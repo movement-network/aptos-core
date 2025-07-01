@@ -7,6 +7,7 @@
 use crate::{
     gas_schedule::VMGasParameters,
     traits::{FromOnChainGasSchedule, InitialGasSchedule, ToOnChainGasSchedule},
+    ver::gas_feature_versions::RELEASE_V1_33,
 };
 use aptos_gas_algebra::{AbstractValueSize, AbstractValueSizePerArg};
 use move_core_types::{
@@ -35,6 +36,7 @@ crate::gas_schedule::macros::define_gas_parameters!(
         [bool: AbstractValueSize, "bool", 40],
         [address: AbstractValueSize, "address", 40],
         [struct_: AbstractValueSize, "struct", 40],
+        [closure: AbstractValueSize, { RELEASE_V1_33.. => "closure" }, 40],
         [vector: AbstractValueSize, "vector", 40],
         [reference: AbstractValueSize, "reference", 40],
         [per_u8_packed: AbstractValueSizePerArg, "per_u8_packed", 1],
@@ -249,11 +251,9 @@ impl ValueVisitor for AbstractValueSizeVisitor<'_> {
     }
 
     #[inline]
-    fn visit_closure(&mut self, depth: u64, _len: usize) -> PartialVMResult<bool> {
-        self.check_depth(depth)?;
-        // TODO(#15664): introduce a dedicated gas parameter?
-        self.size += self.params.struct_;
-        Ok(true)
+    fn visit_closure(&mut self, _depth: usize, _len: usize) -> bool {
+        self.size += self.params.closure;
+        true
     }
 
     #[inline]
@@ -464,11 +464,9 @@ impl AbstractValueSizeGasParameters {
             }
 
             #[inline]
-            fn visit_closure(&mut self, depth: u64, _len: usize) -> PartialVMResult<bool> {
-                self.check_depth(depth)?;
-                // TODO(#15664): introduce a dedicated gas parameter?
-                self.res = Some(self.params.struct_);
-                Ok(false)
+            fn visit_closure(&mut self, _depth: usize, _len: usize) -> bool {
+                self.res = Some(self.params.closure);
+                false
             }
 
             #[inline]
@@ -655,11 +653,9 @@ impl AbstractValueSizeGasParameters {
             }
 
             #[inline]
-            fn visit_closure(&mut self, depth: u64, _len: usize) -> PartialVMResult<bool> {
-                self.check_depth(depth)?;
-                // TODO(#15664): introduce a dedicated gas parameter?
-                self.res = Some(self.params.struct_);
-                Ok(false)
+            fn visit_closure(&mut self, _depth: usize, _len: usize) -> bool {
+                self.res = Some(self.params.closure);
+                false
             }
 
             #[inline]

@@ -159,6 +159,9 @@ pub fn encode_aptos_mainnet_genesis_transaction(
     let genesis_change_set_configs = genesis_vm.genesis_change_set_configs();
     let mut session = genesis_vm.new_genesis_session(&resolver, HashValue::zero());
 
+    let traversal_storage = TraversalStorage::new();
+    let mut traversal_context = TraversalContext::new(&traversal_storage);
+
     // On-chain genesis process.
     let consensus_config = OnChainConsensusConfig::default_for_genesis();
     let execution_config = OnChainExecutionConfig::default_for_genesis();
@@ -166,6 +169,7 @@ pub fn encode_aptos_mainnet_genesis_transaction(
     initialize(
         &mut session,
         &module_storage,
+        &mut traversal_context,
         chain_id,
         genesis_config,
         &consensus_config,
@@ -175,23 +179,45 @@ pub fn encode_aptos_mainnet_genesis_transaction(
     initialize_features(
         &mut session,
         &module_storage,
+        &mut traversal_context,
         genesis_config
             .initial_features_override
             .clone()
             .map(Features::into_flag_vec),
     );
-    initialize_aptos_coin(&mut session, &module_storage);
-    initialize_on_chain_governance(&mut session, &module_storage, genesis_config);
-    create_accounts(&mut session, &module_storage, accounts);
-    create_employee_validators(&mut session, &module_storage, employees, genesis_config);
-    create_and_initialize_validators_with_commission(&mut session, &module_storage, validators);
-    set_genesis_end(&mut session, &module_storage);
+    initialize_aptos_coin(&mut session, &module_storage, &mut traversal_context);
+    initialize_on_chain_governance(
+        &mut session,
+        &module_storage,
+        &mut traversal_context,
+        genesis_config,
+    );
+    create_accounts(
+        &mut session,
+        &module_storage,
+        &mut traversal_context,
+        accounts,
+    );
+    create_employee_validators(
+        &mut session,
+        &module_storage,
+        &mut traversal_context,
+        employees,
+        genesis_config,
+    );
+    create_and_initialize_validators_with_commission(
+        &mut session,
+        &module_storage,
+        &mut traversal_context,
+        validators,
+    );
+    set_genesis_end(&mut session, &module_storage, &mut traversal_context);
 
     // Reconfiguration should happen after all on-chain invocations.
-    emit_new_block_and_epoch_event(&mut session, &module_storage);
+    emit_new_block_and_epoch_event(&mut session, &module_storage, &mut traversal_context);
 
     // Create a change set with all initialized resources.
-    let mut change_set = assert_ok!(session.finish(&genesis_change_set_configs, &module_storage));
+    let mut change_set = assert_ok!(session.finish(&genesis_change_set_configs, &module_storage,));
 
     // Publish the framework, using a different session id, in case both sessions create tables.
     let mut new_id = [0u8; 32];
@@ -261,10 +287,14 @@ pub fn encode_genesis_change_set(
     let genesis_change_set_configs = genesis_vm.genesis_change_set_configs();
     let mut session = genesis_vm.new_genesis_session(&resolver, HashValue::zero());
 
+    let traversal_storage = TraversalStorage::new();
+    let mut traversal_context = TraversalContext::new(&traversal_storage);
+
     // On-chain genesis process.
     initialize(
         &mut session,
         &module_storage,
+        &mut traversal_context,
         chain_id,
         genesis_config,
         consensus_config,
@@ -274,62 +304,85 @@ pub fn encode_genesis_change_set(
     initialize_features(
         &mut session,
         &module_storage,
+        &mut traversal_context,
         genesis_config
             .initial_features_override
             .clone()
             .map(Features::into_flag_vec),
     );
     if genesis_config.is_test {
-        initialize_core_resources_and_aptos_coin(&mut session, &module_storage, core_resources_key);
+        initialize_core_resources_and_aptos_coin(
+            &mut session,
+            &module_storage,
+            &mut traversal_context,
+            core_resources_key,
+        );
     } else {
-        initialize_aptos_coin(&mut session, &module_storage);
+        initialize_aptos_coin(&mut session, &module_storage, &mut traversal_context);
     }
-    // Initialize the governed gas pool with a default seed
-    initialize_governed_gas_pool(&mut session, &module_storage);
-    initialize_config_buffer(&mut session, &module_storage);
-    initialize_dkg(&mut session, &module_storage);
-    initialize_reconfiguration_state(&mut session, &module_storage);
+    initialize_config_buffer(&mut session, &module_storage, &mut traversal_context);
+    initialize_dkg(&mut session, &module_storage, &mut traversal_context);
+    initialize_reconfiguration_state(&mut session, &module_storage, &mut traversal_context);
     let randomness_config = genesis_config
         .randomness_config_override
         .clone()
         .unwrap_or_else(OnChainRandomnessConfig::default_for_genesis);
-    initialize_randomness_api_v0_config(&mut session, &module_storage);
-    initialize_randomness_config_seqnum(&mut session, &module_storage);
-    initialize_randomness_config(&mut session, &module_storage, randomness_config);
-    initialize_randomness_resources(&mut session, &module_storage);
-    initialize_on_chain_governance(&mut session, &module_storage, genesis_config);
-    let not_skip_aa: bool = if let Some(features) =  &genesis_config.initial_features_override {
-        features.is_enabled(FeatureFlag::ACCOUNT_ABSTRACTION) || features.is_enabled(FeatureFlag::DERIVABLE_ACCOUNT_ABSTRACTION)
-    } else {
-        false
-    };
-    if not_skip_aa {
-        initialize_account_abstraction(&mut session, &module_storage);
-    }
-    create_and_initialize_validators(&mut session, &module_storage, validators);
+    initialize_randomness_api_v0_config(&mut session, &module_storage, &mut traversal_context);
+    initialize_randomness_config_seqnum(&mut session, &module_storage, &mut traversal_context);
+    initialize_randomness_config(
+        &mut session,
+        &module_storage,
+        &mut traversal_context,
+        randomness_config,
+    );
+    initialize_randomness_resources(&mut session, &module_storage, &mut traversal_context);
+    initialize_on_chain_governance(
+        &mut session,
+        &module_storage,
+        &mut traversal_context,
+        genesis_config,
+    );
+    initialize_account_abstraction(&mut session, &module_storage, &mut traversal_context);
+    create_and_initialize_validators(
+        &mut session,
+        &module_storage,
+        &mut traversal_context,
+        validators,
+    );
     if genesis_config.is_test {
-        allow_core_resources_to_set_version(&mut session, &module_storage);
+        allow_core_resources_to_set_version(&mut session, &module_storage, &mut traversal_context);
     }
     let jwk_consensus_config = genesis_config
         .jwk_consensus_config_override
         .clone()
         .unwrap_or_else(OnChainJWKConsensusConfig::default_for_genesis);
-    initialize_jwk_consensus_config(&mut session, &module_storage, &jwk_consensus_config);
-    initialize_jwks_resources(&mut session, &module_storage);
+    initialize_jwk_consensus_config(
+        &mut session,
+        &module_storage,
+        &mut traversal_context,
+        &jwk_consensus_config,
+    );
+    initialize_jwks_resources(&mut session, &module_storage, &mut traversal_context);
     initialize_keyless_accounts(
         &mut session,
         &module_storage,
+        &mut traversal_context,
         chain_id,
         genesis_config.initial_jwks.clone(),
         genesis_config.keyless_groth16_vk.clone(),
     );
-    initialize_confidential_asset(&mut session, &module_storage, chain_id);
-    set_genesis_end(&mut session, &module_storage);
+    initialize_confidential_asset(
+        &mut session,
+        &module_storage,
+        chain_id,
+        &mut traversal_context,
+    );
+    set_genesis_end(&mut session, &module_storage, &mut traversal_context);
 
     // Reconfiguration should happen after all on-chain invocations.
-    emit_new_block_and_epoch_event(&mut session, &module_storage);
+    emit_new_block_and_epoch_event(&mut session, &module_storage, &mut traversal_context);
 
-    let mut change_set = assert_ok!(session.finish(&genesis_change_set_configs, &module_storage));
+    let mut change_set = assert_ok!(session.finish(&genesis_change_set_configs, &module_storage,));
 
     // Publish the framework, using a different id, in case both sessions create tables.
     let mut new_id = [0u8; 32];
@@ -389,13 +442,13 @@ fn validate_genesis_config(genesis_config: &GenesisConfiguration) {
 fn exec_function_internal(
     session: &mut SessionExt<impl AptosMoveResolver>,
     module_storage: &impl ModuleStorage,
+    traversal_context: &mut TraversalContext,
     module_name: &str,
     function_name: &str,
     ty_args: Vec<TypeTag>,
     args: Vec<Vec<u8>>,
     address: AccountAddress,
 ) {
-    let storage = TraversalStorage::new();
     session
         .execute_function_bypass_visibility(
             &ModuleId::new(address, Identifier::new(module_name).unwrap()),
@@ -403,7 +456,7 @@ fn exec_function_internal(
             ty_args,
             args,
             &mut UnmeteredGasMeter,
-            &mut TraversalContext::new(&storage),
+            traversal_context,
             module_storage,
         )
         .unwrap_or_else(|e| {
@@ -421,6 +474,7 @@ fn exec_function_internal(
 fn exec_function(
     session: &mut SessionExt<impl AptosMoveResolver>,
     module_storage: &impl ModuleStorage,
+    traversal_context: &mut TraversalContext,
     module_name: &str,
     function_name: &str,
     ty_args: Vec<TypeTag>,
@@ -429,6 +483,7 @@ fn exec_function(
     exec_function_internal(
         session,
         module_storage,
+        traversal_context,
         module_name,
         function_name,
         ty_args,
@@ -440,6 +495,7 @@ fn exec_function(
 fn exec_experimental_function(
     session: &mut SessionExt<impl AptosMoveResolver>,
     module_storage: &impl ModuleStorage,
+    traversal_context: &mut TraversalContext,
     module_name: &str,
     function_name: &str,
     ty_args: Vec<TypeTag>,
@@ -448,6 +504,7 @@ fn exec_experimental_function(
     exec_function_internal(
         session,
         module_storage,
+        traversal_context,
         module_name,
         function_name,
         ty_args,
@@ -459,6 +516,7 @@ fn exec_experimental_function(
 fn initialize(
     session: &mut SessionExt<impl AptosMoveResolver>,
     module_storage: &impl AptosModuleStorage,
+    traversal_context: &mut TraversalContext,
     chain_id: ChainId,
     genesis_config: &GenesisConfiguration,
     consensus_config: &OnChainConsensusConfig,
@@ -489,6 +547,7 @@ fn initialize(
     exec_function(
         session,
         module_storage,
+        traversal_context,
         GENESIS_MODULE_NAME,
         "initialize",
         vec![],
@@ -513,6 +572,7 @@ fn initialize(
 fn initialize_features(
     session: &mut SessionExt<impl AptosMoveResolver>,
     module_storage: &impl AptosModuleStorage,
+    traversal_context: &mut TraversalContext,
     features_override: Option<Vec<FeatureFlag>>,
 ) {
     let features: Vec<u64> = features_override
@@ -528,6 +588,7 @@ fn initialize_features(
     exec_function(
         session,
         module_storage,
+        traversal_context,
         "features",
         "change_feature_flags_internal",
         vec![],
@@ -538,10 +599,12 @@ fn initialize_features(
 fn initialize_aptos_coin(
     session: &mut SessionExt<impl AptosMoveResolver>,
     module_storage: &impl AptosModuleStorage,
+    traversal_context: &mut TraversalContext,
 ) {
     exec_function(
         session,
         module_storage,
+        traversal_context,
         GENESIS_MODULE_NAME,
         "initialize_aptos_coin",
         vec![],
@@ -570,10 +633,12 @@ fn initialize_governed_gas_pool(
 fn initialize_config_buffer(
     session: &mut SessionExt<impl AptosMoveResolver>,
     module_storage: &impl AptosModuleStorage,
+    traversal_context: &mut TraversalContext,
 ) {
     exec_function(
         session,
         module_storage,
+        traversal_context,
         CONFIG_BUFFER_MODULE_NAME,
         "initialize",
         vec![],
@@ -584,10 +649,12 @@ fn initialize_config_buffer(
 fn initialize_dkg(
     session: &mut SessionExt<impl AptosMoveResolver>,
     module_storage: &impl AptosModuleStorage,
+    traversal_context: &mut TraversalContext,
 ) {
     exec_function(
         session,
         module_storage,
+        traversal_context,
         DKG_MODULE_NAME,
         "initialize",
         vec![],
@@ -598,10 +665,12 @@ fn initialize_dkg(
 fn initialize_randomness_config_seqnum(
     session: &mut SessionExt<impl AptosMoveResolver>,
     module_storage: &impl AptosModuleStorage,
+    traversal_context: &mut TraversalContext,
 ) {
     exec_function(
         session,
         module_storage,
+        traversal_context,
         RANDOMNESS_CONFIG_SEQNUM_MODULE_NAME,
         "initialize",
         vec![],
@@ -612,10 +681,12 @@ fn initialize_randomness_config_seqnum(
 fn initialize_randomness_api_v0_config(
     session: &mut SessionExt<impl AptosMoveResolver>,
     module_storage: &impl AptosModuleStorage,
+    traversal_context: &mut TraversalContext,
 ) {
     exec_function(
         session,
         module_storage,
+        traversal_context,
         RANDOMNESS_API_V0_CONFIG_MODULE_NAME,
         "initialize",
         vec![],
@@ -630,11 +701,13 @@ fn initialize_randomness_api_v0_config(
 fn initialize_randomness_config(
     session: &mut SessionExt<impl AptosMoveResolver>,
     module_storage: &impl AptosModuleStorage,
+    traversal_context: &mut TraversalContext,
     randomness_config: OnChainRandomnessConfig,
 ) {
     exec_function(
         session,
         module_storage,
+        traversal_context,
         RANDOMNESS_CONFIG_MODULE_NAME,
         "initialize",
         vec![],
@@ -648,10 +721,12 @@ fn initialize_randomness_config(
 fn initialize_randomness_resources(
     session: &mut SessionExt<impl AptosMoveResolver>,
     module_storage: &impl AptosModuleStorage,
+    traversal_context: &mut TraversalContext,
 ) {
     exec_function(
         session,
         module_storage,
+        traversal_context,
         RANDOMNESS_MODULE_NAME,
         "initialize",
         vec![],
@@ -662,10 +737,12 @@ fn initialize_randomness_resources(
 fn initialize_account_abstraction(
     session: &mut SessionExt<impl AptosMoveResolver>,
     module_storage: &impl AptosModuleStorage,
+    traversal_context: &mut TraversalContext,
 ) {
     exec_function(
         session,
         module_storage,
+        traversal_context,
         ACCOUNT_ABSTRACTION_MODULE_NAME,
         "initialize",
         vec![],
@@ -675,6 +752,7 @@ fn initialize_account_abstraction(
     exec_function(
         session,
         module_storage,
+        traversal_context,
         ACCOUNT_ABSTRACTION_MODULE_NAME,
         "register_derivable_authentication_function",
         vec![],
@@ -691,6 +769,7 @@ fn initialize_account_abstraction(
     exec_function(
         session,
         module_storage,
+        traversal_context,
         ACCOUNT_ABSTRACTION_MODULE_NAME,
         "register_derivable_authentication_function",
         vec![],
@@ -705,6 +784,7 @@ fn initialize_account_abstraction(
     exec_function(
         session,
         module_storage,
+        traversal_context,
         ACCOUNT_ABSTRACTION_MODULE_NAME,
         "register_derivable_authentication_function",
         vec![],
@@ -720,10 +800,12 @@ fn initialize_account_abstraction(
 fn initialize_reconfiguration_state(
     session: &mut SessionExt<impl AptosMoveResolver>,
     module_storage: &impl AptosModuleStorage,
+    traversal_context: &mut TraversalContext,
 ) {
     exec_function(
         session,
         module_storage,
+        traversal_context,
         RECONFIGURATION_STATE_MODULE_NAME,
         "initialize",
         vec![],
@@ -734,11 +816,13 @@ fn initialize_reconfiguration_state(
 fn initialize_jwk_consensus_config(
     session: &mut SessionExt<impl AptosMoveResolver>,
     module_storage: &impl AptosModuleStorage,
+    traversal_context: &mut TraversalContext,
     jwk_consensus_config: &OnChainJWKConsensusConfig,
 ) {
     exec_function(
         session,
         module_storage,
+        traversal_context,
         JWK_CONSENSUS_CONFIG_MODULE_NAME,
         "initialize",
         vec![],
@@ -752,10 +836,12 @@ fn initialize_jwk_consensus_config(
 fn initialize_jwks_resources(
     session: &mut SessionExt<impl AptosMoveResolver>,
     module_storage: &impl AptosModuleStorage,
+    traversal_context: &mut TraversalContext,
 ) {
     exec_function(
         session,
         module_storage,
+        traversal_context,
         JWKS_MODULE_NAME,
         "initialize",
         vec![],
@@ -766,10 +852,12 @@ fn initialize_jwks_resources(
 fn set_genesis_end(
     session: &mut SessionExt<impl AptosMoveResolver>,
     module_storage: &impl AptosModuleStorage,
+    traversal_context: &mut TraversalContext,
 ) {
     exec_function(
         session,
         module_storage,
+        traversal_context,
         GENESIS_MODULE_NAME,
         "set_genesis_end",
         vec![],
@@ -780,12 +868,14 @@ fn set_genesis_end(
 fn initialize_core_resources_and_aptos_coin(
     session: &mut SessionExt<impl AptosMoveResolver>,
     module_storage: &impl AptosModuleStorage,
+    traversal_context: &mut TraversalContext,
     core_resources_key: &Ed25519PublicKey,
 ) {
     let core_resources_auth_key = AuthenticationKey::ed25519(core_resources_key);
     exec_function(
         session,
         module_storage,
+        traversal_context,
         GENESIS_MODULE_NAME,
         "initialize_core_resources_and_aptos_coin",
         vec![],
@@ -800,11 +890,13 @@ fn initialize_core_resources_and_aptos_coin(
 fn initialize_on_chain_governance(
     session: &mut SessionExt<impl AptosMoveResolver>,
     module_storage: &impl AptosModuleStorage,
+    traversal_context: &mut TraversalContext,
     genesis_config: &GenesisConfiguration,
 ) {
     exec_function(
         session,
         module_storage,
+        traversal_context,
         GOVERNANCE_MODULE_NAME,
         "initialize",
         vec![],
@@ -820,6 +912,7 @@ fn initialize_on_chain_governance(
 fn initialize_keyless_accounts(
     session: &mut SessionExt<impl AptosMoveResolver>,
     module_storage: &impl AptosModuleStorage,
+    traversal_context: &mut TraversalContext,
     chain_id: ChainId,
     mut initial_jwks: Vec<IssuerJWK>,
     vk: Option<Groth16VerificationKey>,
@@ -828,6 +921,7 @@ fn initialize_keyless_accounts(
     exec_function(
         session,
         module_storage,
+        traversal_context,
         KEYLESS_ACCOUNT_MODULE_NAME,
         "update_configuration",
         vec![],
@@ -841,6 +935,7 @@ fn initialize_keyless_accounts(
         exec_function(
             session,
             module_storage,
+            traversal_context,
             KEYLESS_ACCOUNT_MODULE_NAME,
             "update_groth16_verification_key",
             vec![],
@@ -872,6 +967,7 @@ fn initialize_keyless_accounts(
         exec_function(
             session,
             module_storage,
+            traversal_context,
             JWKS_MODULE_NAME,
             "set_patches",
             vec![],
@@ -887,11 +983,13 @@ fn initialize_confidential_asset(
     session: &mut SessionExt<impl AptosMoveResolver>,
     module_storage: &impl AptosModuleStorage,
     chain_id: ChainId,
+    traversal_context: &mut TraversalContext,
 ) {
     if !chain_id.is_mainnet() && !chain_id.is_testnet() {
         exec_experimental_function(
             session,
             module_storage,
+            traversal_context,
             "confidential_asset",
             "init_module_for_genesis",
             vec![],
@@ -903,6 +1001,7 @@ fn initialize_confidential_asset(
 fn create_accounts(
     session: &mut SessionExt<impl AptosMoveResolver>,
     module_storage: &impl AptosModuleStorage,
+    traversal_context: &mut TraversalContext,
     accounts: &[AccountBalance],
 ) {
     let accounts_bytes = bcs::to_bytes(accounts).expect("AccountMaps can be serialized");
@@ -911,6 +1010,7 @@ fn create_accounts(
     exec_function(
         session,
         module_storage,
+        traversal_context,
         GENESIS_MODULE_NAME,
         "create_accounts",
         vec![],
@@ -921,6 +1021,7 @@ fn create_accounts(
 fn create_employee_validators(
     session: &mut SessionExt<impl AptosMoveResolver>,
     module_storage: &impl AptosModuleStorage,
+    traversal_context: &mut TraversalContext,
     employees: &[EmployeePool],
     genesis_config: &GenesisConfiguration,
 ) {
@@ -934,6 +1035,7 @@ fn create_employee_validators(
     exec_function(
         session,
         module_storage,
+        traversal_context,
         GENESIS_MODULE_NAME,
         "create_employee_validators",
         vec![],
@@ -947,6 +1049,7 @@ fn create_employee_validators(
 fn create_and_initialize_validators(
     session: &mut SessionExt<impl AptosMoveResolver>,
     module_storage: &impl AptosModuleStorage,
+    traversal_context: &mut TraversalContext,
     validators: &[Validator],
 ) {
     let validators_bytes = bcs::to_bytes(validators).expect("Validators can be serialized");
@@ -955,6 +1058,7 @@ fn create_and_initialize_validators(
     exec_function(
         session,
         module_storage,
+        traversal_context,
         GENESIS_MODULE_NAME,
         "create_initialize_validators",
         vec![],
@@ -965,6 +1069,7 @@ fn create_and_initialize_validators(
 fn create_and_initialize_validators_with_commission(
     session: &mut SessionExt<impl AptosMoveResolver>,
     module_storage: &impl AptosModuleStorage,
+    traversal_context: &mut TraversalContext,
     validators: &[ValidatorWithCommissionRate],
 ) {
     let validators_bytes = bcs::to_bytes(validators).expect("Validators can be serialized");
@@ -976,6 +1081,7 @@ fn create_and_initialize_validators_with_commission(
     exec_function(
         session,
         module_storage,
+        traversal_context,
         GENESIS_MODULE_NAME,
         "create_initialize_validators_with_commission",
         vec![],
@@ -986,10 +1092,12 @@ fn create_and_initialize_validators_with_commission(
 fn allow_core_resources_to_set_version(
     session: &mut SessionExt<impl AptosMoveResolver>,
     module_storage: &impl AptosModuleStorage,
+    traversal_context: &mut TraversalContext,
 ) {
     exec_function(
         session,
         module_storage,
+        traversal_context,
         VERSION_MODULE_NAME,
         "initialize_for_test",
         vec![],
@@ -1000,12 +1108,14 @@ fn allow_core_resources_to_set_version(
 fn initialize_package(
     session: &mut SessionExt<impl AptosMoveResolver>,
     module_storage: &impl ModuleStorage,
+    traversal_context: &mut TraversalContext,
     addr: AccountAddress,
     package: &ReleasePackage,
 ) {
     exec_function(
         session,
         module_storage,
+        traversal_context,
         CODE_MODULE_NAME,
         "initialize",
         vec![],
@@ -1095,6 +1205,9 @@ fn publish_framework(
     let resolver = state_view.as_move_resolver();
     let mut session = genesis_vm.new_genesis_session(&resolver, hash_value);
 
+    let traversal_storage = TraversalStorage::new();
+    let mut traversal_context = TraversalContext::new(&traversal_storage);
+
     for pack in &framework.packages {
         // Unfortunately, package does not contain address information, so we have to access its
         // modules to extract the destination address.
@@ -1105,11 +1218,17 @@ fn publish_framework(
             .1
             .self_id()
             .address();
-        initialize_package(&mut session, &module_storage, addr, pack);
+        initialize_package(
+            &mut session,
+            &module_storage,
+            &mut traversal_context,
+            addr,
+            pack,
+        );
     }
 
     let change_set =
-        assert_ok!(session.finish(&genesis_vm.genesis_change_set_configs(), &module_storage));
+        assert_ok!(session.finish(&genesis_vm.genesis_change_set_configs(), &module_storage,));
     (change_set, module_write_set)
 }
 
@@ -1117,10 +1236,12 @@ fn publish_framework(
 fn emit_new_block_and_epoch_event(
     session: &mut SessionExt<impl AptosMoveResolver>,
     module_storage: &impl AptosModuleStorage,
+    traversal_context: &mut TraversalContext,
 ) {
     exec_function(
         session,
         module_storage,
+        traversal_context,
         "block",
         "emit_genesis_block_event",
         vec![],
@@ -1131,6 +1252,7 @@ fn emit_new_block_and_epoch_event(
     exec_function(
         session,
         module_storage,
+        traversal_context,
         "reconfiguration",
         "emit_genesis_reconfiguration_event",
         vec![],

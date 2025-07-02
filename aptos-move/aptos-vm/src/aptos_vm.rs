@@ -2210,7 +2210,9 @@ impl AptosVM {
             &block_metadata.get_prologue_move_args(account_config::reserved_vm_address()),
         );
 
-        let storage = TraversalStorage::new();
+        let traversal_storage = TraversalStorage::new();
+        let mut traversal_context = TraversalContext::new(&traversal_storage);
+
         session
             .execute_function_bypass_visibility(
                 &BLOCK_MODULE,
@@ -2218,7 +2220,7 @@ impl AptosVM {
                 vec![],
                 args,
                 &mut gas_meter,
-                &mut TraversalContext::new(&storage),
+                &mut traversal_context,
                 module_storage,
             )
             .map(|_return_vals| ())
@@ -2291,7 +2293,8 @@ impl AptosVM {
                 .as_move_value(),
         ];
 
-        let storage = TraversalStorage::new();
+        let traversal_storage = TraversalStorage::new();
+        let mut traversal_context = TraversalContext::new(&traversal_storage);
 
         session
             .execute_function_bypass_visibility(
@@ -2300,7 +2303,7 @@ impl AptosVM {
                 vec![],
                 serialize_values(&args),
                 &mut gas_meter,
-                &mut TraversalContext::new(&storage),
+                &mut traversal_context,
                 module_storage,
             )
             .map(|_return_vals| ())
@@ -2314,6 +2317,82 @@ impl AptosVM {
             module_storage,
             &self.storage_gas_params(log_context)?.change_set_configs,
         )?;
+        Ok((VMStatus::Executed, output))
+    }
+
+    fn process_block_epilogue(
+        &self,
+        resolver: &impl AptosMoveResolver,
+        module_storage: &impl AptosModuleStorage,
+        block_epilogue: BlockEpiloguePayload,
+        log_context: &AdapterLogSchema,
+    ) -> Result<(VMStatus, VMOutput), VMStatus> {
+        let (block_id, fee_distribution) = match block_epilogue {
+            BlockEpiloguePayload::V0 { .. } => {
+                let status = TransactionStatus::Keep(ExecutionStatus::Success);
+                let output = VMOutput::empty_with_status(status);
+                return Ok((VMStatus::Executed, output));
+            },
+            BlockEpiloguePayload::V1 {
+                block_id,
+                fee_distribution,
+                ..
+            } => (block_id, fee_distribution),
+        };
+
+        let mut gas_meter = UnmeteredGasMeter;
+        let mut session = self.new_session(resolver, SessionId::block_epilogue(block_id), None);
+
+        let (validator_indices, amounts) = match fee_distribution {
+            FeeDistribution::V0 { amount } => amount
+                .into_iter()
+                .map(|(validator_index, amount)| {
+                    (MoveValue::U64(validator_index), MoveValue::U64(amount))
+                })
+                .unzip(),
+        };
+
+        let args = vec![
+            MoveValue::Signer(AccountAddress::ZERO), // Run as 0x0
+            MoveValue::Vector(validator_indices),
+            MoveValue::Vector(amounts),
+        ];
+
+        let traversal_storage = TraversalStorage::new();
+        let mut traversal_context = TraversalContext::new(&traversal_storage);
+
+        let output = match session
+            .execute_function_bypass_visibility(
+                &BLOCK_MODULE,
+                BLOCK_EPILOGUE,
+                vec![],
+                serialize_values(&args),
+                &mut gas_meter,
+                &mut traversal_context,
+                module_storage,
+            )
+            .map(|_return_vals| ())
+            .or_else(|e| expect_only_successful_execution(e, BLOCK_EPILOGUE.as_str(), log_context))
+        {
+            Ok(_) => get_system_transaction_output(
+                session,
+                module_storage,
+                &self.storage_gas_params(log_context)?.change_set_configs,
+            )?,
+            Err(e) => {
+                error!(
+                    "Unexpected error from BlockEpilogue txn: {e:?}, fallback to return success."
+                );
+                let status = TransactionStatus::Keep(ExecutionStatus::Success);
+                VMOutput::empty_with_status(status)
+            },
+        };
+
+        SYSTEM_TRANSACTIONS_EXECUTED.inc();
+
+        // TODO(HotState): generate an output according to the block end info in the
+        //   transaction. (maybe resort to the move resolver, but for simplicity I would
+        //   just include the full slot in both the transaction and the output).
         Ok((VMStatus::Executed, output))
     }
 

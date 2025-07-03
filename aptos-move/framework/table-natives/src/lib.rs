@@ -384,18 +384,15 @@ fn native_add_box(
 
     let (gv, loaded) =
         table.get_or_create_global_value(&function_value_extension, table_context, key_bytes)?;
-    let mem_usage = if !fix_memory_double_counting || loaded.is_some() {
-        gv.view()
-            .map(|val| {
-                context
-                    .abs_val_gas_params()
-                    .abstract_heap_size(&val, context.gas_feature_version())
-                    .map(u64::from)
-            })
-            .transpose()?
-    } else {
-        None
-    };
+    let mem_usage = gv
+        .view()
+        .map(|val| {
+            context
+                .abs_val_gas_params()
+                .abstract_heap_size(&val, context.gas_feature_version())
+                .map(u64::from)
+        })
+        .transpose()?;
 
     let res = match gv.move_to(val) {
         Ok(_) => Ok(smallvec![]),
@@ -441,18 +438,15 @@ fn native_borrow_box(
 
     let (gv, loaded) =
         table.get_or_create_global_value(&function_value_extension, table_context, key_bytes)?;
-    let mem_usage = if !fix_memory_double_counting || loaded.is_some() {
-        gv.view()
-            .map(|val| {
-                context
-                    .abs_val_gas_params()
-                    .abstract_heap_size(&val, context.gas_feature_version())
-                    .map(u64::from)
-            })
-            .transpose()?
-    } else {
-        None
-    };
+    let mem_usage = gv
+        .view()
+        .map(|val| {
+            context
+                .abs_val_gas_params()
+                .abstract_heap_size(&val, context.gas_feature_version())
+                .map(u64::from)
+        })
+        .transpose()?;
 
     let res = match gv.borrow_global() {
         Ok(ref_val) => Ok(smallvec![ref_val]),
@@ -499,18 +493,15 @@ fn native_contains_box(
 
     let (gv, loaded) =
         table.get_or_create_global_value(&function_value_extension, table_context, key_bytes)?;
-    let mem_usage = if !fix_memory_double_counting || loaded.is_some() {
-        gv.view()
-            .map(|val| {
-                context
-                    .abs_val_gas_params()
-                    .abstract_heap_size(&val, context.gas_feature_version())
-                    .map(u64::from)
-            })
-            .transpose()?
-    } else {
-        None
-    };
+    let mem_usage = gv
+        .view()
+        .map(|val| {
+            context
+                .abs_val_gas_params()
+                .abstract_heap_size(&val, context.gas_feature_version())
+                .map(u64::from)
+        })
+        .transpose()?;
     let exists = Value::bool(gv.exists()?);
 
     drop(table_data);
@@ -551,18 +542,15 @@ fn native_remove_box(
 
     let (gv, loaded) =
         table.get_or_create_global_value(&function_value_extension, table_context, key_bytes)?;
-    let mem_usage = if !fix_memory_double_counting || loaded.is_some() {
-        gv.view()
-            .map(|val| {
-                context
-                    .abs_val_gas_params()
-                    .abstract_heap_size(&val, context.gas_feature_version())
-                    .map(u64::from)
-            })
-            .transpose()?
-    } else {
-        None
-    };
+    let mem_usage = gv
+        .view()
+        .map(|val| {
+            context
+                .abs_val_gas_params()
+                .abstract_heap_size(&val, context.gas_feature_version())
+                .map(u64::from)
+        })
+        .transpose()?;
 
     let res = match gv.move_from() {
         Ok(val) => Ok(smallvec![val]),

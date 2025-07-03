@@ -251,9 +251,10 @@ impl ValueVisitor for AbstractValueSizeVisitor<'_> {
     }
 
     #[inline]
-    fn visit_closure(&mut self, _depth: usize, _len: usize) -> bool {
+    fn visit_closure(&mut self, depth: u64, _len: usize) -> PartialVMResult<bool> {
+        self.check_depth(depth)?;
         self.size += self.params.closure;
-        true
+        Ok(true)
     }
 
     #[inline]
@@ -464,9 +465,10 @@ impl AbstractValueSizeGasParameters {
             }
 
             #[inline]
-            fn visit_closure(&mut self, _depth: usize, _len: usize) -> bool {
+            fn visit_closure(&mut self, depth: u64, _len: usize) -> PartialVMResult<bool> {
+                self.check_depth(depth)?;
                 self.res = Some(self.params.closure);
-                false
+                Ok(false)
             }
 
             #[inline]
@@ -653,9 +655,10 @@ impl AbstractValueSizeGasParameters {
             }
 
             #[inline]
-            fn visit_closure(&mut self, _depth: usize, _len: usize) -> bool {
+            fn visit_closure(&mut self, depth: u64, _len: usize) -> PartialVMResult<bool> {
+                self.check_depth(depth)?;
                 self.res = Some(self.params.closure);
-                false
+                Ok(false)
             }
 
             #[inline]

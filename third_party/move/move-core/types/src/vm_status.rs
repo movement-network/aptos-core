@@ -210,7 +210,9 @@ impl VMStatus {
                     StatusCode::EXECUTION_LIMIT_REACHED
                     | StatusCode::IO_LIMIT_REACHED
                     | StatusCode::STORAGE_LIMIT_REACHED
-                    | StatusCode::TOO_MANY_DELAYED_FIELDS,
+                    | StatusCode::TOO_MANY_DELAYED_FIELDS
+                    | StatusCode::UNABLE_TO_CAPTURE_DELAYED_FIELDS
+                    | StatusCode::VM_MAX_VALUE_DEPTH_REACHED,
                 ..
             }
             | VMStatus::Error {
@@ -218,7 +220,9 @@ impl VMStatus {
                     StatusCode::EXECUTION_LIMIT_REACHED
                     | StatusCode::IO_LIMIT_REACHED
                     | StatusCode::STORAGE_LIMIT_REACHED
-                    | StatusCode::TOO_MANY_DELAYED_FIELDS,
+                    | StatusCode::TOO_MANY_DELAYED_FIELDS
+                    | StatusCode::UNABLE_TO_CAPTURE_DELAYED_FIELDS
+                    | StatusCode::VM_MAX_VALUE_DEPTH_REACHED,
                 ..
             } => Ok(KeptVMStatus::MiscellaneousError),
 

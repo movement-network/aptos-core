@@ -497,11 +497,8 @@ impl AptosVM {
             }
         }
 
-        let txn_status = TransactionStatus::from_vm_status(
-            error_vm_status.clone(),
-            self.features()
-                .is_enabled(FeatureFlag::CHARGE_INVARIANT_VIOLATION),
-        );
+        let txn_status =
+            TransactionStatus::from_vm_status(error_vm_status.clone(), self.features());
 
         match txn_status {
             TransactionStatus::Keep(status) => {
@@ -2448,7 +2445,36 @@ impl AptosVM {
         let gas_used = Self::gas_used(max_gas_amount.into(), &gas_meter);
         match execution_result {
             Ok(result) => ViewFunctionOutput::new(Ok(result), gas_used),
-            Err(e) => ViewFunctionOutput::new(Err(e), gas_used),
+            Err(e) => {
+                let vm_status = e.clone().into_vm_status();
+                match vm_status {
+                    VMStatus::MoveAbort(_, _) => {},
+                    _ => {
+                        let message = e
+                            .message()
+                            .map(|m| m.to_string())
+                            .unwrap_or_else(|| e.to_string());
+                        return ViewFunctionOutput::new_error_message(
+                            message,
+                            Some(vm_status.status_code()),
+                            gas_used,
+                        );
+                    },
+                }
+                let txn_status =
+                    TransactionStatus::from_vm_status(vm_status.clone(), vm.features());
+                let execution_status = match txn_status {
+                    TransactionStatus::Keep(status) => status,
+                    _ => ExecutionStatus::MiscellaneousError(Some(vm_status.status_code())),
+                };
+                let status_with_abort_info =
+                    vm.inject_abort_info_if_available(&module_storage, execution_status);
+                ViewFunctionOutput::new_move_abort_error(
+                    status_with_abort_info,
+                    Some(vm_status.status_code()),
+                    gas_used,
+                )
+            },
         }
     }
 

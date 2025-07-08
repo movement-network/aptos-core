@@ -274,6 +274,71 @@ impl Committer {
 
     fn should_evict(&self) -> bool {
         self.base.inner.len() > self.base.max_items
-            || self.total_key_bytes + self.total_value_bytes > self.base.max_bytes
+    }
+
+    #[cfg(test)]
+    fn collect_all(&self) -> Vec<(K, V)> {
+        assert_eq!(self.head.is_some(), self.tail.is_some());
+
+        let mut keys = Vec::new();
+        let mut values = Vec::new();
+
+        let mut current_key = self.head.clone();
+        while let Some(key) = current_key {
+            let entry = self.base.inner.get(&key).unwrap();
+            assert_eq!(entry.lru.prev, keys.last().cloned());
+            keys.push(key);
+            values.push(entry.data.clone());
+            current_key = entry.lru.next.clone();
+        }
+        itertools::zip_eq(keys, values).collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{HotStateBase, LRUUpdater};
+    use lru::LruCache;
+    use proptest::{collection::vec, option, prelude::*};
+    use std::{num::NonZeroUsize, sync::Arc};
+
+    const MAX_BYTES: usize = 10000;
+    const MAX_SINGLE_VALUE_BYTES: usize = 100;
+
+    proptest! {
+        #[test]
+        fn test_hot_state_lru(
+            max_items in 1..10usize,
+            updates in vec((0..20u64, option::weighted(0.8, 0..1000u64)), 1..50),
+        ) {
+            let base = Arc::new(HotStateBase::new_empty(
+                max_items,
+                MAX_BYTES,
+                MAX_SINGLE_VALUE_BYTES,
+            ));
+            let mut head = None;
+            let mut tail = None;
+
+            let mut updater = LRUUpdater::new(base, &mut head, &mut tail);
+            let mut cache = LruCache::new(NonZeroUsize::new(max_items).unwrap());
+
+            for (key, value_opt) in updates {
+                match value_opt {
+                    Some(value) => {
+                        updater.insert(key, value);
+                        cache.put(key, value);
+                    }
+                    None => {
+                        updater.delete(&key);
+                        cache.pop(&key);
+                    }
+                }
+                updater.evict();
+
+                prop_assert_eq!(updater.base.inner.len(), cache.len());
+                let items = updater.collect_all();
+                prop_assert_eq!(items, cache.iter().map(|(k, v)| (*k, *v)).collect::<Vec<_>>());
+            }
+        }
     }
 }

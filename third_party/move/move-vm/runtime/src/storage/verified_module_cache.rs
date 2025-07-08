@@ -3,6 +3,7 @@
 
 use lazy_static::lazy_static;
 use parking_lot::Mutex;
+use std::num::NonZeroUsize;
 
 /// Cache key for verified modules.
 ///
@@ -27,7 +28,7 @@ const fn cache_active() -> bool {
 
 impl VerifiedModuleCache {
     /// Maximum size of the cache. When modules are cached, they can skip re-verification.
-    const VERIFIED_CACHE_SIZE: usize = 100_000;
+    const VERIFIED_CACHE_SIZE: NonZeroUsize = NonZeroUsize::new(100_000).unwrap();
 
     /// Returns new empty verified module cache.
     pub(crate) fn empty() -> Self {

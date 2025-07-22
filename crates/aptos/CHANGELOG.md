@@ -3,6 +3,14 @@
 All notable changes to the Movement CLI will be captured in this file. This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and the format set out by [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 # Unreleased
+
+## [7.6.1]
+- Mark language version 2.2 as stable.
+
+## [7.6.0]
+- Sets up confidential assets for localnet under the experimental address 0x7
+
+## [7.5.0]
 - Fix auto-update CLI command to work with more OS's including Mac and Linux on ARM
 
 ## [7.4.0]

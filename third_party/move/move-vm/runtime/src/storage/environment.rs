@@ -69,7 +69,7 @@ pub struct RuntimeEnvironment {
     /// different verifier configurations (e.g. straddling an epoch boundary where the config
     /// changed) would treat each other's cached entries as their own — a module accepted under
     /// a more permissive config could be skipped under a stricter one.
-    /// 
+    ///
     /// Invariant: must stay in line with `vm_config.verifier_config`. Any mutation of `vm_config.verifier_config` must
     /// recompute this digest.
     verifier_config_digest: [u8; 32],
@@ -142,6 +142,7 @@ impl RuntimeEnvironment {
         immediate_dependencies: &[Arc<Module>],
     ) -> VMResult<Script> {
         dependencies::verify_script(
+            &self.vm_config.verifier_config,
             locally_verified_script.0.as_ref(),
             immediate_dependencies
                 .iter()
@@ -189,6 +190,7 @@ impl RuntimeEnvironment {
         immediate_dependencies: &[Arc<Module>],
     ) -> VMResult<Module> {
         dependencies::verify_module(
+            &self.vm_config.verifier_config,
             locally_verified_module.0.as_ref(),
             immediate_dependencies
                 .iter()

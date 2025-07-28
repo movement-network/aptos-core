@@ -12720,6 +12720,7 @@ dependencies = [
  "serde",
  "sha3 0.9.1",
  "smallbitvec",
+ "test-case",
  "triomphe",
  "typed-arena",
 ]

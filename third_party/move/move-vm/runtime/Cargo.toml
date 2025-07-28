@@ -42,6 +42,7 @@ move-vm-test-utils ={ workspace = true }
 move-vm-types = { workspace = true, features = ["testing"] }
 proptest = { workspace = true }
 smallbitvec = { workspace = true }
+test-case = { workspace = true }
 
 [features]
 default = []

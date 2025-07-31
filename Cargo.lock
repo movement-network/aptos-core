@@ -6275,7 +6275,10 @@ name = "bytecode-verifier-transactional-tests"
 version = "0.1.0"
 dependencies = [
  "datatest-stable",
+ "libtest-mimic",
  "move-transactional-test-runner",
+ "once_cell",
+ "walkdir",
 ]
 
 [[package]]

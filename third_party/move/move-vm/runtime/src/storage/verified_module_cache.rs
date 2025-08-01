@@ -1,7 +1,9 @@
 // Copyright (c) The Move Contributors
 // SPDX-License-Identifier: Apache-2.0
 
+use cfg_if::cfg_if;
 use lazy_static::lazy_static;
+use move_vm_metrics::VERIFIED_MODULE_CACHE_SIZE;
 use parking_lot::Mutex;
 use std::num::NonZeroUsize;
 
@@ -35,26 +37,44 @@ impl VerifiedModuleCache {
         Self(Mutex::new(lru::LruCache::new(Self::VERIFIED_CACHE_SIZE)))
     }
 
-    /// Returns true if the (module hash, verifier config digest) pair is contained in the cache.
-    pub(crate) fn contains(
-        &self,
-        module_hash: &[u8; 32],
-        verifier_config_digest: &[u8; 32],
-    ) -> bool {
-        cache_active() && self.0.lock().contains(&(*module_hash, *verifier_config_digest))
+    /// Returns true if the module hash is contained in the cache. For tests, the cache is treated
+    /// as empty at all times.
+    pub(crate) fn contains(&self, module_hash: &[u8; 32]) -> bool {
+        // Note: need to use get to update LRU queue.
+        verifier_cache_enabled() && self.0.lock().get(module_hash).is_some()
     }
 
-    /// Inserts the (module hash, verifier config digest) pair into the cache, marking the
-    /// corresponding module as locally verified under that configuration.
-    pub(crate) fn put(&self, module_hash: [u8; 32], verifier_config_digest: [u8; 32]) {
-        if cache_active() {
-            self.0
-                .lock()
-                .put((module_hash, verifier_config_digest), ());
+    /// Inserts the hash into the cache, marking the corresponding as locally verified. For tests,
+    /// entries are not added to the cache.
+    pub(crate) fn put(&self, module_hash: [u8; 32]) {
+        if verifier_cache_enabled() {
+            let mut cache = self.0.lock();
+            cache.put(module_hash, ());
+            VERIFIED_MODULE_CACHE_SIZE.set(cache.len() as i64);
+        }
+    }
+
+    /// Flushes the verified modules cache.
+    pub(crate) fn flush(&self) {
+        if verifier_cache_enabled() {
+            self.0.lock().clear();
         }
     }
 }
 
 lazy_static! {
-    pub(crate) static ref VERIFIED_MODULES_V2: VerifiedModuleCache = VerifiedModuleCache::empty();
+    pub(crate) static ref VERIFIED_MODULES_CACHE: VerifiedModuleCache =
+        VerifiedModuleCache::empty();
+}
+
+#[inline(always)]
+fn verifier_cache_enabled() -> bool {
+    cfg_if! {
+        if #[cfg(any(test, feature = "testing"))] {
+            false
+        } else {
+            // Cache is enabled in non-test environments only.
+            true
+        }
+    }
 }

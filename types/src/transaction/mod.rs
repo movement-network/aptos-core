@@ -1488,8 +1488,8 @@ impl TransactionStatus {
 
     pub fn as_kept_status(&self) -> Result<ExecutionStatus> {
         match self {
-            TransactionStatus::Keep(s) => Ok(s.clone()),
-            _ => Err(format_err!("Not Keep.")),
+            Self::Keep(s) => Ok(s.clone()),
+            status => Err(format_err!("Expected kept status, got {:?}", status)),
         }
     }
 

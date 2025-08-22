@@ -600,7 +600,6 @@ impl CliCommand<&'static str> for TestPackage {
             config.clone(),
             UnitTestingConfig {
                 filter: self.filter.clone(),
-                report_stacktrace_on_abort: true,
                 report_storage_on_error: self.dump_state,
                 ignore_compile_warnings: self.ignore_compile_warnings,
                 named_address_values: self

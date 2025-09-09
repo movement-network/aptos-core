@@ -4,6 +4,12 @@ All notable changes to the Movement CLI will be captured in this file. This proj
 
 # Unreleased
 
+##[7.8.0]
+- New beta feature: Transaction Simulation Session
+
+## [7.7.0]
+- Turn off sharding in the local testnet
+
 ## [7.6.1]
 - Mark language version 2.2 as stable.
 

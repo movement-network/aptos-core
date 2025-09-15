@@ -1176,7 +1176,7 @@ pub trait AsConverter<R> {
         &self,
         db: Arc<dyn DbReader>,
         indexer_reader: Option<Arc<dyn IndexerReader>>,
-    ) -> MoveConverter<R>;
+    ) -> MoveConverter<'_, R>;
 }
 
 impl<R: StateView> AsConverter<R> for R {
@@ -1184,7 +1184,7 @@ impl<R: StateView> AsConverter<R> for R {
         &self,
         db: Arc<dyn DbReader>,
         indexer_reader: Option<Arc<dyn IndexerReader>>,
-    ) -> MoveConverter<R> {
+    ) -> MoveConverter<'_, R> {
         MoveConverter::new(self, db, indexer_reader)
     }
 }

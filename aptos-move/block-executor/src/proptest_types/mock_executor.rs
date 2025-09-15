@@ -765,12 +765,14 @@ where
         self.group_writes.clone()
     }
 
-    fn skip_output() -> Self {
-        Self::skipped_output(None)
-    }
-
-    fn discard_output(discard_code: StatusCode) -> Self {
-        Self::with_discard_code(discard_code)
+    fn for_each_resource_group_key_and_tags(
+        &self,
+        callback: &mut dyn FnMut(&K, HashSet<&u32>) -> Result<(), PanicError>,
+    ) -> Result<(), PanicError> {
+        for (key, _, _, ops) in self.group_writes.iter() {
+            callback(key, ops.keys().collect())?;
+        }
+        Ok(())
     }
 
     fn output_approx_size(&self) -> u64 {

@@ -543,7 +543,7 @@ impl RawTransaction {
         self.payload
     }
 
-    pub fn executable_ref(&self) -> Result<TransactionExecutableRef> {
+    pub fn executable_ref(&self) -> Result<TransactionExecutableRef<'_>> {
         self.payload.executable_ref()
     }
 
@@ -702,7 +702,7 @@ impl TransactionExecutable {
         matches!(self, Self::EntryFunction(_))
     }
 
-    pub fn as_ref(&self) -> TransactionExecutableRef {
+    pub fn as_ref(&self) -> TransactionExecutableRef<'_> {
         match self {
             TransactionExecutable::EntryFunction(entry_function) => {
                 TransactionExecutableRef::EntryFunction(entry_function)
@@ -789,7 +789,7 @@ impl TransactionPayload {
         }
     }
 
-    pub fn executable_ref(&self) -> Result<TransactionExecutableRef> {
+    pub fn executable_ref(&self) -> Result<TransactionExecutableRef<'_>> {
         match self {
             TransactionPayload::EntryFunction(entry_function) => {
                 Ok(TransactionExecutableRef::EntryFunction(entry_function))
@@ -1152,7 +1152,7 @@ impl SignedTransaction {
         &self.raw_txn.payload
     }
 
-    pub fn executable_ref(&self) -> Result<TransactionExecutableRef> {
+    pub fn executable_ref(&self) -> Result<TransactionExecutableRef<'_>> {
         self.raw_txn.executable_ref()
     }
 
@@ -2598,4 +2598,135 @@ impl ViewFunctionOutput {
     pub fn new(values: Result<Vec<Vec<u8>>>, gas_used: u64) -> Self {
         Self { values, gas_used }
     }
+
+    pub fn new_ok(values: Vec<Vec<u8>>, gas_used: u64) -> Self {
+        Self {
+            values: Ok(values),
+            gas_used,
+        }
+    }
+
+    pub fn new_error_message(
+        message: String,
+        vm_status: Option<StatusCode>,
+        gas_used: u64,
+    ) -> Self {
+        Self {
+            values: Err(ViewFunctionError::ErrorMessage(message, vm_status)),
+            gas_used,
+        }
+    }
+
+    pub fn new_move_abort_error(
+        status: ExecutionStatus,
+        vm_status: Option<StatusCode>,
+        gas_used: u64,
+    ) -> Self {
+        Self {
+            values: Err(ViewFunctionError::MoveAbort(status, vm_status)),
+            gas_used,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct AuxiliaryInfo {
+    persisted_info: PersistedAuxiliaryInfo,
+    ephemeral_info: Option<EphemeralAuxiliaryInfo>,
+}
+
+impl AuxiliaryInfo {
+    pub fn new(
+        persisted_info: PersistedAuxiliaryInfo,
+        ephemeral_info: Option<EphemeralAuxiliaryInfo>,
+    ) -> Self {
+        Self {
+            persisted_info,
+            ephemeral_info,
+        }
+    }
+
+    pub fn into_persisted_info(self) -> PersistedAuxiliaryInfo {
+        self.persisted_info
+    }
+
+    pub fn persisted_info(&self) -> &PersistedAuxiliaryInfo {
+        &self.persisted_info
+    }
+
+    pub fn ephemeral_info(&self) -> &Option<EphemeralAuxiliaryInfo> {
+        &self.ephemeral_info
+    }
+
+    pub fn persisted_info_hash(&self) -> Option<HashValue> {
+        match self.persisted_info {
+            PersistedAuxiliaryInfo::V1 { .. } => Some(self.persisted_info.hash()),
+            PersistedAuxiliaryInfo::None => None,
+        }
+    }
+}
+
+impl Default for AuxiliaryInfo {
+    fn default() -> Self {
+        Self {
+            persisted_info: PersistedAuxiliaryInfo::None, // Use None by default for compatibility
+            ephemeral_info: None,
+        }
+    }
+}
+
+impl AuxiliaryInfoTrait for AuxiliaryInfo {
+    fn new_empty() -> Self {
+        Self {
+            persisted_info: PersistedAuxiliaryInfo::None,
+            ephemeral_info: None,
+        }
+    }
+
+    fn transaction_index(&self) -> Option<u32> {
+        match self.persisted_info {
+            PersistedAuxiliaryInfo::V1 { transaction_index } => Some(transaction_index),
+            PersistedAuxiliaryInfo::None => None,
+        }
+    }
+
+    fn proposer_index(&self) -> Option<u64> {
+        self.ephemeral_info
+            .map(|EphemeralAuxiliaryInfo { proposer_index }| proposer_index)
+    }
+
+    fn auxiliary_info_at_txn_index(txn_index: u32) -> Self {
+        Self {
+            persisted_info: PersistedAuxiliaryInfo::V1 {
+                transaction_index: txn_index,
+            },
+            ephemeral_info: None,
+        }
+    }
+}
+
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, CryptoHasher, BCSCryptoHash,
+)]
+#[cfg_attr(any(test, feature = "fuzzing"), derive(Arbitrary))]
+pub enum PersistedAuxiliaryInfo {
+    None,
+    // The index of the transaction in a block (after shuffler, before execution).
+    // Note that this would be slightly different from the index of transactions that get committed
+    // onchain, as this considers transactions that may get discarded.
+    V1 { transaction_index: u32 },
+}
+
+pub trait AuxiliaryInfoTrait: Clone {
+    fn transaction_index(&self) -> Option<u32>;
+    fn proposer_index(&self) -> Option<u64>;
+    fn new_empty() -> Self;
+    fn auxiliary_info_at_txn_index(txn_index: u32) -> Self;
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct EphemeralAuxiliaryInfo {
+    // TODO(grao): After execution pool is implemented we might want this information be persisted
+    // onchain?
+    pub proposer_index: u64,
 }

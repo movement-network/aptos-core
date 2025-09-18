@@ -142,7 +142,7 @@ impl AptosDebugger {
             &txn,
             &log_context,
             |gas_meter| {
-                let gas_profiler = match txn
+                match txn
                     .executable_ref()
                     .expect("Module bundle payload has been removed")
                 {
@@ -159,8 +159,7 @@ impl AptosDebugger {
                         // TODO[Orderless]: Implement this
                         unimplemented!("not supported yet")
                     },
-                };
-                gas_profiler
+                }
             },
         )?;
 

@@ -108,7 +108,7 @@ where
             ModuleId,
             Arc<ModuleCode<CompiledModule, Module, AptosModuleExtension>>,
         ),
-    > {
+    > + use<K, T, V, I> {
         self.module_cache.take_modules_iter()
     }
 

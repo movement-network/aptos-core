@@ -319,7 +319,15 @@ impl TransactionFactory {
         TransactionBuilder {
             sender: None,
             sequence_number: None,
-            payload,
+            payload: if self.use_txn_payload_v2_format || self.use_replay_protection_nonce {
+                payload.upgrade_payload_with_fn(
+                    self.use_txn_payload_v2_format,
+                    self.use_replay_protection_nonce
+                        .then_some(|| thread_rng().r#gen()),
+                )
+            } else {
+                payload
+            },
             max_gas_amount: self.max_gas_amount,
             gas_unit_price: self.gas_unit_price,
             expiration_timestamp_secs: self.expiration_timestamp(),

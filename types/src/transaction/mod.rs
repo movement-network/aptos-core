@@ -847,6 +847,20 @@ impl TransactionPayload {
         use_txn_payload_v2_format: bool,
         use_orderless_transactions: bool,
     ) -> Self {
+        self.upgrade_payload_with_fn(
+            use_txn_payload_v2_format,
+            use_orderless_transactions.then_some(|| rng.r#gen()),
+        )
+    }
+
+    pub fn upgrade_payload_with_fn<F>(
+        self,
+        use_txn_payload_v2_format: bool,
+        use_orderless_transactions: Option<F>,
+    ) -> Self
+    where
+        F: FnOnce() -> u64,
+    {
         if use_txn_payload_v2_format {
             let executable = self
                 .executable()

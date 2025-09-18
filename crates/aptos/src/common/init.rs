@@ -237,7 +237,7 @@ impl CliCommand<()> for InitTool {
 
         // Public key
         let public_key = if self.is_hardware_wallet() {
-            let pub_key = match aptos_ledger::get_public_key(
+            match aptos_ledger::get_public_key(
                 derivation_path
                     .ok_or_else(|| {
                         CliError::UnexpectedError("Invalid derivation path".to_string())
@@ -252,8 +252,7 @@ impl CliCommand<()> for InitTool {
                         err.to_string()
                     )))
                 },
-            };
-            pub_key
+            }
         } else {
             private_key.clone().unwrap().public_key()
         };
@@ -333,8 +332,8 @@ impl CliCommand<()> for InitTool {
             .unwrap_or(DEFAULT_PROFILE);
 
         eprintln!(
-            "\n---\nMovement CLI is now set up for account {} as profile {}!\n See the account here: {}\n 
-            Run `movement --help` for more information about commands. \n 
+            "\n---\nMovement CLI is now set up for account {} as profile {}!\n See the account here: {}\n
+            Run `movement --help` for more information about commands. \n
             Visit https://faucet.movementlabs.xyz to use the testnet faucet.",
             address,
             profile_name,

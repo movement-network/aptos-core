@@ -1036,14 +1036,28 @@ impl TestContext {
         payload: Value,
         status_code: u16,
     ) {
-        let mut request = json!({
-            "sender": account.address(),
-            "sequence_number": account.sequence_number().to_string(),
-            "gas_unit_price": "100",
-            "max_gas_amount": "1000000",
-            "expiration_timestamp_secs": "16373698888888",
-            "payload": payload,
-        });
+        let mut request = if self.use_orderless_transactions {
+            let mut rng = rand::thread_rng();
+            let replay_protection_nonce: u64 = rng.r#gen();
+            json!({
+                "sender": account.address(),
+                "sequence_number": (u64::MAX).to_string(),
+                "gas_unit_price": "100",
+                "max_gas_amount": "1000000",
+                "expiration_timestamp_secs": self.get_expiration_time().to_string(),
+                "payload": payload,
+                "replay_protection_nonce": replay_protection_nonce.to_string(),
+            })
+        } else {
+            json!({
+                "sender": account.address(),
+                "sequence_number": account.sequence_number().to_string(),
+                "gas_unit_price": "100",
+                "max_gas_amount": "1000000",
+                "expiration_timestamp_secs": "16373698888888",
+                "payload": payload,
+            })
+        };
 
         let resp = self
             .post(
@@ -1105,14 +1119,28 @@ impl TestContext {
         payload: Value,
         status_code: u16,
     ) -> Value {
-        let mut request = json!({
-            "sender": sender.address(),
-            "sequence_number": sender.sequence_number().to_string(),
-            "gas_unit_price": "0",
-            "max_gas_amount": "1000000",
-            "expiration_timestamp_secs": "16373698888888",
-            "payload": payload,
-        });
+        let mut request = if self.use_orderless_transactions {
+            let mut rng = rand::thread_rng();
+            let replay_protection_nonce: u64 = rng.r#gen();
+            json!({
+                "sender": sender.address(),
+                "sequence_number": (u64::MAX).to_string(),
+                "gas_unit_price": "0",
+                "max_gas_amount": "1000000",
+                "expiration_timestamp_secs": self.get_expiration_time().to_string(),
+                "payload": payload,
+                "replay_protection_nonce": replay_protection_nonce.to_string(),
+            })
+        } else {
+            json!({
+                "sender": sender.address(),
+                "sequence_number": sender.sequence_number().to_string(),
+                "gas_unit_price": "0",
+                "max_gas_amount": "1000000",
+                "expiration_timestamp_secs": "16373698888888",
+                "payload": payload,
+            })
+        };
 
         // We're intentionally using invalid signatures since simulation API rejects valid ones.
         let random_account = self.gen_account();
@@ -1186,7 +1214,7 @@ impl TestContext {
     pub fn get_routes_with_poem(
         &self,
         poem_address: SocketAddr,
-    ) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
+    ) -> impl Filter<Extract = (impl Reply + use<>,), Error = Rejection> + Clone + use<> {
         warp::path!("v1" / ..).and(reverse_proxy_filter(
             "v1".to_string(),
             format!("http://{}/v1", poem_address),

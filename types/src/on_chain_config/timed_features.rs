@@ -20,15 +20,9 @@ pub enum TimedFeatureFlag {
 
     // Fixes the bug of table natives not tracking the memory usage of the global values they create.
     FixMemoryUsageTracking,
-
-    /// Fixes the bug that table natives double count the memory usage of the global values.
-    FixTableNativesMemoryDoubleCounting,
-
-    /// Fixes the bug in deep type tag conversion.
-    FixCryptoAlgebraNativesTypeTagConversion,
-
-    /// Uses full transaction size when computing transaction metadata.
-    UseFullTransactionSizeForTransactionMetadata,
+    // Disable checking for captured option types.
+    // Only when this feature is turned on, feature flag ENABLE_CAPTURE_OPTION can control whether the option type can be captured.
+    DisabledCaptureOption,
 }
 
 /// Representation of features that are gated by the block timestamps.
@@ -135,24 +129,14 @@ impl TimedFeatureFlag {
                 .with_ymd_and_hms(2025, 3, 11, 17, 0, 0)
                 .unwrap()
                 .with_timezone(&Utc),
-
-            (FixTableNativesMemoryDoubleCounting, TESTNET) => Los_Angeles
-                .with_ymd_and_hms(2025, 10, 16, 17, 0, 0)
+            (DisabledCaptureOption, TESTNET) => Los_Angeles
+                .with_ymd_and_hms(2025, 9, 15, 12, 0, 0)
                 .unwrap()
                 .with_timezone(&Utc),
-            (FixTableNativesMemoryDoubleCounting, MAINNET) => Los_Angeles
-                .with_ymd_and_hms(2025, 10, 21, 10, 0, 0)
-                .unwrap()
-                .with_timezone(&Utc),
-
-            // 1 hour after the beginning of time
-            (FixCryptoAlgebraNativesTypeTagConversion, _) => {
-                Utc.with_ymd_and_hms(1970, 1, 1, 1, 0, 0).unwrap()
-            },
-
-            // Irrelevant for us except for testing
-            (UseFullTransactionSizeForTransactionMetadata, _) => BEGINNING_OF_TIME,
-
+            // For testing, time set to 1 hour after the beginning of time to test the old and new behaviors in tests.
+            (DisabledCaptureOption, TESTING) => Utc.with_ymd_and_hms(1970, 1, 1, 1, 0, 0).unwrap(),
+            // For mainnet, always enable this feature.
+            (DisabledCaptureOption, MAINNET) => BEGINNING_OF_TIME,
             // For chains other than testnet and mainnet, a timed feature is considered enabled from
             // the very beginning, if left unspecified.
             (_, TESTING | DEVNET | PREMAINNET) => BEGINNING_OF_TIME,

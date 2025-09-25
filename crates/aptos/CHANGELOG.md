@@ -4,7 +4,13 @@ All notable changes to the Movement CLI will be captured in this file. This proj
 
 # Unreleased
 
-##[7.8.0]
+## [7.9.0]
+- Set language version 2.2 and bytecode version v8 as default
+
+## [7.8.1]
+- Transaction Simulatiom Session: fixed resource deserialization bug
+
+## [7.8.0]
 - New beta feature: Transaction Simulation Session
 
 ## [7.7.0]

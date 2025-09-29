@@ -3404,7 +3404,7 @@ dependencies = [
  "fail",
  "futures",
  "hex",
- "jemallocator",
+ "move-vm-runtime",
  "num_cpus",
  "rand 0.7.3",
  "rayon",

@@ -4,6 +4,9 @@ All notable changes to the Movement CLI will be captured in this file. This proj
 
 # Unreleased
 
+## [7.9.1]
+- Add mem as pre-compiled module to avoid compatibility issue when using aptos-framework
+
 ## [7.9.0]
 - Set language version 2.2 and bytecode version v8 as default
 

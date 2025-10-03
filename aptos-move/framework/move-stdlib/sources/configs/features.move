@@ -592,6 +592,32 @@ module std::features {
     ///
     /// Lifetime: transient
     const TRANSACTION_SIMULATION_ENHANCEMENT: u64 = 78;
+    /// Whether the Atomic bridge is available
+    /// Lifetime: transient
+    const ATOMIC_BRIDGE: u64 = 224;
+
+    public fun get_atomic_bridge_feature(): u64 { ATOMIC_BRIDGE }
+
+
+    public fun abort_atomic_bridge_enabled(): bool acquires Features {
+        true
+    }
+
+
+    /// Whether the Atomic bridge is available
+    /// Lifetime: transient
+    const NATIVE_BRIDGE: u64 = 225;
+
+    public fun get_native_bridge_feature(): u64 { NATIVE_BRIDGE }
+
+    public fun abort_native_bridge_enabled(): bool acquires Features {
+        true
+    }
+
+    /// Whether the Governed Gas Pool is used to capture gas fees
+    ///
+    /// Lifetime: permanent
+    const GOVERNED_GAS_POOL: u64 = 223;
 
     public fun get_transaction_simulation_enhancement_feature(): u64 { TRANSACTION_SIMULATION_ENHANCEMENT }
 

@@ -620,9 +620,13 @@ impl SchedulerV2 {
             // (which, inductively, must occur before the transaction is committed). Hence, it
             // must also be safe to commit the current transaction.
 
-            if self.committed_marker[next_to_commit_idx as usize]
-                .swap(CommitMarkerFlag::CommitStarted as u8, Ordering::Relaxed)
-                != CommitMarkerFlag::NotCommitted as u8
+            if self
+                .committed_marker
+                .get(next_to_commit_idx as usize)
+                .is_some_and(|marker| {
+                    marker.swap(CommitMarkerFlag::CommitStarted as u8, Ordering::Relaxed)
+                        != CommitMarkerFlag::NotCommitted as u8
+                })
             {
                 return Err(code_invariant_error(format!(
                     "Marking {} as PENDING_COMMIT_HOOK, but previous marker != NOT_COMMITTED",

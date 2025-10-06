@@ -668,6 +668,14 @@ impl<K, E> MockOutput<K, E> {
     }
 }
 
+fn mock_fee_statement(total_gas: u64) -> FeeStatement {
+    // First argument is supposed to be total (not important for the test though).
+    // Next two arguments are different kinds of execution gas that are counted
+    // towards the block limit. We split the total into two pieces for these arguments.
+    // TODO: add variety to generating fee statement based on total gas.
+    FeeStatement::new(total_gas, total_gas / 2, total_gas.div_ceil(2), 0, 0)
+}
+
 impl<K, E> TransactionOutput for MockOutput<K, E>
 where
     K: PartialOrd + Ord + Send + Sync + Clone + Hash + Eq + ModulePath + Debug + 'static,
@@ -675,10 +683,71 @@ where
 {
     type Txn = MockTransaction<K, E>;
 
-    // TODO[agg_v2](tests): Assigning MoveTypeLayout as None for all the writes for now.
-    // That means, the resources do not have any DelayedFields embedded in them.
-    // Change it to test resources with DelayedFields as well.
-    fn resource_write_set(&self) -> Vec<(K, Arc<ValueType>, Option<Arc<MoveTypeLayout>>)> {
+    fn committed_output(&self) -> &OnceCell<aptos_types::transaction::TransactionOutput> {
+        unimplemented!("Not used in tests");
+    }
+
+    fn skip_output() -> Self {
+        Self::skipped_output(None)
+    }
+
+    fn discard_output(discard_code: StatusCode) -> Self {
+        Self::with_discard_code(discard_code)
+    }
+
+    fn before_materialization(&self) -> Result<Self::BeforeMaterializationGuard<'_>, PanicError> {
+        Ok(self)
+    }
+
+    fn after_materialization(&self) -> Result<Self::AfterMaterializationGuard<'_>, PanicError> {
+        Ok(self)
+    }
+
+    fn check_materialization(&self) -> Result<bool, PanicError> {
+        Ok(!self.skipped)
+    }
+
+    fn legacy_sequential_materialize_agg_v1(
+        &mut self,
+        _view: &impl TAggregatorV1View<Identifier = K>,
+    ) {
+        // TODO[agg_v2](tests): implement this method and compare
+        // against sequential execution results v. aggregator v1.
+    }
+
+    fn incorporate_materialized_txn_output(
+        &mut self,
+        aggregator_v1_writes: Vec<(K, WriteOp)>,
+        patched_resource_write_set: Vec<(K, ValueType)>,
+        _patched_events: Vec<E>,
+    ) -> Result<(), PanicError> {
+        assert_ok!(self
+            .patched_resource_write_set
+            .set(patched_resource_write_set.clone().into_iter().collect()));
+        assert_ok!(self.materialized_delta_writes.set(aggregator_v1_writes));
+        // TODO: Also test patched events.
+        Ok(())
+    }
+
+    fn set_txn_output_for_non_dynamic_change_set(&mut self) {
+        // No compatibility issues here since the move-vm doesn't use the dynamic flag.
+    }
+
+    fn is_materialized_and_success(&self) -> bool {
+        // TODO(BlockSTMv2): Actually test that materialize is called.
+        // A skipped transaction is not a success.
+        !self.skipped
+    }
+}
+
+impl<K, E> BeforeMaterializationOutput<MockTransaction<K, E>> for &MockOutput<K, E>
+where
+    K: PartialOrd + Ord + Send + Sync + Clone + Hash + Eq + ModulePath + Debug + 'static,
+    E: Send + Sync + Debug + Clone + TransactionEvent + 'static,
+{
+    fn resource_write_set(
+        &self,
+    ) -> HashMap<K, (TriompheArc<ValueType>, Option<TriompheArc<MoveTypeLayout>>)> {
         self.writes
             .iter()
             .map(|(key, value, maybe_layout)| {
@@ -846,6 +915,22 @@ where
     }
 
     fn has_new_epoch_event(&self) -> bool {
+        // For tests, it is ok to return false.
+        false
+    }
+}
+
+impl<K, E> AfterMaterializationOutput<MockTransaction<K, E>> for &MockOutput<K, E>
+where
+    K: PartialOrd + Ord + Send + Sync + Clone + Hash + Eq + ModulePath + Debug + 'static,
+    E: Send + Sync + Debug + Clone + TransactionEvent + 'static,
+{
+    fn fee_statement(&self) -> FeeStatement {
+        mock_fee_statement(self.total_gas)
+    }
+
+    fn has_new_epoch_event(&self) -> bool {
+        // For tests, it is ok to return false.
         false
     }
 }

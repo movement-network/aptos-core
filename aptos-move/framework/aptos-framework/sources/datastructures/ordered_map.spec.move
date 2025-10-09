@@ -1,8 +1,9 @@
-spec aptos_std::big_ordered_map {
+spec aptos_std::ordered_map {
 
-    spec BigOrderedMap {
+    spec OrderedMap {
         pragma intrinsic = map,
             map_new = new,
+            map_len = length,
             map_destroy_empty = destroy_empty,
             map_has_key = contains,
             map_add_no_override = add,
@@ -16,30 +17,18 @@ spec aptos_std::big_ordered_map {
             map_is_empty = is_empty;
     }
 
-    spec native fun spec_len<K, V>(t: BigOrderedMap<K, V>): num;
-    spec native fun spec_contains_key<K, V>(t: BigOrderedMap<K, V>, k: K): bool;
-    spec native fun spec_set<K, V>(t: BigOrderedMap<K, V>, k: K, v: V): BigOrderedMap<K, V>;
-    spec native fun spec_remove<K, V>(t: BigOrderedMap<K, V>, k: K): BigOrderedMap<K, V>;
-    spec native fun spec_get<K, V>(t: BigOrderedMap<K, V>, k: K): V;
+    spec native fun spec_len<K, V>(t: OrderedMap<K, V>): num;
+    spec native fun spec_contains_key<K, V>(t: OrderedMap<K, V>, k: K): bool;
+    spec native fun spec_set<K, V>(t: OrderedMap<K, V>, k: K, v: V): OrderedMap<K, V>;
+    spec native fun spec_remove<K, V>(t: OrderedMap<K, V>, k: K): OrderedMap<K, V>;
+    spec native fun spec_get<K, V>(t: OrderedMap<K, V>, k: K): V;
 
-
-    spec new_with_config {
-        pragma verify = false;
-        pragma opaque;
+    spec length {
+        pragma intrinsic;
     }
 
     spec new {
         pragma intrinsic;
-    }
-
-    spec new_with_reusable {
-        pragma verify = false;
-        pragma opaque;
-    }
-
-    spec new_with_type_size_hints {
-        pragma verify = false;
-        pragma opaque;
     }
 
     spec borrow {
@@ -77,6 +66,22 @@ spec aptos_std::big_ordered_map {
         pragma intrinsic;
     }
 
+    spec iter_add {
+        pragma opaque;
+        pragma verify = false;
+    }
+
+
+    spec iter_replace {
+        pragma opaque;
+        pragma verify = false;
+    }
+
+    spec iter_remove {
+        pragma opaque;
+        pragma verify = false;
+    }
+
     spec iter_is_end {
         pragma opaque;
         pragma verify = false;
@@ -92,10 +97,27 @@ spec aptos_std::big_ordered_map {
         pragma verify = false;
     }
 
+    spec iter_is_begin_from_non_empty {
+        pragma opaque;
+        pragma verify = false;
+    }
+
     spec iter_is_begin {
         pragma opaque;
         pragma verify = false;
     }
+
+    spec values {
+        pragma opaque;
+        pragma verify = false;
+    }
+
+
+    spec binary_search {
+        pragma opaque;
+        pragma verify = false;
+    }
+
 
     spec internal_lower_bound {
         pragma opaque;
@@ -107,33 +129,18 @@ spec aptos_std::big_ordered_map {
         pragma verify = false;
     }
 
-    spec allocate_spare_slots {
-        pragma verify = false;
-        pragma opaque;
-    }
-
-    spec validate_size_and_init_max_degrees {
-        pragma verify = false;
-        pragma opaque;
-    }
-
-    spec validate_dynamic_size_and_init_max_degrees {
-        pragma verify = false;
-        pragma opaque;
-    }
-
-    spec validate_static_size_and_init_max_degrees {
-        pragma verify = false;
-        pragma opaque;
-    }
-
     spec keys {
         pragma verify = false;
         pragma opaque;
         ensures [abstract] forall k: K: vector::spec_contains(result, k) <==> spec_contains_key(self, k);
     }
 
-    spec new_from<K: drop + copy + store, V: store>(keys: vector<K>, values: vector<V>): BigOrderedMap<K, V> {
+    spec to_vec_pair {
+        pragma verify = false;
+        pragma opaque;
+    }
+
+    spec new_from<K, V>(keys: vector<K>, values: vector<V>): OrderedMap<K, V> {
         pragma opaque;
         pragma verify = false;
         aborts_if [abstract] exists i in 0..len(keys), j in 0..len(keys) where i != j : keys[i] == keys[j];
@@ -157,12 +164,42 @@ spec aptos_std::big_ordered_map {
         ensures [abstract] forall k: K: spec_contains_key(old(self), k) ==> spec_contains_key(self, k);
     }
 
+    spec replace_key_inplace {
+        pragma opaque;
+        pragma verify = false;
+    }
+
     spec add_all {
         pragma opaque;
         pragma verify = false;
     }
 
-    spec borrow_front<K: drop + copy + store, V: store>(self: &BigOrderedMap<K, V>): (K, &V) {
+    spec append {
+        pragma opaque;
+        pragma verify = false;
+    }
+
+    spec upsert_all {
+        pragma opaque;
+        pragma verify = false;
+    }
+
+    spec append_disjoint {
+        pragma opaque;
+        pragma verify = false;
+    }
+
+    spec append_impl {
+        pragma opaque;
+        pragma verify = false;
+    }
+
+    spec trim {
+        pragma opaque;
+        pragma verify = false;
+    }
+
+    spec borrow_front<K, V>(self: &OrderedMap<K, V>): (&K, &V) {
         pragma opaque;
         pragma verify = false;
         ensures [abstract] spec_contains_key(self, result_1);
@@ -180,7 +217,7 @@ spec aptos_std::big_ordered_map {
         std::cmp::compare(result_1, k) == std::cmp::Ordering::Greater;
     }
 
-    spec pop_front<K: drop + copy + store, V: store>(self: &mut BigOrderedMap<K, V>): (K, V) {
+    spec pop_front<K, V>(self: &mut OrderedMap<K, V>): (K, V) {
         pragma opaque;
         pragma verify = false;
     }
@@ -190,7 +227,7 @@ spec aptos_std::big_ordered_map {
         pragma verify = false;
     }
 
-    spec prev_key<K: drop + copy + store, V: store>(self: &BigOrderedMap<K, V>, key: &K): Option<K> {
+    spec prev_key<K: copy, V>(self: &OrderedMap<K, V>, key: &K): Option<K> {
         pragma opaque;
         pragma verify = false;
         ensures [abstract] result == std::option::spec_none() <==>
@@ -205,7 +242,7 @@ spec aptos_std::big_ordered_map {
     }
 
 
-    spec next_key<K: drop + copy + store, V: store>(self: &BigOrderedMap<K, V>, key: &K): Option<K>  {
+    spec next_key<K: copy, V>(self: &OrderedMap<K, V>, key: &K): Option<K>  {
         pragma opaque;
         pragma verify = false;
         ensures [abstract] result == std::option::spec_none() <==>
@@ -245,11 +282,9 @@ spec aptos_std::big_ordered_map {
         pragma verify = false;
     }
 
-    spec compute_length {
-        pragma verify = false;
+    spec remove_or_none {
         pragma opaque;
-        ensures [abstract] result == spec_len(self);
+        pragma verify = false;
     }
-
 
 }

@@ -8,4 +8,7 @@ mod move_workloads;
 mod raw_module_data;
 mod token_workflow;
 
-pub use move_workloads::{EntryPoints, LoopType, MapType, OrderBookState};
+pub use move_workloads::{
+    EntryPoints, LoopType, MapType, MonotonicCounterType, MoveVmMicroBenchmark, OrderBookState,
+};
+pub use token_workflow::TokenWorkflowKind;

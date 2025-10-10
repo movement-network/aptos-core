@@ -70,6 +70,15 @@ impl OrderBookState {
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum MoveVmMicroBenchmark {
+    /// Runs a function which creates many local variables (but do not do any expensive compute)
+    Locals,
+    /// Runs a function instantiation which creates many local variables (but do not do any
+    /// expensive compute)
+    LocalsGeneric,
+}
+
 //
 // List of entry points to expose
 //
@@ -265,6 +274,14 @@ pub enum EntryPoints {
         /// Buy size is picked randomly from [1, max_buy_size] range
         max_buy_size: u64,
     },
+
+    /// Test monotonically increasing counter native function throughput
+    MonotonicCounter {
+        counter_type: MonotonicCounterType,
+    },
+
+    /// Different microbenchmarks to stress-test Move VM.
+    MoveVmMicroBenchmark(MoveVmMicroBenchmark),
 }
 
 impl EntryPointTrait for EntryPoints {
@@ -334,6 +351,9 @@ impl EntryPointTrait for EntryPoints {
             EntryPoints::IncGlobalMilestoneAggV2 { .. }
             | EntryPoints::CreateGlobalMilestoneAggV2 { .. } => "aggregator_examples",
             EntryPoints::DeserializeU256 => "bcs_stream",
+            EntryPoints::MoveVmMicroBenchmark(entrypoint) => match entrypoint {
+                MoveVmMicroBenchmark::Locals | MoveVmMicroBenchmark::LocalsGeneric => "locals",
+            },
         }
     }
 
@@ -402,6 +422,9 @@ impl EntryPointTrait for EntryPoints {
             EntryPoints::APTTransferWithPermissionedSigner
             | EntryPoints::APTTransferWithMasterSigner => "permissioned_transfer",
             EntryPoints::OrderBook { .. } => "order_book_example",
+            EntryPoints::MoveVmMicroBenchmark(entrypoint) => match entrypoint {
+                MoveVmMicroBenchmark::Locals | MoveVmMicroBenchmark::LocalsGeneric => "locals",
+            },
         }
     }
 
@@ -868,6 +891,14 @@ impl EntryPointTrait for EntryPoints {
                     bcs::to_bytes(&is_buy).unwrap(), // is_buy
                 ])
             },
+            EntryPoints::MoveVmMicroBenchmark(entrypoint) => match entrypoint {
+                MoveVmMicroBenchmark::Locals => {
+                    get_payload_void(module_id, ident_str!("benchmark").to_owned())
+                },
+                MoveVmMicroBenchmark::LocalsGeneric => {
+                    get_payload_void(module_id, ident_str!("benchmark_generic").to_owned())
+                },
+            },
         }
     }
 
@@ -989,6 +1020,7 @@ impl EntryPointTrait for EntryPoints {
             EntryPoints::APTTransferWithPermissionedSigner
             | EntryPoints::APTTransferWithMasterSigner => AutomaticArgs::Signer,
             EntryPoints::OrderBook { .. } => AutomaticArgs::None,
+            EntryPoints::MoveVmMicroBenchmark(_) => AutomaticArgs::None,
         }
     }
 }

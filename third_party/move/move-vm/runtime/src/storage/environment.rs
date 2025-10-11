@@ -30,8 +30,10 @@ use move_vm_metrics::{Timer, VERIFIED_MODULE_CACHE_SIZE, VM_TIMER};
 use move_vm_types::loaded_data::{
     runtime_types::StructIdentifier, struct_name_indexing::StructNameIndex,
 };
-use move_vm_types::loaded_data::{runtime_types::Type, struct_name_indexing::StructNameIndexMap};
-use sha3::{Digest, Sha3_256};
+use move_vm_types::{
+    loaded_data::{runtime_types::Type, struct_name_indexing::StructNameIndexMap},
+    ty_interner::InternedTypePool,
+};
 use std::sync::Arc;
 
 const OPTION_MODULE_BYTES: &[u8] = include_bytes!("option.mv");
@@ -63,19 +65,8 @@ pub struct RuntimeEnvironment {
     /// speculatively because type tag information does not change with module publishes.
     ty_tag_cache: Arc<TypeTagCache>,
 
-    /// SHA3-256 digest of the BCS-serialized [VerifierConfig] from `vm_config`. Precomputed at
-    /// construction time so it can be combined with the module hash to form the
-    /// [VERIFIED_MODULES_V2] cache key without re-hashing the config on every lookup.
-    ///
-    /// Why this exists: the verified-module cache is a process-global LRU shared across all
-    /// runtime environments. Without a per-config component in the key, two threads using
-    /// different verifier configurations (e.g. straddling an epoch boundary where the config
-    /// changed) would treat each other's cached entries as their own — a module accepted under
-    /// a more permissive config could be skipped under a stricter one.
-    ///
-    /// Invariant: must stay in line with `vm_config.verifier_config`. Any mutation of `vm_config.verifier_config` must
-    /// recompute this digest.
-    verifier_config_digest: [u8; 32],
+    /// Pool of interned type representations. Same lifetime as struct index map.
+    interned_ty_pool: Arc<InternedTypePool>,
 }
 
 impl RuntimeEnvironment {
@@ -115,13 +106,18 @@ impl RuntimeEnvironment {
             natives,
             struct_name_index_map: Arc::new(StructNameIndexMap::empty()),
             ty_tag_cache: Arc::new(TypeTagCache::empty()),
-            verifier_config_digest,
+            interned_ty_pool: Arc::new(InternedTypePool::new()),
         }
     }
 
     /// Returns the config currently used by this runtime environment.
     pub fn vm_config(&self) -> &VMConfig {
         &self.vm_config
+    }
+
+    /// Returns the type pool for interning that is currently used by this runtime environment.
+    pub fn ty_pool(&self) -> &InternedTypePool {
+        &self.interned_ty_pool
     }
 
     /// Enables delayed field optimization for this environment.
@@ -160,8 +156,12 @@ impl RuntimeEnvironment {
                 .iter()
                 .map(|module| module.as_ref().as_ref()),
         )?;
-        Script::new(locally_verified_script.0, self.struct_name_index_map())
-            .map_err(|err| err.finish(Location::Script))
+        Script::new(
+            locally_verified_script.0,
+            self.struct_name_index_map(),
+            self.ty_pool(),
+        )
+        .map_err(|err| err.finish(Location::Script))
     }
 
     /// Creates a locally verified compiled module by running:
@@ -212,6 +212,7 @@ impl RuntimeEnvironment {
             locally_verified_module.1,
             locally_verified_module.0,
             self.struct_name_index_map(),
+            self.ty_pool(),
         );
 
         // Note: loader V1 implementation does not set locations for this error.
@@ -229,6 +230,7 @@ impl RuntimeEnvironment {
             locally_verified_module.1,
             locally_verified_module.0,
             self.struct_name_index_map(),
+            self.ty_pool(),
         )
         .map_err(|err| err.finish(Location::Undefined))
     }
@@ -345,9 +347,10 @@ impl RuntimeEnvironment {
 
     /// Flushes the global caches with struct name indices and struct tags. Note that when calling
     /// this function, modules that still store indices into struct name cache must also be flushed.
-    pub fn flush_struct_name_and_tag_caches(&self) {
+    pub fn flush_all_caches(&self) {
         self.ty_tag_cache.flush();
         self.struct_name_index_map.flush();
+        self.interned_ty_pool.flush();
     }
 
     /// Flushes the global verified module cache. Should be used when verifier configuration has
@@ -413,7 +416,7 @@ impl Clone for RuntimeEnvironment {
             natives: self.natives.clone(),
             struct_name_index_map: Arc::clone(&self.struct_name_index_map),
             ty_tag_cache: Arc::clone(&self.ty_tag_cache),
-            verifier_config_digest: self.verifier_config_digest,
+            interned_ty_pool: Arc::clone(&self.interned_ty_pool),
         }
     }
 }

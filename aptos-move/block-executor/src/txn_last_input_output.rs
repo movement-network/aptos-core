@@ -274,6 +274,12 @@ impl<T: Transaction, O: TransactionOutput<Txn = T>, E: Debug + Send + Clone>
             )
             | None => Vec::new(),
         }
+        if published {
+            // Record validation requirements after the modules are published.
+            global_module_cache.flush_layout_cache();
+            scheduler.record_validation_requirements(txn_idx, module_ids_for_v2)?;
+        }
+        Ok(published)
     }
 
     pub(crate) fn delayed_field_keys(

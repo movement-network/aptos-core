@@ -86,6 +86,11 @@ module 0xc0ffee::m {
         }
     }
 
+    public fun with_return_void_and_tuple(_x : bool) {
+        return;  // Should warn here.
+        ()
+    }
+
     #[lint::skip(needless_return)]
     fun test_skip(): bool {
         return true

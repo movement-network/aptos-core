@@ -574,11 +574,11 @@ pub fn explorer_account_link(hash: AccountAddress, network: Option<Network>) -> 
     // For now, default to what the browser is already on, though the link could be wrong
     if let Some(network) = network {
         format!(
-            "https://explorer.aptoslabs.com/account/{}?network={}",
+            "https://explorer.movementnetwork.xyz/account/{}?network={}",
             hash, network
         )
     } else {
-        format!("https://explorer.aptoslabs.com/account/{}", hash)
+        format!("https://explorer.movementnetwork.xyz/account/{}", hash)
     }
 }
 

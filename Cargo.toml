@@ -258,6 +258,7 @@ members = [
     "vm-validator",
 ]
 
+
 # NOTE: default-members is the complete list of binaries that form the "production Aptos codebase". These members should
 # never include crates that require fuzzing features or test features. These are the crates we want built with no extra
 # test-only code included.
@@ -292,7 +293,7 @@ rust-version = "1.80.1"
 [workspace.dependencies]
 # Internal crate dependencies.
 # Please do not add any test features here: they should be declared by the individual crate.
-aptos = { path = "crates/aptos" }
+aptos = { package = "movement", path = "crates/aptos" }
 aptos-accumulator = { path = "storage/accumulator" }
 aptos-admin-service = { path = "crates/aptos-admin-service" }
 aptos-aggregator = { path = "aptos-move/aptos-aggregator" }

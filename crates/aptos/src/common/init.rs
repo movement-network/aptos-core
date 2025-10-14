@@ -97,7 +97,7 @@ impl CliCommand<()> for InitTool {
 
         // Select profile we're using
         let mut profile_config = if let Some(profile_config) = config.remove_profile(profile_name) {
-            prompt_yes_with_override(&format!("Aptos already initialized for profile {}, do you want to overwrite the existing config?", profile_name), self.prompt_options)?;
+            prompt_yes_with_override(&format!("Movement already initialized for profile {}, do you want to overwrite the existing config?", profile_name), self.prompt_options)?;
             profile_config
         } else {
             ProfileConfig::default()
@@ -110,13 +110,13 @@ impl CliCommand<()> for InitTool {
             network
         } else {
             eprintln!(
-                "Choose network from [devnet, testnet, mainnet, local, custom | defaults to devnet]"
+                "Choose network from [testnet, mainnet, local, custom | defaults to testnet]"
             );
             let input = read_line("network")?;
             let input = input.trim();
             if input.is_empty() {
-                eprintln!("No network given, using devnet...");
-                Network::Devnet
+                eprintln!("No network given, using testnet...");
+                Network::Testnet
             } else {
                 Network::from_str(input)?
             }
@@ -142,22 +142,18 @@ impl CliCommand<()> for InitTool {
         match network {
             Network::Mainnet => {
                 profile_config.rest_url =
-                    Some("https://fullnode.mainnet.aptoslabs.com".to_string());
+                    Some("https://full.mainnet.movementinfra.xyz".to_string());
                 profile_config.faucet_url = None;
             },
             Network::Testnet => {
-                profile_config.rest_url =
-                    Some("https://fullnode.testnet.aptoslabs.com".to_string());
-                // The faucet in testnet is only accessible with some kind of bypass.
-                // For regular users this can only really mean an auth token. So if
-                // there is no auth token set, we don't set the faucet URL. If the user
-                // is confident they want to use the testnet faucet without a token
-                // they can set it manually with `--network custom` and `--faucet-url`.
-                profile_config.faucet_url = None;
+                profile_config.rest_url = Some("https://testnet.movementnetwork.xyz".to_string());
+                profile_config.faucet_url =
+                    Some("https://faucet.testnet.movementnetwork.xyz".to_string());
             },
             Network::Devnet => {
-                profile_config.rest_url = Some("https://fullnode.devnet.aptoslabs.com".to_string());
-                profile_config.faucet_url = Some("https://faucet.devnet.aptoslabs.com".to_string());
+                profile_config.rest_url = Some("https://devnet.movementnetwork.xyz".to_string());
+                profile_config.faucet_url =
+                    Some("https://faucet.devnet.movementnetwork.xyz".to_string());
             },
             Network::Local => {
                 profile_config.rest_url = Some("http://localhost:8080".to_string());
@@ -284,7 +280,7 @@ impl CliCommand<()> for InitTool {
 
         // Create account if it doesn't exist (and there's a faucet)
         // Check if account exists
-        let funded = matches!(client
+        let mut funded = matches!(client
             .get_account_balance(address, "0x1::AptosCoin::AptosCoin")
             .await, Ok(res) if *res.inner() > 0);
 
@@ -313,6 +309,7 @@ impl CliCommand<()> for InitTool {
                 )
                 .await?;
                 eprintln!("Account {} funded successfully", address);
+                funded = true;
             }
         } else if funded {
             eprintln!("Account {} has been already funded onchain", address);
@@ -339,7 +336,7 @@ impl CliCommand<()> for InitTool {
             .unwrap_or(DEFAULT_PROFILE);
 
         eprintln!(
-            "\n---\nAptos CLI is now set up for account {} as profile {}!\n---\n",
+            "\n---\nMovement CLI is now set up for account {} as profile {}!\n---\n",
             address, profile_name,
         );
 
@@ -347,22 +344,6 @@ impl CliCommand<()> for InitTool {
             match network {
                 Network::Mainnet => {
                     eprintln!("The account has not been funded on chain yet, you will need to create and fund the account by transferring funds from another account");
-                },
-                Network::Testnet => {
-                    let mint_site_url = get_mint_site_url(Some(address));
-                    eprintln!("The account has not been funded on chain yet. To fund the account and get APT on testnet you must visit {}", mint_site_url);
-                    // We don't use `prompt_yes_with_override` here because we only want to
-                    // automatically open the minting site if they're in an interactive setting.
-                    if !self.prompt_options.assume_yes {
-                        eprint!("Press [Enter] to go there now > ");
-                        read_line("Confirmation")?;
-                        open::that(&mint_site_url).map_err(|err| {
-                            CliError::UnexpectedError(format!(
-                                "Failed to open minting site: {}",
-                                err
-                            ))
-                        })?;
-                    }
                 },
                 _ => {},
             }
@@ -490,7 +471,7 @@ impl FromStr for Network {
             "custom" => Self::Custom,
             str => {
                 return Err(CliError::CommandArgumentError(format!(
-                    "Invalid network {}.  Must be one of [devnet, testnet, mainnet, local, custom]",
+                    "Invalid network {}.  Must be one of [testnet, mainnet, local, custom]",
                     str
                 )));
             },

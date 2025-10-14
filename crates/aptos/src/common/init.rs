@@ -6,7 +6,7 @@ use crate::{
     account::key_rotation::lookup_address,
     common::{
         types::{
-            account_address_from_public_key, get_mint_site_url, CliCommand, CliConfig, CliError,
+            account_address_from_public_key, CliCommand, CliConfig, CliError,
             CliTypedResult, ConfigSearchMode, EncodingOptions, HardwareWalletOptions,
             PrivateKeyInputOptions, ProfileConfig, ProfileOptions, PromptOptions, RngArgs,
             DEFAULT_PROFILE,

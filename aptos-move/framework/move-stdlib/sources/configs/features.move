@@ -599,7 +599,7 @@ module std::features {
     public fun get_atomic_bridge_feature(): u64 { ATOMIC_BRIDGE }
 
 
-    public fun abort_atomic_bridge_enabled(): bool acquires Features {
+    public fun abort_atomic_bridge_enabled(): bool {
         true
     }
 
@@ -610,7 +610,7 @@ module std::features {
 
     public fun get_native_bridge_feature(): u64 { NATIVE_BRIDGE }
 
-    public fun abort_native_bridge_enabled(): bool acquires Features {
+    public fun abort_native_bridge_enabled(): bool {
         true
     }
 
@@ -618,6 +618,25 @@ module std::features {
     ///
     /// Lifetime: permanent
     const GOVERNED_GAS_POOL: u64 = 223;
+
+     public fun get_governed_gas_pool_feature(): u64 {
+        GOVERNED_GAS_POOL
+    }
+
+    // Need to keep active for transaction_validation.move prologue
+    public fun governed_gas_pool_enabled(): bool acquires Features {
+        is_enabled(GOVERNED_GAS_POOL)
+    }
+
+    const DECOMMISSION_CORE_RESOURCES: u64 = 222;
+
+    public fun get_decommission_core_resources_feature(): u64 {
+        DECOMMISSION_CORE_RESOURCES
+    }
+
+    public fun get_decommission_core_resources_enabled(): bool acquires Features {
+        is_enabled(DECOMMISSION_CORE_RESOURCES)
+    }
 
     public fun get_transaction_simulation_enhancement_feature(): u64 { TRANSACTION_SIMULATION_ENHANCEMENT }
 

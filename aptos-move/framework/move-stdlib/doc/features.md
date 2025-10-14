@@ -129,6 +129,10 @@ return true.
 -  [Function `default_to_concurrent_fungible_balance_enabled`](#0x1_features_default_to_concurrent_fungible_balance_enabled)
 -  [Function `get_abort_if_multisig_payload_mismatch_feature`](#0x1_features_get_abort_if_multisig_payload_mismatch_feature)
 -  [Function `abort_if_multisig_payload_mismatch_enabled`](#0x1_features_abort_if_multisig_payload_mismatch_enabled)
+-  [Function `get_atomic_bridge_feature`](#0x1_features_get_atomic_bridge_feature)
+-  [Function `abort_atomic_bridge_enabled`](#0x1_features_abort_atomic_bridge_enabled)
+-  [Function `get_native_bridge_feature`](#0x1_features_get_native_bridge_feature)
+-  [Function `abort_native_bridge_enabled`](#0x1_features_abort_native_bridge_enabled)
 -  [Function `get_transaction_simulation_enhancement_feature`](#0x1_features_get_transaction_simulation_enhancement_feature)
 -  [Function `transaction_simulation_enhancement_enabled`](#0x1_features_transaction_simulation_enhancement_enabled)
 -  [Function `get_collection_owner_feature`](#0x1_features_get_collection_owner_feature)
@@ -303,6 +307,17 @@ Lifetime: transient
 
 
 <pre><code><b>const</b> <a href="features.md#0x1_features_APTOS_UNIQUE_IDENTIFIERS">APTOS_UNIQUE_IDENTIFIERS</a>: u64 = 23;
+</code></pre>
+
+
+
+<a id="0x1_features_ATOMIC_BRIDGE"></a>
+
+Whether the Atomic bridge is available
+Lifetime: transient
+
+
+<pre><code><b>const</b> <a href="features.md#0x1_features_ATOMIC_BRIDGE">ATOMIC_BRIDGE</a>: u64 = 224;
 </code></pre>
 
 
@@ -648,6 +663,18 @@ Lifetime: transient
 
 
 
+<a id="0x1_features_GOVERNED_GAS_POOL"></a>
+
+Whether the Governed Gas Pool is used to capture gas fees
+
+Lifetime: permanent
+
+
+<pre><code><b>const</b> <a href="features.md#0x1_features_GOVERNED_GAS_POOL">GOVERNED_GAS_POOL</a>: u64 = 223;
+</code></pre>
+
+
+
 <a id="0x1_features_JWK_CONSENSUS"></a>
 
 Deprecated by <code>aptos_framework::jwk_consensus_config::JWKConsensusConfig</code>.
@@ -783,6 +810,17 @@ Lifetime: transient
 
 
 <pre><code><b>const</b> <a href="features.md#0x1_features_MULTI_ED25519_PK_VALIDATE_V2_NATIVES">MULTI_ED25519_PK_VALIDATE_V2_NATIVES</a>: u64 = 7;
+</code></pre>
+
+
+
+<a id="0x1_features_NATIVE_BRIDGE"></a>
+
+Whether the Atomic bridge is available
+Lifetime: transient
+
+
+<pre><code><b>const</b> <a href="features.md#0x1_features_NATIVE_BRIDGE">NATIVE_BRIDGE</a>: u64 = 225;
 </code></pre>
 
 
@@ -3346,6 +3384,98 @@ Deprecated feature
 
 <pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_abort_if_multisig_payload_mismatch_enabled">abort_if_multisig_payload_mismatch_enabled</a>(): bool <b>acquires</b> <a href="features.md#0x1_features_Features">Features</a> {
     <a href="features.md#0x1_features_is_enabled">is_enabled</a>(<a href="features.md#0x1_features_ABORT_IF_MULTISIG_PAYLOAD_MISMATCH">ABORT_IF_MULTISIG_PAYLOAD_MISMATCH</a>)
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_features_get_atomic_bridge_feature"></a>
+
+## Function `get_atomic_bridge_feature`
+
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_get_atomic_bridge_feature">get_atomic_bridge_feature</a>(): u64
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_get_atomic_bridge_feature">get_atomic_bridge_feature</a>(): u64 { <a href="features.md#0x1_features_ATOMIC_BRIDGE">ATOMIC_BRIDGE</a> }
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_features_abort_atomic_bridge_enabled"></a>
+
+## Function `abort_atomic_bridge_enabled`
+
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_abort_atomic_bridge_enabled">abort_atomic_bridge_enabled</a>(): bool
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_abort_atomic_bridge_enabled">abort_atomic_bridge_enabled</a>(): bool {
+    <b>true</b>
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_features_get_native_bridge_feature"></a>
+
+## Function `get_native_bridge_feature`
+
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_get_native_bridge_feature">get_native_bridge_feature</a>(): u64
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_get_native_bridge_feature">get_native_bridge_feature</a>(): u64 { <a href="features.md#0x1_features_NATIVE_BRIDGE">NATIVE_BRIDGE</a> }
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_features_abort_native_bridge_enabled"></a>
+
+## Function `abort_native_bridge_enabled`
+
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_abort_native_bridge_enabled">abort_native_bridge_enabled</a>(): bool
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_abort_native_bridge_enabled">abort_native_bridge_enabled</a>(): bool {
+    <b>true</b>
 }
 </code></pre>
 

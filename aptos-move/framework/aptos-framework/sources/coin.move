@@ -25,6 +25,7 @@ module aptos_framework::coin {
     friend aptos_framework::aptos_coin;
     friend aptos_framework::genesis;
     friend aptos_framework::transaction_fee;
+    friend aptos_framework::governed_gas_pool;
 
     //
     // Errors.

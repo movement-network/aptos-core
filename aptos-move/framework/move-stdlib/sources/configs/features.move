@@ -85,18 +85,14 @@ module std::features {
         is_enabled(VM_BINARY_FORMAT_V6)
     }
 
-    #[deprecated]
-    /// Deprecated feature
+    /// Whether gas fees are collected and distributed to the block proposers.
     /// Lifetime: transient
     const COLLECT_AND_DISTRIBUTE_GAS_FEES: u64 = 6;
 
-    #[deprecated]
-    /// Deprecated feature
     public fun get_collect_and_distribute_gas_fees_feature(): u64 { COLLECT_AND_DISTRIBUTE_GAS_FEES }
 
-    #[deprecated]
-    public fun collect_and_distribute_gas_fees(): bool {
-        false
+    public fun collect_and_distribute_gas_fees(): bool acquires Features {
+        is_enabled(COLLECT_AND_DISTRIBUTE_GAS_FEES)
     }
 
     /// Whether the new `aptos_stdlib::multi_ed25519::public_key_validate_internal_v2()` native is enabled.
@@ -586,18 +582,12 @@ module std::features {
         is_enabled(ABORT_IF_MULTISIG_PAYLOAD_MISMATCH)
     }
 
-    /// Whether the simulation enhancement is enabled. This enables the simulation without an authentication check,
-    /// the sponsored transaction simulation when the fee payer is set to 0x0, and the multisig transaction
-    /// simulation consistnet with the execution.
-    ///
-    /// Lifetime: transient
     const TRANSACTION_SIMULATION_ENHANCEMENT: u64 = 78;
     /// Whether the Atomic bridge is available
     /// Lifetime: transient
     const ATOMIC_BRIDGE: u64 = 224;
 
     public fun get_atomic_bridge_feature(): u64 { ATOMIC_BRIDGE }
-
 
     public fun abort_atomic_bridge_enabled(): bool {
         true
@@ -619,20 +609,17 @@ module std::features {
     /// Lifetime: permanent
     const GOVERNED_GAS_POOL: u64 = 223;
 
-     public fun get_governed_gas_pool_feature(): u64 {
-        GOVERNED_GAS_POOL
-    }
+    /// Whether the Governed Gas Pool is enabled.
+    public fun get_governed_gas_pool_feature(): u64 { GOVERNED_GAS_POOL }
 
-    // Need to keep active for transaction_validation.move prologue
     public fun governed_gas_pool_enabled(): bool acquires Features {
         is_enabled(GOVERNED_GAS_POOL)
     }
 
+    /// Lifetime: transient
     const DECOMMISSION_CORE_RESOURCES: u64 = 222;
 
-    public fun get_decommission_core_resources_feature(): u64 {
-        DECOMMISSION_CORE_RESOURCES
-    }
+    public fun get_decommission_core_resources_feature(): u64 { DECOMMISSION_CORE_RESOURCES }
 
     public fun get_decommission_core_resources_enabled(): bool acquires Features {
         is_enabled(DECOMMISSION_CORE_RESOURCES)

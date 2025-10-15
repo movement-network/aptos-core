@@ -589,13 +589,13 @@ pub fn explorer_transaction_link(
     // For now, default to what the browser is already on, though the link could be wrong
     if let Some(network) = network {
         format!(
-            "https://explorer.aptoslabs.com/txn/{}?network={}",
+            "https://explorer.movementlabs.xyz/txn/{}?network={}",
             hash.to_hex_literal(),
             network
         )
     } else {
         format!(
-            "https://explorer.aptoslabs.com/txn/{}",
+            "https://explorer.movementlabs.xyz/txn/{}",
             hash.to_hex_literal()
         )
     }

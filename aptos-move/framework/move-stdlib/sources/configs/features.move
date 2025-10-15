@@ -89,10 +89,12 @@ module std::features {
     /// Lifetime: transient
     const COLLECT_AND_DISTRIBUTE_GAS_FEES: u64 = 6;
 
+    #[deprecated]
     public fun get_collect_and_distribute_gas_fees_feature(): u64 { COLLECT_AND_DISTRIBUTE_GAS_FEES }
 
-    public fun collect_and_distribute_gas_fees(): bool acquires Features {
-        is_enabled(COLLECT_AND_DISTRIBUTE_GAS_FEES)
+    #[deprecated]
+    public fun collect_and_distribute_gas_fees(): bool {
+        false
     }
 
     /// Whether the new `aptos_stdlib::multi_ed25519::public_key_validate_internal_v2()` native is enabled.
@@ -587,8 +589,10 @@ module std::features {
     /// Lifetime: transient
     const ATOMIC_BRIDGE: u64 = 224;
 
+    #[deprecated]
     public fun get_atomic_bridge_feature(): u64 { ATOMIC_BRIDGE }
 
+    #[deprecated]
     public fun abort_atomic_bridge_enabled(): bool {
         true
     }
@@ -598,8 +602,10 @@ module std::features {
     /// Lifetime: transient
     const NATIVE_BRIDGE: u64 = 225;
 
+    #[deprecated]
     public fun get_native_bridge_feature(): u64 { NATIVE_BRIDGE }
 
+    #[deprecated]
     public fun abort_native_bridge_enabled(): bool {
         true
     }

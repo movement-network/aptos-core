@@ -1,8 +1,6 @@
 script {
     use aptos_framework::aptos_governance;
-    use aptos_framework::signer;
     use std::features;
-    use std::vector;
 
     fun main(core_resources: &signer) {
         let core_signer = aptos_governance::get_signer_testnet_only(
@@ -16,6 +14,7 @@ script {
             67, // ConcurrentFungibleBalance
             40, // VMBinaryFormat7
             74, // EnumTypes
+            80, // NativeMemoryOperation
             223, // new GGP
         ];
 
@@ -30,6 +29,6 @@ script {
             73, // Old GGP
         ];
 
-        features::change_feature_flags(&core_signer, enabled_blob, disabled_blob);
+        features::change_feature_flags_for_next_epoch(&core_signer, enabled_blob, disabled_blob);
     }
 }

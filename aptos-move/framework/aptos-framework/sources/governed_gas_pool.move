@@ -133,9 +133,9 @@ module aptos_framework::governed_gas_pool {
 
             // compute the account store address
             let account_store_address = primary_fungible_store_address(account);
-            fungible_asset::deposit_internal(
+            fungible_asset::unchecked_deposit(
                 governed_gas_pool_store_address,
-                fungible_asset::withdraw_internal(
+                fungible_asset::unchecked_withdraw(
                     account_store_address,
                     amount
                 )

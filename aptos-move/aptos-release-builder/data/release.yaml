@@ -8,10 +8,7 @@ proposals:
     metadata:
       title: "Multi-step proposal to upgrade mainnet framework, version v0.1"
       description: "This is for upgrading the framework to move2"
-    execution_mode: MultiStep
+    execution_mode: RootSigner
     update_sequence:
-      - Gas:
-          old: https://raw.githubusercontent.com/aptos-labs/aptos-networks/main/gas/v1.31.0.json
-          new: https://raw.githubusercontent.com/aptos-labs/aptos-networks/main/gas/v1.32.0.json
       - Framework:
           bytecode_version: 7

@@ -10,7 +10,6 @@ module aptos_framework::genesis {
     use aptos_framework::aptos_account;
     use aptos_framework::aptos_coin::{Self, AptosCoin};
     use aptos_framework::aptos_governance;
-    use aptos_framework::native_bridge;
     use aptos_framework::block;
     use aptos_framework::chain_id;
     use aptos_framework::chain_status;
@@ -127,16 +126,12 @@ module aptos_framework::genesis {
 
         // Ensure we can create aggregators for supply, but not enable it for common use just yet.
         aggregator_factory::initialize_aggregator_factory(&aptos_framework_account);
-        coin::initialize_supply_config(&aptos_framework_account);
 
         chain_id::initialize(&aptos_framework_account, chain_id);
         reconfiguration::initialize(&aptos_framework_account);
         block::initialize(&aptos_framework_account, epoch_interval_microsecs);
         state_storage::initialize(&aptos_framework_account);
-        timestamp::set_time_has_started(&aptos_framework_account);
-        native_bridge::initialize(&aptos_framework_account);
         nonce_validation::initialize(&aptos_framework_account);
-
     }
 
     /// Genesis step 2: Initialize Aptos coin.
@@ -204,14 +199,17 @@ module aptos_framework::genesis {
     /// This creates an funds an account if it doesn't exist.
     /// If it exists, it just returns the signer.
     fun create_account(aptos_framework: &signer, account_address: address, balance: u64): signer {
-        if (account::exists_at(account_address)) {
+        let account = if (account::exists_at(account_address)) {
             create_signer(account_address)
         } else {
-            let account = account::create_account(account_address);
+            account::create_account(account_address)
+        };
+
+        if (coin::balance<AptosCoin>(account_address) == 0) {
             coin::register<AptosCoin>(&account);
             aptos_coin::mint(aptos_framework, account_address, balance);
-            account
-        }
+        };
+        account
     }
 
     fun create_employee_validators(

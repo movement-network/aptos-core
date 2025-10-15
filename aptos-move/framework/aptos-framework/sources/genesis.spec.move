@@ -160,7 +160,6 @@ spec aptos_framework::genesis {
         requires exists<stake::ValidatorFees>(@aptos_framework);
         requires exists<coin::CoinInfo<AptosCoin>>(@aptos_framework);
         include CompareTimeRequires;
-        include transaction_fee::RequiresCollectedFeesPerValueLeqBlockAptosSupply;
     }
 
     spec schema CompareTimeRequires {

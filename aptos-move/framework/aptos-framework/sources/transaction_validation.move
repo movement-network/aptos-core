@@ -13,6 +13,7 @@ module aptos_framework::transaction_validation {
     use aptos_framework::chain_id;
     use aptos_framework::coin;
     use aptos_framework::create_signer;
+    use aptos_framework::governed_gas_pool;
     use aptos_framework::permissioned_signer;
     use aptos_framework::system_addresses;
     use aptos_framework::timestamp;

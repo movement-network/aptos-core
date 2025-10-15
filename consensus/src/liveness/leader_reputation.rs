@@ -311,8 +311,7 @@ impl NewBlockEventAggregation {
             &history[start..]
         } else {
             if let (Some(first), Some(last)) = (history.first(), history.last()) {
-
-                assert!((first.epoch(), first.round()) >= (last.epoch(), last.round()),"{} {} {} {}" ,first.epoch(), last.epoch(), first.round(), last.round());
+                assert!((first.epoch(), first.round()) >= (last.epoch(), last.round()));
             }
             let end = if history.len() > window_size {
                 window_size

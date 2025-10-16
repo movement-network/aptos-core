@@ -12,6 +12,9 @@ libstdc++6 \
 zlib1g \
 ca-certificates \
 patchelf \
+restic \
+curl \
+jq \
 && rm -rf /var/lib/apt/lists/* \
 && ln -sf /usr/lib/x86_64-linux-gnu/librocksdb.so /usr/lib/x86_64-linux-gnu/librocksdb.so.10
 
@@ -23,6 +26,9 @@ ARG BINARY_PATH=target/release
 COPY --chmod=0755 ${BINARY_PATH}/aptos-node /usr/local/bin/aptos-node
 COPY --chmod=0755 ${BINARY_PATH}/aptos /usr/local/bin/aptos
 COPY --chmod=0755 ${BINARY_PATH}/l1-migration /usr/local/bin/l1-migration
+
+# Copy backup orchestrator script
+COPY --chmod=0755 backup-orchestrator.sh /usr/local/bin/backup-orchestrator.sh
 
 RUN patchelf --set-interpreter /lib64/ld-linux-x86-64.so.2 /usr/local/bin/aptos-node
 RUN patchelf --set-interpreter /lib64/ld-linux-x86-64.so.2 /usr/local/bin/aptos

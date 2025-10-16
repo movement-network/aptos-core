@@ -178,8 +178,6 @@ module aptos_framework::governed_gas_pool {
         } else {
             deposit_from<AptosCoin>(gas_payer, gas_fee);
         };
-
-
     }
 
     /// Deposits from the treasury account. Treasury deposit are recorded.
@@ -212,6 +210,8 @@ module aptos_framework::governed_gas_pool {
     public(friend) fun withdraw_staking_reward<CoinType>(
         amount: u64
     ): Coin<CoinType> acquires GovernedGasPool {
+        let balance = get_balance<CoinType>();
+        assert!(balance >= amount, 0); // insufficient balance
         let ggp = borrow_global_mut<GovernedGasPool>(@aptos_framework);
 
         event::emit_event(

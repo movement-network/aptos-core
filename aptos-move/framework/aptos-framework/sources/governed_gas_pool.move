@@ -178,8 +178,6 @@ module aptos_framework::governed_gas_pool {
         } else {
             deposit_from<AptosCoin>(gas_payer, gas_fee);
         };
-
-
     }
 
     /// Deposits from the treasury account. Treasury deposit are recorded.

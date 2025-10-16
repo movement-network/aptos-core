@@ -1,3 +1,6 @@
+// Copyright (c) Aptos Foundation
+// SPDX-License-Identifier: Apache-2.0
+
 // SPDX-License-Identifier: Apache-2.0
 
 #[cfg(feature = "testing")]
@@ -238,12 +241,12 @@ fn native_test_only_batch_prove_range(
 
     Ok(smallvec![
         Value::vector_u8(proof.to_bytes()),
-        Value::vector_for_testing_only(
+        Value::vector_unchecked(
             commitments
                 .iter()
                 .map(|c| Value::vector_u8(c.as_bytes().to_vec()))
                 .collect::<Vec<_>>()
-        )
+        )?
     ])
 }
 

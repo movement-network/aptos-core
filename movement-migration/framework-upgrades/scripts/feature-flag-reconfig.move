@@ -16,6 +16,7 @@ script {
             67, // ConcurrentFungibleBalance
             40, // VMBinaryFormat7
             74, // EnumTypes
+            73, // GovernedGasPool
         ];
 
         let disabled_blob: vector<u64> = vector[
@@ -24,7 +25,6 @@ script {
             46, // KeylessAccouns
             47, // KeylessButZklessAccounts
             54, // KeylessAccountsWithPasskeys
-            73, // GovernedGasPool
         ];
 
         features::change_feature_flags(&core_signer, enabled_blob, disabled_blob);

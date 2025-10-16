@@ -2,6 +2,8 @@
 // Framework commit hash: 98b466f9961cacd499cd25b280fb35c667dd548d
 // Builder commit hash: 98b466f9961cacd499cd25b280fb35c667dd548d
 // Upgrade proposal for package `AptosTokenObjects`
+//
+// Note this upgrade is for enabling the epoch change only
 
 // source digest: C6E6FE42377AA1E190816303CE0C2D00B500FB00742A77F72FFEAE0C22B05918
 script {

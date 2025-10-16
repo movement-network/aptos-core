@@ -35,6 +35,7 @@ module aptos_framework::governed_gas_pool {
     struct GovernedGasPool has key {
         /// The signer capability of the resource account.
         signer_capability: SignerCapability,
+        deposited_treasury_counter: u64,
         withdraw_staking_reward_events: EventHandle<WithdrawStakingRewardEvent>,
     }
 
@@ -79,6 +80,7 @@ module aptos_framework::governed_gas_pool {
 
         move_to(aptos_framework, GovernedGasPool{
             signer_capability: governed_gas_pool_signer_cap,
+            deposited_treasury_counter: 0,
             withdraw_staking_reward_events: account::new_event_handle<WithdrawStakingRewardEvent>(aptos_framework),
         });
     }
@@ -103,6 +105,12 @@ module aptos_framework::governed_gas_pool {
     /// @return The address of the governed gas pool.
     public fun governed_gas_pool_address(): address acquires GovernedGasPool {
         signer::address_of(&governed_gas_signer())
+    }
+
+    #[view]
+    /// Return the amount of treasury deposited.
+    public fun get_treasury_deposited(): u64 acquires GovernedGasPool {
+        borrow_global<GovernedGasPool>(@aptos_framework).deposited_treasury_counter
     }
 
     /// Funds the destination account with a given amount of coin.
@@ -165,11 +173,24 @@ module aptos_framework::governed_gas_pool {
     /// @param gas_payer The address of the account that paid the gas fees.
     /// @param gas_fee The amount of gas fees to be deposited.
     public(friend) fun deposit_gas_fee_v2(gas_payer: address, gas_fee: u64) acquires GovernedGasPool {
-       if (features::operations_default_to_fa_apt_store_enabled()) {
+        if (features::operations_default_to_fa_apt_store_enabled()) {
             deposit_from_fungible_store(gas_payer, gas_fee);
         } else {
             deposit_from<AptosCoin>(gas_payer, gas_fee);
         };
+
+
+    }
+
+    /// Deposits from the treasury account. Treasury deposit are recorded.
+    /// @param treasury_account The address of the account that paid the treasury.
+    /// @param amount The amount of treasury to be deposited.
+    public entry fun deposit_treasury(treasury_account: &signer, amount: u64) acquires GovernedGasPool {
+        let treasury_account_address = signer::address_of(treasury_account);
+        deposit_from<AptosCoin>(treasury_account_address, amount);
+
+        let ggp = borrow_global_mut<GovernedGasPool>(@aptos_framework);
+        ggp.deposited_treasury_counter = ggp.deposited_treasury_counter + amount;
     }
 
     #[view]
@@ -261,6 +282,9 @@ module aptos_framework::governed_gas_pool {
     public fun initialize_for_test(
         aptos_framework: &signer,
     ) {
+
+        // Create framework account to be able to send event.
+        aptos_framework::account::create_account_for_test(@aptos_framework);
 
         // initialize the AptosCoin module
         let (burn_cap, mint_cap) = aptos_coin::initialize_for_test(aptos_framework);
@@ -401,4 +425,34 @@ module aptos_framework::governed_gas_pool {
         // initialize the governed gas pool again, no abort
         initialize(aptos_framework, vector::empty<u8>());
     }
+
+
+    #[test(aptos_framework = @aptos_framework, treasury = @0xdddd)]
+    /// Add some treasury to the governed gas pool.
+    ///
+    /// @param aptos_framework is the signer of the aptos_framework module.
+    fun test_deposite_treasury_and_counter(aptos_framework: &signer, treasury: &signer) acquires GovernedGasPool, AptosCoinMintCapability {
+       
+        // initialize the modules
+        initialize_for_test(aptos_framework);
+    
+        // create the depositor account and fund it
+        aptos_account::create_account(signer::address_of(treasury));
+        mint_for_test(signer::address_of(treasury), 1000);
+
+        // get the balances for the depositor and the governed gas pool
+        let treasury_balance = coin::balance<AptosCoin>(signer::address_of(treasury));
+        let governed_gas_pool_balance = coin::balance<AptosCoin>(governed_gas_pool_address());
+
+        // deposit some coin into the governed gas pool
+        deposit_treasury(treasury, 100);
+
+        // check the balances after the deposit
+        assert!(coin::balance<AptosCoin>(signer::address_of(treasury)) == treasury_balance - 100, 1);
+        assert!(coin::balance<AptosCoin>(governed_gas_pool_address()) == governed_gas_pool_balance + 100, 2);
+
+        assert!(get_treasury_deposited() == 100, 3);
+    
+    }
+
 }

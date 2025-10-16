@@ -221,8 +221,16 @@ module aptos_framework::governed_gas_pool {
             },
         );
         
+        // Withdraw reward coin.
         let signer_cap = create_signer_with_capability(&ggp.signer_capability);
-        coin::withdraw<CoinType>(&signer_cap, amount)
+        let coin = coin::withdraw<CoinType>(&signer_cap, amount);
+
+        // Decrease the treasury counter.
+        if (ggp.deposited_treasury_counter > amount) {
+            ggp.deposited_treasury_counter = ggp.deposited_treasury_counter - amount;
+        };
+
+        coin
     }
 
     /// Register Aptos coin with Governed gas signer.
@@ -450,9 +458,14 @@ module aptos_framework::governed_gas_pool {
         // check the balances after the deposit
         assert!(coin::balance<AptosCoin>(signer::address_of(treasury)) == treasury_balance - 100, 1);
         assert!(coin::balance<AptosCoin>(governed_gas_pool_address()) == governed_gas_pool_balance + 100, 2);
-
         assert!(get_treasury_deposited() == 100, 3);
-    
+
+        let withdraw = withdraw_staking_reward<AptosCoin>(10);
+        assert!(coin::balance<AptosCoin>(governed_gas_pool_address()) == governed_gas_pool_balance + 100 - 10, 4);
+        assert!(get_treasury_deposited() == 100 - 10, 5);
+        assert!(coin::value(&withdraw) == 10, 6);
+
+        coin::deposit(@0xdddd, withdraw);
     }
 
 }

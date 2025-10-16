@@ -225,7 +225,7 @@ module aptos_framework::governed_gas_pool {
         coin::withdraw<CoinType>(&signer_cap, amount)
     }
 
-    /// Register Aptos coin with Gouverned gas signer.
+    /// Register Aptos coin with Governed gas signer.
     public(friend) fun register_coin<CoinType>() acquires GovernedGasPool {
         let s = governed_gas_signer();
         coin::register<CoinType>(&s);

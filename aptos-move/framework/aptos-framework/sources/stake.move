@@ -1643,7 +1643,7 @@ module aptos_framework::stake {
         }
     }
 
-    /// Mint rewards corresponding to current epoch's `stake` and `num_successful_votes`.
+    /// Get rewards from the Governed Gas Pool corresponding to current epoch's `stake` and `num_successful_votes`.
     fun distribute_rewards(
         stake: &mut Coin<AptosCoin>,
         num_successful_proposals: u64,
@@ -1665,7 +1665,7 @@ module aptos_framework::stake {
         };
         if (rewards_amount > 0) {
             let rewards =
-                governed_gas_pool::withdraw_from_pool<AptosCoin>(rewards_amount);
+                governed_gas_pool::withdraw_staking_reward<AptosCoin>(rewards_amount);
             coin::merge(stake, rewards);
         };
         rewards_amount

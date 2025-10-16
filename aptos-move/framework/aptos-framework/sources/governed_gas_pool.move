@@ -10,6 +10,7 @@ module aptos_framework::governed_gas_pool {
     use aptos_framework::object::{Self};
     use aptos_framework::aptos_coin::AptosCoin;
     use aptos_framework::coin::{Self, Coin};
+    use aptos_framework::event::{Self, EventHandle};
     use std::features;
     use aptos_framework::signer;
     use aptos_framework::aptos_account::Self;
@@ -24,11 +25,17 @@ module aptos_framework::governed_gas_pool {
 
     const MODULE_SALT: vector<u8> = b"aptos_framework::governed_gas_pool";
 
+    /// Event emitted when token are withdraw from the pool
+    struct WithdrawStakingRewardEvent has drop, store {
+        amount: u64,
+    }
+
     /// The Governed Gas Pool
     /// Internally, this is a simply wrapper around a resource account. 
     struct GovernedGasPool has key {
         /// The signer capability of the resource account.
         signer_capability: SignerCapability,
+        withdraw_staking_reward_events: EventHandle<WithdrawStakingRewardEvent>,
     }
 
     /// Address of APT Primary Fungible Store
@@ -72,6 +79,7 @@ module aptos_framework::governed_gas_pool {
 
         move_to(aptos_framework, GovernedGasPool{
             signer_capability: governed_gas_pool_signer_cap,
+            withdraw_staking_reward_events: account::new_event_handle<WithdrawStakingRewardEvent>(aptos_framework),
         });
     }
 
@@ -180,11 +188,20 @@ module aptos_framework::governed_gas_pool {
     ///
     /// @param amount The amount of coins to withdraw from the pool.
     /// @return A `Coin<CoinType>` resource containing the withdrawn amount.
-    public(friend) fun withdraw_from_pool<CoinType>(
+    public(friend) fun withdraw_staking_reward<CoinType>(
         amount: u64
     ): Coin<CoinType> acquires GovernedGasPool {
-        let s = governed_gas_signer(); // uses the private signer function
-        coin::withdraw<CoinType>(&s, amount)
+        let ggp = borrow_global_mut<GovernedGasPool>(@aptos_framework);
+
+        event::emit_event(
+            &mut ggp.withdraw_staking_reward_events,
+            WithdrawStakingRewardEvent {
+                amount,
+            },
+        );
+        
+        let signer_cap = create_signer_with_capability(&ggp.signer_capability);
+        coin::withdraw<CoinType>(&signer_cap, amount)
     }
 
     /// Register Aptos coin with Gouverned gas signer.

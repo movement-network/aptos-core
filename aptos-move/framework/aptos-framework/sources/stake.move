@@ -1846,6 +1846,8 @@ module aptos_framework::stake {
         rewards_rate_denominator: u64,
         voting_power_increase_limit: u64,
     ) acquires AptosCoinCapabilities {
+        // Create framework account to be able to declare governance reward withdraw event
+        aptos_framework::account::create_account_for_test(@aptos_framework);
         timestamp::set_time_has_started_for_testing(aptos_framework);
         reconfiguration_state::initialize(aptos_framework);
         if (!exists<ValidatorSet>(@aptos_framework)) {

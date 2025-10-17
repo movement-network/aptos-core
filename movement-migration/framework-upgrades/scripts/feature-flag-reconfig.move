@@ -14,8 +14,7 @@ script {
             67, // ConcurrentFungibleBalance
             40, // VMBinaryFormat7
             74, // EnumTypes
-            80, // NativeMemoryOperation
-            223, // new GGP
+            223, // STAKE_REWARD_USING_TREASURY
         ];
 
         let disabled_blob: vector<u64> = vector[
@@ -26,7 +25,6 @@ script {
             54, // KeylessAccountsWithPasskeys
             71, // AtomicBridge
             72, // NativeBridge
-            73, // Old GGP
         ];
 
         features::change_feature_flags_for_next_epoch(&core_signer, enabled_blob, disabled_blob);

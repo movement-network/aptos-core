@@ -1,40 +1,19 @@
-FROM docker.io/library/ubuntu:24.04
+ARG BASE_IMAGE=ghcr.io/movementlabsxyz/aptos-node:latest
+FROM ${BASE_IMAGE}
 
 # Minimal backup-focused image for PFN backups
-# Contains only essential tools needed for backup operations
+# Builds on top of main aptos-node image and adds only backup tools
 
-# Install minimal dependencies for backup operations and runtime libraries
+# Install backup-specific tools (restic, curl, jq)
 RUN apt-get update && apt-get install -y \
-libjemalloc2 \
-libdw1 \
-librocksdb-dev \
-libssl3 \
-libstdc++6 \
-zlib1g \
-ca-certificates \
-patchelf \
 restic \
 curl \
 jq \
-&& rm -rf /var/lib/apt/lists/* \
-&& ln -sf /usr/lib/x86_64-linux-gnu/librocksdb.so /usr/lib/x86_64-linux-gnu/librocksdb.so.10
-
-# Set the working directory
-WORKDIR /app
-
-ARG BINARY_PATH=target/release
-# Copy only the aptos-node binary (no CLI tools needed for backup)
-COPY --chmod=0755 ${BINARY_PATH}/aptos-node /usr/local/bin/aptos-node
+&& rm -rf /var/lib/apt/lists/*
 
 # Copy backup orchestrator script
 COPY --chmod=0755 backup-orchestrator.sh /usr/local/bin/backup-orchestrator.sh
 
-# Patch binary to use system interpreter
-RUN patchelf --set-interpreter /lib64/ld-linux-x86-64.so.2 /usr/local/bin/aptos-node
-
-# Verify the binary can be executed
-RUN LD_LIBRARY_PATH=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu /usr/local/bin/aptos-node --version
-
-# Run backup orchestrator by default
+# Run backup orchestrator by default (instead of aptos-node directly)
 ENTRYPOINT ["/usr/local/bin/backup-orchestrator.sh"]
 CMD []

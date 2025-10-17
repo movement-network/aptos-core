@@ -203,7 +203,7 @@ jobs:
 
       - name: Build and push aptos-node-backup Docker image
         run: |
-          docker build --build-arg BINARY_PATH=target/debug -f docker/aptos-node/Dockerfile.backup -t ghcr.io/movementlabsxyz/aptos-node-backup:${{ env.GIT_SHA_SHORT }} .
+          docker build --build-arg BASE_IMAGE=ghcr.io/movementlabsxyz/aptos-node:${{ env.GIT_SHA_SHORT }} -f docker/aptos-node/Dockerfile.backup -t ghcr.io/movementlabsxyz/aptos-node-backup:${{ env.GIT_SHA_SHORT }} .
           docker push ghcr.io/movementlabsxyz/aptos-node-backup:${{ env.GIT_SHA_SHORT }}
 
       # Output image information

@@ -631,143 +631,15 @@ module std::features {
         is_enabled(DECOMMISSION_CORE_RESOURCES)
     }
 
-    public fun get_transaction_simulation_enhancement_feature(): u64 { TRANSACTION_SIMULATION_ENHANCEMENT }
-
-    public fun transaction_simulation_enhancement_enabled(): bool acquires Features {
-        is_enabled(TRANSACTION_SIMULATION_ENHANCEMENT)
-    }
-
-    const COLLECTION_OWNER: u64 = 79;
-
-    public fun get_collection_owner_feature(): u64 { COLLECTION_OWNER }
-
-    public fun is_collection_owner_enabled(): bool acquires Features {
-        is_enabled(COLLECTION_OWNER)
-    }
-
-    const NATIVE_MEMORY_OPERATIONS: u64 = 80;
-
-    public fun get_native_memory_operations_feature(): u64 { NATIVE_MEMORY_OPERATIONS }
-
-    public fun is_native_memory_operations_enabled(): bool acquires Features {
-        is_enabled(NATIVE_MEMORY_OPERATIONS)
-    }
-
-    const PERMISSIONED_SIGNER: u64 = 84;
-
-    public fun get_permissioned_signer_feature(): u64 { PERMISSIONED_SIGNER }
-
-    public fun is_permissioned_signer_enabled(): bool acquires Features {
-        is_enabled(PERMISSIONED_SIGNER)
-    }
-
-    /// Whether the account abstraction is enabled.
+    /// Whether the staking rewards are mint (diseable) or withdraw from the gouverned gas pool treasury (enable). 
     ///
-    /// Lifetime: transient
-    const ACCOUNT_ABSTRACTION: u64 = 85;
+    /// Lifetime: permanent
+    const STAKE_REWARD_USING_TREASURY: u64 = 223;
 
-    public fun get_account_abstraction_feature(): u64 { ACCOUNT_ABSTRACTION }
+    public fun get_stake_reward_using_treasury_feature(): u64 { STAKE_REWARD_USING_TREASURY }
 
-    public fun is_account_abstraction_enabled(): bool acquires Features {
-        is_enabled(ACCOUNT_ABSTRACTION)
-    }
-
-    /// Whether bytecode version v8 is enabled.
-    /// Lifetime: transient
-    ///
-    /// We do not expect use from Move, so for now only for documentation purposes here
-    const VM_BINARY_FORMAT_V8: u64 = 86;
-
-    /// Whether the batch Bulletproofs native functions are available. This is needed because of the introduction of a new native function.
-    /// Lifetime: transient
-    const BULLETPROOFS_BATCH_NATIVES: u64 = 87;
-
-    public fun get_bulletproofs_batch_feature(): u64 { BULLETPROOFS_BATCH_NATIVES }
-
-    public fun bulletproofs_batch_enabled(): bool acquires Features {
-        is_enabled(BULLETPROOFS_BATCH_NATIVES)
-    }
-
-    /// Whether the account abstraction is enabled.
-    ///
-    /// Lifetime: transient
-    const DERIVABLE_ACCOUNT_ABSTRACTION: u64 = 88;
-
-    public fun is_derivable_account_abstraction_enabled(): bool acquires Features {
-        is_enabled(DERIVABLE_ACCOUNT_ABSTRACTION)
-    }
-
-    #[deprecated]
-    public fun is_domain_account_abstraction_enabled(): bool {
-        false
-    }
-
-    /// Whether function values are enabled.
-    /// Lifetime: transient
-    ///
-    /// We do not expect use from Move, so for now only for documentation purposes here
-    const ENABLE_FUNCTION_VALUES: u64 = 89;
-
-    /// Whether new accounts default to the Fungible Asset store.
-    /// Lifetime: transient
-    const NEW_ACCOUNTS_DEFAULT_TO_FA_STORE: u64 = 90;
-
-    public fun get_new_accounts_default_to_fa_store_feature(): u64 { NEW_ACCOUNTS_DEFAULT_TO_FA_STORE }
-
-    public fun new_accounts_default_to_fa_store_enabled(): bool acquires Features {
-        is_enabled(NEW_ACCOUNTS_DEFAULT_TO_FA_STORE)
-    }
-
-    /// Lifetime: transient
-    const DEFAULT_ACCOUNT_RESOURCE: u64 = 91;
-
-    public fun get_default_account_resource_feature(): u64 { DEFAULT_ACCOUNT_RESOURCE }
-
-    public fun is_default_account_resource_enabled(): bool acquires Features {
-        is_enabled(DEFAULT_ACCOUNT_RESOURCE)
-    }
-
-    /// If enabled, JWK consensus should run in per-key mode, where:
-    /// - The consensus is for key-level updates
-    ///   (e.g., "issuer A key 1 should be deleted", "issuer B key 2 should be upserted");
-    /// - transaction type `ValidatorTransaction::ObservedJWKUpdate` is reused;
-    /// - while a key-level update is mostly represented by a new type `KeyLevelUpdate` locally,
-    ///   For simplicity, it is represented by type `ProviderJWKs` (used to represent issuer-level update)
-    ///   in JWK Consensus messages, in validator transactions, and in Move.
-    const JWK_CONSENSUS_PER_KEY_MODE: u64 = 92;
-
-    public fun get_jwk_consensus_per_key_mode_feature(): u64 { JWK_CONSENSUS_PER_KEY_MODE }
-
-    public fun is_jwk_consensus_per_key_mode_enabled(): bool acquires Features {
-        is_enabled(JWK_CONSENSUS_PER_KEY_MODE)
-    }
-
-    /// Whether orderless transactions are enabled.
-    /// Lifetime: transient
-    const ORDERLESS_TRANSACTIONS: u64 = 94;
-
-    public fun get_orderless_transactions_feature(): u64 { ORDERLESS_TRANSACTIONS }
-
-    public fun orderless_transactions_enabled(): bool acquires Features {
-        is_enabled(ORDERLESS_TRANSACTIONS)
-    }
-
-    /// Whether to calculate the transaction fee for distribution.
-    const CALCULATE_TRANSACTION_FEE_FOR_DISTRIBUTION: u64 = 96;
-
-    public fun get_calculate_transaction_fee_for_distribution_feature(): u64 { CALCULATE_TRANSACTION_FEE_FOR_DISTRIBUTION }
-
-    public fun is_calculate_transaction_fee_for_distribution_enabled(): bool acquires Features {
-        is_enabled(CALCULATE_TRANSACTION_FEE_FOR_DISTRIBUTION)
-    }
-
-    /// Whether to distribute transaction fee to validators.
-    const DISTRIBUTE_TRANSACTION_FEE: u64 = 97;
-
-    public fun get_distribute_transaction_fee_feature(): u64 { DISTRIBUTE_TRANSACTION_FEE }
-
-    public fun is_distribute_transaction_fee_enabled(): bool acquires Features {
-        is_enabled(DISTRIBUTE_TRANSACTION_FEE)
+    public fun stake_reward_using_treasury_enabled(): bool acquires Features {
+        is_enabled(STAKE_REWARD_USING_TREASURY)
     }
 
     // ============================================================================================

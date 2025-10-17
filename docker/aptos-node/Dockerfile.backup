@@ -1,0 +1,26 @@
+FROM docker.io/library/ubuntu:24.04
+
+# Minimal backup-focused image for PFN backups
+# Contains only essential tools needed for backup operations
+
+# Install minimal dependencies for backup operations
+RUN apt-get update && apt-get install -y \
+restic \
+curl \
+jq \
+ca-certificates \
+&& rm -rf /var/lib/apt/lists/*
+
+# Set the working directory
+WORKDIR /app
+
+ARG BINARY_PATH=target/release
+# Copy only the aptos-node binary (no CLI tools needed for backup)
+COPY --chmod=0755 ${BINARY_PATH}/aptos-node /usr/local/bin/aptos-node
+
+# Copy backup orchestrator script
+COPY --chmod=0755 backup-orchestrator.sh /usr/local/bin/backup-orchestrator.sh
+
+# Run backup orchestrator by default
+ENTRYPOINT ["/usr/local/bin/backup-orchestrator.sh"]
+CMD []

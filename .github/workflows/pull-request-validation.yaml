@@ -195,16 +195,22 @@ jobs:
           echo "GIT_SHA_SHORT=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_ENV
           echo "BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_ENV
       
-      # Build and push Docker image
+      # Build and push Docker images
       - name: Build and push aptos-node Docker image
         run: |
           docker build --build-arg BINARY_PATH=target/debug -f docker/aptos-node/Dockerfile -t ghcr.io/movementlabsxyz/aptos-node:${{ env.GIT_SHA_SHORT }} .
           docker push ghcr.io/movementlabsxyz/aptos-node:${{ env.GIT_SHA_SHORT }}
-      
+
+      - name: Build and push aptos-node-backup Docker image
+        run: |
+          docker build --build-arg BINARY_PATH=target/debug -f docker/aptos-node/Dockerfile.backup -t ghcr.io/movementlabsxyz/aptos-node-backup:${{ env.GIT_SHA_SHORT }} .
+          docker push ghcr.io/movementlabsxyz/aptos-node-backup:${{ env.GIT_SHA_SHORT }}
+
       # Output image information
       - name: Output image information
         run: |
-          echo "✅ Docker image built and pushed successfully!"
-          echo "📦 Image: ghcr.io/movementlabsxyz/aptos-node:${{ env.GIT_SHA_SHORT }}"
+          echo "✅ Docker images built and pushed successfully!"
+          echo "📦 Main Image: ghcr.io/movementlabsxyz/aptos-node:${{ env.GIT_SHA_SHORT }}"
+          echo "📦 Backup Image: ghcr.io/movementlabsxyz/aptos-node-backup:${{ env.GIT_SHA_SHORT }}"
           echo "🏷️  Tag: ${{ env.GIT_SHA_SHORT }}"
-          echo "🌐 Registry: ghcr.io/movementlabsxyz/aptos-node"
+          echo "🌐 Registry: ghcr.io/movementlabsxyz"

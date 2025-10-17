@@ -35,6 +35,10 @@ module aptos_framework::governed_gas_pool {
     struct GovernedGasPool has key {
         /// The signer capability of the resource account.
         signer_capability: SignerCapability,
+    }
+
+    /// Contains added variable needed for the GovernedGasPool staking reward update.
+    struct GovernedGasPoolV2 has key {
         deposited_treasury_counter: u64,
         withdraw_staking_reward_events: EventHandle<WithdrawStakingRewardEvent>,
     }
@@ -80,6 +84,9 @@ module aptos_framework::governed_gas_pool {
 
         move_to(aptos_framework, GovernedGasPool{
             signer_capability: governed_gas_pool_signer_cap,
+        });
+
+        move_to(aptos_framework, GovernedGasPoolV2{
             deposited_treasury_counter: 0,
             withdraw_staking_reward_events: account::new_event_handle<WithdrawStakingRewardEvent>(aptos_framework),
         });
@@ -109,8 +116,8 @@ module aptos_framework::governed_gas_pool {
 
     #[view]
     /// Return the amount of treasury deposited.
-    public fun get_treasury_deposited(): u64 acquires GovernedGasPool {
-        borrow_global<GovernedGasPool>(@aptos_framework).deposited_treasury_counter
+    public fun get_treasury_deposited(): u64 acquires GovernedGasPoolV2 {
+        borrow_global<GovernedGasPoolV2>(@aptos_framework).deposited_treasury_counter
     }
 
     /// Funds the destination account with a given amount of coin.
@@ -183,11 +190,11 @@ module aptos_framework::governed_gas_pool {
     /// Deposits from the treasury account. Treasury deposit are recorded.
     /// @param treasury_account The address of the account that paid the treasury.
     /// @param amount The amount of treasury to be deposited.
-    public entry fun deposit_treasury(treasury_account: &signer, amount: u64) acquires GovernedGasPool {
+    public entry fun deposit_treasury(treasury_account: &signer, amount: u64) acquires GovernedGasPool, GovernedGasPoolV2 {
         let treasury_account_address = signer::address_of(treasury_account);
         deposit_from<AptosCoin>(treasury_account_address, amount);
 
-        let ggp = borrow_global_mut<GovernedGasPool>(@aptos_framework);
+        let ggp = borrow_global_mut<GovernedGasPoolV2>(@aptos_framework);
         ggp.deposited_treasury_counter = ggp.deposited_treasury_counter + amount;
     }
 
@@ -209,21 +216,20 @@ module aptos_framework::governed_gas_pool {
     /// @return A `Coin<CoinType>` resource containing the withdrawn amount.
     public(friend) fun withdraw_staking_reward<CoinType>(
         amount: u64
-    ): Coin<CoinType> acquires GovernedGasPool {
+    ): Coin<CoinType> acquires GovernedGasPool, GovernedGasPoolV2 {
         let balance = get_balance<CoinType>();
         assert!(balance >= amount, 0); // insufficient balance
-        let ggp = borrow_global_mut<GovernedGasPool>(@aptos_framework);
+        let ggpv2 = borrow_global_mut<GovernedGasPoolV2>(@aptos_framework);
 
         event::emit_event(
-            &mut ggp.withdraw_staking_reward_events,
+            &mut ggpv2.withdraw_staking_reward_events,
             WithdrawStakingRewardEvent {
                 amount,
             },
         );
         
         // Withdraw reward coin.
-        let signer_cap = create_signer_with_capability(&ggp.signer_capability);
-        coin::withdraw<CoinType>(&signer_cap, amount)
+        coin::withdraw<CoinType>(&governed_gas_signer(), amount)
     }
 
     /// Register Aptos coin with Governed gas signer.
@@ -432,7 +438,7 @@ module aptos_framework::governed_gas_pool {
     /// Add some treasury to the governed gas pool.
     ///
     /// @param aptos_framework is the signer of the aptos_framework module.
-    fun test_deposite_treasury_and_counter(aptos_framework: &signer, treasury: &signer) acquires GovernedGasPool, AptosCoinMintCapability {
+    fun test_deposite_treasury_and_counter(aptos_framework: &signer, treasury: &signer) acquires GovernedGasPool, GovernedGasPoolV2, AptosCoinMintCapability {
        
         // initialize the modules
         initialize_for_test(aptos_framework);

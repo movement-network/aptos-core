@@ -1232,7 +1232,7 @@ module aptos_framework::stake {
     /// pending inactive validators so they no longer can vote.
     /// 4. The validator's voting power in the validator set is updated to be the corresponding staking pool's voting
     /// power.
-    public(friend) fun on_new_epoch() acquires StakePool, ValidatorConfig, ValidatorPerformance, ValidatorSet, ValidatorFees {
+    public(friend) fun on_new_epoch() acquires StakePool, AptosCoinCapabilities, ValidatorConfig, ValidatorPerformance, ValidatorSet, ValidatorFees {
         let validator_set = borrow_global_mut<ValidatorSet>(@aptos_framework);
         let config = staking_config::get();
         let validator_perf = borrow_global_mut<ValidatorPerformance>(@aptos_framework);
@@ -1545,7 +1545,7 @@ module aptos_framework::stake {
         validator_perf: &ValidatorPerformance,
         pool_address: address,
         staking_config: &StakingConfig,
-    ) acquires StakePool, ValidatorConfig, ValidatorFees {
+    ) acquires StakePool, AptosCoinCapabilities, ValidatorConfig, ValidatorFees {
         let stake_pool = borrow_global_mut<StakePool>(pool_address);
         let validator_config = borrow_global<ValidatorConfig>(pool_address);
         let cur_validator_perf = vector::borrow(&validator_perf.validators, validator_config.validator_index);
@@ -1650,7 +1650,7 @@ module aptos_framework::stake {
         num_total_proposals: u64,
         rewards_rate: u64,
         rewards_rate_denominator: u64,
-    ): u64 {
+    ): u64 acquires AptosCoinCapabilities {
         let stake_amount = coin::value(stake);
         let rewards_amount = if (stake_amount > 0) {
             calculate_rewards_amount(
@@ -1664,8 +1664,12 @@ module aptos_framework::stake {
             0
         };
         if (rewards_amount > 0) {
-            let rewards =
-                governed_gas_pool::withdraw_staking_reward<AptosCoin>(rewards_amount);
+            let rewards = if (features::stake_reward_using_treasury_enabled()) {
+                governed_gas_pool::withdraw_staking_reward<AptosCoin>(rewards_amount)
+            } else {
+                let mint_cap = &borrow_global<AptosCoinCapabilities>(@aptos_framework).mint_cap;
+                coin::mint(rewards_amount, mint_cap)
+            };
             coin::merge(stake, rewards);
         };
         rewards_amount
@@ -1816,7 +1820,7 @@ module aptos_framework::stake {
         operator: &signer,
         pool_address: address,
         should_end_epoch: bool,
-    ) acquires StakePool, ValidatorConfig, ValidatorPerformance, ValidatorSet, ValidatorFees {
+    ) acquires StakePool, AptosCoinCapabilities, ValidatorConfig, ValidatorPerformance, ValidatorSet, ValidatorFees {
         let pk_bytes = bls12381::public_key_to_bytes(pk);
         let pop_bytes = bls12381::proof_of_possession_to_bytes(pop);
         rotate_consensus_key(operator, pool_address, pk_bytes, pop_bytes);
@@ -1828,7 +1832,7 @@ module aptos_framework::stake {
 
     #[test_only]
     public fun fast_forward_to_unlock(pool_address: address)
-    acquires StakePool, ValidatorConfig, ValidatorPerformance, ValidatorSet, ValidatorFees {
+    acquires StakePool, AptosCoinCapabilities, ValidatorConfig, ValidatorPerformance, ValidatorSet, ValidatorFees {
         let expiration_time = get_lockup_secs(pool_address);
         timestamp::update_global_time_for_test_secs(expiration_time);
         end_epoch();
@@ -1848,6 +1852,10 @@ module aptos_framework::stake {
     ) acquires AptosCoinCapabilities {
         // Create framework account to be able to declare governance reward withdraw event
         aptos_framework::account::create_account_for_test(@aptos_framework);
+
+        // Test using treasure.
+        features::change_feature_flags_for_testing(aptos_framework, vector[features::get_stake_reward_using_treasury_feature()], vector[]);
+
         timestamp::set_time_has_started_for_testing(aptos_framework);
         reconfiguration_state::initialize(aptos_framework);
         if (!exists<ValidatorSet>(@aptos_framework)) {
@@ -2988,6 +2996,10 @@ module aptos_framework::stake {
             fixed_point64::create_from_rational(50, 100),
         );
         features::change_feature_flags_for_testing(aptos_framework, vector[features::get_periodical_reward_rate_decrease_feature()], vector[]);
+        // Make sure that periodical reward rate decrease is enabled.
+        assert!(features::periodical_reward_rate_decrease_enabled(), 0);
+        // Make sure that stake reward using treasury is enabled.
+        assert!(features::stake_reward_using_treasury_enabled(), 0);
 
         // For some reason, this epoch is very long. It has been 1 year since genesis when the epoch ends.
         timestamp::fast_forward_seconds(one_year_in_secs - EPOCH_DURATION * 3);
@@ -3152,7 +3164,7 @@ module aptos_framework::stake {
     }
 
     #[test_only]
-    public fun end_epoch() acquires StakePool, ValidatorConfig, ValidatorPerformance, ValidatorSet, ValidatorFees {
+    public fun end_epoch() acquires StakePool, AptosCoinCapabilities, ValidatorConfig, ValidatorPerformance, ValidatorSet, ValidatorFees {
         // Set the number of blocks to 1, to give out rewards to non-failing validators.
         set_validator_perf_at_least_one_block();
         timestamp::fast_forward_seconds(EPOCH_DURATION);
@@ -3256,13 +3268,17 @@ module aptos_framework::stake {
         validator_2: &signer,
         validator_3: &signer,
     ) acquires AllowedValidators, AptosCoinCapabilities, OwnerCapability, StakePool, ValidatorConfig, ValidatorPerformance, ValidatorSet, ValidatorFees {
-        // Make sure that fees collection and distribution is enabled.
         features::change_feature_flags_for_testing(aptos_framework, vector[COLLECT_AND_DISTRIBUTE_GAS_FEES], vector[]);
-        assert!(features::collect_and_distribute_gas_fees(), 0);
 
         // Initialize staking and validator fees table.
         initialize_for_test(aptos_framework);
         initialize_validator_fees(aptos_framework);
+
+        // Make sure that fees collection and distribution is enabled.
+        assert!(features::collect_and_distribute_gas_fees(), 0);
+        // Make sure that stake reward using treasury is enabled.
+        assert!(features::stake_reward_using_treasury_enabled(), 0);
+
 
         let validator_1_address = signer::address_of(validator_1);
         let validator_2_address = signer::address_of(validator_2);

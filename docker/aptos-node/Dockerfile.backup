@@ -3,13 +3,21 @@ FROM docker.io/library/ubuntu:24.04
 # Minimal backup-focused image for PFN backups
 # Contains only essential tools needed for backup operations
 
-# Install minimal dependencies for backup operations
+# Install minimal dependencies for backup operations and runtime libraries
 RUN apt-get update && apt-get install -y \
+libjemalloc2 \
+libdw1 \
+librocksdb-dev \
+libssl3 \
+libstdc++6 \
+zlib1g \
+ca-certificates \
+patchelf \
 restic \
 curl \
 jq \
-ca-certificates \
-&& rm -rf /var/lib/apt/lists/*
+&& rm -rf /var/lib/apt/lists/* \
+&& ln -sf /usr/lib/x86_64-linux-gnu/librocksdb.so /usr/lib/x86_64-linux-gnu/librocksdb.so.10
 
 # Set the working directory
 WORKDIR /app
@@ -20,6 +28,12 @@ COPY --chmod=0755 ${BINARY_PATH}/aptos-node /usr/local/bin/aptos-node
 
 # Copy backup orchestrator script
 COPY --chmod=0755 backup-orchestrator.sh /usr/local/bin/backup-orchestrator.sh
+
+# Patch binary to use system interpreter
+RUN patchelf --set-interpreter /lib64/ld-linux-x86-64.so.2 /usr/local/bin/aptos-node
+
+# Verify the binary can be executed
+RUN LD_LIBRARY_PATH=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu /usr/local/bin/aptos-node --version
 
 # Run backup orchestrator by default
 ENTRYPOINT ["/usr/local/bin/backup-orchestrator.sh"]

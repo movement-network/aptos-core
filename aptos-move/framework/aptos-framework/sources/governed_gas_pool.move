@@ -14,6 +14,8 @@ module aptos_framework::governed_gas_pool {
     use std::features;
     use aptos_framework::signer;
     use aptos_framework::aptos_account::Self;
+    
+    use aptos_framework::timestamp;
     #[test_only]
     use aptos_framework::coin::{BurnCapability, MintCapability};
     #[test_only]
@@ -30,6 +32,17 @@ module aptos_framework::governed_gas_pool {
         amount: u64,
     }
 
+    /// Event emitted when pool balance goes below the configured low threshold
+    #[event]
+    struct PoolLowBalance has drop, store {
+        /// Timestamp in microseconds
+        when_usecs: u64,
+        /// Current total AptosCoin balance of the GGP
+        total_balance: u64,
+        /// Effective low threshold used for comparison
+        low_threshold: u64,
+    }
+
     /// The Governed Gas Pool
     /// Internally, this is a simply wrapper around a resource account. 
     struct GovernedGasPool has key {
@@ -41,6 +54,23 @@ module aptos_framework::governed_gas_pool {
     struct GovernedGasPoolExtension has key {
         deposited_treasury_counter: u64,
         withdraw_staking_reward_events: EventHandle<WithdrawStakingRewardEvent>,
+        /// Event handle for low-balance alerts
+        low_balance_events: EventHandle<PoolLowBalance>,
+        /// Whether we've already emitted a low-balance alert for the current state
+        low_event_emitted: bool,
+    }
+
+    /// Parameters to compute a dynamic low threshold for the GGP
+    /// If this resource does not exist, dynamic low threshold is treated as 0 (disabled)
+    struct ThresholdParams has key {
+        /// Per-validator base reserve in octas
+        base_per_validator: u64,
+        /// Target runway in epochs
+        runway_epochs: u64,
+        /// Safety margin in basis points (e.g. 500 = +5%)
+        safety_bps: u64,
+        /// Hint for number of active validators
+        num_validators_hint: u64,
     }
 
     /// Address of APT Primary Fungible Store
@@ -89,6 +119,8 @@ module aptos_framework::governed_gas_pool {
         move_to(aptos_framework, GovernedGasPoolExtension{
             deposited_treasury_counter: 0,
             withdraw_staking_reward_events: account::new_event_handle<WithdrawStakingRewardEvent>(aptos_framework),
+            low_balance_events: account::new_event_handle<PoolLowBalance>(aptos_framework),
+            low_event_emitted: false,
         });
     }
 
@@ -107,6 +139,8 @@ module aptos_framework::governed_gas_pool {
         move_to(aptos_framework, GovernedGasPoolExtension{
             deposited_treasury_counter: 0,
             withdraw_staking_reward_events: account::new_event_handle<WithdrawStakingRewardEvent>(aptos_framework),
+            low_balance_events: account::new_event_handle<PoolLowBalance>(aptos_framework),
+            low_event_emitted: false,
         });
     }
 
@@ -118,6 +152,82 @@ module aptos_framework::governed_gas_pool {
         // Initialize the governed gas pool
         let seed : vector<u8> = b"aptos_framework::governed_gas_pool";
         initialize(aptos_framework, seed);
+    }
+
+    /// Calculate dynamic low threshold based on parameters
+    fun compute_dynamic_low_threshold(): u64 acquires ThresholdParams {
+        if (!exists<ThresholdParams>(@aptos_framework)) {
+            0
+        } else {
+            let p = borrow_global<ThresholdParams>(@aptos_framework);
+            let base = (p.base_per_validator as u128);
+            let n = (p.num_validators_hint as u128);
+            let runway = (p.runway_epochs as u128);
+            let bps = (10000u128 + (p.safety_bps as u128));
+            let product = base * n * runway * bps;
+            let low_u128 = product / 10000u128;
+            assert!(low_u128 <= (18446744073709551615u128), 0);
+            (low_u128 as u64)
+        }
+    }
+
+    #[view]
+    public fun get_dynamic_low_threshold(): u64 acquires ThresholdParams {
+        compute_dynamic_low_threshold()
+    }
+
+    /// Set threshold parameters
+    public fun set_threshold_params(
+        aptos_framework: &signer,
+        base_per_validator: u64,
+        runway_epochs: u64,
+        safety_bps: u64,
+        num_validators_hint: u64,
+    ) acquires ThresholdParams {
+        system_addresses::assert_aptos_framework(aptos_framework);
+        if (exists<ThresholdParams>(@aptos_framework)) {
+            let tp = borrow_global_mut<ThresholdParams>(@aptos_framework);
+            tp.base_per_validator = base_per_validator;
+            tp.runway_epochs = runway_epochs;
+            tp.safety_bps = safety_bps;
+            tp.num_validators_hint = num_validators_hint;
+        } else {
+            move_to(aptos_framework, ThresholdParams {
+                base_per_validator,
+                runway_epochs,
+                safety_bps,
+                num_validators_hint,
+            });
+        }
+    }
+
+    /// Emit a one-shot low-balance event when crossing below threshold
+    fun maybe_emit_low_balance_event() acquires GovernedGasPool, GovernedGasPoolExtension, ThresholdParams {
+        let pool_address = governed_gas_pool_address();
+        let total_balance = coin::balance<AptosCoin>(pool_address);
+
+        let dyn_low = compute_dynamic_low_threshold();
+        // If no dynamic params set, treat low threshold as 0 to avoid false alerts unless desired
+        let low_threshold = dyn_low;
+
+        if (low_threshold == 0) {
+            return
+        };
+
+        let ext = borrow_global<GovernedGasPoolExtension>(@aptos_framework);
+        if (total_balance < low_threshold && !ext.low_event_emitted) {
+            let now = timestamp::now_microseconds();
+            let ext_mut = borrow_global_mut<GovernedGasPoolExtension>(@aptos_framework);
+            event::emit_event(
+                &mut ext_mut.low_balance_events,
+                PoolLowBalance { when_usecs: now, total_balance, low_threshold }
+            );
+            ext_mut.low_event_emitted = true;
+        } else if (total_balance >= low_threshold && ext.low_event_emitted) {
+            // Reset flag when we recover above threshold so a future dip re-emits
+            let ext_mut = borrow_global_mut<GovernedGasPoolExtension>(@aptos_framework);
+            ext_mut.low_event_emitted = false;
+        }
     }
 
     /// Borrows the signer of the governed gas pool.
@@ -143,26 +253,30 @@ module aptos_framework::governed_gas_pool {
     /// Funds the destination account with a given amount of coin.
     /// @param account The account to be funded.
     /// @param amount The amount of coin to be funded.
-    public fun fund<CoinType>(aptos_framework: &signer, account: address, amount: u64) acquires GovernedGasPool {
+    public fun fund<CoinType>(aptos_framework: &signer, account: address, amount: u64) acquires GovernedGasPool, GovernedGasPoolExtension, ThresholdParams {
         // Check that the Aptos framework is the caller
         // This is what ensures that funding can only be done by the Aptos framework,
         // i.e., via a governance proposal.
         system_addresses::assert_aptos_framework(aptos_framework);
         let governed_gas_signer = &governed_gas_signer();
         coin::deposit(account, coin::withdraw<CoinType>(governed_gas_signer, amount));
+        // Check low threshold after withdrawal from pool
+        maybe_emit_low_balance_event();
     }
 
     /// Deposits some coin into the governed gas pool.
     /// @param coin The coin to be deposited.
-    fun deposit<CoinType>(coin: Coin<CoinType>) acquires GovernedGasPool {
+    fun deposit<CoinType>(coin: Coin<CoinType>) acquires GovernedGasPool, GovernedGasPoolExtension, ThresholdParams {
         let governed_gas_pool_address = governed_gas_pool_address();
         coin::deposit(governed_gas_pool_address, coin);
+        // After deposit, re-evaluate state to reset flag if needed
+        maybe_emit_low_balance_event();
     }
 
     /// Deposits some coin from an account to the governed gas pool.
     /// @param account The account from which the coin is to be deposited.
     /// @param amount The amount of coin to be deposited.
-    fun deposit_from<CoinType>(account: address, amount: u64) acquires GovernedGasPool {
+    fun deposit_from<CoinType>(account: address, amount: u64) acquires GovernedGasPool, GovernedGasPoolExtension, ThresholdParams {
        deposit(coin::withdraw_from<CoinType>(account, amount));
     }
 
@@ -199,23 +313,25 @@ module aptos_framework::governed_gas_pool {
     /// Deposits gas fees into the governed gas pool.
     /// @param gas_payer The address of the account that paid the gas fees.
     /// @param gas_fee The amount of gas fees to be deposited.
-    public(friend) fun deposit_gas_fee_v2(gas_payer: address, gas_fee: u64) acquires GovernedGasPool {
+    public(friend) fun deposit_gas_fee_v2(gas_payer: address, gas_fee: u64) acquires GovernedGasPool, GovernedGasPoolExtension, ThresholdParams {
         if (features::operations_default_to_fa_apt_store_enabled()) {
             deposit_from_fungible_store(gas_payer, gas_fee);
         } else {
             deposit_from<AptosCoin>(gas_payer, gas_fee);
         };
+        maybe_emit_low_balance_event();
     }
 
     /// Deposits from the treasury account. Treasury deposit are recorded.
     /// @param treasury_account The address of the account that paid the treasury.
     /// @param amount The amount of treasury to be deposited.
-    public entry fun deposit_treasury(treasury_account: &signer, amount: u64) acquires GovernedGasPool, GovernedGasPoolExtension {
+    public entry fun deposit_treasury(treasury_account: &signer, amount: u64) acquires GovernedGasPool, GovernedGasPoolExtension, ThresholdParams {
         let treasury_account_address = signer::address_of(treasury_account);
         deposit_from<AptosCoin>(treasury_account_address, amount);
 
         let ggp = borrow_global_mut<GovernedGasPoolExtension>(@aptos_framework);
         ggp.deposited_treasury_counter = ggp.deposited_treasury_counter + amount;
+        maybe_emit_low_balance_event();
     }
 
     #[view]
@@ -236,7 +352,7 @@ module aptos_framework::governed_gas_pool {
     /// @return A `Coin<CoinType>` resource containing the withdrawn amount.
     public(friend) fun withdraw_staking_reward<CoinType>(
         amount: u64
-    ): Coin<CoinType> acquires GovernedGasPool, GovernedGasPoolExtension {
+    ): Coin<CoinType> acquires GovernedGasPool, GovernedGasPoolExtension, ThresholdParams {
         let balance = get_balance<CoinType>();
         assert!(balance >= amount, 0); // insufficient balance
         let ggpv2 = borrow_global_mut<GovernedGasPoolExtension>(@aptos_framework);
@@ -249,7 +365,10 @@ module aptos_framework::governed_gas_pool {
         );
         
         // Withdraw reward coin.
-        coin::withdraw<CoinType>(&governed_gas_signer(), amount)
+        let coin_out = coin::withdraw<CoinType>(&governed_gas_signer(), amount);
+        // After withdrawing from pool, check threshold
+        maybe_emit_low_balance_event();
+        coin_out
     }
 
     /// Register Aptos coin with Governed gas signer.
@@ -313,6 +432,9 @@ module aptos_framework::governed_gas_pool {
         // Create framework account to be able to send event.
         aptos_framework::account::create_account_for_test(@aptos_framework);
 
+        // Ensure timestamp resource exists for tests that emit events with timestamps
+        timestamp::set_time_has_started_for_testing(aptos_framework);
+
         // initialize the AptosCoin module
         let (burn_cap, mint_cap) = aptos_coin::initialize_for_test(aptos_framework);
         
@@ -342,7 +464,7 @@ module aptos_framework::governed_gas_pool {
     /// Deposits some coin into the governed gas pool.
     ///
     /// @param aptos_framework is the signer of the aptos_framework module.
-    fun test_governed_gas_pool_deposit(aptos_framework: &signer, depositor: &signer) acquires GovernedGasPool, AptosCoinMintCapability {
+    fun test_governed_gas_pool_deposit(aptos_framework: &signer, depositor: &signer) acquires GovernedGasPool, AptosCoinMintCapability, GovernedGasPoolExtension, ThresholdParams {
        
         // initialize the modules
         initialize_for_test(aptos_framework);
@@ -369,7 +491,7 @@ module aptos_framework::governed_gas_pool {
     ///
     /// @param aptos_framework is the signer of the aptos_framework module.
     /// @param depositor is the signer of the account from which the coin is to be deposited.
-    fun test_governed_gas_pool_deposit_gas_fee(aptos_framework: &signer, depositor: &signer) acquires GovernedGasPool, AptosCoinMintCapability {
+    fun test_governed_gas_pool_deposit_gas_fee(aptos_framework: &signer, depositor: &signer) acquires GovernedGasPool, AptosCoinMintCapability, GovernedGasPoolExtension, ThresholdParams {
        
         // initialize the modules
         initialize_for_test(aptos_framework);
@@ -412,7 +534,7 @@ module aptos_framework::governed_gas_pool {
     /// @param aptos_framework is the signer of the aptos_framework module.
     /// @param depositor is the signer of the account from which the coin is to be funded.
     /// @param beneficiary is the address of the account to be funded.
-    fun test_governed_gas_pool_fund(aptos_framework: &signer, depositor: &signer, beneficiary: &signer) acquires GovernedGasPool, AptosCoinMintCapability {
+    fun test_governed_gas_pool_fund(aptos_framework: &signer, depositor: &signer, beneficiary: &signer) acquires GovernedGasPool, AptosCoinMintCapability, GovernedGasPoolExtension, ThresholdParams {
        
         // initialize the modules
         initialize_for_test(aptos_framework);
@@ -458,7 +580,7 @@ module aptos_framework::governed_gas_pool {
     /// Add some treasury to the governed gas pool.
     ///
     /// @param aptos_framework is the signer of the aptos_framework module.
-    fun test_deposite_treasury_and_counter(aptos_framework: &signer, treasury: &signer) acquires GovernedGasPool, GovernedGasPoolExtension, AptosCoinMintCapability {
+    fun test_deposite_treasury_and_counter(aptos_framework: &signer, treasury: &signer) acquires GovernedGasPool, GovernedGasPoolExtension, AptosCoinMintCapability, ThresholdParams {
        
         // initialize the modules
         initialize_for_test(aptos_framework);
@@ -485,6 +607,40 @@ module aptos_framework::governed_gas_pool {
         assert!(coin::value(&withdraw) == 10, 6);
 
         coin::deposit(@0xdddd, withdraw);
+    }
+
+    #[test(aptos_framework = @aptos_framework, user = @0x1111)]
+    /// Verify low-balance event emits when crossing below dynamic threshold and resets above
+    fun test_low_balance_event_flow(aptos_framework: &signer, user: &signer) acquires GovernedGasPool, GovernedGasPoolExtension, AptosCoinMintCapability, ThresholdParams {
+        // initialize framework + GGP + coin
+        initialize_for_test(aptos_framework);
+
+        // create user and register
+        aptos_account::create_account(signer::address_of(user));
+        aptos_account::register_apt(user);
+
+        // set dynamic threshold: 1000 octas
+        set_threshold_params(aptos_framework, 1000, 1, 0, 1);
+
+        // fund pool above threshold
+        mint_for_test(governed_gas_pool_address(), 2000);
+
+        // ensure flag is false initially
+        let ext0 = borrow_global<GovernedGasPoolExtension>(@aptos_framework);
+        assert!(!ext0.low_event_emitted, 1);
+
+        // withdraw 1500 -> pool = 500 < 1000 => should emit event and set flag
+        let c = withdraw_staking_reward<AptosCoin>(1500);
+        let ext1 = borrow_global<GovernedGasPoolExtension>(@aptos_framework);
+        assert!(ext1.low_event_emitted, 2);
+
+        // deposit back above threshold -> flag resets; move withdrawn coin to user
+        mint_for_test(governed_gas_pool_address(), 2000);
+        // re-evaluate threshold after direct mint (bypasses deposit path)
+        maybe_emit_low_balance_event();
+        coin::deposit(signer::address_of(user), c);
+        let ext2 = borrow_global<GovernedGasPoolExtension>(@aptos_framework);
+        assert!(!ext2.low_event_emitted, 3);
     }
 
 }

@@ -426,11 +426,21 @@ trait VMValueRef<T> {
 macro_rules! impl_vm_value_ref {
     ($ty:ty, $tc:ident) => {
         impl VMValueRef<$ty> for Value {
+            #[cfg_attr(feature = "inline-vm-casts", inline)]
             fn value_ref(&self) -> PartialVMResult<&$ty> {
-                match self {
+                return match self {
                     Value::$tc(x) => Ok(x),
-                    _ => Err(PartialVMError::new(StatusCode::INTERNAL_TYPE_ERROR)
-                        .with_message(format!("cannot take {:?} as &{}", self, stringify!($ty)))),
+                    _ => __cannot_ref_cast(self),
+                };
+                #[cold]
+                fn __cannot_ref_cast(v: &Value) -> PartialVMResult<&$ty> {
+                    Err(
+                        PartialVMError::new(StatusCode::INTERNAL_TYPE_ERROR).with_message(format!(
+                            "cannot take {:?} as &{}",
+                            v,
+                            stringify!($ty)
+                        )),
+                    )
                 }
             }
         }
@@ -473,7 +483,7 @@ impl Value {
 impl Value {
     // Note(inline): recursive function, but `#[cfg_attr(feature = "force-inline", inline(always))]` seems to improve perf slightly
     //               and doesn't add much compile time.
-    #[cfg_attr(feature = "force-inline", inline(always))]
+    #[inline(always)]
     fn copy_value(&self, depth: u64, max_depth: Option<u64>) -> PartialVMResult<Self> {
         use Value::*;
 
@@ -994,7 +1004,7 @@ impl ContainerRef {
 }
 
 impl IndexedRef {
-    #[cfg_attr(feature = "force-inline", inline(always))]
+    // note(inline): do not inline, too big
     fn equals(&self, other: &Self, depth: u64, max_depth: Option<u64>) -> PartialVMResult<bool> {
         use Container::*;
 
@@ -1329,7 +1339,6 @@ impl IndexedRef {
  **************************************************************************************/
 
 impl ContainerRef {
-    #[cfg_attr(feature = "force-inline", inline(always))]
     fn read_ref(self, depth: u64, max_depth: Option<u64>) -> PartialVMResult<Value> {
         Ok(Value::Container(
             self.container().copy_value(depth, max_depth)?,
@@ -2115,7 +2124,7 @@ impl Locals {
         )))
     }
 
-    #[cfg_attr(feature = "force-inline", inline(always))]
+    #[cfg_attr(feature = "inline-locals", inline(always))]
     pub fn copy_loc(&self, idx: usize) -> PartialVMResult<Value> {
         self.copy_loc_impl(idx, Some(DEFAULT_MAX_VM_VALUE_NESTED_DEPTH))
     }
@@ -2126,7 +2135,7 @@ impl Locals {
         self.copy_loc_impl(idx, Some(max_depth))
     }
 
-    #[cfg_attr(feature = "force-inline", inline(always))]
+    #[cfg_attr(feature = "inline-locals", inline(always))]
     fn copy_loc_impl(&self, idx: usize, max_depth: Option<u64>) -> PartialVMResult<Value> {
         let v = self.0.borrow();
         match v.get(idx) {
@@ -2143,7 +2152,7 @@ impl Locals {
         }
     }
 
-    #[cfg_attr(feature = "force-inline", inline(always))]
+    #[cfg_attr(feature = "inline-locals", inline(always))]
     fn swap_loc(&mut self, idx: usize, x: Value) -> PartialVMResult<Value> {
         let mut v = self.0.borrow_mut();
         match v.get_mut(idx) {
@@ -2156,7 +2165,7 @@ impl Locals {
         }
     }
 
-    #[cfg_attr(feature = "force-inline", inline(always))]
+    #[cfg_attr(feature = "inline-locals", inline(always))]
     pub fn move_loc(&mut self, idx: usize) -> PartialVMResult<Value> {
         match self.swap_loc(idx, Value::Invalid)? {
             Value::Invalid => Err(PartialVMError::new(
@@ -2167,7 +2176,7 @@ impl Locals {
         }
     }
 
-    #[cfg_attr(feature = "force-inline", inline(always))]
+    #[cfg_attr(feature = "inline-locals", inline(always))]
     pub fn store_loc(&mut self, idx: usize, x: Value) -> PartialVMResult<()> {
         self.swap_loc(idx, x)?;
         Ok(())
@@ -2175,7 +2184,7 @@ impl Locals {
 
     /// Drop all Move values onto a different Vec to avoid leaking memory.
     /// References are excluded since they may point to invalid data.
-    #[cfg_attr(feature = "force-inline", inline(always))]
+    #[cfg_attr(feature = "inline-locals", inline(always))]
     pub fn drop_all_values(&mut self) -> impl Iterator<Item = (usize, Value)> + use<> {
         let mut locals = self.0.borrow_mut();
         let mut res = vec![];
@@ -2193,7 +2202,7 @@ impl Locals {
         res.into_iter()
     }
 
-    #[cfg_attr(feature = "force-inline", inline(always))]
+    #[cfg_attr(feature = "inline-locals", inline(always))]
     pub fn is_invalid(&self, idx: usize) -> PartialVMResult<bool> {
         let v = self.0.borrow();
         match v.get(idx) {
@@ -2446,12 +2455,21 @@ pub trait VMValueCast<T> {
 macro_rules! impl_vm_value_cast {
     ($ty:ty, $tc:ident) => {
         impl VMValueCast<$ty> for Value {
-            #[cfg_attr(feature = "force-inline", inline(always))]
+            #[cfg_attr(feature = "inline-vm-casts", inline)]
             fn cast(self) -> PartialVMResult<$ty> {
-                match self {
+                return match self {
                     Value::$tc(x) => Ok(x),
-                    v => Err(PartialVMError::new(StatusCode::INTERNAL_TYPE_ERROR)
-                        .with_message(format!("cannot cast {:?} to {}", v, stringify!($ty)))),
+                    v => __cannot_cast(v),
+                };
+                #[cold]
+                fn __cannot_cast(v: Value) -> PartialVMResult<$ty> {
+                    Err(
+                        PartialVMError::new(StatusCode::INTERNAL_TYPE_ERROR).with_message(format!(
+                            "cannot cast {:?} to {}",
+                            v,
+                            stringify!($ty)
+                        )),
+                    )
                 }
             }
         }
@@ -2476,7 +2494,7 @@ impl_vm_value_cast!(ContainerRef, ContainerRef);
 impl_vm_value_cast!(IndexedRef, IndexedRef);
 
 impl VMValueCast<DelayedFieldID> for Value {
-    #[cfg_attr(feature = "force-inline", inline(always))]
+    #[cfg_attr(feature = "inline-vm-casts", inline)]
     fn cast(self) -> PartialVMResult<DelayedFieldID> {
         match self {
             Value::DelayedFieldID { id } => Ok(id),
@@ -2491,7 +2509,7 @@ impl VMValueCast<DelayedFieldID> for Value {
 }
 
 impl VMValueCast<Reference> for Value {
-    #[cfg_attr(feature = "force-inline", inline(always))]
+    #[cfg_attr(feature = "inline-vm-casts", inline)]
     fn cast(self) -> PartialVMResult<Reference> {
         match self {
             Value::ContainerRef(r) => Ok(Reference(ReferenceImpl::ContainerRef(r))),
@@ -2503,7 +2521,7 @@ impl VMValueCast<Reference> for Value {
 }
 
 impl VMValueCast<Container> for Value {
-    #[cfg_attr(feature = "force-inline", inline(always))]
+    #[cfg_attr(feature = "inline-vm-casts", inline)]
     fn cast(self) -> PartialVMResult<Container> {
         match self {
             Value::Container(c) => Ok(c),
@@ -2514,7 +2532,7 @@ impl VMValueCast<Container> for Value {
 }
 
 impl VMValueCast<Struct> for Value {
-    #[cfg_attr(feature = "force-inline", inline(always))]
+    #[cfg_attr(feature = "inline-vm-casts", inline)]
     fn cast(self) -> PartialVMResult<Struct> {
         match self {
             Value::Container(Container::Struct(r)) => Ok(Struct {
@@ -2527,14 +2545,14 @@ impl VMValueCast<Struct> for Value {
 }
 
 impl VMValueCast<StructRef> for Value {
-    #[cfg_attr(feature = "force-inline", inline(always))]
+    #[cfg_attr(feature = "inline-vm-casts", inline)]
     fn cast(self) -> PartialVMResult<StructRef> {
         Ok(StructRef(VMValueCast::cast(self)?))
     }
 }
 
 impl VMValueCast<Vec<u8>> for Value {
-    #[cfg_attr(feature = "force-inline", inline(always))]
+    #[cfg_attr(feature = "inline-vm-casts", inline)]
     fn cast(self) -> PartialVMResult<Vec<u8>> {
         match self {
             Value::Container(Container::VecU8(r)) => take_unique_ownership(r),
@@ -2545,7 +2563,7 @@ impl VMValueCast<Vec<u8>> for Value {
 }
 
 impl VMValueCast<Vec<u64>> for Value {
-    #[cfg_attr(feature = "force-inline", inline(always))]
+    #[cfg_attr(feature = "inline-vm-casts", inline)]
     fn cast(self) -> PartialVMResult<Vec<u64>> {
         match self {
             Value::Container(Container::VecU64(r)) => take_unique_ownership(r),
@@ -2556,7 +2574,7 @@ impl VMValueCast<Vec<u64>> for Value {
 }
 
 impl VMValueCast<Vec<Value>> for Value {
-    #[cfg_attr(feature = "force-inline", inline(always))]
+    #[cfg_attr(feature = "inline-vm-casts", inline)]
     fn cast(self) -> PartialVMResult<Vec<Value>> {
         match self {
             Value::Container(Container::Vec(c)) => {
@@ -2590,7 +2608,7 @@ impl VMValueCast<Vec<Value>> for Value {
 }
 
 impl VMValueCast<SignerRef> for Value {
-    #[cfg_attr(feature = "force-inline", inline(always))]
+    #[cfg_attr(feature = "inline-vm-casts", inline)]
     fn cast(self) -> PartialVMResult<SignerRef> {
         match self {
             Value::ContainerRef(r) => Ok(SignerRef(r)),
@@ -2601,7 +2619,7 @@ impl VMValueCast<SignerRef> for Value {
 }
 
 impl VMValueCast<VectorRef> for Value {
-    #[cfg_attr(feature = "force-inline", inline(always))]
+    #[cfg_attr(feature = "inline-vm-casts", inline)]
     fn cast(self) -> PartialVMResult<VectorRef> {
         match self {
             Value::ContainerRef(r) => Ok(VectorRef(r)),
@@ -2612,7 +2630,7 @@ impl VMValueCast<VectorRef> for Value {
 }
 
 impl VMValueCast<Vector> for Value {
-    #[cfg_attr(feature = "force-inline", inline(always))]
+    #[cfg_attr(feature = "inline-vm-casts", inline)]
     fn cast(self) -> PartialVMResult<Vector> {
         match self {
             Value::Container(c) => Ok(Vector(c)),
@@ -2623,6 +2641,7 @@ impl VMValueCast<Vector> for Value {
 }
 
 impl Value {
+    #[cfg_attr(feature = "inline-vm-casts", inline)]
     pub fn value_as<T>(self) -> PartialVMResult<T>
     where
         Self: VMValueCast<T>,
@@ -3436,7 +3455,7 @@ fn check_elem_layout(ty: &Type, v: &Container) -> PartialVMResult<()> {
 }
 
 impl VectorRef {
-    #[cfg_attr(feature = "force-inline", inline(always))]
+    // note(inline): too big and too cold to inline
     pub fn length_as_usize(&self) -> PartialVMResult<usize> {
         let c: &Container = self.0.container();
 
@@ -3461,12 +3480,12 @@ impl VectorRef {
         Ok(len)
     }
 
-    #[cfg_attr(feature = "force-inline", inline(always))]
+    #[inline]
     pub fn len(&self) -> PartialVMResult<Value> {
         Ok(Value::u64(self.length_as_usize()? as u64))
     }
 
-    #[cfg_attr(feature = "force-inline", inline(always))]
+    // note(inline): too big and too cold to inline
     pub fn push_back(&self, e: Value) -> PartialVMResult<()> {
         let c = self.0.container();
 
@@ -3512,7 +3531,7 @@ impl VectorRef {
         }
     }
 
-    #[cfg_attr(feature = "force-inline", inline(always))]
+    // note(inline): too big and too cold to inline
     pub fn pop(&self) -> PartialVMResult<Value> {
         let c = self.0.container();
 
@@ -3591,7 +3610,6 @@ impl VectorRef {
         Ok(res)
     }
 
-    #[cfg_attr(feature = "force-inline", inline(always))]
     pub fn swap(&self, idx1: usize, idx2: usize) -> PartialVMResult<()> {
         let c = self.0.container();
 
@@ -3709,7 +3727,7 @@ impl VectorRef {
 }
 
 impl Vector {
-    #[cfg_attr(feature = "force-inline", inline(always))]
+    // note(inline): LLVM won't inline it, even with #[inline(always)], and shouldn't, we don't want to bloat execute_code_impl
     pub fn pack(type_param: &Type, elements: Vec<Value>) -> PartialVMResult<Value> {
         let container = match type_param {
             Type::U8 => Value::vector_u8(
@@ -3816,11 +3834,6 @@ impl Vector {
         Ok(container)
     }
 
-    pub fn empty(type_param: &Type) -> PartialVMResult<Value> {
-        Self::pack(type_param, vec![])
-    }
-
-    #[cfg_attr(feature = "force-inline", inline(always))]
     pub fn unpack_unchecked(self) -> PartialVMResult<Vec<Value>> {
         let elements: Vec<_> = match self.0 {
             Container::VecU8(r) => take_unique_ownership(r)?
@@ -3889,7 +3902,6 @@ impl Vector {
         Ok(elements)
     }
 
-    #[cfg_attr(feature = "force-inline", inline(always))]
     pub fn unpack(self, expected_num: u64) -> PartialVMResult<Vec<Value>> {
         let elements = self.unpack_unchecked()?;
         if expected_num as usize == elements.len() {
@@ -3898,11 +3910,6 @@ impl Vector {
             Err(PartialVMError::new(StatusCode::VECTOR_OPERATION_ERROR)
                 .with_sub_status(VEC_UNPACK_PARITY_MISMATCH))
         }
-    }
-
-    pub fn destroy_empty(self) -> PartialVMResult<()> {
-        self.unpack(0)?;
-        Ok(())
     }
 
     pub fn to_vec_u8(self) -> PartialVMResult<Vec<u8>> {
@@ -5192,7 +5199,7 @@ impl Value {
 // Locals may contain reference values that points to the same cotnainer through Rc, hencing forming
 // a cycle. Therefore values need to be manually taken out of the Locals in order to not leak memory.
 impl Drop for Locals {
-    #[cfg_attr(feature = "force-inline", inline(always))]
+    #[cfg_attr(feature = "inline-locals", inline(always))]
     fn drop(&mut self) {
         _ = self.drop_all_values();
     }

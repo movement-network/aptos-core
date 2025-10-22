@@ -1227,11 +1227,11 @@ module aptos_framework::stake {
         while ({
             spec {
                 invariant len(validator_perf.validators) == validator_len;
-                invariant (option::spec_is_some(ghost_proposer_idx) && option::spec_borrow(
+                invariant (option::is_some(ghost_proposer_idx) && option::borrow(
                     ghost_proposer_idx
                 ) < validator_len) ==>
-                    (validator_perf.validators[option::spec_borrow(ghost_proposer_idx)].successful_proposals ==
-                        ghost_valid_perf.validators[option::spec_borrow(ghost_proposer_idx)].successful_proposals + 1);
+                    (validator_perf.validators[option::borrow(ghost_proposer_idx)].successful_proposals ==
+                        ghost_valid_perf.validators[option::borrow(ghost_proposer_idx)].successful_proposals + 1);
             };
             f < f_len
         }) {
@@ -3634,7 +3634,7 @@ module aptos_framework::stake {
         // Test Case 4: Full rewards when pool has enough
         // Expected reward is ~10 (1% of 1005), add 100 to be safe
         seed_governed_gas_pool(aptos_framework, 100);
-        
+
         end_epoch();
 
         // Verify full rewards distributed
@@ -3651,17 +3651,17 @@ module aptos_framework::stake {
     ) acquires AllowedValidators, AptosCoinCapabilities, OwnerCapability, StakePool, ValidatorConfig, ValidatorPerformance, ValidatorSet {
         // Initialize WITHOUT treasury feature (uses minting)
         initialize_for_test(aptos_framework);
-        
+
         // Disable treasury feature to use minting path
         features::change_feature_flags_for_testing(aptos_framework, vector[], vector[features::get_stake_reward_using_treasury_feature()]);
-        
+
         let validator_address = signer::address_of(validator);
         let (_sk, pk, pop) = generate_identity();
         initialize_test_validator(&pk, &pop, validator, 1000, true, true);
-        
+
         // Trigger epoch change - should use minting path
         end_epoch();
-        
+
         // Validator should receive full rewards via minting (not from pool)
         assert_validator_state(validator_address, 1010, 0, 0, 0, 0);
     }

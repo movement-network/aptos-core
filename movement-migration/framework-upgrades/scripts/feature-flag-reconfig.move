@@ -14,7 +14,9 @@ script {
             67, // ConcurrentFungibleBalance
             40, // VMBinaryFormat7
             74, // EnumTypes
-            223, // STAKE_REWARD_USING_TREASURY
+            80, // NativeMemoryOperation
+            223,// new GGP
+            224,// STAKE_REWARD_USING_TREASURY
         ];
 
         let disabled_blob: vector<u64> = vector[

@@ -585,6 +585,51 @@ module std::features {
     }
 
     const TRANSACTION_SIMULATION_ENHANCEMENT: u64 = 78;
+    /// Whether the Atomic bridge is available
+    /// Lifetime: transient
+    const ATOMIC_BRIDGE: u64 = 224;
+
+    #[deprecated]
+    public fun get_atomic_bridge_feature(): u64 { ATOMIC_BRIDGE }
+
+    #[deprecated]
+    public fun abort_atomic_bridge_enabled(): bool {
+        true
+    }
+
+
+    /// Whether the Atomic bridge is available
+    /// Lifetime: transient
+    const NATIVE_BRIDGE: u64 = 225;
+
+    #[deprecated]
+    public fun get_native_bridge_feature(): u64 { NATIVE_BRIDGE }
+
+    #[deprecated]
+    public fun abort_native_bridge_enabled(): bool {
+        true
+    }
+
+    /// Whether the Governed Gas Pool is used to capture gas fees
+    ///
+    /// Lifetime: permanent
+    const GOVERNED_GAS_POOL: u64 = 223;
+
+    /// Whether the Governed Gas Pool is enabled.
+    public fun get_governed_gas_pool_feature(): u64 { GOVERNED_GAS_POOL }
+
+    public fun governed_gas_pool_enabled(): bool acquires Features {
+        is_enabled(GOVERNED_GAS_POOL)
+    }
+
+    /// Lifetime: transient
+    const DECOMMISSION_CORE_RESOURCES: u64 = 222;
+
+    public fun get_decommission_core_resources_feature(): u64 { DECOMMISSION_CORE_RESOURCES }
+
+    public fun get_decommission_core_resources_enabled(): bool acquires Features {
+        is_enabled(DECOMMISSION_CORE_RESOURCES)
+    }
 
     public fun get_transaction_simulation_enhancement_feature(): u64 { TRANSACTION_SIMULATION_ENHANCEMENT }
 
@@ -657,61 +702,72 @@ module std::features {
         false
     }
 
-    /// Whether the Atomic bridge is available
+    /// Whether function values are enabled.
     /// Lifetime: transient
-    const ATOMIC_BRIDGE: u64 = 224;
-
-    #[deprecated]
-    public fun get_atomic_bridge_feature(): u64 { ATOMIC_BRIDGE }
-
-    #[deprecated]
-    public fun abort_atomic_bridge_enabled(): bool {
-        true
-    }
-
-
-    /// Whether the Atomic bridge is available
-    /// Lifetime: transient
-    const NATIVE_BRIDGE: u64 = 225;
-
-    #[deprecated]
-    public fun get_native_bridge_feature(): u64 { NATIVE_BRIDGE }
-
-    #[deprecated]
-    public fun abort_native_bridge_enabled(): bool {
-        true
-    }
-
-    /// Whether the Governed Gas Pool is used to capture gas fees
     ///
-    /// Lifetime: permanent
-    const GOVERNED_GAS_POOL: u64 = 223;
+    /// We do not expect use from Move, so for now only for documentation purposes here
+    const ENABLE_FUNCTION_VALUES: u64 = 89;
 
-    /// Whether the Governed Gas Pool is enabled.
-    public fun get_governed_gas_pool_feature(): u64 { GOVERNED_GAS_POOL }
+    /// Whether new accounts default to the Fungible Asset store.
+    /// Lifetime: transient
+    const NEW_ACCOUNTS_DEFAULT_TO_FA_STORE: u64 = 90;
 
-    public fun governed_gas_pool_enabled(): bool acquires Features {
-        is_enabled(GOVERNED_GAS_POOL)
+    public fun get_new_accounts_default_to_fa_store_feature(): u64 { NEW_ACCOUNTS_DEFAULT_TO_FA_STORE }
+
+    public fun new_accounts_default_to_fa_store_enabled(): bool acquires Features {
+        is_enabled(NEW_ACCOUNTS_DEFAULT_TO_FA_STORE)
     }
 
     /// Lifetime: transient
-    const DECOMMISSION_CORE_RESOURCES: u64 = 222;
+    const DEFAULT_ACCOUNT_RESOURCE: u64 = 91;
 
-    public fun get_decommission_core_resources_feature(): u64 { DECOMMISSION_CORE_RESOURCES }
+    public fun get_default_account_resource_feature(): u64 { DEFAULT_ACCOUNT_RESOURCE }
 
-    public fun get_decommission_core_resources_enabled(): bool acquires Features {
-        is_enabled(DECOMMISSION_CORE_RESOURCES)
+    public fun is_default_account_resource_enabled(): bool acquires Features {
+        is_enabled(DEFAULT_ACCOUNT_RESOURCE)
     }
 
-    /// Whether the staking rewards are mint (diseable) or withdraw from the gouverned gas pool treasury (enable). 
-    ///
-    /// Lifetime: permanent
-    const STAKE_REWARD_USING_TREASURY: u64 = 223;
+    /// If enabled, JWK consensus should run in per-key mode, where:
+    /// - The consensus is for key-level updates
+    ///   (e.g., "issuer A key 1 should be deleted", "issuer B key 2 should be upserted");
+    /// - transaction type `ValidatorTransaction::ObservedJWKUpdate` is reused;
+    /// - while a key-level update is mostly represented by a new type `KeyLevelUpdate` locally,
+    ///   For simplicity, it is represented by type `ProviderJWKs` (used to represent issuer-level update)
+    ///   in JWK Consensus messages, in validator transactions, and in Move.
+    const JWK_CONSENSUS_PER_KEY_MODE: u64 = 92;
 
-    public fun get_stake_reward_using_treasury_feature(): u64 { STAKE_REWARD_USING_TREASURY }
+    public fun get_jwk_consensus_per_key_mode_feature(): u64 { JWK_CONSENSUS_PER_KEY_MODE }
 
-    public fun stake_reward_using_treasury_enabled(): bool acquires Features {
-        is_enabled(STAKE_REWARD_USING_TREASURY)
+    public fun is_jwk_consensus_per_key_mode_enabled(): bool acquires Features {
+        is_enabled(JWK_CONSENSUS_PER_KEY_MODE)
+    }
+
+    /// Whether orderless transactions are enabled.
+    /// Lifetime: transient
+    const ORDERLESS_TRANSACTIONS: u64 = 94;
+
+    public fun get_orderless_transactions_feature(): u64 { ORDERLESS_TRANSACTIONS }
+
+    public fun orderless_transactions_enabled(): bool acquires Features {
+        is_enabled(ORDERLESS_TRANSACTIONS)
+    }
+
+    /// Whether to calculate the transaction fee for distribution.
+    const CALCULATE_TRANSACTION_FEE_FOR_DISTRIBUTION: u64 = 96;
+
+    public fun get_calculate_transaction_fee_for_distribution_feature(): u64 { CALCULATE_TRANSACTION_FEE_FOR_DISTRIBUTION }
+
+    public fun is_calculate_transaction_fee_for_distribution_enabled(): bool acquires Features {
+        is_enabled(CALCULATE_TRANSACTION_FEE_FOR_DISTRIBUTION)
+    }
+
+    /// Whether to distribute transaction fee to validators.
+    const DISTRIBUTE_TRANSACTION_FEE: u64 = 97;
+
+    public fun get_distribute_transaction_fee_feature(): u64 { DISTRIBUTE_TRANSACTION_FEE }
+
+    public fun is_distribute_transaction_fee_enabled(): bool acquires Features {
+        is_enabled(DISTRIBUTE_TRANSACTION_FEE)
     }
 
     // ============================================================================================

@@ -773,7 +773,7 @@ module std::features {
     /// Whether the staking rewards are mint (diseable) or withdraw from the gouverned gas pool treasury (enable). 
     ///
     /// Lifetime: permanent
-    const STAKE_REWARD_USING_TREASURY: u64 = 223;
+    const STAKE_REWARD_USING_TREASURY: u64 = 224;
 
     public fun get_stake_reward_using_treasury_feature(): u64 { STAKE_REWARD_USING_TREASURY }
 

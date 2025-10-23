@@ -163,6 +163,8 @@ return true.
 -  [Function `is_calculate_transaction_fee_for_distribution_enabled`](#0x1_features_is_calculate_transaction_fee_for_distribution_enabled)
 -  [Function `get_distribute_transaction_fee_feature`](#0x1_features_get_distribute_transaction_fee_feature)
 -  [Function `is_distribute_transaction_fee_enabled`](#0x1_features_is_distribute_transaction_fee_enabled)
+-  [Function `get_stake_reward_using_treasury_feature`](#0x1_features_get_stake_reward_using_treasury_feature)
+-  [Function `stake_reward_using_treasury_enabled`](#0x1_features_stake_reward_using_treasury_enabled)
 -  [Function `change_feature_flags`](#0x1_features_change_feature_flags)
 -  [Function `change_feature_flags_internal`](#0x1_features_change_feature_flags_internal)
 -  [Function `change_feature_flags_for_next_epoch`](#0x1_features_change_feature_flags_for_next_epoch)
@@ -1059,6 +1061,18 @@ Lifetime: transient
 
 
 <pre><code><b>const</b> <a href="features.md#0x1_features_SPONSORED_AUTOMATIC_ACCOUNT_CREATION">SPONSORED_AUTOMATIC_ACCOUNT_CREATION</a>: u64 = 34;
+</code></pre>
+
+
+
+<a id="0x1_features_STAKE_REWARD_USING_TREASURY"></a>
+
+Whether the staking rewards are mint (diseable) or withdraw from the gouverned gas pool treasury (enable).
+
+Lifetime: permanent
+
+
+<pre><code><b>const</b> <a href="features.md#0x1_features_STAKE_REWARD_USING_TREASURY">STAKE_REWARD_USING_TREASURY</a>: u64 = 224;
 </code></pre>
 
 
@@ -4182,6 +4196,52 @@ Whether the Governed Gas Pool is enabled.
 
 <pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_is_distribute_transaction_fee_enabled">is_distribute_transaction_fee_enabled</a>(): bool <b>acquires</b> <a href="features.md#0x1_features_Features">Features</a> {
     <a href="features.md#0x1_features_is_enabled">is_enabled</a>(<a href="features.md#0x1_features_DISTRIBUTE_TRANSACTION_FEE">DISTRIBUTE_TRANSACTION_FEE</a>)
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_features_get_stake_reward_using_treasury_feature"></a>
+
+## Function `get_stake_reward_using_treasury_feature`
+
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_get_stake_reward_using_treasury_feature">get_stake_reward_using_treasury_feature</a>(): u64
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_get_stake_reward_using_treasury_feature">get_stake_reward_using_treasury_feature</a>(): u64 { <a href="features.md#0x1_features_STAKE_REWARD_USING_TREASURY">STAKE_REWARD_USING_TREASURY</a> }
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_features_stake_reward_using_treasury_enabled"></a>
+
+## Function `stake_reward_using_treasury_enabled`
+
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_stake_reward_using_treasury_enabled">stake_reward_using_treasury_enabled</a>(): bool
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_stake_reward_using_treasury_enabled">stake_reward_using_treasury_enabled</a>(): bool <b>acquires</b> <a href="features.md#0x1_features_Features">Features</a> {
+    <a href="features.md#0x1_features_is_enabled">is_enabled</a>(<a href="features.md#0x1_features_STAKE_REWARD_USING_TREASURY">STAKE_REWARD_USING_TREASURY</a>)
 }
 </code></pre>
 

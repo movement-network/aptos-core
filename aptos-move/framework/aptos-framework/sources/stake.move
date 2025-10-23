@@ -35,6 +35,7 @@ module aptos_framework::stake {
     use aptos_framework::staking_config::{Self, StakingConfig, StakingRewardsConfig};
     use aptos_framework::chain_status;
     use aptos_framework::governed_gas_pool;
+    use aptos_framework::permissioned_signer;
 
     friend aptos_framework::block;
     friend aptos_framework::genesis;
@@ -1251,7 +1252,7 @@ module aptos_framework::stake {
     /// pending inactive validators so they no longer can vote.
     /// 4. The validator's voting power in the validator set is updated to be the corresponding staking pool's voting
     /// power.
-    public(friend) fun on_new_epoch() acquires StakePool, AptosCoinCapabilities, ValidatorConfig, ValidatorPerformance, ValidatorSet, ValidatorFees {
+    public(friend) fun on_new_epoch() acquires StakePool, AptosCoinCapabilities, ValidatorConfig, ValidatorPerformance, ValidatorSet {
         let validator_set = borrow_global_mut<ValidatorSet>(@aptos_framework);
         let config = staking_config::get();
         let validator_perf = borrow_global_mut<ValidatorPerformance>(@aptos_framework);
@@ -1372,7 +1373,7 @@ module aptos_framework::stake {
         validator_consensus_infos_from_validator_set(validator_set)
     }
 
-    public fun next_validator_consensus_infos(): vector<ValidatorConsensusInfo> acquires ValidatorSet, ValidatorPerformance, StakePool, ValidatorFees, ValidatorConfig {
+    public fun next_validator_consensus_infos(): vector<ValidatorConsensusInfo> acquires ValidatorSet, ValidatorPerformance, StakePool, ValidatorConfig {
         // Init.
         let cur_validator_set = borrow_global<ValidatorSet>(@aptos_framework);
         let staking_config = staking_config::get();

@@ -521,15 +521,18 @@ fn native_contains_box(
 
     let (gv, loaded) =
         table.get_or_create_global_value(&function_value_extension, table_context, key_bytes)?;
-    let mem_usage = gv
-        .view()
-        .map(|val| {
-            abs_val_gas_params
-                .abstract_heap_size(&val, gas_feature_version)
-                .map(u64::from)
-        })
-        .transpose()?;
-    let exists = Value::bool(gv.exists()?);
+    let mem_usage = if !fix_memory_double_counting || loaded.is_some() {
+        gv.view()
+            .map(|val| {
+                abs_val_gas_params
+                    .abstract_heap_size(&val, gas_feature_version)
+                    .map(u64::from)
+            })
+            .transpose()?
+    } else {
+        None
+    };
+    let exists = Value::bool(gv.exists());
 
     drop(table_data);
 

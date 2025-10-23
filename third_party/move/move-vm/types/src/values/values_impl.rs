@@ -4103,10 +4103,10 @@ impl GlobalValueImpl {
         Ok(())
     }
 
-    fn exists(&self) -> PartialVMResult<bool> {
+    fn exists(&self) -> bool {
         match self {
-            Self::Fresh { .. } | Self::Cached { .. } => Ok(true),
-            Self::None | Self::Deleted => Ok(false),
+            Self::Fresh { .. } | Self::Cached { .. } => true,
+            Self::None | Self::Deleted => false,
         }
     }
 
@@ -4177,7 +4177,7 @@ impl GlobalValue {
         self.0.borrow_global()
     }
 
-    pub fn exists(&self) -> PartialVMResult<bool> {
+    pub fn exists(&self) -> bool {
         self.0.exists()
     }
 

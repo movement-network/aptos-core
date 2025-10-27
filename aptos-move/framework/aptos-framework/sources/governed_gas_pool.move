@@ -34,7 +34,7 @@ module aptos_framework::governed_gas_pool {
 
     /// Event emitted when pool balance goes below the configured low threshold
     #[event]
-    struct PoolLowBalance has drop, store {
+    struct PoolLowBalanceEvent has drop, store {
         /// Timestamp in microseconds
         when_usecs: u64,
         /// Current total AptosCoin balance of the GGP
@@ -55,7 +55,7 @@ module aptos_framework::governed_gas_pool {
         deposited_treasury_counter: u64,
         withdraw_staking_reward_events: EventHandle<WithdrawStakingRewardEvent>,
         /// Event handle for low-balance alerts
-        low_balance_events: EventHandle<PoolLowBalance>,
+        low_balance_events: EventHandle<PoolLowBalanceEvent>,
         /// Whether we've already emitted a low-balance alert for the current state
         low_event_emitted: bool,
     }
@@ -119,7 +119,7 @@ module aptos_framework::governed_gas_pool {
         move_to(aptos_framework, GovernedGasPoolExtension{
             deposited_treasury_counter: 0,
             withdraw_staking_reward_events: account::new_event_handle<WithdrawStakingRewardEvent>(aptos_framework),
-            low_balance_events: account::new_event_handle<PoolLowBalance>(aptos_framework),
+            low_balance_events: account::new_event_handle<PoolLowBalanceEvent>(aptos_framework),
             low_event_emitted: false,
         });
     }
@@ -139,7 +139,7 @@ module aptos_framework::governed_gas_pool {
         move_to(aptos_framework, GovernedGasPoolExtension{
             deposited_treasury_counter: 0,
             withdraw_staking_reward_events: account::new_event_handle<WithdrawStakingRewardEvent>(aptos_framework),
-            low_balance_events: account::new_event_handle<PoolLowBalance>(aptos_framework),
+            low_balance_events: account::new_event_handle<PoolLowBalanceEvent>(aptos_framework),
             low_event_emitted: false,
         });
     }
@@ -154,7 +154,12 @@ module aptos_framework::governed_gas_pool {
         initialize(aptos_framework, seed);
     }
 
+    const E_LOW_THRESHOLD_OVERFLOW: u64 = 1;
+
     /// Calculate dynamic low threshold based on parameters
+    /// Equation: low = base_per_validator * num_validators_hint * runway_epochs * (10000 + safety_bps) / 10000
+    /// Rationale: safety_bps is expressed in basis points (1/100 of a percent). We scale by 10000
+    /// to convert basis points to a fixed-point multiplier, then divide by 10000 to normalize.
     fun compute_dynamic_low_threshold(): u64 acquires ThresholdParams {
         if (!exists<ThresholdParams>(@aptos_framework)) {
             0
@@ -166,7 +171,7 @@ module aptos_framework::governed_gas_pool {
             let bps = (10000u128 + (p.safety_bps as u128));
             let product = base * n * runway * bps;
             let low_u128 = product / 10000u128;
-            assert!(low_u128 <= (18446744073709551615u128), 0);
+            assert!(low_u128 <= (18446744073709551615u128), E_LOW_THRESHOLD_OVERFLOW);
             (low_u128 as u64)
         }
     }
@@ -177,7 +182,7 @@ module aptos_framework::governed_gas_pool {
     }
 
     /// Set threshold parameters
-    public fun set_threshold_params(
+    public entry fun set_threshold_params(
         aptos_framework: &signer,
         base_per_validator: u64,
         runway_epochs: u64,
@@ -207,23 +212,21 @@ module aptos_framework::governed_gas_pool {
         let total_balance = coin::balance<AptosCoin>(pool_address);
 
         let dyn_low = compute_dynamic_low_threshold();
-        // If no dynamic params set, treat low threshold as 0 to avoid false alerts unless desired
-        let low_threshold = dyn_low;
 
-        if (low_threshold == 0) {
+        if (dyn_low == 0) {
             return
         };
 
         let ext = borrow_global<GovernedGasPoolExtension>(@aptos_framework);
-        if (total_balance < low_threshold && !ext.low_event_emitted) {
+        if (total_balance < dyn_low && !ext.low_event_emitted) {
             let now = timestamp::now_microseconds();
             let ext_mut = borrow_global_mut<GovernedGasPoolExtension>(@aptos_framework);
             event::emit_event(
                 &mut ext_mut.low_balance_events,
-                PoolLowBalance { when_usecs: now, total_balance, low_threshold }
+                PoolLowBalanceEvent { when_usecs: now, total_balance, low_threshold: dyn_low }
             );
             ext_mut.low_event_emitted = true;
-        } else if (total_balance >= low_threshold && ext.low_event_emitted) {
+        } else if (total_balance >= dyn_low && ext.low_event_emitted) {
             // Reset flag when we recover above threshold so a future dip re-emits
             let ext_mut = borrow_global_mut<GovernedGasPoolExtension>(@aptos_framework);
             ext_mut.low_event_emitted = false;
@@ -629,6 +632,11 @@ module aptos_framework::governed_gas_pool {
         let ext0 = borrow_global<GovernedGasPoolExtension>(@aptos_framework);
         assert!(!ext0.low_event_emitted, 1);
 
+        // perform a withdrawal that keeps balance above threshold to ensure no false event
+        let safe_withdraw = withdraw_staking_reward<AptosCoin>(500); // balance = 1500 (still above 1000)
+        let ext_safe = borrow_global<GovernedGasPoolExtension>(@aptos_framework);
+        assert!(!ext_safe.low_event_emitted, 6);
+
         // withdraw 1500 -> pool = 500 < 1000 => should emit event and set flag
         let c = withdraw_staking_reward<AptosCoin>(1500);
         let ext1 = borrow_global<GovernedGasPoolExtension>(@aptos_framework);
@@ -638,9 +646,12 @@ module aptos_framework::governed_gas_pool {
         mint_for_test(governed_gas_pool_address(), 2000);
         // re-evaluate threshold after direct mint (bypasses deposit path)
         maybe_emit_low_balance_event();
-        coin::deposit(signer::address_of(user), c);
         let ext2 = borrow_global<GovernedGasPoolExtension>(@aptos_framework);
         assert!(!ext2.low_event_emitted, 3);
+
+        // move withdrawn coins at the end (to avoid unused value warning)
+        coin::deposit(signer::address_of(user), safe_withdraw);
+        coin::deposit(signer::address_of(user), c);
     }
 
 }

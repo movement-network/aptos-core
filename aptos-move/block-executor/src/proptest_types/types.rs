@@ -25,7 +25,7 @@ use move_core_types::{
     language_storage::ModuleId,
 };
 use move_vm_runtime::Module;
-use move_vm_types::delayed_values::delayed_field_id::{DelayedFieldID, ExtractUniqueIndex};
+use move_vm_types::module_id_interner::InternedModuleIdPool;
 use proptest::{arbitrary::Arbitrary, collection::vec, prelude::*, proptest, sample::Index};
 use proptest_derive::Arbitrary;
 use std::{
@@ -746,6 +746,7 @@ impl<V: Into<Vec<u8>> + Arbitrary + Clone + Debug + Eq + Sync + Send> Transactio
         E: Send + Sync + Debug + Clone + TransactionEvent,
     >(
         self,
+        module_id_pool: &InternedModuleIdPool,
         universe: &[K],
     ) -> MockTransaction<KeyType<K>, E> {
         let universe_len = universe.len();
@@ -761,7 +762,7 @@ impl<V: Into<Vec<u8>> + Arbitrary + Clone + Debug + Eq + Sync + Send> Transactio
 
             // Serialize a module and store it in bytes so deserialization can succeed.
             let mut serialized_bytes = vec![];
-            Module::new_for_test(module_id.clone())
+            Module::new_for_test(module_id_pool, module_id.clone())
                 .serialize(&mut serialized_bytes)
                 .expect("Failed to serialize compiled module");
             value.bytes = Some(serialized_bytes.into());

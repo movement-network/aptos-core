@@ -353,7 +353,7 @@ Burn transaction fees in epilogue.
 Mint refund in epilogue.
 
 
-<pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="transaction_fee.md#0x1_transaction_fee_mint_and_refund">mint_and_refund</a>(<a href="account.md#0x1_account">account</a>: <b>address</b>, refund: u64)
+<pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="transaction_fee.md#0x1_transaction_fee_mint_and_refund">mint_and_refund</a>(_account: <b>address</b>, refund: u64)
 </code></pre>
 
 
@@ -362,8 +362,12 @@ Mint refund in epilogue.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="transaction_fee.md#0x1_transaction_fee_mint_and_refund">mint_and_refund</a>(<a href="account.md#0x1_account">account</a>: <b>address</b>, refund: u64) {
-    <b>abort</b> <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_not_implemented">error::not_implemented</a>(<a href="transaction_fee.md#0x1_transaction_fee_ENO_LONGER_SUPPORTED">ENO_LONGER_SUPPORTED</a>)
+<pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="transaction_fee.md#0x1_transaction_fee_mint_and_refund">mint_and_refund</a>(_account: <b>address</b>, refund: u64) {
+    // refund is 0 when the STORAGE_DELETION_REFUND feature is desactivated.
+    // STORAGE_DELETION_REFUND is not implemented.
+    <b>if</b> (refund &gt; 0) {
+        <b>abort</b> <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_not_implemented">error::not_implemented</a>(<a href="transaction_fee.md#0x1_transaction_fee_ENO_LONGER_SUPPORTED">ENO_LONGER_SUPPORTED</a>)
+    }
 }
 </code></pre>
 
@@ -595,7 +599,7 @@ DEPRECATED
 
 
 <pre><code>#[deprecated]
-<b>public</b> <b>fun</b> <a href="transaction_fee.md#0x1_transaction_fee_copy_capabilities_for_bridge">copy_capabilities_for_bridge</a>(aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>): (<a href="coin.md#0x1_coin_MintCapability">coin::MintCapability</a>&lt;<a href="aptos_coin.md#0x1_aptos_coin_AptosCoin">aptos_coin::AptosCoin</a>&gt;, <a href="coin.md#0x1_coin_BurnCapability">coin::BurnCapability</a>&lt;<a href="aptos_coin.md#0x1_aptos_coin_AptosCoin">aptos_coin::AptosCoin</a>&gt;)
+<b>public</b> <b>fun</b> <a href="transaction_fee.md#0x1_transaction_fee_copy_capabilities_for_bridge">copy_capabilities_for_bridge</a>(_aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>): (<a href="coin.md#0x1_coin_MintCapability">coin::MintCapability</a>&lt;<a href="aptos_coin.md#0x1_aptos_coin_AptosCoin">aptos_coin::AptosCoin</a>&gt;, <a href="coin.md#0x1_coin_BurnCapability">coin::BurnCapability</a>&lt;<a href="aptos_coin.md#0x1_aptos_coin_AptosCoin">aptos_coin::AptosCoin</a>&gt;)
 </code></pre>
 
 
@@ -604,7 +608,7 @@ DEPRECATED
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="transaction_fee.md#0x1_transaction_fee_copy_capabilities_for_bridge">copy_capabilities_for_bridge</a>(aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>) : (MintCapability&lt;AptosCoin&gt;, BurnCapability&lt;AptosCoin&gt;){
+<pre><code><b>public</b> <b>fun</b> <a href="transaction_fee.md#0x1_transaction_fee_copy_capabilities_for_bridge">copy_capabilities_for_bridge</a>(_aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>) : (MintCapability&lt;AptosCoin&gt;, BurnCapability&lt;AptosCoin&gt;){
    <b>abort</b> <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_not_implemented">error::not_implemented</a>(<a href="transaction_fee.md#0x1_transaction_fee_ENO_LONGER_SUPPORTED">ENO_LONGER_SUPPORTED</a>)
 }
 </code></pre>
@@ -621,7 +625,7 @@ Copy Mint and Burn capabilities over to bridge
 Can only be called once after which it will assert
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="transaction_fee.md#0x1_transaction_fee_copy_capabilities_for_native_bridge">copy_capabilities_for_native_bridge</a>(aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>): (<a href="coin.md#0x1_coin_MintCapability">coin::MintCapability</a>&lt;<a href="aptos_coin.md#0x1_aptos_coin_AptosCoin">aptos_coin::AptosCoin</a>&gt;, <a href="coin.md#0x1_coin_BurnCapability">coin::BurnCapability</a>&lt;<a href="aptos_coin.md#0x1_aptos_coin_AptosCoin">aptos_coin::AptosCoin</a>&gt;)
+<pre><code><b>public</b> <b>fun</b> <a href="transaction_fee.md#0x1_transaction_fee_copy_capabilities_for_native_bridge">copy_capabilities_for_native_bridge</a>(_aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>): (<a href="coin.md#0x1_coin_MintCapability">coin::MintCapability</a>&lt;<a href="aptos_coin.md#0x1_aptos_coin_AptosCoin">aptos_coin::AptosCoin</a>&gt;, <a href="coin.md#0x1_coin_BurnCapability">coin::BurnCapability</a>&lt;<a href="aptos_coin.md#0x1_aptos_coin_AptosCoin">aptos_coin::AptosCoin</a>&gt;)
 </code></pre>
 
 
@@ -630,7 +634,7 @@ Can only be called once after which it will assert
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="transaction_fee.md#0x1_transaction_fee_copy_capabilities_for_native_bridge">copy_capabilities_for_native_bridge</a>(aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>) : (MintCapability&lt;AptosCoin&gt;, BurnCapability&lt;AptosCoin&gt;){
+<pre><code><b>public</b> <b>fun</b> <a href="transaction_fee.md#0x1_transaction_fee_copy_capabilities_for_native_bridge">copy_capabilities_for_native_bridge</a>(_aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>) : (MintCapability&lt;AptosCoin&gt;, BurnCapability&lt;AptosCoin&gt;){
     <b>abort</b> <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_not_implemented">error::not_implemented</a>(<a href="transaction_fee.md#0x1_transaction_fee_ENO_LONGER_SUPPORTED">ENO_LONGER_SUPPORTED</a>)
 }
 </code></pre>
@@ -806,22 +810,13 @@ Can only be called once after which it will assert
 ### Function `mint_and_refund`
 
 
-<pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="transaction_fee.md#0x1_transaction_fee_mint_and_refund">mint_and_refund</a>(<a href="account.md#0x1_account">account</a>: <b>address</b>, refund: u64)
+<pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="transaction_fee.md#0x1_transaction_fee_mint_and_refund">mint_and_refund</a>(_account: <b>address</b>, refund: u64)
 </code></pre>
 
 
 
 
-<pre><code><b>pragma</b> verify = <b>false</b>;
-<b>let</b> aptos_addr = <a href="../../aptos-stdlib/doc/type_info.md#0x1_type_info_type_of">type_info::type_of</a>&lt;AptosCoin&gt;().account_address;
-<b>aborts_if</b> (refund != 0) && !<b>exists</b>&lt;CoinInfo&lt;AptosCoin&gt;&gt;(aptos_addr);
-<b>include</b> <a href="coin.md#0x1_coin_CoinAddAbortsIf">coin::CoinAddAbortsIf</a>&lt;AptosCoin&gt; { amount: refund };
-<b>aborts_if</b> !<b>exists</b>&lt;CoinStore&lt;AptosCoin&gt;&gt;(<a href="account.md#0x1_account">account</a>);
-<b>aborts_if</b> !<b>exists</b>&lt;<a href="transaction_fee.md#0x1_transaction_fee_AptosCoinMintCapability">AptosCoinMintCapability</a>&gt;(@aptos_framework);
-<b>let</b> supply = <a href="coin.md#0x1_coin_supply">coin::supply</a>&lt;AptosCoin&gt;;
-<b>let</b> <b>post</b> post_supply = <a href="coin.md#0x1_coin_supply">coin::supply</a>&lt;AptosCoin&gt;;
-<b>aborts_if</b> [abstract] supply + refund &gt; MAX_U128;
-<b>ensures</b> post_supply == supply + refund;
+<pre><code><b>aborts_if</b> (refund != 0);
 </code></pre>
 
 

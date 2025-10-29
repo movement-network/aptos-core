@@ -20,6 +20,7 @@ script {
         ];
 
         let disabled_blob: vector<u64> = vector[
+            28, // STORAGE_DELETION_REFUND
             48, // RemoveDetailedError
             16, // PeriodicalRewardRateReduction
             46, // KeylessAccouns

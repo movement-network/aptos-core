@@ -781,6 +781,16 @@ module std::features {
         is_enabled(STAKE_REWARD_USING_TREASURY)
     }
 
+    /// Whether the Storage fee is refund on deletion (enable) or never refund (disable). 
+    ///
+    /// Lifetime: permanent
+    const STORAGE_DELETION_REFUND: u64 = 225;
+
+    public fun get_storage_deletion_refund_feature(): u64 { STORAGE_DELETION_REFUND }
+
+    public fun storage_deletion_refund_enabled(): bool acquires Features {
+        is_enabled(STORAGE_DELETION_REFUND)
+    }
     // ============================================================================================
     // Feature Flag Implementation
 

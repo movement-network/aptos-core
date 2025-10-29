@@ -114,8 +114,29 @@ spec aptos_framework::transaction_fee {
         ensures coin::supply<AptosCoin> == old(coin::supply<AptosCoin>) - amount;
     }
 
-    spec mint_and_refund(_account: address, refund: u64) {
-        aborts_if (refund != 0);
+    spec mint_and_refund(account: address, refund: u64) {
+        use aptos_std::type_info;
+        use aptos_framework::aptos_coin::AptosCoin;
+        use aptos_framework::coin::{CoinInfo, CoinStore};
+        use aptos_framework::coin;
+        // TODO(fa_migration)
+        pragma verify = false;
+        // pragma opaque;
+
+        let aptos_addr = type_info::type_of<AptosCoin>().account_address;
+
+        aborts_if (refund != 0) && !exists<CoinInfo<AptosCoin>>(aptos_addr);
+        include coin::CoinAddAbortsIf<AptosCoin> { amount: refund };
+
+        aborts_if !exists<CoinStore<AptosCoin>>(account);
+        // modifies global<CoinStore<AptosCoin>>(account);
+
+        aborts_if !exists<AptosCoinMintCapability>(@aptos_framework);
+
+        let supply = coin::supply<AptosCoin>;
+        let post post_supply = coin::supply<AptosCoin>;
+        aborts_if [abstract] supply + refund > MAX_U128;
+        ensures post_supply == supply + refund;
     }
 
     /// Ensure caller is admin.

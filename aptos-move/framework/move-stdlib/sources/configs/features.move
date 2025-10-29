@@ -269,7 +269,7 @@ module std::features {
     /// Whether we refund storage costs to the user upon deletion
     /// 
     /// Lifetime: transient
-    const STORAGE_DELETION_REFUND: = 28;
+    const STORAGE_DELETION_REFUND: u64 = 28;
 
     public fun module_event_enabled(): bool acquires Features {
         is_enabled(STORAGE_DELETION_REFUND)

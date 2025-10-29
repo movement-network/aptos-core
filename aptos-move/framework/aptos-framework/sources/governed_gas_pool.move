@@ -22,6 +22,10 @@ module aptos_framework::governed_gas_pool {
     use aptos_framework::aptos_coin::Self;
 
     friend aptos_framework::stake;
+    friend aptos_framework::transaction_fee;
+
+    /// No longer supported.
+    const ENO_LONGER_SUPPORTED: u64 = 4;
 
     const MODULE_SALT: vector<u8> = b"aptos_framework::governed_gas_pool";
 
@@ -191,9 +195,8 @@ module aptos_framework::governed_gas_pool {
     /// Deposits gas fees into the governed gas pool.
     /// @param gas_payer The address of the account that paid the gas fees.
     /// @param gas_fee The amount of gas fees to be deposited.
-    public fun deposit_gas_fee(_gas_payer: address, _gas_fee: u64) acquires GovernedGasPool {
-        // get the sender to preserve the signature but do nothing
-        governed_gas_pool_address();
+    public fun deposit_gas_fee(_gas_payer: address, _gas_fee: u64) {
+         abort error::not_implemented(ENO_LONGER_SUPPORTED)
     }
 
     /// Deposits gas fees into the governed gas pool.

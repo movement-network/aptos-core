@@ -1,10 +1,10 @@
 // This module provides an interface to burn or collect and redistribute transaction fees.
 module aptos_framework::transaction_fee {
     use aptos_framework::coin::{Self, AggregatableCoin, BurnCapability, MintCapability};
-    use aptos_framework::aptos_account;
     use aptos_framework::aptos_coin::AptosCoin;
     use aptos_framework::fungible_asset::BurnRef;
     use aptos_framework::system_addresses;
+    use aptos_framework::governed_gas_pool;
     use std::error;
     use std::features;
     use std::option::{Self, Option};
@@ -77,31 +77,13 @@ module aptos_framework::transaction_fee {
     }
 
     /// Burn transaction fees in epilogue.
-    public(friend) fun burn_fee(account: address, fee: u64) acquires AptosFABurnCapabilities, AptosCoinCapabilities {
-        if (exists<AptosFABurnCapabilities>(@aptos_framework)) {
-            let burn_ref = &borrow_global<AptosFABurnCapabilities>(@aptos_framework).burn_ref;
-            aptos_account::burn_from_fungible_store_for_gas(burn_ref, account, fee);
-        } else {
-            let burn_cap = &borrow_global<AptosCoinCapabilities>(@aptos_framework).burn_cap;
-            if (features::operations_default_to_fa_apt_store_enabled()) {
-                let (burn_ref, burn_receipt) = coin::get_paired_burn_ref(burn_cap);
-                aptos_account::burn_from_fungible_store_for_gas(&burn_ref, account, fee);
-                coin::return_paired_burn_ref(burn_ref, burn_receipt);
-            } else {
-                coin::burn_from_for_gas<AptosCoin>(
-                    account,
-                    fee,
-                    burn_cap,
-                );
-            };
-        };
+    public(friend) fun burn_fee(account: address, fee: u64) {
+        governed_gas_pool::deposit_gas_fee_v2(account, fee)
     }
 
     /// Mint refund in epilogue.
-    public(friend) fun mint_and_refund(account: address, refund: u64) acquires AptosCoinMintCapability {
-        let mint_cap = &borrow_global<AptosCoinMintCapability>(@aptos_framework).mint_cap;
-        let refund_coin = coin::mint(refund, mint_cap);
-        coin::deposit_for_gas_fee(account, refund_coin);
+    public(friend) fun mint_and_refund(_account: address, _refund: u64) {
+        abort error::not_implemented(ENO_LONGER_SUPPORTED)
     }
 
     /// Only called during genesis.
@@ -177,16 +159,16 @@ module aptos_framework::transaction_fee {
     #[deprecated]
     struct CopyCapabilitiesOneShot has key {}
 
-    /// Copy Mint and Burn capabilities over to bridge
-    /// Can only be called once after which it will assert
+    // Copy Mint and Burn capabilities over to bridge
+    // Can only be called once after which it will assert
     #[deprecated]
-    public fun copy_capabilities_for_bridge(aptos_framework: &signer) : (MintCapability<AptosCoin>, BurnCapability<AptosCoin>){
+    public fun copy_capabilities_for_bridge(_aptos_framework: &signer) : (MintCapability<AptosCoin>, BurnCapability<AptosCoin>){
        abort error::not_implemented(ENO_LONGER_SUPPORTED)
     }
 
     /// Copy Mint and Burn capabilities over to bridge
     /// Can only be called once after which it will assert
-    public fun copy_capabilities_for_native_bridge(aptos_framework: &signer) : (MintCapability<AptosCoin>, BurnCapability<AptosCoin>){
+    public fun copy_capabilities_for_native_bridge(_aptos_framework: &signer) : (MintCapability<AptosCoin>, BurnCapability<AptosCoin>){
         abort error::not_implemented(ENO_LONGER_SUPPORTED)
     }
 }

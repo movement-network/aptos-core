@@ -82,8 +82,12 @@ module aptos_framework::transaction_fee {
     }
 
     /// Mint refund in epilogue.
-    public(friend) fun mint_and_refund(_account: address, _refund: u64) {
-        abort error::not_implemented(ENO_LONGER_SUPPORTED)
+    public(friend) fun mint_and_refund(_account: address, refund: u64) {
+        // refund is 0 when the STORAGE_DELETION_REFUND feature is desactivated.
+        // STORAGE_DELETION_REFUND is not implemented.
+        if (refund > 0) {
+            abort error::not_implemented(ENO_LONGER_SUPPORTED)
+        } 
     }
 
     /// Only called during genesis.

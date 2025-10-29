@@ -266,6 +266,15 @@ module std::features {
         is_enabled(MODULE_EVENT)
     }
 
+    /// Whether we refund storage costs to the user upon deletion
+    /// 
+    /// Lifetime: transient
+    const STORAGE_DELETION_REFUND: = 28;
+
+    public fun module_event_enabled(): bool acquires Features {
+        is_enabled(STORAGE_DELETION_REFUND)
+    }
+
     /// Whether the fix for a counting bug in the script path of the signature checker pass is enabled.
     /// Lifetime: transient
     const SIGNATURE_CHECKER_V2_SCRIPT_FIX: u64 = 29;

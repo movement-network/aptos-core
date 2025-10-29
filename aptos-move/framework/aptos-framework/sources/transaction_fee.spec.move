@@ -114,8 +114,8 @@ spec aptos_framework::transaction_fee {
         ensures coin::supply<AptosCoin> == old(coin::supply<AptosCoin>) - amount;
     }
 
-    spec mint_and_refund(_account: address, _refund: u64) {
-         aborts_if true;
+    spec mint_and_refund(_account: address, refund: u64) {
+        aborts_if (refund != 0);
     }
 
     /// Ensure caller is admin.

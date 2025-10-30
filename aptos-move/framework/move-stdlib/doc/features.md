@@ -324,7 +324,7 @@ Whether the Atomic bridge is available
 Lifetime: transient
 
 
-<pre><code><b>const</b> <a href="features.md#0x1_features_ATOMIC_BRIDGE">ATOMIC_BRIDGE</a>: u64 = 224;
+<pre><code><b>const</b> <a href="features.md#0x1_features_ATOMIC_BRIDGE">ATOMIC_BRIDGE</a>: u64 = 71;
 </code></pre>
 
 
@@ -837,7 +837,7 @@ Whether the Atomic bridge is available
 Lifetime: transient
 
 
-<pre><code><b>const</b> <a href="features.md#0x1_features_NATIVE_BRIDGE">NATIVE_BRIDGE</a>: u64 = 225;
+<pre><code><b>const</b> <a href="features.md#0x1_features_NATIVE_BRIDGE">NATIVE_BRIDGE</a>: u64 = 72;
 </code></pre>
 
 

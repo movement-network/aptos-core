@@ -596,7 +596,7 @@ module std::features {
     const TRANSACTION_SIMULATION_ENHANCEMENT: u64 = 78;
     /// Whether the Atomic bridge is available
     /// Lifetime: transient
-    const ATOMIC_BRIDGE: u64 = 224;
+    const ATOMIC_BRIDGE: u64 = 71;
 
     #[deprecated]
     public fun get_atomic_bridge_feature(): u64 { ATOMIC_BRIDGE }
@@ -609,7 +609,7 @@ module std::features {
 
     /// Whether the Atomic bridge is available
     /// Lifetime: transient
-    const NATIVE_BRIDGE: u64 = 225;
+    const NATIVE_BRIDGE: u64 = 72;
 
     #[deprecated]
     public fun get_native_bridge_feature(): u64 { NATIVE_BRIDGE }

@@ -71,6 +71,7 @@ return true.
 -  [Function `signer_native_format_fix_enabled`](#0x1_features_signer_native_format_fix_enabled)
 -  [Function `get_module_event_feature`](#0x1_features_get_module_event_feature)
 -  [Function `module_event_enabled`](#0x1_features_module_event_enabled)
+-  [Function `storage_deletion_refund_enabled`](#0x1_features_storage_deletion_refund_enabled)
 -  [Function `get_aggregator_v2_api_feature`](#0x1_features_get_aggregator_v2_api_feature)
 -  [Function `aggregator_v2_api_enabled`](#0x1_features_aggregator_v2_api_enabled)
 -  [Function `get_aggregator_snapshots_feature`](#0x1_features_get_aggregator_snapshots_feature)
@@ -1077,6 +1078,18 @@ Lifetime: permanent
 
 
 
+<a id="0x1_features_STORAGE_DELETION_REFUND"></a>
+
+Whether we refund storage costs to the user upon deletion
+
+Lifetime: transient
+
+
+<pre><code><b>const</b> <a href="features.md#0x1_features_STORAGE_DELETION_REFUND">STORAGE_DELETION_REFUND</a>: u64 = 28;
+</code></pre>
+
+
+
 <a id="0x1_features_STRUCT_CONSTRUCTORS"></a>
 
 Whether struct constructors are enabled
@@ -2053,6 +2066,30 @@ We do not expect use from Move, so for now only for documentation purposes here
 
 <pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_module_event_enabled">module_event_enabled</a>(): bool <b>acquires</b> <a href="features.md#0x1_features_Features">Features</a> {
     <a href="features.md#0x1_features_is_enabled">is_enabled</a>(<a href="features.md#0x1_features_MODULE_EVENT">MODULE_EVENT</a>)
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_features_storage_deletion_refund_enabled"></a>
+
+## Function `storage_deletion_refund_enabled`
+
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_storage_deletion_refund_enabled">storage_deletion_refund_enabled</a>(): bool
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_storage_deletion_refund_enabled">storage_deletion_refund_enabled</a>(): bool <b>acquires</b> <a href="features.md#0x1_features_Features">Features</a> {
+    <a href="features.md#0x1_features_is_enabled">is_enabled</a>(<a href="features.md#0x1_features_STORAGE_DELETION_REFUND">STORAGE_DELETION_REFUND</a>)
 }
 </code></pre>
 

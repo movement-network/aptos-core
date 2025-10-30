@@ -1,6 +1,6 @@
 // Script hash: 89af1dd2 
-// Framework commit hash: e9c203487eac641398813259df5e3f743e276e4a
-// Builder commit hash: e9c203487eac641398813259df5e3f743e276e4a
+// Framework commit hash: 56600dddc65fb526e703101107a7cac7828f2097
+// Builder commit hash: 56600dddc65fb526e703101107a7cac7828f2097
 // Upgrade proposal for package `AptosStdlib`
 
 // source digest: 37FAC5377894EF2AB4823E0469F644A5F2FFFD5BBE3199A73CD66768F97BD01E

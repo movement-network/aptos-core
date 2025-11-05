@@ -14,6 +14,7 @@ edition = { workspace = true }
 ambassador = { workspace = true }
 bcs = { workspace = true }
 better_any = { workspace = true }
+bitvec = { workspace = true }
 bytes = { workspace = true }
 cfg-if = { workspace = true }
 claims = { workspace = true }

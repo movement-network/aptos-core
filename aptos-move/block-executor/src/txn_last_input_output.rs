@@ -23,7 +23,7 @@ use arc_swap::ArcSwapOption;
 use crossbeam::utils::CachePadded;
 use move_binary_format::CompiledModule;
 use move_core_types::{language_storage::ModuleId, value::MoveTypeLayout};
-use move_vm_runtime::Module;
+use move_vm_runtime::{execution_tracing::Trace, Module, RuntimeEnvironment};
 use move_vm_types::delayed_values::delayed_field_id::DelayedFieldID;
 use std::{
     collections::HashSet,
@@ -360,24 +360,17 @@ impl<T: Transaction, O: TransactionOutput<Txn = T>, E: Debug + Send + Clone>
         delta_writes: Vec<(T::Key, WriteOp)>,
         patched_resource_write_set: Vec<(T::Key, T::Value)>,
         patched_events: Vec<T::Event>,
-    ) -> Result<(), PanicError> {
-        match self.outputs[txn_idx as usize]
-            .load_full()
-            .expect("Output must exist")
-            .as_ref()
-        {
-            ExecutionStatus::Success(t) | ExecutionStatus::SkipRest(t) => {
-                t.incorporate_materialized_txn_output(
-                    delta_writes,
-                    patched_resource_write_set,
-                    patched_events,
-                )?;
-            },
-            ExecutionStatus::Abort(_)
-            | ExecutionStatus::SpeculativeExecutionAbortError(_)
-            | ExecutionStatus::DelayedFieldsCodeInvariantError(_) => {},
-        };
-        Ok(())
+    ) -> Result<Trace, PanicError> {
+        with_success_or_skip_rest!(
+            self,
+            txn_idx,
+            |mut t| t.incorporate_materialized_txn_output(
+                delta_writes,
+                patched_resource_write_set,
+                patched_events
+            ),
+            Ok(Trace::empty())
+        )
     }
 
     pub(crate) fn get_txn_read_write_summary(&self, txn_idx: TxnIndex) -> ReadWriteSummary<T> {

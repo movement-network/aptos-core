@@ -6,6 +6,13 @@ pub struct ThresholdParams {
     pub num_validators_hint: u64,
 }
 
+/// Calculate dynamic low threshold based on parameters.
+///
+/// Formula: `base_per_validator × num_validators_hint × runway_epochs × (10000 + safety_bps) / 10000`
+///
+/// Calculates minimum required reserves: base reserve per validator × number of validators ×
+/// target runway in epochs, with a safety margin. Basis points = 1/100 of a percent
+/// (e.g. 500 basis points = 5% safety margin).
 pub fn compute_dynamic_low_threshold(p: Option<ThresholdParams>) -> u64 {
     let Some(p) = p else { return 0; };
     let base = p.base_per_validator as u128;

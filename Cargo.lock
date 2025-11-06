@@ -8149,6 +8149,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "httpmock 0.7.0",
+ "hyper",
  "reqwest",
  "serde",
  "serde_json",

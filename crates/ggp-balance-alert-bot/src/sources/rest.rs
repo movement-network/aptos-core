@@ -10,15 +10,24 @@ pub struct RestClient {
 impl RestClient {
     pub fn new(base: String) -> Self { Self { base, http: reqwest::Client::new() } }
 
-    pub async fn get_apt_balance(&self, account: &str) -> anyhow::Result<u64> {
-        // GET /v1/accounts/{address}/resource/0x1::coin::CoinStore<0x1::aptos_coin::AptosCoin>
-        let url = format!(
-            "{}/accounts/{}/resource/0x1::coin::CoinStore<0x1::aptos_coin::AptosCoin>",
-            self.base, account
-        );
-        let resp = self.http.get(url).send().await?.error_for_status()?;
-        let r: ResourceCoinStore = resp.json().await?;
-        Ok(r.data.coin.value)
+    /// Get GGP AptosCoin balance via Move view function.
+    pub async fn get_ggp_balance_via_view(&self) -> anyhow::Result<u64> {
+        let url = format!("{}/view", self.base);
+        let payload = serde_json::json!({
+            "function": "0x1::governed_gas_pool::get_balance",
+            "type_arguments": ["0x1::aptos_coin::AptosCoin"],
+            "arguments": []
+        });
+        let resp = self.http.post(url).json(&payload).send().await?;
+        let status = resp.status();
+        let body = resp.text().await?;
+        if !status.is_success() {
+            anyhow::bail!("view get_balance failed: {} body: {}", status, body);
+        }
+        // View function returns array of strings
+        let vals: Vec<String> = serde_json::from_str(&body).context("parse get_balance view")?;
+        let val_str = vals.get(0).context("empty get_balance view result")?;
+        val_str.parse::<u64>().context("parse balance string as u64")
     }
 
     pub async fn get_ggp_address_via_view(&self) -> anyhow::Result<String> {
@@ -37,9 +46,8 @@ impl RestClient {
     }
 
     pub async fn get_active_validator_count(&self) -> anyhow::Result<u64> {
-        // GET /v1/accounts/0x1/resource/0x1::stake::ValidatorSet
         // Count active + pending_active validators for reserve planning.
-        // We include pending_active because these validators will need gas reserves soon,
+        // We are including pending_active because these validators will need gas reserves soon,
         // so the threshold calculation should account for them to ensure sufficient reserves.
         let url = format!("{}/accounts/0x1/resource/0x1::stake::ValidatorSet", self.base);
         let resp = self.http.get(&url).send().await?.error_for_status()?;
@@ -48,15 +56,6 @@ impl RestClient {
         Ok(count)
     }
 }
-
-#[derive(Debug, Deserialize)]
-struct ResourceCoinStore { data: CoinStoreData }
-
-#[derive(Debug, Deserialize)]
-struct CoinStoreData { coin: Coin }
-
-#[derive(Debug, Deserialize)]
-struct Coin { value: u64 }
 
 #[derive(Debug, Deserialize)]
 struct ValidatorSetResp {

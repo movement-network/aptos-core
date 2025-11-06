@@ -15,6 +15,7 @@ tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
 url = "2"
 anyhow = "1"
 async-trait = "0.1"
+hyper = { version = "0.14", features = ["full"] }
 
 [dev-dependencies]
 httpmock = "0.7"

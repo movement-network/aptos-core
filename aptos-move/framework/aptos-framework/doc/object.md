@@ -624,7 +624,7 @@ Exceeds maximum nesting for an object transfer.
 
 
 
-<a id="0x1_object_ENOT_"></a>
+<a id="0x1_object_ENOT_OBJECT_OWNER"></a>
 
 The caller does not have ownership permissions
 
@@ -2227,7 +2227,8 @@ Return true if ungated transfer is allowed.
 Return the current owner.
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="object.md#0x1_object_owner">owner</a>&lt;T: key&gt;(<a href="object.md#0x1_object">object</a>: <a href="object.md#0x1_object_Object">object::Object</a>&lt;T&gt;): <b>address</b>
+<pre><code>#[view]
+<b>public</b> <b>fun</b> <a href="object.md#0x1_object_owner">owner</a>&lt;T: key&gt;(<a href="object.md#0x1_object">object</a>: <a href="object.md#0x1_object_Object">object::Object</a>&lt;T&gt;): <b>address</b>
 </code></pre>
 
 
@@ -2256,7 +2257,8 @@ Return the current owner.
 Return true if the provided address is the current owner.
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="object.md#0x1_object_is_owner">is_owner</a>&lt;T: key&gt;(<a href="object.md#0x1_object">object</a>: <a href="object.md#0x1_object_Object">object::Object</a>&lt;T&gt;, owner: <b>address</b>): bool
+<pre><code>#[view]
+<b>public</b> <b>fun</b> <a href="object.md#0x1_object_is_owner">is_owner</a>&lt;T: key&gt;(<a href="object.md#0x1_object">object</a>: <a href="object.md#0x1_object_Object">object::Object</a>&lt;T&gt;, owner: <b>address</b>): bool
 </code></pre>
 
 
@@ -2281,7 +2283,8 @@ Return true if the provided address is the current owner.
 Return true if the provided address has indirect or direct ownership of the provided object.
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="object.md#0x1_object_owns">owns</a>&lt;T: key&gt;(<a href="object.md#0x1_object">object</a>: <a href="object.md#0x1_object_Object">object::Object</a>&lt;T&gt;, owner: <b>address</b>): bool
+<pre><code>#[view]
+<b>public</b> <b>fun</b> <a href="object.md#0x1_object_owns">owns</a>&lt;T: key&gt;(<a href="object.md#0x1_object">object</a>: <a href="object.md#0x1_object_Object">object::Object</a>&lt;T&gt;, owner: <b>address</b>): bool
 </code></pre>
 
 
@@ -2331,7 +2334,8 @@ Returns the root owner of an object. As objects support nested ownership, it can
 to determine the identity of the starting point of ownership.
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="object.md#0x1_object_root_owner">root_owner</a>&lt;T: key&gt;(<a href="object.md#0x1_object">object</a>: <a href="object.md#0x1_object_Object">object::Object</a>&lt;T&gt;): <b>address</b>
+<pre><code>#[view]
+<b>public</b> <b>fun</b> <a href="object.md#0x1_object_root_owner">root_owner</a>&lt;T: key&gt;(<a href="object.md#0x1_object">object</a>: <a href="object.md#0x1_object_Object">object::Object</a>&lt;T&gt;): <b>address</b>
 </code></pre>
 
 
@@ -3303,7 +3307,8 @@ to determine the identity of the starting point of ownership.
 ### Function `owner`
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="object.md#0x1_object_owner">owner</a>&lt;T: key&gt;(<a href="object.md#0x1_object">object</a>: <a href="object.md#0x1_object_Object">object::Object</a>&lt;T&gt;): <b>address</b>
+<pre><code>#[view]
+<b>public</b> <b>fun</b> <a href="object.md#0x1_object_owner">owner</a>&lt;T: key&gt;(<a href="object.md#0x1_object">object</a>: <a href="object.md#0x1_object_Object">object::Object</a>&lt;T&gt;): <b>address</b>
 </code></pre>
 
 
@@ -3320,7 +3325,8 @@ to determine the identity of the starting point of ownership.
 ### Function `is_owner`
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="object.md#0x1_object_is_owner">is_owner</a>&lt;T: key&gt;(<a href="object.md#0x1_object">object</a>: <a href="object.md#0x1_object_Object">object::Object</a>&lt;T&gt;, owner: <b>address</b>): bool
+<pre><code>#[view]
+<b>public</b> <b>fun</b> <a href="object.md#0x1_object_is_owner">is_owner</a>&lt;T: key&gt;(<a href="object.md#0x1_object">object</a>: <a href="object.md#0x1_object_Object">object::Object</a>&lt;T&gt;, owner: <b>address</b>): bool
 </code></pre>
 
 
@@ -3337,7 +3343,8 @@ to determine the identity of the starting point of ownership.
 ### Function `owns`
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="object.md#0x1_object_owns">owns</a>&lt;T: key&gt;(<a href="object.md#0x1_object">object</a>: <a href="object.md#0x1_object_Object">object::Object</a>&lt;T&gt;, owner: <b>address</b>): bool
+<pre><code>#[view]
+<b>public</b> <b>fun</b> <a href="object.md#0x1_object_owns">owns</a>&lt;T: key&gt;(<a href="object.md#0x1_object">object</a>: <a href="object.md#0x1_object_Object">object::Object</a>&lt;T&gt;, owner: <b>address</b>): bool
 </code></pre>
 
 
@@ -3358,7 +3365,8 @@ to determine the identity of the starting point of ownership.
 ### Function `root_owner`
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="object.md#0x1_object_root_owner">root_owner</a>&lt;T: key&gt;(<a href="object.md#0x1_object">object</a>: <a href="object.md#0x1_object_Object">object::Object</a>&lt;T&gt;): <b>address</b>
+<pre><code>#[view]
+<b>public</b> <b>fun</b> <a href="object.md#0x1_object_root_owner">root_owner</a>&lt;T: key&gt;(<a href="object.md#0x1_object">object</a>: <a href="object.md#0x1_object_Object">object::Object</a>&lt;T&gt;): <b>address</b>
 </code></pre>
 
 

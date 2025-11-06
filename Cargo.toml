@@ -46,6 +46,7 @@ members = [
     "consensus/consensus-types",
     "consensus/safety-rules",
     "crates/aptos",
+    "crates/ggp-balance-alert-bot",
     "crates/aptos-admin-service",
     "crates/aptos-api-tester",
     "crates/aptos-bcs-utils",

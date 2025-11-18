@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Bare bones script to update the validator set using movement CLI
-# Usage: ./update_validator_set.sh <validator-identity-file> <network-api-address> <stake-amount>
+# Usage: ./update_validator_set.sh <validator-identity-file> <network-api-address> <stake-amount> <validator-host> [dry-run]
 
 set -e
 
@@ -11,16 +11,17 @@ PROFILE="PROFILE_SHOULD_NOT_BE_USED"
 VALIDATOR_IDENTITY_FILE="$1"
 NETWORK_API_ADDRESS="${2%/}"  # Remove trailing slash if present
 STAKE_AMOUNT="$3"
-DRY_RUN="${4:-true}"
+VALIDATOR_HOST="$4"
+DRY_RUN="${5:-true}"
 
 help_message_and_exit() {
-    echo "Usage: $0 <validator-identity-file> <network-api-address> <stake-amount> [dry-run]"
+    echo "Usage: $0 <validator-identity-file> <network-api-address> <stake-amount> <validator-host> [dry-run]"
     exit 1
 }
 
 # Check parameters.
 check_params() {
-    if [ -z "$VALIDATOR_IDENTITY_FILE" ] || [ -z "$NETWORK_API_ADDRESS" ] || [ -z "$STAKE_AMOUNT" ]; then
+    if [ -z "$VALIDATOR_IDENTITY_FILE" ] || [ -z "$NETWORK_API_ADDRESS" ] || [ -z "$STAKE_AMOUNT" ] || [ -z "$VALIDATOR_HOST" ]; then
         help_message_and_exit
     fi
 }
@@ -130,6 +131,11 @@ validate_input() {
         echo "Error: Stake amount not provided"
         help_message_and_exit
     fi
+
+    if [ -z "$VALIDATOR_HOST" ]; then
+        echo "Error: Validator host not provided"
+        help_message_and_exit
+    fi
 }
 
 get_identities() {
@@ -172,6 +178,26 @@ check_account_exists() {
     echo "Account exists on network"
 }
 
+get_total_stakes() {
+    local api_url="${NETWORK_API_ADDRESS}/v1/accounts/0x1/resource/0x1::stake::ValidatorSet"
+    local response=$(curl -s "$api_url")
+
+    if [ $? -ne 0 ]; then
+        echo "Error: Failed to fetch validator set"
+        exit 1
+    fi
+
+    # Parse the validator set data
+    TOTAL_VOTING_POWER=$(echo "$response" | jq -r '.data.total_voting_power')
+    ACTIVE_VALIDATOR_COUNT=$(echo "$response" | jq -r '.data.active_validators | length')
+    TOTAL_JOINING_POWER=$(echo "$response" | jq -r '.data.total_joining_power')
+
+    if [ -z "$TOTAL_VOTING_POWER" ] || [ "$TOTAL_VOTING_POWER" = "null" ]; then
+        echo "Error: Unable to parse validator set data"
+        exit 1
+    fi
+}
+
 check_account_balance() {
     BALANCE_OUTPUT=$($MOVEMENT_CLI account balance --account $ACCOUNT_ADDRESS --url $NETWORK_API_ADDRESS 2>&1)
 
@@ -192,6 +218,13 @@ check_account_balance() {
 validate_config() {
     if [ "$STAKE_AMOUNT" -gt "$BALANCE" ]; then
         echo "Error: Stake amount ($STAKE_AMOUNT) exceeds account balance ($BALANCE)"
+        exit 1
+    fi
+
+    # The proposed stake amount should be < 30% of total voting power
+    local max_allowed_stake=$((TOTAL_VOTING_POWER / 10 * 3))
+    if [ "$STAKE_AMOUNT" -gt "$max_allowed_stake" ]; then
+        echo "Error: Stake amount ($STAKE_AMOUNT) exceeds 30% of total voting power ($max_allowed_stake)"
         exit 1
     fi
 }
@@ -226,7 +259,7 @@ update_consensus_keys() {
 update_network_address() {
     $MOVEMENT_CLI node update-validator-network-addresses \
         --pool-address $ACCOUNT_ADDRESS \
-        --validator-host 127.0.0.1:40564 \
+        --validator-host $VALIDATOR_HOST \
         --validator-network-public-key $NETWORK_PUBLIC_KEY \
         --private-key $ACCOUNT_PRIVATE_KEY \
         --sender-account $ACCOUNT_ADDRESS \
@@ -250,6 +283,8 @@ join_the_network() {
 execute() {
     if [ "$DRY_RUN" = "true" ]; then
         echo "Dry run enabled. No changes will be made."
+        validate_config
+
     else
         echo "Executing validator set update..."
 
@@ -278,19 +313,31 @@ execute() {
 
 
 execution_summary() {
+    echo ""
     echo "Execution Summary:"
-    echo "-------------------"
-    echo "Account Address:           $ACCOUNT_ADDRESS"
-    echo "Consensus Public Key:      ${CONSENSUS_PUBLIC_KEY:0:64}"
+    echo "==========================================="
+    echo "Network Information:"
+    echo "  Total Voting Power:      $TOTAL_VOTING_POWER octas"
+    echo "  Active Validators:       $ACTIVE_VALIDATOR_COUNT"
+    echo ""
+    echo "Validator Configuration:"
+    echo "  Account Address:         $ACCOUNT_ADDRESS"
+    echo "  Account Balance:         $BALANCE"
+    echo "  Stake Amount:            $STAKE_AMOUNT"
+    echo "  Validator Host:          $VALIDATOR_HOST"
+    echo ""
+    echo "  Consensus Public Key:    ${CONSENSUS_PUBLIC_KEY:0:64}"
     echo "                           ${CONSENSUS_PUBLIC_KEY:64}"
-    echo "Consensus Proof of Poss:   ${CONSENSUS_POP:0:64}"
+    echo ""
+    echo "  Consensus POP:           ${CONSENSUS_POP:0:64}"
     echo "                           ${CONSENSUS_POP:64:64}"
     echo "                           ${CONSENSUS_POP:128}"
-    echo "Network Public Key:        $NETWORK_PUBLIC_KEY"
-    echo "Network API Address:       $NETWORK_API_ADDRESS"
-    echo "Account Balance:           $BALANCE"
-    echo "Stake Amount:              $STAKE_AMOUNT"
-    echo "-------------------"
+    echo ""
+    echo "  Network Public Key:      $NETWORK_PUBLIC_KEY"
+    echo ""
+    echo "  Network API Address:     $NETWORK_API_ADDRESS"
+    echo "==========================================="
+    echo ""
 }
 
 # Main execution
@@ -298,7 +345,8 @@ check_params
 dependency_check
 validate_input
 get_identities
-# check_account_exists
+check_account_exists
+get_total_stakes
 check_account_balance
 execution_summary
 execute

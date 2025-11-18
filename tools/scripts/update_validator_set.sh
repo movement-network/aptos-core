@@ -4,6 +4,7 @@
 # Usage: ./update_validator_set.sh <validator-identity-file> <network-api-address> <stake-amount> <validator-host> [dry-run]
 
 set -e
+set -o pipefail  # Add this at the top
 
 # Configuration
 MOVEMENT_CLI="movement"

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Bare bones script to update the validator set using movement CLI
+# Script to update the validator set using movement CLI
 # Usage: ./update_validator_set.sh <validator-identity-file> <network-api-address> <stake-amount> <validator-host> [dry-run]
 
 set -e
@@ -17,13 +17,6 @@ DRY_RUN="${5:-true}"
 help_message_and_exit() {
     echo "Usage: $0 <validator-identity-file> <network-api-address> <stake-amount> <validator-host> [dry-run]"
     exit 1
-}
-
-# Check parameters.
-check_params() {
-    if [ -z "$VALIDATOR_IDENTITY_FILE" ] || [ -z "$NETWORK_API_ADDRESS" ] || [ -z "$STAKE_AMOUNT" ] || [ -z "$VALIDATOR_HOST" ]; then
-        help_message_and_exit
-    fi
 }
 
 # Functions
@@ -241,6 +234,10 @@ init_stake_owner() {
         --gas-unit-price 100 \
         --max-gas 2000 \
         --assume-yes
+    if [ $? -ne 0 ]; then
+        echo "Error: Failed to initialize stake owner"
+        exit 1
+    fi
 }
 
 update_consensus_keys() {
@@ -254,6 +251,10 @@ update_consensus_keys() {
         --gas-unit-price 100 \
         --max-gas 2000 \
         --assume-yes
+    if [ $? -ne 0 ]; then
+        echo "Error: Failed to update consensus keys"
+        exit 1
+    fi
 }
 
 update_network_address() {
@@ -267,6 +268,10 @@ update_network_address() {
         --gas-unit-price 100 \
         --max-gas 2000 \
         --assume-yes
+    if [ $? -ne 0 ]; then
+        echo "Error: Failed to update network address"
+        exit 1
+    fi
 }
 
 join_the_network() {
@@ -278,18 +283,19 @@ join_the_network() {
         --gas-unit-price 100 \
         --max-gas 2000 \
         --assume-yes
+    if [ $? -ne 0 ]; then
+        echo "Error: Failed to join the validator set"
+        exit 1
+    fi
 }
 
 execute() {
+    validate_config
+
     if [ "$DRY_RUN" = "true" ]; then
         echo "Dry run enabled. No changes will be made."
-        validate_config
-
     else
         echo "Executing validator set update..."
-
-        # Validate the configuration
-        validate_config
 
         # Initialize stake owner
         echo "Initializing stake owner..."
@@ -341,7 +347,6 @@ execution_summary() {
 }
 
 # Main execution
-check_params
 dependency_check
 validate_input
 get_identities

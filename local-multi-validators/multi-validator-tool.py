@@ -467,15 +467,20 @@ def _generate_validator_identities(validator_index):
         validator_full_node_identity_path = os.path.join(validator_dir, "validator-full-node-identity.yaml")
         public_keys_path = os.path.join(validator_dir, "public-keys.yaml")
         private_keys_path = os.path.join(validator_dir, "private-keys.yaml")
-        operator_yaml_path = os.path.join(validator_dir, "operator.yaml")
-        owner_yaml_path = os.path.join(validator_dir, "owner.yaml")
+        # operator.yaml and owner.yaml are created in validator-X directory by genesis command
+        operator_yaml_path = os.path.join(data_dir, f"validator-{validator_index}", "operator.yaml")
+        owner_yaml_path = os.path.join(data_dir, f"validator-{validator_index}", "owner.yaml")
         
         os.chmod(validator_identity_path, 0o644)
         os.chmod(validator_full_node_identity_path, 0o644)
         os.chmod(public_keys_path, 0o644)
         os.chmod(private_keys_path, 0o644)
-        os.chmod(operator_yaml_path, 0o644)
-        os.chmod(owner_yaml_path, 0o644)
+        
+        # Check if operator files exist before setting permissions (they should exist after genesis command)
+        if os.path.exists(operator_yaml_path):
+            os.chmod(operator_yaml_path, 0o644)
+        if os.path.exists(owner_yaml_path):
+            os.chmod(owner_yaml_path, 0o644)
         
         # Create validator config for this validator
         aptos_node = _load_aptos_node()
@@ -634,7 +639,8 @@ def _join_validator(validator_index, account_address):
         validator_dir = os.path.join(data_dir, str(validator_index))
         
         private_keys_path = os.path.join(validator_dir, "private-keys.yaml")
-        operator_config_path = os.path.join(validator_dir, "operator.yaml")
+        # operator.yaml is created in a directory named after the username (validator-X)
+        operator_config_path = os.path.join(data_dir, f"validator-{validator_index}", "operator.yaml")
         
         if not os.path.exists(private_keys_path) or not os.path.exists(operator_config_path):
             raise Exception(f"Validator {validator_index} keys or config not found")
@@ -686,19 +692,15 @@ def add_validator():
         validator_index = _get_next_validator_index()
         print(f"Validator to add is {validator_index}")
         
-        # 1. Generate identities and keys
+        # Generate identities, keys, and configs
         account_address = _generate_validator_identities(validator_index)
-        print(f"Validator account address: {account_address}")
-        
-        # 2. Fund the validator account
-        _fund_validator(account_address)
-        
-        # 3. Join the validator set
-        _join_validator(validator_index, account_address)
         
         print(f"\nValidator-{validator_index} setup complete!")
-        print(f"Account: {account_address}")
-        print(f"Status: Will join active validator set in next epoch")
+        print(f"Account address: {account_address}")
+        print(f"Config location: data/{validator_index}/validator.yaml")
+        print(f"Startup script: data/{validator_index}/start-validator.sh")
+        print(f"API port: {8080 + validator_index * 10}")
+        print(f"Admin port: {9103 + validator_index * 10}")
         
     except Exception as e:
         print(f"Error: {e}")

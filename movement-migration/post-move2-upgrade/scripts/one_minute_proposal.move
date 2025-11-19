@@ -11,7 +11,7 @@ script {
             &core_signer,
             min_voting_threshold,
             required_proposer_stake,
-            /* voting_duration_secs = */ 60,
+            180, // 3min
         );
     }
 }

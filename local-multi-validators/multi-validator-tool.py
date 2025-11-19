@@ -122,7 +122,7 @@ def load():
         print(f"Error: {e}")
         sys.exit(1)
 
-def bootstrap_network(chain_id):
+def bootstrap_network(chain_id, prepare_only=False):
     """Bootstrap a new multi-validator network"""
     try:
         aptos_core_dir = _check_current_folder()
@@ -132,19 +132,19 @@ def bootstrap_network(chain_id):
         
         # Create local-multi-validators directory
         network_dir = os.path.join(aptos_core_dir, "local-multi-validators")
-        docker_data_dir = os.path.join(network_dir, "docker-data")
+        data_dir = os.path.join(network_dir, "data")
         
         print(f"Creating multi-validator network with chain ID {chain_id}...")
         
         # Clean up existing data
         print("Cleaning up existing data...")
-        if os.path.exists(docker_data_dir):
-            shutil.rmtree(docker_data_dir)
-        os.makedirs(docker_data_dir, exist_ok=True)
+        if os.path.exists(data_dir):
+            shutil.rmtree(data_dir)
+        os.makedirs(data_dir, exist_ok=True)
         
         # 1. Generate node identities
         print("1. Generating node identities...")
-        validator_dir = os.path.join(docker_data_dir, "validator-0")
+        validator_dir = os.path.join(data_dir, "0")
         os.makedirs(validator_dir, exist_ok=True)
         
         # Generate validator keys (with assume-yes)
@@ -157,29 +157,29 @@ def bootstrap_network(chain_id):
         # Configure validator information
         subprocess.run([
             aptos_cli, "genesis", "set-validator-configuration",
-            "--local-repository-dir", docker_data_dir,
+            "--local-repository-dir", data_dir,
             "--username", "validator-0",
             "--owner-public-identity-file", os.path.join(validator_dir, "public-keys.yaml"),
             "--validator-host", "127.0.0.1:6180",
             "--stake-amount", "50000000000000000"
         ], check=True)
         
-        # Copy framework.mrb to docker-data directory
-        framework_dest = os.path.join(docker_data_dir, "framework.mrb")
+        # Copy framework.mrb to data directory
+        framework_dest = os.path.join(data_dir, "framework.mrb")
         shutil.copy2(framework_mrb, framework_dest)
         
         # 2. Generate genesis and waypoint
         print("2. Generating genesis and waypoint...")
         
         # Generate root key
-        root_key_path = os.path.join(docker_data_dir, "root.key")
+        root_key_path = os.path.join(data_dir, "root.key")
         subprocess.run([
             aptos_cli, "key", "generate",
             "--output-file", root_key_path
         ], check=True)
         
         # Generate layout template
-        layout_path = os.path.join(docker_data_dir, "layout.yaml")
+        layout_path = os.path.join(data_dir, "layout.yaml")
         subprocess.run([
             aptos_cli, "genesis", "generate-layout-template",
             "--output-file", layout_path
@@ -208,13 +208,13 @@ def bootstrap_network(chain_id):
         # Generate genesis
         subprocess.run([
             aptos_cli, "genesis", "generate-genesis",
-            "--local-repository-dir", docker_data_dir,
-            "--output-dir", docker_data_dir
+            "--local-repository-dir", data_dir,
+            "--output-dir", data_dir
         ], check=True)
         
         # Fix permissions for genesis files and identity files
-        genesis_blob_path = os.path.join(docker_data_dir, "genesis.blob")
-        waypoint_path = os.path.join(docker_data_dir, "waypoint.txt")
+        genesis_blob_path = os.path.join(data_dir, "genesis.blob")
+        waypoint_path = os.path.join(data_dir, "waypoint.txt")
         validator_identity_path = os.path.join(validator_dir, "validator-identity.yaml")
         validator_full_node_identity_path = os.path.join(validator_dir, "validator-full-node-identity.yaml")
         
@@ -223,20 +223,22 @@ def bootstrap_network(chain_id):
         os.chmod(validator_identity_path, 0o644)
         os.chmod(validator_full_node_identity_path, 0o644)
         
-        # 3. Dockerfile builds from source - no need to copy binaries
+        # 3. Create validator node configuration for raw binary execution
+        print("3. Creating validator configuration...")
         
-        # 4. Copy docker-compose template
-        print("4. Creating docker-compose.yml...")
-        template_path = os.path.join(network_dir, "docker-compose.yml.template")
-        docker_compose_path = os.path.join(network_dir, "docker-compose.yml")
-        shutil.copy2(template_path, docker_compose_path)
+        # Create absolute paths for the binary configuration
+        node_data_dir = os.path.join(validator_dir, "node-data")
+        os.makedirs(node_data_dir, exist_ok=True)
         
-        # Create validator config
+        # Set ports for validator-0 (avoid 9101 which is used by dart)
+        admin_port = 9103
+        
+        # Create validator config for raw binary execution
         validator_config = f"""base:
   role: "validator"
-  data_dir: "/opt/aptos/data"
+  data_dir: "{node_data_dir}"
   waypoint:
-    from_file: "/opt/aptos/genesis/waypoint.txt"
+    from_file: "{waypoint_path}"
 
 consensus:
   sync_only: false
@@ -251,11 +253,11 @@ consensus:
     initial_safety_rules_config:
       from_file:
         waypoint:
-          from_file: /opt/aptos/genesis/waypoint.txt
-        identity_blob_path: /opt/aptos/etc/validator-identity.yaml
+          from_file: {waypoint_path}
+        identity_blob_path: {validator_identity_path}
 
 execution:
-  genesis_file_location: "/opt/aptos/genesis/genesis.blob"
+  genesis_file_location: "{genesis_blob_path}"
 
 storage:
   rocksdb_configs:
@@ -266,7 +268,7 @@ validator_network:
   mutual_authentication: true
   identity:
     type: "from_file"
-    path: /opt/aptos/etc/validator-identity.yaml
+    path: {validator_identity_path}
 
 full_node_networks:
 - network_id:
@@ -274,7 +276,7 @@ full_node_networks:
   listen_address: "/ip4/0.0.0.0/tcp/6181"
   identity:
     type: "from_file"
-    path: /opt/aptos/etc/validator-full-node-identity.yaml
+    path: {validator_full_node_identity_path}
 
 api:
   enabled: true
@@ -283,7 +285,11 @@ api:
 admin_service:
   enabled: true
   address: "127.0.0.1"
-  port: 9102
+  port: {admin_port}
+
+inspection_service:
+  address: "127.0.0.1"
+  port: {admin_port + 1}
 
 state_sync:
   state_sync_driver:
@@ -293,18 +299,45 @@ state_sync:
     max_connection_deadline_secs: 1
 """
         
+        # Put validator.yaml directly in the validator directory (0/)
         validator_config_path = os.path.join(validator_dir, "validator.yaml")
         with open(validator_config_path, "w") as f:
             f.write(validator_config)
         
-        # 5. Run docker compose
-        print("5. Starting docker compose...")
-        subprocess.run([
-            "docker", "compose", "up", "-d", "--build"
-        ], cwd=network_dir, check=True)
+        # Create startup script in the validator directory too
+        startup_script_path = os.path.join(validator_dir, "start-validator.sh")
+        startup_script = f"""#!/bin/bash
+# Startup script for validator-0
+
+APTOS_NODE_PATH="{aptos_node}"
+CONFIG_PATH="{validator_config_path}"
+
+echo "Starting validator-0..."
+echo "Config: $CONFIG_PATH"
+echo "Binary: $APTOS_NODE_PATH"
+
+exec "$APTOS_NODE_PATH" -f "$CONFIG_PATH"
+"""
+        
+        with open(startup_script_path, "w") as f:
+            f.write(startup_script)
+        os.chmod(startup_script_path, 0o755)
+        
+        if not prepare_only:
+            print("4. Network is ready. Use 'start-node' command to run validators.")
+        else:
+            print("4. Configuration complete - ready for manual startup.")
         
         print(f"\\nBootstrap complete!")
         print(f"Chain ID: {chain_id}")
+        print(f"Configuration directory: {data_dir}")
+        print(f"Validator config: {validator_config_path}")
+        print(f"Start script: {startup_script_path}")
+        print(f"\\nTo start validator manually:")
+        print(f"  {aptos_node} -f {validator_config_path}")
+        print(f"\\nOr use the startup script:")
+        print(f"  {startup_script_path}")
+        print(f"\\nOnce running:")
         print(f"API: http://127.0.0.1:8080/v1")
         print(f"Admin: http://127.0.0.1:9102/metrics")
         
@@ -320,7 +353,22 @@ def stop():
         
         print("Stopping validators and cleaning up...")
         
-        # Stop docker containers if they exist
+        # Kill any running aptos-node processes
+        try:
+            print("Looking for running aptos-node processes...")
+            result = subprocess.run(["pgrep", "-f", "aptos-node"], capture_output=True, text=True)
+            if result.stdout.strip():
+                pids = result.stdout.strip().split('\n')
+                print(f"Found {len(pids)} aptos-node processes, stopping them...")
+                for pid in pids:
+                    subprocess.run(["kill", pid], check=False)
+                print("Stopped aptos-node processes")
+            else:
+                print("No running aptos-node processes found")
+        except Exception as e:
+            print(f"Warning: Could not check/stop aptos-node processes: {e}")
+        
+        # Stop docker containers if they exist (for backward compatibility)
         if os.path.exists(os.path.join(network_dir, "docker-compose.yml")):
             print("Stopping Docker containers...")
             try:
@@ -335,6 +383,7 @@ def stop():
         files_to_remove = [
             "docker-compose.yml",
             "docker-data",
+            "data",
             "aptos.yaml"  # in case it exists
         ]
         
@@ -361,18 +410,18 @@ def _get_next_validator_index():
     """Get the next available validator index by checking existing validator folders"""
     try:
         aptos_core_dir = _check_current_folder()
-        docker_data_dir = os.path.join(aptos_core_dir, "local-multi-validators", "docker-data")
+        data_dir = os.path.join(aptos_core_dir, "local-multi-validators", "data")
         
-        if not os.path.exists(docker_data_dir):
+        if not os.path.exists(data_dir):
             return 0  # No network exists yet
         
         max_index = -1
-        for item in os.listdir(docker_data_dir):
-            if os.path.isdir(os.path.join(docker_data_dir, item)) and item.startswith("validator-"):
+        for item in os.listdir(data_dir):
+            if os.path.isdir(os.path.join(data_dir, item)) and item.isdigit():
                 try:
-                    index = int(item.split("-")[1])
+                    index = int(item)
                     max_index = max(max_index, index)
-                except (IndexError, ValueError):
+                except ValueError:
                     continue
         
         return max_index + 1
@@ -384,15 +433,15 @@ def _generate_validator_identities(validator_index):
     try:
         aptos_core_dir = _check_current_folder()
         aptos_cli = _load_aptos_cli()
-        docker_data_dir = os.path.join(aptos_core_dir, "local-multi-validators", "docker-data")
+        data_dir = os.path.join(aptos_core_dir, "local-multi-validators", "data")
         
-        if not os.path.exists(docker_data_dir):
+        if not os.path.exists(data_dir):
             raise Exception("No existing network found. Please run bootstrap-network first.")
         
         print(f"Generating identities for validator-{validator_index}...")
         
-        # Create validator directory
-        validator_dir = os.path.join(docker_data_dir, f"validator-{validator_index}")
+        # Create validator directory using numeric naming
+        validator_dir = os.path.join(data_dir, str(validator_index))
         os.makedirs(validator_dir, exist_ok=True)
         
         # Generate validator keys
@@ -406,7 +455,7 @@ def _generate_validator_identities(validator_index):
         consensus_port = 6180 + validator_index * 4
         subprocess.run([
             aptos_cli, "genesis", "set-validator-configuration",
-            "--local-repository-dir", docker_data_dir,
+            "--local-repository-dir", data_dir,
             "--username", f"validator-{validator_index}",
             "--owner-public-identity-file", os.path.join(validator_dir, "public-keys.yaml"),
             "--validator-host", f"127.0.0.1:{consensus_port}",
@@ -428,6 +477,113 @@ def _generate_validator_identities(validator_index):
         os.chmod(operator_yaml_path, 0o644)
         os.chmod(owner_yaml_path, 0o644)
         
+        # Create validator config for this validator
+        aptos_node = _load_aptos_node()
+        genesis_blob_path = os.path.join(data_dir, "genesis.blob")
+        waypoint_path = os.path.join(data_dir, "waypoint.txt")
+        
+        # Create node data directory
+        node_data_dir = os.path.join(validator_dir, "node-data")
+        os.makedirs(node_data_dir, exist_ok=True)
+        
+        # Calculate ports for this validator (admin_port base is 9103 to avoid dart on 9101)
+        api_port = 8080 + validator_index * 10
+        admin_port = 9103 + validator_index * 10
+        vfn_port = 6181 + validator_index * 10
+        
+        validator_config = f"""base:
+  role: "validator"
+  data_dir: "{node_data_dir}"
+  waypoint:
+    from_file: "{waypoint_path}"
+
+consensus:
+  sync_only: false
+  vote_back_pressure_limit: 999999
+  safety_rules:
+    service:
+      type: "local"
+    backend:
+      type: "on_disk_storage"
+      path: secure-data.json
+      namespace: ~
+    initial_safety_rules_config:
+      from_file:
+        waypoint:
+          from_file: {waypoint_path}
+        identity_blob_path: {validator_identity_path}
+
+execution:
+  genesis_file_location: "{genesis_blob_path}"
+
+storage:
+  rocksdb_configs:
+    enable_storage_sharding: false
+
+validator_network:
+  discovery_method: "none"
+  mutual_authentication: true
+  identity:
+    type: "from_file"
+    path: {validator_identity_path}
+
+full_node_networks:
+- network_id:
+    private: "vfn"
+  listen_address: "/ip4/0.0.0.0/tcp/{vfn_port}"
+  identity:
+    type: "from_file"
+    path: {validator_full_node_identity_path}
+
+api:
+  enabled: true
+  address: "0.0.0.0:{api_port}"
+
+admin_service:
+  enabled: true
+  address: "127.0.0.1"
+  port: {admin_port}
+
+inspection_service:
+  address: "127.0.0.1"
+  port: {admin_port + 1}
+
+state_sync:
+  state_sync_driver:
+    bootstrapping_mode: ExecuteOrApplyFromGenesis
+    continuous_syncing_mode: ExecuteTransactionsOrApplyOutputs
+    enable_auto_bootstrapping: true
+    max_connection_deadline_secs: 1
+"""
+        
+        # Write validator config to the validator directory
+        validator_config_path = os.path.join(validator_dir, "validator.yaml")
+        with open(validator_config_path, "w") as f:
+            f.write(validator_config)
+        
+        # Create startup script
+        startup_script_path = os.path.join(validator_dir, "start-validator.sh")
+        startup_script = f"""#!/bin/bash
+# Startup script for validator-{validator_index}
+
+APTOS_NODE_PATH="{aptos_node}"
+CONFIG_PATH="{validator_config_path}"
+
+echo "Starting validator-{validator_index}..."
+echo "Config: $CONFIG_PATH"
+echo "Binary: $APTOS_NODE_PATH"
+
+exec "$APTOS_NODE_PATH" -f "$CONFIG_PATH"
+"""
+        
+        with open(startup_script_path, "w") as f:
+            f.write(startup_script)
+        os.chmod(startup_script_path, 0o755)
+        
+        print(f"Created validator config: {validator_config_path}")
+        print(f"API will be available on: http://127.0.0.1:{api_port}")
+        print(f"Admin will be available on: http://127.0.0.1:{admin_port}")
+        
         # Read and return the account address
         with open(public_keys_path, "r") as f:
             keys_data = yaml.safe_load(f)
@@ -444,8 +600,8 @@ def _fund_validator(account_address, amount="1100000000000000"):
     try:
         aptos_core_dir = _check_current_folder()
         aptos_cli = _load_aptos_cli()
-        docker_data_dir = os.path.join(aptos_core_dir, "local-multi-validators", "docker-data")
-        root_key_path = os.path.join(docker_data_dir, "root.key")
+        data_dir = os.path.join(aptos_core_dir, "local-multi-validators", "data")
+        root_key_path = os.path.join(data_dir, "root.key")
         
         if not os.path.exists(root_key_path):
             raise Exception("Root key not found. Please run bootstrap-network first.")
@@ -474,8 +630,8 @@ def _join_validator(validator_index, account_address):
     try:
         aptos_core_dir = _check_current_folder()
         aptos_cli = _load_aptos_cli()
-        docker_data_dir = os.path.join(aptos_core_dir, "local-multi-validators", "docker-data")
-        validator_dir = os.path.join(docker_data_dir, f"validator-{validator_index}")
+        data_dir = os.path.join(aptos_core_dir, "local-multi-validators", "data")
+        validator_dir = os.path.join(data_dir, str(validator_index))
         
         private_keys_path = os.path.join(validator_dir, "private-keys.yaml")
         operator_config_path = os.path.join(validator_dir, "operator.yaml")
@@ -548,6 +704,99 @@ def add_validator():
         print(f"Error: {e}")
         sys.exit(1)
 
+def prepare_network(chain_id):
+    """Prepare network configuration without starting nodes"""
+    bootstrap_network(chain_id, prepare_only=True)
+
+def start_node(validator_index=None):
+    """Start a specific validator node or all nodes"""
+    try:
+        aptos_core_dir = _check_current_folder()
+        aptos_node = _load_aptos_node()
+        data_dir = os.path.join(aptos_core_dir, "local-multi-validators", "data")
+        
+        if not os.path.exists(data_dir):
+            raise Exception("No network configuration found. Please run prepare-network or bootstrap-network first.")
+        
+        if validator_index is not None:
+            # Start specific validator
+            validator_dir = os.path.join(data_dir, str(validator_index))
+            config_path = os.path.join(validator_dir, "validator.yaml")
+            
+            if not os.path.exists(config_path):
+                raise Exception(f"Validator {validator_index} configuration not found at {config_path}")
+            
+            print(f"Starting validator-{validator_index}...")
+            print(f"Config: {config_path}")
+            print(f"Command: {aptos_node} -f {config_path}")
+            print("\nPress Ctrl+C to stop the validator\n")
+            
+            subprocess.run([aptos_node, "-f", config_path])
+        else:
+            # List all available validators
+            validators = []
+            for item in os.listdir(data_dir):
+                if os.path.isdir(os.path.join(data_dir, item)) and item.isdigit():
+                    validators.append(item)
+            
+            if not validators:
+                raise Exception("No validator configurations found")
+            
+            print("Available validators:")
+            for validator in sorted(validators, key=int):
+                config_path = os.path.join(data_dir, validator, "validator.yaml")
+                startup_script = os.path.join(data_dir, validator, "start-validator.sh")
+                print(f"  validator-{validator}:")
+                print(f"    Config: {config_path}")
+                print(f"    Startup script: {startup_script}")
+                print(f"    Manual command: {aptos_node} -f {config_path}")
+            
+            print(f"\nTo start a specific validator, use: python3 {sys.argv[0]} start-node <validator_index>")
+            
+    except Exception as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+
+def list_configs():
+    """List all validator configurations and startup commands"""
+    try:
+        aptos_core_dir = _check_current_folder()
+        aptos_node = _load_aptos_node()
+        data_dir = os.path.join(aptos_core_dir, "local-multi-validators", "data")
+        
+        if not os.path.exists(data_dir):
+            print("No network configuration found. Please run prepare-network or bootstrap-network first.")
+            return
+        
+        validators = []
+        for item in os.listdir(data_dir):
+            if os.path.isdir(os.path.join(data_dir, item)) and item.isdigit():
+                validators.append(item)
+        
+        if not validators:
+            print("No validator configurations found")
+            return
+        
+        print("Validator configurations:")
+        print(f"Binary: {aptos_node}")
+        print()
+        
+        for validator in sorted(validators, key=int):
+            validator_dir = os.path.join(data_dir, validator)
+            config_path = os.path.join(validator_dir, "validator.yaml")
+            startup_script = os.path.join(validator_dir, "start-validator.sh")
+            
+            if os.path.exists(config_path):
+                print(f"validator-{validator}:")
+                print(f"  Config: {config_path}")
+                if os.path.exists(startup_script):
+                    print(f"  Startup script: {startup_script}")
+                print(f"  Manual command: {aptos_node} -f {config_path}")
+                print()
+            
+    except Exception as e:
+        print(f"Error: {e}")
+
 def main():
     parser = argparse.ArgumentParser(description="Multi-Validator Tool")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -555,9 +804,20 @@ def main():
     # Load command
     subparsers.add_parser("load", help="Load aptos CLI and aptos-node binaries")
     
-    # Bootstrap network command
+    # Bootstrap network command (creates and optionally starts)
     bootstrap_parser = subparsers.add_parser("bootstrap-network", help="Bootstrap a new multi-validator network")
     bootstrap_parser.add_argument("chain_id", type=int, help="Chain ID for the network")
+    
+    # Prepare network command (creates but doesn't start)
+    prepare_parser = subparsers.add_parser("prepare-network", help="Prepare network configuration without starting nodes")
+    prepare_parser.add_argument("chain_id", type=int, help="Chain ID for the network")
+    
+    # Start node command
+    start_parser = subparsers.add_parser("start-node", help="Start validator node(s)")
+    start_parser.add_argument("validator_index", type=int, nargs='?', help="Validator index to start (optional)")
+    
+    # List configs command
+    subparsers.add_parser("list-configs", help="List all validator configurations and startup commands")
     
     # Stop command
     subparsers.add_parser("stop", help="Stop validators and clean up generated files")
@@ -571,6 +831,12 @@ def main():
         load()
     elif args.command == "bootstrap-network":
         bootstrap_network(args.chain_id)
+    elif args.command == "prepare-network":
+        prepare_network(args.chain_id)
+    elif args.command == "start-node":
+        start_node(args.validator_index)
+    elif args.command == "list-configs":
+        list_configs()
     elif args.command == "stop":
         stop()
     elif args.command == "add-validator":

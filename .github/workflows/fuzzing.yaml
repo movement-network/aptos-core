@@ -1,0 +1,240 @@
+---
+name: "Aptos Fuzzer"
+run-name: "Aptos Fuzzer for ${{ github.ref_name }}"
+
+on:
+  push:
+    branches:
+      - rubujubi/add-aptos-fuzzer-workflow
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: 'Fuzzing duration in seconds per target'
+        required: false
+        default: '1800'
+        type: string
+      targets:
+        description: 'Comma-separated list of targets (empty for all)'
+        required: false
+        default: ''
+        type: string
+
+env:
+  NIGHTLY_VERSION: "nightly-2025-04-15"
+  # Default 30 minutes for push
+  FUZZ_DURATION: ${{ github.event.inputs.duration || '1800' }}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  get-targets:
+    runs-on: ubuntu-latest
+    outputs:
+      targets: ${{ steps.list-targets.outputs.targets }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: List fuzz targets
+        id: list-targets
+        run: |
+          cd testsuite/fuzzer
+
+          # Get all targets from Cargo.toml
+          if [ -n "${{ github.event.inputs.targets }}" ]; then
+            # Use provided targets
+            TARGETS=$(echo '${{ github.event.inputs.targets }}' | tr ',' '\n' | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          else
+            # Get all targets
+            TARGETS=$(grep -E '^\[\[bin\]\]' -A 1 fuzz/Cargo.toml | grep 'name = ' | sed 's/.*name = "\([^"]*\)".*/\1/' | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          fi
+
+          echo "targets=$TARGETS" >> $GITHUB_OUTPUT
+          echo "Found targets: $TARGETS"
+
+  fuzz:
+    needs: get-targets
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJson(needs.get-targets.outputs.targets) }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust nightly
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.NIGHTLY_VERSION }}
+          components: llvm-tools-preview
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake clang libclang-dev lld pkg-config libssl-dev
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            testsuite/fuzzer/target/
+          key: ${{ runner.os }}-fuzz-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-fuzz-${{ matrix.target }}-
+            ${{ runner.os }}-fuzz-
+
+      - name: Download corpus from GCS
+        run: |
+          cd testsuite/fuzzer
+
+          # Create corpus directory
+          mkdir -p fuzz/corpus/${{ matrix.target }}
+
+          # Download corpus for targets that need it
+          case "${{ matrix.target }}" in
+            move_aptosvm_publish_and_run|move_bytecode_verifier_compiled_modules|move_aptosvm_publish)
+              echo "Downloading corpus for ${{ matrix.target }}..."
+              wget -q --content-disposition -P /tmp "https://storage.googleapis.com/aptos-core-corpora/move_aptosvm_publish_and_run_seed_corpus.zip" || true
+              if [ -f /tmp/move_aptosvm_publish_and_run_seed_corpus.zip ]; then
+                unzip -q -o /tmp/move_aptosvm_publish_and_run_seed_corpus.zip -d fuzz/corpus/${{ matrix.target }}/ || true
+                echo "Corpus downloaded and extracted"
+                ls -la fuzz/corpus/${{ matrix.target }}/ | head -20
+              else
+                echo "No corpus available, starting from scratch"
+              fi
+              ;;
+            *)
+              echo "No pre-built corpus for ${{ matrix.target }}, starting from scratch"
+              ;;
+          esac
+
+      - name: Build fuzz target
+        run: |
+          cd testsuite/fuzzer
+
+          # Get features for target
+          FEATURES=$(sed -n "/name = \"${{ matrix.target }}\"/,/\[\[bin]]/p" fuzz/Cargo.toml | \
+                     grep "required-features" | \
+                     sed -E 's/.*required-features *= *\[(.*)\].*/\1/' | \
+                     tr -d '", ')
+
+          if [ -n "$FEATURES" ]; then
+            FEATURES_FLAG="--features $FEATURES"
+          else
+            FEATURES_FLAG=""
+          fi
+
+          export RUSTFLAGS="${RUSTFLAGS:-} --cfg tokio_unstable"
+
+          cargo +${{ env.NIGHTLY_VERSION }} fuzz build \
+            -Ztarget-applies-to-host -Zhost-config \
+            $FEATURES_FLAG \
+            --sanitizer address \
+            -O \
+            ${{ matrix.target }}
+
+      - name: Run fuzzer
+        id: fuzz
+        run: |
+          cd testsuite/fuzzer
+
+          # Create artifacts directory for crashes
+          mkdir -p fuzz/artifacts/${{ matrix.target }}
+
+          # Get features for target
+          FEATURES=$(sed -n "/name = \"${{ matrix.target }}\"/,/\[\[bin]]/p" fuzz/Cargo.toml | \
+                     grep "required-features" | \
+                     sed -E 's/.*required-features *= *\[(.*)\].*/\1/' | \
+                     tr -d '", ')
+
+          if [ -n "$FEATURES" ]; then
+            FEATURES_FLAG="--features $FEATURES"
+          else
+            FEATURES_FLAG=""
+          fi
+
+          echo "Running fuzzer for ${{ matrix.target }} for ${{ env.FUZZ_DURATION }} seconds..."
+
+          # Set environment variables needed by cargo fuzz
+          export RUSTFLAGS="${RUSTFLAGS:-} --cfg tokio_unstable"
+
+          # Run fuzzer with timeout
+          # Using cargo fuzz directly for better control
+          timeout ${{ env.FUZZ_DURATION }}s cargo +${{ env.NIGHTLY_VERSION }} fuzz run \
+            -Ztarget-applies-to-host -Zhost-config \
+            $FEATURES_FLAG \
+            --sanitizer address \
+            -O \
+            ${{ matrix.target }} \
+            fuzz/corpus/${{ matrix.target }} \
+            -- \
+            -artifact_prefix=fuzz/artifacts/${{ matrix.target }}/ \
+            -max_total_time=${{ env.FUZZ_DURATION }} \
+            -rss_limit_mb=4096 \
+            -fork=10 \
+            2>&1 | tee fuzz_output.log || true
+
+          # Check for crashes
+          CRASH_COUNT=$(find fuzz/artifacts/${{ matrix.target }} -type f 2>/dev/null | wc -l)
+          echo "crash_count=$CRASH_COUNT" >> $GITHUB_OUTPUT
+
+          if [ "$CRASH_COUNT" -gt 0 ]; then
+            echo "::warning::Found $CRASH_COUNT crash(es) in ${{ matrix.target }}"
+          else
+            echo "No crashes found in ${{ matrix.target }}"
+          fi
+
+      - name: Upload crash artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crashes-${{ matrix.target }}-${{ github.sha }}
+          path: testsuite/fuzzer/fuzz/artifacts/${{ matrix.target }}/
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload corpus
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: corpus-${{ matrix.target }}-${{ github.sha }}
+          path: testsuite/fuzzer/fuzz/corpus/${{ matrix.target }}/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Upload fuzz log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-log-${{ matrix.target }}-${{ github.sha }}
+          path: testsuite/fuzzer/fuzz_output.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  summary:
+    needs: fuzz
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## Fuzzing Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Target | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|--------|" >> $GITHUB_STEP_SUMMARY
+
+      
+          echo "Fuzzing completed for all targets. Check individual job logs and artifacts for details." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Duration per target:** ${{ env.FUZZ_DURATION }} seconds" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Crash artifacts (if any) are uploaded and retained for 30 days." >> $GITHUB_STEP_SUMMARY

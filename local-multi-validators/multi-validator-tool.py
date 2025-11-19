@@ -201,6 +201,11 @@ def bootstrap_network(chain_id, prepare_only=False):
         layout_content = layout_content.replace('root_key: ~', f'root_key: "{root_public_key}"')
         layout_content = re.sub(r'epoch_duration_secs: \d+', 'epoch_duration_secs: 120', layout_content)
         layout_content = layout_content.replace('total_supply: ~', 'total_supply: 18000000000000000000')  # 18 quintillion APT (safe u64)
+        layout_content = layout_content.replace('allow_new_validators: false', 'allow_new_validators: true')
+        # Set reasonable minimum stake requirements (1 billion APT instead of 100 trillion)
+        layout_content = re.sub(r'min_stake: \d+', 'min_stake: 1000000000', layout_content)
+        layout_content = re.sub(r'min_voting_threshold: \d+', 'min_voting_threshold: 1000000000', layout_content) 
+        layout_content = re.sub(r'required_proposer_stake: \d+', 'required_proposer_stake: 1000000000', layout_content)
         
         with open(layout_path, "w") as f:
             f.write(layout_content)

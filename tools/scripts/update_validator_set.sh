@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # Script to update the validator set using movement CLI
-# Usage: ./update_validator_set.sh <validator-identity-file> <network-api-address> <stake-amount> <validator-host> [dry-run]
+# Usage: ./update_validator_set.sh <validator-identity-file> <network> <stake-amount> <validator-host> [dry-run]
+# Network options: testnet | mainnet | custom:https://your-api-url.com
 
 set -e
 set -o pipefail  # Add this at the top
@@ -13,14 +14,23 @@ PROFILE="PROFILE_SHOULD_NOT_BE_USED"
 # Global stake validation constants
 MIN_STAKE=0                    # Minimum allowed stake (0 for now, will be non-zero later)
 MAX_STAKE_RATIO=30             # Maximum stake as percentage of total voting power
+
+# Network presets
+TESTNET_API="https://testnet.movementnetwork.xyz"
+MAINNET_API="https://mainnet.movementnetwork.xyz"
+
 VALIDATOR_IDENTITY_FILE="$1"
-NETWORK_API_ADDRESS="${2%/}"  # Remove trailing slash if present
+NETWORK_INPUT="$2"
 STAKE_AMOUNT="$3"
 VALIDATOR_HOST="$4"
 DRY_RUN="${5:-true}"
 
 help_message_and_exit() {
-    echo "Usage: $0 <validator-identity-file> <network-api-address> <stake-amount> <validator-host> [dry-run]"
+    echo "Usage: $0 <validator-identity-file> <network> <stake-amount> <validator-host> [dry-run]"
+    echo "Network options:"
+    echo "  testnet               - Movement testnet ($TESTNET_API)"
+    echo "  mainnet               - Movement mainnet ($MAINNET_API)"
+    echo "  custom:https://url    - Custom API endpoint"
     exit 1
 }
 
@@ -120,10 +130,28 @@ validate_input() {
         help_message_and_exit
     fi
 
-    if [ -z "$NETWORK_API_ADDRESS" ]; then
-        echo "Error: Network API address not provided"
+    if [ -z "$NETWORK_INPUT" ]; then
+        echo "Error: Network not provided"
         help_message_and_exit
     fi
+
+    # Parse network input and set NETWORK_API_ADDRESS
+    case "$NETWORK_INPUT" in
+        "testnet")
+            NETWORK_API_ADDRESS="$TESTNET_API"
+            ;;
+        "mainnet")
+            NETWORK_API_ADDRESS="$MAINNET_API"
+            ;;
+        "custom:"*)
+            NETWORK_API_ADDRESS="${NETWORK_INPUT#custom:}"
+            NETWORK_API_ADDRESS="${NETWORK_API_ADDRESS%/}"  # Remove trailing slash
+            ;;
+        *)
+            echo "Error: Invalid network option: $NETWORK_INPUT"
+            help_message_and_exit
+            ;;
+    esac
 
     if [ -z "$STAKE_AMOUNT" ]; then
         echo "Error: Stake amount not provided"

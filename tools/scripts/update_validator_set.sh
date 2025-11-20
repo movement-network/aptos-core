@@ -183,20 +183,23 @@ get_current_validator_set() {
 }
 
 check_not_in_validator_set() {
+    # Normalize account address to have 0x prefix for comparison
+    local normalized_account="0x${ACCOUNT_ADDRESS#0x}"
+    
     # Check if account is already in active validators
-    if echo "$ACTIVE_VALIDATORS" | grep -q "^${ACCOUNT_ADDRESS}$"; then
+    if echo "$ACTIVE_VALIDATORS" | grep -q "^${normalized_account}$"; then
         echo "Error: Account $ACCOUNT_ADDRESS is already an active validator"
         exit 1
     fi
 
     # Check if account is in pending active validators
-    if [ -n "$PENDING_ACTIVE_VALIDATORS" ] && echo "$PENDING_ACTIVE_VALIDATORS" | grep -q "^${ACCOUNT_ADDRESS}$"; then
+    if [ -n "$PENDING_ACTIVE_VALIDATORS" ] && echo "$PENDING_ACTIVE_VALIDATORS" | grep -q "^${normalized_account}$"; then
         echo "Error: Account $ACCOUNT_ADDRESS is already pending to become active validator"
         exit 1
     fi
 
     # Check if account is in pending inactive validators
-    if [ -n "$PENDING_INACTIVE_VALIDATORS" ] && echo "$PENDING_INACTIVE_VALIDATORS" | grep -q "^${ACCOUNT_ADDRESS}$"; then
+    if [ -n "$PENDING_INACTIVE_VALIDATORS" ] && echo "$PENDING_INACTIVE_VALIDATORS" | grep -q "^${normalized_account}$"; then
         echo "Error: Account $ACCOUNT_ADDRESS is pending to become inactive validator"
         exit 1
     fi

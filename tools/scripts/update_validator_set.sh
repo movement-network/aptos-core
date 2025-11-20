@@ -156,27 +156,8 @@ get_identities() {
     NETWORK_PUBLIC_KEY=$(get_network_pub_key "$NETWORK_PRIVATE_KEY")
 }
 
-check_account_exists() {
-    local api_url="${NETWORK_API_ADDRESS}/v1/accounts/${ACCOUNT_ADDRESS}"
-    local response=$(curl -s -w "\n%{http_code}" "$api_url")
-    local http_code=$(echo "$response" | tail -n1)
-    local body=$(echo "$response" | sed '$d')
 
-    if [ "$http_code" = "404" ]; then
-        echo "Error: Account $ACCOUNT_ADDRESS does not exist on the network"
-        exit 1
-    fi
-
-    if [ "$http_code" != "200" ]; then
-        echo "Error: Failed to retrieve account info (HTTP $http_code)"
-        echo "$body"
-        exit 1
-    fi
-
-    echo "Account exists on network"
-}
-
-get_total_stakes() {
+get_current_validator_set() {
     local api_url="${NETWORK_API_ADDRESS}/v1/accounts/0x1/resource/0x1::stake::ValidatorSet"
     local response=$(curl -s "$api_url")
 
@@ -194,6 +175,33 @@ get_total_stakes() {
         echo "Error: Unable to parse validator set data"
         exit 1
     fi
+
+    # Extract list of active validator addresses
+    ACTIVE_VALIDATORS=$(echo "$response" | jq -r '.data.active_validators[].addr')
+    PENDING_ACTIVE_VALIDATORS=$(echo "$response" | jq -r '.data.pending_active[].addr // empty')
+    PENDING_INACTIVE_VALIDATORS=$(echo "$response" | jq -r '.data.pending_inactive[].addr // empty')
+}
+
+check_not_in_validator_set() {
+    # Check if account is already in active validators
+    if echo "$ACTIVE_VALIDATORS" | grep -q "^${ACCOUNT_ADDRESS}$"; then
+        echo "Error: Account $ACCOUNT_ADDRESS is already an active validator"
+        exit 1
+    fi
+
+    # Check if account is in pending active validators
+    if [ -n "$PENDING_ACTIVE_VALIDATORS" ] && echo "$PENDING_ACTIVE_VALIDATORS" | grep -q "^${ACCOUNT_ADDRESS}$"; then
+        echo "Error: Account $ACCOUNT_ADDRESS is already pending to become active validator"
+        exit 1
+    fi
+
+    # Check if account is in pending inactive validators
+    if [ -n "$PENDING_INACTIVE_VALIDATORS" ] && echo "$PENDING_INACTIVE_VALIDATORS" | grep -q "^${ACCOUNT_ADDRESS}$"; then
+        echo "Error: Account $ACCOUNT_ADDRESS is pending to become inactive validator"
+        exit 1
+    fi
+
+    echo "Account $ACCOUNT_ADDRESS is not in current validator set - proceeding"
 }
 
 check_account_balance() {
@@ -360,8 +368,8 @@ execution_summary() {
 dependency_check
 validate_input
 get_identities
-check_account_exists
-get_total_stakes
+get_current_validator_set
+check_not_in_validator_set
 check_account_balance
 execution_summary
 execute

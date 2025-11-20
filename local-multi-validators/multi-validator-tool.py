@@ -236,9 +236,17 @@ def bootstrap_network(chain_id, prepare_only=False):
         os.makedirs(node_data_dir, exist_ok=True)
         
         # Set ports for validator-0 (avoid 9101 which is used by dart)
+        validator_index = 0
         admin_port = 9103
+        api_port = 8080
         
-        # Create validator config for raw binary execution
+        # Only validator 0 gets public full node network
+        vfn_section = f"""full_node_networks:
+- discovery_method: "onchain"
+  listen_address: "/ip4/0.0.0.0/tcp/6179"
+  network_id: "public\""""
+        
+        # Create validator config for raw binary execution  
         validator_config = f"""base:
   role: "validator"
   data_dir: "{node_data_dir}"
@@ -246,8 +254,6 @@ def bootstrap_network(chain_id, prepare_only=False):
     from_file: "{waypoint_path}"
 
 consensus:
-  sync_only: false
-  vote_back_pressure_limit: 999999
   safety_rules:
     service:
       type: "local"
@@ -265,12 +271,14 @@ execution:
   genesis_file_location: "{genesis_blob_path}"
 
 storage:
+  backup_service_address: "127.0.0.1:{admin_port + 2}"
   rocksdb_configs:
     enable_storage_sharding: false
 
 validator_network:
-  discovery_method: "none"
+  discovery_method: "onchain"
   mutual_authentication: true
+  listen_address: "/ip4/127.0.0.1/tcp/{6180 + validator_index * 4}"
   identity:
     type: "from_file"
     path: {validator_identity_path}
@@ -308,6 +316,13 @@ state_sync:
         validator_config_path = os.path.join(validator_dir, "validator.yaml")
         with open(validator_config_path, "w") as f:
             f.write(validator_config)
+        
+        # Also create single-validator.yaml with discovery_method: "none" and consensus settings
+        single_validator_config = validator_config.replace('discovery_method: "onchain"', 'discovery_method: "none"')
+        single_validator_config = single_validator_config.replace('consensus:\n  safety_rules:', 'consensus:\n  sync_only: false\n  vote_back_pressure_limit: 999999\n  safety_rules:')
+        single_validator_config_path = os.path.join(validator_dir, "single-validator.yaml")
+        with open(single_validator_config_path, "w") as f:
+            f.write(single_validator_config)
         
         # Create startup script in the validator directory too
         startup_script_path = os.path.join(validator_dir, "start-validator.sh")
@@ -499,7 +514,41 @@ def _generate_validator_identities(validator_index):
         # Calculate ports for this validator (admin_port base is 9103 to avoid dart on 9101)
         api_port = 8080 + validator_index * 10
         admin_port = 9103 + validator_index * 10
-        vfn_port = 6181 + validator_index * 10
+        
+        # VFN network configuration  
+        if validator_index == 0:
+            # Validator 0: VFN server with identity (accepts connections)
+            vfn_section = f"""full_node_networks:
+- network_id:
+    private: "vfn"
+  listen_address: "/ip4/0.0.0.0/tcp/6181"
+  identity:
+    type: "from_file"
+    path: {validator_full_node_identity_path}"""
+        else:
+            # Validators 1+: VFN client (no identity, just connects to validator 0)
+            # Read validator 0's VFN public key dynamically
+            validator_0_keys_path = os.path.join(data_dir, "0", "public-keys.yaml")
+            if not os.path.exists(validator_0_keys_path):
+                raise Exception("Validator 0 public keys not found. Please ensure validator 0 is properly configured.")
+            
+            with open(validator_0_keys_path, "r") as f:
+                validator_0_keys = yaml.safe_load(f)
+                peer_id = validator_0_keys['account_address']
+                vfn_public_key = validator_0_keys['full_node_network_public_key']
+                # Remove 0x prefix if present
+                vfn_public_key = vfn_public_key.replace('0x', '')
+            
+            vfn_port = 6181 + validator_index * 10
+            vfn_section = f"""full_node_networks:
+- network_id:
+    private: "vfn"
+  listen_address: "/ip4/0.0.0.0/tcp/{vfn_port}"
+  seeds:
+    {peer_id}:
+      addresses:
+      - "/ip4/127.0.0.1/tcp/6181/noise-ik/{vfn_public_key}/handshake/0"
+      role: "Validator\""""
         
         validator_config = f"""base:
   role: "validator"
@@ -527,23 +576,19 @@ execution:
   genesis_file_location: "{genesis_blob_path}"
 
 storage:
+  backup_service_address: "127.0.0.1:{admin_port + 2}"
   rocksdb_configs:
     enable_storage_sharding: false
 
 validator_network:
-  discovery_method: "none"
+  discovery_method: "onchain"
   mutual_authentication: true
+  listen_address: "/ip4/127.0.0.1/tcp/{6180 + validator_index * 4}"
   identity:
     type: "from_file"
     path: {validator_identity_path}
 
-full_node_networks:
-- network_id:
-    private: "vfn"
-  listen_address: "/ip4/0.0.0.0/tcp/{vfn_port}"
-  identity:
-    type: "from_file"
-    path: {validator_full_node_identity_path}
+{vfn_section}
 
 api:
   enabled: true
@@ -566,14 +611,64 @@ state_sync:
     max_connection_deadline_secs: 1
 """
         
-        # Write validator config to the validator directory
-        validator_config_path = os.path.join(validator_dir, "validator.yaml")
-        with open(validator_config_path, "w") as f:
-            f.write(validator_config)
+        # For validator 0, create only validator.yaml
+        # For validators 1+, create both vfn.yaml and validator.yaml
+        if validator_index == 0:
+            validator_config_path = os.path.join(validator_dir, "validator.yaml")
+            with open(validator_config_path, "w") as f:
+                f.write(validator_config)
+        else:
+            # Create VFN config (full_node role with VFN network for syncing, no consensus/validator_network)
+            vfn_config = f"""base:
+  role: "full_node"
+  data_dir: "{node_data_dir}"
+  waypoint:
+    from_file: "{waypoint_path}"
+
+execution:
+  genesis_file_location: "{genesis_blob_path}"
+
+storage:
+  backup_service_address: "127.0.0.1:{admin_port + 2}"
+  rocksdb_configs:
+    enable_storage_sharding: false
+
+{vfn_section}
+
+api:
+  enabled: true
+  address: "0.0.0.0:{api_port}"
+
+admin_service:
+  enabled: true
+  address: "127.0.0.1"
+  port: {admin_port}
+
+inspection_service:
+  address: "127.0.0.1"
+  port: {admin_port + 1}
+
+state_sync:
+  state_sync_driver:
+    bootstrapping_mode: ExecuteOrApplyFromGenesis
+    continuous_syncing_mode: ExecuteTransactionsOrApplyOutputs
+    enable_auto_bootstrapping: true
+    max_connection_deadline_secs: 1
+"""
+            vfn_config_path = os.path.join(validator_dir, "vfn.yaml")
+            with open(vfn_config_path, "w") as f:
+                f.write(vfn_config)
+            
+            # Create Validator config (validator role, no VFN network)
+            validator_config_no_vfn = validator_config.replace(vfn_section, "")
+            validator_config_path = os.path.join(validator_dir, "validator.yaml")
+            with open(validator_config_path, "w") as f:
+                f.write(validator_config_no_vfn)
         
-        # Create startup script
-        startup_script_path = os.path.join(validator_dir, "start-validator.sh")
-        startup_script = f"""#!/bin/bash
+        # Create startup scripts
+        if validator_index == 0:
+            startup_script_path = os.path.join(validator_dir, "start-validator.sh")
+            startup_script = f"""#!/bin/bash
 # Startup script for validator-{validator_index}
 
 APTOS_NODE_PATH="{aptos_node}"
@@ -585,12 +680,54 @@ echo "Binary: $APTOS_NODE_PATH"
 
 exec "$APTOS_NODE_PATH" -f "$CONFIG_PATH"
 """
+            with open(startup_script_path, "w") as f:
+                f.write(startup_script)
+            os.chmod(startup_script_path, 0o755)
+            
+            print(f"Created validator config: {validator_config_path}")
+        else:
+            # Create VFN startup script
+            vfn_script_path = os.path.join(validator_dir, "start-vfn.sh")
+            vfn_script = f"""#!/bin/bash
+# VFN startup script for validator-{validator_index} (sync phase)
+
+APTOS_NODE_PATH="{aptos_node}"
+CONFIG_PATH="{vfn_config_path}"
+
+echo "Starting validator-{validator_index} in VFN mode (syncing)..."
+echo "Config: $CONFIG_PATH"
+echo "Binary: $APTOS_NODE_PATH"
+
+exec "$APTOS_NODE_PATH" -f "$CONFIG_PATH"
+"""
+            with open(vfn_script_path, "w") as f:
+                f.write(vfn_script)
+            os.chmod(vfn_script_path, 0o755)
+            
+            # Create validator startup script  
+            validator_script_path = os.path.join(validator_dir, "start-validator.sh")
+            validator_script = f"""#!/bin/bash
+# Validator startup script for validator-{validator_index} (validator phase)
+
+APTOS_NODE_PATH="{aptos_node}"
+CONFIG_PATH="{validator_config_path}"
+
+echo "Starting validator-{validator_index} in validator mode..."
+echo "Config: $CONFIG_PATH"
+echo "Binary: $APTOS_NODE_PATH"
+
+exec "$APTOS_NODE_PATH" -f "$CONFIG_PATH"
+"""
+            with open(validator_script_path, "w") as f:
+                f.write(validator_script)
+            os.chmod(validator_script_path, 0o755)
+            
+            print(f"Created dual configs:")
+            print(f"  VFN config (for syncing): {vfn_config_path}")
+            print(f"  Validator config (for consensus): {validator_config_path}")
+            print(f"  VFN startup script: {vfn_script_path}")
+            print(f"  Validator startup script: {validator_script_path}")
         
-        with open(startup_script_path, "w") as f:
-            f.write(startup_script)
-        os.chmod(startup_script_path, 0o755)
-        
-        print(f"Created validator config: {validator_config_path}")
         print(f"API will be available on: http://127.0.0.1:{api_port}")
         print(f"Admin will be available on: http://127.0.0.1:{admin_port}")
         
@@ -605,11 +742,10 @@ exec "$APTOS_NODE_PATH" -f "$CONFIG_PATH"
     except Exception as e:
         raise Exception(f"Failed to generate validator identities: {e}")
 
-def _fund_validator(account_address, amount="1100000000000000"):
-    """Fund validator account using root key"""
+def _fund_validator(account_address, amount="100000000000"):
+    """Fund validator account using treasury transfer"""
     try:
         aptos_core_dir = _check_current_folder()
-        aptos_cli = _load_aptos_cli()
         data_dir = os.path.join(aptos_core_dir, "local-multi-validators", "data")
         root_key_path = os.path.join(data_dir, "root.key")
         
@@ -618,16 +754,15 @@ def _fund_validator(account_address, amount="1100000000000000"):
         
         print(f"Funding account {account_address} with {amount} APT...")
         
-        # Mint APT coins directly using root authority
+        # Transfer from treasury account using movement CLI
         subprocess.run([
-            aptos_cli, "move", "run",
+            "movement", "account", "transfer",
             "--private-key-file", root_key_path,
-            "--function-id", "0x1::aptos_coin::mint",
-            "--args", f"address:{account_address}", f"u64:{amount}",
-            "--url", "http://127.0.0.1:8080",
-            "--gas-unit-price", "100",
-            "--max-gas", "2000000",
-            "--assume-yes"
+            "--sender-account", "0xa550c18",
+            "--account", account_address,
+            "--amount", amount,
+            "--assume-yes",
+            "--url", "http://localhost:8080"
         ], check=True)
         
         print(f"Successfully funded account {account_address}")
@@ -700,8 +835,13 @@ def add_validator():
         # Generate identities, keys, and configs
         account_address = _generate_validator_identities(validator_index)
         
+        # Fund the validator account
+        print(f"\nFunding validator-{validator_index} account...")
+        _fund_validator(account_address, "100000000000")
+        
         print(f"\nValidator-{validator_index} setup complete!")
         print(f"Account address: {account_address}")
+        print(f"Funded with: 100000000000 APT")
         print(f"Config location: data/{validator_index}/validator.yaml")
         print(f"Startup script: data/{validator_index}/start-validator.sh")
         print(f"API port: {8080 + validator_index * 10}")

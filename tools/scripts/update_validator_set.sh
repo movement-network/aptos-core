@@ -9,6 +9,10 @@ set -o pipefail  # Add this at the top
 # Configuration
 MOVEMENT_CLI="movement"
 PROFILE="PROFILE_SHOULD_NOT_BE_USED"
+
+# Global stake validation constants
+MIN_STAKE=0                    # Minimum allowed stake (0 for now, will be non-zero later)
+MAX_STAKE_RATIO=30             # Maximum stake as percentage of total voting power
 VALIDATOR_IDENTITY_FILE="$1"
 NETWORK_API_ADDRESS="${2%/}"  # Remove trailing slash if present
 STAKE_AMOUNT="$3"
@@ -215,10 +219,15 @@ validate_config() {
         exit 1
     fi
 
-    # The proposed stake amount should be < 30% of total voting power
-    local max_allowed_stake=$((TOTAL_VOTING_POWER / 10 * 3))
+    # Range check: MIN_STAKE <= STAKE_AMOUNT <= MAX_STAKE
+    if [ "$STAKE_AMOUNT" -lt "$MIN_STAKE" ]; then
+        echo "Error: Stake amount ($STAKE_AMOUNT) is below minimum required stake ($MIN_STAKE)"
+        exit 1
+    fi
+
+    local max_allowed_stake=$((TOTAL_VOTING_POWER * MAX_STAKE_RATIO / 100))
     if [ "$STAKE_AMOUNT" -gt "$max_allowed_stake" ]; then
-        echo "Error: Stake amount ($STAKE_AMOUNT) exceeds 30% of total voting power ($max_allowed_stake)"
+        echo "Error: Stake amount ($STAKE_AMOUNT) exceeds $MAX_STAKE_RATIO% of total voting power ($max_allowed_stake)"
         exit 1
     fi
 }

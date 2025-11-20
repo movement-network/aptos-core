@@ -74,7 +74,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake clang libclang-dev lld pkg-config libssl-dev
+          sudo apt-get install -y build-essential cmake clang libclang-dev lld pkg-config libssl-dev libudev-dev
 
       - name: Install cargo-fuzz
         run: cargo install cargo-fuzz
@@ -169,7 +169,9 @@ jobs:
 
           # Run fuzzer with timeout
           # Using cargo fuzz directly for better control
-          timeout ${{ env.FUZZ_DURATION }}s cargo +${{ env.NIGHTLY_VERSION }} fuzz run \
+          # External timeout is 60s longer than internal timeout to allow clean shutdown
+          EXTERNAL_TIMEOUT=$(($${{ env.FUZZ_DURATION }} + 60))
+          timeout ${EXTERNAL_TIMEOUT}s cargo +${{ env.NIGHTLY_VERSION }} fuzz run \
             -Ztarget-applies-to-host -Zhost-config \
             $FEATURES_FLAG \
             --sanitizer address \

@@ -347,7 +347,7 @@ fn charge_load_cost(
 
 fn native_new_table_handle(
     context: &mut SafeNativeContext,
-    ty_args: Vec<Type>,
+    ty_args: &[Type],
     args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     assert_eq!(ty_args.len(), 2);
@@ -380,7 +380,7 @@ fn native_new_table_handle(
 
 fn native_add_box(
     context: &mut SafeNativeContext,
-    ty_args: Vec<Type>,
+    ty_args: &[Type],
     mut args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     assert_eq!(ty_args.len(), 3);
@@ -438,7 +438,7 @@ fn native_add_box(
 
 fn native_borrow_box(
     context: &mut SafeNativeContext,
-    ty_args: Vec<Type>,
+    ty_args: &[Type],
     mut args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     assert_eq!(ty_args.len(), 3);
@@ -494,7 +494,7 @@ fn native_borrow_box(
 
 fn native_contains_box(
     context: &mut SafeNativeContext,
-    ty_args: Vec<Type>,
+    ty_args: &[Type],
     mut args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     assert_eq!(ty_args.len(), 3);
@@ -548,7 +548,7 @@ fn native_contains_box(
 
 fn native_remove_box(
     context: &mut SafeNativeContext,
-    ty_args: Vec<Type>,
+    ty_args: &[Type],
     mut args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     assert_eq!(ty_args.len(), 3);
@@ -605,7 +605,7 @@ fn native_remove_box(
 
 fn native_destroy_empty_box(
     context: &mut SafeNativeContext,
-    ty_args: Vec<Type>,
+    ty_args: &[Type],
     mut args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     assert_eq!(ty_args.len(), 3);
@@ -628,7 +628,7 @@ fn native_destroy_empty_box(
 
 fn native_drop_unchecked_box(
     context: &mut SafeNativeContext,
-    ty_args: Vec<Type>,
+    ty_args: &[Type],
     args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     assert_eq!(ty_args.len(), 3);

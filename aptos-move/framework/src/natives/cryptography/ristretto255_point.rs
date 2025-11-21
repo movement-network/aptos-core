@@ -227,7 +227,7 @@ fn decompress_maybe_non_canonical_point_bytes(
 
 pub(crate) fn native_point_identity(
     context: &mut SafeNativeContext,
-    ty_args: Vec<Type>,
+    ty_args: &[Type],
     args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     safely_assert_eq!(ty_args.len(), 0);
@@ -244,10 +244,10 @@ pub(crate) fn native_point_identity(
 
 pub(crate) fn native_point_is_canonical(
     context: &mut SafeNativeContext,
-    _ty_args: Vec<Type>,
+    ty_args: &[Type],
     mut args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
-    safely_assert_eq!(_ty_args.len(), 0);
+    safely_assert_eq!(ty_args.len(), 0);
     safely_assert_eq!(args.len(), 1);
 
     let bytes = safely_pop_arg!(args, Vec<u8>);
@@ -259,10 +259,10 @@ pub(crate) fn native_point_is_canonical(
 
 pub(crate) fn native_point_decompress(
     context: &mut SafeNativeContext,
-    _ty_args: Vec<Type>,
+    ty_args: &[Type],
     mut args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
-    safely_assert_eq!(_ty_args.len(), 0);
+    safely_assert_eq!(ty_args.len(), 0);
     safely_assert_eq!(args.len(), 1);
 
     let bytes = safely_pop_arg!(args, Vec<u8>);
@@ -288,7 +288,7 @@ pub(crate) fn native_point_decompress(
 
 pub(crate) fn native_point_clone(
     context: &mut SafeNativeContext,
-    ty_args: Vec<Type>,
+    ty_args: &[Type],
     mut args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     assert_eq!(ty_args.len(), 0);
@@ -308,7 +308,7 @@ pub(crate) fn native_point_clone(
 
 pub(crate) fn native_point_compress(
     context: &mut SafeNativeContext,
-    ty_args: Vec<Type>,
+    ty_args: &[Type],
     mut args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     safely_assert_eq!(ty_args.len(), 0);
@@ -327,7 +327,7 @@ pub(crate) fn native_point_compress(
 
 pub(crate) fn native_point_mul(
     context: &mut SafeNativeContext,
-    ty_args: Vec<Type>,
+    ty_args: &[Type],
     mut args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     safely_assert_eq!(ty_args.len(), 0);
@@ -359,7 +359,7 @@ pub(crate) fn native_point_mul(
 
 pub(crate) fn native_point_equals(
     context: &mut SafeNativeContext,
-    ty_args: Vec<Type>,
+    ty_args: &[Type],
     mut args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     safely_assert_eq!(ty_args.len(), 0);
@@ -382,7 +382,7 @@ pub(crate) fn native_point_equals(
 
 pub(crate) fn native_point_neg(
     context: &mut SafeNativeContext,
-    ty_args: Vec<Type>,
+    ty_args: &[Type],
     mut args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     safely_assert_eq!(ty_args.len(), 0);
@@ -414,7 +414,7 @@ pub(crate) fn native_point_neg(
 
 pub(crate) fn native_point_add(
     context: &mut SafeNativeContext,
-    ty_args: Vec<Type>,
+    ty_args: &[Type],
     mut args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     safely_assert_eq!(ty_args.len(), 0);
@@ -456,7 +456,7 @@ pub(crate) fn native_point_add(
 
 pub(crate) fn native_point_sub(
     context: &mut SafeNativeContext,
-    ty_args: Vec<Type>,
+    ty_args: &[Type],
     mut args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     safely_assert_eq!(ty_args.len(), 0);
@@ -497,7 +497,7 @@ pub(crate) fn native_point_sub(
 
 pub(crate) fn native_basepoint_mul(
     context: &mut SafeNativeContext,
-    ty_args: Vec<Type>,
+    ty_args: &[Type],
     mut args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     safely_assert_eq!(ty_args.len(), 0);
@@ -520,7 +520,7 @@ pub(crate) fn native_basepoint_mul(
 #[allow(non_snake_case)]
 pub(crate) fn native_basepoint_double_mul(
     context: &mut SafeNativeContext,
-    ty_args: Vec<Type>,
+    ty_args: &[Type],
     mut args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     safely_assert_eq!(ty_args.len(), 0);
@@ -546,7 +546,7 @@ pub(crate) fn native_basepoint_double_mul(
 // NOTE: This was supposed to be more clearly named with *_sha2_512_*
 pub(crate) fn native_new_point_from_sha512(
     context: &mut SafeNativeContext,
-    ty_args: Vec<Type>,
+    ty_args: &[Type],
     mut args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     safely_assert_eq!(ty_args.len(), 0);
@@ -570,7 +570,7 @@ pub(crate) fn native_new_point_from_sha512(
 
 pub(crate) fn native_new_point_from_64_uniform_bytes(
     context: &mut SafeNativeContext,
-    ty_args: Vec<Type>,
+    ty_args: &[Type],
     mut args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     safely_assert_eq!(ty_args.len(), 0);
@@ -591,7 +591,7 @@ pub(crate) fn native_new_point_from_64_uniform_bytes(
 
 pub(crate) fn native_double_scalar_mul(
     context: &mut SafeNativeContext,
-    mut _ty_args: Vec<Type>,
+    mut _ty_args: &[Type],
     mut args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     assert_eq!(args.len(), 4);
@@ -628,7 +628,7 @@ pub(crate) fn native_double_scalar_mul(
 /// function.
 pub(crate) fn safe_native_multi_scalar_mul_no_floating_point(
     context: &mut SafeNativeContext,
-    _ty_args: Vec<Type>,
+    _ty_args: &[Type],
     mut args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     safely_assert_eq!(args.len(), 2);

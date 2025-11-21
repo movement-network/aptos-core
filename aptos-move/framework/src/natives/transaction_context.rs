@@ -96,7 +96,7 @@ impl NativeTransactionContext {
  **************************************************************************************************/
 fn native_get_txn_hash(
     context: &mut SafeNativeContext,
-    _ty_args: Vec<Type>,
+    _ty_args: &[Type],
     _args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     context.charge(TRANSACTION_CONTEXT_GET_TXN_HASH_BASE)?;
@@ -115,7 +115,7 @@ fn native_get_txn_hash(
  **************************************************************************************************/
 fn native_generate_unique_address(
     context: &mut SafeNativeContext,
-    _ty_args: Vec<Type>,
+    _ty_args: &[Type],
     _args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     context.charge(TRANSACTION_CONTEXT_GENERATE_UNIQUE_ADDRESS_BASE)?;
@@ -134,6 +134,91 @@ fn native_generate_unique_address(
 }
 
 /***************************************************************************************************
+ * native fun monotonically_increasing_counter_internal
+ *
+ *   gas cost: base_cost
+ *
+ **************************************************************************************************/
+fn native_monotonically_increasing_counter_internal(
+    context: &mut SafeNativeContext,
+    _ty_args: &[Type],
+    mut args: VecDeque<Value>,
+) -> SafeNativeResult<SmallVec<[Value; 1]>> {
+    context.charge(TRANSACTION_CONTEXT_MONOTONICALLY_INCREASING_COUNTER_BASE)?;
+
+    let transaction_context = context
+        .extensions_mut()
+        .get_mut::<NativeTransactionContext>();
+    if transaction_context.local_counter == u16::MAX {
+        return Err(SafeNativeError::Abort {
+            abort_code: error::invalid_state(
+                abort_codes::EMONOTONICALLY_INCREASING_COUNTER_OVERFLOW,
+            ),
+        });
+    }
+    transaction_context.local_counter += 1;
+    let local_counter = transaction_context.local_counter as u128;
+    let session_counter = transaction_context.session_counter as u128;
+
+    let user_transaction_context_opt = get_user_transaction_context_opt_from_context(context);
+    if let Some(user_transaction_context) = user_transaction_context_opt {
+        // monotonically_increasing_counter (128 bits) = `<reserved_byte (8 bits) = 0 for block/chunk execution, 1 for validation/simulation> || timestamp_us (64 bits) || transaction_index (32 bits) || session counter (8 bits) || local_counter (16 bits)`
+        let timestamp_us = safely_pop_arg!(args, u64);
+        let transaction_index = user_transaction_context.transaction_index();
+
+        if let Some(transaction_index) = transaction_index {
+            let mut monotonically_increasing_counter: u128 = (timestamp_us as u128) << 56;
+            monotonically_increasing_counter |= (transaction_index as u128) << 24;
+            monotonically_increasing_counter |= session_counter << 16;
+            monotonically_increasing_counter |= local_counter;
+            Ok(smallvec![Value::u128(monotonically_increasing_counter)])
+        } else {
+            Err(SafeNativeError::Abort {
+                abort_code: error::invalid_state(abort_codes::ETRANSACTION_INDEX_NOT_AVAILABLE),
+            })
+        }
+    } else {
+        // When transaction context is not available, return an error
+        Err(SafeNativeError::Abort {
+            abort_code: error::invalid_state(abort_codes::ETRANSACTION_CONTEXT_NOT_AVAILABLE),
+        })
+    }
+}
+
+/***************************************************************************************************
+ * native fun monotonically_increasing_counter_internal_for_test_only
+ *
+ *   gas cost: base_cost
+ *
+ *   This is a test-only version that returns increasing counter values without requiring
+ *   a user transaction context. Used when COMPILE_FOR_TESTING flag is enabled.
+ *
+ **************************************************************************************************/
+fn native_monotonically_increasing_counter_internal_for_test_only(
+    context: &mut SafeNativeContext,
+    _ty_args: &[Type],
+    _args: VecDeque<Value>,
+) -> SafeNativeResult<SmallVec<[Value; 1]>> {
+    context.charge(TRANSACTION_CONTEXT_MONOTONICALLY_INCREASING_COUNTER_BASE)?;
+
+    let transaction_context = context
+        .extensions_mut()
+        .get_mut::<NativeTransactionContext>();
+    if transaction_context.local_counter == u16::MAX {
+        return Err(SafeNativeError::Abort {
+            abort_code: error::invalid_state(
+                abort_codes::EMONOTONICALLY_INCREASING_COUNTER_OVERFLOW,
+            ),
+        });
+    }
+    transaction_context.local_counter += 1;
+    let local_counter = transaction_context.local_counter as u128;
+
+    // For testing, return just the local counter value to verify monotonically increasing behavior
+    Ok(smallvec![Value::u128(local_counter)])
+}
+
+/***************************************************************************************************
  * native fun get_script_hash
  *
  *   gas cost: base_cost
@@ -141,7 +226,7 @@ fn native_generate_unique_address(
  **************************************************************************************************/
 fn native_get_script_hash(
     context: &mut SafeNativeContext,
-    _ty_args: Vec<Type>,
+    _ty_args: &[Type],
     _args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     context.charge(TRANSACTION_CONTEXT_GET_SCRIPT_HASH_BASE)?;
@@ -155,7 +240,7 @@ fn native_get_script_hash(
 
 fn native_sender_internal(
     context: &mut SafeNativeContext,
-    _ty_args: Vec<Type>,
+    _ty_args: &[Type],
     _args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     context.charge(TRANSACTION_CONTEXT_SENDER_BASE)?;
@@ -172,7 +257,7 @@ fn native_sender_internal(
 
 fn native_secondary_signers_internal(
     context: &mut SafeNativeContext,
-    _ty_args: Vec<Type>,
+    _ty_args: &[Type],
     _args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     context.charge(TRANSACTION_CONTEXT_SECONDARY_SIGNERS_BASE)?;
@@ -194,7 +279,7 @@ fn native_secondary_signers_internal(
 
 fn native_gas_payer_internal(
     context: &mut SafeNativeContext,
-    _ty_args: Vec<Type>,
+    _ty_args: &[Type],
     _args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     context.charge(TRANSACTION_CONTEXT_FEE_PAYER_BASE)?;
@@ -211,7 +296,7 @@ fn native_gas_payer_internal(
 
 fn native_max_gas_amount_internal(
     context: &mut SafeNativeContext,
-    _ty_args: Vec<Type>,
+    _ty_args: &[Type],
     _args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     context.charge(TRANSACTION_CONTEXT_MAX_GAS_AMOUNT_BASE)?;
@@ -228,7 +313,7 @@ fn native_max_gas_amount_internal(
 
 fn native_gas_unit_price_internal(
     context: &mut SafeNativeContext,
-    _ty_args: Vec<Type>,
+    _ty_args: &[Type],
     _args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     context.charge(TRANSACTION_CONTEXT_GAS_UNIT_PRICE_BASE)?;
@@ -245,7 +330,7 @@ fn native_gas_unit_price_internal(
 
 fn native_chain_id_internal(
     context: &mut SafeNativeContext,
-    _ty_args: Vec<Type>,
+    _ty_args: &[Type],
     _args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     context.charge(TRANSACTION_CONTEXT_CHAIN_ID_BASE)?;
@@ -325,7 +410,7 @@ fn create_entry_function_payload(
 
 fn native_entry_function_payload_internal(
     context: &mut SafeNativeContext,
-    _ty_args: Vec<Type>,
+    _ty_args: &[Type],
     _args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     context.charge(TRANSACTION_CONTEXT_ENTRY_FUNCTION_PAYLOAD_BASE)?;
@@ -353,7 +438,7 @@ fn native_entry_function_payload_internal(
 
 fn native_multisig_payload_internal(
     context: &mut SafeNativeContext,
-    _ty_args: Vec<Type>,
+    _ty_args: &[Type],
     _args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     context.charge(TRANSACTION_CONTEXT_MULTISIG_PAYLOAD_BASE)?;

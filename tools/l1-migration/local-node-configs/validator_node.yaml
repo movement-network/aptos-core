@@ -3,7 +3,10 @@ base:
   role: validator
   waypoint:
     from_file: /Users/bowu/data/.maptos/waypoint.txt # update to your path
+randomness_override_seq_num: 999999999 # disable randomness - must be at top level, not under consensus
 consensus:
+  sync_only: false
+  vote_back_pressure_limit: 200000
   safety_rules:
     service:
       type: local

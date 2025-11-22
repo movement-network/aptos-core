@@ -210,9 +210,10 @@ impl BufferManager {
         consensus_publisher: Option<Arc<ConsensusPublisher>>,
         max_pending_rounds_in_commit_vote_cache: u64,
         new_pipeline_enabled: bool,
+        channel_id: u64,
     ) -> Self {
         let buffer = Buffer::<BufferItem>::new();
-
+        warn!("bowu buffer manager start {:?}, channel_id {}", epoch_state, channel_id);
         let rb_backoff_policy = ExponentialBackoff::from_millis(2)
             .factor(50)
             .max_delay(Duration::from_secs(5));
@@ -947,10 +948,14 @@ impl BufferManager {
     fn need_back_pressure(&self) -> bool {
         const MAX_BACKLOG: Round = 20;
 
-        self.back_pressure_enabled && self.highest_committed_round + MAX_BACKLOG < self.latest_round
+        let res = self.back_pressure_enabled && self.highest_committed_round + MAX_BACKLOG < self.latest_round;
+        warn!("bowu_buffer_manager_backpressur {:?}", res);
+        res
     }
 
     pub async fn start(mut self) {
+        let channel_id = format!("{:p}", &self.block_rx as *const _);
+        warn!("bowu Buffer manager starts with block_rx channel_id at {:?}", channel_id);
         info!("Buffer manager starts.");
         let (verified_commit_msg_tx, mut verified_commit_msg_rx) = create_channel();
         let mut interval = tokio::time::interval(Duration::from_millis(LOOP_INTERVAL_MS));
@@ -975,8 +980,10 @@ impl BufferManager {
         });
         while !self.stop {
             // advancing the root will trigger sending requests to the pipeline
+            warn!("bowu_select_loop: iteration start, stop={}", self.stop);
             ::tokio::select! {
                 Some(blocks) = self.block_rx.next(), if !self.need_back_pressure() => {
+                    warn!("bowu_SELECT_BRANCH: block_rx RECEIVED: round={}, num_blocks={}", blocks.latest_round(), blocks.ordered_blocks.len());
                     self.latest_round = blocks.latest_round();
                     monitor!("buffer_manager_process_ordered", {
                     self.process_ordered_blocks(blocks).await;
@@ -985,14 +992,17 @@ impl BufferManager {
                     }});
                 },
                 Some(reset_event) = self.reset_rx.next() => {
+                    warn!("bowu_SELECT_BRANCH: reset_rx");
                     monitor!("buffer_manager_process_reset",
                     self.process_reset_request(reset_event).await);
                 },
                 Some(response) = self.execution_schedule_phase_rx.next() => {
+                    warn!("bowu_SELECT_BRANCH: execution_schedule_phase_rx");
                     monitor!("buffer_manager_process_execution_schedule_response", {
                     self.process_execution_schedule_response(response).await;
                 })},
                 Some(response) = self.execution_wait_phase_rx.next() => {
+                    warn!("bowu_SELECT_BRANCH: execution_wait_phase_rx");
                     monitor!("buffer_manager_process_execution_wait_response", {
                     let response_block_id = response.block_id;
                     self.process_execution_response(response).await;
@@ -1012,24 +1022,28 @@ impl BufferManager {
                     }});
                 },
                 _ = self.execution_schedule_retry_rx.next() => {
+                    warn!("bowu_SELECT_BRANCH: execution_schedule_retry_rx");
                     if !self.new_pipeline_enabled {
                         monitor!("buffer_manager_process_execution_schedule_retry",
                             self.retry_schedule_phase().await);
                     }
                 },
                 Some(response) = self.signing_phase_rx.next() => {
+                    warn!("bowu_SELECT_BRANCH: signing_phase_rx");
                     monitor!("buffer_manager_process_signing_response", {
                     self.process_signing_response(response).await;
                     self.advance_signing_root().await
                     })
                 },
                 Some(Ok(round)) = self.persisting_phase_rx.next() => {
+                    warn!("bowu_SELECT_BRANCH: persisting_phase_rx, round={}", round);
                     // see where `need_backpressure()` is called.
                     self.pending_commit_votes = self.pending_commit_votes.split_off(&(round + 1));
                     self.highest_committed_round = round;
                     self.pending_commit_blocks = self.pending_commit_blocks.split_off(&(round + 1));
                 },
                 Some(rpc_request) = verified_commit_msg_rx.next() => {
+                    warn!("bowu_SELECT_BRANCH: verified_commit_msg_rx");
                     monitor!("buffer_manager_process_commit_message",
                     if let Some(aggregated_block_id) = self.process_commit_message(rpc_request) {
                         self.advance_head(aggregated_block_id).await;
@@ -1042,6 +1056,7 @@ impl BufferManager {
                     });
                 }
                 _ = interval.tick().fuse() => {
+                    warn!("bowu_SELECT_BRANCH: interval_tick");
                     monitor!("buffer_manager_process_interval_tick", {
                     self.update_buffer_manager_metrics();
                     self.rebroadcast_commit_votes_if_needed().await

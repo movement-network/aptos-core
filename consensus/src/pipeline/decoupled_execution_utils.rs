@@ -46,6 +46,7 @@ pub fn prepare_phases_and_buffer_manager(
     consensus_publisher: Option<Arc<ConsensusPublisher>>,
     max_pending_rounds_in_commit_vote_cache: u64,
     new_pipeline_enabled: bool,
+    channel_id: u64,
 ) -> (
     PipelinePhase<ExecutionSchedulePhase>,
     PipelinePhase<ExecutionWaitPhase>,
@@ -139,6 +140,7 @@ pub fn prepare_phases_and_buffer_manager(
             consensus_publisher,
             max_pending_rounds_in_commit_vote_cache,
             new_pipeline_enabled,
+            channel_id,
         ),
     )
 }

@@ -381,6 +381,7 @@ impl<S: TShare, D: TAugmentedData> RandManager<S, D> {
             tokio::select! {
                 Some(blocks) = incoming_blocks.next(), if self.aug_data_store.my_certified_aug_data_exists() => {
                     self.process_incoming_blocks(blocks);
+                    warn!("bowu_rand_manager_finish_blocks");
                 }
                 Some(reset) = reset_rx.next() => {
                     while matches!(incoming_blocks.try_next(), Ok(Some(_))) {}

@@ -3253,10 +3253,13 @@ module aptos_framework::stake {
     // Test with 10% annual reward rate to demonstrate how to calculate the reward rate from the annual APR.
     // Use 3 validators with 50% 30% and 20% each of the stacking.
     // Reward per epoch should gives 10% of the staking after one year.
-    // So the reward rate is:
-    // Reward_rate = (annual_rate_in_percent / 100) * (epoch_duration / num_sec_per_year) * denomonator
+    // With S: initial staking, R: reward rate, N; nb epoch per year, the staking after one year equation is:
+    // S + S*10% = S(1+R)^N
+    // So to have 10% reward rate, R = (1+10%)^(1/N) -1
+    // On the validator Reward_rate = R * Denominator.
     // For our test of 10%: denominator = 100000000, annual rate: 10/100, epoch_duration = 7200, 2 hours => number of epochs per year = 4380
-    // reward_rate = 10 * denominator / (100 * 4380) = 2283 and denominator = 100000000
+    // R = 1.1^(1/4380)-1 = 0,000021761 and denominator = 100000000
+    // => Reward_rate =  0,000021761 * 100000000 = 2176
     #[test(
         aptos_framework = @aptos_framework,
         validator_1 = @aptos_framework,
@@ -3275,7 +3278,7 @@ module aptos_framework::stake {
 
         //initialize_for_test(aptos_framework);
         // Reward rate = 10%.
-        initialize_for_test_custom(aptos_framework, 50, 10000000, LOCKUP_CYCLE_SECONDS, true, 2283, 100000000, 100);
+        initialize_for_test_custom(aptos_framework, 50, 10000000, LOCKUP_CYCLE_SECONDS, true, 2176, 100000000, 100);
 
         let (_sk_1, pk_1, pop_1) = generate_identity();
         let (_sk_2, pk_2, pop_2) = generate_identity();

@@ -3249,5 +3249,84 @@ module aptos_framework::stake {
         let (numerator, denominator) = staking_config::get_reward_rate(&staking_config::get());
         amount + amount * numerator / denominator
     }
+    
+    // Test with 10% annual reward rate to demonstrate how to calculate the reward rate from the annual APR.
+    // Use 3 validators with 50% 30% and 20% each of the stacking.
+    // Reward per epoch should gives 10% of the staking after one year.
+    // With S: initial staking, R: reward rate, N; nb epoch per year, the staking after one year equation is:
+    // S + S*10% = S(1+R)^N
+    // So to have 10% reward rate, R = (1+10%)^(1/N) -1
+    // On the validator Reward_rate = R * Denominator.
+    // For our test of 10%: denominator = 100000000, annual rate: 10/100, epoch_duration = 7200, 2 hours => number of epochs per year = 4380
+    // R = 1.1^(1/4380)-1 = 0,000021761 and denominator = 100000000
+    // => Reward_rate =  0,000021761 * 100000000 = 2176
+    #[test(
+        aptos_framework = @aptos_framework,
+        validator_1 = @aptos_framework,
+        validator_2 = @0x2,
+        validator_3 = @0x3,
+    )]
+    public entry fun test_reward_rate_with_validator(
+        aptos_framework: &signer,
+        validator_1: &signer,
+        validator_2: &signer,
+        validator_3: &signer,
+    ) acquires AllowedValidators, AptosCoinCapabilities, OwnerCapability, StakePool, ValidatorConfig, ValidatorPerformance, ValidatorSet {
+        let v1_addr = signer::address_of(validator_1);
+        let v2_addr = signer::address_of(validator_2);
+        let v3_addr = signer::address_of(validator_3);
 
+        //initialize_for_test(aptos_framework);
+        // Reward rate = 10%.
+        initialize_for_test_custom(aptos_framework, 50, 10000000, LOCKUP_CYCLE_SECONDS, true, 2176, 100000000, 100);
+
+        let (_sk_1, pk_1, pop_1) = generate_identity();
+        let (_sk_2, pk_2, pop_2) = generate_identity();
+        let (_sk_3, pk_3, pop_3) = generate_identity();
+
+        initialize_test_validator(&pk_1, &pop_1, validator_1, 500000, true, false);
+        initialize_test_validator(&pk_2, &pop_2, validator_2, 300000, true, false);
+        initialize_test_validator(&pk_3, &pop_3, validator_3, 200000, true, true);
+
+        let stake_pool = borrow_global<StakePool>(v1_addr);
+        let actual_active_stake = coin::value(&stake_pool.active);
+        std::debug::print(&actual_active_stake);
+        let stake_pool = borrow_global<StakePool>(v2_addr);
+        let actual_active_stake = coin::value(&stake_pool.active);
+        std::debug::print(&actual_active_stake);
+        let stake_pool = borrow_global<StakePool>(v3_addr);
+        let actual_active_stake = coin::value(&stake_pool.active);
+        std::debug::print(&actual_active_stake);
+
+        timestamp::fast_forward_seconds(LOCKUP_CYCLE_SECONDS);
+        end_epoch();
+
+        let stake_pool = borrow_global<StakePool>(v1_addr);
+        let actual_active_stake = coin::value(&stake_pool.active);
+        assert!(actual_active_stake == 500011, 1); // +11 for one epoch.
+
+        let stake_pool = borrow_global<StakePool>(v2_addr);
+        let actual_active_stake = coin::value(&stake_pool.active);
+        assert!(actual_active_stake == 300006, 2); // +6 for one epoch.
+
+        let stake_pool = borrow_global<StakePool>(v3_addr);
+        let actual_active_stake = coin::value(&stake_pool.active);
+        assert!(actual_active_stake == 200004, 3); // +4 for one epoch.
+
+        timestamp::fast_forward_seconds(LOCKUP_CYCLE_SECONDS);
+        end_epoch();
+
+        let stake_pool = borrow_global<StakePool>(v1_addr);
+        let actual_active_stake = coin::value(&stake_pool.active);
+        assert!(actual_active_stake == 500022, 4); // +22 for two epoch.
+
+        let stake_pool = borrow_global<StakePool>(v2_addr);
+        let actual_active_stake = coin::value(&stake_pool.active);
+        assert!(actual_active_stake == 300012, 5); // +12 for two epoch.
+
+        let stake_pool = borrow_global<StakePool>(v3_addr);
+        let actual_active_stake = coin::value(&stake_pool.active);
+        assert!(actual_active_stake == 200008, 8); // +8 for two epoch.
+
+    }
 }

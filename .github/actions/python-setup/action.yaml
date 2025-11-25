@@ -1,0 +1,33 @@
+name: "Python setup"
+description: |
+  Runs an opinionated and unified python setup action. It does the following:
+  * Installs python
+  * Installs poetry
+  * Installs a specified poetry project, if given
+inputs:
+  pyproject_directory:
+    description: "Optional path to a poetry project"
+    required: false
+  poetry_version:
+    description: "Poetry package manager version"
+    required: false
+    default: 1.2.2
+
+runs:
+  using: composite
+  steps:
+    - name: Setup python
+      uses: actions/setup-python@v5
+      with:
+        python-version: 3.10.12
+
+    # Install Poetry.
+    - uses: snok/install-poetry@76e04a911780d5b312d89783f7b1cd627778900a # pin@v1.4.1
+      with:
+        version: ${{ inputs.poetry_version }}
+
+    - name: Install poetry project
+      if: inputs.pyproject_directory != ''
+      run: poetry install
+      shell: bash
+      working-directory: ${{ inputs.pyproject_directory }}

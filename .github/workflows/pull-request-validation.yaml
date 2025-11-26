@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   check-dynamic-deps:
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         if: ${{ !inputs.SKIP_JOB }}

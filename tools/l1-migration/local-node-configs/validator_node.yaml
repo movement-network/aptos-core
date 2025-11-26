@@ -3,6 +3,7 @@ base:
   role: validator
   waypoint:
     from_file: /Users/bowu/data/.maptos/waypoint.txt # update to your path
+randomness_override_seq_num: 999999999
 consensus:
   safety_rules:
     service:

@@ -50,7 +50,7 @@ jobs:
              ./.github/linters/semgrep/pull-request-target-code-checkout.yaml
 
   build-checks:
-    runs-on: k8s-movement-labs
+    runs-on: ubuntu-latest
     outputs:
       members_changed: ${{ steps.members_check.outputs.changed }}
       docker_changed: ${{ steps.docker_check.outputs.changed }}
@@ -70,7 +70,7 @@ jobs:
   build-binaries:
     needs: build-checks
     if: needs.build-checks.outputs.members_changed == 'true' || needs.build-checks.outputs.docker_changed == 'true'
-    runs-on: k8s-movement-labs
+    runs-on: ubuntu-latest
     name: "Build Binaries with Nix"
     strategy:
       matrix:

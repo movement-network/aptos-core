@@ -8,6 +8,7 @@
 -  [Struct `WithdrawStakingRewardEvent`](#0x1_governed_gas_pool_WithdrawStakingRewardEvent)
 -  [Resource `GovernedGasPool`](#0x1_governed_gas_pool_GovernedGasPool)
 -  [Resource `GovernedGasPoolExtension`](#0x1_governed_gas_pool_GovernedGasPoolExtension)
+-  [Resource `GovernedGasPoolCounters`](#0x1_governed_gas_pool_GovernedGasPoolCounters)
 -  [Constants](#@Constants_0)
 -  [Function `primary_fungible_store_address`](#0x1_governed_gas_pool_primary_fungible_store_address)
 -  [Function `create_resource_account_seed`](#0x1_governed_gas_pool_create_resource_account_seed)
@@ -27,6 +28,10 @@
 -  [Function `get_balance`](#0x1_governed_gas_pool_get_balance)
 -  [Function `withdraw_staking_reward`](#0x1_governed_gas_pool_withdraw_staking_reward)
 -  [Function `register_coin`](#0x1_governed_gas_pool_register_coin)
+-  [Function `get_gas_fee_total`](#0x1_governed_gas_pool_get_gas_fee_total)
+-  [Function `get_treasury_total`](#0x1_governed_gas_pool_get_treasury_total)
+-  [Function `get_governance_funded_total`](#0x1_governed_gas_pool_get_governance_funded_total)
+-  [Function `get_reward_withdrawn_total`](#0x1_governed_gas_pool_get_reward_withdrawn_total)
 -  [Specification](#@Specification_1)
     -  [Function `initialize`](#@Specification_1_initialize)
     -  [Function `fund`](#@Specification_1_fund)
@@ -35,6 +40,7 @@
 
 
 <pre><code><b>use</b> <a href="account.md#0x1_account">0x1::account</a>;
+<b>use</b> <a href="aggregator_v2.md#0x1_aggregator_v2">0x1::aggregator_v2</a>;
 <b>use</b> <a href="aptos_account.md#0x1_aptos_account">0x1::aptos_account</a>;
 <b>use</b> <a href="aptos_coin.md#0x1_aptos_coin">0x1::aptos_coin</a>;
 <b>use</b> <a href="coin.md#0x1_coin">0x1::coin</a>;
@@ -141,9 +147,71 @@ Contains added variable needed for the GovernedGasPool staking reward update.
 
 </details>
 
+<a id="0x1_governed_gas_pool_GovernedGasPoolCounters"></a>
+
+## Resource `GovernedGasPoolCounters`
+
+Aggregator-backed counters for parallel gas pool accounting.
+
+
+<pre><code><b>struct</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolCounters">GovernedGasPoolCounters</a> <b>has</b> key
+</code></pre>
+
+
+
+<details>
+<summary>Fields</summary>
+
+
+<dl>
+<dt>
+<code>gas_fee_total: <a href="aggregator_v2.md#0x1_aggregator_v2_Aggregator">aggregator_v2::Aggregator</a>&lt;u64&gt;</code>
+</dt>
+<dd>
+
+</dd>
+<dt>
+<code>treasury_total: <a href="aggregator_v2.md#0x1_aggregator_v2_Aggregator">aggregator_v2::Aggregator</a>&lt;u64&gt;</code>
+</dt>
+<dd>
+
+</dd>
+<dt>
+<code>governance_funded_total: <a href="aggregator_v2.md#0x1_aggregator_v2_Aggregator">aggregator_v2::Aggregator</a>&lt;u64&gt;</code>
+</dt>
+<dd>
+
+</dd>
+<dt>
+<code>reward_withdrawn_total: <a href="aggregator_v2.md#0x1_aggregator_v2_Aggregator">aggregator_v2::Aggregator</a>&lt;u64&gt;</code>
+</dt>
+<dd>
+
+</dd>
+<dt>
+<code>withdraw_events: <a href="event.md#0x1_event_EventHandle">event::EventHandle</a>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_WithdrawStakingRewardEvent">governed_gas_pool::WithdrawStakingRewardEvent</a>&gt;</code>
+</dt>
+<dd>
+
+</dd>
+</dl>
+
+
+</details>
+
 <a id="@Constants_0"></a>
 
 ## Constants
+
+
+<a id="0x1_governed_gas_pool_EINSUFFICIENT_BALANCE"></a>
+
+Insufficient balance in the pool.
+
+
+<pre><code><b>const</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_EINSUFFICIENT_BALANCE">EINSUFFICIENT_BALANCE</a>: u64 = 1;
+</code></pre>
+
 
 
 <a id="0x1_governed_gas_pool_ENO_LONGER_SUPPORTED"></a>
@@ -253,6 +321,15 @@ Initializes the governed gas pool around a resource account creation seed.
                 deposited_treasury_counter: 0,
                 withdraw_staking_reward_events: <a href="account.md#0x1_account_new_event_handle">account::new_event_handle</a>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_WithdrawStakingRewardEvent">WithdrawStakingRewardEvent</a>&gt;(aptos_framework),
             });
+        };
+        <b>if</b> (!<b>exists</b>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolCounters">GovernedGasPoolCounters</a>&gt;(<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework))) {
+            <b>move_to</b>(aptos_framework, <a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolCounters">GovernedGasPoolCounters</a>{
+                gas_fee_total: <a href="aggregator_v2.md#0x1_aggregator_v2_create_unbounded_aggregator">aggregator_v2::create_unbounded_aggregator</a>(),
+                treasury_total: <a href="aggregator_v2.md#0x1_aggregator_v2_create_unbounded_aggregator">aggregator_v2::create_unbounded_aggregator</a>(),
+                governance_funded_total: <a href="aggregator_v2.md#0x1_aggregator_v2_create_unbounded_aggregator">aggregator_v2::create_unbounded_aggregator</a>(),
+                reward_withdrawn_total: <a href="aggregator_v2.md#0x1_aggregator_v2_create_unbounded_aggregator">aggregator_v2::create_unbounded_aggregator</a>(),
+                withdraw_events: <a href="account.md#0x1_account_new_event_handle">account::new_event_handle</a>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_WithdrawStakingRewardEvent">WithdrawStakingRewardEvent</a>&gt;(aptos_framework),
+            });
         }
     } <b>else</b> {
 
@@ -270,6 +347,14 @@ Initializes the governed gas pool around a resource account creation seed.
         <b>move_to</b>(aptos_framework, <a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolExtension">GovernedGasPoolExtension</a>{
             deposited_treasury_counter: 0,
             withdraw_staking_reward_events: <a href="account.md#0x1_account_new_event_handle">account::new_event_handle</a>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_WithdrawStakingRewardEvent">WithdrawStakingRewardEvent</a>&gt;(aptos_framework),
+        });
+
+        <b>move_to</b>(aptos_framework, <a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolCounters">GovernedGasPoolCounters</a>{
+            gas_fee_total: <a href="aggregator_v2.md#0x1_aggregator_v2_create_unbounded_aggregator">aggregator_v2::create_unbounded_aggregator</a>(),
+            treasury_total: <a href="aggregator_v2.md#0x1_aggregator_v2_create_unbounded_aggregator">aggregator_v2::create_unbounded_aggregator</a>(),
+            governance_funded_total: <a href="aggregator_v2.md#0x1_aggregator_v2_create_unbounded_aggregator">aggregator_v2::create_unbounded_aggregator</a>(),
+            reward_withdrawn_total: <a href="aggregator_v2.md#0x1_aggregator_v2_create_unbounded_aggregator">aggregator_v2::create_unbounded_aggregator</a>(),
+            withdraw_events: <a href="account.md#0x1_account_new_event_handle">account::new_event_handle</a>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_WithdrawStakingRewardEvent">WithdrawStakingRewardEvent</a>&gt;(aptos_framework),
         });
     }
 }
@@ -298,17 +383,32 @@ Initializes the governed gas pool extension alone.
 
 <pre><code><b>public</b> entry <b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_initialize_governed_gas_pool_extension">initialize_governed_gas_pool_extension</a>(
     aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>,
-) {
+) <b>acquires</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolExtension">GovernedGasPoolExtension</a> {
     <a href="system_addresses.md#0x1_system_addresses_assert_aptos_framework">system_addresses::assert_aptos_framework</a>(aptos_framework);
 
     // <b>return</b> <b>if</b> the governed gas extension <b>has</b> already been initialized
-    <b>if</b> (<b>exists</b>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolExtension">GovernedGasPoolExtension</a>&gt;(<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework))) {
-    } <b>else</b> {
+    <b>if</b> (!<b>exists</b>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolExtension">GovernedGasPoolExtension</a>&gt;(<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework))) {
+        <b>move_to</b>(aptos_framework, <a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolExtension">GovernedGasPoolExtension</a>{
+            deposited_treasury_counter: 0,
+            withdraw_staking_reward_events: <a href="account.md#0x1_account_new_event_handle">account::new_event_handle</a>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_WithdrawStakingRewardEvent">WithdrawStakingRewardEvent</a>&gt;(aptos_framework),
+        });
+    };
 
-    <b>move_to</b>(aptos_framework, <a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolExtension">GovernedGasPoolExtension</a>{
-        deposited_treasury_counter: 0,
-        withdraw_staking_reward_events: <a href="account.md#0x1_account_new_event_handle">account::new_event_handle</a>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_WithdrawStakingRewardEvent">WithdrawStakingRewardEvent</a>&gt;(aptos_framework),
-    });
+    // Create counters resource <b>if</b> missing (migration path)
+    <b>if</b> (!<b>exists</b>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolCounters">GovernedGasPoolCounters</a>&gt;(<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework))) {
+        <b>let</b> legacy_treasury_total = <b>if</b> (<b>exists</b>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolExtension">GovernedGasPoolExtension</a>&gt;(<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework))) {
+            <b>borrow_global</b>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolExtension">GovernedGasPoolExtension</a>&gt;(@aptos_framework).deposited_treasury_counter
+        } <b>else</b> {
+            0
+        };
+
+        <b>move_to</b>(aptos_framework, <a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolCounters">GovernedGasPoolCounters</a>{
+            gas_fee_total: <a href="aggregator_v2.md#0x1_aggregator_v2_create_unbounded_aggregator">aggregator_v2::create_unbounded_aggregator</a>(),
+            treasury_total: <a href="aggregator_v2.md#0x1_aggregator_v2_create_unbounded_aggregator_with_value">aggregator_v2::create_unbounded_aggregator_with_value</a>(legacy_treasury_total),
+            governance_funded_total: <a href="aggregator_v2.md#0x1_aggregator_v2_create_unbounded_aggregator">aggregator_v2::create_unbounded_aggregator</a>(),
+            reward_withdrawn_total: <a href="aggregator_v2.md#0x1_aggregator_v2_create_unbounded_aggregator">aggregator_v2::create_unbounded_aggregator</a>(),
+            withdraw_events: <a href="account.md#0x1_account_new_event_handle">account::new_event_handle</a>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_WithdrawStakingRewardEvent">WithdrawStakingRewardEvent</a>&gt;(aptos_framework),
+        });
     }
 }
 </code></pre>
@@ -443,13 +543,18 @@ Funds the destination account with a given amount of coin.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_fund">fund</a>&lt;CoinType&gt;(aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, <a href="account.md#0x1_account">account</a>: <b>address</b>, amount: u64) <b>acquires</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPool">GovernedGasPool</a> {
+<pre><code><b>public</b> <b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_fund">fund</a>&lt;CoinType&gt;(aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, <a href="account.md#0x1_account">account</a>: <b>address</b>, amount: u64) <b>acquires</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPool">GovernedGasPool</a>, <a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolCounters">GovernedGasPoolCounters</a> {
     // Check that the Aptos framework is the caller
     // This is what <b>ensures</b> that funding can only be done by the Aptos framework,
     // i.e., via a governance proposal.
     <a href="system_addresses.md#0x1_system_addresses_assert_aptos_framework">system_addresses::assert_aptos_framework</a>(aptos_framework);
     <b>let</b> governed_gas_signer = &<a href="governed_gas_pool.md#0x1_governed_gas_pool_governed_gas_signer">governed_gas_signer</a>();
     <a href="coin.md#0x1_coin_deposit">coin::deposit</a>(<a href="account.md#0x1_account">account</a>, <a href="coin.md#0x1_coin_withdraw">coin::withdraw</a>&lt;CoinType&gt;(governed_gas_signer, amount));
+
+    <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_governed_gas_pool_aggregators_enabled">features::governed_gas_pool_aggregators_enabled</a>()) {
+        <b>let</b> counters = <b>borrow_global_mut</b>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolCounters">GovernedGasPoolCounters</a>&gt;(@aptos_framework);
+        <a href="aggregator_v2.md#0x1_aggregator_v2_add">aggregator_v2::add</a>(&<b>mut</b> counters.governance_funded_total, amount);
+    };
 }
 </code></pre>
 
@@ -599,11 +704,18 @@ Deposits gas fees into the governed gas pool.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_deposit_gas_fee_v2">deposit_gas_fee_v2</a>(gas_payer: <b>address</b>, gas_fee: u64) <b>acquires</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPool">GovernedGasPool</a> {
+<pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_deposit_gas_fee_v2">deposit_gas_fee_v2</a>(gas_payer: <b>address</b>, gas_fee: u64) <b>acquires</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPool">GovernedGasPool</a>, <a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolCounters">GovernedGasPoolCounters</a> {
+    <b>if</b> (gas_fee == 0) <b>return</b>;
+
     <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_operations_default_to_fa_apt_store_enabled">features::operations_default_to_fa_apt_store_enabled</a>()) {
         <a href="governed_gas_pool.md#0x1_governed_gas_pool_deposit_from_fungible_store">deposit_from_fungible_store</a>(gas_payer, gas_fee);
     } <b>else</b> {
         <a href="governed_gas_pool.md#0x1_governed_gas_pool_deposit_from">deposit_from</a>&lt;AptosCoin&gt;(gas_payer, gas_fee);
+    };
+
+    <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_governed_gas_pool_aggregators_enabled">features::governed_gas_pool_aggregators_enabled</a>()) {
+        <b>let</b> counters = <b>borrow_global_mut</b>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolCounters">GovernedGasPoolCounters</a>&gt;(@aptos_framework);
+        <a href="aggregator_v2.md#0x1_aggregator_v2_add">aggregator_v2::add</a>(&<b>mut</b> counters.gas_fee_total, gas_fee);
     };
 }
 </code></pre>
@@ -630,12 +742,17 @@ Deposits from the treasury account. Treasury deposit are recorded.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> entry <b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_deposit_treasury">deposit_treasury</a>(treasury_account: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, amount: u64) <b>acquires</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPool">GovernedGasPool</a>, <a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolExtension">GovernedGasPoolExtension</a> {
+<pre><code><b>public</b> entry <b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_deposit_treasury">deposit_treasury</a>(treasury_account: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, amount: u64) <b>acquires</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPool">GovernedGasPool</a>, <a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolExtension">GovernedGasPoolExtension</a>, <a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolCounters">GovernedGasPoolCounters</a> {
     <b>let</b> treasury_account_address = <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(treasury_account);
     <a href="governed_gas_pool.md#0x1_governed_gas_pool_deposit_from">deposit_from</a>&lt;AptosCoin&gt;(treasury_account_address, amount);
 
-    <b>let</b> ggp = <b>borrow_global_mut</b>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolExtension">GovernedGasPoolExtension</a>&gt;(@aptos_framework);
-    ggp.deposited_treasury_counter = ggp.deposited_treasury_counter + amount;
+    <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_governed_gas_pool_aggregators_enabled">features::governed_gas_pool_aggregators_enabled</a>()) {
+        <b>let</b> counters = <b>borrow_global_mut</b>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolCounters">GovernedGasPoolCounters</a>&gt;(@aptos_framework);
+        <a href="aggregator_v2.md#0x1_aggregator_v2_add">aggregator_v2::add</a>(&<b>mut</b> counters.treasury_total, amount);
+    } <b>else</b> {
+        <b>let</b> ggp = <b>borrow_global_mut</b>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolExtension">GovernedGasPoolExtension</a>&gt;(@aptos_framework);
+        ggp.deposited_treasury_counter = ggp.deposited_treasury_counter + amount;
+    };
 }
 </code></pre>
 
@@ -696,17 +813,24 @@ governed gas pool to authorize the withdrawal.
 
 <pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_withdraw_staking_reward">withdraw_staking_reward</a>&lt;CoinType&gt;(
     amount: u64
-): Coin&lt;CoinType&gt; <b>acquires</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPool">GovernedGasPool</a>, <a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolExtension">GovernedGasPoolExtension</a> {
+): Coin&lt;CoinType&gt; <b>acquires</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPool">GovernedGasPool</a>, <a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolExtension">GovernedGasPoolExtension</a>, <a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolCounters">GovernedGasPoolCounters</a> {
     <b>let</b> balance = <a href="governed_gas_pool.md#0x1_governed_gas_pool_get_balance">get_balance</a>&lt;CoinType&gt;();
-    <b>assert</b>!(balance &gt;= amount, 0); // insufficient balance
-    <b>let</b> ggpv2 = <b>borrow_global_mut</b>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolExtension">GovernedGasPoolExtension</a>&gt;(@aptos_framework);
+    <b>assert</b>!(balance &gt;= amount, <a href="governed_gas_pool.md#0x1_governed_gas_pool_EINSUFFICIENT_BALANCE">EINSUFFICIENT_BALANCE</a>);
 
-    <a href="event.md#0x1_event_emit_event">event::emit_event</a>(
-        &<b>mut</b> ggpv2.withdraw_staking_reward_events,
-        <a href="governed_gas_pool.md#0x1_governed_gas_pool_WithdrawStakingRewardEvent">WithdrawStakingRewardEvent</a> {
-            amount,
-        },
-    );
+    <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_governed_gas_pool_aggregators_enabled">features::governed_gas_pool_aggregators_enabled</a>()) {
+        <b>let</b> counters = <b>borrow_global_mut</b>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolCounters">GovernedGasPoolCounters</a>&gt;(@aptos_framework);
+        <a href="aggregator_v2.md#0x1_aggregator_v2_add">aggregator_v2::add</a>(&<b>mut</b> counters.reward_withdrawn_total, amount);
+        <a href="event.md#0x1_event_emit_event">event::emit_event</a>(
+            &<b>mut</b> counters.withdraw_events,
+            <a href="governed_gas_pool.md#0x1_governed_gas_pool_WithdrawStakingRewardEvent">WithdrawStakingRewardEvent</a> { amount },
+        );
+    } <b>else</b> {
+        <b>let</b> ggpv2 = <b>borrow_global_mut</b>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolExtension">GovernedGasPoolExtension</a>&gt;(@aptos_framework);
+        <a href="event.md#0x1_event_emit_event">event::emit_event</a>(
+            &<b>mut</b> ggpv2.withdraw_staking_reward_events,
+            <a href="governed_gas_pool.md#0x1_governed_gas_pool_WithdrawStakingRewardEvent">WithdrawStakingRewardEvent</a> { amount },
+        );
+    };
 
     // Withdraw reward <a href="coin.md#0x1_coin">coin</a>.
     <a href="coin.md#0x1_coin_withdraw">coin::withdraw</a>&lt;CoinType&gt;(&<a href="governed_gas_pool.md#0x1_governed_gas_pool_governed_gas_signer">governed_gas_signer</a>(), amount)
@@ -736,6 +860,110 @@ Register Aptos coin with Governed gas signer.
 <pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_register_coin">register_coin</a>&lt;CoinType&gt;() <b>acquires</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPool">GovernedGasPool</a> {
     <b>let</b> s = <a href="governed_gas_pool.md#0x1_governed_gas_pool_governed_gas_signer">governed_gas_signer</a>();
     <a href="coin.md#0x1_coin_register">coin::register</a>&lt;CoinType&gt;(&s);
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_governed_gas_pool_get_gas_fee_total"></a>
+
+## Function `get_gas_fee_total`
+
+Returns a snapshot of the total gas fees collected.
+
+
+<pre><code>#[view]
+<b>public</b> <b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_get_gas_fee_total">get_gas_fee_total</a>(): <a href="aggregator_v2.md#0x1_aggregator_v2_AggregatorSnapshot">aggregator_v2::AggregatorSnapshot</a>&lt;u64&gt;
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_get_gas_fee_total">get_gas_fee_total</a>(): AggregatorSnapshot&lt;u64&gt; <b>acquires</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolCounters">GovernedGasPoolCounters</a> {
+    <a href="aggregator_v2.md#0x1_aggregator_v2_snapshot">aggregator_v2::snapshot</a>(&<b>borrow_global</b>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolCounters">GovernedGasPoolCounters</a>&gt;(@aptos_framework).gas_fee_total)
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_governed_gas_pool_get_treasury_total"></a>
+
+## Function `get_treasury_total`
+
+Returns a snapshot of the total treasury deposits.
+
+
+<pre><code>#[view]
+<b>public</b> <b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_get_treasury_total">get_treasury_total</a>(): <a href="aggregator_v2.md#0x1_aggregator_v2_AggregatorSnapshot">aggregator_v2::AggregatorSnapshot</a>&lt;u64&gt;
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_get_treasury_total">get_treasury_total</a>(): AggregatorSnapshot&lt;u64&gt; <b>acquires</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolCounters">GovernedGasPoolCounters</a> {
+    <a href="aggregator_v2.md#0x1_aggregator_v2_snapshot">aggregator_v2::snapshot</a>(&<b>borrow_global</b>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolCounters">GovernedGasPoolCounters</a>&gt;(@aptos_framework).treasury_total)
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_governed_gas_pool_get_governance_funded_total"></a>
+
+## Function `get_governance_funded_total`
+
+Returns a snapshot of the total governance-funded payouts.
+
+
+<pre><code>#[view]
+<b>public</b> <b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_get_governance_funded_total">get_governance_funded_total</a>(): <a href="aggregator_v2.md#0x1_aggregator_v2_AggregatorSnapshot">aggregator_v2::AggregatorSnapshot</a>&lt;u64&gt;
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_get_governance_funded_total">get_governance_funded_total</a>(): AggregatorSnapshot&lt;u64&gt; <b>acquires</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolCounters">GovernedGasPoolCounters</a> {
+    <a href="aggregator_v2.md#0x1_aggregator_v2_snapshot">aggregator_v2::snapshot</a>(&<b>borrow_global</b>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolCounters">GovernedGasPoolCounters</a>&gt;(@aptos_framework).governance_funded_total)
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_governed_gas_pool_get_reward_withdrawn_total"></a>
+
+## Function `get_reward_withdrawn_total`
+
+Returns a snapshot of the total staking rewards withdrawn.
+
+
+<pre><code>#[view]
+<b>public</b> <b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_get_reward_withdrawn_total">get_reward_withdrawn_total</a>(): <a href="aggregator_v2.md#0x1_aggregator_v2_AggregatorSnapshot">aggregator_v2::AggregatorSnapshot</a>&lt;u64&gt;
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_get_reward_withdrawn_total">get_reward_withdrawn_total</a>(): AggregatorSnapshot&lt;u64&gt; <b>acquires</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolCounters">GovernedGasPoolCounters</a> {
+    <a href="aggregator_v2.md#0x1_aggregator_v2_snapshot">aggregator_v2::snapshot</a>(&<b>borrow_global</b>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolCounters">GovernedGasPoolCounters</a>&gt;(@aptos_framework).reward_withdrawn_total)
 }
 </code></pre>
 
@@ -793,7 +1021,7 @@ Register Aptos coin with Governed gas signer.
 Abort if the governed gas pool has insufficient funds
 
 
-<pre><code><b>aborts_with</b> <a href="coin.md#0x1_coin_EINSUFFICIENT_BALANCE">coin::EINSUFFICIENT_BALANCE</a>, <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(EINSUFFICIENT_BALANCE), 0x1, 0x5, 0x7;
+<pre><code><b>aborts_with</b> <a href="coin.md#0x1_coin_EINSUFFICIENT_BALANCE">coin::EINSUFFICIENT_BALANCE</a>, <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="governed_gas_pool.md#0x1_governed_gas_pool_EINSUFFICIENT_BALANCE">EINSUFFICIENT_BALANCE</a>), 0x1, 0x5, 0x7;
 </code></pre>
 
 

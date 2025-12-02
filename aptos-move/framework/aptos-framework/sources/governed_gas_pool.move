@@ -14,6 +14,7 @@ module aptos_framework::governed_gas_pool {
     use std::features;
     use aptos_framework::signer;
     use aptos_framework::aptos_account::Self;
+    use aptos_framework::aggregator_v2::{Self, Aggregator, AggregatorSnapshot};
     #[test_only]
     use aptos_framework::coin::{BurnCapability, MintCapability};
     #[test_only]
@@ -24,6 +25,8 @@ module aptos_framework::governed_gas_pool {
     friend aptos_framework::stake;
     friend aptos_framework::transaction_fee;
 
+    /// Insufficient balance in the pool.
+    const EINSUFFICIENT_BALANCE: u64 = 1;
     /// No longer supported.
     const ENO_LONGER_SUPPORTED: u64 = 4;
 
@@ -45,6 +48,15 @@ module aptos_framework::governed_gas_pool {
     struct GovernedGasPoolExtension has key {
         deposited_treasury_counter: u64,
         withdraw_staking_reward_events: EventHandle<WithdrawStakingRewardEvent>,
+    }
+
+    /// Aggregator-backed counters for parallel gas pool accounting.
+    struct GovernedGasPoolCounters has key {
+        gas_fee_total: Aggregator<u64>,
+        treasury_total: Aggregator<u64>,
+        governance_funded_total: Aggregator<u64>,
+        reward_withdrawn_total: Aggregator<u64>,
+        withdraw_events: EventHandle<WithdrawStakingRewardEvent>,
     }
 
     /// Address of APT Primary Fungible Store
@@ -80,6 +92,15 @@ module aptos_framework::governed_gas_pool {
                     deposited_treasury_counter: 0,
                     withdraw_staking_reward_events: account::new_event_handle<WithdrawStakingRewardEvent>(aptos_framework),
                 });
+            };
+            if (!exists<GovernedGasPoolCounters>(signer::address_of(aptos_framework))) {
+                move_to(aptos_framework, GovernedGasPoolCounters{
+                    gas_fee_total: aggregator_v2::create_unbounded_aggregator(),
+                    treasury_total: aggregator_v2::create_unbounded_aggregator(),
+                    governance_funded_total: aggregator_v2::create_unbounded_aggregator(),
+                    reward_withdrawn_total: aggregator_v2::create_unbounded_aggregator(),
+                    withdraw_events: account::new_event_handle<WithdrawStakingRewardEvent>(aptos_framework),
+                });
             }
         } else {
 
@@ -98,6 +119,14 @@ module aptos_framework::governed_gas_pool {
                 deposited_treasury_counter: 0,
                 withdraw_staking_reward_events: account::new_event_handle<WithdrawStakingRewardEvent>(aptos_framework),
             });
+
+            move_to(aptos_framework, GovernedGasPoolCounters{
+                gas_fee_total: aggregator_v2::create_unbounded_aggregator(),
+                treasury_total: aggregator_v2::create_unbounded_aggregator(),
+                governance_funded_total: aggregator_v2::create_unbounded_aggregator(),
+                reward_withdrawn_total: aggregator_v2::create_unbounded_aggregator(),
+                withdraw_events: account::new_event_handle<WithdrawStakingRewardEvent>(aptos_framework),
+            });
         }
     }
 
@@ -105,17 +134,32 @@ module aptos_framework::governed_gas_pool {
     /// @param aptos_framework The signer of the aptos_framework module.
     public entry fun initialize_governed_gas_pool_extension(
         aptos_framework: &signer,
-    ) {
+    ) acquires GovernedGasPoolExtension {
         system_addresses::assert_aptos_framework(aptos_framework);
 
         // return if the governed gas extension has already been initialized
-        if (exists<GovernedGasPoolExtension>(signer::address_of(aptos_framework))) {
-        } else {
+        if (!exists<GovernedGasPoolExtension>(signer::address_of(aptos_framework))) {
+            move_to(aptos_framework, GovernedGasPoolExtension{
+                deposited_treasury_counter: 0,
+                withdraw_staking_reward_events: account::new_event_handle<WithdrawStakingRewardEvent>(aptos_framework),
+            });
+        };
 
-        move_to(aptos_framework, GovernedGasPoolExtension{
-            deposited_treasury_counter: 0,
-            withdraw_staking_reward_events: account::new_event_handle<WithdrawStakingRewardEvent>(aptos_framework),
-        });
+        // Create counters resource if missing (migration path)
+        if (!exists<GovernedGasPoolCounters>(signer::address_of(aptos_framework))) {
+            let legacy_treasury_total = if (exists<GovernedGasPoolExtension>(signer::address_of(aptos_framework))) {
+                borrow_global<GovernedGasPoolExtension>(@aptos_framework).deposited_treasury_counter
+            } else {
+                0
+            };
+
+            move_to(aptos_framework, GovernedGasPoolCounters{
+                gas_fee_total: aggregator_v2::create_unbounded_aggregator(),
+                treasury_total: aggregator_v2::create_unbounded_aggregator_with_value(legacy_treasury_total),
+                governance_funded_total: aggregator_v2::create_unbounded_aggregator(),
+                reward_withdrawn_total: aggregator_v2::create_unbounded_aggregator(),
+                withdraw_events: account::new_event_handle<WithdrawStakingRewardEvent>(aptos_framework),
+            });
         }
     }
 
@@ -150,13 +194,18 @@ module aptos_framework::governed_gas_pool {
     /// Funds the destination account with a given amount of coin.
     /// @param account The account to be funded.
     /// @param amount The amount of coin to be funded.
-    public fun fund<CoinType>(aptos_framework: &signer, account: address, amount: u64) acquires GovernedGasPool {
+    public fun fund<CoinType>(aptos_framework: &signer, account: address, amount: u64) acquires GovernedGasPool, GovernedGasPoolCounters {
         // Check that the Aptos framework is the caller
         // This is what ensures that funding can only be done by the Aptos framework,
         // i.e., via a governance proposal.
         system_addresses::assert_aptos_framework(aptos_framework);
         let governed_gas_signer = &governed_gas_signer();
         coin::deposit(account, coin::withdraw<CoinType>(governed_gas_signer, amount));
+
+        if (features::governed_gas_pool_aggregators_enabled()) {
+            let counters = borrow_global_mut<GovernedGasPoolCounters>(@aptos_framework);
+            aggregator_v2::add(&mut counters.governance_funded_total, amount);
+        };
     }
 
     /// Deposits some coin into the governed gas pool.
@@ -206,23 +255,35 @@ module aptos_framework::governed_gas_pool {
     /// Deposits gas fees into the governed gas pool.
     /// @param gas_payer The address of the account that paid the gas fees.
     /// @param gas_fee The amount of gas fees to be deposited.
-    public(friend) fun deposit_gas_fee_v2(gas_payer: address, gas_fee: u64) acquires GovernedGasPool {
+    public(friend) fun deposit_gas_fee_v2(gas_payer: address, gas_fee: u64) acquires GovernedGasPool, GovernedGasPoolCounters {
+        if (gas_fee == 0) return;
+
         if (features::operations_default_to_fa_apt_store_enabled()) {
             deposit_from_fungible_store(gas_payer, gas_fee);
         } else {
             deposit_from<AptosCoin>(gas_payer, gas_fee);
+        };
+
+        if (features::governed_gas_pool_aggregators_enabled()) {
+            let counters = borrow_global_mut<GovernedGasPoolCounters>(@aptos_framework);
+            aggregator_v2::add(&mut counters.gas_fee_total, gas_fee);
         };
     }
 
     /// Deposits from the treasury account. Treasury deposit are recorded.
     /// @param treasury_account The address of the account that paid the treasury.
     /// @param amount The amount of treasury to be deposited.
-    public entry fun deposit_treasury(treasury_account: &signer, amount: u64) acquires GovernedGasPool, GovernedGasPoolExtension {
+    public entry fun deposit_treasury(treasury_account: &signer, amount: u64) acquires GovernedGasPool, GovernedGasPoolExtension, GovernedGasPoolCounters {
         let treasury_account_address = signer::address_of(treasury_account);
         deposit_from<AptosCoin>(treasury_account_address, amount);
 
-        let ggp = borrow_global_mut<GovernedGasPoolExtension>(@aptos_framework);
-        ggp.deposited_treasury_counter = ggp.deposited_treasury_counter + amount;
+        if (features::governed_gas_pool_aggregators_enabled()) {
+            let counters = borrow_global_mut<GovernedGasPoolCounters>(@aptos_framework);
+            aggregator_v2::add(&mut counters.treasury_total, amount);
+        } else {
+            let ggp = borrow_global_mut<GovernedGasPoolExtension>(@aptos_framework);
+            ggp.deposited_treasury_counter = ggp.deposited_treasury_counter + amount;
+        };
     }
 
     #[view]
@@ -243,17 +304,24 @@ module aptos_framework::governed_gas_pool {
     /// @return A `Coin<CoinType>` resource containing the withdrawn amount.
     public(friend) fun withdraw_staking_reward<CoinType>(
         amount: u64
-    ): Coin<CoinType> acquires GovernedGasPool, GovernedGasPoolExtension {
+    ): Coin<CoinType> acquires GovernedGasPool, GovernedGasPoolExtension, GovernedGasPoolCounters {
         let balance = get_balance<CoinType>();
-        assert!(balance >= amount, 0); // insufficient balance
-        let ggpv2 = borrow_global_mut<GovernedGasPoolExtension>(@aptos_framework);
+        assert!(balance >= amount, EINSUFFICIENT_BALANCE);
 
-        event::emit_event(
-            &mut ggpv2.withdraw_staking_reward_events,
-            WithdrawStakingRewardEvent {
-                amount,
-            },
-        );
+        if (features::governed_gas_pool_aggregators_enabled()) {
+            let counters = borrow_global_mut<GovernedGasPoolCounters>(@aptos_framework);
+            aggregator_v2::add(&mut counters.reward_withdrawn_total, amount);
+            event::emit_event(
+                &mut counters.withdraw_events,
+                WithdrawStakingRewardEvent { amount },
+            );
+        } else {
+            let ggpv2 = borrow_global_mut<GovernedGasPoolExtension>(@aptos_framework);
+            event::emit_event(
+                &mut ggpv2.withdraw_staking_reward_events,
+                WithdrawStakingRewardEvent { amount },
+            );
+        };
         
         // Withdraw reward coin.
         coin::withdraw<CoinType>(&governed_gas_signer(), amount)
@@ -263,6 +331,32 @@ module aptos_framework::governed_gas_pool {
     public(friend) fun register_coin<CoinType>() acquires GovernedGasPool {
         let s = governed_gas_signer();
         coin::register<CoinType>(&s);
+    }
+
+    // ========== View Functions for Aggregator Totals ==========
+
+    #[view]
+    /// Returns a snapshot of the total gas fees collected.
+    public fun get_gas_fee_total(): AggregatorSnapshot<u64> acquires GovernedGasPoolCounters {
+        aggregator_v2::snapshot(&borrow_global<GovernedGasPoolCounters>(@aptos_framework).gas_fee_total)
+    }
+
+    #[view]
+    /// Returns a snapshot of the total treasury deposits.
+    public fun get_treasury_total(): AggregatorSnapshot<u64> acquires GovernedGasPoolCounters {
+        aggregator_v2::snapshot(&borrow_global<GovernedGasPoolCounters>(@aptos_framework).treasury_total)
+    }
+
+    #[view]
+    /// Returns a snapshot of the total governance-funded payouts.
+    public fun get_governance_funded_total(): AggregatorSnapshot<u64> acquires GovernedGasPoolCounters {
+        aggregator_v2::snapshot(&borrow_global<GovernedGasPoolCounters>(@aptos_framework).governance_funded_total)
+    }
+
+    #[view]
+    /// Returns a snapshot of the total staking rewards withdrawn.
+    public fun get_reward_withdrawn_total(): AggregatorSnapshot<u64> acquires GovernedGasPoolCounters {
+        aggregator_v2::snapshot(&borrow_global<GovernedGasPoolCounters>(@aptos_framework).reward_withdrawn_total)
     }
 
     #[test_only]

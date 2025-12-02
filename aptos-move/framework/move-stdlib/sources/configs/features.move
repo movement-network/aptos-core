@@ -790,6 +790,18 @@ module std::features {
         is_enabled(STAKE_REWARD_USING_TREASURY)
     }
 
+    /// Whether the Governed Gas Pool uses Aggregator V2 for concurrent accounting.
+    /// Enables parallel tracking of gas fees, treasury deposits, governance payouts, and rewards.
+    ///
+    /// Lifetime: transient
+    const GOVERNED_GAS_POOL_AGGREGATORS: u64 = 225;
+
+    public fun get_governed_gas_pool_aggregators_feature(): u64 { GOVERNED_GAS_POOL_AGGREGATORS }
+
+    public fun governed_gas_pool_aggregators_enabled(): bool acquires Features {
+        is_enabled(GOVERNED_GAS_POOL_AGGREGATORS)
+    }
+
     // ============================================================================================
     // Feature Flag Implementation
 

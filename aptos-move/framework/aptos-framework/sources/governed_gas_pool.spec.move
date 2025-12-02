@@ -1,5 +1,4 @@
 spec aptos_framework::governed_gas_pool {
-    use aptos_framework::coin::EINSUFFICIENT_BALANCE;
     use aptos_framework::error;
 
     /// <high-level-req>

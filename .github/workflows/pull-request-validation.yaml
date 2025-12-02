@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   check-dynamic-deps:
-    runs-on: ubuntu-latest
+    runs-on: k8s-movement-labs
     steps:
       - uses: actions/checkout@v4
         if: ${{ !inputs.SKIP_JOB }}
@@ -33,7 +33,7 @@ jobs:
   
   semgrep:
     name: semgrep/ci
-    runs-on: ubuntu-latest
+    runs-on: k8s-movement-labs
 
     container:
       image: returntocorp/semgrep
@@ -50,7 +50,7 @@ jobs:
              ./.github/linters/semgrep/pull-request-target-code-checkout.yaml
 
   build-checks:
-    runs-on: ubuntu-latest
+    runs-on: k8s-movement-labs
     outputs:
       members_changed: ${{ steps.members_check.outputs.changed }}
       docker_changed: ${{ steps.docker_check.outputs.changed }}
@@ -70,7 +70,7 @@ jobs:
   build-binaries:
     needs: build-checks
     if: needs.build-checks.outputs.members_changed == 'true' || needs.build-checks.outputs.docker_changed == 'true'
-    runs-on: ubuntu-latest
+    runs-on: k8s-movement-labs
     name: "Build Binaries with Nix"
     strategy:
       matrix:
@@ -147,7 +147,7 @@ jobs:
 
   build-docker:
     needs: build-binaries
-    runs-on: ubuntu-latest
+    runs-on: k8s-movement-labs
     name: "Build Docker Images"
     permissions:
       contents: read

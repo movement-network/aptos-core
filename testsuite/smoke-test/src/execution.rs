@@ -6,13 +6,13 @@ use crate::{
     aptos_cli::validator::generate_blob, smoke_test_environment::SwarmBuilder,
     utils::get_current_version,
 };
-use aptos::test::CliTestFramework;
 use aptos_forge::{NodeExt, Swarm, SwarmExt};
 use aptos_rest_client::Client;
 use aptos_types::on_chain_config::{
     BlockGasLimitType, ExecutionConfigV4, OnChainExecutionConfig, TransactionDeduperType,
     TransactionShufflerType,
 };
+use movement::test::CliTestFramework;
 use std::{sync::Arc, time::Duration};
 
 const MAX_WAIT_SECS: u64 = 30;
@@ -135,7 +135,7 @@ async fn block_epilogue_upgrade_test() {
 
     assert_eq!(
         get_last_non_reconfig_block_ending_txn_name(&rest_client).await,
-        Some("block_epilogue")
+        Some("state_checkpoint")
     );
 
     for _ in 0..3 {
@@ -200,7 +200,7 @@ async fn block_epilogue_upgrade_test() {
 
         assert_eq!(
             get_last_non_reconfig_block_ending_txn_name(&rest_client).await,
-            Some("block_epilogue")
+            Some("state_checkpoint")
         );
     }
 }

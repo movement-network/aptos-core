@@ -85,13 +85,11 @@ module std::features {
         is_enabled(VM_BINARY_FORMAT_V6)
     }
 
-    #[deprecated]
-    /// Deprecated feature
+    /// Whether gas fees are collected and distributed to the block proposers.
     /// Lifetime: transient
     const COLLECT_AND_DISTRIBUTE_GAS_FEES: u64 = 6;
 
     #[deprecated]
-    /// Deprecated feature
     public fun get_collect_and_distribute_gas_fees_feature(): u64 { COLLECT_AND_DISTRIBUTE_GAS_FEES }
 
     #[deprecated]
@@ -266,6 +264,15 @@ module std::features {
 
     public fun module_event_enabled(): bool acquires Features {
         is_enabled(MODULE_EVENT)
+    }
+
+    /// Whether we refund storage costs to the user upon deletion
+    /// 
+    /// Lifetime: transient
+    const STORAGE_DELETION_REFUND: u64 = 28;
+
+    public fun storage_deletion_refund_enabled(): bool acquires Features {
+        is_enabled(STORAGE_DELETION_REFUND)
     }
 
     /// Whether the fix for a counting bug in the script path of the signature checker pass is enabled.
@@ -586,12 +593,52 @@ module std::features {
         is_enabled(ABORT_IF_MULTISIG_PAYLOAD_MISMATCH)
     }
 
-    /// Whether the simulation enhancement is enabled. This enables the simulation without an authentication check,
-    /// the sponsored transaction simulation when the fee payer is set to 0x0, and the multisig transaction
-    /// simulation consistnet with the execution.
-    ///
-    /// Lifetime: transient
     const TRANSACTION_SIMULATION_ENHANCEMENT: u64 = 78;
+    /// Whether the Atomic bridge is available
+    /// Lifetime: transient
+    const ATOMIC_BRIDGE: u64 = 71;
+
+    #[deprecated]
+    public fun get_atomic_bridge_feature(): u64 { ATOMIC_BRIDGE }
+
+    #[deprecated]
+    public fun abort_atomic_bridge_enabled(): bool {
+        true
+    }
+
+
+    /// Whether the Atomic bridge is available
+    /// Lifetime: transient
+    const NATIVE_BRIDGE: u64 = 72;
+
+    #[deprecated]
+    public fun get_native_bridge_feature(): u64 { NATIVE_BRIDGE }
+
+    #[deprecated]
+    public fun abort_native_bridge_enabled(): bool {
+        true
+    }
+
+    /// Whether the Governed Gas Pool is used to capture gas fees
+    ///
+    /// Lifetime: permanent
+    const GOVERNED_GAS_POOL: u64 = 223;
+
+    /// Whether the Governed Gas Pool is enabled.
+    public fun get_governed_gas_pool_feature(): u64 { GOVERNED_GAS_POOL }
+
+    public fun governed_gas_pool_enabled(): bool acquires Features {
+        is_enabled(GOVERNED_GAS_POOL)
+    }
+
+    /// Lifetime: transient
+    const DECOMMISSION_CORE_RESOURCES: u64 = 222;
+
+    public fun get_decommission_core_resources_feature(): u64 { DECOMMISSION_CORE_RESOURCES }
+
+    public fun get_decommission_core_resources_enabled(): bool acquires Features {
+        is_enabled(DECOMMISSION_CORE_RESOURCES)
+    }
 
     public fun get_transaction_simulation_enhancement_feature(): u64 { TRANSACTION_SIMULATION_ENHANCEMENT }
 
@@ -730,6 +777,17 @@ module std::features {
 
     public fun is_distribute_transaction_fee_enabled(): bool acquires Features {
         is_enabled(DISTRIBUTE_TRANSACTION_FEE)
+    }
+
+    /// Whether the staking rewards are mint (diseable) or withdraw from the gouverned gas pool treasury (enable). 
+    ///
+    /// Lifetime: permanent
+    const STAKE_REWARD_USING_TREASURY: u64 = 224;
+
+    public fun get_stake_reward_using_treasury_feature(): u64 { STAKE_REWARD_USING_TREASURY }
+
+    public fun stake_reward_using_treasury_enabled(): bool acquires Features {
+        is_enabled(STAKE_REWARD_USING_TREASURY)
     }
 
     // ============================================================================================

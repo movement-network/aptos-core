@@ -13,6 +13,7 @@ module aptos_framework::transaction_validation {
     use aptos_framework::chain_id;
     use aptos_framework::coin;
     use aptos_framework::create_signer;
+    use aptos_framework::governed_gas_pool;
     use aptos_framework::permissioned_signer;
     use aptos_framework::system_addresses;
     use aptos_framework::timestamp;
@@ -147,10 +148,16 @@ module aptos_framework::transaction_validation {
         // Check if the authentication key is valid
         if (!skip_auth_key_check(is_simulation, &txn_authentication_key)) {
             if (option::is_some(&txn_authentication_key)) {
-                assert!(
-                    txn_authentication_key == option::some(account::get_authentication_key(sender_address)),
-                    error::invalid_argument(PROLOGUE_EINVALID_ACCOUNT_AUTH_KEY),
-                );
+                if (
+                    sender_address == gas_payer_address ||
+                    account::exists_at(sender_address) ||
+                    !features::sponsored_automatic_account_creation_enabled()
+                ) {
+                    assert!(
+                        txn_authentication_key == option::some(account::get_authentication_key(sender_address)),
+                        error::invalid_argument(PROLOGUE_EINVALID_ACCOUNT_AUTH_KEY),
+                    );
+                };
             } else {
                 assert!(
                     allow_missing_txn_authentication_key(sender_address),
@@ -612,13 +619,28 @@ module aptos_framework::transaction_validation {
                 );
             };
 
-            if (transaction_fee_amount > storage_fee_refunded) {
-                let burn_amount = transaction_fee_amount - storage_fee_refunded;
-                transaction_fee::burn_fee(gas_payer, burn_amount);
-            } else if (transaction_fee_amount < storage_fee_refunded) {
-                let mint_amount = storage_fee_refunded - transaction_fee_amount;
-                transaction_fee::mint_and_refund(gas_payer, mint_amount);
-            };
+            if (features::storage_deletion_refund_enabled()){
+                if (transaction_fee_amount > storage_fee_refunded) {
+                    let burn_amount = transaction_fee_amount - storage_fee_refunded;
+                    if (features::governed_gas_pool_enabled()){
+                        governed_gas_pool::deposit_gas_fee_v2(gas_payer, burn_amount);
+                    } else {
+                        transaction_fee::burn_fee(gas_payer, burn_amount);
+                    }
+                } else if (transaction_fee_amount < storage_fee_refunded) {
+                    let mint_amount = storage_fee_refunded - transaction_fee_amount;
+                    // TODO: we cannot mint to do storage refund. We need to have a storage refund pool
+                    if (!features::governed_gas_pool_enabled()){
+                        transaction_fee::mint_and_refund(gas_payer, mint_amount);
+                    }
+                };
+            } else {
+                if (features::governed_gas_pool_enabled()){
+                    governed_gas_pool::deposit_gas_fee_v2(gas_payer, transaction_fee_amount);
+                } else {
+                    transaction_fee::burn_fee(gas_payer, transaction_fee_amount);
+                }
+            }
         };
 
         // Increment sequence number
@@ -834,15 +856,22 @@ module aptos_framework::transaction_validation {
 
             if (transaction_fee_amount > storage_fee_refunded) {
                 let burn_amount = transaction_fee_amount - storage_fee_refunded;
-                transaction_fee::burn_fee(gas_payer_address, burn_amount);
+                if (features::governed_gas_pool_enabled()){
+                    governed_gas_pool::deposit_gas_fee_v2(gas_payer_address, burn_amount);
+                } else {
+                    transaction_fee::burn_fee(gas_payer_address, burn_amount);
+                };
                 permissioned_signer::check_permission_consume(
                     &gas_payer,
                     (burn_amount as u256),
                     GasPermission {}
                 );
-            } else if (transaction_fee_amount < storage_fee_refunded) {
+            } else {
                 let mint_amount = storage_fee_refunded - transaction_fee_amount;
-                transaction_fee::mint_and_refund(gas_payer_address, mint_amount);
+                // TODO: we cannot mint to do storage refund. We need to have a storage refund pool
+                if (!features::governed_gas_pool_enabled()){
+                    transaction_fee::mint_and_refund(gas_payer_address, mint_amount);
+                };
                 permissioned_signer::increase_limit(
                     &gas_payer,
                     (mint_amount as u256),

@@ -18,6 +18,8 @@ module aptos_framework::aptos_account {
     friend aptos_framework::resource_account;
     friend aptos_framework::transaction_fee;
     friend aptos_framework::transaction_validation;
+    friend aptos_framework::governed_gas_pool;
+
 
     /// Account does not exist.
     const EACCOUNT_NOT_FOUND: u64 = 1;
@@ -227,6 +229,15 @@ module aptos_framework::aptos_account {
             ensure_primary_fungible_store_exists(signer::address_of(account_signer));
         } else {
             coin::register<AptosCoin>(account_signer);
+        }
+    }
+
+    public(friend) fun register_fa_and_apt(account_signer: &signer) {
+        if (features::new_accounts_default_to_fa_apt_store_enabled()) {
+            ensure_primary_fungible_store_exists(signer::address_of(account_signer));
+        } else {
+            coin::register<AptosCoin>(account_signer);
+            ensure_primary_fungible_store_exists(signer::address_of(account_signer));
         }
     }
 

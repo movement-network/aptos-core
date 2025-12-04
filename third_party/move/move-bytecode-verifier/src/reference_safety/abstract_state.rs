@@ -379,9 +379,12 @@ impl AbstractState {
         mut_: bool,
         local: LocalIndex,
     ) -> PartialVMResult<AbstractValue> {
-        // nothing to check in case borrow is mutable since the frame cannot have an full borrow/
-        // epsilon outgoing edge
         if !mut_ && self.is_local_mutably_borrowed(local) {
+            return Err(self.error(StatusCode::BORROWLOC_EXISTS_BORROW_ERROR, offset));
+        }
+
+        // The frame can end up being fully borrowed because of borrow edge overflow.
+        if mut_ && self.has_full_borrows(self.frame_root()) {
             return Err(self.error(StatusCode::BORROWLOC_EXISTS_BORROW_ERROR, offset));
         }
 
@@ -463,6 +466,16 @@ impl AbstractState {
         mut_: bool,
     ) -> PartialVMResult<AbstractValue> {
         let vec_id = safe_unwrap!(vector.ref_id());
+
+        // For immutable borrow, check that the vector is readable
+        if !mut_ && !self.is_readable(vec_id, None) {
+            return Err(self.error(
+                StatusCode::VEC_BORROW_ELEMENT_EXISTS_MUTABLE_BORROW_ERROR,
+                offset,
+            ));
+        }
+
+        // For mutable borrow, check that the vector is writable
         if mut_ && !self.is_writable(vec_id) {
             return Err(self.error(
                 StatusCode::VEC_BORROW_ELEMENT_EXISTS_MUTABLE_BORROW_ERROR,

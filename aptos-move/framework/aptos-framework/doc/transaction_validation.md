@@ -72,6 +72,7 @@
 <b>use</b> <a href="create_signer.md#0x1_create_signer">0x1::create_signer</a>;
 <b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error">0x1::error</a>;
 <b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features">0x1::features</a>;
+<b>use</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool">0x1::governed_gas_pool</a>;
 <b>use</b> <a href="nonce_validation.md#0x1_nonce_validation">0x1::nonce_validation</a>;
 <b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option">0x1::option</a>;
 <b>use</b> <a href="permissioned_signer.md#0x1_permissioned_signer">0x1::permissioned_signer</a>;
@@ -554,10 +555,16 @@ Only called during genesis to initialize system resources for this module.
     // Check <b>if</b> the authentication key is valid
     <b>if</b> (!<a href="transaction_validation.md#0x1_transaction_validation_skip_auth_key_check">skip_auth_key_check</a>(is_simulation, &txn_authentication_key)) {
         <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_is_some">option::is_some</a>(&txn_authentication_key)) {
-            <b>assert</b>!(
-                txn_authentication_key == <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_some">option::some</a>(<a href="account.md#0x1_account_get_authentication_key">account::get_authentication_key</a>(sender_address)),
-                <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="transaction_validation.md#0x1_transaction_validation_PROLOGUE_EINVALID_ACCOUNT_AUTH_KEY">PROLOGUE_EINVALID_ACCOUNT_AUTH_KEY</a>),
-            );
+            <b>if</b> (
+                sender_address == gas_payer_address ||
+                <a href="account.md#0x1_account_exists_at">account::exists_at</a>(sender_address) ||
+                !<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_sponsored_automatic_account_creation_enabled">features::sponsored_automatic_account_creation_enabled</a>()
+            ) {
+                <b>assert</b>!(
+                    txn_authentication_key == <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_some">option::some</a>(<a href="account.md#0x1_account_get_authentication_key">account::get_authentication_key</a>(sender_address)),
+                    <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="transaction_validation.md#0x1_transaction_validation_PROLOGUE_EINVALID_ACCOUNT_AUTH_KEY">PROLOGUE_EINVALID_ACCOUNT_AUTH_KEY</a>),
+                );
+            };
         } <b>else</b> {
             <b>assert</b>!(
                 <a href="transaction_validation.md#0x1_transaction_validation_allow_missing_txn_authentication_key">allow_missing_txn_authentication_key</a>(sender_address),
@@ -1264,13 +1271,28 @@ Called by the Adapter
             );
         };
 
-        <b>if</b> (transaction_fee_amount &gt; storage_fee_refunded) {
-            <b>let</b> burn_amount = transaction_fee_amount - storage_fee_refunded;
-            <a href="transaction_fee.md#0x1_transaction_fee_burn_fee">transaction_fee::burn_fee</a>(gas_payer, burn_amount);
-        } <b>else</b> <b>if</b> (transaction_fee_amount &lt; storage_fee_refunded) {
-            <b>let</b> mint_amount = storage_fee_refunded - transaction_fee_amount;
-            <a href="transaction_fee.md#0x1_transaction_fee_mint_and_refund">transaction_fee::mint_and_refund</a>(gas_payer, mint_amount);
-        };
+        <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_storage_deletion_refund_enabled">features::storage_deletion_refund_enabled</a>()){
+            <b>if</b> (transaction_fee_amount &gt; storage_fee_refunded) {
+                <b>let</b> burn_amount = transaction_fee_amount - storage_fee_refunded;
+                <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_governed_gas_pool_enabled">features::governed_gas_pool_enabled</a>()){
+                    <a href="governed_gas_pool.md#0x1_governed_gas_pool_deposit_gas_fee_v2">governed_gas_pool::deposit_gas_fee_v2</a>(gas_payer, burn_amount);
+                } <b>else</b> {
+                    <a href="transaction_fee.md#0x1_transaction_fee_burn_fee">transaction_fee::burn_fee</a>(gas_payer, burn_amount);
+                }
+            } <b>else</b> <b>if</b> (transaction_fee_amount &lt; storage_fee_refunded) {
+                <b>let</b> mint_amount = storage_fee_refunded - transaction_fee_amount;
+                // TODO: we cannot mint <b>to</b> do storage refund. We need <b>to</b> have a storage refund pool
+                <b>if</b> (!<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_governed_gas_pool_enabled">features::governed_gas_pool_enabled</a>()){
+                    <a href="transaction_fee.md#0x1_transaction_fee_mint_and_refund">transaction_fee::mint_and_refund</a>(gas_payer, mint_amount);
+                }
+            };
+        } <b>else</b> {
+            <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_governed_gas_pool_enabled">features::governed_gas_pool_enabled</a>()){
+                <a href="governed_gas_pool.md#0x1_governed_gas_pool_deposit_gas_fee_v2">governed_gas_pool::deposit_gas_fee_v2</a>(gas_payer, transaction_fee_amount);
+            } <b>else</b> {
+                <a href="transaction_fee.md#0x1_transaction_fee_burn_fee">transaction_fee::burn_fee</a>(gas_payer, transaction_fee_amount);
+            }
+        }
     };
 
     // Increment sequence number
@@ -1639,15 +1661,22 @@ If there is no fee_payer, fee_payer = sender
 
         <b>if</b> (transaction_fee_amount &gt; storage_fee_refunded) {
             <b>let</b> burn_amount = transaction_fee_amount - storage_fee_refunded;
-            <a href="transaction_fee.md#0x1_transaction_fee_burn_fee">transaction_fee::burn_fee</a>(gas_payer_address, burn_amount);
+            <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_governed_gas_pool_enabled">features::governed_gas_pool_enabled</a>()){
+                <a href="governed_gas_pool.md#0x1_governed_gas_pool_deposit_gas_fee_v2">governed_gas_pool::deposit_gas_fee_v2</a>(gas_payer_address, burn_amount);
+            } <b>else</b> {
+                <a href="transaction_fee.md#0x1_transaction_fee_burn_fee">transaction_fee::burn_fee</a>(gas_payer_address, burn_amount);
+            };
             <a href="permissioned_signer.md#0x1_permissioned_signer_check_permission_consume">permissioned_signer::check_permission_consume</a>(
                 &gas_payer,
                 (burn_amount <b>as</b> u256),
                 <a href="transaction_validation.md#0x1_transaction_validation_GasPermission">GasPermission</a> {}
             );
-        } <b>else</b> <b>if</b> (transaction_fee_amount &lt; storage_fee_refunded) {
+        } <b>else</b> {
             <b>let</b> mint_amount = storage_fee_refunded - transaction_fee_amount;
-            <a href="transaction_fee.md#0x1_transaction_fee_mint_and_refund">transaction_fee::mint_and_refund</a>(gas_payer_address, mint_amount);
+            // TODO: we cannot mint <b>to</b> do storage refund. We need <b>to</b> have a storage refund pool
+            <b>if</b> (!<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_governed_gas_pool_enabled">features::governed_gas_pool_enabled</a>()){
+                <a href="transaction_fee.md#0x1_transaction_fee_mint_and_refund">transaction_fee::mint_and_refund</a>(gas_payer_address, mint_amount);
+            };
             <a href="permissioned_signer.md#0x1_permissioned_signer_increase_limit">permissioned_signer::increase_limit</a>(
                 &gas_payer,
                 (mint_amount <b>as</b> u256),

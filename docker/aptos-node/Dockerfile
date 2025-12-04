@@ -18,7 +18,7 @@ patchelf \
 # Set the working directory
 WORKDIR /app
 
-ARG BINARY_PATH=target/debug
+ARG BINARY_PATH=target/release
 # Copy the binary and modify its interpreter
 COPY --chmod=0755 ${BINARY_PATH}/aptos-node /usr/local/bin/aptos-node
 COPY --chmod=0755 ${BINARY_PATH}/aptos /usr/local/bin/aptos

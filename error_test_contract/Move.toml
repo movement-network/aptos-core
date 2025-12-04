@@ -1,0 +1,16 @@
+[package]
+name = "ErrorLocationTest"
+version = "1.0.0"
+authors = []
+
+[addresses]
+error_test = "0x865068c439cac7b4eb72621f1a41d615101a263c6163ec947296a40afe6ae0f1"
+
+[dev-addresses]
+
+[dependencies.AptosFramework]
+git = "https://github.com/movementlabsxyz/aptos-core.git"
+rev = "l1-migration"
+subdir = "aptos-move/framework/aptos-framework"
+
+[dev-dependencies]

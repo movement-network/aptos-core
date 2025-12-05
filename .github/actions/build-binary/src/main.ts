@@ -28,19 +28,9 @@ async function run(): Promise<void> {
     // Parse inputs
     const config = parseInputs();
     
-    // Read default-members from Cargo.toml if building defaults
-    let defaultBinaries: string[] = [];
-    if (config.buildDefaults) {
-      defaultBinaries = await readDefaultMembersFromCargoToml();
-      core.info(`📋 Found ${defaultBinaries.length} default-members in Cargo.toml`);
-    }
-    
     core.info('🔨 Build Configuration:');
     core.info(`  Profile: ${config.profile}`);
     core.info(`  Build defaults: ${config.buildDefaults}`);
-    if (config.buildDefaults) {
-      core.info(`  Default binaries: ${defaultBinaries.length} binaries`);
-    }
     core.info(`  Additional binaries: ${config.binaries.join(', ') || 'none'}`);
     core.info('');
 
@@ -51,8 +41,8 @@ async function run(): Promise<void> {
     const targetFolder = getTargetFolder(config.profile);
     core.info(`📁 Target folder: ${targetFolder}`);
 
-    // Verify built binaries
-    const builtBinaries = await verifyBinaries(config, targetFolder, defaultBinaries);
+    // Discover and verify built binaries
+    const builtBinaries = await discoverBuiltBinaries(config, targetFolder);
 
     // Upload artifacts
     const shortSha = process.env.GITHUB_SHA?.substring(0, 7) || 'unknown';
@@ -71,38 +61,6 @@ async function run(): Promise<void> {
       core.setFailed('An unknown error occurred');
     }
   }
-}
-
-async function readDefaultMembersFromCargoToml(): Promise<string[]> {
-  const cargoTomlPath = path.join(process.cwd(), 'Cargo.toml');
-  
-  if (!fs.existsSync(cargoTomlPath)) {
-    throw new Error(`Cargo.toml not found at ${cargoTomlPath}`);
-  }
-
-  const cargoTomlContent = fs.readFileSync(cargoTomlPath, 'utf-8');
-  const parsed = toml.parse(cargoTomlContent) as CargoToml;
-
-  if (!parsed.workspace || !parsed.workspace['default-members']) {
-    throw new Error('No default-members found in Cargo.toml workspace section');
-  }
-
-  const defaultMembers = parsed.workspace['default-members'];
-  
-  // Extract binary names from paths
-  // e.g., "aptos-node" from "aptos-node"
-  // e.g., "aptos" from "crates/aptos"
-  // e.g., "aptos-backup-cli" from "storage/backup/backup-cli"
-  const binaryNames = defaultMembers.map(member => {
-    const parts = member.split('/');
-    return parts[parts.length - 1];
-  });
-
-  core.info(`📦 Default-members from Cargo.toml:`);
-  binaryNames.forEach(name => core.info(`   - ${name}`));
-  core.info('');
-
-  return binaryNames;
 }
 
 function parseInputs(): BuildConfig {
@@ -140,6 +98,7 @@ async function buildBinaries(config: BuildConfig): Promise<void> {
 
   if (config.buildDefaults) {
     core.info('📦 Building all default-member binaries...');
+    core.info('   (This builds all packages in default-members that produce binaries)');
     await exec.exec('nix', [
       '--extra-experimental-features',
       'nix-command flakes',
@@ -183,46 +142,51 @@ function getTargetFolder(profile: string): string {
   }
 }
 
-async function verifyBinaries(
+async function discoverBuiltBinaries(
   config: BuildConfig,
-  targetFolder: string,
-  defaultBinaries: string[]
+  targetFolder: string
 ): Promise<BinaryInfo[]> {
-  core.info('📋 Verifying built binaries:');
+  core.info('📋 Discovering built binaries in target folder...');
   core.info('');
 
-  const builtBinaries: BinaryInfo[] = [];
-
-  if (config.buildDefaults && defaultBinaries.length > 0) {
-    core.info('Default-member binaries:');
-    for (const binary of defaultBinaries) {
-      const binaryPath = path.join(targetFolder, binary);
-      if (fs.existsSync(binaryPath)) {
-        const stats = fs.statSync(binaryPath);
-        const sizeInMB = (stats.size / (1024 * 1024)).toFixed(2);
-        core.info(`  ✅ ${binary} (${sizeInMB} MB)`);
-        builtBinaries.push({ name: binary, path: binaryPath, size: stats.size });
-      } else {
-        throw new Error(`Binary not found: ${binary} at ${binaryPath}`);
-      }
-    }
-    core.info('');
+  if (!fs.existsSync(targetFolder)) {
+    throw new Error(`Target folder not found: ${targetFolder}`);
   }
 
-  if (config.binaries.length > 0) {
-    core.info('Additional binaries:');
-    for (const binary of config.binaries) {
-      const binaryPath = path.join(targetFolder, binary);
-      if (fs.existsSync(binaryPath)) {
-        const stats = fs.statSync(binaryPath);
+  const builtBinaries: BinaryInfo[] = [];
+  const files = fs.readdirSync(targetFolder);
+
+  // Filter for executable files (binaries)
+  for (const file of files) {
+    const filePath = path.join(targetFolder, file);
+    const stats = fs.statSync(filePath);
+
+    // Check if it's a file and executable
+    if (stats.isFile() && (stats.mode & 0o111) !== 0) {
+      // Skip files with extensions (like .d, .rlib, etc.)
+      if (!file.includes('.')) {
         const sizeInMB = (stats.size / (1024 * 1024)).toFixed(2);
-        core.info(`  ✅ ${binary} (${sizeInMB} MB)`);
-        builtBinaries.push({ name: binary, path: binaryPath, size: stats.size });
-      } else {
-        throw new Error(`Binary not found: ${binary} at ${binaryPath}`);
+        core.info(`  ✅ ${file} (${sizeInMB} MB)`);
+        builtBinaries.push({ name: file, path: filePath, size: stats.size });
       }
     }
-    core.info('');
+  }
+
+  core.info('');
+  core.info(`📊 Total binaries found: ${builtBinaries.length}`);
+
+  // Verify that additional binaries were built if specified
+  if (config.binaries.length > 0) {
+    const builtNames = builtBinaries.map(b => b.name);
+    for (const binary of config.binaries) {
+      if (!builtNames.includes(binary)) {
+        throw new Error(`Expected binary not found: ${binary}`);
+      }
+    }
+  }
+
+  if (builtBinaries.length === 0) {
+    throw new Error('No binaries were built!');
   }
 
   return builtBinaries;

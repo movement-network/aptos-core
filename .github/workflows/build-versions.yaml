@@ -14,7 +14,7 @@ on:
 
 jobs:
   setup:
-    runs-on: ubuntu-latest
+    runs-on: buildjet-16vcpu-ubuntu-2204
     outputs:
       short_sha: ${{ steps.chop_sha.outputs.short_sha }}
       build_date: ${{ steps.build_date.outputs.build_date }}

@@ -96,10 +96,10 @@ jobs:
         with:
           name: aptos-node-${{ env.SHORT_SHA }}
           path: ${{ env.TARGET_FOLDER }}
-      - name: Download aptos binary
+      - name: Download movement binary
         uses: actions/download-artifact@v4
         with:
-          name: aptos-${{ env.SHORT_SHA }}
+          name: movement-${{ env.SHORT_SHA }}
           path: ${{ env.TARGET_FOLDER }}
       - name: Download l1-migration binary
         uses: actions/download-artifact@v4

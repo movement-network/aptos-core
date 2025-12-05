@@ -47,7 +47,7 @@ async function run(): Promise<void> {
     // Upload artifacts
     const shortSha = process.env.GITHUB_SHA?.substring(0, 7) || 'unknown';
     const artifactName = `all-binaries-${shortSha}`;
-    await uploadArtifacts(builtBinaries, artifactName);
+    await uploadArtifacts(builtBinaries, artifactName, targetFolder);
 
     // Set outputs
     core.setOutput('artifact_name', artifactName);
@@ -192,16 +192,24 @@ async function discoverBuiltBinaries(
   return builtBinaries;
 }
 
-async function uploadArtifacts(binaries: BinaryInfo[], artifactName: string): Promise<void> {
+async function uploadArtifacts(
+  binaries: BinaryInfo[],
+  artifactName: string,
+  targetFolder: string
+): Promise<void> {
   core.info(`📤 Uploading ${binaries.length} binaries as artifact: ${artifactName}`);
 
   const artifactClient = new DefaultArtifactClient();
   const files = binaries.map(b => b.path);
 
+  // Use targetFolder as root path so binaries are uploaded without directory structure
+  // This way when downloaded to target/release, they'll be directly in that folder
+  const rootDirectory = path.resolve(targetFolder);
+
   const uploadResponse = await artifactClient.uploadArtifact(
     artifactName,
     files,
-    process.cwd(),
+    rootDirectory,
     {
       retentionDays: 7,
     }

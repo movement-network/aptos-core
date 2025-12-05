@@ -14,10 +14,14 @@ inputs:
   profile:
     description: "Cargo build profile (release, dev, or custom profile name)"
     required: true
+  separate_artifacts:
+    description: "Upload each binary as a separate artifact (true) or all in one artifact (false)"
+    required: false
+    default: "false"
 
 outputs:
   artifact_name:
-    description: "The name of the uploaded artifact"
+    description: "The name of the uploaded artifact (or base name if separate_artifacts=true)"
   binaries_built:
     description: "JSON array of binaries that were built"
 

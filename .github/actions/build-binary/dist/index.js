@@ -77297,6 +77297,7 @@ async function run() {
         core.info(`  Profile: ${config.profile}`);
         core.info(`  Build defaults: ${config.buildDefaults}`);
         core.info(`  Additional binaries: ${config.binaries.join(', ') || 'none'}`);
+        core.info(`  Separate artifacts: ${config.separateArtifacts}`);
         core.info('');
         // Build binaries (assumes Nix is already installed by workflow)
         await buildBinaries(config);
@@ -77307,10 +77308,16 @@ async function run() {
         const builtBinaries = await discoverBuiltBinaries(config, targetFolder);
         // Upload artifacts
         const shortSha = process.env.GITHUB_SHA?.substring(0, 7) || 'unknown';
-        const artifactName = `all-binaries-${shortSha}`;
-        await uploadArtifacts(builtBinaries, artifactName, targetFolder);
+        if (config.separateArtifacts) {
+            await uploadSeparateArtifacts(builtBinaries, shortSha, targetFolder);
+            core.setOutput('artifact_name', `{binary}-${shortSha}`);
+        }
+        else {
+            const artifactName = `all-binaries-${shortSha}`;
+            await uploadCombinedArtifact(builtBinaries, artifactName, targetFolder);
+            core.setOutput('artifact_name', artifactName);
+        }
         // Set outputs
-        core.setOutput('artifact_name', artifactName);
         core.setOutput('binaries_built', JSON.stringify(builtBinaries.map(b => b.name)));
         core.info('✅ Build completed successfully!');
     }
@@ -77325,6 +77332,7 @@ async function run() {
 }
 function parseInputs() {
     const buildDefaults = core.getInput('defaults') === 'true';
+    const separateArtifacts = core.getInput('separate_artifacts') === 'true';
     const binariesInput = core.getInput('binaries');
     let binaries = [];
     if (binariesInput) {
@@ -77349,6 +77357,7 @@ function parseInputs() {
         buildDefaults,
         binaries,
         profile,
+        separateArtifacts,
     };
 }
 async function buildBinaries(config) {
@@ -77436,19 +77445,35 @@ async function discoverBuiltBinaries(config, targetFolder) {
     }
     return builtBinaries;
 }
-async function uploadArtifacts(binaries, artifactName, targetFolder) {
-    core.info(`📤 Uploading ${binaries.length} binaries as artifact: ${artifactName}`);
+async function uploadCombinedArtifact(binaries, artifactName, targetFolder) {
+    core.info(`📤 Uploading ${binaries.length} binaries as single artifact: ${artifactName}`);
     const artifactClient = new artifact_1.DefaultArtifactClient();
     const files = binaries.map(b => b.path);
-    // Use targetFolder as root path so binaries are uploaded without directory structure
-    // This way when downloaded to target/release, they'll be directly in that folder
     const rootDirectory = path.resolve(targetFolder);
     const uploadResponse = await artifactClient.uploadArtifact(artifactName, files, rootDirectory, {
         retentionDays: 7,
     });
     core.info(`✅ Artifact uploaded: ${artifactName}`);
     core.info(`   ID: ${uploadResponse.id}`);
-    core.info(`   Size: ${uploadResponse.size} bytes`);
+    const sizeInMB = ((uploadResponse.size || 0) / (1024 * 1024)).toFixed(2);
+    core.info(`   Size: ${sizeInMB} MB`);
+}
+async function uploadSeparateArtifacts(binaries, shortSha, targetFolder) {
+    core.info(`📤 Uploading ${binaries.length} binaries as separate artifacts...`);
+    core.info('');
+    const artifactClient = new artifact_1.DefaultArtifactClient();
+    const rootDirectory = path.resolve(targetFolder);
+    for (const binary of binaries) {
+        const artifactName = `${binary.name}-${shortSha}`;
+        core.info(`  Uploading: ${artifactName}`);
+        const uploadResponse = await artifactClient.uploadArtifact(artifactName, [binary.path], rootDirectory, {
+            retentionDays: 7,
+        });
+        const sizeInMB = ((uploadResponse.size || 0) / (1024 * 1024)).toFixed(2);
+        core.info(`    ✅ ${artifactName} (${sizeInMB} MB, ID: ${uploadResponse.id})`);
+    }
+    core.info('');
+    core.info(`✅ All ${binaries.length} artifacts uploaded successfully!`);
 }
 run();
 

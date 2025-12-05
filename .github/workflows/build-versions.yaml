@@ -73,12 +73,13 @@ jobs:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
           nix_path: nixpkgs=channel:nixos-unstable
       
-      # Build all binaries
+      # Build all binaries with separate artifacts
       - name: Build all binaries
         uses: ./.github/actions/build-binary
         with:
           binaries: l1-migration
           profile: ${{ needs.setup.outputs.build_profile }}
+          separate_artifacts: true
 
   container-aptos-node:
     needs: 
@@ -97,11 +98,23 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha}}
       
-      # Download all binaries artifact
-      - name: Download all binaries
+      # Download only the binaries needed for aptos-node container
+      - name: Download aptos-node binary
         uses: actions/download-artifact@v4
         with:
-          name: all-binaries-${{ env.SHORT_SHA }}
+          name: aptos-node-${{ env.SHORT_SHA }}
+          path: ${{ env.TARGET_FOLDER }}
+      
+      - name: Download aptos binary
+        uses: actions/download-artifact@v4
+        with:
+          name: aptos-${{ env.SHORT_SHA }}
+          path: ${{ env.TARGET_FOLDER }}
+      
+      - name: Download l1-migration binary
+        uses: actions/download-artifact@v4
+        with:
+          name: l1-migration-${{ env.SHORT_SHA }}
           path: ${{ env.TARGET_FOLDER }}
       
       - name: List binaries
@@ -138,11 +151,11 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha}}
       
-      # Download all binaries artifact
-      - name: Download all binaries
+      # Download only the binary needed for faucet service
+      - name: Download aptos-faucet-service binary
         uses: actions/download-artifact@v4
         with:
-          name: all-binaries-${{ env.SHORT_SHA }}
+          name: aptos-faucet-service-${{ env.SHORT_SHA }}
           path: ${{ env.TARGET_FOLDER }}
       
       - name: List binaries

@@ -53,7 +53,7 @@ jobs:
 
   binaries-all:
     needs: setup
-    runs-on: k8s-movement-labs
+    runs-on: ubuntu-latest
     name: "Build all binaries"
     outputs:
       binaries_built: ${{ steps.build.outputs.binaries_built }}
@@ -88,7 +88,7 @@ jobs:
     needs: 
       - setup
       - binaries-all
-    runs-on: k8s-movement-labs
+    runs-on: ubuntu-latest
     name: "Build container: aptos-node"
     permissions:
       contents: read
@@ -124,41 +124,35 @@ jobs:
       - name: List binaries
         run: ls -la ${{ env.TARGET_FOLDER }}
       
-      # Prepare build configuration
-      - name: Prepare build config
-        id: build_config
-        uses: ./.github/actions/build-container
-        with:
-          image_name: ghcr.io/movementlabsxyz/aptos-node
-          dockerfile_subdir: aptos-node
-          build_args: |
-            BINARY_PATH=${{ env.TARGET_FOLDER }}
-            GIT_SHA=${{ github.sha }}
-            GIT_TAG=${{ needs.setup.outputs.git_tag }}
-            GIT_BRANCH=${{ needs.setup.outputs.git_branch }}
-            BUILD_DATE=${{ needs.setup.outputs.build_date }}
-          ghcr_username: ${{ vars.INFRA_GH_USER }}
-          ghcr_password: ${{ secrets.INFRA_GH_PAT }}
-      
-      # Build and push with Kaniko
-      - name: Build and push with Kaniko
-        uses: aevea/action-kaniko@master
+      # Login to GitHub Container Registry
+      - name: Login to GHCR
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ vars.INFRA_GH_USER }}
           password: ${{ secrets.INFRA_GH_PAT }}
-          image: movementlabsxyz/aptos-node
-          tag: ${{ env.SHORT_SHA }}
-          tag_with_latest: true
-          path: .
-          build_file: ${{ steps.build_config.outputs.dockerfile_path }}
-          extra_args: --build-arg=${{ steps.build_config.outputs.build_args_formatted }}
+      
+      # Build and push Docker image
+      - name: Build and push Docker image
+        run: |
+          docker build \
+            -f docker/aptos-node/Dockerfile \
+            --build-arg BINARY_PATH=${{ env.TARGET_FOLDER }} \
+            --build-arg GIT_SHA=${{ github.sha }} \
+            --build-arg GIT_TAG=${{ needs.setup.outputs.git_tag }} \
+            --build-arg GIT_BRANCH=${{ needs.setup.outputs.git_branch }} \
+            --build-arg BUILD_DATE=${{ needs.setup.outputs.build_date }} \
+            -t ghcr.io/movementlabsxyz/aptos-node:${{ env.SHORT_SHA }} \
+            -t ghcr.io/movementlabsxyz/aptos-node:latest \
+            .
+          docker push ghcr.io/movementlabsxyz/aptos-node:${{ env.SHORT_SHA }}
+          docker push ghcr.io/movementlabsxyz/aptos-node:latest
 
   container-aptos-faucet-service:
     needs: 
       - setup
       - binaries-all
-    runs-on: k8s-movement-labs
+    runs-on: ubuntu-latest
     name: "Build container: aptos-faucet-service"
     permissions:
       contents: read
@@ -181,32 +175,26 @@ jobs:
       - name: List binaries
         run: ls -la ${{ env.TARGET_FOLDER }}
       
-      # Prepare build configuration
-      - name: Prepare build config
-        id: build_config
-        uses: ./.github/actions/build-container
-        with:
-          image_name: ghcr.io/movementlabsxyz/aptos-faucet-service
-          dockerfile_subdir: aptos-faucet-service
-          build_args: |
-            BINARY_PATH=${{ env.TARGET_FOLDER }}
-            GIT_SHA=${{ github.sha }}
-            GIT_TAG=${{ needs.setup.outputs.git_tag }}
-            GIT_BRANCH=${{ needs.setup.outputs.git_branch }}
-            BUILD_DATE=${{ needs.setup.outputs.build_date }}
-          ghcr_username: ${{ vars.INFRA_GH_USER }}
-          ghcr_password: ${{ secrets.INFRA_GH_PAT }}
-      
-      # Build and push with Kaniko
-      - name: Build and push with Kaniko
-        uses: aevea/action-kaniko@master
+      # Login to GitHub Container Registry
+      - name: Login to GHCR
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ vars.INFRA_GH_USER }}
           password: ${{ secrets.INFRA_GH_PAT }}
-          image: movementlabsxyz/aptos-faucet-service
-          tag: ${{ env.SHORT_SHA }}
-          tag_with_latest: true
-          path: .
-          build_file: ${{ steps.build_config.outputs.dockerfile_path }}
-          extra_args: --build-arg=${{ steps.build_config.outputs.build_args_formatted }}
+      
+      # Build and push Docker image
+      - name: Build and push Docker image
+        run: |
+          docker build \
+            -f docker/aptos-faucet-service/Dockerfile \
+            --build-arg BINARY_PATH=${{ env.TARGET_FOLDER }} \
+            --build-arg GIT_SHA=${{ github.sha }} \
+            --build-arg GIT_TAG=${{ needs.setup.outputs.git_tag }} \
+            --build-arg GIT_BRANCH=${{ needs.setup.outputs.git_branch }} \
+            --build-arg BUILD_DATE=${{ needs.setup.outputs.build_date }} \
+            -t ghcr.io/movementlabsxyz/aptos-faucet-service:${{ env.SHORT_SHA }} \
+            -t ghcr.io/movementlabsxyz/aptos-faucet-service:latest \
+            .
+          docker push ghcr.io/movementlabsxyz/aptos-faucet-service:${{ env.SHORT_SHA }}
+          docker push ghcr.io/movementlabsxyz/aptos-faucet-service:latest

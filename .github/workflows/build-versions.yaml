@@ -123,8 +123,10 @@ jobs:
       
       - name: List binaries
         run: ls -la ${{ env.TARGET_FOLDER }}
-        
-      - name: Build Container
+      
+      # Prepare build configuration
+      - name: Prepare build config
+        id: build_config
         uses: ./.github/actions/build-container
         with:
           image_name: ghcr.io/movementlabsxyz/aptos-node
@@ -137,6 +139,20 @@ jobs:
             BUILD_DATE=${{ needs.setup.outputs.build_date }}
           ghcr_username: ${{ vars.INFRA_GH_USER }}
           ghcr_password: ${{ secrets.INFRA_GH_PAT }}
+      
+      # Build and push with Kaniko
+      - name: Build and push with Kaniko
+        uses: aevea/action-kaniko@master
+        with:
+          registry: ghcr.io
+          username: ${{ vars.INFRA_GH_USER }}
+          password: ${{ secrets.INFRA_GH_PAT }}
+          image: movementlabsxyz/aptos-node
+          tag: ${{ env.SHORT_SHA }}
+          tag_with_latest: true
+          path: .
+          build_file: ${{ steps.build_config.outputs.dockerfile_path }}
+          extra_args: --build-arg=${{ steps.build_config.outputs.build_args_formatted }}
 
   container-aptos-faucet-service:
     needs: 
@@ -164,8 +180,10 @@ jobs:
       
       - name: List binaries
         run: ls -la ${{ env.TARGET_FOLDER }}
-        
-      - name: Build Container
+      
+      # Prepare build configuration
+      - name: Prepare build config
+        id: build_config
         uses: ./.github/actions/build-container
         with:
           image_name: ghcr.io/movementlabsxyz/aptos-faucet-service
@@ -178,3 +196,17 @@ jobs:
             BUILD_DATE=${{ needs.setup.outputs.build_date }}
           ghcr_username: ${{ vars.INFRA_GH_USER }}
           ghcr_password: ${{ secrets.INFRA_GH_PAT }}
+      
+      # Build and push with Kaniko
+      - name: Build and push with Kaniko
+        uses: aevea/action-kaniko@master
+        with:
+          registry: ghcr.io
+          username: ${{ vars.INFRA_GH_USER }}
+          password: ${{ secrets.INFRA_GH_PAT }}
+          image: movementlabsxyz/aptos-faucet-service
+          tag: ${{ env.SHORT_SHA }}
+          tag_with_latest: true
+          path: .
+          build_file: ${{ steps.build_config.outputs.dockerfile_path }}
+          extra_args: --build-arg=${{ steps.build_config.outputs.build_args_formatted }}

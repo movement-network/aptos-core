@@ -1,5 +1,5 @@
 name: "Build Container"
-description: "Builds and pushes Docker container images with configurable inputs using Kaniko for K8s compatibility"
+description: "Builds and pushes Docker container images with configurable inputs"
 inputs:
   image_name:
     description: "Full Docker image name (e.g., ghcr.io/org/repo/image)"
@@ -21,89 +21,50 @@ inputs:
 outputs:
   image_name:
     description: "The Docker image name that was built and pushed"
+    value: ${{ inputs.image_name }}
   image_tag:
     description: "The tag of the Docker image that was built and pushed"
-  registry:
-    description: "The container registry where the image was pushed"
-  artifact_name:
-    description: "The name of the uploaded artifact"
+    value: ${{ steps.set_env.outputs.git_sha_short }}
+  dockerfile_path:
+    description: "The path to the Dockerfile"
+    value: ${{ steps.set_env.outputs.dockerfile_path }}
+  build_args_formatted:
+    description: "Formatted build arguments"
+    value: ${{ steps.format_args.outputs.build_args }}
+
 runs:
   using: "composite"
   steps:
   - name: Set build environment
+    id: set_env
     run: |
-      echo "GIT_SHA_SHORT=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_ENV
-      echo "BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_ENV
+      GIT_SHA_SHORT=$(echo ${{ github.sha }} | cut -c1-7)
+      echo "git_sha_short=$GIT_SHA_SHORT" >> $GITHUB_OUTPUT
+      echo "dockerfile_path=docker/${{ inputs.dockerfile_subdir }}/Dockerfile" >> $GITHUB_OUTPUT
     shell: bash
 
-  - name: Install Kaniko
-    run: |
-      # Download and install Kaniko executor
-      wget -O /tmp/kaniko.tar.gz https://github.com/GoogleContainerTools/kaniko/releases/download/v1.23.2/kaniko-amd64.tar.gz
-      sudo tar -xzf /tmp/kaniko.tar.gz -C /usr/local/bin/ executor
-      sudo chmod +x /usr/local/bin/executor
-    shell: bash
-
-  - name: Prepare Kaniko config
-    run: |
-      # Create Kaniko config directory
-      mkdir -p $HOME/.docker
-
-      # Create Docker config for GHCR authentication
-      cat > $HOME/.docker/config.json <<EOF
-      {
-        "auths": {
-          "ghcr.io": {
-            "auth": "$(echo -n ${{ inputs.ghcr_username }}:${{ inputs.ghcr_password }} | base64)"
-          }
-        }
-      }
-      EOF
-    shell: bash
-
-  - name: Build and push with Kaniko
+  - name: Verify Dockerfile exists
     run: |
       DOCKERFILE_PATH="docker/${{ inputs.dockerfile_subdir }}/Dockerfile"
       if [ ! -f "$DOCKERFILE_PATH" ]; then
         echo "Error: Dockerfile not found at $DOCKERFILE_PATH"
         exit 1
       fi
+    shell: bash
 
-      # Prepare build args for Kaniko
+  - name: Format build args
+    id: format_args
+    run: |
+      # Convert multi-line build args to comma-separated format for Kaniko
       BUILD_ARGS=""
       while IFS= read -r line; do
         if [[ -n "$line" ]]; then
-          BUILD_ARGS="$BUILD_ARGS --build-arg $line"
+          if [[ -z "$BUILD_ARGS" ]]; then
+            BUILD_ARGS="$line"
+          else
+            BUILD_ARGS="$BUILD_ARGS,$line"
+          fi
         fi
       done <<< "${{ inputs.build_args }}"
-
-      # Use Kaniko executor to build and push
-      /usr/local/bin/executor \
-        --dockerfile=$DOCKERFILE_PATH \
-        --context=$(pwd) \
-        --destination=${{ inputs.image_name }}:${{ env.GIT_SHA_SHORT }} \
-        --destination=${{ inputs.image_name }}:latest \
-        $BUILD_ARGS \
-        --cache=true \
-        --compressed-caching=false \
-        --skip-tls-verify-registry=ghcr.io
-    shell: bash
-
-  - name: Output image information
-    run: |
-      echo "✅ Docker image built and pushed successfully!"
-      echo "📦 Image: ${{ inputs.image_name }}:${{ env.GIT_SHA_SHORT }}"
-      echo "🏷️ Tag: ${{ env.GIT_SHA_SHORT }}"
-      echo "🌐 Registry: ${{ inputs.image_name }}"
-    shell: bash
-
-  # Add image information to summary
-  - name: Add image info to summary
-    run: |
-      echo "### Docker Image Built and Pushed" >> $GITHUB_STEP_SUMMARY
-      echo "" >> $GITHUB_STEP_SUMMARY
-      echo "- **Image:** \`${{ inputs.image_name }}:${{ env.GIT_SHA_SHORT }}\`" >> $GITHUB_STEP_SUMMARY
-      echo "- **Tag:** \`${{ env.GIT_SHA_SHORT }}\`" >> $GITHUB_STEP_SUMMARY
-      echo "- **Registry:** \`${{ inputs.image_name }}\`" >> $GITHUB_STEP_SUMMARY
-      echo "- **Build Method:** Kaniko (K8s-compatible)" >> $GITHUB_STEP_SUMMARY
+      echo "build_args=$BUILD_ARGS" >> $GITHUB_OUTPUT
     shell: bash

@@ -14,7 +14,7 @@ on:
 
 jobs:
   setup:
-    runs-on: ubuntu-latest
+    runs-on: buildjet-16vcpu-ubuntu-2204
     outputs:
       short_sha: ${{ steps.chop_sha.outputs.short_sha }}
       build_date: ${{ steps.build_date.outputs.build_date }}
@@ -54,7 +54,7 @@ jobs:
   binaries-aptos-node:
     needs: 
       - setup
-    runs-on: k8s-movement-labs
+    runs-on: buildjet-16vcpu-ubuntu-2204
     name: "Build ${{ matrix.binary.package }} with Nix"
     strategy:
       matrix:
@@ -78,7 +78,7 @@ jobs:
     needs: 
       - setup
       - binaries-aptos-node
-    runs-on: ubuntu-latest
+    runs-on: buildjet-16vcpu-ubuntu-2204
     name: "build container: aptos-node"
     permissions:
       contents: read
@@ -126,7 +126,7 @@ jobs:
   binaries-aptos-faucet-service:
     needs: 
       - setup
-    runs-on: k8s-movement-labs
+    runs-on: buildjet-16vcpu-ubuntu-2204
     name: "Build ${{ matrix.binary.package }} with Nix"
     strategy:
       matrix:
@@ -148,7 +148,7 @@ jobs:
     needs: 
       - setup
       - binaries-aptos-faucet-service
-    runs-on: ubuntu-latest
+    runs-on: buildjet-16vcpu-ubuntu-2204
     name: "build container: aptos-faucet-service"
     permissions:
       contents: read
@@ -186,7 +186,7 @@ jobs:
   binaries-aptos-tools:
     needs: 
       - setup
-    runs-on: k8s-movement-labs
+    runs-on: buildjet-16vcpu-ubuntu-2204
     name: "Build ${{ matrix.binary.package }} with Nix"
     strategy:
       matrix:

@@ -55,6 +55,8 @@ jobs:
     needs: setup
     runs-on: k8s-movement-labs
     name: "Build all binaries"
+    outputs:
+      binaries_built: ${{ steps.build.outputs.binaries_built }}
     env:
       TARGET_FOLDER: target/${{ needs.setup.outputs.build_profile }}
     steps:
@@ -75,6 +77,7 @@ jobs:
       
       # Build all binaries with separate artifacts
       - name: Build all binaries
+        id: build
         uses: ./.github/actions/build-binary
         with:
           binaries: l1-migration
@@ -99,16 +102,17 @@ jobs:
           ref: ${{ inputs.ref || github.sha}}
       
       # Download only the binaries needed for aptos-node container
+      # Note: Binary names come from the actual executable names, not package names
       - name: Download aptos-node binary
         uses: actions/download-artifact@v4
         with:
           name: aptos-node-${{ env.SHORT_SHA }}
           path: ${{ env.TARGET_FOLDER }}
       
-      - name: Download aptos binary
+      - name: Download movement binary (aptos CLI)
         uses: actions/download-artifact@v4
         with:
-          name: aptos-${{ env.SHORT_SHA }}
+          name: movement-${{ env.SHORT_SHA }}
           path: ${{ env.TARGET_FOLDER }}
       
       - name: Download l1-migration binary

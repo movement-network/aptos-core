@@ -53,7 +53,7 @@ jobs:
 
   binaries-all:
     needs: setup
-    runs-on: k8s-movement-labs
+    runs-on: buildjet-16vcpu-ubuntu-2204
     name: "Build all binaries"
     outputs:
       binaries_built: ${{ steps.build.outputs.binaries_built }}
@@ -88,7 +88,7 @@ jobs:
     needs: 
       - setup
       - binaries-all
-    runs-on: k8s-movement-labs
+    runs-on: buildjet-16vcpu-ubuntu-2204
     name: "Build container: aptos-node"
     permissions:
       contents: read
@@ -142,7 +142,7 @@ jobs:
     needs: 
       - setup
       - binaries-all
-    runs-on: k8s-movement-labs
+    runs-on: buildjet-16vcpu-ubuntu-2204
     name: "Build container: aptos-faucet-service"
     permissions:
       contents: read

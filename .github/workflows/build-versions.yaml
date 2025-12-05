@@ -51,35 +51,41 @@ jobs:
         run: |
           echo "build_profile=${{ inputs.build_profile || 'release' }}" >> $GITHUB_OUTPUT
 
-  binaries-aptos-node:
-    needs: 
-      - setup
+  binaries-all:
+    needs: setup
     runs-on: k8s-movement-labs
-    name: "Build ${{ matrix.binary.package }} with Nix"
-    strategy:
-      matrix:
-        binary:
-          - package: "aptos-node"
-          - package: "aptos"
-          - package: "l1-migration"
+    name: "Build all binaries"
     env:
       TARGET_FOLDER: target/${{ needs.setup.outputs.build_profile }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref || github.sha}}
-      - name: Build binary ${{ matrix.binary.package }}
+      
+      # Install system dependencies
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y xz-utils
+      
+      # Install Nix
+      - name: Install Nix
+        uses: cachix/install-nix-action@v27
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+          nix_path: nixpkgs=channel:nixos-unstable
+      
+      # Build all binaries
+      - name: Build all binaries
         uses: ./.github/actions/build-binary
         with:
-          binary_package: ${{ matrix.binary.package }}
+          binaries: l1-migration
           profile: ${{ needs.setup.outputs.build_profile }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+
   container-aptos-node:
     needs: 
       - setup
-      - binaries-aptos-node
+      - binaries-all
     runs-on: ubuntu-latest
-    name: "build container: aptos-node"
+    name: "Build container: aptos-node"
     permissions:
       contents: read
       packages: write
@@ -90,22 +96,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref || github.sha}}
-      # Download artifacts
-      - name: Download aptos-node binary
+      
+      # Download all binaries artifact
+      - name: Download all binaries
         uses: actions/download-artifact@v4
         with:
-          name: aptos-node-${{ env.SHORT_SHA }}
+          name: all-binaries-${{ env.SHORT_SHA }}
           path: ${{ env.TARGET_FOLDER }}
-      - name: Download aptos binary
-        uses: actions/download-artifact@v4
-        with:
-          name: aptos-${{ env.SHORT_SHA }}
-          path: ${{ env.TARGET_FOLDER }}
-      - name: Download l1-migration binary
-        uses: actions/download-artifact@v4
-        with:
-          name: l1-migration-${{ env.SHORT_SHA }}
-          path: ${{ env.TARGET_FOLDER }}
+      
       - name: List binaries
         run: ls -la ${{ env.TARGET_FOLDER }}
         
@@ -123,33 +121,12 @@ jobs:
           ghcr_username: ${{ vars.INFRA_GH_USER }}
           ghcr_password: ${{ secrets.INFRA_GH_PAT }}
 
-  binaries-aptos-faucet-service:
-    needs: 
-      - setup
-    runs-on: k8s-movement-labs
-    name: "Build ${{ matrix.binary.package }} with Nix"
-    strategy:
-      matrix:
-        binary:
-          - package: "aptos-faucet-service"
-    env:
-      TARGET_FOLDER: target/${{ needs.setup.outputs.build_profile }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.ref || github.sha}}
-      - name: Build binary ${{ matrix.binary.package }}
-        uses: ./.github/actions/build-binary
-        with:
-          binary_package: ${{ matrix.binary.package }}
-          profile: ${{ needs.setup.outputs.build_profile }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
   container-aptos-faucet-service:
     needs: 
       - setup
-      - binaries-aptos-faucet-service
+      - binaries-all
     runs-on: ubuntu-latest
-    name: "build container: aptos-faucet-service"
+    name: "Build container: aptos-faucet-service"
     permissions:
       contents: read
       packages: write
@@ -160,12 +137,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref || github.sha}}
-      # Download artifacts
-      - name: Download aptos-faucet-service binary
+      
+      # Download all binaries artifact
+      - name: Download all binaries
         uses: actions/download-artifact@v4
         with:
-          name: aptos-faucet-service-${{ env.SHORT_SHA }}
+          name: all-binaries-${{ env.SHORT_SHA }}
           path: ${{ env.TARGET_FOLDER }}
+      
       - name: List binaries
         run: ls -la ${{ env.TARGET_FOLDER }}
         
@@ -182,25 +161,3 @@ jobs:
             BUILD_DATE=${{ needs.setup.outputs.build_date }}
           ghcr_username: ${{ vars.INFRA_GH_USER }}
           ghcr_password: ${{ secrets.INFRA_GH_PAT }}
-
-  binaries-aptos-tools:
-    needs: 
-      - setup
-    runs-on: k8s-movement-labs
-    name: "Build ${{ matrix.binary.package }} with Nix"
-    strategy:
-      matrix:
-        binary:
-          - package: "aptos-transaction-emitter"
-    env:
-      TARGET_FOLDER: target/${{ needs.setup.outputs.build_profile }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.ref || github.sha}}
-      - name: Build binary ${{ matrix.binary.package }}
-        uses: ./.github/actions/build-binary
-        with:
-          binary_package: ${{ matrix.binary.package }}
-          profile: ${{ needs.setup.outputs.build_profile }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}

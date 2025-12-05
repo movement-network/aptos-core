@@ -1,60 +1,26 @@
 name: "Build Binary"
-description: "Builds a Rust binary using Nix and uploads artifact"
+description: "Builds Rust binaries using Nix - builds default-members plus any additional specified binaries"
+author: "Movement Labs"
+
 inputs:
-  binary_package:
-    description: "Cargo package name to build"
-    required: true
-  profile:
-    description: "Cargo build profile"
-    required: true
-  features:
-    description: "Cargo features to enable"
+  defaults:
+    description: "Whether to build all default-members from Cargo.toml"
+    required: false
+    default: "true"
+  binaries:
+    description: "List of additional binaries to build (comma-separated string or YAML list)"
     required: false
     default: ""
-  github_token:
-    description: "GitHub token for Nix installation"
+  profile:
+    description: "Cargo build profile (release, dev, or custom profile name)"
     required: true
 
 outputs:
   artifact_name:
     description: "The name of the uploaded artifact"
-    value: ${{ inputs.binary_package }}-${{ env.SHORT_SHA }}
+  binaries_built:
+    description: "JSON array of binaries that were built"
 
 runs:
-  using: "composite"
-  steps:
-  - run: sudo apt-get update && sudo apt-get install -y xz-utils
-    shell: bash
-  - uses: cachix/install-nix-action@v27
-    with:
-      github_access_token: ${{ inputs.github_token }}
-      nix_path: nixpkgs=channel:nixos-unstable
-  - run: |
-      nix develop -c cargo build -p ${{ inputs.binary_package }} --profile ${{ inputs.profile }} --features "${{ inputs.features }}"
-    shell: bash
-  - name: determine output directory
-    run: |
-      if [ -d "target/release" ]; then
-        echo "Using release build output directory"
-        echo "TARGET_FOLDER=target/release" >> $GITHUB_ENV
-      else
-        echo "Using debug build output directory"
-        echo "TARGET_FOLDER=target/debug" >> $GITHUB_ENV
-      fi
-    shell: bash
-  - name: shorten sha
-    run: echo "SHORT_SHA=$(echo ${GITHUB_SHA} | cut -c1-7)" >> $GITHUB_ENV
-    shell: bash
-  - run: |
-      if [ -f "${{ env.TARGET_FOLDER }}/${{ inputs.binary_package }}" ]; then
-        echo "✅ Binary ${{ inputs.binary_package }} built successfully"
-      else
-        echo "❌ Binary ${{ inputs.binary_package }} not found"
-        exit 1
-      fi
-    shell: bash
-  - uses: actions/upload-artifact@v4
-    with:
-      name: ${{ inputs.binary_package }}-${{ env.SHORT_SHA }}
-      path: ${{ env.TARGET_FOLDER }}/${{ inputs.binary_package }}
-      retention-days: 7
+  using: "node20"
+  main: "dist/index.js"

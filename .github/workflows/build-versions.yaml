@@ -60,7 +60,7 @@ jobs:
       matrix:
         binary:
           - package: "aptos-node"
-          - package: "aptos"
+          - package: "movement"
           - package: "l1-migration"
     env:
       TARGET_FOLDER: target/${{ needs.setup.outputs.build_profile }}

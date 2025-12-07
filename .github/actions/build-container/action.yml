@@ -21,69 +21,50 @@ inputs:
 outputs:
   image_name:
     description: "The Docker image name that was built and pushed"
+    value: ${{ inputs.image_name }}
   image_tag:
     description: "The tag of the Docker image that was built and pushed"
-  registry:
-    description: "The container registry where the image was pushed"
-  artifact_name:
-    description: "The name of the uploaded artifact"
+    value: ${{ steps.set_env.outputs.git_sha_short }}
+  dockerfile_path:
+    description: "The path to the Dockerfile"
+    value: ${{ steps.set_env.outputs.dockerfile_path }}
+  build_args_formatted:
+    description: "Formatted build arguments"
+    value: ${{ steps.format_args.outputs.build_args }}
+
 runs:
   using: "composite"
   steps:
-  - name: Set up Docker Buildx
-    uses: docker/setup-buildx-action@v3
-    with:
-      version: latest
-
-  - name: Login to GHCR
-    uses: docker/login-action@v3
-    with:
-      registry: ghcr.io
-      username: ${{ inputs.ghcr_username }}
-      password: ${{ inputs.ghcr_password }}
-
   - name: Set build environment
+    id: set_env
     run: |
-      echo "GIT_SHA_SHORT=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_ENV
-      echo "BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_ENV
+      GIT_SHA_SHORT=$(echo ${{ github.sha }} | cut -c1-7)
+      echo "git_sha_short=$GIT_SHA_SHORT" >> $GITHUB_OUTPUT
+      echo "dockerfile_path=docker/${{ inputs.dockerfile_subdir }}/Dockerfile" >> $GITHUB_OUTPUT
     shell: bash
 
-  - name: Build and push Docker image
+  - name: Verify Dockerfile exists
     run: |
       DOCKERFILE_PATH="docker/${{ inputs.dockerfile_subdir }}/Dockerfile"
       if [ ! -f "$DOCKERFILE_PATH" ]; then
         echo "Error: Dockerfile not found at $DOCKERFILE_PATH"
         exit 1
       fi
+    shell: bash
 
-      BUILD_ARGS_ARRAY=()
+  - name: Format build args
+    id: format_args
+    run: |
+      # Convert multi-line build args to comma-separated format for Kaniko
+      BUILD_ARGS=""
       while IFS= read -r line; do
-        [[ -n "$line" ]] && BUILD_ARGS_ARRAY+=("--build-arg" "$line")
+        if [[ -n "$line" ]]; then
+          if [[ -z "$BUILD_ARGS" ]]; then
+            BUILD_ARGS="$line"
+          else
+            BUILD_ARGS="$BUILD_ARGS,$line"
+          fi
+        fi
       done <<< "${{ inputs.build_args }}"
-
-      docker build \
-        "${BUILD_ARGS_ARRAY[@]}" \
-        -f "$DOCKERFILE_PATH" \
-        -t ${{ inputs.image_name }}:${{ env.GIT_SHA_SHORT }} \
-        -t ${{ inputs.image_name }}:latest .
-      docker push ${{ inputs.image_name }}:${{ env.GIT_SHA_SHORT }}
-      docker push ${{ inputs.image_name }}:latest
-    shell: bash
-
-  - name: Output image information
-    run: |
-      echo "✅ Docker image built and pushed successfully!"
-      echo "📦 Image: ${{ inputs.image_name }}:${{ env.GIT_SHA_SHORT }}"
-      echo "🏷️ Tag: ${{ env.GIT_SHA_SHORT }}"
-      echo "🌐 Registry: ${{ inputs.image_name }}"
-    shell: bash
-  
-  # Add image information to summary
-  - name: Add image info to summary
-    run: |
-      echo "### Docker Image Built and Pushed" >> $GITHUB_STEP_SUMMARY
-      echo "" >> $GITHUB_STEP_SUMMARY
-      echo "- **Image:** `${{ inputs.image_name }}:${{ env.GIT_SHA_SHORT }}`" >> $GITHUB_STEP_SUMMARY
-      echo "- **Tag:** `${{ env.GIT_SHA_SHORT }}`" >> $GITHUB_STEP_SUMMARY
-      echo "- **Registry:** `${{ inputs.image_name }}`" >> $GITHUB_STEP_SUMMARY
+      echo "build_args=$BUILD_ARGS" >> $GITHUB_OUTPUT
     shell: bash

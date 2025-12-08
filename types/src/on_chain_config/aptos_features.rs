@@ -145,6 +145,7 @@ pub enum FeatureFlag {
     DISTRIBUTE_TRANSACTION_FEE = 97,
     GOVERNED_GAS_POOL = 223,
     STAKE_REWARD_USING_TREASURY = 224,
+    GOVERNED_GAS_POOL_AGGREGATORS = 225,
 }
 
 impl FeatureFlag {
@@ -245,6 +246,7 @@ impl FeatureFlag {
             // FeatureFlag::CALCULATE_TRANSACTION_FEE_FOR_DISTRIBUTION,
             // FeatureFlag::DISTRIBUTE_TRANSACTION_FEE,
             FeatureFlag::GOVERNED_GAS_POOL,
+            FeatureFlag::GOVERNED_GAS_POOL_AGGREGATORS,
         ]
     }
 }

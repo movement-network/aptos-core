@@ -559,7 +559,7 @@ module aptos_framework::governed_gas_pool {
     /// Add some treasury to the governed gas pool.
     ///
     /// @param aptos_framework is the signer of the aptos_framework module.
-    fun test_deposite_treasury_and_counter(aptos_framework: &signer, treasury: &signer) acquires GovernedGasPool, GovernedGasPoolExtension, AptosCoinMintCapability {
+    fun test_deposite_treasury_and_counter(aptos_framework: &signer, treasury: &signer) acquires GovernedGasPool, GovernedGasPoolExtension, GovernedGasPoolCounters, AptosCoinMintCapability {
        
         // initialize the modules
         initialize_for_test(aptos_framework);
@@ -586,6 +586,169 @@ module aptos_framework::governed_gas_pool {
         assert!(coin::value(&withdraw) == 10, 6);
 
         coin::deposit(@0xdddd, withdraw);
+    }
+
+    // ============ Aggregator V2 Tests ============
+
+    #[test_only]
+    /// Helper to enable the aggregator feature flag for testing
+    fun enable_aggregator_feature_for_test(aptos_framework: &signer) {
+        features::change_feature_flags_for_testing(
+            aptos_framework,
+            vector[features::get_governed_gas_pool_aggregators_feature()],
+            vector[]
+        );
+    }
+
+    #[test(aptos_framework = @aptos_framework, depositor = @0xdddd)]
+    /// Test gas fee tracking with aggregators enabled
+    fun test_gas_fee_tracking_with_aggregators(
+        aptos_framework: &signer, 
+        depositor: &signer
+    ) acquires GovernedGasPool, GovernedGasPoolCounters, AptosCoinMintCapability {
+        initialize_for_test(aptos_framework);
+        enable_aggregator_feature_for_test(aptos_framework);
+
+        aptos_account::create_account(signer::address_of(depositor));
+        mint_for_test(signer::address_of(depositor), 10000);
+
+        deposit_gas_fee_v2(signer::address_of(depositor), 100);
+        deposit_gas_fee_v2(signer::address_of(depositor), 200);
+        deposit_gas_fee_v2(signer::address_of(depositor), 300);
+
+        let gas_total = aggregator_v2::read_snapshot(&get_gas_fee_total());
+        assert!(gas_total == 600, 1);
+
+        deposit_gas_fee_v2(signer::address_of(depositor), 0);
+        let gas_total_after = aggregator_v2::read_snapshot(&get_gas_fee_total());
+        assert!(gas_total_after == 600, 2);
+    }
+
+    #[test(aptos_framework = @aptos_framework, treasury = @0xdddd)]
+    /// Test treasury tracking with aggregators enabled
+    fun test_treasury_tracking_with_aggregators(
+        aptos_framework: &signer, 
+        treasury: &signer
+    ) acquires GovernedGasPool, GovernedGasPoolExtension, GovernedGasPoolCounters, AptosCoinMintCapability {
+        initialize_for_test(aptos_framework);
+        enable_aggregator_feature_for_test(aptos_framework);
+
+        aptos_account::create_account(signer::address_of(treasury));
+        mint_for_test(signer::address_of(treasury), 10000);
+
+        deposit_treasury(treasury, 500);
+        deposit_treasury(treasury, 300);
+
+        let treasury_total = aggregator_v2::read_snapshot(&get_treasury_total());
+        assert!(treasury_total == 800, 1);
+    }
+
+    #[test(aptos_framework = @aptos_framework, depositor = @0xdddd, beneficiary = @0xbbbb)]
+    /// Test governance funding tracking with aggregators enabled
+    fun test_governance_funding_tracking_with_aggregators(
+        aptos_framework: &signer,
+        depositor: &signer,
+        beneficiary: &signer
+    ) acquires GovernedGasPool, GovernedGasPoolCounters, AptosCoinMintCapability {
+        initialize_for_test(aptos_framework);
+        enable_aggregator_feature_for_test(aptos_framework);
+
+        aptos_account::create_account(signer::address_of(depositor));
+        aptos_account::create_account(signer::address_of(beneficiary));
+        aptos_account::register_apt(beneficiary);
+        
+        mint_for_test(signer::address_of(depositor), 10000);
+        deposit_gas_fee_v2(signer::address_of(depositor), 5000);
+
+        fund<AptosCoin>(aptos_framework, signer::address_of(beneficiary), 200);
+        fund<AptosCoin>(aptos_framework, signer::address_of(beneficiary), 100);
+
+        let governance_total = aggregator_v2::read_snapshot(&get_governance_funded_total());
+        assert!(governance_total == 300, 1);
+    }
+
+    #[test(aptos_framework = @aptos_framework, treasury = @0xdddd)]
+    /// Test reward withdrawal tracking with aggregators enabled
+    fun test_reward_withdrawal_tracking_with_aggregators(
+        aptos_framework: &signer,
+        treasury: &signer
+    ) acquires GovernedGasPool, GovernedGasPoolExtension, GovernedGasPoolCounters, AptosCoinMintCapability {
+        initialize_for_test(aptos_framework);
+        enable_aggregator_feature_for_test(aptos_framework);
+
+        aptos_account::create_account(signer::address_of(treasury));
+        mint_for_test(signer::address_of(treasury), 10000);
+        deposit_treasury(treasury, 5000);
+
+        let reward1 = withdraw_staking_reward<AptosCoin>(100);
+        let reward2 = withdraw_staking_reward<AptosCoin>(150);
+
+        let reward_total = aggregator_v2::read_snapshot(&get_reward_withdrawn_total());
+        assert!(reward_total == 250, 1);
+
+        coin::deposit(signer::address_of(treasury), reward1);
+        coin::deposit(signer::address_of(treasury), reward2);
+    }
+
+    #[test(aptos_framework = @aptos_framework, treasury = @0xdddd, beneficiary = @0xbbbb)]
+    /// Comprehensive test: verify accounting invariant (inflows >= outflows)
+    fun test_accounting_invariant_with_aggregators(
+        aptos_framework: &signer,
+        treasury: &signer,
+        beneficiary: &signer
+    ) acquires GovernedGasPool, GovernedGasPoolExtension, GovernedGasPoolCounters, AptosCoinMintCapability {
+        initialize_for_test(aptos_framework);
+        enable_aggregator_feature_for_test(aptos_framework);
+
+        aptos_account::create_account(signer::address_of(treasury));
+        aptos_account::create_account(signer::address_of(beneficiary));
+        aptos_account::register_apt(beneficiary);
+        mint_for_test(signer::address_of(treasury), 100000);
+
+        // INFLOWS
+        deposit_gas_fee_v2(signer::address_of(treasury), 1000);
+        deposit_gas_fee_v2(signer::address_of(treasury), 2000);
+        deposit_treasury(treasury, 5000);
+
+        // OUTFLOWS
+        fund<AptosCoin>(aptos_framework, signer::address_of(beneficiary), 500);
+        let reward = withdraw_staking_reward<AptosCoin>(300);
+        coin::deposit(signer::address_of(beneficiary), reward);
+
+        let gas_total = aggregator_v2::read_snapshot(&get_gas_fee_total());
+        let treasury_total = aggregator_v2::read_snapshot(&get_treasury_total());
+        let governance_total = aggregator_v2::read_snapshot(&get_governance_funded_total());
+        let reward_total = aggregator_v2::read_snapshot(&get_reward_withdrawn_total());
+
+        assert!(gas_total == 3000, 1);
+        assert!(treasury_total == 5000, 2);
+        assert!(governance_total == 500, 3);
+        assert!(reward_total == 300, 4);
+
+        let total_inflows = gas_total + treasury_total;
+        let total_outflows = governance_total + reward_total;
+        assert!(total_outflows <= total_inflows, 5);
+
+        let expected_balance = total_inflows - total_outflows;
+        assert!(get_balance<AptosCoin>() == expected_balance, 6);
+    }
+
+    #[test(aptos_framework = @aptos_framework)]
+    /// Test that counters resource is created during initialization
+    fun test_counters_resource_created(aptos_framework: &signer) acquires GovernedGasPoolCounters {
+        initialize_for_test(aptos_framework);
+
+        assert!(exists<GovernedGasPoolCounters>(@aptos_framework), 1);
+
+        let gas_total = aggregator_v2::read_snapshot(&get_gas_fee_total());
+        let treasury_total = aggregator_v2::read_snapshot(&get_treasury_total());
+        let governance_total = aggregator_v2::read_snapshot(&get_governance_funded_total());
+        let reward_total = aggregator_v2::read_snapshot(&get_reward_withdrawn_total());
+
+        assert!(gas_total == 0, 2);
+        assert!(treasury_total == 0, 3);
+        assert!(governance_total == 0, 4);
+        assert!(reward_total == 0, 5);
     }
 
 }

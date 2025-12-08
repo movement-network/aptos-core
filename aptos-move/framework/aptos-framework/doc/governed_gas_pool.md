@@ -34,9 +34,13 @@
 -  [Function `get_reward_withdrawn_total`](#0x1_governed_gas_pool_get_reward_withdrawn_total)
 -  [Specification](#@Specification_1)
     -  [Function `initialize`](#@Specification_1_initialize)
+    -  [Function `initialize_governed_gas_pool_extension`](#@Specification_1_initialize_governed_gas_pool_extension)
     -  [Function `fund`](#@Specification_1_fund)
     -  [Function `deposit`](#@Specification_1_deposit)
     -  [Function `deposit_gas_fee`](#@Specification_1_deposit_gas_fee)
+    -  [Function `deposit_gas_fee_v2`](#@Specification_1_deposit_gas_fee_v2)
+    -  [Function `deposit_treasury`](#@Specification_1_deposit_treasury)
+    -  [Function `withdraw_staking_reward`](#@Specification_1_withdraw_staking_reward)
 
 
 <pre><code><b>use</b> <a href="account.md#0x1_account">0x1::account</a>;
@@ -1001,6 +1005,23 @@ Returns a snapshot of the total staking rewards withdrawn.
 
 
 
+<a id="@Specification_1_initialize_governed_gas_pool_extension"></a>
+
+### Function `initialize_governed_gas_pool_extension`
+
+
+<pre><code><b>public</b> entry <b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_initialize_governed_gas_pool_extension">initialize_governed_gas_pool_extension</a>(aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>)
+</code></pre>
+
+
+Spec for initialize_governed_gas_pool_extension
+
+
+<pre><code><b>pragma</b> aborts_if_is_partial = <b>true</b>;
+</code></pre>
+
+
+
 <a id="@Specification_1_fund"></a>
 
 ### Function `fund`
@@ -1048,6 +1069,58 @@ Abort if the governed gas pool has insufficient funds
 
 
 <pre><code><b>public</b> <b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_deposit_gas_fee">deposit_gas_fee</a>(_gas_payer: <b>address</b>, _gas_fee: u64)
+</code></pre>
+
+
+
+
+<a id="@Specification_1_deposit_gas_fee_v2"></a>
+
+### Function `deposit_gas_fee_v2`
+
+
+<pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_deposit_gas_fee_v2">deposit_gas_fee_v2</a>(gas_payer: <b>address</b>, gas_fee: u64)
+</code></pre>
+
+
+[high-level-req-5] Spec for deposit_gas_fee_v2
+
+
+<pre><code><b>pragma</b> aborts_if_is_partial = <b>true</b>;
+</code></pre>
+
+
+
+<a id="@Specification_1_deposit_treasury"></a>
+
+### Function `deposit_treasury`
+
+
+<pre><code><b>public</b> entry <b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_deposit_treasury">deposit_treasury</a>(treasury_account: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, amount: u64)
+</code></pre>
+
+
+[high-level-req-5.1] Spec for deposit_treasury
+
+
+<pre><code><b>pragma</b> aborts_if_is_partial = <b>true</b>;
+</code></pre>
+
+
+
+<a id="@Specification_1_withdraw_staking_reward"></a>
+
+### Function `withdraw_staking_reward`
+
+
+<pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_withdraw_staking_reward">withdraw_staking_reward</a>&lt;CoinType&gt;(amount: u64): <a href="coin.md#0x1_coin_Coin">coin::Coin</a>&lt;CoinType&gt;
+</code></pre>
+
+
+[high-level-req-5.3] Spec for withdraw_staking_reward
+
+
+<pre><code><b>pragma</b> aborts_if_is_partial = <b>true</b>;
 </code></pre>
 
 

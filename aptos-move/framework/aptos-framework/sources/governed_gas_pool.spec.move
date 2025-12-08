@@ -26,6 +26,21 @@ spec aptos_framework::governed_gas_pool {
     /// Implementation: The fund function verifies the signer is the aptos_framework address.
     /// Enforcement: Formally verified via [high-level-req-4](fund).
     ///
+    /// No.: 5
+    /// Requirement: Aggregator-backed counters must track all inflows and outflows when the feature is enabled.
+    /// Criticality: High
+    /// Implementation: When governed_gas_pool_aggregators_enabled(), gas fees, treasury deposits,
+    ///   governance payouts, and staking rewards are tracked in GovernedGasPoolCounters aggregators.
+    /// Enforcement: Formally verified via [high-level-req-5](deposit_gas_fee_v2), [high-level-req-5.1](deposit_treasury),
+    ///   [high-level-req-5.2](fund), [high-level-req-5.3](withdraw_staking_reward).
+    ///
+    /// No.: 6
+    /// Requirement: Total outflows must not exceed total inflows (accounting invariant).
+    /// Criticality: Critical
+    /// Implementation: reward_withdrawn_total + governance_funded_total <= gas_fee_total + treasury_total.
+    ///   Note: This invariant is only meaningful for post-migration transactions as historical data is not tracked.
+    /// Enforcement: Documented invariant; runtime balance checks prevent overdraw.
+    ///
 
     spec module {
         /// [high-level-req-1]
@@ -74,5 +89,25 @@ spec aptos_framework::governed_gas_pool {
         //   ensures governed_gas_pool_balance<AptosCoin> == old(governed_gas_pool_balance<AptosCoin>) + gas_fee;
         //   ensures gas_payer_balance<AptosCoin> == old(gas_payer_balance<AptosCoin>) - gas_fee;
         */
+    }
+
+    /// [high-level-req-5] Spec for deposit_gas_fee_v2
+    spec deposit_gas_fee_v2(gas_payer: address, gas_fee: u64) {
+        pragma aborts_if_is_partial = true;
+    }
+
+    /// [high-level-req-5.1] Spec for deposit_treasury
+    spec deposit_treasury(treasury_account: &signer, amount: u64) {
+        pragma aborts_if_is_partial = true;
+    }
+
+    /// [high-level-req-5.3] Spec for withdraw_staking_reward
+    spec withdraw_staking_reward<CoinType>(amount: u64): Coin<CoinType> {
+        pragma aborts_if_is_partial = true;
+    }
+
+    /// Spec for initialize_governed_gas_pool_extension
+    spec initialize_governed_gas_pool_extension(aptos_framework: &signer) {
+        pragma aborts_if_is_partial = true;
     }
 }

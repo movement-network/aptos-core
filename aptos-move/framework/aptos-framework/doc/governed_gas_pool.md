@@ -36,8 +36,6 @@
     -  [Function `initialize`](#@Specification_1_initialize)
     -  [Function `initialize_governed_gas_pool_extension`](#@Specification_1_initialize_governed_gas_pool_extension)
     -  [Function `fund`](#@Specification_1_fund)
-    -  [Function `deposit`](#@Specification_1_deposit)
-    -  [Function `deposit_gas_fee`](#@Specification_1_deposit_gas_fee)
     -  [Function `deposit_gas_fee_v2`](#@Specification_1_deposit_gas_fee_v2)
     -  [Function `deposit_treasury`](#@Specification_1_deposit_treasury)
     -  [Function `withdraw_staking_reward`](#@Specification_1_withdraw_staking_reward)
@@ -334,7 +332,7 @@ Initializes the governed gas pool around a resource account creation seed.
                 reward_withdrawn_total: <a href="aggregator_v2.md#0x1_aggregator_v2_create_unbounded_aggregator">aggregator_v2::create_unbounded_aggregator</a>(),
                 withdraw_events: <a href="account.md#0x1_account_new_event_handle">account::new_event_handle</a>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_WithdrawStakingRewardEvent">WithdrawStakingRewardEvent</a>&gt;(aptos_framework),
             });
-        }
+        };
     } <b>else</b> {
 
         // generate a seed <b>to</b> be used <b>to</b> create the resource <a href="account.md#0x1_account">account</a> hosting the delegation pool
@@ -413,7 +411,8 @@ Initializes the governed gas pool extension alone.
             reward_withdrawn_total: <a href="aggregator_v2.md#0x1_aggregator_v2_create_unbounded_aggregator">aggregator_v2::create_unbounded_aggregator</a>(),
             withdraw_events: <a href="account.md#0x1_account_new_event_handle">account::new_event_handle</a>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_WithdrawStakingRewardEvent">WithdrawStakingRewardEvent</a>&gt;(aptos_framework),
         });
-    }
+    };
+
 }
 </code></pre>
 
@@ -555,7 +554,9 @@ Funds the destination account with a given amount of coin.
     <b>let</b> governed_gas_signer = &<a href="governed_gas_pool.md#0x1_governed_gas_pool_governed_gas_signer">governed_gas_signer</a>();
     <a href="coin.md#0x1_coin_deposit">coin::deposit</a>(<a href="account.md#0x1_account">account</a>, <a href="coin.md#0x1_coin_withdraw">coin::withdraw</a>&lt;CoinType&gt;(governed_gas_signer, amount));
 
-    <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_governed_gas_pool_aggregators_enabled">features::governed_gas_pool_aggregators_enabled</a>()) {
+    // Use aggregators only <b>if</b> feature is enabled AND counters are initialized.
+    // This avoids aborts between feature rollout and extension initialization.
+    <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_governed_gas_pool_aggregators_enabled">features::governed_gas_pool_aggregators_enabled</a>() && <b>exists</b>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolCounters">GovernedGasPoolCounters</a>&gt;(@aptos_framework)) {
         <b>let</b> counters = <b>borrow_global_mut</b>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolCounters">GovernedGasPoolCounters</a>&gt;(@aptos_framework);
         <a href="aggregator_v2.md#0x1_aggregator_v2_add">aggregator_v2::add</a>(&<b>mut</b> counters.governance_funded_total, amount);
     };
@@ -697,6 +698,7 @@ Deposits gas fees into the governed gas pool.
 Deposits gas fees into the governed gas pool.
 @param gas_payer The address of the account that paid the gas fees.
 @param gas_fee The amount of gas fees to be deposited.
+Note: tracked via aggregator when feature is enabled.
 
 
 <pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_deposit_gas_fee_v2">deposit_gas_fee_v2</a>(gas_payer: <b>address</b>, gas_fee: u64)
@@ -717,7 +719,9 @@ Deposits gas fees into the governed gas pool.
         <a href="governed_gas_pool.md#0x1_governed_gas_pool_deposit_from">deposit_from</a>&lt;AptosCoin&gt;(gas_payer, gas_fee);
     };
 
-    <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_governed_gas_pool_aggregators_enabled">features::governed_gas_pool_aggregators_enabled</a>()) {
+    // Use aggregators only <b>if</b> feature is enabled AND counters are initialized.
+    // This avoids aborts between feature rollout and extension initialization.
+    <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_governed_gas_pool_aggregators_enabled">features::governed_gas_pool_aggregators_enabled</a>() && <b>exists</b>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolCounters">GovernedGasPoolCounters</a>&gt;(@aptos_framework)) {
         <b>let</b> counters = <b>borrow_global_mut</b>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolCounters">GovernedGasPoolCounters</a>&gt;(@aptos_framework);
         <a href="aggregator_v2.md#0x1_aggregator_v2_add">aggregator_v2::add</a>(&<b>mut</b> counters.gas_fee_total, gas_fee);
     };
@@ -750,7 +754,9 @@ Deposits from the treasury account. Treasury deposit are recorded.
     <b>let</b> treasury_account_address = <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(treasury_account);
     <a href="governed_gas_pool.md#0x1_governed_gas_pool_deposit_from">deposit_from</a>&lt;AptosCoin&gt;(treasury_account_address, amount);
 
-    <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_governed_gas_pool_aggregators_enabled">features::governed_gas_pool_aggregators_enabled</a>()) {
+    // Use aggregators only <b>if</b> feature is enabled AND counters are initialized.
+    // This avoids aborts between feature rollout and extension initialization.
+    <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_governed_gas_pool_aggregators_enabled">features::governed_gas_pool_aggregators_enabled</a>() && <b>exists</b>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolCounters">GovernedGasPoolCounters</a>&gt;(@aptos_framework)) {
         <b>let</b> counters = <b>borrow_global_mut</b>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolCounters">GovernedGasPoolCounters</a>&gt;(@aptos_framework);
         <a href="aggregator_v2.md#0x1_aggregator_v2_add">aggregator_v2::add</a>(&<b>mut</b> counters.treasury_total, amount);
     } <b>else</b> {
@@ -821,7 +827,13 @@ governed gas pool to authorize the withdrawal.
     <b>let</b> balance = <a href="governed_gas_pool.md#0x1_governed_gas_pool_get_balance">get_balance</a>&lt;CoinType&gt;();
     <b>assert</b>!(balance &gt;= amount, <a href="governed_gas_pool.md#0x1_governed_gas_pool_EINSUFFICIENT_BALANCE">EINSUFFICIENT_BALANCE</a>);
 
-    <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_governed_gas_pool_aggregators_enabled">features::governed_gas_pool_aggregators_enabled</a>()) {
+    // Perform the withdrawal first so that <a href="../../aptos-stdlib/doc/any.md#0x1_any">any</a> insufficient-balance aborts happen
+    // before <a href="event.md#0x1_event">event</a> emission or <a href="aggregator.md#0x1_aggregator">aggregator</a> updates (reduces wasted work on <b>abort</b>/retry).
+    <b>let</b> reward = <a href="coin.md#0x1_coin_withdraw">coin::withdraw</a>&lt;CoinType&gt;(&<a href="governed_gas_pool.md#0x1_governed_gas_pool_governed_gas_signer">governed_gas_signer</a>(), amount);
+
+    // Use aggregators only <b>if</b> feature is enabled AND counters are initialized.
+    // This avoids aborts between feature rollout and extension initialization.
+    <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_governed_gas_pool_aggregators_enabled">features::governed_gas_pool_aggregators_enabled</a>() && <b>exists</b>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolCounters">GovernedGasPoolCounters</a>&gt;(@aptos_framework)) {
         <b>let</b> counters = <b>borrow_global_mut</b>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolCounters">GovernedGasPoolCounters</a>&gt;(@aptos_framework);
         <a href="aggregator_v2.md#0x1_aggregator_v2_add">aggregator_v2::add</a>(&<b>mut</b> counters.reward_withdrawn_total, amount);
         <a href="event.md#0x1_event_emit_event">event::emit_event</a>(
@@ -836,8 +848,7 @@ governed gas pool to authorize the withdrawal.
         );
     };
 
-    // Withdraw reward <a href="coin.md#0x1_coin">coin</a>.
-    <a href="coin.md#0x1_coin_withdraw">coin::withdraw</a>&lt;CoinType&gt;(&<a href="governed_gas_pool.md#0x1_governed_gas_pool_governed_gas_signer">governed_gas_signer</a>(), amount)
+    reward
 }
 </code></pre>
 
@@ -875,7 +886,7 @@ Register Aptos coin with Governed gas signer.
 
 ## Function `get_gas_fee_total`
 
-Returns a snapshot of the total gas fees collected.
+Returns a snapshot of the total gas fees collected (aggregator-backed).
 
 
 <pre><code>#[view]
@@ -1046,31 +1057,11 @@ Abort if the governed gas pool has insufficient funds
 </code></pre>
 
 
-
-<a id="@Specification_1_deposit"></a>
-
-### Function `deposit`
-
-
-<pre><code><b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_deposit">deposit</a>&lt;CoinType&gt;(<a href="coin.md#0x1_coin">coin</a>: <a href="coin.md#0x1_coin_Coin">coin::Coin</a>&lt;CoinType&gt;)
-</code></pre>
-
-
+[high-level-req-5.2] Spec for fund
 
 
 <pre><code><b>pragma</b> aborts_if_is_partial = <b>true</b>;
 </code></pre>
-
-
-
-<a id="@Specification_1_deposit_gas_fee"></a>
-
-### Function `deposit_gas_fee`
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_deposit_gas_fee">deposit_gas_fee</a>(_gas_payer: <b>address</b>, _gas_fee: u64)
-</code></pre>
-
 
 
 

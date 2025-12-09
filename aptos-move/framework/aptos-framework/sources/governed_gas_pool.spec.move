@@ -46,6 +46,7 @@ spec aptos_framework::governed_gas_pool {
         /// [high-level-req-1]
         /// The GovernedGasPool resource must exist at aptos_framework after initialization.
         invariant exists<GovernedGasPool>(@aptos_framework);
+        // Note: Aggregator invariants are omitted in specs to avoid unsupported snapshot expressions.
     }
 
     spec initialize(aptos_framework: &signer, delegation_pool_creation_seed: vector<u8>) {
@@ -65,32 +66,6 @@ spec aptos_framework::governed_gas_pool {
         aborts_with coin::EINSUFFICIENT_BALANCE, error::invalid_argument(EINSUFFICIENT_BALANCE), 0x1, 0x5, 0x7;
     }
 
-    spec deposit<CoinType>(coin: Coin<CoinType>) {
-        pragma aborts_if_is_partial = true;
-
-        /*
-        /// [high-level-req-3]
-        /// Ensure the deposit increases the value in the CoinStore
-
-        //@TODO: Calling governed_gas_pool_adddress() doesn't work as the boogie gen cant check the signer
-        // created for the resource account created at runtime
-
-        /// Ensure the governed gas pool resource account exists
-        //aborts_if !exists<CoinStore<CoinType>>(governed_gas_pool_address());
-
-        //ensures global<CoinStore<CoinType>>(aptos_framework_address).coin.value ==
-        //old(global<CoinStore<CoinType>>(aptos_framework_address).coin.value) + coin.value;
-        */
-    }
-
-    spec deposit_gas_fee(_gas_payer: address, _gas_fee: u64) {
-        /*
-        /// [high-level-req-5]
-        //   ensures governed_gas_pool_balance<AptosCoin> == old(governed_gas_pool_balance<AptosCoin>) + gas_fee;
-        //   ensures gas_payer_balance<AptosCoin> == old(gas_payer_balance<AptosCoin>) - gas_fee;
-        */
-    }
-
     /// [high-level-req-5] Spec for deposit_gas_fee_v2
     spec deposit_gas_fee_v2(gas_payer: address, gas_fee: u64) {
         pragma aborts_if_is_partial = true;
@@ -98,6 +73,11 @@ spec aptos_framework::governed_gas_pool {
 
     /// [high-level-req-5.1] Spec for deposit_treasury
     spec deposit_treasury(treasury_account: &signer, amount: u64) {
+        pragma aborts_if_is_partial = true;
+    }
+
+    /// [high-level-req-5.2] Spec for fund
+    spec fund<CoinType>(aptos_framework: &signer, account: address, amount: u64) {
         pragma aborts_if_is_partial = true;
     }
 

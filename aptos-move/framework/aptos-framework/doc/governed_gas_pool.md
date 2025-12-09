@@ -36,8 +36,6 @@
     -  [Function `initialize`](#@Specification_1_initialize)
     -  [Function `initialize_governed_gas_pool_extension`](#@Specification_1_initialize_governed_gas_pool_extension)
     -  [Function `fund`](#@Specification_1_fund)
-    -  [Function `deposit`](#@Specification_1_deposit)
-    -  [Function `deposit_gas_fee`](#@Specification_1_deposit_gas_fee)
     -  [Function `deposit_gas_fee_v2`](#@Specification_1_deposit_gas_fee_v2)
     -  [Function `deposit_treasury`](#@Specification_1_deposit_treasury)
     -  [Function `withdraw_staking_reward`](#@Specification_1_withdraw_staking_reward)
@@ -334,7 +332,7 @@ Initializes the governed gas pool around a resource account creation seed.
                 reward_withdrawn_total: <a href="aggregator_v2.md#0x1_aggregator_v2_create_unbounded_aggregator">aggregator_v2::create_unbounded_aggregator</a>(),
                 withdraw_events: <a href="account.md#0x1_account_new_event_handle">account::new_event_handle</a>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_WithdrawStakingRewardEvent">WithdrawStakingRewardEvent</a>&gt;(aptos_framework),
             });
-        }
+        };
     } <b>else</b> {
 
         // generate a seed <b>to</b> be used <b>to</b> create the resource <a href="account.md#0x1_account">account</a> hosting the delegation pool
@@ -413,7 +411,8 @@ Initializes the governed gas pool extension alone.
             reward_withdrawn_total: <a href="aggregator_v2.md#0x1_aggregator_v2_create_unbounded_aggregator">aggregator_v2::create_unbounded_aggregator</a>(),
             withdraw_events: <a href="account.md#0x1_account_new_event_handle">account::new_event_handle</a>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_WithdrawStakingRewardEvent">WithdrawStakingRewardEvent</a>&gt;(aptos_framework),
         });
-    }
+    };
+
 }
 </code></pre>
 
@@ -697,6 +696,7 @@ Deposits gas fees into the governed gas pool.
 Deposits gas fees into the governed gas pool.
 @param gas_payer The address of the account that paid the gas fees.
 @param gas_fee The amount of gas fees to be deposited.
+Note: tracked via aggregator when feature is enabled.
 
 
 <pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_deposit_gas_fee_v2">deposit_gas_fee_v2</a>(gas_payer: <b>address</b>, gas_fee: u64)
@@ -875,7 +875,7 @@ Register Aptos coin with Governed gas signer.
 
 ## Function `get_gas_fee_total`
 
-Returns a snapshot of the total gas fees collected.
+Returns a snapshot of the total gas fees collected (aggregator-backed).
 
 
 <pre><code>#[view]
@@ -1046,31 +1046,11 @@ Abort if the governed gas pool has insufficient funds
 </code></pre>
 
 
-
-<a id="@Specification_1_deposit"></a>
-
-### Function `deposit`
-
-
-<pre><code><b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_deposit">deposit</a>&lt;CoinType&gt;(<a href="coin.md#0x1_coin">coin</a>: <a href="coin.md#0x1_coin_Coin">coin::Coin</a>&lt;CoinType&gt;)
-</code></pre>
-
-
+[high-level-req-5.2] Spec for fund
 
 
 <pre><code><b>pragma</b> aborts_if_is_partial = <b>true</b>;
 </code></pre>
-
-
-
-<a id="@Specification_1_deposit_gas_fee"></a>
-
-### Function `deposit_gas_fee`
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_deposit_gas_fee">deposit_gas_fee</a>(_gas_payer: <b>address</b>, _gas_fee: u64)
-</code></pre>
-
 
 
 

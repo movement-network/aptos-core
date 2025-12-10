@@ -7,6 +7,18 @@ on:
       - movement
       - l1-migration
     types: [labeled, opened, synchronize, reopened, auto_merge_enabled]
+  workflow_dispatch:
+    inputs:
+      force_build:
+        description: 'Force build even if no files changed'
+        required: false
+        default: true
+        type: boolean
+      skip_checks:
+        description: 'Skip initial checks (dynamic deps and semgrep)'
+        required: false
+        default: false
+        type: boolean
 
 env:
   GIT_SHA: ${{ github.sha }}
@@ -22,6 +34,7 @@ concurrency:
 jobs:
   check-dynamic-deps:
     runs-on: macos-latest
+    if: ${{ !inputs.skip_checks }}
     steps:
       - uses: actions/checkout@v4
         if: ${{ !inputs.SKIP_JOB }}
@@ -40,7 +53,7 @@ jobs:
       options: --user root
 
     # Skip any PR created by dependabot to avoid permission issues:
-    if: (github.actor != 'dependabot[bot]')
+    if: (github.actor != 'dependabot[bot]') && !inputs.skip_checks
 
     steps:
       - uses: actions/checkout@v4
@@ -52,8 +65,8 @@ jobs:
   build-checks:
     runs-on: k8s-movement-labs
     outputs:
-      members_changed: ${{ steps.members_check.outputs.changed }}
-      docker_changed: ${{ steps.docker_check.outputs.changed }}
+      members_changed: ${{ steps.members_check.outputs.changed || inputs.force_build }}
+      docker_changed: ${{ steps.docker_check.outputs.changed || inputs.force_build }}
     steps:
       - uses: actions/checkout@v4
       - name: Check if Cargo Members Changed
@@ -69,7 +82,7 @@ jobs:
 
   build-binaries:
     needs: build-checks
-    if: needs.build-checks.outputs.members_changed == 'true' || needs.build-checks.outputs.docker_changed == 'true'
+    if: needs.build-checks.outputs.members_changed == 'true' || needs.build-checks.outputs.docker_changed == 'true' || inputs.force_build
     runs-on: k8s-movement-labs
     name: "Build Binaries with Nix"
     strategy:

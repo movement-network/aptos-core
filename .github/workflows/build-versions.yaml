@@ -21,13 +21,20 @@ jobs:
       git_branch: ${{ steps.git_branch.outputs.git_branch }}
       git_tag: ${{ steps.git_tag.outputs.git_tag }}
       build_profile: ${{ steps.build_profile.outputs.build_profile }}
+      git_sha: ${{ steps.get_sha.outputs.git_sha }}
+    env:
+      BUILD_REF: ${{ inputs.ref || github.sha}}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref || github.sha}}
+      - id: get_sha
+        run: |
+          GIT_SHA=$(git rev-parse HEAD)
+          echo "git_sha=$GIT_SHA" >> $GITHUB_OUTPUT
       - id: chop_sha
         run: |
-          SHORT_SHA=$(echo "${GITHUB_SHA}" | cut -c1-7)
+          SHORT_SHA=$(echo "${{ steps.get_sha.outputs.git_sha }}" | cut -c1-7)
           echo "short_sha=$SHORT_SHA" >> $GITHUB_OUTPUT
       - id: build_date
         run: |
@@ -35,14 +42,27 @@ jobs:
           echo "build_date=$BUILD_DATE" >> $GITHUB_OUTPUT
       - id: git_branch
         run: |
-          if [ "${GITHUB_REF_TYPE}" = "branch" ]; then
+          # Determine if the checked-out ref is a branch
+          if git show-ref --verify --quiet "refs/heads/${{ env.BUILD_REF }}"; then
+            echo "git_branch=${{ env.BUILD_REF }}" >> $GITHUB_OUTPUT
+          elif [ -n "${{ inputs.ref }}" ]; then
+            # If a custom ref was provided, try to extract branch name
+            BRANCH_NAME=$(git symbolic-ref -q --short HEAD 2>/dev/null || echo "detached")
+            echo "git_branch=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          elif [ "${GITHUB_REF_TYPE}" = "branch" ]; then
+            # Fall back to workflow trigger ref for push events
             echo "git_branch=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
           else
             echo "git_branch=detached" >> $GITHUB_OUTPUT
           fi
       - id: git_tag
         run: |
-          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+          # Check if the checked-out ref is a tag
+          TAG_NAME=$(git describe --exact-match --tags HEAD 2>/dev/null || echo "")
+          if [ -n "$TAG_NAME" ]; then
+            echo "git_tag=$TAG_NAME" >> $GITHUB_OUTPUT
+          elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            # Fall back to workflow trigger ref for tag push events
             echo "git_tag=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
           else
             echo "git_tag=none" >> $GITHUB_OUTPUT
@@ -74,6 +94,7 @@ jobs:
           binary_package: ${{ matrix.binary.package }}
           profile: ${{ needs.setup.outputs.build_profile }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          git_sha: ${{ needs.setup.outputs.git_sha }}
   container-aptos-node:
     needs: 
       - setup
@@ -116,12 +137,13 @@ jobs:
           dockerfile_subdir: aptos-node
           build_args: |
             BINARY_PATH=${{ env.TARGET_FOLDER }}
-            GIT_SHA=${{ github.sha }}
+            GIT_SHA=${{ env.SHORT_SHA }}
             GIT_TAG=${{ needs.setup.outputs.git_tag }}
             GIT_BRANCH=${{ needs.setup.outputs.git_branch }}
             BUILD_DATE=${{ needs.setup.outputs.build_date }}
           ghcr_username: ${{ vars.INFRA_GH_USER }}
           ghcr_password: ${{ secrets.INFRA_GH_PAT }}
+          git_sha: ${{ needs.setup.outputs.git_sha }}
 
   binaries-aptos-faucet-service:
     needs: 
@@ -144,6 +166,7 @@ jobs:
           binary_package: ${{ matrix.binary.package }}
           profile: ${{ needs.setup.outputs.build_profile }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          git_sha: ${{ needs.setup.outputs.git_sha }}
   container-aptos-faucet-service:
     needs: 
       - setup
@@ -176,12 +199,13 @@ jobs:
           dockerfile_subdir: aptos-faucet-service
           build_args: |
             BINARY_PATH=${{ env.TARGET_FOLDER }}
-            GIT_SHA=${{ github.sha }}
+            GIT_SHA=${{ env.SHORT_SHA }}
             GIT_TAG=${{ needs.setup.outputs.git_tag }}
             GIT_BRANCH=${{ needs.setup.outputs.git_branch }}
             BUILD_DATE=${{ needs.setup.outputs.build_date }}
           ghcr_username: ${{ vars.INFRA_GH_USER }}
           ghcr_password: ${{ secrets.INFRA_GH_PAT }}
+          git_sha: ${{ needs.setup.outputs.git_sha }}
 
   binaries-aptos-tools:
     needs: 
@@ -204,3 +228,4 @@ jobs:
           binary_package: ${{ matrix.binary.package }}
           profile: ${{ needs.setup.outputs.build_profile }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          git_sha: ${{ needs.setup.outputs.git_sha }}

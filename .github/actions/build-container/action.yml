@@ -17,6 +17,10 @@ inputs:
   ghcr_password:
     description: "Password for GHCR login"
     required: true
+  git_sha:
+    description: "Git SHA to use for image tagging (defaults to github.sha)"
+    required: false
+    default: ""
 
 outputs:
   image_name:
@@ -38,7 +42,11 @@ runs:
   - name: Set build environment
     id: set_env
     run: |
-      GIT_SHA_SHORT=$(echo ${{ github.sha }} | cut -c1-7)
+      if [ -n "${{ inputs.git_sha }}" ]; then
+        GIT_SHA_SHORT=$(echo "${{ inputs.git_sha }}" | cut -c1-7)
+      else
+        GIT_SHA_SHORT=$(echo ${{ github.sha }} | cut -c1-7)
+      fi
       echo "git_sha_short=$GIT_SHA_SHORT" >> $GITHUB_OUTPUT
       echo "dockerfile_path=docker/${{ inputs.dockerfile_subdir }}/Dockerfile" >> $GITHUB_OUTPUT
     shell: bash

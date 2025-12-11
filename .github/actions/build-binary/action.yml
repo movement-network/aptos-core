@@ -14,6 +14,10 @@ inputs:
   github_token:
     description: "GitHub token for Nix installation"
     required: true
+  git_sha:
+    description: "Git SHA to use for artifact naming (defaults to GITHUB_SHA)"
+    required: false
+    default: ""
 
 outputs:
   artifact_name:
@@ -43,7 +47,13 @@ runs:
       fi
     shell: bash
   - name: shorten sha
-    run: echo "SHORT_SHA=$(echo ${GITHUB_SHA} | cut -c1-7)" >> $GITHUB_ENV
+    run: |
+      if [ -n "${{ inputs.git_sha }}" ]; then
+        SHORT_SHA=$(echo "${{ inputs.git_sha }}" | cut -c1-7)
+      else
+        SHORT_SHA=$(echo ${GITHUB_SHA} | cut -c1-7)
+      fi
+      echo "SHORT_SHA=$SHORT_SHA" >> $GITHUB_ENV
     shell: bash
   - run: |
       if [ -f "${{ env.TARGET_FOLDER }}/${{ inputs.binary_package }}" ]; then

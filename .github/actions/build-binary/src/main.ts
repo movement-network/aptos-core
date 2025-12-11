@@ -10,6 +10,7 @@ interface BuildConfig {
   binaries: string[];
   profile: string;
   separateArtifacts: boolean;
+  gitSha: string;
 }
 
 interface BinaryInfo {
@@ -34,6 +35,7 @@ async function run(): Promise<void> {
     core.info(`  Build defaults: ${config.buildDefaults}`);
     core.info(`  Additional binaries: ${config.binaries.join(', ') || 'none'}`);
     core.info(`  Separate artifacts: ${config.separateArtifacts}`);
+    core.info(`  Git SHA: ${config.gitSha}`);
     core.info('');
 
     // Build binaries (assumes Nix is already installed by workflow)
@@ -47,7 +49,7 @@ async function run(): Promise<void> {
     const builtBinaries = await discoverBuiltBinaries(config, targetFolder);
 
     // Upload artifacts
-    const shortSha = process.env.GITHUB_SHA?.substring(0, 7) || 'unknown';
+    const shortSha = config.gitSha.substring(0, 7);
     
     if (config.separateArtifacts) {
       await uploadSeparateArtifacts(builtBinaries, shortSha, targetFolder);
@@ -94,12 +96,17 @@ function parseInputs(): BuildConfig {
   }
   
   const profile = core.getInput('profile', { required: true });
+  
+  // Get git_sha input, fall back to GITHUB_SHA if not provided
+  const gitShaInput = core.getInput('git_sha');
+  const gitSha = gitShaInput || process.env.GITHUB_SHA || 'unknown';
 
   return {
     buildDefaults,
     binaries,
     profile,
     separateArtifacts,
+    gitSha,
   };
 }
 

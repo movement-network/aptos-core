@@ -60,7 +60,7 @@ jobs:
              ./.github/linters/semgrep/pull-request-target-code-checkout.yaml
 
   build-checks:
-    runs-on: k8s-movement-labs
+    runs-on: buildjet-16vcpu-ubuntu-2204
     outputs:
       members_changed: ${{ steps.members_check.outputs.changed }}
       docker_changed: ${{ steps.docker_check.outputs.changed }}
@@ -80,7 +80,7 @@ jobs:
   build-binaries:
     needs: build-checks
     if: (needs.build-checks.outputs.members_changed == 'true' || needs.build-checks.outputs.docker_changed == 'true') || (github.event_name == 'workflow_dispatch' && inputs.force_build)
-    runs-on: k8s-movement-labs
+    runs-on: buildjet-16vcpu-ubuntu-2204
     name: "Build Binaries with Nix"
     strategy:
       matrix:
@@ -157,7 +157,7 @@ jobs:
 
   build-docker:
     needs: build-binaries
-    runs-on: k8s-movement-labs
+    runs-on: buildjet-16vcpu-ubuntu-2204
     name: "Build Docker Images"
     permissions:
       contents: read

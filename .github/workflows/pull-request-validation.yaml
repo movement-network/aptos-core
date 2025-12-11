@@ -92,7 +92,7 @@ jobs:
             package: "aptos-node"
             profile: "dev"
           - name: "aptos-cli"
-            package: "aptos"
+            package: "movement"
             profile: "dev"
           - name: "l1-migration"
             package: "l1-migration"

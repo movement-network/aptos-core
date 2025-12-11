@@ -23,7 +23,7 @@ on:
 env:
   GIT_SHA: ${{ github.sha }}
   GIT_BRANCH: ${{ github.ref_name }}
-  BUILD_DATE: ${{ github.event.head_commit.timestamp }}
+  BUILD_DATE: ${{ github.event.head_commit.timestamp || github.event.workflow_run.created_at || github.run_id }}
   BUILT_VIA_BUILDKIT: "true"
   FEATURES: ""
 
@@ -37,9 +37,6 @@ jobs:
     if: ${{ !inputs.skip_checks }}
     steps:
       - uses: actions/checkout@v4
-        if: ${{ !inputs.SKIP_JOB }}
-        with:
-          ref: ${{ inputs.GIT_SHA }}
           
       # This will exit with failure if any of the banned dynamic deps are found.
       - run: ./crates/aptos/scripts/check_dynamic_deps.sh

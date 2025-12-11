@@ -154,7 +154,7 @@ jobs:
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.binary.package }}-${{ github.sha }}
+          name: ${{ matrix.binary.name }}-${{ github.sha }}
           path: ${{ env.TARGET_FOLDER }}/${{ matrix.binary.package }}
           retention-days: 7
 
@@ -176,10 +176,10 @@ jobs:
         with:
           name: aptos-node-${{ github.sha }}
           path: ${{ env.TARGET_FOLDER }}
-      - name: Download aptos binary
+      - name: Download movement CLI binary
         uses: actions/download-artifact@v4
         with:
-          name: aptos-${{ github.sha }}
+          name: aptos-cli-${{ github.sha }}
           path: ${{ env.TARGET_FOLDER }}
       - name: Download l1-migration binary
         uses: actions/download-artifact@v4

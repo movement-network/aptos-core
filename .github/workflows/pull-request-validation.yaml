@@ -65,8 +65,8 @@ jobs:
   build-checks:
     runs-on: k8s-movement-labs
     outputs:
-      members_changed: ${{ steps.members_check.outputs.changed || inputs.force_build }}
-      docker_changed: ${{ steps.docker_check.outputs.changed || inputs.force_build }}
+      members_changed: ${{ steps.members_check.outputs.changed }}
+      docker_changed: ${{ steps.docker_check.outputs.changed }}
     steps:
       - uses: actions/checkout@v4
       - name: Check if Cargo Members Changed
@@ -82,7 +82,7 @@ jobs:
 
   build-binaries:
     needs: build-checks
-    if: needs.build-checks.outputs.members_changed == 'true' || needs.build-checks.outputs.docker_changed == 'true' || inputs.force_build
+    if: (needs.build-checks.outputs.members_changed == 'true' || needs.build-checks.outputs.docker_changed == 'true') || (github.event_name == 'workflow_dispatch' && inputs.force_build)
     runs-on: k8s-movement-labs
     name: "Build Binaries with Nix"
     strategy:

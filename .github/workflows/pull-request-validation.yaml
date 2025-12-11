@@ -90,15 +90,15 @@ jobs:
         binary:
           - name: "aptos-node"
             package: "aptos-node"
-            profile: "dev"
+            profile: "release"
           - name: "aptos-cli"
             package: "movement"
-            profile: "dev"
+            profile: "release"
           - name: "l1-migration"
             package: "l1-migration"
-            profile: "dev"
+            profile: "release"
     env:
-      TARGET_FOLDER: target/debug
+      TARGET_FOLDER: target/release
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -160,13 +160,13 @@ jobs:
 
   build-docker:
     needs: build-binaries
-    runs-on: ubuntu-latest
+    runs-on: k8s-movement-labs
     name: "Build Docker Images"
     permissions:
       contents: read
       packages: write
     env:
-      TARGET_FOLDER: target/debug
+      TARGET_FOLDER: target/release
     steps:
       - uses: actions/checkout@v4
       
@@ -211,7 +211,7 @@ jobs:
       # Build and push Docker image
       - name: Build and push aptos-node Docker image
         run: |
-          docker build --build-arg BINARY_PATH=target/debug -f docker/aptos-node/Dockerfile -t ghcr.io/movementlabsxyz/aptos-node:${{ env.GIT_SHA_SHORT }} .
+          docker build --build-arg BINARY_PATH=target/release -f docker/aptos-node/Dockerfile -t ghcr.io/movementlabsxyz/aptos-node:${{ env.GIT_SHA_SHORT }} .
           docker push ghcr.io/movementlabsxyz/aptos-node:${{ env.GIT_SHA_SHORT }}
       
       # Output image information

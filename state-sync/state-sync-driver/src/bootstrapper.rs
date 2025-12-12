@@ -28,6 +28,7 @@ use aptos_types::{
     ledger_info::LedgerInfoWithSignatures,
     state_store::state_value::StateValueChunkWithProof,
     transaction::{TransactionListWithProof, TransactionOutputListWithProof, Version},
+    validator_verifier::ValidatorVerifier,
     waypoint::Waypoint,
 };
 use futures::channel::oneshot;
@@ -101,7 +102,45 @@ impl VerifiedEpochStates {
         epoch_ending_ledger_info: &LedgerInfoWithSignatures,
         waypoint: &Waypoint,
     ) -> Result<(), Error> {
-        // Verify the ledger info against the latest epoch state
+        // Check if this is the waypoint ledger info FIRST (before signature verification)
+        // This allows us to bootstrap from a waypoint without needing to verify all prior epochs
+        let ledger_info = epoch_ending_ledger_info.ledger_info();
+        let is_waypoint = !self.verified_waypoint
+            && ledger_info.version() == waypoint.version();
+
+        if is_waypoint {
+            // Verify the waypoint using hash verification (not signature verification)
+            waypoint.verify(ledger_info).map_err(|error| {
+                Error::VerificationError(format!("Waypoint verification failed: {:?}", error))
+            })?;
+
+            info!(LogSchema::new(LogEntry::Bootstrapper).message(&format!(
+                "Waypoint verified at version {} epoch {}",
+                ledger_info.version(),
+                ledger_info.epoch()
+            )));
+
+            // Update the latest epoch state with the next epoch from the waypoint
+            if let Some(next_epoch_state) = ledger_info.next_epoch_state() {
+                self.highest_fetched_epoch_ending_version = ledger_info.version();
+                self.latest_epoch_state = next_epoch_state.clone();
+                self.insert_new_epoch_ending_ledger_info(epoch_ending_ledger_info.clone())?;
+                self.set_verified_waypoint(ledger_info.version());
+
+                trace!(LogSchema::new(LogEntry::Bootstrapper).message(&format!(
+                    "Updated epoch state from waypoint to epoch: {:?}",
+                    self.latest_epoch_state.epoch
+                )));
+            } else {
+                return Err(Error::VerificationError(
+                    "The waypoint ledger info was not epoch ending!".into(),
+                ));
+            }
+
+            return Ok(());
+        }
+
+        // For non-waypoint epochs: verify the ledger info against the latest epoch state
         self.latest_epoch_state
             .verify(epoch_ending_ledger_info)
             .map_err(|error| {
@@ -340,8 +379,21 @@ impl<
         storage_synchronizer: StorageSyncer,
     ) -> Self {
         // Load the latest epoch state from storage
-        let latest_epoch_state = utils::fetch_latest_epoch_state(storage.clone())
+        let mut latest_epoch_state = utils::fetch_latest_epoch_state(storage.clone())
             .expect("Unable to fetch latest epoch state!");
+
+        // Memory optimization: Adjust epoch state when start_epoch is configured
+        let configured_start_epoch = driver_configuration.config.start_epoch;
+        if configured_start_epoch > 0 && configured_start_epoch > latest_epoch_state.epoch {
+            info!(LogSchema::new(LogEntry::Bootstrapper).message(&format!(
+                "Memory optimization: Adjusting epoch state from epoch {} to start_epoch {}",
+                latest_epoch_state.epoch, configured_start_epoch
+            )));
+            // Create a new epoch state with the configured start epoch
+            // We'll use empty verifier initially - it will be updated when we process actual epoch data
+            latest_epoch_state = EpochState::new(configured_start_epoch, ValidatorVerifier::new(vec![]));
+        }
+
         let verified_epoch_states = VerifiedEpochStates::new(latest_epoch_state);
 
         Self {
@@ -850,9 +902,23 @@ impl<
                 "Found higher epoch ending ledger infos in the network! Local: {:?}, advertised: {:?}",
                    highest_local_epoch_end, highest_advertised_epoch_end
             )));
-            let next_epoch_end = highest_local_epoch_end.checked_add(1).ok_or_else(|| {
+
+            // Memory optimization: Use waypoint epoch to skip ancient epochs
+            let configured_start_epoch = self.driver_configuration.config.start_epoch;
+            let waypoint_version = self.driver_configuration.waypoint.version();
+            let mut next_epoch_end = highest_local_epoch_end.checked_add(1).ok_or_else(|| {
                 Error::IntegerOverflow("The next epoch end has overflown!".into())
             })?;
+
+            // Use the configured start epoch if provided and higher than current position
+            // This allows skipping millions of old epochs to save memory by jumping to waypoint
+            if configured_start_epoch > 0 && configured_start_epoch > next_epoch_end {
+                next_epoch_end = configured_start_epoch;
+                info!(LogSchema::new(LogEntry::Bootstrapper).message(&format!(
+                    "Optimization: Starting epoch sync from configured start_epoch {} (waypoint version: {}) instead of epoch {}",
+                    next_epoch_end, waypoint_version, highest_local_epoch_end + 1
+                )));
+            }
             let epoch_ending_stream = self
                 .streaming_client
                 .get_all_epoch_ending_ledger_infos(next_epoch_end)
@@ -1088,9 +1154,20 @@ impl<
             ));
         }
 
-        // Verify the epoch change proofs, update our latest epoch state and
-        // verify our waypoint.
+        // Verify the epoch change proofs, update our latest epoch state and verify our waypoint
         for epoch_ending_ledger_info in epoch_ending_ledger_infos {
+            // Skip epochs before the configured start epoch (these should not be in the stream)
+            let current_epoch = epoch_ending_ledger_info.ledger_info().epoch();
+            let configured_start_epoch = self.driver_configuration.config.start_epoch;
+
+            if configured_start_epoch > 0 && current_epoch < configured_start_epoch {
+                trace!(LogSchema::new(LogEntry::Bootstrapper).message(&format!(
+                    "Skipping epoch {} (before configured start_epoch {})",
+                    current_epoch, configured_start_epoch
+                )));
+                continue;
+            }
+
             if let Err(error) = self.verified_epoch_states.update_verified_epoch_states(
                 &epoch_ending_ledger_info,
                 &self.driver_configuration.waypoint,

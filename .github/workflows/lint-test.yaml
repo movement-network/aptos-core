@@ -92,6 +92,9 @@ jobs:
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           command: check licenses
+      - run: scripts/dev_setup.sh -b -p -r -y -P -t
+      - name: Add cargo to PATH
+        run: echo "${HOME}/.cargo/bin" >> $GITHUB_PATH
       - run: echo "Skipping cargo deny! Unrelated changes detected."
         if: needs.file_change_determinator.outputs.only_docs_changed == 'true'
 
@@ -130,6 +133,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         if: needs.file_change_determinator.outputs.only_docs_changed != 'true'
+      - run: scripts/dev_setup.sh -b -p -r -y -P -t
+      - name: Add cargo to PATH
+        run: echo "${HOME}/.cargo/bin" >> $GITHUB_PATH
       - name: Run rust smoke tests
         uses: ./.github/actions/rust-smoke-tests
         if: needs.file_change_determinator.outputs.only_docs_changed != 'true'
@@ -151,6 +157,9 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0 # Fetch all git history for accurate target determination
+      - run: scripts/dev_setup.sh -b -p -r -y -P -t
+      - name: Add cargo to PATH
+        run: echo "${HOME}/.cargo/bin" >> $GITHUB_PATH
       - name: Run the merge base freshness check
         uses: ./.github/actions/rust-check-merge-base
         with:
@@ -169,11 +178,9 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0 # Fetch all git history for accurate target determination
-
-      - name: Run dev_setup.sh
-        run: |
-          scripts/dev_setup.sh -b -p -r -y -P -t
-
+      - run: scripts/dev_setup.sh -b -p -r -y -P -t
+      - name: Add cargo to PATH
+        run: echo "${HOME}/.cargo/bin" >> $GITHUB_PATH
       - name: Run targeted rust unit tests
         uses: ./.github/actions/rust-targeted-unit-tests
         with:
@@ -192,9 +199,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       # Install Move Prover tools
-      - name: Run dev_setup.sh
-        run: |
-          scripts/dev_setup.sh -b -y
+      - run: scripts/dev_setup.sh -b -p -r -y -P -t
+      - name: Add cargo to PATH
+        run: echo "${HOME}/.cargo/bin" >> $GITHUB_PATH
       - name: Run rust unit tests
         uses: ./.github/actions/rust-unit-tests
         with:
@@ -215,6 +222,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         if: needs.file_change_determinator.outputs.only_docs_changed != 'true'
+      - run: scripts/dev_setup.sh -b -p -r -y -P -t
+      - name: Add cargo to PATH
+        run: echo "${HOME}/.cargo/bin" >> $GITHUB_PATH
       - name: Run aptos cached packages build test
         if: needs.file_change_determinator.outputs.only_docs_changed != 'true'
         run: scripts/cargo_build_aptos_cached_packages.sh --check
@@ -227,6 +237,9 @@ jobs:
     if: contains(github.event.pull_request.labels.*.name, 'CICD:build-consensus-only-image')
     steps:
       - uses: actions/checkout@v4
+      - run: scripts/dev_setup.sh -b -p -r -y -P -t
+      - name: Add cargo to PATH
+        run: echo "${HOME}/.cargo/bin" >> $GITHUB_PATH
       - run: cargo nextest run --locked --workspace --exclude smoke-test --exclude aptos-testcases --exclude aptos-api --exclude aptos-executor-benchmark --exclude aptos-backup-cli --retries 3 --no-fail-fast -F consensus-only-perf-test
         env:
           RUST_MIN_STACK: 4297152
@@ -239,6 +252,9 @@ jobs:
       - uses: actions/checkout@v4
       # prebuild aptos-node binary, so that tests don't start before node is built.
       # also prebuild aptos-node binary as a separate step to avoid feature unification issues
+      - run: scripts/dev_setup.sh -b -p -r -y -P -t
+      - name: Add cargo to PATH
+        run: echo "${HOME}/.cargo/bin" >> $GITHUB_PATH
       - run: cargo build --locked --package=aptos-node -F consensus-only-perf-test --release && LOCAL_SWARM_NODE_RELEASE=1 CONSENSUS_ONLY_PERF_TEST=1 cargo nextest run --release --package smoke-test -E "test(test_consensus_only_with_txn_emitter)" --run-ignored all
 
       # We always try to create the artifact, but it only creates on flaky or failed smoke tests -- when the directories are empty.

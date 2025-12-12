@@ -60,6 +60,7 @@ jobs:
     if: contains(github.event.pull_request.labels.*.name, 'CICD:non-required-tests')
     steps:
       - uses: actions/checkout@v4
+      - run: scripts/dev_setup.sh -b -p -r -y -P -t
       - run: python3 scripts/check-cryptohasher-symbols.py
 
   # Run all rust lints. This is a PR required job.

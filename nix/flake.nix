@@ -11,8 +11,8 @@
   };
 
   inputs = {
-    # Pin to same nixpkgs as movement repo for compatibility
-    nixpkgs.url = "github:NixOS/nixpkgs/a7abebc31a8f60011277437e000eebcc01702b9f";
+    # Use nixpkgs-unstable (25.11+) as required by crane
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
     rust-overlay.url = "github:oxalica/rust-overlay";
     crane.url = "github:ipetkov/crane";
@@ -35,8 +35,12 @@
         # Create craneLib with our toolchain
         craneLib = (crane.mkLib pkgs).overrideToolchain rustToolchain;
 
-        # Darwin frameworks for macOS
-        frameworks = pkgs.darwin.apple_sdk.frameworks;
+        # Darwin SDK for macOS (new pattern as of nixpkgs 25.11+)
+        # See: https://discourse.nixos.org/t/the-darwin-sdks-have-been-updated/55295
+        darwinBuildInputs = lib.optionals stdenv.isDarwin [
+          pkgs.apple-sdk_15
+          pkgs.libiconv
+        ];
 
         # Source filtering - only include Rust-relevant files
         src = lib.cleanSourceWith {
@@ -60,14 +64,7 @@
           zlib
           jemalloc
           protobuf
-        ] ++ lib.optionals stdenv.isDarwin [
-          frameworks.Security
-          frameworks.CoreServices
-          frameworks.SystemConfiguration
-          frameworks.AppKit
-          libiconv
-          libelf
-        ] ++ lib.optionals stdenv.isLinux [
+        ] ++ darwinBuildInputs ++ lib.optionals stdenv.isLinux [
           elfutils
           udev
           systemd
@@ -297,12 +294,8 @@
               jq
               nodejs
             ] ++ lib.optionals stdenv.isDarwin [
-              frameworks.Security
-              frameworks.CoreServices
-              frameworks.SystemConfiguration
-              frameworks.AppKit
+              apple-sdk_15
               libiconv
-              libelf
             ] ++ lib.optionals stdenv.isLinux [
               elfutils
               elfutils.dev

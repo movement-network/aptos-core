@@ -49,6 +49,7 @@
             || (builtins.match ".*\\.bpl$" path != null)    # Boogie prover prelude (include_bytes!)
             || (builtins.match ".*\\.mv$" path != null)     # Move bytecode (include_bytes!)
             || (builtins.match ".*\\.errmap$" path != null) # Move error descriptions (include_bytes!)
+            || (builtins.match ".*\\.yaml$" path != null)   # Config test data (include_str!)
             || (builtins.match ".*aptos-move/.*" path != null)
             || (builtins.match ".*movement-migration/.*" path != null);
         };

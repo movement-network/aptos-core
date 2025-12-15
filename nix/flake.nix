@@ -1,14 +1,9 @@
 {
   description = "Aptos Core - Layer 1 blockchain";
 
-  nixConfig = {
-    extra-substituters = [
-      "https://movementlabs.cachix.org"
-    ];
-    extra-trusted-public-keys = [
-      "movementlabs.cachix.org-1:qqCkWyzFSZCH2TcyHPRXVOOlYR3Sv+4GKMXSZtyN8s="
-    ];
-  };
+  # Note: Cachix configuration is handled via system config (/etc/nix/nix.custom.conf)
+  # rather than here to avoid "public key is not valid" errors with some Nix versions.
+  # See docs/nix-cachix-setup.md for setup instructions.
 
   inputs = {
     # Use nixpkgs-unstable (25.11+) as required by crane

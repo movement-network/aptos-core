@@ -222,6 +222,31 @@ Large binaries take time to upload. The `aptos-node` binary is ~200MB+.
 cachix push movementlabs ./result -v
 ```
 
+### "public key is not valid" Error
+
+If you see `error: public key is not valid` when running any nix command (including `nix build`, `nix develop`, or even `nix profile add nixpkgs#cachix`):
+
+**Cause**: Determinate Nix adds FlakeHub cache keys to `/etc/nix/nix.conf` by default. These keys can trigger a validation error.
+
+**Fix**: Edit `/etc/nix/nix.conf` and comment out or remove the `extra-trusted-public-keys` line containing FlakeHub keys:
+
+```bash
+# Backup and edit
+sudo cp /etc/nix/nix.conf /etc/nix/nix.conf.bak
+sudo nano /etc/nix/nix.conf
+
+# Comment out this line (starts with):
+# extra-trusted-public-keys = cache.flakehub.com-3:... cache.flakehub.com-4:...
+
+# Restart daemon (macOS)
+sudo launchctl stop org.nixos.nix-daemon && sudo launchctl start org.nixos.nix-daemon
+
+# Restart daemon (Linux)
+sudo systemctl restart nix-daemon
+```
+
+This does not affect Cachix - only FlakeHub cache is disabled.
+
 ## How It Works
 
 ### Nix Store Paths
@@ -235,20 +260,9 @@ The hash (`abc123...`) is determined by all inputs - source code, dependencies, 
 
 ### Flake Configuration
 
-The `flake.nix` includes:
+Cachix configuration is handled via your system's `/etc/nix/nix.custom.conf` rather than in the flake itself. This avoids "public key is not valid" errors that can occur when keys are specified in multiple places.
 
-```nix
-nixConfig = {
-  extra-substituters = [
-    "https://movementlabs.cachix.org"
-  ];
-  extra-trusted-public-keys = [
-    "movementlabs.cachix.org-1:qqCkWyzFSZCH2TcyHPRXVOOlYR3Sv+4GKMXSZtyN8s="
-  ];
-};
-```
-
-This tells Nix to check Cachix before building. Trusted users automatically use these settings.
+When you follow the Developer Setup steps above, your system will be configured to use the Movement Labs Cachix cache automatically.
 
 ### Dependency Caching (Crane)
 

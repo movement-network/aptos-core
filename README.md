@@ -46,6 +46,16 @@ nix develop
 | Lazy trees | No | **Yes (3x faster, 20x less disk)** |
 | Native Linux builder (macOS) | Manual setup | **Built-in** |
 
+### Troubleshooting: "public key is not valid" Error
+
+If you encounter `error: public key is not valid` when running nix commands, this is caused by FlakeHub cache keys that Determinate Nix adds by default. To fix:
+
+```bash
+sudo nano /etc/nix/nix.conf
+# Comment out or remove the line starting with: extra-trusted-public-keys = cache.flakehub.com-3:...
+sudo launchctl stop org.nixos.nix-daemon && sudo launchctl start org.nixos.nix-daemon
+```
+
 For detailed setup instructions, see:
 - [Nix Build Setup Guide](docs/nix-build-setup.md)
 - [Binary Cache Setup Guide](docs/nix-cachix-setup.md)

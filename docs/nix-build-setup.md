@@ -255,6 +255,32 @@ nix-collect-garbage -d
 
 Without Cachix configured, builds must compile everything from source. Set up Cachix (see [Cachix Setup Guide](./nix-cachix-setup.md)) to pull pre-built binaries.
 
+### "public key is not valid" Error
+
+If you see `error: public key is not valid` when running any nix command:
+
+**Cause**: Determinate Nix adds FlakeHub cache keys to `/etc/nix/nix.conf` by default. These keys can trigger a validation error in some Nix versions.
+
+**Fix**: Edit `/etc/nix/nix.conf` and comment out or remove the `extra-trusted-public-keys` line containing FlakeHub keys:
+
+```bash
+# Backup and edit the config
+sudo cp /etc/nix/nix.conf /etc/nix/nix.conf.bak
+sudo nano /etc/nix/nix.conf
+
+# Find and comment out this line (starts with):
+# extra-trusted-public-keys = cache.flakehub.com-3:... cache.flakehub.com-4:... (etc)
+
+# Restart the daemon
+# macOS:
+sudo launchctl stop org.nixos.nix-daemon && sudo launchctl start org.nixos.nix-daemon
+
+# Linux:
+sudo systemctl restart nix-daemon
+```
+
+**Note**: This removes FlakeHub cache integration but does not affect Cachix or other caches. If you need FlakeHub, contact Determinate Systems for support.
+
 ## Understanding the Build System
 
 ### File Structure

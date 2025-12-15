@@ -71,9 +71,16 @@ sudo systemctl restart nix-daemon
 ### Step 2: Install and Configure Cachix CLI
 
 ```bash
-# Install Cachix
-nix profile install nixpkgs#cachix
+# Option A: Use via nix shell (no permanent install needed)
+nix shell nixpkgs#cachix -c cachix --version
 
+# Option B: Add to your Nix profile (may fail on some systems)
+nix profile install nixpkgs#cachix
+```
+
+> **Note**: If `nix profile install` fails with "public key is not valid", use option A with `nix shell nixpkgs#cachix -c <command>` instead.
+
+```bash
 # Authenticate with your token (get from team lead or 1Password)
 cachix authtoken YOUR_AUTH_TOKEN
 

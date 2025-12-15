@@ -364,26 +364,32 @@
           aptos-node = {
             type = "app";
             program = "${aptos-node}/bin/aptos-node";
+            meta.description = "Aptos blockchain node";
           };
           movement = {
             type = "app";
             program = "${movement}/bin/movement";
+            meta.description = "Movement CLI tool";
           };
           l1-migration = {
             type = "app";
             program = "${l1-migration}/bin/l1-migration";
+            meta.description = "L1 migration utility";
           };
           aptos-faucet-service = {
             type = "app";
             program = "${aptos-faucet-service}/bin/aptos-faucet-service";
+            meta.description = "Aptos faucet service";
           };
           aptos-transaction-emitter = {
             type = "app";
             program = "${aptos-transaction-emitter}/bin/aptos-transaction-emitter";
+            meta.description = "Transaction testing and benchmarking tool";
           };
           default = {
             type = "app";
             program = "${aptos-node}/bin/aptos-node";
+            meta.description = "Aptos blockchain node (default)";
           };
         };
       });

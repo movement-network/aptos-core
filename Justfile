@@ -147,7 +147,7 @@ cache-push-all:
     echo "  nix build .#movement"
     echo "  etc."
 
-# Check Cachix authentication status
+# Check Cachix setup status
 cache-status:
     #!/usr/bin/env bash
     echo "Cachix Status"
@@ -155,12 +155,13 @@ cache-status:
     echo ""
     if ! command -v cachix &> /dev/null; then
         echo "Cachix CLI: NOT INSTALLED"
-        echo "  Install with: nix profile install nixpkgs#cachix"
+        echo "  Install with: nix profile add nixpkgs#cachix"
     else
         echo "Cachix CLI: $(cachix --version)"
         echo ""
-        if cachix authtoken --check 2>/dev/null; then
-            echo "Authentication: OK"
+        if [ -f "$HOME/.config/cachix/cachix.dhall" ]; then
+            echo "Authentication: CONFIGURED"
+            echo "  Config: $HOME/.config/cachix/cachix.dhall"
         else
             echo "Authentication: NOT CONFIGURED"
             echo "  Run: cachix authtoken YOUR_TOKEN"
@@ -171,7 +172,33 @@ cache-status:
     nix show-config 2>/dev/null | grep trusted-users || echo "  (not configured)"
     echo ""
     echo "Cachix substituters configured:"
-    nix show-config 2>/dev/null | grep -i cachix || echo "  (using flake config)"
+    nix show-config 2>/dev/null | grep -i movementlabs || echo "  (using flake config)"
+
+# Watch store and auto-push to Cachix (run in background while developing)
+cache-watch:
+    #!/usr/bin/env bash
+    if ! command -v cachix &> /dev/null; then
+        echo "Error: Cachix CLI not installed."
+        echo "Install with: nix profile add nixpkgs#cachix"
+        exit 1
+    fi
+    echo "Starting Cachix watch mode..."
+    echo "All new Nix builds will be automatically pushed to movementlabs cache."
+    echo "Press Ctrl+C to stop."
+    echo ""
+    cachix watch-store movementlabs
+
+# Build and push with watch-exec (auto-pushes build results)
+cache-build binary="all-binaries":
+    #!/usr/bin/env bash
+    if ! command -v cachix &> /dev/null; then
+        echo "Error: Cachix CLI not installed."
+        echo "Install with: nix profile add nixpkgs#cachix"
+        exit 1
+    fi
+    echo "Building {{binary}} and auto-pushing to Cachix..."
+    echo ""
+    cachix watch-exec movementlabs -- nix build .#{{binary}} -L
 
 # ==============================================================================
 # Container Commands (Nix-based container builds)

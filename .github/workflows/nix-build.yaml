@@ -1,0 +1,108 @@
+name: "🔧 Nix Build & Cache"
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - aptos-node
+          - movement
+          - l1-migration
+          - aptos-faucet-service
+          - aptos-transaction-emitter
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Determinate Nix
+        uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Setup Cachix
+        uses: cachix/cachix-action@v15
+        with:
+          name: movementlabs
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      - name: Build ${{ matrix.target }}
+        run: |
+          cd nix
+          nix build .#${{ matrix.target }} -L --accept-flake-config
+
+      - name: Verify binary
+        run: |
+          ls -la result/bin/
+          ./result/bin/${{ matrix.target }} --version || ./result/bin/${{ matrix.target }} --help || true
+
+  build-all:
+    name: Build All Binaries
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Determinate Nix
+        uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Setup Cachix
+        uses: cachix/cachix-action@v15
+        with:
+          name: movementlabs
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      - name: Build all binaries
+        run: |
+          cd nix
+          nix build .#all-binaries -L --accept-flake-config
+
+      - name: List all binaries
+        run: ls -la result/bin/
+
+  containers:
+    name: Build Containers
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Determinate Nix
+        uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Setup Cachix
+        uses: cachix/cachix-action@v15
+        with:
+          name: movementlabs
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      - name: Build aptos-node container
+        run: |
+          cd nix
+          nix build .#container-aptos-node -L --accept-flake-config
+
+      - name: Build faucet container
+        run: |
+          cd nix
+          nix build .#container-aptos-faucet-service -L --accept-flake-config
+
+      - name: Load and verify containers
+        run: |
+          docker load < result
+          docker images | grep -E "(aptos-node|aptos-faucet)"

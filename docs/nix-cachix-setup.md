@@ -34,7 +34,7 @@ Create tokens for team members and CI:
 The flake uses this public key - verify it matches your cache:
 
 ```
-movementlabs.cachix.org-1:qqCkWyzFSZCH2TcyHPRXVOOlYR3Sv+4GKMXSZtyN8s=
+movementlabs.cachix.org-1:qqCkWyzFSZCH2Tcy/HPRXVOOlYR3Sv+4GKMXSZtyN8s=
 ```
 
 If different, update `nixConfig` in `flake.nix` and `nix/flake.nix`.
@@ -51,7 +51,7 @@ On macOS, using group-based trust (`@admin` or `@staff`) is more reliable than i
 sudo tee /etc/nix/nix.custom.conf << 'EOF'
 trusted-users = root @admin @staff
 trusted-substituters = https://cache.flakehub.com https://movementlabs.cachix.org
-trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= movementlabs.cachix.org-1:qqCkWyzFSZCH2TcyHPRXVOOlYR3Sv+4GKMXSZtyN8s=
+trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= movementlabs.cachix.org-1:qqCkWyzFSZCH2Tcy/HPRXVOOlYR3Sv+4GKMXSZtyN8s=
 accept-flake-config = true
 EOF
 

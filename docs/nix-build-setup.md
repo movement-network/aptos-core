@@ -211,7 +211,7 @@ Ensure your user is in a trusted group. On macOS with Determinate Systems' Nix, 
 sudo tee /etc/nix/nix.custom.conf << 'EOF'
 trusted-users = root @admin @staff
 trusted-substituters = https://cache.flakehub.com https://movementlabs.cachix.org
-trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= movementlabs.cachix.org-1:qqCkWyzFSZCH2TcyHPRXVOOlYR3Sv+4GKMXSZtyN8s=
+trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= movementlabs.cachix.org-1:qqCkWyzFSZCH2Tcy/HPRXVOOlYR3Sv+4GKMXSZtyN8s=
 accept-flake-config = true
 EOF
 

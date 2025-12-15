@@ -1,53 +1,217 @@
 # Binary Cache Setup Guide
 
-This document explains how to configure Nix to use the Movement Labs binary cache, which speeds up builds by downloading pre-built artifacts.
+This document explains how to configure Nix binary caching so team members can share builds and avoid redundant compilation during PR reviews.
 
-## Quick Setup (Recommended)
+## Overview
 
-### Step 1: Add Yourself as a Trusted User
+With Cachix configured:
+1. Developer A builds `aptos-node` and pushes to cache (~30 min)
+2. Developer B reviewing the PR pulls the pre-built binary (~30 sec)
+3. CI/CD can also populate the cache for main branch builds
 
-The flake includes cache configuration, but Nix needs to trust your user to use it.
+## One-Time Admin Setup
 
-**For Determinate Nix (macOS/Linux):**
+**Someone with org admin access needs to do this once:**
+
+### 1. Create the Cachix Cache
+
+1. Go to https://app.cachix.org
+2. Sign in with GitHub (use Movement Labs org account)
+3. Create a new cache named `movementlabsxyz`
+4. Set it as **public** (allows anyone to pull without auth)
+5. Note the signing key shown after creation
+
+### 2. Generate Auth Tokens
+
+Create tokens for team members and CI:
+
+1. Go to cache settings → Auth Tokens
+2. Create tokens with **Write** permission
+3. Distribute tokens securely to team members (1Password recommended)
+
+### 3. Verify the Public Key
+
+The flake uses this public key - verify it matches your cache:
+
+```
+movementlabsxyz.cachix.org-1:ap2x2pbuuPk8hJr3B7jkXiP32UvJWpcmQ38RVB4P0cU=
+```
+
+If different, update `nixConfig` in `flake.nix` and `nix/flake.nix`.
+
+## Developer Setup
+
+### Step 1: Add Yourself as Trusted User
 
 ```bash
-# Add yourself as a trusted user
+# For Determinate Nix (check with: cat /etc/nix/nix.conf | head -1)
 sudo sh -c 'echo "trusted-users = root $(whoami)" >> /etc/nix/nix.custom.conf'
 
-# Restart the Nix daemon
+# For standard Nix
+sudo sh -c 'echo "trusted-users = root $(whoami)" >> /etc/nix/nix.conf'
+
+# Restart Nix daemon
 # macOS:
-sudo launchctl stop org.nixos.nix-daemon
-sudo launchctl start org.nixos.nix-daemon
+sudo launchctl stop org.nixos.nix-daemon && sudo launchctl start org.nixos.nix-daemon
 
 # Linux:
 sudo systemctl restart nix-daemon
 ```
 
-**For standard Nix installations:**
+### Step 2: Install and Configure Cachix CLI
 
 ```bash
-# Edit the main config file
-sudo nano /etc/nix/nix.conf
+# Install Cachix
+nix profile install nixpkgs#cachix
 
-# Add this line (replace YOUR_USERNAME):
-trusted-users = root YOUR_USERNAME
+# Authenticate with your token (get from team lead or 1Password)
+cachix authtoken YOUR_AUTH_TOKEN
 
-# Restart the daemon (same commands as above)
+# Verify authentication
+cachix authtoken --check
 ```
 
-### Step 2: Verify Setup
+### Step 3: Verify Setup
 
 ```bash
-# Should show your username
-nix show-config | grep trusted-users
-
-# Test a build - should not show "untrusted substituter" warnings
+# Should not show "untrusted substituter" warnings
 nix flake check --no-build
+```
+
+## Workflow: Building and Sharing
+
+### Push Your Builds to Cache
+
+After building locally, push to cache so others can pull:
+
+```bash
+# Build a package
+nix build .#aptos-node -L
+
+# Push the result to cache
+cachix push movementlabsxyz ./result
+
+# Or build and push in one command
+nix build .#aptos-node -L | cachix push movementlabsxyz
+```
+
+### Push All Binaries
+
+```bash
+# Build all binaries
+nix build .#all-binaries -L
+
+# Push the entire result (includes all 5 binaries)
+cachix push movementlabsxyz ./result
+```
+
+### Pull from Cache (Automatic)
+
+Once someone has pushed a build, others automatically get it:
+
+```bash
+# This will download from cache if available, otherwise build
+nix build .#aptos-node -L
+```
+
+You'll see cache hits in the output:
+```
+copying path '/nix/store/xxx-aptos-node-0.1.0' from 'https://movementlabsxyz.cachix.org'...
+```
+
+## PR Review Workflow
+
+### For PR Authors
+
+After pushing your PR branch:
+
+```bash
+# Build and push so reviewers don't have to build
+nix build .#all-binaries -L
+cachix push movementlabsxyz ./result
+
+# Add a comment to the PR
+echo "Binaries pushed to Cachix - reviewers can pull with: nix build .#all-binaries"
+```
+
+### For PR Reviewers
+
+```bash
+# Checkout the PR branch
+gh pr checkout 123
+
+# Build - will pull from cache if author pushed
+nix build .#aptos-node -L
+
+# Test the binary
+./result/bin/aptos-node --version
+```
+
+## CI/CD Integration
+
+Add to your GitHub Actions workflow:
+
+```yaml
+- name: Install Nix
+  uses: DeterminateSystems/nix-installer-action@main
+
+- name: Setup Cachix
+  uses: cachix/cachix-action@v14
+  with:
+    name: movementlabsxyz
+    authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+
+- name: Build and push
+  run: |
+    nix build .#all-binaries -L
+    cachix push movementlabsxyz ./result
+```
+
+Store `CACHIX_AUTH_TOKEN` in GitHub repository secrets.
+
+## Troubleshooting
+
+### "Binary cache movementlabsxyz doesn't exist"
+
+The cache hasn't been created yet. See "One-Time Admin Setup" above.
+
+### "Untrusted substituter" Warning
+
+Add yourself to `trusted-users` - see Step 1 in Developer Setup.
+
+### "Permission denied" When Pushing
+
+Your auth token doesn't have write access. Get a new token from an admin.
+
+### Cache Misses (Always Building from Source)
+
+1. The specific derivation hasn't been pushed yet
+2. The flake inputs changed (different nixpkgs = different hashes)
+3. Check if cache is configured: `nix show-config | grep movementlabsxyz`
+
+### Slow Uploads
+
+Large binaries take time to upload. The `aptos-node` binary is ~200MB+.
+
+```bash
+# Check upload progress with verbose output
+cachix push movementlabsxyz ./result -v
 ```
 
 ## How It Works
 
-The `flake.nix` includes this configuration:
+### Nix Store Paths
+
+Each build produces a unique path like:
+```
+/nix/store/abc123...-aptos-node-0.1.0
+```
+
+The hash (`abc123...`) is determined by all inputs - source code, dependencies, build flags. Same inputs = same hash = cache hit.
+
+### Flake Configuration
+
+The `flake.nix` includes:
 
 ```nix
 nixConfig = {
@@ -60,76 +224,24 @@ nixConfig = {
 };
 ```
 
-When you're a trusted user, Nix automatically uses these substituters to check for pre-built binaries before compiling from source.
+This tells Nix to check Cachix before building. Trusted users automatically use these settings.
 
-## Alternative: Per-Command Flag
+### Dependency Caching (Crane)
 
-If you don't want to modify system config, use `--accept-flake-config`:
+The flake uses crane's `buildDepsOnly` to cache dependencies separately:
 
-```bash
-nix build .#aptos-node --accept-flake-config -L
+```nix
+cargoArtifacts = craneLib.buildDepsOnly commonArgs;
 ```
 
-This trusts the flake's cache settings for that command only.
+Benefits:
+- Dependencies cached independently of source changes
+- Source-only changes rebuild faster even on cache miss
+- Multiple binaries share the same dependency cache
 
-## Cache Status
+## Security Notes
 
-**Current Status**: The `movementlabsxyz` Cachix cache is being set up. Until CI/CD populates it with builds, you'll need to build from source (15-60+ minutes for first build).
-
-Once the cache is populated:
-- Subsequent builds will download pre-built binaries in seconds
-- The flake's dependency caching (via crane) means even cache misses are faster
-
-## Verifying Cache Hits
-
-When building with `-L` flag, cache hits show:
-
-```
-copying path '/nix/store/xxx-aptos-node-0.1.0' from 'https://movementlabsxyz.cachix.org'...
-```
-
-Cache misses show compilation output instead.
-
-## Troubleshooting
-
-### "Untrusted substituter" Warning
-
-```
-warning: ignoring untrusted substituter 'https://movementlabsxyz.cachix.org'
-```
-
-**Fix**: Add yourself to `trusted-users` (see Step 1 above).
-
-### "Not a trusted user" Warning
-
-```
-warning: you are not a trusted user
-```
-
-**Fix**: Same as above - add yourself to `trusted-users` and restart the daemon.
-
-### Cache Misses (Building from Source)
-
-If builds compile from source even after cache setup:
-
-1. The commit you're building may not be cached yet
-2. Check network connectivity: `curl -I https://movementlabsxyz.cachix.org`
-3. Verify substituters are configured: `nix show-config | grep substituters`
-
-## For CI/CD: Pushing to Cache
-
-To populate the cache from CI:
-
-```bash
-# Install Cachix
-nix profile install nixpkgs#cachix
-
-# Authenticate (requires CACHIX_AUTH_TOKEN secret)
-cachix authtoken $CACHIX_AUTH_TOKEN
-
-# Build and push
-nix build .#aptos-node -L
-cachix push movementlabsxyz ./result
-```
-
-Note: Pushing requires organization membership and an auth token.
+- The public key cryptographically verifies all downloaded artifacts
+- Only authenticated users with write tokens can push
+- The cache is read-only for unauthenticated users
+- Never commit auth tokens to git - use environment variables or secrets managers

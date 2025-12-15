@@ -89,6 +89,91 @@ build-all-nix:
     echo "  $RESULT_PATH/bin/aptos-transaction-emitter"
 
 # ==============================================================================
+# Cachix Commands (share builds with team)
+# ==============================================================================
+
+# Push a built binary to Cachix (requires auth: cachix authtoken YOUR_TOKEN)
+cache-push binary="all-binaries":
+    #!/usr/bin/env bash
+    if ! command -v cachix &> /dev/null; then
+        echo "Error: Cachix CLI not installed."
+        echo "Install with: nix profile install nixpkgs#cachix"
+        echo "Then authenticate: cachix authtoken YOUR_TOKEN"
+        exit 1
+    fi
+
+    echo "Building and pushing {{binary}} to Cachix..."
+    echo ""
+
+    # Build first if result doesn't exist or is different target
+    if [ ! -L result ] || [ "$(readlink result)" != "$(nix build .#{{binary}} --print-out-paths 2>/dev/null)" ]; then
+        nix build .#{{binary}} -L
+    fi
+
+    echo ""
+    echo "Pushing to Cachix..."
+    cachix push movementlabsxyz ./result
+
+    echo ""
+    echo "Done! Others can now pull this build with:"
+    echo "  nix build .#{{binary}}"
+
+# Push all binaries to Cachix
+cache-push-all:
+    #!/usr/bin/env bash
+    if ! command -v cachix &> /dev/null; then
+        echo "Error: Cachix CLI not installed."
+        echo "Install with: nix profile install nixpkgs#cachix"
+        echo "Then authenticate: cachix authtoken YOUR_TOKEN"
+        exit 1
+    fi
+
+    echo "Building and pushing all binaries to Cachix..."
+    echo "This may take a while for the initial build (~30-60 min)."
+    echo ""
+
+    nix build .#all-binaries -L
+
+    echo ""
+    echo "Pushing to Cachix..."
+    cachix push movementlabsxyz ./result
+
+    echo ""
+    echo "Done! Others can now pull these builds with:"
+    echo "  nix build .#all-binaries"
+    echo ""
+    echo "Individual binaries are also cached:"
+    echo "  nix build .#aptos-node"
+    echo "  nix build .#movement"
+    echo "  etc."
+
+# Check Cachix authentication status
+cache-status:
+    #!/usr/bin/env bash
+    echo "Cachix Status"
+    echo "============="
+    echo ""
+    if ! command -v cachix &> /dev/null; then
+        echo "Cachix CLI: NOT INSTALLED"
+        echo "  Install with: nix profile install nixpkgs#cachix"
+    else
+        echo "Cachix CLI: $(cachix --version)"
+        echo ""
+        if cachix authtoken --check 2>/dev/null; then
+            echo "Authentication: OK"
+        else
+            echo "Authentication: NOT CONFIGURED"
+            echo "  Run: cachix authtoken YOUR_TOKEN"
+        fi
+    fi
+    echo ""
+    echo "Nix trusted-users:"
+    nix show-config 2>/dev/null | grep trusted-users || echo "  (not configured)"
+    echo ""
+    echo "Cachix substituters configured:"
+    nix show-config 2>/dev/null | grep -i cachix || echo "  (using flake config)"
+
+# ==============================================================================
 # Container Commands (Nix-based container builds)
 # ==============================================================================
 
@@ -245,6 +330,11 @@ list-binaries:
     @echo "  just container-load <name>             - Load container into Docker"
     @echo "  just container-push <name> [tag]       - Push container to GHCR"
     @echo ""
+    @echo "CACHIX (share builds with team):"
+    @echo "  just cache-push <binary>               - Build and push to Cachix"
+    @echo "  just cache-push-all                    - Build and push all binaries"
+    @echo "  just cache-status                      - Check Cachix setup status"
+    @echo ""
     @echo "================================================================================"
 
 # Help - list available recipes
@@ -268,6 +358,10 @@ help:
     @echo "  just container-nix <name>  - Build container with Nix"
     @echo "  just container-load <name> - Load into Docker"
     @echo "  just container-push <name> - Push to GHCR"
+    @echo ""
+    @echo "SHARE BUILDS (Cachix):"
+    @echo "  just cache-push-all        - Build all & push to cache"
+    @echo "  just cache-status          - Check Cachix setup"
     @echo ""
     @echo "Use 'just list-binaries' for complete list of build targets"
     @echo "================================================================================"

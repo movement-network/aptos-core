@@ -112,7 +112,7 @@ cache-push binary="all-binaries":
 
     echo ""
     echo "Pushing to Cachix..."
-    cachix push movementlabsxyz ./result
+    cachix push movementlabs ./result
 
     echo ""
     echo "Done! Others can now pull this build with:"
@@ -136,7 +136,7 @@ cache-push-all:
 
     echo ""
     echo "Pushing to Cachix..."
-    cachix push movementlabsxyz ./result
+    cachix push movementlabs ./result
 
     echo ""
     echo "Done! Others can now pull these builds with:"

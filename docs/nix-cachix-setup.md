@@ -17,7 +17,7 @@ With Cachix configured:
 
 1. Go to https://app.cachix.org
 2. Sign in with GitHub (use Movement Labs org account)
-3. Create a new cache named `movementlabsxyz`
+3. Create a new cache named `movementlabs`
 4. Set it as **public** (allows anyone to pull without auth)
 5. Note the signing key shown after creation
 
@@ -34,7 +34,7 @@ Create tokens for team members and CI:
 The flake uses this public key - verify it matches your cache:
 
 ```
-movementlabsxyz.cachix.org-1:ap2x2pbuuPk8hJr3B7jkXiP32UvJWpcmQ38RVB4P0cU=
+movementlabs.cachix.org-1:qqCkWyzFSZCH2TcyHPRXVOOlYR3Sv+4GKMXSZtyN8s=
 ```
 
 If different, update `nixConfig` in `flake.nix` and `nix/flake.nix`.
@@ -89,10 +89,10 @@ After building locally, push to cache so others can pull:
 nix build .#aptos-node -L
 
 # Push the result to cache
-cachix push movementlabsxyz ./result
+cachix push movementlabs ./result
 
 # Or build and push in one command
-nix build .#aptos-node -L | cachix push movementlabsxyz
+nix build .#aptos-node -L | cachix push movementlabs
 ```
 
 ### Push All Binaries
@@ -102,7 +102,7 @@ nix build .#aptos-node -L | cachix push movementlabsxyz
 nix build .#all-binaries -L
 
 # Push the entire result (includes all 5 binaries)
-cachix push movementlabsxyz ./result
+cachix push movementlabs ./result
 ```
 
 ### Pull from Cache (Automatic)
@@ -116,7 +116,7 @@ nix build .#aptos-node -L
 
 You'll see cache hits in the output:
 ```
-copying path '/nix/store/xxx-aptos-node-0.1.0' from 'https://movementlabsxyz.cachix.org'...
+copying path '/nix/store/xxx-aptos-node-0.1.0' from 'https://movementlabs.cachix.org'...
 ```
 
 ## PR Review Workflow
@@ -128,7 +128,7 @@ After pushing your PR branch:
 ```bash
 # Build and push so reviewers don't have to build
 nix build .#all-binaries -L
-cachix push movementlabsxyz ./result
+cachix push movementlabs ./result
 
 # Add a comment to the PR
 echo "Binaries pushed to Cachix - reviewers can pull with: nix build .#all-binaries"
@@ -158,20 +158,20 @@ Add to your GitHub Actions workflow:
 - name: Setup Cachix
   uses: cachix/cachix-action@v14
   with:
-    name: movementlabsxyz
+    name: movementlabs
     authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
 
 - name: Build and push
   run: |
     nix build .#all-binaries -L
-    cachix push movementlabsxyz ./result
+    cachix push movementlabs ./result
 ```
 
 Store `CACHIX_AUTH_TOKEN` in GitHub repository secrets.
 
 ## Troubleshooting
 
-### "Binary cache movementlabsxyz doesn't exist"
+### "Binary cache movementlabs doesn't exist"
 
 The cache hasn't been created yet. See "One-Time Admin Setup" above.
 
@@ -187,7 +187,7 @@ Your auth token doesn't have write access. Get a new token from an admin.
 
 1. The specific derivation hasn't been pushed yet
 2. The flake inputs changed (different nixpkgs = different hashes)
-3. Check if cache is configured: `nix show-config | grep movementlabsxyz`
+3. Check if cache is configured: `nix show-config | grep movementlabs`
 
 ### Slow Uploads
 
@@ -195,7 +195,7 @@ Large binaries take time to upload. The `aptos-node` binary is ~200MB+.
 
 ```bash
 # Check upload progress with verbose output
-cachix push movementlabsxyz ./result -v
+cachix push movementlabs ./result -v
 ```
 
 ## How It Works
@@ -216,10 +216,10 @@ The `flake.nix` includes:
 ```nix
 nixConfig = {
   extra-substituters = [
-    "https://movementlabsxyz.cachix.org"
+    "https://movementlabs.cachix.org"
   ];
   extra-trusted-public-keys = [
-    "movementlabsxyz.cachix.org-1:ap2x2pbuuPk8hJr3B7jkXiP32UvJWpcmQ38RVB4P0cU="
+    "movementlabs.cachix.org-1:qqCkWyzFSZCH2TcyHPRXVOOlYR3Sv+4GKMXSZtyN8s="
   ];
 };
 ```

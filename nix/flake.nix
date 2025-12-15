@@ -3,10 +3,10 @@
 
   nixConfig = {
     extra-substituters = [
-      "https://movementlabsxyz.cachix.org"
+      "https://movementlabs.cachix.org"
     ];
     extra-trusted-public-keys = [
-      "movementlabsxyz.cachix.org-1:ap2x2pbuuPk8hJr3B7jkXiP32UvJWpcmQ38RVB4P0cU="
+      "movementlabs.cachix.org-1:qqCkWyzFSZCH2TcyHPRXVOOlYR3Sv+4GKMXSZtyN8s="
     ];
   };
 

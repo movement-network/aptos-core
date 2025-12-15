@@ -91,10 +91,8 @@ This bypasses the key validation issue while still using the official NixOS cach
 
 ```bash
 # Authenticate with your token (get from team lead or 1Password)
+# Token is saved to ~/.config/cachix/cachix.dhall
 cachix authtoken YOUR_AUTH_TOKEN
-
-# Verify authentication
-cachix authtoken --check
 ```
 
 ### Step 3: Verify Setup

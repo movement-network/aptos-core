@@ -6,7 +6,11 @@ set shell := ["bash", "-c"]
 # Default target
 default: build
 
-# Build the project or a specific binary using Nix development shell
+# ==============================================================================
+# Development Shell Commands (fast iteration with cargo)
+# ==============================================================================
+
+# Build the project or a specific binary using Nix development shell (for development)
 build binary="all" profile="dev":
     #!/usr/bin/env bash
     if [ "{{profile}}" != "release" ]; then
@@ -44,17 +48,105 @@ clippy:
     @echo "Running clippy..."
     nix --extra-experimental-features "nix-command flakes" develop -c cargo clippy -- --deny warnings
 
-# Clean build artifacts
-clean:
-    @echo "Cleaning build artifacts..."
-    rm -rf result target
+# Build any binary by package name (cargo-based)
+build-bin package:
+    @echo "Building {{package}} with Nix development shell..."
+    nix develop -c cargo build --release -p {{package}}
+    @echo "Binary available at target/release/{{package}}"
 
-# Update flake.lock
-update:
-    @echo "Updating flake.lock..."
-    nix flake update
+# ==============================================================================
+# Nix Build Commands (reproducible builds with Cachix caching)
+# ==============================================================================
 
-# Build Docker image
+# Build a specific binary using Nix (reproducible, cached via Cachix)
+build-nix binary="aptos-node":
+    #!/usr/bin/env bash
+    echo "Building {{binary}} with Nix (reproducible build)..."
+    echo "This build can be cached and shared via Cachix."
+    echo ""
+    nix build .#{{binary}} -L
+    RESULT_PATH=$(readlink result)
+    echo ""
+    echo "Build complete!"
+    echo "Binary path: $RESULT_PATH/bin/{{binary}}"
+    echo ""
+    echo "To run: ./result/bin/{{binary}}"
+
+# Build all binaries using Nix (reproducible, cached via Cachix)
+build-all-nix:
+    #!/usr/bin/env bash
+    echo "Building all binaries with Nix (reproducible build)..."
+    echo "This build can be cached and shared via Cachix."
+    echo ""
+    nix build .#all-binaries -L
+    RESULT_PATH=$(readlink result)
+    echo ""
+    echo "Build complete! All binaries available at:"
+    echo "  $RESULT_PATH/bin/aptos-node"
+    echo "  $RESULT_PATH/bin/movement"
+    echo "  $RESULT_PATH/bin/l1-migration"
+    echo "  $RESULT_PATH/bin/aptos-faucet-service"
+    echo "  $RESULT_PATH/bin/aptos-transaction-emitter"
+
+# ==============================================================================
+# Container Commands (Nix-based container builds)
+# ==============================================================================
+
+# Build a container image using Nix dockerTools (Linux only)
+container-nix container="aptos-node":
+    #!/usr/bin/env bash
+    echo "Building container image for {{container}} with Nix..."
+    echo ""
+    nix build .#container-{{container}} -L
+    RESULT_PATH=$(readlink result)
+    echo ""
+    echo "Container image built!"
+    echo "Image tarball: $RESULT_PATH"
+    echo ""
+    echo "To load into Docker: docker load < $RESULT_PATH"
+    echo "Or use: just container-load {{container}}"
+
+# Load a Nix-built container image into Docker
+container-load container="aptos-node":
+    #!/usr/bin/env bash
+    echo "Loading {{container}} container image into Docker..."
+    IMAGE_PATH=$(nix build .#container-{{container}} --print-out-paths)
+    docker load < "$IMAGE_PATH"
+    echo ""
+    echo "Image loaded! Available as:"
+    echo "  ghcr.io/movementlabsxyz/{{container}}:nix"
+    echo ""
+    echo "To run: docker run ghcr.io/movementlabsxyz/{{container}}:nix"
+
+# Push a Nix-built container image to GHCR
+container-push container="aptos-node" tag="":
+    #!/usr/bin/env bash
+    # Default tag to git short SHA if not provided
+    if [ -z "{{tag}}" ]; then
+        TAG=$(git rev-parse --short HEAD)
+    else
+        TAG="{{tag}}"
+    fi
+
+    echo "Pushing {{container}} container to GHCR with tag: $TAG"
+    echo ""
+
+    # Build and load the image first
+    IMAGE_PATH=$(nix build .#container-{{container}} --print-out-paths)
+    docker load < "$IMAGE_PATH"
+
+    # Tag for the target registry
+    docker tag ghcr.io/movementlabsxyz/{{container}}:nix ghcr.io/movementlabsxyz/{{container}}:$TAG
+
+    # Push to GHCR
+    echo "Pushing to ghcr.io/movementlabsxyz/{{container}}:$TAG ..."
+    docker push ghcr.io/movementlabsxyz/{{container}}:$TAG
+
+    echo ""
+    echo "Container pushed successfully!"
+    echo "  ghcr.io/movementlabsxyz/{{container}}:$TAG"
+
+# Build Docker image using traditional Dockerfile (legacy method)
 container-build container="aptos-node" tag="latest" profile="release":
     #!/usr/bin/env bash
     # Check if Docker is installed
@@ -92,7 +184,7 @@ container-build container="aptos-node" tag="latest" profile="release":
             just build {{container}} {{profile}}
             ;;
     esac
-    
+
 
     # Set binary path based on profile
     if [ "{{profile}}" = "release" ]; then
@@ -102,44 +194,80 @@ container-build container="aptos-node" tag="latest" profile="release":
     else
         BINARY_PATH="target/{{profile}}"
     fi
-    
+
     echo "Building Docker image for '{{container}}' using binary at $BINARY_PATH..."
     docker build \
         --build-arg BINARY_PATH="$BINARY_PATH" \
         -f docker/{{container}}/Dockerfile \
         -t ghcr.io/movementlabsxyz/{{container}}:{{tag}} .
-    
+
     # Clean up the copied binary
     rm -f aptos-test
 
-# Build any binary by package name
-build-bin package:
-    @echo "Building {{package}} with Nix development shell..."
-    nix develop -c cargo build --release -p {{package}}
-    @echo "Binary available at target/release/{{package}}"
+# ==============================================================================
+# Utility Commands
+# ==============================================================================
+
+# Clean build artifacts
+clean:
+    @echo "Cleaning build artifacts..."
+    rm -rf result target
+
+# Update flake.lock
+update:
+    @echo "Updating flake.lock..."
+    nix flake update
 
 # List available binary build targets
 list-binaries:
-    @echo "Available binary build targets:"
-    @echo "  Generic: just build <binary-name>"
-    @echo "  Common binaries:"
-    @echo "    aptos-node          - Main Aptos node"
-    @echo "    aptos               - Aptos CLI tool"
-    @echo "    aptos-debugger      - Debugging tool"
-    @echo "    aptos-backup-cli    - Backup CLI tool"
-    @echo "    aptos-keygen        - Key generation tool"
-    @echo "    transaction-emitter - Transaction emitter"
-    @echo "    aptos-node-checker  - Node checker tool"
     @echo ""
-    @echo "Use 'just build' to build all packages"
-    @echo "Use 'just build-bin <package-name>' for custom package builds"
+    @echo "================================================================================"
+    @echo "                        Available Binary Build Targets"
+    @echo "================================================================================"
+    @echo ""
+    @echo "NIX BUILD TARGETS (reproducible, cached via Cachix):"
+    @echo "  just build-nix aptos-node              - Main Aptos node binary"
+    @echo "  just build-nix movement                - Movement CLI (renamed from aptos)"
+    @echo "  just build-nix l1-migration            - L1 migration tool"
+    @echo "  just build-nix aptos-faucet-service    - Faucet service for test networks"
+    @echo "  just build-nix aptos-transaction-emitter - Transaction testing tool"
+    @echo "  just build-all-nix                     - Build all five binaries"
+    @echo ""
+    @echo "CARGO BUILD TARGETS (faster iteration, uses dev shell):"
+    @echo "  just build aptos-node                  - Build with cargo (dev profile)"
+    @echo "  just build aptos-node release          - Build with cargo (release profile)"
+    @echo "  just build                             - Build entire workspace"
+    @echo "  just build-bin <package-name>          - Build any cargo package"
+    @echo ""
+    @echo "CONTAINER TARGETS (Nix-based containers):"
+    @echo "  just container-nix aptos-node          - Build aptos-node container"
+    @echo "  just container-nix aptos-faucet-service - Build faucet container"
+    @echo "  just container-load <name>             - Load container into Docker"
+    @echo "  just container-push <name> [tag]       - Push container to GHCR"
+    @echo ""
+    @echo "================================================================================"
 
 # Help - list available recipes
 help:
     @just --list
     @echo ""
-    @echo "Binary Build Options:"
-    @echo "  Use 'just list-binaries' to see available binary build targets"
-    @echo "  Use 'just build <binary-name>' for common binary builds"
-    @echo "  Use 'just build' to build all packages"
-    @echo "  Use 'just build-bin <package-name>' for custom package builds"
+    @echo "================================================================================"
+    @echo "                              Quick Reference"
+    @echo "================================================================================"
+    @echo ""
+    @echo "DEVELOPMENT:"
+    @echo "  just dev                 - Enter Nix development shell"
+    @echo "  just build               - Build all with cargo (fast iteration)"
+    @echo "  just test                - Run tests"
+    @echo ""
+    @echo "PRODUCTION BUILDS:"
+    @echo "  just build-nix <binary>  - Build single binary (reproducible, cached)"
+    @echo "  just build-all-nix       - Build all binaries (reproducible, cached)"
+    @echo ""
+    @echo "CONTAINERS:"
+    @echo "  just container-nix <name>  - Build container with Nix"
+    @echo "  just container-load <name> - Load into Docker"
+    @echo "  just container-push <name> - Push to GHCR"
+    @echo ""
+    @echo "Use 'just list-binaries' for complete list of build targets"
+    @echo "================================================================================"

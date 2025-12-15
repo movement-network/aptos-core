@@ -175,13 +175,32 @@ sudo systemctl start nix-daemon
 
 ### Permission denied errors
 
-Ensure your user is in the nix-trusted-users group or configure trusted users in `/etc/nix/nix.conf`:
+Ensure your user is in a trusted group. On macOS with Determinate Systems' Nix, configure trusted users in `/etc/nix/nix.custom.conf`:
 
-```ini
-trusted-users = root @wheel @admin
+```bash
+# macOS with Determinate Nix (recommended)
+sudo tee /etc/nix/nix.custom.conf << 'EOF'
+trusted-users = root @admin @staff
+trusted-substituters = https://cache.flakehub.com https://movementlabs.cachix.org
+trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= movementlabs.cachix.org-1:qqCkWyzFSZCH2TcyHPRXVOOlYR3Sv+4GKMXSZtyN8s=
+accept-flake-config = true
+EOF
+
+# Linux with standard Nix
+sudo sh -c 'echo "trusted-users = root @wheel" >> /etc/nix/nix.conf'
 ```
 
-Then restart the Nix daemon.
+**Important**: On macOS, using groups (`@admin`, `@staff`) is more reliable than individual usernames.
+
+Then restart the Nix daemon:
+
+```bash
+# macOS
+sudo launchctl stop org.nixos.nix-daemon && sudo launchctl start org.nixos.nix-daemon
+
+# Linux
+sudo systemctl restart nix-daemon
+```
 
 ### Darwin framework linking errors (macOS)
 

@@ -43,12 +43,20 @@ If different, update `nixConfig` in `flake.nix` and `nix/flake.nix`.
 
 ### Step 1: Add Yourself as Trusted User
 
-```bash
-# For Determinate Nix (check with: cat /etc/nix/nix.conf | head -1)
-sudo sh -c 'echo "trusted-users = root $(whoami)" >> /etc/nix/nix.custom.conf'
+On macOS, using group-based trust (`@admin` or `@staff`) is more reliable than individual usernames:
 
-# For standard Nix
-sudo sh -c 'echo "trusted-users = root $(whoami)" >> /etc/nix/nix.conf'
+```bash
+# For Determinate Nix on macOS (recommended)
+# Using groups ensures all admin/staff users are trusted
+sudo tee /etc/nix/nix.custom.conf << 'EOF'
+trusted-users = root @admin @staff
+trusted-substituters = https://cache.flakehub.com https://movementlabs.cachix.org
+trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= movementlabs.cachix.org-1:qqCkWyzFSZCH2TcyHPRXVOOlYR3Sv+4GKMXSZtyN8s=
+accept-flake-config = true
+EOF
+
+# For standard Nix on Linux
+sudo sh -c 'echo "trusted-users = root @wheel" >> /etc/nix/nix.conf'
 
 # Restart Nix daemon
 # macOS:
@@ -57,6 +65,8 @@ sudo launchctl stop org.nixos.nix-daemon && sudo launchctl start org.nixos.nix-d
 # Linux:
 sudo systemctl restart nix-daemon
 ```
+
+**Note**: Using individual usernames (e.g., `trusted-users = root myusername`) may not work reliably on macOS with Determinate Systems' Nix. Using groups (`@admin`, `@staff`, `@wheel`) is the recommended approach.
 
 ### Step 2: Install and Configure Cachix CLI
 

@@ -37,13 +37,17 @@
           pkgs.libiconv
         ];
 
-        # Source filtering - only include Rust-relevant files
+        # Source filtering - include Rust files and embedded assets
         src = lib.cleanSourceWith {
           src = ./..;
           filter = path: type:
             (craneLib.filterCargoSources path type)
             || (builtins.match ".*\\.proto$" path != null)
             || (builtins.match ".*\\.toml$" path != null)
+            || (builtins.match ".*\\.json$" path != null)   # JWKS test keys (include_str!)
+            || (builtins.match ".*\\.pem$" path != null)    # Cryptographic keys (include_str!)
+            || (builtins.match ".*\\.bpl$" path != null)    # Boogie prover prelude (include_bytes!)
+            || (builtins.match ".*\\.mv$" path != null)     # Move bytecode (include_bytes!)
             || (builtins.match ".*aptos-move/.*" path != null)
             || (builtins.match ".*movement-migration/.*" path != null);
         };

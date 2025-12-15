@@ -18,9 +18,21 @@ The Nix build approach is recommended for production builds as it:
 
 ## Prerequisites
 
-### 1. Install Nix
+### 1. Install Determinate Nix (Recommended)
 
-We recommend using the Determinate Systems installer, which sets up Nix with flakes enabled by default:
+We **strongly recommend** using [Determinate Nix](https://determinate.systems/nix/) instead of standard Nix. Determinate Nix is a validated downstream distribution that provides:
+
+| Feature | Standard Nix | Determinate Nix |
+|---------|-------------|-----------------|
+| **Flakes** | Experimental (requires flag) | Stable by default |
+| **New CLI (`nix` command)** | Experimental | Stable by default |
+| **Parallel evaluation** | Not available | 50%+ faster evaluations |
+| **Lazy trees** | Not available | 3x+ faster, 20x less disk usage |
+| **Native Linux builder (macOS)** | Requires manual setup | Built-in, zero config |
+| **Automatic garbage collection** | Manual | Automatic |
+| **License** | LGPL v2.1 | LGPL v2.1 (same, fully open source) |
+
+Install Determinate Nix:
 
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install
@@ -32,15 +44,30 @@ After installation, restart your shell or run:
 . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
 ```
 
-Verify Nix is installed:
+Verify installation:
 
 ```bash
 nix --version
+# Should show: nix (Determinate Nix X.Y.Z) 2.X.Y
 ```
 
-### 2. Enable Flakes (if not using Determinate Systems installer)
+#### Upgrading Determinate Nix
 
-If you used a different Nix installer, you may need to enable flakes manually.
+To upgrade to the latest version:
+
+```bash
+sudo determinate-nixd upgrade
+```
+
+### 2. Alternative: Standard Nix (Not Recommended)
+
+If you prefer standard Nix, you'll need to enable flakes manually.
+
+Install standard Nix:
+
+```bash
+curl -L https://nixos.org/nix/install | sh
+```
 
 Add to `~/.config/nix/nix.conf`:
 
@@ -49,6 +76,8 @@ experimental-features = nix-command flakes
 ```
 
 Or use the command-line flag: `nix --extra-experimental-features "nix-command flakes" ...`
+
+**Note**: You will miss out on parallel evaluation, lazy trees, and other performance improvements available in Determinate Nix.
 
 ### 3. Install Just (optional but recommended)
 

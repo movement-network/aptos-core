@@ -71,14 +71,23 @@ sudo systemctl restart nix-daemon
 ### Step 2: Install and Configure Cachix CLI
 
 ```bash
-# Option A: Use via nix shell (no permanent install needed)
-nix shell nixpkgs#cachix -c cachix --version
+# Option A: Standard installation (recommended)
+nix profile add nixpkgs#cachix
 
-# Option B: Add to your Nix profile (may fail on some systems)
-nix profile install nixpkgs#cachix
+# Option B: Use via nix shell (no permanent install needed)
+nix shell nixpkgs#cachix -c cachix --version
 ```
 
-> **Note**: If `nix profile install` fails with "public key is not valid", use option A with `nix shell nixpkgs#cachix -c <command>` instead.
+#### Troubleshooting: "public key is not valid" Error
+
+If you encounter the error `error: public key is not valid` when installing cachix, this is a known issue with certain key configurations. Use the workaround:
+
+```bash
+# Install with only the cache.nixos.org key
+nix profile add nixpkgs#cachix --option trusted-public-keys "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
+```
+
+This bypasses the key validation issue while still using the official NixOS cache. The movementlabs cache will still work for other operations once cachix is installed.
 
 ```bash
 # Authenticate with your token (get from team lead or 1Password)

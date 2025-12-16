@@ -107,13 +107,15 @@
           # Environment variables
           LIBCLANG_PATH = "${pkgs.libclang.lib}/lib";
           ROCKSDB_LIB_DIR = "${pkgs.rocksdb}/lib";
-          JEMALLOC_OVERRIDE = if stdenv.isLinux then "${pkgs.jemalloc}/lib/libjemalloc.so" else "${pkgs.jemalloc}/lib/libjemalloc.dylib";
           CARGO_BUILD_RUSTFLAGS = "${platformRustFlags} -C opt-level=3";
-          # Disable jemalloc-sys from building from source
           JEMALLOC_SYS_WITH_MALLOC_CONF = "";
 
           # Additional library paths for linking
           LD_LIBRARY_PATH = libraryPath;
+        } // lib.optionalAttrs stdenv.isLinux {
+          # On Linux, use system jemalloc. On macOS, let jemalloc-sys build from source
+          # to get the correct _rjem_ prefixed symbols that jemallocator expects.
+          JEMALLOC_OVERRIDE = "${pkgs.jemalloc}/lib/libjemalloc.so";
         };
 
         # Build dependencies only (for caching)

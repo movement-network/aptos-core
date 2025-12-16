@@ -145,10 +145,10 @@
           binary = "aptos-node";
         };
 
-        # movement binary comes from the 'aptos' cargo package
+        # movement binary (CLI tool, formerly named aptos)
         movement = mkPackage {
           pname = "movement";
-          cargoPackage = "aptos";
+          cargoPackage = "movement";
           binary = "movement";
         };
 

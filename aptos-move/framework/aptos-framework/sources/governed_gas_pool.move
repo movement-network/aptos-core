@@ -203,7 +203,9 @@ module aptos_framework::governed_gas_pool {
         let governed_gas_signer = &governed_gas_signer();
         coin::deposit(account, coin::withdraw<CoinType>(governed_gas_signer, amount));
 
-        if (features::governed_gas_pool_aggregators_enabled()) {
+        // Use aggregators only if feature is enabled AND counters are initialized.
+        // This avoids aborts between feature rollout and extension initialization.
+        if (features::governed_gas_pool_aggregators_enabled() && exists<GovernedGasPoolCounters>(@aptos_framework)) {
             let counters = borrow_global_mut<GovernedGasPoolCounters>(@aptos_framework);
             aggregator_v2::add(&mut counters.governance_funded_total, amount);
         };
@@ -266,7 +268,9 @@ module aptos_framework::governed_gas_pool {
             deposit_from<AptosCoin>(gas_payer, gas_fee);
         };
 
-        if (features::governed_gas_pool_aggregators_enabled()) {
+        // Use aggregators only if feature is enabled AND counters are initialized.
+        // This avoids aborts between feature rollout and extension initialization.
+        if (features::governed_gas_pool_aggregators_enabled() && exists<GovernedGasPoolCounters>(@aptos_framework)) {
             let counters = borrow_global_mut<GovernedGasPoolCounters>(@aptos_framework);
             aggregator_v2::add(&mut counters.gas_fee_total, gas_fee);
         };
@@ -279,7 +283,9 @@ module aptos_framework::governed_gas_pool {
         let treasury_account_address = signer::address_of(treasury_account);
         deposit_from<AptosCoin>(treasury_account_address, amount);
 
-        if (features::governed_gas_pool_aggregators_enabled()) {
+        // Use aggregators only if feature is enabled AND counters are initialized.
+        // This avoids aborts between feature rollout and extension initialization.
+        if (features::governed_gas_pool_aggregators_enabled() && exists<GovernedGasPoolCounters>(@aptos_framework)) {
             let counters = borrow_global_mut<GovernedGasPoolCounters>(@aptos_framework);
             aggregator_v2::add(&mut counters.treasury_total, amount);
         } else {
@@ -310,7 +316,13 @@ module aptos_framework::governed_gas_pool {
         let balance = get_balance<CoinType>();
         assert!(balance >= amount, EINSUFFICIENT_BALANCE);
 
-        if (features::governed_gas_pool_aggregators_enabled()) {
+        // Perform the withdrawal first so that any insufficient-balance aborts happen
+        // before event emission or aggregator updates (reduces wasted work on abort/retry).
+        let reward = coin::withdraw<CoinType>(&governed_gas_signer(), amount);
+
+        // Use aggregators only if feature is enabled AND counters are initialized.
+        // This avoids aborts between feature rollout and extension initialization.
+        if (features::governed_gas_pool_aggregators_enabled() && exists<GovernedGasPoolCounters>(@aptos_framework)) {
             let counters = borrow_global_mut<GovernedGasPoolCounters>(@aptos_framework);
             aggregator_v2::add(&mut counters.reward_withdrawn_total, amount);
             event::emit_event(
@@ -325,8 +337,7 @@ module aptos_framework::governed_gas_pool {
             );
         };
         
-        // Withdraw reward coin.
-        coin::withdraw<CoinType>(&governed_gas_signer(), amount)
+        reward
     }
 
     /// Register Aptos coin with Governed gas signer.
@@ -603,8 +614,8 @@ module aptos_framework::governed_gas_pool {
     }
 
     #[test(aptos_framework = @aptos_framework, depositor = @0xdddd)]
-    /// Test that gas fees are NOT tracked (for performance - hot path)
-    fun test_gas_fee_not_tracked_for_performance(
+    /// Test that gas fees ARE tracked with aggregators when feature is enabled
+    fun test_gas_fee_tracking_with_aggregators(
         aptos_framework: &signer, 
         depositor: &signer
     ) acquires GovernedGasPool, GovernedGasPoolCounters, AptosCoinMintCapability {
@@ -618,11 +629,11 @@ module aptos_framework::governed_gas_pool {
         deposit_gas_fee_v2(signer::address_of(depositor), 200);
         deposit_gas_fee_v2(signer::address_of(depositor), 300);
 
-        // Gas fees are NOT tracked in aggregators (hot path optimization)
+        // Gas fees ARE tracked in aggregators when feature is enabled
         let gas_total = aggregator_v2::read_snapshot(&get_gas_fee_total());
-        assert!(gas_total == 0, 1);
+        assert!(gas_total == 600, 1);
 
-        // But balance should reflect the deposits
+        // Balance should reflect the deposits
         assert!(get_balance<AptosCoin>() >= 600, 2);
     }
 

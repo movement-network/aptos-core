@@ -116,7 +116,8 @@ impl AptosVM {
         ];
 
         let traversal_storage = TraversalStorage::new();
-        session
+        //Hack to bypass epoch change
+        let err = session
             .execute_function_bypass_visibility(
                 &RECONFIGURATION_WITH_DKG_MODULE,
                 FINISH_WITH_DKG_RESULT,
@@ -129,7 +130,10 @@ impl AptosVM {
             .map_err(|e| {
                 expect_only_successful_execution(e, FINISH_WITH_DKG_RESULT.as_str(), log_context)
             })
-            .map_err(|r| Unexpected(r.unwrap_err()))?;
+            .map_err(|r| Unexpected(r.unwrap_err()));
+        if let Err(_) = err {
+            println!("###### ERROR : dkg error bypassed");
+        }
 
         let output = get_system_transaction_output(
             session,

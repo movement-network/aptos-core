@@ -26,6 +26,7 @@ mod state;
 #[cfg(test)]
 pub mod tests;
 mod transactions;
+mod verification;
 mod view_function;
 
 /// API categories for the OpenAPI spec

@@ -8,7 +8,11 @@ use crate::{
     response::{
         api_forbidden, build_not_found, module_not_found, resource_not_found, table_item_not_found,
         BadRequestError, BasicErrorWith404, BasicResponse, BasicResponseStatus, BasicResultWith404,
-        InternalError,
+        InternalError, ServiceUnavailableError,
+    },
+    verification::{
+        verify_module_on_demand, verify_package_registry_bytecode, ModuleVerificationStatusResponse,
+        PackageRegistryVerification,
     },
     ApiTags, Context,
 };
@@ -18,6 +22,7 @@ use aptos_api_types::{
     MoveModuleBytecode, MoveResource, MoveStructTag, MoveValue, RawStateValueRequest,
     RawTableItemRequest, TableItemRequest, VerifyInput, VerifyInputWithRecursion, U64,
 };
+use aptos_framework::natives::code::PackageRegistry;
 use aptos_types::state_store::{state_key::StateKey, table::TableHandle, TStateView};
 use move_core_types::language_storage::StructTag;
 use poem_openapi::{
@@ -25,7 +30,7 @@ use poem_openapi::{
     payload::Json,
     OpenApi,
 };
-use std::{convert::TryInto, sync::Arc};
+use std::{convert::TryInto, str::FromStr, sync::Arc};
 
 /// API for retrieving individual state
 #[derive(Clone)]
@@ -119,6 +124,110 @@ impl StateApi {
         let api = self.clone();
         api_spawn_blocking(move || {
             api.module(&accept_type, address.0, module_name.0, ledger_version.0)
+        })
+        .await
+    }
+
+    /// Get package registry verification
+    ///
+    /// Verifies that the source code in PackageRegistry metadata compiles to
+    /// the same bytecode as what's deployed on-chain. This is an off-chain
+    /// verification that does not affect on-chain state.
+    ///
+    /// For each module with source code:
+    /// 1. Compiles the source code with framework dependencies
+    /// 2. Fetches the on-chain bytecode for that module
+    /// 3. Compares compiled bytecode with on-chain bytecode
+    ///
+    /// The Aptos nodes prune account state history, via a configurable time window.
+    /// If the requested ledger version has been pruned, the server responds with a 410.
+    #[oai(
+        path = "/accounts/:address/resource/0x1::code::PackageRegistry/verification",
+        method = "get",
+        operation_id = "get_package_registry_verification",
+        tag = "ApiTags::Accounts"
+    )]
+    async fn get_package_registry_verification(
+        &self,
+        accept_type: AcceptType,
+        /// Address of account with or without a `0x` prefix
+        address: Path<Address>,
+        /// Ledger version to get state of account
+        ///
+        /// If not provided, it will be the latest version
+        ledger_version: Query<Option<U64>>,
+    ) -> BasicResultWith404<PackageRegistryVerification> {
+        fail_point_poem("endpoint_get_package_registry_verification")?;
+        self.context
+            .check_api_output_enabled("Get package registry verification", &accept_type)?;
+
+        let api = self.clone();
+        api_spawn_blocking(move || {
+            api.package_registry_verification(
+                &accept_type,
+                address.0,
+                ledger_version.0.map(|inner| inner.0),
+            )
+        })
+        .await
+    }
+
+    /// Get module verification status
+    ///
+    /// Verifies that the source code for a specific module in PackageRegistry metadata
+    /// compiles to the same bytecode as what's deployed on-chain.
+    ///
+    /// This endpoint performs on-demand verification and caches the result.
+    /// Results are cached to avoid re-verification on every request.
+    ///
+    /// Returns:
+    /// - 200 with `{ "verified": true }` if bytecode matches (verified_success)
+    /// - 200 with `{ "verified": false }` if bytecode doesn't match (verified_failure)
+    /// - 404 if no source code is available for the module
+    /// - 503 if bytecode verification is disabled on this node
+    #[oai(
+        path = "/accounts/:address/modules/:module_name/verification_status",
+        method = "get",
+        operation_id = "get_module_verification_status",
+        tag = "ApiTags::Accounts"
+    )]
+    async fn get_module_verification_status(
+        &self,
+        accept_type: AcceptType,
+        /// Address of account with or without a `0x` prefix
+        address: Path<Address>,
+        /// Name of module to verify e.g. `coin`
+        module_name: Path<IdentifierWrapper>,
+        /// Ledger version to get state of account
+        ///
+        /// If not provided, it will be the latest version
+        ledger_version: Query<Option<U64>>,
+    ) -> BasicResultWith404<ModuleVerificationStatusResponse> {
+        verify_module_identifier(module_name.0.as_str())
+            .context("'module_name' invalid")
+            .map_err(|err| {
+                BasicErrorWith404::bad_request_with_code_no_info(err, AptosErrorCode::InvalidInput)
+            })?;
+        fail_point_poem("endpoint_get_module_verification_status")?;
+        self.context
+            .check_api_output_enabled("Get module verification status", &accept_type)?;
+
+        // Check if bytecode verification is enabled
+        if !self.context.bytecode_verification_enabled() {
+            return Err(BasicErrorWith404::service_unavailable_with_code_no_info(
+                "Bytecode verification is disabled on this node",
+                AptosErrorCode::ApiDisabled,
+            ));
+        }
+
+        let api = self.clone();
+        api_spawn_blocking(move || {
+            api.module_verification_status(
+                &accept_type,
+                address.0,
+                module_name.0,
+                ledger_version.0.map(|inner| inner.0),
+            )
         })
         .await
     }
@@ -587,6 +696,225 @@ impl StateApi {
             AcceptType::Bcs => {
                 BasicResponse::try_from_encoded((bytes, &ledger_info, BasicResponseStatus::Ok))
             },
+        }
+    }
+
+    /// Verify a single module's source code on-demand
+    fn module_verification_status(
+        &self,
+        accept_type: &AcceptType,
+        address: Address,
+        module_name: IdentifierWrapper,
+        ledger_version: Option<u64>,
+    ) -> BasicResultWith404<ModuleVerificationStatusResponse> {
+        let (ledger_info, ledger_version, state_view) = self.context.state_view(ledger_version)?;
+        let address_inner: aptos_types::account_address::AccountAddress = address.into();
+        let module_name_str = module_name.to_string();
+
+        // Check cache first
+        if let Some(cached_status) = self
+            .context
+            .verification_cache()
+            .get(&address_inner, &module_name_str)
+        {
+            return match cached_status.to_bool() {
+                Some(verified) => {
+                    let response = ModuleVerificationStatusResponse { verified };
+                    match accept_type {
+                        AcceptType::Json => {
+                            BasicResponse::try_from_json((response, &ledger_info, BasicResponseStatus::Ok))
+                        }
+                        AcceptType::Bcs => {
+                            let bcs_bytes = bcs::to_bytes(&response)
+                                .context("Failed to serialize verification response")
+                                .map_err(|err| {
+                                    BasicErrorWith404::internal_with_code(
+                                        err,
+                                        AptosErrorCode::InternalError,
+                                        &ledger_info,
+                                    )
+                                })?;
+                            BasicResponse::try_from_encoded((bcs_bytes, &ledger_info, BasicResponseStatus::Ok))
+                        }
+                    }
+                }
+                None => {
+                    // Unverified - no source code available
+                    Err(build_not_found(
+                        "Module source code",
+                        format!("{} at address {}", module_name_str, address),
+                        AptosErrorCode::ResourceNotFound,
+                        &ledger_info,
+                    ))
+                }
+            };
+        }
+
+        // Fetch PackageRegistry
+        let tag = StructTag::from_str("0x1::code::PackageRegistry")
+            .context("Failed to parse PackageRegistry struct tag")
+            .map_err(|err| {
+                BasicErrorWith404::internal_with_code(
+                    err,
+                    AptosErrorCode::InternalError,
+                    &ledger_info,
+                )
+            })?;
+
+        let bytes = state_view
+            .as_converter(self.context.db.clone(), self.context.indexer_reader.clone())
+            .find_resource(&state_view, address, &tag)
+            .context(format!("Failed to query DB for PackageRegistry at {}", address))
+            .map_err(|err| {
+                BasicErrorWith404::internal_with_code(
+                    err,
+                    AptosErrorCode::InternalError,
+                    &ledger_info,
+                )
+            })?
+            .ok_or_else(|| resource_not_found(address, &tag, ledger_version, &ledger_info))?;
+
+        // Deserialize as PackageRegistry
+        let registry: PackageRegistry = bcs::from_bytes(&bytes)
+            .context("Failed to deserialize PackageRegistry from bytes")
+            .map_err(|err| {
+                BasicErrorWith404::internal_with_code(
+                    err,
+                    AptosErrorCode::InternalError,
+                    &ledger_info,
+                )
+            })?;
+
+        // Perform on-demand verification
+        let status = verify_module_on_demand(&registry, address_inner, &module_name_str, &state_view);
+
+        // Cache the result
+        self.context
+            .verification_cache()
+            .insert(address_inner, module_name_str.clone(), status);
+
+        // Return response based on status
+        match status.to_bool() {
+            Some(verified) => {
+                let response = ModuleVerificationStatusResponse { verified };
+                match accept_type {
+                    AcceptType::Json => {
+                        BasicResponse::try_from_json((response, &ledger_info, BasicResponseStatus::Ok))
+                    }
+                    AcceptType::Bcs => {
+                        let bcs_bytes = bcs::to_bytes(&response)
+                            .context("Failed to serialize verification response")
+                            .map_err(|err| {
+                                BasicErrorWith404::internal_with_code(
+                                    err,
+                                    AptosErrorCode::InternalError,
+                                    &ledger_info,
+                                )
+                            })?;
+                        BasicResponse::try_from_encoded((bcs_bytes, &ledger_info, BasicResponseStatus::Ok))
+                    }
+                }
+            }
+            None => {
+                // Unverified - no source code available
+                Err(build_not_found(
+                    "Module source code",
+                    format!("{} at address {}", module_name_str, address),
+                    AptosErrorCode::ResourceNotFound,
+                    &ledger_info,
+                ))
+            }
+        }
+    }
+
+    /// Verify PackageRegistry source fields
+    fn package_registry_verification(
+        &self,
+        accept_type: &AcceptType,
+        address: Address,
+        ledger_version: Option<u64>,
+    ) -> BasicResultWith404<PackageRegistryVerification> {
+        let (ledger_info, ledger_version, state_view) = self.context.state_view(ledger_version)?;
+
+        // Verify this is only for PackageRegistry
+        let tag = StructTag::from_str("0x1::code::PackageRegistry")
+            .context("Failed to parse PackageRegistry struct tag")
+            .map_err(|err| {
+                BasicErrorWith404::internal_with_code(
+                    err,
+                    AptosErrorCode::InternalError,
+                    &ledger_info,
+                )
+            })?;
+
+        // Fetch the PackageRegistry resource bytes
+        let bytes = state_view
+            .as_converter(self.context.db.clone(), self.context.indexer_reader.clone())
+            .find_resource(&state_view, address, &tag)
+            .context(format!(
+                "Failed to query DB for PackageRegistry at {}",
+                address
+            ))
+            .map_err(|err| {
+                BasicErrorWith404::internal_with_code(
+                    err,
+                    AptosErrorCode::InternalError,
+                    &ledger_info,
+                )
+            })?
+            .ok_or_else(|| resource_not_found(address, &tag, ledger_version, &ledger_info))?;
+
+        // Deserialize as PackageRegistry
+        let registry: PackageRegistry = bcs::from_bytes(&bytes)
+            .context("Failed to deserialize PackageRegistry from bytes")
+            .map_err(|err| {
+                BasicErrorWith404::internal_with_code(
+                    err,
+                    AptosErrorCode::InternalError,
+                    &ledger_info,
+                )
+            })?;
+
+        // Perform bytecode verification
+        let verification = verify_package_registry_bytecode(
+            &registry,
+            address.into(),
+            &state_view,
+        )
+        .context("Failed to verify package registry bytecode")
+        .map_err(|err| {
+            BasicErrorWith404::internal_with_code(
+                err,
+                AptosErrorCode::InternalError,
+                &ledger_info,
+            )
+        })?;
+
+        match accept_type {
+            AcceptType::Json => {
+                BasicResponse::try_from_json((
+                    verification,
+                    &ledger_info,
+                    BasicResponseStatus::Ok,
+                ))
+            }
+            AcceptType::Bcs => {
+                // BCS encoding for verification response
+                let bcs_bytes = bcs::to_bytes(&verification)
+                    .context("Failed to serialize verification response")
+                    .map_err(|err| {
+                        BasicErrorWith404::internal_with_code(
+                            err,
+                            AptosErrorCode::InternalError,
+                            &ledger_info,
+                        )
+                    })?;
+                BasicResponse::try_from_encoded((
+                    bcs_bytes,
+                    &ledger_info,
+                    BasicResponseStatus::Ok,
+                ))
+            }
         }
     }
 }

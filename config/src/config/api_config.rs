@@ -92,6 +92,13 @@ pub struct ApiConfig {
     pub wait_by_hash_poll_interval_ms: u64,
     /// The number of active wait_by_hash requests that can be active at any given time.
     pub wait_by_hash_max_active_connections: usize,
+    /// Enables bytecode verification for source code
+    ///
+    /// When enabled, the node can verify that source code stored in PackageRegistry
+    /// compiles to the same bytecode as what's deployed on-chain. When disabled,
+    /// verification endpoints will return a 503 Service Unavailable error.
+    #[serde(default = "default_disabled")]
+    pub bytecode_verification_enabled: bool,
 }
 
 const DEFAULT_ADDRESS: &str = "127.0.0.1";
@@ -145,6 +152,7 @@ impl Default for ApiConfig {
             wait_by_hash_timeout_ms: 1_000,
             wait_by_hash_poll_interval_ms: 20,
             wait_by_hash_max_active_connections: 100,
+            bytecode_verification_enabled: default_disabled(),
         }
     }
 }

@@ -100,6 +100,9 @@ docker/compose/indexer-grpc/data-service-grpc-server.key
 # VSCode settings
 .vscode/
 
+# Taskmaster
+.taskmaster
+
 # Typescript
 *.env
 node_modules

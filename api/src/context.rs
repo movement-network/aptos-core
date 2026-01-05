@@ -69,6 +69,40 @@ use std::{
     time::Instant,
 };
 
+use crate::verification::VerificationStatus;
+
+/// Cache for bytecode verification results. Key: (address, module_name).
+/// LRU cache with 10,000 entry limit.
+pub struct VerificationCache {
+    cache: Cache<(AccountAddress, String), VerificationStatus>,
+}
+
+impl VerificationCache {
+    fn new() -> Self {
+        // Cache up to 10000 module verification results
+        // Uses LRU eviction when capacity is reached
+        Self {
+            cache: Cache::new(10000),
+        }
+    }
+
+    pub fn get(&self, address: &AccountAddress, module_name: &str) -> Option<VerificationStatus> {
+        self.cache.get(&(*address, module_name.to_string()))
+    }
+
+    pub fn insert(&self, address: AccountAddress, module_name: String, status: VerificationStatus) {
+        self.cache.insert((address, module_name), status);
+    }
+
+    pub fn invalidate(&self, address: &AccountAddress, module_name: &str) {
+        self.cache.invalidate(&(*address, module_name.to_string()));
+    }
+
+    pub fn invalidate_all(&self) {
+        self.cache.invalidate_all();
+    }
+}
+
 // Context holds application scope context
 #[derive(Clone)]
 pub struct Context {
@@ -83,6 +117,8 @@ pub struct Context {
     simulate_txn_stats: Arc<FunctionStats>,
     pub indexer_reader: Option<Arc<dyn IndexerReader>>,
     pub wait_for_hash_active_connections: Arc<AtomicUsize>,
+    /// Cache for bytecode verification results
+    verification_cache: Arc<VerificationCache>,
 }
 
 impl std::fmt::Debug for Context {
@@ -135,7 +171,18 @@ impl Context {
             simulate_txn_stats,
             indexer_reader,
             wait_for_hash_active_connections: Arc::new(AtomicUsize::new(0)),
+            verification_cache: Arc::new(VerificationCache::new()),
         }
+    }
+
+    /// Check if bytecode verification is enabled
+    pub fn bytecode_verification_enabled(&self) -> bool {
+        self.node_config.api.bytecode_verification_enabled
+    }
+
+    /// Get the verification cache
+    pub fn verification_cache(&self) -> &VerificationCache {
+        &self.verification_cache
     }
 
     pub fn max_transactions_page_size(&self) -> u16 {

@@ -93,11 +93,39 @@ pub struct PackageRegistryVerification {
 ///
 /// This creates a temporary file with the source code and compiles it
 /// using the Move compiler v2.
+#[cfg(test)]
+pub fn compile_module_source_for_test(
+    source_code: &str,
+    module_name: &str,
+    address: AccountAddress,
+) -> Result<Vec<u8>> {
+    compile_module_source(source_code, module_name, address)
+}
+
 fn compile_module_source(
     source_code: &str,
     module_name: &str,
     address: AccountAddress,
 ) -> Result<Vec<u8>> {
+    // Extract named address from module declaration (e.g., "verification_test" from "module verification_test::greeter_valid")
+    let named_address_from_source = source_code
+        .lines()
+        .find_map(|line| {
+            let line = line.trim();
+            if line.starts_with("module") {
+                // Parse "module <named_address>::<module_name>"
+                let parts: Vec<&str> = line.split("::").collect();
+                if parts.len() >= 2 {
+                    // Extract the named address part (remove "module " prefix)
+                    parts[0].trim_start_matches("module").trim().to_string().into()
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        });
+
     // Create a temp directory for the source file
     let dir = tempdir().context("Failed to create temp directory")?;
     let file_path = dir.path().join(format!("{}.move", module_name));
@@ -109,12 +137,14 @@ fn compile_module_source(
         .with_context(|| format!("Failed to write source for module {}", module_name))?;
     drop(file);
 
-    // Get framework dependency paths from cached packages
-    let framework_bundle = aptos_cached_packages::head_release_bundle();
-    let deps: Vec<String> = framework_bundle.source_dirs.clone();
+    // Get minimal framework dependency - just move-stdlib for basic types like string
+    // Keep it minimal to avoid stack overflow from processing large frameworks
+    let deps: Vec<String> = vec![
+        aptos_framework::path_in_crate("move-stdlib/sources").to_string_lossy().to_string(),
+    ];
 
     // Set up named address mapping
-    let named_addresses = vec![
+    let mut named_addresses = vec![
         format!("std=0x1"),
         format!("aptos_std=0x1"),
         format!("aptos_framework=0x1"),
@@ -122,9 +152,17 @@ fn compile_module_source(
         format!("aptos_token=0x3"),
         format!("core_resources=0xA550C18"),
         format!("vm_reserved=0x0"),
-        // Add the deployer's address for the module being compiled
+        // Map common named addresses to the deployer's address
         format!("deployer={}", address),
     ];
+    
+    // If we found a named address in the source, map it to the deployer's address
+    // (since that's how it was compiled originally)
+    if let Some(named_addr) = named_address_from_source {
+        if !named_addr.is_empty() && named_addr != "0x1" && named_addr != "0xA" && named_addr != "0x3" {
+            named_addresses.push(format!("{}={}", named_addr, address));
+        }
+    }
 
     let options = move_compiler_v2::Options {
         sources: vec![file_path.to_str().unwrap().to_string()],
@@ -240,8 +278,9 @@ fn verify_module_bytecode(
             },
         };
 
-    // Compare bytecode
-    let matches = compiled_bytecode == on_chain_bytecode;
+    // Compare bytecode by deserializing and comparing module structure
+    // This is more robust than byte comparison as it ignores metadata differences
+    let matches = compare_module_bytecode(&compiled_bytecode, &on_chain_bytecode);
 
     ModuleVerificationResult {
         module_name: module_metadata.name.clone(),
@@ -252,6 +291,45 @@ fn verify_module_bytecode(
             Some("Compiled bytecode does not match on-chain bytecode".to_string())
         },
     }
+}
+
+/// Compare two module bytecodes by deserializing them
+/// Returns true if the modules are functionally equivalent
+fn compare_module_bytecode(compiled: &[u8], on_chain: &[u8]) -> bool {
+    use move_binary_format::CompiledModule;
+
+    // First try exact byte comparison (fastest)
+    if compiled == on_chain {
+        return true;
+    }
+
+    // If bytes differ, deserialize and compare module structure
+    let mut compiled_module = match CompiledModule::deserialize(compiled) {
+        Ok(m) => m,
+        Err(_) => return false,
+    };
+    
+    let mut on_chain_module = match CompiledModule::deserialize(on_chain) {
+        Ok(m) => m,
+        Err(_) => return false,
+    };
+
+    // Clear metadata fields to compare only the core module structure
+    compiled_module.metadata.clear();
+    on_chain_module.metadata.clear();
+
+    // Re-serialize both to normalize and compare
+    let mut compiled_normalized = Vec::new();
+    let mut on_chain_normalized = Vec::new();
+    
+    if compiled_module.serialize(&mut compiled_normalized).is_err() {
+        return false;
+    }
+    if on_chain_module.serialize(&mut on_chain_normalized).is_err() {
+        return false;
+    }
+
+    compiled_normalized == on_chain_normalized
 }
 
 /// Verify a single module's source code against on-chain bytecode and return status

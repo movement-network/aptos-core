@@ -89,19 +89,6 @@ pub struct PackageRegistryVerification {
     pub packages: Vec<PackageVerificationStatus>,
 }
 
-/// Compile Move source code to bytecode using move-compiler-v2
-///
-/// This creates a temporary file with the source code and compiles it
-/// using the Move compiler v2.
-#[cfg(test)]
-pub fn compile_module_source_for_test(
-    source_code: &str,
-    module_name: &str,
-    address: AccountAddress,
-) -> Result<Vec<u8>> {
-    compile_module_source(source_code, module_name, address)
-}
-
 fn compile_module_source(
     source_code: &str,
     module_name: &str,

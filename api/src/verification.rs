@@ -1,6 +1,3 @@
-// Copyright © Aptos Foundation
-// SPDX-License-Identifier: Apache-2.0
-
 //! On-demand bytecode verification for PackageRegistry source code.
 //!
 //! Verifies that source code stored in PackageRegistry compiles to the same

@@ -1,6 +1,3 @@
-// Copyright © Aptos Foundation
-// SPDX-License-Identifier: Apache-2.0
-
 //! Unit tests for bytecode verification API endpoint.
 
 use super::new_test_context_with_config;

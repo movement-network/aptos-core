@@ -74,6 +74,9 @@ jobs:
         if: needs.file_change_determinator.outputs.only_docs_changed != 'true'
         with:
           fetch-depth: 0 # get all the history because cargo xtest --change-since origin/main requires it.
+      - run: scripts/dev_setup.sh -b -p -r -y -P -t
+      - name: Add cargo to PATH
+        run: echo "${HOME}/.cargo/bin" >> $GITHUB_PATH
       - name: Run rust lints
         uses: ./.github/actions/rust-lints
         if: needs.file_change_determinator.outputs.only_docs_changed != 'true'

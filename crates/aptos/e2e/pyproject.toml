@@ -10,6 +10,7 @@ license = "Apache-2.0"
 python = ">=3.8.1,<=4"
 aptos-sdk = "^0.10.0"
 requests = "^2.31.0"
+urllib3 = {version = ">=2.6.3", python = ">=3.9"}
 
 [tool.poetry.dev-dependencies]
 black = "^22.6.0"

@@ -2,6 +2,21 @@
 //!
 //! Verifies that source code stored in PackageRegistry compiles to the same
 //! bytecode as what's deployed on-chain. Enabled via `api.bytecode_verification_enabled`.
+//!
+//! ## Supported Dependencies
+//!
+//! This verification supports contracts that depend on standard Aptos framework packages:
+//! - `move-stdlib` (0x1) - always included
+//! - `aptos-stdlib` (0x1) - included when source uses `aptos_std::`
+//! - `aptos-framework` (0x1) - included when source uses `aptos_framework::`
+//! - `aptos-token` (0x3) - included when source uses `aptos_token::`
+//! - `aptos-token-objects` (0x4) - included when source uses `aptos_token_objects::`
+//!
+//! ## Limitations
+//!
+//! Contracts that depend on other user-deployed packages (e.g., `use alice::library`)
+//! cannot be verified, as we don't have access to those dependencies at compile time.
+//! In such cases, verification will fail with a compilation error.
 
 use anyhow::{Context, Result};
 use aptos_framework::{natives::code::PackageRegistry, unzip_metadata_str};
@@ -15,31 +30,55 @@ use move_core_types::identifier::Identifier;
 use move_model::metadata::LanguageVersion;
 use poem_openapi::Object;
 use serde::{Deserialize, Serialize};
-use std::{fs::File, io::Write};
+use std::{fs::File, io::Write, thread};
 use tempfile::tempdir;
+
+/// Stack size for compilation thread (16MB to handle large framework dependencies)
+const COMPILATION_STACK_SIZE: usize = 16 * 1024 * 1024;
 
 /// Verification status enum for local storage/caching
 ///
 /// This enum is used internally for caching verification results.
-/// The API returns a boolean (true = verified_success, false = verified_failure).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// API responses:
+/// - VerifiedSuccess → HTTP 200, `{"verified": true}`
+/// - VerifiedFailure → HTTP 200, `{"verified": false}`
+/// - Unverified → HTTP 404 (no source code)
+/// - CompilationError → HTTP 422, `{"error": "...", "message": "..."}`
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VerificationStatus {
     /// Source code compiles to matching bytecode
     VerifiedSuccess,
-    /// Source code compiles but bytecode doesn't match
+    /// Source code compiles but bytecode doesn't match (SUSPICIOUS)
     VerifiedFailure,
     /// No source code available in PackageRegistry
     Unverified,
+    /// Compilation failed (e.g., unsupported dependencies, syntax error)
+    /// Contains the error message
+    CompilationError(String),
 }
 
 impl VerificationStatus {
-    /// Convert to boolean for API response
-    /// Returns Some(true) for VerifiedSuccess, Some(false) for VerifiedFailure, None for Unverified
+    /// Convert to boolean for API response (only for success/failure states)
+    /// Returns Some(true) for VerifiedSuccess, Some(false) for VerifiedFailure, None otherwise
     pub fn to_bool(&self) -> Option<bool> {
         match self {
             VerificationStatus::VerifiedSuccess => Some(true),
             VerificationStatus::VerifiedFailure => Some(false),
             VerificationStatus::Unverified => None,
+            VerificationStatus::CompilationError(_) => None,
+        }
+    }
+
+    /// Check if this is a compilation error
+    pub fn is_compilation_error(&self) -> bool {
+        matches!(self, VerificationStatus::CompilationError(_))
+    }
+
+    /// Get the compilation error message, if any
+    pub fn compilation_error_message(&self) -> Option<&str> {
+        match self {
+            VerificationStatus::CompilationError(msg) => Some(msg),
+            _ => None,
         }
     }
 }
@@ -51,6 +90,15 @@ pub struct ModuleVerificationStatusResponse {
     /// true = verified_success (bytecode matches)
     /// false = verified_failure (bytecode doesn't match)
     pub verified: bool,
+}
+
+/// Response for compilation error (HTTP 422)
+#[derive(Clone, Debug, Serialize, Deserialize, Object)]
+pub struct CompilationErrorResponse {
+    /// Error type identifier
+    pub error: String,
+    /// Human-readable error message
+    pub message: String,
 }
 
 /// Verification result for a single module
@@ -86,7 +134,33 @@ pub struct PackageRegistryVerification {
     pub packages: Vec<PackageVerificationStatus>,
 }
 
+/// Compile module source code to bytecode.
+/// Runs in a separate thread with larger stack to handle framework dependencies.
 fn compile_module_source(
+    source_code: &str,
+    module_name: &str,
+    address: AccountAddress,
+) -> Result<Vec<u8>> {
+    // Clone data for the thread
+    let source_code = source_code.to_string();
+    let module_name_owned = module_name.to_string();
+    let module_name_for_error = module_name.to_string();
+    
+    // Spawn compilation in a separate thread with larger stack size
+    // The Move compiler uses deep recursion which can overflow the default stack
+    let handle = thread::Builder::new()
+        .name("move-compiler".to_string())
+        .stack_size(COMPILATION_STACK_SIZE)
+        .spawn(move || compile_module_source_inner(&source_code, &module_name_owned, address))
+        .context("Failed to spawn compilation thread")?;
+    
+    handle
+        .join()
+        .map_err(|_| anyhow::anyhow!("Compilation thread panicked for module {}", module_name_for_error))?
+}
+
+/// Inner compilation function that runs in a thread with larger stack
+fn compile_module_source_inner(
     source_code: &str,
     module_name: &str,
     address: AccountAddress,
@@ -121,11 +195,49 @@ fn compile_module_source(
         .with_context(|| format!("Failed to write source for module {}", module_name))?;
     drop(file);
 
-    // Get minimal framework dependency - just move-stdlib for basic types like string
-    // Keep it minimal to avoid stack overflow from processing large frameworks
-    let deps: Vec<String> = vec![
+    // Include framework dependencies based on what the source code uses.
+    // We track which frameworks are needed and resolve transitive dependencies.
+    // Dependency tree:
+    //   move-stdlib          <- no deps
+    //   aptos-stdlib         <- move-stdlib
+    //   aptos-framework      <- move-stdlib, aptos-stdlib
+    //   aptos-token          <- move-stdlib, aptos-framework (-> aptos-stdlib)
+    //   aptos-token-objects  <- move-stdlib, aptos-framework (-> aptos-stdlib)
+    
+    let needs_aptos_std = source_code.contains("aptos_std::") || source_code.contains("use aptos_std");
+    let needs_aptos_framework = source_code.contains("aptos_framework::") || source_code.contains("use aptos_framework");
+    let needs_aptos_token = source_code.contains("aptos_token::") || source_code.contains("use aptos_token");
+    let needs_aptos_token_objects = source_code.contains("aptos_token_objects::") || source_code.contains("use aptos_token_objects");
+    
+    // Resolve transitive dependencies:
+    // - aptos-framework requires aptos-stdlib
+    // - aptos-token requires aptos-framework (and transitively aptos-stdlib)
+    // - aptos-token-objects requires aptos-framework (and transitively aptos-stdlib)
+    let include_aptos_stdlib = needs_aptos_std 
+        || needs_aptos_framework 
+        || needs_aptos_token 
+        || needs_aptos_token_objects;
+    let include_aptos_framework = needs_aptos_framework 
+        || needs_aptos_token 
+        || needs_aptos_token_objects;
+    
+    // Build dependency list (move-stdlib is always included)
+    let mut deps: Vec<String> = vec![
         aptos_framework::path_in_crate("move-stdlib/sources").to_string_lossy().to_string(),
     ];
+    
+    if include_aptos_stdlib {
+        deps.push(aptos_framework::path_in_crate("aptos-stdlib/sources").to_string_lossy().to_string());
+    }
+    if include_aptos_framework {
+        deps.push(aptos_framework::path_in_crate("aptos-framework/sources").to_string_lossy().to_string());
+    }
+    if needs_aptos_token {
+        deps.push(aptos_framework::path_in_crate("aptos-token/sources").to_string_lossy().to_string());
+    }
+    if needs_aptos_token_objects {
+        deps.push(aptos_framework::path_in_crate("aptos-token-objects/sources").to_string_lossy().to_string());
+    }
 
     // Set up named address mapping
     let mut named_addresses = vec![
@@ -134,8 +246,10 @@ fn compile_module_source(
         format!("aptos_framework=0x1"),
         format!("aptos_fungible_asset=0xA"),
         format!("aptos_token=0x3"),
+        format!("aptos_token_objects=0x4"),
         format!("core_resources=0xA550C18"),
         format!("vm_reserved=0x0"),
+        format!("vm=0x0"),
         // Map common named addresses to the deployer's address
         format!("deployer={}", address),
     ];
@@ -143,7 +257,7 @@ fn compile_module_source(
     // If we found a named address in the source, map it to the deployer's address
     // (since that's how it was compiled originally)
     if let Some(named_addr) = named_address_from_source {
-        if !named_addr.is_empty() && named_addr != "0x1" && named_addr != "0xA" && named_addr != "0x3" {
+        if !named_addr.is_empty() && named_addr != "0x1" && named_addr != "0xA" && named_addr != "0x3" && named_addr != "0x4" {
             named_addresses.push(format!("{}={}", named_addr, address));
         }
     }
@@ -324,7 +438,8 @@ fn compare_module_bytecode(compiled: &[u8], on_chain: &[u8]) -> bool {
 ///
 /// Returns:
 /// - VerifiedSuccess if bytecode matches
-/// - VerifiedFailure if bytecode doesn't match
+/// - VerifiedFailure if bytecode doesn't match (compilation succeeded, but different)
+/// - CompilationError if compilation failed (e.g., unsupported dependencies)
 /// - Unverified if no source code is available
 pub fn verify_module_on_demand(
     registry: &PackageRegistry,
@@ -346,9 +461,21 @@ pub fn verify_module_on_demand(
                 
                 if result.bytecode_matches {
                     return VerificationStatus::VerifiedSuccess;
-                } else {
-                    return VerificationStatus::VerifiedFailure;
                 }
+                
+                // Check if this was a compilation/processing error vs actual bytecode mismatch
+                if let Some(ref error_msg) = result.error {
+                    // These error prefixes indicate we couldn't complete verification
+                    // (as opposed to successfully verifying and finding a mismatch)
+                    if error_msg.starts_with("Compilation failed:") ||
+                       error_msg.starts_with("Failed to ungzip") ||
+                       error_msg.starts_with("Failed to fetch on-chain") {
+                        return VerificationStatus::CompilationError(error_msg.clone());
+                    }
+                }
+                
+                // Bytecode compiled successfully but doesn't match - this is suspicious
+                return VerificationStatus::VerifiedFailure;
             }
         }
     }

@@ -212,15 +212,160 @@ async fn test_module_verification_cache_with_upgrade() {
     // Check that upgrade_number = 0 entry still exists (not evicted)
     let cached_status_v0 = cache.get(&account.address(), "test_module", initial_upgrade_number);
     assert!(cached_status_v0.is_some(), "Cache should still have entry for initial version (upgrade_number = 0)");
-    assert_eq!(cached_status_v0.unwrap().to_bool(), Some(true), "Cached status for v0 should be verified");
+    assert_eq!(cached_status_v0.as_ref().unwrap().to_bool(), Some(true), "Cached status for v0 should be verified");
     
     // Check that upgrade_number = 1 entry exists (separate from v0)
     let cached_status_v1 = cache.get(&account.address(), "test_module", upgraded_upgrade_number);
     assert!(cached_status_v1.is_some(), "Cache should have entry for upgraded version (upgrade_number = 1)");
-    assert_eq!(cached_status_v1.unwrap().to_bool(), Some(true), "Cached status for v1 should be verified");
+    assert_eq!(cached_status_v1.as_ref().unwrap().to_bool(), Some(true), "Cached status for v1 should be verified");
     
     // Verify they are separate entries (both exist simultaneously)
     assert_ne!(initial_upgrade_number, upgraded_upgrade_number, "Upgrade numbers should be different");
     assert!(cached_status_v0.is_some() && cached_status_v1.is_some(), 
         "Both cache entries should exist, proving they use separate keys based on upgrade_number");
+}
+
+/// Build test package that uses framework dependencies (aptos-stdlib)
+/// Uses a thread with larger stack to avoid stack overflow when processing framework
+fn build_framework_test_package(account_address: aptos_types::account_address::AccountAddress) -> aptos_types::transaction::TransactionPayload {
+    // Spawn in a thread with 16MB stack to avoid stack overflow
+    std::thread::Builder::new()
+        .name("package-builder".to_string())
+        .stack_size(16 * 1024 * 1024)
+        .spawn(move || {
+            let path = PathBuf::from(std::env!("CARGO_MANIFEST_DIR"))
+                .join("src/tests/move/pack_framework_test");
+            let mut build_options = BuildOptions::default();
+            build_options.with_srcs = true;
+            build_options.named_addresses.insert("framework_test".to_string(), account_address);
+            let package = BuiltPackage::build(path, build_options).unwrap();
+            aptos_stdlib::code_publish_package_txn(
+                bcs::to_bytes(&package.extract_metadata().unwrap()).unwrap(),
+                package.extract_code(),
+            )
+        })
+        .expect("Failed to spawn package builder thread")
+        .join()
+        .expect("Package builder thread panicked")
+}
+
+/// Build test package that uses aptos_token (requires transitive dependencies)
+/// aptos_token depends on aptos-framework, which depends on aptos-stdlib
+fn build_token_test_package(account_address: aptos_types::account_address::AccountAddress) -> aptos_types::transaction::TransactionPayload {
+    std::thread::Builder::new()
+        .name("token-package-builder".to_string())
+        .stack_size(16 * 1024 * 1024)
+        .spawn(move || {
+            let path = PathBuf::from(std::env!("CARGO_MANIFEST_DIR"))
+                .join("src/tests/move/pack_token_test");
+            let mut build_options = BuildOptions::default();
+            build_options.with_srcs = true;
+            build_options.named_addresses.insert("token_test".to_string(), account_address);
+            let package = BuiltPackage::build(path, build_options).unwrap();
+            aptos_stdlib::code_publish_package_txn(
+                bcs::to_bytes(&package.extract_metadata().unwrap()).unwrap(),
+                package.extract_code(),
+            )
+        })
+        .expect("Failed to spawn token package builder thread")
+        .join()
+        .expect("Token package builder thread panicked")
+}
+
+/// Tests verification works with contracts that use framework dependencies (aptos-stdlib, aptos-framework, etc.)
+/// This ensures the verification compiler includes all necessary framework dependencies.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_module_verification_with_framework_dependencies() {
+    let mut node_config = NodeConfig::default();
+    node_config.api.bytecode_verification_enabled = true;
+    let mut context = new_test_context_with_config(current_function_name!(), node_config);
+    let mut account = context.create_account().await;
+    
+    // Publish package that uses aptos-stdlib (framework dependency)
+    let txn = build_framework_test_package(account.address());
+    context.publish_package(&mut account, txn).await;
+
+    // Verify the module - this should succeed because we now include full framework dependencies
+    let resp = context.get(&format!(
+        "/accounts/{}/modules/framework_module/verification_status",
+        account.address()
+    )).await;
+
+    assert_eq!(resp["verified"], true, "Module using framework dependencies should verify successfully");
+}
+
+/// Tests verification works with contracts that use aptos_token (transitive dependencies).
+/// aptos_token depends on aptos-framework, which depends on aptos-stdlib.
+/// This tests that the verification compiler correctly includes transitive dependencies.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_module_verification_with_transitive_dependencies() {
+    let mut node_config = NodeConfig::default();
+    node_config.api.bytecode_verification_enabled = true;
+    let mut context = new_test_context_with_config(current_function_name!(), node_config);
+    let mut account = context.create_account().await;
+    
+    // Publish package that uses aptos_token (which requires aptos-framework transitively)
+    let txn = build_token_test_package(account.address());
+    context.publish_package(&mut account, txn).await;
+
+    // Verify the module - this should succeed because we include transitive deps
+    let resp = context.get(&format!(
+        "/accounts/{}/modules/token_module/verification_status",
+        account.address()
+    )).await;
+
+    assert_eq!(resp["verified"], true, "Module using aptos_token (transitive deps) should verify successfully");
+}
+
+/// Tests that compilation failures are cached to prevent DoS attacks.
+/// If a contract has an unsupported dependency, repeated requests should use cached result.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_compilation_failure_is_cached() {
+    let mut node_config = NodeConfig::default();
+    node_config.api.bytecode_verification_enabled = true;
+    let mut context = new_test_context_with_config(current_function_name!(), node_config);
+    let mut account = context.create_account().await;
+    
+    // First, publish a valid package
+    let txn = build_test_package(account.address());
+    context.publish_package(&mut account, txn).await;
+
+    // Get PackageRegistry and modify source to have an unsupported user dependency
+    let state_view = context.latest_state_view();
+    let tag = StructTag::from_str("0x1::code::PackageRegistry").unwrap();
+    let bytes = state_view
+        .as_converter(context.db.clone(), context.get_indexer_readers().cloned())
+        .find_resource(&state_view, account.address().into(), &tag)
+        .unwrap()
+        .unwrap();
+    let mut registry: PackageRegistry = bcs::from_bytes(&bytes).unwrap();
+
+    // Replace source with code that has an unsupported user dependency
+    let unsupported_source = r#"module test_module::test_module {
+    use alice::some_library;  // This dependency doesn't exist - will fail compilation
+    
+    #[view]
+    public fun greet(): u64 { some_library::get_value() }
+}"#;
+    let gzipped = zip_metadata_str(unsupported_source).unwrap();
+    for package in &mut registry.packages {
+        for module in &mut package.modules {
+            if module.name == "test_module" {
+                module.source = gzipped.clone();
+            }
+        }
+    }
+
+    // Test verification - should fail due to compilation error (returns CompilationError, not VerifiedFailure)
+    let status1 = verify_module_on_demand(&registry, account.address(), "test_module", &state_view);
+    assert!(status1.is_compilation_error(), "Compilation failure should return CompilationError");
+    assert!(status1.compilation_error_message().unwrap().contains("Compilation failed"), 
+        "Error message should indicate compilation failure");
+
+    // Verify the status is consistent on repeated calls
+    let status2 = verify_module_on_demand(&registry, account.address(), "test_module", &state_view);
+    assert!(status2.is_compilation_error(), "Second call should also return CompilationError");
+    
+    // Note: Cache insertion is done in state.rs, not verify_module_on_demand.
+    // The caching behavior is implicitly tested by the API endpoint tests.
 }

@@ -8,11 +8,11 @@ use crate::{
     response::{
         api_forbidden, build_not_found, module_not_found, resource_not_found, table_item_not_found,
         BadRequestError, BasicErrorWith404, BasicResponse, BasicResponseStatus, BasicResultWith404,
-        InternalError, ServiceUnavailableError,
+        InternalError, ServiceUnavailableError, UnprocessableEntityError,
     },
     verification::{
         verify_module_on_demand, verify_package_registry_bytecode, ModuleVerificationStatusResponse,
-        PackageRegistryVerification,
+        PackageRegistryVerification, VerificationStatus,
     },
     ApiTags, Context,
 };
@@ -767,37 +767,13 @@ impl StateApi {
             .verification_cache()
             .get(&address_inner, &module_name_str, upgrade_number)
         {
-            return match cached_status.to_bool() {
-                Some(verified) => {
-                    let response = ModuleVerificationStatusResponse { verified };
-                    match accept_type {
-                        AcceptType::Json => {
-                            BasicResponse::try_from_json((response, &ledger_info, BasicResponseStatus::Ok))
-                        }
-                        AcceptType::Bcs => {
-                            let bcs_bytes = bcs::to_bytes(&response)
-                                .context("Failed to serialize verification response")
-                                .map_err(|err| {
-                                    BasicErrorWith404::internal_with_code(
-                                        err,
-                                        AptosErrorCode::InternalError,
-                                        &ledger_info,
-                                    )
-                                })?;
-                            BasicResponse::try_from_encoded((bcs_bytes, &ledger_info, BasicResponseStatus::Ok))
-                        }
-                    }
-                }
-                None => {
-                    // Unverified - no source code available
-                    Err(build_not_found(
-                        "Module source code",
-                        format!("{} at address {}", module_name_str, address),
-                        AptosErrorCode::ResourceNotFound,
-                        &ledger_info,
-                    ))
-                }
-            };
+            return Self::verification_status_to_response(
+                cached_status,
+                &module_name_str,
+                &address,
+                accept_type,
+                &ledger_info,
+            );
         }
 
         // Perform on-demand verification
@@ -806,15 +782,32 @@ impl StateApi {
         // Cache the result
         self.context
             .verification_cache()
-            .insert(address_inner, module_name_str.clone(), upgrade_number, status);
+            .insert(address_inner, module_name_str.clone(), upgrade_number, status.clone());
 
         // Return response based on status
-        match status.to_bool() {
-            Some(verified) => {
-                let response = ModuleVerificationStatusResponse { verified };
+        Self::verification_status_to_response(
+            status,
+            &module_name_str,
+            &address,
+            accept_type,
+            &ledger_info,
+        )
+    }
+
+    /// Convert VerificationStatus to HTTP response
+    fn verification_status_to_response(
+        status: VerificationStatus,
+        module_name: &str,
+        address: &Address,
+        accept_type: &AcceptType,
+        ledger_info: &aptos_api_types::LedgerInfo,
+    ) -> BasicResultWith404<ModuleVerificationStatusResponse> {
+        match status {
+            VerificationStatus::VerifiedSuccess => {
+                let response = ModuleVerificationStatusResponse { verified: true };
                 match accept_type {
                     AcceptType::Json => {
-                        BasicResponse::try_from_json((response, &ledger_info, BasicResponseStatus::Ok))
+                        BasicResponse::try_from_json((response, ledger_info, BasicResponseStatus::Ok))
                     }
                     AcceptType::Bcs => {
                         let bcs_bytes = bcs::to_bytes(&response)
@@ -823,20 +816,47 @@ impl StateApi {
                                 BasicErrorWith404::internal_with_code(
                                     err,
                                     AptosErrorCode::InternalError,
-                                    &ledger_info,
+                                    ledger_info,
                                 )
                             })?;
-                        BasicResponse::try_from_encoded((bcs_bytes, &ledger_info, BasicResponseStatus::Ok))
+                        BasicResponse::try_from_encoded((bcs_bytes, ledger_info, BasicResponseStatus::Ok))
                     }
                 }
             }
-            None => {
-                // Unverified - no source code available
+            VerificationStatus::VerifiedFailure => {
+                let response = ModuleVerificationStatusResponse { verified: false };
+                match accept_type {
+                    AcceptType::Json => {
+                        BasicResponse::try_from_json((response, ledger_info, BasicResponseStatus::Ok))
+                    }
+                    AcceptType::Bcs => {
+                        let bcs_bytes = bcs::to_bytes(&response)
+                            .context("Failed to serialize verification response")
+                            .map_err(|err| {
+                                BasicErrorWith404::internal_with_code(
+                                    err,
+                                    AptosErrorCode::InternalError,
+                                    ledger_info,
+                                )
+                            })?;
+                        BasicResponse::try_from_encoded((bcs_bytes, ledger_info, BasicResponseStatus::Ok))
+                    }
+                }
+            }
+            VerificationStatus::Unverified => {
                 Err(build_not_found(
                     "Module source code",
-                    format!("{} at address {}", module_name_str, address),
+                    format!("{} at address {}", module_name, address),
                     AptosErrorCode::ResourceNotFound,
-                    &ledger_info,
+                    ledger_info,
+                ))
+            }
+            VerificationStatus::CompilationError(error_msg) => {
+                // Return HTTP 422 for compilation errors (can't verify, not mismatch)
+                Err(BasicErrorWith404::unprocessable_entity_with_code(
+                    format!("Cannot verify module: {}", error_msg),
+                    AptosErrorCode::CompilationError,
+                    ledger_info,
                 ))
             }
         }

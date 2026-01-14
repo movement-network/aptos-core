@@ -514,7 +514,8 @@ generate_error_traits!(
     PayloadTooLarge,
     Internal,
     InsufficientStorage,
-    ServiceUnavailable
+    ServiceUnavailable,
+    UnprocessableEntity
 );
 
 // Group these common errors together
@@ -536,13 +537,14 @@ generate_error_response!(
 // This type just simplifies using BasicResponse and BasicError together.
 pub type BasicResult<T> = poem::Result<BasicResponse<T>, BasicError>;
 
-// As above but with 404.
+// As above but with 404 and 422.
 generate_error_response!(
     BasicErrorWith404,
     (400, BadRequest),
     (403, Forbidden),
     (404, NotFound),
     (410, Gone),
+    (422, UnprocessableEntity),
     (500, Internal),
     (503, ServiceUnavailable)
 );

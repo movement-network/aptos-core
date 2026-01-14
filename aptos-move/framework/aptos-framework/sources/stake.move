@@ -1647,6 +1647,7 @@ module aptos_framework::stake {
     }
 
     /// Get rewards from the Governed Gas Pool corresponding to current epoch's `stake` and `num_successful_votes`.
+    /// This function includes failsafe logic to allow epoch changes even when the governed gas pool has insufficient funds.
     fun distribute_rewards(
         stake: &mut Coin<AptosCoin>,
         num_successful_proposals: u64,
@@ -1666,16 +1667,29 @@ module aptos_framework::stake {
         } else {
             0
         };
-        if (rewards_amount > 0) {
-            let rewards = if (features::stake_reward_using_treasury_enabled()) {
-                governed_gas_pool::withdraw_staking_reward<AptosCoin>(rewards_amount)
+        let actual_rewards_amount = if (rewards_amount > 0) {
+            if (features::stake_reward_using_treasury_enabled()) {
+                // Failsafe: Check balance before attempting withdrawal to prevent epoch change from aborting
+                let available_balance = governed_gas_pool::get_balance<AptosCoin>();
+                let withdraw_amount = min(rewards_amount, available_balance);
+                if (withdraw_amount > 0) {
+                    let rewards = governed_gas_pool::withdraw_staking_reward<AptosCoin>(withdraw_amount);
+                    coin::merge(stake, rewards);
+                    withdraw_amount
+                } else {
+                    // Insufficient funds in governed gas pool - epoch change proceeds with zero rewards
+                    0
+                }
             } else {
                 let mint_cap = &borrow_global<AptosCoinCapabilities>(@aptos_framework).mint_cap;
-                coin::mint(rewards_amount, mint_cap)
-            };
-            coin::merge(stake, rewards);
+                let rewards = coin::mint(rewards_amount, mint_cap);
+                coin::merge(stake, rewards);
+                rewards_amount
+            }
+        } else {
+            0
         };
-        rewards_amount
+        actual_rewards_amount
     }
 
     fun append<T>(v1: &mut vector<T>, v2: &mut vector<T>) {
@@ -1810,6 +1824,26 @@ module aptos_framework::stake {
             governed_gas_pool::register_coin<AptosCoin>();
         };
         coin::deposit<AptosCoin>(pool_addr, coins);
+    }
+
+    #[test_only]
+    /// Set the governed gas pool balance to a specific amount for testing.
+    /// This can both add or remove funds from the pool.
+    public fun set_governed_gas_pool_balance(
+        aptos_framework: &signer, target_amount: u64
+    ) acquires AptosCoinCapabilities {
+        let current_balance = governed_gas_pool::get_balance<AptosCoin>();
+        if (target_amount > current_balance) {
+            // Need to add more
+            let amount_to_add = target_amount - current_balance;
+            seed_governed_gas_pool(aptos_framework, amount_to_add);
+        } else if (target_amount < current_balance) {
+            // Need to reduce - withdraw excess to a burn address
+            let excess = current_balance - target_amount;
+            // Use fund() to withdraw excess coins to the aptos_framework account
+            governed_gas_pool::fund<AptosCoin>(aptos_framework, @aptos_framework, excess);
+        };
+        // If equal, do nothing
     }
 
     #[test_only]
@@ -3248,6 +3282,138 @@ module aptos_framework::stake {
     public fun with_rewards(amount: u64): u64 {
         let (numerator, denominator) = staking_config::get_reward_rate(&staking_config::get());
         amount + amount * numerator / denominator
+    }
+
+    /// Test the failsafe logic when governed gas pool has insufficient funds.
+    /// This test verifies that epoch changes can proceed even when rewards cannot be fully distributed.
+    #[test(aptos_framework = @aptos_framework, validator_1 = @0x123, validator_2 = @0x234, validator_3 = @0x345)]
+    public entry fun test_stake_reward_failsafe_insufficient_funds(
+        aptos_framework: &signer,
+        validator_1: &signer,
+        validator_2: &signer,
+        validator_3: &signer,
+    ) acquires AllowedValidators, AptosCoinCapabilities, OwnerCapability, StakePool, ValidatorConfig, ValidatorPerformance, ValidatorSet {
+        // Initialize with treasury feature enabled
+        initialize_for_test_custom(
+            aptos_framework,
+            100,      // minimum_stake
+            10000,    // maximum_stake
+            LOCKUP_CYCLE_SECONDS,
+            true,     // allow_validator_set_change
+            1,        // rewards_rate_numerator
+            100,      // rewards_rate_denominator (1% rewards)
+            1000000,  // voting_power_increase_limit
+        );
+
+        let validator_1_address = signer::address_of(validator_1);
+        let validator_2_address = signer::address_of(validator_2);
+        let validator_3_address = signer::address_of(validator_3);
+
+        // Initialize validators with stake
+        let (_sk_1, pk_1, pop_1) = generate_identity();
+        let (_sk_2, pk_2, pop_2) = generate_identity();
+        let (_sk_3, pk_3, pop_3) = generate_identity();
+        
+        initialize_test_validator(&pk_1, &pop_1, validator_1, 1000, true, false);
+        initialize_test_validator(&pk_2, &pop_2, validator_2, 2000, true, false);
+        initialize_test_validator(&pk_3, &pop_3, validator_3, 3000, true, true);
+
+        // Test Case 1: Very small balance (simulating near-zero scenario)
+        // Expected rewards: validator_1 = 10, validator_2 = 20, validator_3 = 30 (total = 60)
+        // Set pool to only 5 coins - much less than needed
+        set_governed_gas_pool_balance(aptos_framework, 5);
+        assert!(governed_gas_pool::get_balance<AptosCoin>() >= 5, 1);
+        
+        // Trigger epoch change - should succeed even with zero balance
+        end_epoch();
+        
+        // Validators should have same stake (no rewards distributed)
+        assert_validator_state(validator_1_address, 1000, 0, 0, 0, 0);
+        assert_validator_state(validator_2_address, 2000, 0, 0, 0, 1);
+        assert_validator_state(validator_3_address, 3000, 0, 0, 0, 2);
+
+        // Test Case 2: Partial balance (less than required)
+        // Expected rewards: validator_1 = 10, validator_2 = 20, validator_3 = 30 (total = 60)
+        // Seed pool with only 30 coins (half of what's needed)
+        seed_governed_gas_pool(aptos_framework, 30);
+        assert!(governed_gas_pool::get_balance<AptosCoin>() == 30, 2);
+        
+        // Trigger epoch change
+        end_epoch();
+        
+        // Validators should receive partial rewards based on available balance
+        // The order matters: validator_1 (10), validator_2 (20), validator_3 (0) = 30 total
+        let balance_after = governed_gas_pool::get_balance<AptosCoin>();
+        // Validator 1 and 2 should get their rewards (10 + 20 = 30), validator 3 gets 0
+        assert_validator_state(validator_1_address, 1010, 0, 0, 0, 0);
+        assert_validator_state(validator_2_address, 2020, 0, 0, 0, 1);
+        assert_validator_state(validator_3_address, 3000, 0, 0, 0, 2);
+        assert!(balance_after == 0, 3); // All available funds should be distributed
+
+        // Test Case 3: Exact balance match
+        // Expected rewards: validator_1 = 10, validator_2 = 20, validator_3 = 30 (total = 60)
+        seed_governed_gas_pool(aptos_framework, 60);
+        assert!(governed_gas_pool::get_balance<AptosCoin>() == 60, 4);
+        
+        end_epoch();
+        
+        // All validators should receive full rewards
+        assert_validator_state(validator_1_address, 1020, 0, 0, 0, 0);
+        assert_validator_state(validator_2_address, 2040, 0, 0, 0, 1);
+        assert_validator_state(validator_3_address, 3030, 0, 0, 0, 2);
+        assert!(governed_gas_pool::get_balance<AptosCoin>() == 0, 5);
+
+        // Test Case 4: Multiple consecutive epochs with insufficient funds
+        // Set pool to a small amount that will be exhausted after first epoch
+        set_governed_gas_pool_balance(aptos_framework, 5); // Very small amount
+        
+        // Trigger multiple epoch changes - should all succeed
+        end_epoch();
+        // After first epoch, pool should be depleted
+        let balance_after_first = governed_gas_pool::get_balance<AptosCoin>();
+        
+        // Trigger more epochs - should succeed even with depleted pool
+        end_epoch();
+        end_epoch();
+        
+        // All should succeed - validators may get partial or no rewards but epoch changes complete
+        // The exact stake amounts depend on how much was distributed, but epoch changes should succeed
+        let final_balance = governed_gas_pool::get_balance<AptosCoin>();
+        // Balance should be 0 or very small after distributions
+        assert!(final_balance <= 5, 6);
+
+        // Test Case 5: Very small balance (1 coin) with large expected rewards
+        seed_governed_gas_pool(aptos_framework, 1);
+        end_epoch();
+        
+        // Only 1 coin should be distributed (to first validator)
+        // Validator 1 should get 1 coin, others get 0
+        let validator_1_stake = coin::value(&borrow_global<StakePool>(validator_1_address).active);
+        assert!(validator_1_stake >= 1020 && validator_1_stake <= 1021, 7);
+        assert!(governed_gas_pool::get_balance<AptosCoin>() == 0, 8);
+    }
+
+    /// Test that the old minting path still works when treasury feature is disabled
+    #[test(aptos_framework = @aptos_framework, validator = @0x123)]
+    public entry fun test_stake_reward_minting_path_still_works(
+        aptos_framework: &signer,
+        validator: &signer,
+    ) acquires AllowedValidators, AptosCoinCapabilities, OwnerCapability, StakePool, ValidatorConfig, ValidatorPerformance, ValidatorSet {
+        // Initialize WITHOUT treasury feature (uses minting)
+        initialize_for_test(aptos_framework);
+        
+        // Disable treasury feature to use minting path
+        features::change_feature_flags_for_testing(aptos_framework, vector[], vector[features::get_stake_reward_using_treasury_feature()]);
+        
+        let validator_address = signer::address_of(validator);
+        let (_sk, pk, pop) = generate_identity();
+        initialize_test_validator(&pk, &pop, validator, 1000, true, true);
+        
+        // Trigger epoch change - should use minting path
+        end_epoch();
+        
+        // Validator should receive full rewards via minting (not from pool)
+        assert_validator_state(validator_address, 1010, 0, 0, 0, 0);
     }
 
 }

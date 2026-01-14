@@ -23,6 +23,7 @@ use aptos_api_types::{
     RawTableItemRequest, TableItemRequest, VerifyInput, VerifyInputWithRecursion, U64,
 };
 use aptos_framework::natives::code::PackageRegistry;
+use aptos_sdk::bcs;
 use aptos_types::state_store::{state_key::StateKey, table::TableHandle, TStateView};
 use move_core_types::language_storage::StructTag;
 use poem_openapi::{
@@ -711,11 +712,60 @@ impl StateApi {
         let address_inner: aptos_types::account_address::AccountAddress = address.into();
         let module_name_str = module_name.to_string();
 
+        // Fetch PackageRegistry to get upgrade_number
+        let tag = StructTag::from_str("0x1::code::PackageRegistry")
+            .context("Failed to parse PackageRegistry struct tag")
+            .map_err(|err| {
+                BasicErrorWith404::internal_with_code(
+                    err,
+                    AptosErrorCode::InternalError,
+                    &ledger_info,
+                )
+            })?;
+
+        // Fetch PackageRegistry resource bytes from state
+        let bytes = state_view
+            .as_converter(self.context.db.clone(), self.context.indexer_reader.clone())
+            .find_resource(&state_view, address, &tag)
+            .context(format!("Failed to query DB for PackageRegistry at {}", address))
+            .map_err(|err| {
+                BasicErrorWith404::internal_with_code(
+                    err,
+                    AptosErrorCode::InternalError,
+                    &ledger_info,
+                )
+            })?
+            .ok_or_else(|| resource_not_found(address, &tag, ledger_version, &ledger_info))?;
+
+        // Deserialize as PackageRegistry
+        let registry: PackageRegistry = bcs::from_bytes(&bytes)
+            .context("Failed to deserialize PackageRegistry from bytes")
+            .map_err(|err| {
+                BasicErrorWith404::internal_with_code(
+                    err,
+                    AptosErrorCode::InternalError,
+                    &ledger_info,
+                )
+            })?;
+
+        // Find the package containing the module to get upgrade_number
+        let upgrade_number = registry
+            .packages
+            .iter()
+            .find_map(|package| {
+                package
+                    .modules
+                    .iter()
+                    .find(|module| module.name == module_name_str)
+                    .map(|_| package.upgrade_number)
+            })
+            .unwrap_or(0); // Default to 0 if module not found (will be handled by verification)
+
         // Check cache first
         if let Some(cached_status) = self
             .context
             .verification_cache()
-            .get(&address_inner, &module_name_str)
+            .get(&address_inner, &module_name_str, upgrade_number)
         {
             return match cached_status.to_bool() {
                 Some(verified) => {
@@ -750,48 +800,13 @@ impl StateApi {
             };
         }
 
-        // Fetch PackageRegistry
-        let tag = StructTag::from_str("0x1::code::PackageRegistry")
-            .context("Failed to parse PackageRegistry struct tag")
-            .map_err(|err| {
-                BasicErrorWith404::internal_with_code(
-                    err,
-                    AptosErrorCode::InternalError,
-                    &ledger_info,
-                )
-            })?;
-
-        let bytes = state_view
-            .as_converter(self.context.db.clone(), self.context.indexer_reader.clone())
-            .find_resource(&state_view, address, &tag)
-            .context(format!("Failed to query DB for PackageRegistry at {}", address))
-            .map_err(|err| {
-                BasicErrorWith404::internal_with_code(
-                    err,
-                    AptosErrorCode::InternalError,
-                    &ledger_info,
-                )
-            })?
-            .ok_or_else(|| resource_not_found(address, &tag, ledger_version, &ledger_info))?;
-
-        // Deserialize as PackageRegistry
-        let registry: PackageRegistry = bcs::from_bytes(&bytes)
-            .context("Failed to deserialize PackageRegistry from bytes")
-            .map_err(|err| {
-                BasicErrorWith404::internal_with_code(
-                    err,
-                    AptosErrorCode::InternalError,
-                    &ledger_info,
-                )
-            })?;
-
         // Perform on-demand verification
         let status = verify_module_on_demand(&registry, address_inner, &module_name_str, &state_view);
 
         // Cache the result
         self.context
             .verification_cache()
-            .insert(address_inner, module_name_str.clone(), status);
+            .insert(address_inner, module_name_str.clone(), upgrade_number, status);
 
         // Return response based on status
         match status.to_bool() {

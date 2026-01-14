@@ -71,10 +71,10 @@ use std::{
 
 use crate::verification::VerificationStatus;
 
-/// Cache for bytecode verification results. Key: (address, module_name).
+/// Cache for bytecode verification results. Key: (address, module_name, upgrade_number).
 /// LRU cache with 10,000 entry limit.
 pub struct VerificationCache {
-    cache: Cache<(AccountAddress, String), VerificationStatus>,
+    cache: Cache<(AccountAddress, String, u64), VerificationStatus>,
 }
 
 impl VerificationCache {
@@ -86,16 +86,16 @@ impl VerificationCache {
         }
     }
 
-    pub fn get(&self, address: &AccountAddress, module_name: &str) -> Option<VerificationStatus> {
-        self.cache.get(&(*address, module_name.to_string()))
+    pub fn get(&self, address: &AccountAddress, module_name: &str, upgrade_number: u64) -> Option<VerificationStatus> {
+        self.cache.get(&(*address, module_name.to_string(), upgrade_number))
     }
 
-    pub fn insert(&self, address: AccountAddress, module_name: String, status: VerificationStatus) {
-        self.cache.insert((address, module_name), status);
+    pub fn insert(&self, address: AccountAddress, module_name: String, upgrade_number: u64, status: VerificationStatus) {
+        self.cache.insert((address, module_name, upgrade_number), status);
     }
 
-    pub fn invalidate(&self, address: &AccountAddress, module_name: &str) {
-        self.cache.invalidate(&(*address, module_name.to_string()));
+    pub fn invalidate(&self, address: &AccountAddress, module_name: &str, upgrade_number: u64) {
+        self.cache.invalidate(&(*address, module_name.to_string(), upgrade_number));
     }
 
     pub fn invalidate_all(&self) {

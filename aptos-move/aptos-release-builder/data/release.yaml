@@ -1,5 +1,5 @@
 ---
-remote_endpoint: https://testnet.movementnetwork.xyz/
+remote_endpoint: https://devnet.movementnetwork.xyz/
 # replace with below for actual release, compat test needs concrete URL above:
 # remote_endpoint: ~
 name: "v0.1"
@@ -11,5 +11,5 @@ proposals:
     execution_mode: RootSigner
     update_sequence:
       - Gas:
-          old: movement-migration/gas-schedule/gas-old-movement.json
-          new: movement-migration/gas-schedule/gas-v38.json
+          old: movement-migration/gas-schedule/gas-v38.json
+          new: movement-migration/gas-schedule/gas-v39.json

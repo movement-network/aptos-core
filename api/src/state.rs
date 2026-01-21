@@ -8,7 +8,7 @@ use crate::{
     response::{
         api_forbidden, build_not_found, module_not_found, resource_not_found, table_item_not_found,
         BadRequestError, BasicErrorWith404, BasicResponse, BasicResponseStatus, BasicResultWith404,
-        InternalError, ServiceUnavailableError, UnprocessableEntityError,
+        InternalError, NotFoundError, ServiceUnavailableError, UnprocessableEntityError,
     },
     verification::{
         verify_module_on_demand, verify_package_registry_bytecode, ModuleVerificationStatusResponse,
@@ -199,10 +199,10 @@ impl StateApi {
         address: Path<Address>,
         /// Name of module to verify e.g. `coin`
         module_name: Path<IdentifierWrapper>,
-        /// Ledger version to get state of account
-        ///
-        /// If not provided, it will be the latest version
-        ledger_version: Query<Option<U64>>,
+        /// Package upgrade_number for the module. Used to verify a specific contract version.
+        /// If provided, must match the current on-chain upgrade_number; otherwise 404.
+        /// If not provided, the current (latest) upgrade_number is verified.
+        upgrade_number: Query<Option<U64>>,
     ) -> BasicResultWith404<ModuleVerificationStatusResponse> {
         verify_module_identifier(module_name.0.as_str())
             .context("'module_name' invalid")
@@ -227,7 +227,7 @@ impl StateApi {
                 &accept_type,
                 address.0,
                 module_name.0,
-                ledger_version.0.map(|inner| inner.0),
+                upgrade_number.0.map(|inner| inner.0),
             )
         })
         .await
@@ -700,19 +700,20 @@ impl StateApi {
         }
     }
 
-    /// Verify a single module's source code on-demand
+    /// Verify a single module's source code on-demand.
+    /// Always uses latest state. Cache is keyed by (address, module_name, upgrade_number).
     fn module_verification_status(
         &self,
         accept_type: &AcceptType,
         address: Address,
         module_name: IdentifierWrapper,
-        ledger_version: Option<u64>,
+        client_upgrade_number: Option<u64>,
     ) -> BasicResultWith404<ModuleVerificationStatusResponse> {
-        let (ledger_info, ledger_version, state_view) = self.context.state_view(ledger_version)?;
+        let (ledger_info, _ledger_version, state_view) = self.context.state_view(None)?;
         let address_inner: aptos_types::account_address::AccountAddress = address.into();
         let module_name_str = module_name.to_string();
 
-        // Fetch PackageRegistry to get upgrade_number
+        // Fetch PackageRegistry at latest to get current upgrade_number
         let tag = StructTag::from_str("0x1::code::PackageRegistry")
             .context("Failed to parse PackageRegistry struct tag")
             .map_err(|err| {
@@ -735,7 +736,7 @@ impl StateApi {
                     &ledger_info,
                 )
             })?
-            .ok_or_else(|| resource_not_found(address, &tag, ledger_version, &ledger_info))?;
+            .ok_or_else(|| resource_not_found(address, &tag, _ledger_version, &ledger_info))?;
 
         // Deserialize as PackageRegistry
         let registry: PackageRegistry = bcs::from_bytes(&bytes)
@@ -748,8 +749,8 @@ impl StateApi {
                 )
             })?;
 
-        // Find the package containing the module to get upgrade_number
-        let upgrade_number = registry
+        // Find the package containing the module to get current upgrade_number
+        let current_upgrade = registry
             .packages
             .iter()
             .find_map(|package| {
@@ -760,6 +761,19 @@ impl StateApi {
                     .map(|_| package.upgrade_number)
             })
             .unwrap_or(0); // Default to 0 if module not found (will be handled by verification)
+
+        // If client sent upgrade_number and it does not match current, return error (do not serve from cache)
+        let upgrade_number = match client_upgrade_number {
+            Some(req) if req != current_upgrade => {
+                return Err(BasicErrorWith404::not_found_with_code(
+                    "Contract has been upgraded; refresh the page for the current version.",
+                    AptosErrorCode::ResourceNotFound,
+                    &ledger_info,
+                ));
+            },
+            Some(req) => req,
+            None => current_upgrade,
+        };
 
         // Check cache first
         if let Some(cached_status) = self

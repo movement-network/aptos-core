@@ -606,6 +606,21 @@ where
                 let json: Value = serde_json::from_str(&file_content).expect("Failed to parse JSON");
                 configure_keyless_with_vk(genesis_config, json).unwrap();
             };
+
+            // Install initial JWKs from Google's JWKS endpoint
+            if let Ok(url) = env::var("INSTALL_INITIAL_JWKS_FROM_URL") {
+                let jwks = fetch_and_parse_jwks(&url).expect("Failed to fetch/parse JWKs");
+                genesis_config.initial_jwks = jwks;
+                println!("Installed {} initial JWKs from {}", genesis_config.initial_jwks.len(), url);
+            };
+
+            // Install initial JWKs from a local file
+            if let Ok(path) = env::var("INSTALL_INITIAL_JWKS_FROM_PATH") {
+                let file_content = fs::read_to_string(&path).unwrap_or_else(|_| panic!("Failed to read JWKs file: {}", path));
+                let jwks: Vec<aptos_types::jwks::patch::IssuerJWK> = serde_json::from_str(&file_content).expect("Failed to parse JWKs JSON");
+                genesis_config.initial_jwks = jwks;
+                println!("Installed {} initial JWKs from {}", genesis_config.initial_jwks.len(), path);
+            };
         })))
         .with_randomize_first_validator_ports(random_ports);
     let (root_key, _genesis, genesis_waypoint, mut validators) = builder.build(rng)?;
@@ -679,6 +694,65 @@ fn decode_hex_field(json: &Value, field: &str) -> Result<Vec<u8>, anyhow::Error>
 
     // Decode hex string
     hex::decode(cleaned_hex).with_context(|| format!("Failed to decode hex for field {}", field))
+}
+
+/// Fetch JWKs from a URL (e.g., Google's JWKS endpoint) and parse into IssuerJWK format
+fn fetch_and_parse_jwks(url: &str) -> Result<Vec<aptos_types::jwks::patch::IssuerJWK>, anyhow::Error> {
+    use aptos_types::jwks::{jwk::JWK, rsa::RSA_JWK, patch::IssuerJWK};
+
+    // Determine issuer from URL - if it's a Google JWKS URL, use Google issuer
+    let issuer = if url.contains("googleapis.com") {
+        "https://accounts.google.com".to_string()
+    } else if url.contains("appleid.apple.com") {
+        "https://appleid.apple.com".to_string()
+    } else {
+        // Try to extract issuer from URL pattern, or use URL as-is
+        url.split("/").take(3).collect::<Vec<_>>().join("/")
+    };
+
+    println!("Fetching JWKs from {} for issuer {}", url, issuer);
+
+    let response = ureq::get(url).call();
+    let json: Value = response.into_json().expect("Failed to parse JWKs response");
+
+    let keys = json["keys"].as_array()
+        .ok_or_else(|| anyhow!("JWKs response missing 'keys' array"))?;
+
+    let mut jwks = Vec::new();
+    for key in keys {
+        let kty = key["kty"].as_str().unwrap_or("");
+        if kty != "RSA" {
+            println!("Skipping non-RSA key type: {}", kty);
+            continue;
+        }
+
+        let kid = key["kid"].as_str().unwrap_or("").to_string();
+        let alg = key["alg"].as_str().unwrap_or("RS256").to_string();
+        let e = key["e"].as_str().unwrap_or("AQAB").to_string();
+        let n = key["n"].as_str().unwrap_or("").to_string();
+
+        if n.is_empty() {
+            println!("Skipping key with empty modulus: {}", kid);
+            continue;
+        }
+
+        let rsa_jwk = RSA_JWK {
+            kid: kid.clone(),
+            kty: kty.to_string(),
+            alg,
+            e,
+            n,
+        };
+
+        jwks.push(IssuerJWK {
+            issuer: issuer.clone(),
+            jwk: JWK::RSA(rsa_jwk),
+        });
+
+        println!("  Added JWK: kid={}", kid);
+    }
+
+    Ok(jwks)
 }
 
 /// Initializes the node environment and starts the node

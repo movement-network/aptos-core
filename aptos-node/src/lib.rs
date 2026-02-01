@@ -621,6 +621,26 @@ where
                 genesis_config.initial_jwks = jwks;
                 println!("Installed {} initial JWKs from {}", genesis_config.initial_jwks.len(), path);
             };
+
+            // Install OIDC Proxy JWK for Discord/GitHub/Twitter login (local development)
+            // The proxy must use the stable dev keypair at services/oidc-proxy/keys/dev_private.pem
+            if env::var("INSTALL_OIDC_PROXY_JWK").is_ok() {
+                use aptos_types::jwks::{jwk::JWK, rsa::RSA_JWK, patch::IssuerJWK};
+
+                let oidc_proxy_jwk = RSA_JWK {
+                    kid: "175246fe12ca732d".to_string(),
+                    kty: "RSA".to_string(),
+                    alg: "RS256".to_string(),
+                    e: "AQAB".to_string(),
+                    n: "urJiMIc9XiE_PJocaOdPFEkuyBfi-Qk6qrzMoq0Rr6xytH-HwtTbLj6b0ieUlTVelzlPolveM86KJVbVWE-tydS1-wN7bhiRVxRC348ogWRFmd2OUrqr9-B6kGWiq4n0FJSxS0jsedSGBcUTdK-Y0P7AEX9Sazj4W0RuJSdcgzk49eazZv6OyGfS20XwzlGzFkhZi_kOTJsGMf6rou43YJp-9DyTx3eIPTnXe5l4Dm42XSlY4aZWnTKKeqnLFow2mgWmFxvNtbIT2_24hl17_kdGLeuEJth5JObcTElWEoOyNsYNs-HzDQDxZMv-ooo19xas0pD5hwatMED_tRFtQw".to_string(),
+                };
+
+                genesis_config.initial_jwks.push(IssuerJWK {
+                    issuer: "http://localhost:8084".to_string(),
+                    jwk: JWK::RSA(oidc_proxy_jwk),
+                });
+                println!("Installed OIDC Proxy JWK for http://localhost:8084");
+            };
         })))
         .with_randomize_first_validator_ports(random_ports);
     let (root_key, _genesis, genesis_waypoint, mut validators) = builder.build(rng)?;

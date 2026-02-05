@@ -247,6 +247,87 @@ validator-status:
         echo "  Unable to connect (node may still be starting)"
     fi
 
+# ==============================================================================
+# Cachix Commands (binary cache sharing)
+# ==============================================================================
+
+# Build a binary with Nix and push to Cachix
+cache-push binary:
+    #!/usr/bin/env bash
+    if ! command -v cachix &> /dev/null; then
+        echo "Error: cachix is not installed."
+        echo "Install with: nix-env -iA cachix -f https://cachix.org/api/v1/install"
+        echo "Or: nix profile install nixpkgs#cachix"
+        exit 1
+    fi
+    if [ -z "$CACHIX_AUTH_TOKEN" ]; then
+        echo "Error: CACHIX_AUTH_TOKEN is not set."
+        echo "Get the token from 1Password and export it:"
+        echo "  export CACHIX_AUTH_TOKEN=<token-from-1password>"
+        exit 1
+    fi
+    echo "Building {{binary}} and pushing to Cachix..."
+    nix build .#{{binary}} -L
+    cachix push movementlabs result
+    echo "Done! {{binary}} pushed to movementlabs cache."
+
+# Build all binaries and push to Cachix
+cache-push-all:
+    #!/usr/bin/env bash
+    if ! command -v cachix &> /dev/null; then
+        echo "Error: cachix is not installed."
+        echo "Install with: nix-env -iA cachix -f https://cachix.org/api/v1/install"
+        echo "Or: nix profile install nixpkgs#cachix"
+        exit 1
+    fi
+    if [ -z "$CACHIX_AUTH_TOKEN" ]; then
+        echo "Error: CACHIX_AUTH_TOKEN is not set."
+        echo "Get the token from 1Password and export it:"
+        echo "  export CACHIX_AUTH_TOKEN=<token-from-1password>"
+        exit 1
+    fi
+    echo "Building all binaries and pushing to Cachix..."
+    for binary in aptos-node movement l1-migration; do
+        echo ""
+        echo "=== Building $binary ==="
+        nix build .#$binary -L
+        cachix push movementlabs result
+        echo "$binary pushed to cache."
+    done
+    echo ""
+    echo "All binaries pushed to movementlabs cache."
+
+# Check Cachix setup status
+cache-status:
+    #!/usr/bin/env bash
+    echo "Cachix Configuration"
+    echo "===================="
+    echo ""
+    echo "Cache name: aptos-core"
+    echo ""
+    if command -v cachix &> /dev/null; then
+        echo "cachix CLI: installed ($(cachix --version 2>&1))"
+    else
+        echo "cachix CLI: NOT INSTALLED"
+        echo "  Install with: nix profile install nixpkgs#cachix"
+    fi
+    echo ""
+    if [ -n "$CACHIX_AUTH_TOKEN" ]; then
+        echo "CACHIX_AUTH_TOKEN: set"
+    else
+        echo "CACHIX_AUTH_TOKEN: NOT SET"
+        echo "  Get the token from 1Password and export it:"
+        echo "  export CACHIX_AUTH_TOKEN=<token-from-1password>"
+    fi
+    echo ""
+    echo "To use the cache (pull only, no auth needed):"
+    echo "  cachix use movementlabs"
+    echo ""
+    echo "To push builds to the cache:"
+    echo "  export CACHIX_AUTH_TOKEN=<token-from-1password>"
+    echo "  just cache-push aptos-node"
+    echo "  just cache-push-all"
+
 # List available binary build targets
 list-binaries:
     @echo "Available binary build targets:"

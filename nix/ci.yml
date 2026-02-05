@@ -25,8 +25,8 @@ jobs:
     - name: Set up Cachix
       uses: cachix/cachix-action@v12
       with:
-        name: aptos-core
-        # authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}' # Optional
+        name: movementlabs
+        authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
 
     - name: Build aptos-core
       run: |
@@ -65,8 +65,8 @@ jobs:
     - name: Set up Cachix
       uses: cachix/cachix-action@v12
       with:
-        name: aptos-core
-        # authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}' # Optional
+        name: movementlabs
+        authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
 
     - name: Build Docker image using Nix
       run: |
@@ -105,7 +105,7 @@ jobs:
     - name: Set up Cachix
       uses: cachix/cachix-action@v12
       with:
-        name: aptos-core
+        name: movementlabs
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
 
     - name: Build and push aptos-core binary

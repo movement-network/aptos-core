@@ -29,8 +29,7 @@ COPY . .
 
 # Build all binaries using Nix
 # The --no-link avoids creating symlinks, we use --print-out-paths to get the path
-RUN cd nix && \
-    nix build .#all-binaries -L && \
+RUN nix build .#all-binaries -L && \
     mkdir -p /output/bin && \
     cp -L result/bin/* /output/bin/ && \
     chmod +x /output/bin/*

@@ -112,13 +112,12 @@ container-build container="aptos-node" tag="latest" profile="release":
     # Clean up the copied binary
     rm -f aptos-test
 
-<<<<<<< Updated upstream
 # Build any binary by package name
 build-bin package:
     @echo "Building {{package}} with Nix development shell..."
     nix develop -c cargo build --release -p {{package}}
     @echo "Binary available at target/release/{{package}}"
-=======
+
 # Build container using Docker buildx with Nix (works on macOS/Apple Silicon)
 container-buildx container="aptos-node" tag="":
     #!/usr/bin/env bash
@@ -248,21 +247,6 @@ validator-status:
         echo "  Unable to connect (node may still be starting)"
     fi
 
-# ==============================================================================
-# Utility Commands
-# ==============================================================================
-
-# Clean build artifacts
-clean:
-    @echo "Cleaning build artifacts..."
-    rm -rf result target
-
-# Update flake.lock
-update:
-    @echo "Updating flake.lock..."
-    nix flake update
->>>>>>> Stashed changes
-
 # List available binary build targets
 list-binaries:
     @echo "Available binary build targets:"
@@ -276,10 +260,6 @@ list-binaries:
     @echo "    transaction-emitter - Transaction emitter"
     @echo "    aptos-node-checker  - Node checker tool"
     @echo ""
-<<<<<<< Updated upstream
-    @echo "Use 'just build' to build all packages"
-    @echo "Use 'just build-bin <package-name>' for custom package builds"
-=======
     @echo "================================================================================"
     @echo "                        Available Binary Build Targets"
     @echo "================================================================================"
@@ -320,19 +300,11 @@ list-binaries:
     @echo "  just cache-status                      - Check Cachix setup status"
     @echo ""
     @echo "================================================================================"
->>>>>>> Stashed changes
 
 # Help - list available recipes
 help:
     @just --list
     @echo ""
-<<<<<<< Updated upstream
-    @echo "Binary Build Options:"
-    @echo "  Use 'just list-binaries' to see available binary build targets"
-    @echo "  Use 'just build <binary-name>' for common binary builds"
-    @echo "  Use 'just build' to build all packages"
-    @echo "  Use 'just build-bin <package-name>' for custom package builds"
-=======
     @echo "================================================================================"
     @echo "                              Quick Reference"
     @echo "================================================================================"
@@ -362,4 +334,3 @@ help:
     @echo ""
     @echo "Use 'just list-binaries' for complete list of build targets"
     @echo "================================================================================"
->>>>>>> Stashed changes

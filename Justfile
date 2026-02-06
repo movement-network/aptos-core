@@ -338,7 +338,7 @@ cache-push-all:
         exit 1
     fi
     echo "Building all binaries and pushing to Cachix..."
-    for binary in aptos-node movement l1-migration; do
+    for binary in aptos-node movement l1-migration aptos-faucet-service aptos-transaction-emitter; do
         echo ""
         echo "=== Building $binary ==="
         nix build .#$binary -L
@@ -381,30 +381,59 @@ cache-status:
     echo "  just cache-push aptos-node"
     echo "  just cache-push-all"
 
+# ==============================================================================
+# Test Scripts
+# ==============================================================================
+
+# Test nix builds locally (all binaries + version checks)
+test-nix-build:
+    @bash scripts/test-nix-build.sh
+
+# Test cachix push works for all binaries
+test-cachix:
+    @bash scripts/test-cachix.sh
+
+# ==============================================================================
+# K8s Test Jobs (validate Docker images on real amd64 Linux)
+# ==============================================================================
+
+# Setup K8s namespace for test jobs
+k8s-setup:
+    @bash scripts/k8s-setup.sh
+
+# Test Docker image on K8s (validates binaries on real amd64 Linux)
+k8s-test-docker tag="":
+    @bash scripts/k8s-test-docker.sh {{tag}}
+
+# Stream logs from K8s test job
+k8s-test-logs job="test-docker-image":
+    @bash scripts/k8s-test-logs.sh {{job}}
+
+# Check K8s test job status
+k8s-test-status:
+    @bash scripts/k8s-test-status.sh
+
+# Clean up K8s test jobs
+k8s-test-cleanup:
+    @bash scripts/k8s-test-cleanup.sh
+
+# End-to-end: build Docker image, push to GHCR, validate on K8s
+k8s-test-e2e tag="":
+    @bash scripts/k8s-test-e2e.sh {{tag}}
+
 # List available binary build targets
 list-binaries:
-    @echo "Available binary build targets:"
-    @echo "  Generic: just build <binary-name>"
-    @echo "  Common binaries:"
-    @echo "    aptos-node          - Main Aptos node"
-    @echo "    aptos               - Aptos CLI tool"
-    @echo "    aptos-debugger      - Debugging tool"
-    @echo "    aptos-backup-cli    - Backup CLI tool"
-    @echo "    aptos-keygen        - Key generation tool"
-    @echo "    transaction-emitter - Transaction emitter"
-    @echo "    aptos-node-checker  - Node checker tool"
-    @echo ""
     @echo "================================================================================"
     @echo "                        Available Binary Build Targets"
     @echo "================================================================================"
     @echo ""
     @echo "NIX BUILD TARGETS (reproducible, cached via Cachix):"
-    @echo "  just build-nix aptos-node              - Main Aptos node binary"
-    @echo "  just build-nix movement                - Movement CLI (renamed from aptos)"
-    @echo "  just build-nix l1-migration            - L1 migration tool"
-    @echo "  just build-nix aptos-faucet-service    - Faucet service for test networks"
-    @echo "  just build-nix aptos-transaction-emitter - Transaction testing tool"
-    @echo "  just build-all-nix                     - Build all five binaries"
+    @echo "  nix build .#aptos-node                 - Main Aptos node binary"
+    @echo "  nix build .#movement                   - Movement CLI (renamed from aptos)"
+    @echo "  nix build .#l1-migration               - L1 migration tool"
+    @echo "  nix build .#aptos-faucet-service       - Faucet service for test networks"
+    @echo "  nix build .#aptos-transaction-emitter  - Transaction testing tool"
+    @echo "  nix build .#all-binaries               - Build all five binaries"
     @echo ""
     @echo "CARGO BUILD TARGETS (faster iteration, uses dev shell):"
     @echo "  just build aptos-node                  - Build with cargo (dev profile)"
@@ -465,6 +494,15 @@ help:
     @echo "SHARE BUILDS (Cachix):"
     @echo "  just cache-push-all        - Build all & push to cache"
     @echo "  just cache-status          - Check Cachix setup"
+    @echo ""
+    @echo "TESTING:"
+    @echo "  just test-nix-build        - Test all nix builds locally"
+    @echo "  just test-cachix           - Test cachix push for all binaries"
+    @echo ""
+    @echo "K8s VALIDATION (amd64 Docker image testing):"
+    @echo "  just k8s-test-e2e          - Build, push, validate on K8s"
+    @echo "  just k8s-test-docker <tag> - Test image on K8s"
+    @echo "  just k8s-test-logs         - Stream K8s test logs"
     @echo ""
     @echo "Use 'just list-binaries' for complete list of build targets"
     @echo "================================================================================"

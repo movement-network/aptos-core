@@ -147,3 +147,9 @@ genesis_antithesis_*/
 
 # Ignore generated credentials from google-github-actions/auth
 gha-creds-*.json
+
+# Nix build outputs
+result
+result-*
+nix/result
+nix/result-*

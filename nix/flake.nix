@@ -91,12 +91,26 @@
             cargoExtraArgs = "-p l1-migration";
           });
 
+          aptos-faucet-service = craneLib.buildPackage (crateArgs // {
+            pname = "aptos-faucet-service";
+            version = "0.1.0";
+            cargoExtraArgs = "-p aptos-faucet-service";
+          });
+
+          aptos-transaction-emitter = craneLib.buildPackage (crateArgs // {
+            pname = "aptos-transaction-emitter";
+            version = "0.1.0";
+            cargoExtraArgs = "-p aptos-transaction-emitter";
+          });
+
           all-binaries = pkgs.symlinkJoin {
             name = "aptos-all-binaries";
             paths = [
               self.packages.${system}.aptos-node
               self.packages.${system}.movement
               self.packages.${system}.l1-migration
+              self.packages.${system}.aptos-faucet-service
+              self.packages.${system}.aptos-transaction-emitter
             ];
           };
         };

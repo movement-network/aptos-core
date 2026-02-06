@@ -1,87 +1,83 @@
 # Aptos Core Nix Build System
 
-This directory contains the Nix expressions for building and developing Aptos Core. Nix has been adopted as the primary build system for Aptos Core to ensure reproducible builds, streamline dependency management, and provide a consistent development environment, particularly addressing common issues like RocksDB compilation.
+This directory contains the Nix flake for building Aptos Core. The build system uses [crane](https://github.com/ipetkov/crane) with [rust-overlay](https://github.com/oxalica/rust-overlay) for reproducible Rust builds.
 
-## Overview
-
-The Nix build system provides:
-
-1. **Reproducible builds** - Ensures consistent builds across different environments, from local development to CI/CD.
-2. **Dependency management** - Automatically handles all system dependencies, ensuring all developers use the same versions.
-3. **Consistent Development Environment** - Provides a hermetic and consistent development environment, reducing "it works on my machine" issues.
-4. **RocksDB compatibility** - Specifically addresses and fixes RocksDB compilation issues by managing proper environment variables and dependencies.
-
-## Directory Structure
+## Architecture
 
 ```
 nix/
-├── default.nix       # Legacy Nix entry point (deprecated, use flake.nix)
-├── flake.nix         # Modern Nix flake entry point
-├── flake.lock        # Locked dependencies for flake.nix
-├── shell.nix         # Development environment definition
-├── build-aptos.sh    # Convenience script for building Aptos Core using Nix
-├── README.md         # This file
-└── pkgs/
-    └── aptos-node.nix # Aptos Core package definition
+├── flake.nix         # Nix flake - package definitions, dev shell
+├── flake.lock        # Locked dependencies
+└── README.md         # This file
 ```
+
+The root `flake.nix` is a symlink to `nix/flake.nix`. All source paths in the flake use `./..` to reference the repo root.
+
+### Why crane?
+
+Standard nixpkgs `buildRustPackage` / `fetchCargoVendor` can't handle two git crates with the same name and version from different repos (e.g., `aptos-moving-average-0.1.0` from both `aptos-indexer-processors` and `aptos-indexer-processor-sdk`). Crane vendors by repo+revision, avoiding collisions.
+
+### Build phases
+
+Crane splits the build into two phases for better caching:
+
+1. **`buildDepsOnly`** - Builds all workspace dependencies (cached separately)
+2. **`buildPackage`** - Builds the specific crate (fast rebuild on source changes)
+
+## Packages
+
+| Package | Binary | Description |
+|---------|--------|-------------|
+| `aptos-node` | `aptos-node` | Main Aptos node |
+| `movement` | `movement` | Movement CLI |
+| `l1-migration` | `l1-migration` | L1 migration tool |
+| `aptos-faucet-service` | `aptos-faucet-service` | Faucet service |
+| `aptos-transaction-emitter` | `aptos-transaction-emitter` | Transaction load tool |
+| `all-binaries` | (all above) | symlinkJoin of all 5 |
 
 ## Usage
 
-### Using Nix Flakes (Recommended)
-
-Nix Flakes provide a modern, reproducible way to interact with the Nix build system.
-
-To build Aptos Core:
-
 ```bash
-nix build .#aptos-core
-```
+# Build all binaries
+nix build .#all-binaries -L
 
-To enter the development environment:
+# Build individual binary
+nix build .#aptos-node
 
-```bash
+# Enter dev shell
 nix develop
-```
 
-To run a specific app (e.g., `aptos-node`):
-
-```bash
+# Run aptos-node
 nix run .#aptos-node
 ```
 
-### Using the Build Script
+## Inputs
 
-For convenience, you can use the provided `build-aptos.sh` script, which wraps the `nix build` command:
+| Input | Source | Purpose |
+|-------|--------|---------|
+| `nixpkgs` | `nixos-unstable` | System packages (openssl, rocksdb, etc.) |
+| `flake-utils` | `numtide/flake-utils` | `eachDefaultSystem` helper |
+| `rust-overlay` | `oxalica/rust-overlay` | Rust toolchain from `rust-toolchain.toml` |
+| `crane` | `ipetkov/crane` | Rust build framework |
 
-```bash
-./nix/build-aptos.sh
-```
+## Environment Variables
 
-## Configuration
+The flake configures these for the build:
 
-The Nix build system automatically configures the necessary environment variables to ensure smooth compilation, especially for dependencies like RocksDB and OpenSSL. These include:
+- `LIBCLANG_PATH` - libclang for bindgen
+- `BINDGEN_EXTRA_CLANG_ARGS` - Include paths for bindgen
+- `ROCKSDB_LIB_DIR` - System RocksDB library
+- `LD_LIBRARY_PATH` - Runtime library search path
 
-- `ROCKSDB_LIB_DIR` - Points to the Nix-managed RocksDB library directory.
-- `ROCKSDB_STATIC` - Forces static linking of RocksDB.
-- `OPENSSL_NO_VENDOR` - Prevents vendoring OpenSSL, relying on the Nix-provided version.
-- `OPENSSL_DIR` - Points to the Nix-managed OpenSSL development directory.
+**Note**: `JEMALLOC_OVERRIDE` is intentionally NOT set for package builds. The dev shell sets it for faster cargo builds, but package builds let `jemalloc-sys` compile from source with the correct `_rjem_` prefix.
 
-## Troubleshooting
-
-### RocksDB Compilation Issues
-
-If you encounter RocksDB compilation errors, ensure that your Nix environment is correctly set up. The Nix build system is designed to mitigate these issues by providing a controlled environment. If problems persist, verify your Nix installation and flake configuration.
-
-### OpenSSL Issues
-
-Similar to RocksDB, OpenSSL issues are typically resolved by the Nix environment. Ensure your Nix setup is healthy if you face persistent problems.
-
-## Contributing
-
-To update the `flake.lock` file (which locks all input dependencies):
+## Updating Dependencies
 
 ```bash
 nix flake update
 ```
 
-To add new dependencies or modify existing ones, update `flake.nix` and then run `nix flake update` to refresh the lock file.
+## See Also
+
+- [Nix Build Guide](../docs/nix-build-guide.md) - Comprehensive guide with testing, Docker, Cachix, and K8s validation
+- [README.md](../README.md) - Quick start

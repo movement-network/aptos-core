@@ -71,8 +71,31 @@ jobs:
         run: |
           echo "build_profile=${{ inputs.build_profile || 'release' }}" >> $GITHUB_OUTPUT
 
+  cachix-push:
+    needs: setup
+    runs-on: buildjet-16vcpu-ubuntu-2204
+    name: "Push Nix builds to Cachix"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: cachix/install-nix-action@v27
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: cachix/cachix-action@v15
+        with:
+          name: movement-m1
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+      - name: Build and push all binaries to Cachix
+        run: |
+          for binary in aptos-node movement l1-migration aptos-faucet-service aptos-transaction-emitter; do
+            echo "=== Building and caching $binary ==="
+            nix build .#$binary -L
+            cachix push movement-m1 result
+          done
+
   binaries-aptos-node:
-    needs: 
+    needs:
       - setup
     runs-on: buildjet-16vcpu-ubuntu-2204
     name: "Build ${{ matrix.binary.package }} with Nix"

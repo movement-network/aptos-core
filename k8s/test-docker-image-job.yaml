@@ -1,0 +1,45 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: test-docker-image
+  namespace: nix-build-test
+  labels:
+    app: nix-build-test
+spec:
+  ttlSecondsAfterFinished: 3600
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: verify-binaries
+        image: ghcr.io/movementlabsxyz/aptos-node:IMAGE_TAG
+        command: ["/bin/bash", "-c"]
+        args:
+        - |
+          echo "=== Validating Docker image on $(uname -m) ==="
+          echo ""
+          FAILURES=0
+          for bin in aptos-node movement l1-migration aptos; do
+            echo "--- $bin ---"
+            if /usr/local/bin/$bin --version 2>&1; then
+              echo "  OK"
+            else
+              echo "  FAILED"
+              FAILURES=$((FAILURES + 1))
+            fi
+          done
+          echo ""
+          if [ "$FAILURES" -eq 0 ]; then
+            echo "=== SUCCESS: All binaries work on amd64 Linux ==="
+          else
+            echo "=== FAILED: $FAILURES binary(ies) failed ==="
+            exit 1
+          fi
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+          limits:
+            cpu: "1"
+            memory: "1Gi"

@@ -22,7 +22,7 @@ Movement is a layer 1 blockchain bringing a paradigm shift to Web3 through bette
 
 ## Nix Build System
 
-This project uses [Nix](https://nixos.org/) for reproducible builds. All binaries (`aptos-node`, `movement`, `l1-migration`) can be built with a single command.
+This project uses [Nix](https://nixos.org/) for reproducible builds. All binaries (`aptos-node`, `movement`, `l1-migration`, `aptos-faucet-service`, `aptos-transaction-emitter`) can be built with a single command.
 
 ### Prerequisites
 
@@ -100,12 +100,33 @@ Build a Linux container using Docker buildx (works on macOS/Apple Silicon):
 just container-buildx aptos-node
 ```
 
+### Testing
+
+```bash
+just test-nix-build    # Build all 5 binaries, verify --version
+just test-cachix       # Build, push to cachix, verify narinfo
+```
+
+### K8s Validation (amd64 Docker images)
+
+Validate Docker images on real amd64 Linux hardware using a K8s devNet cluster:
+
+```bash
+just k8s-test-e2e              # Build, push to GHCR, validate on K8s
+just k8s-test-docker <tag>     # Test a specific image tag
+just k8s-test-logs             # Stream test job logs
+```
+
 ### More Commands
 
 ```bash
 just help              # List all available commands
 just list-binaries     # List all build targets
 ```
+
+### Comprehensive Guide
+
+See [docs/nix-build-guide.md](docs/nix-build-guide.md) for the full guide covering Cachix, Docker, K8s validation, CI/CD, and troubleshooting.
 
 ## Contributing
 

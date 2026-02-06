@@ -1,0 +1,9 @@
+# Dockerfile.nix.dockerignore - permissive ignore for Nix builds inside Docker
+# Nix needs the full source tree to build, so we only exclude large non-essential dirs
+
+target/
+result
+result-*
+.git/
+node_modules/
+.github/

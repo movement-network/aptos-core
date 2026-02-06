@@ -5,9 +5,10 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
     rust-overlay.url = "github:oxalica/rust-overlay";
+    crane.url = "github:ipetkov/crane";
   };
 
-  outputs = { self, nixpkgs, flake-utils, rust-overlay }:
+  outputs = { self, nixpkgs, flake-utils, rust-overlay, crane }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         overlays = [ (import rust-overlay) ];
@@ -17,49 +18,16 @@
 
         rustToolchain = pkgs.rust-bin.fromRustupToolchainFile ../rust-toolchain.toml;
 
-        # Create a custom rustPlatform with the specified toolchain
-        customRustPlatform = pkgs.makeRustPlatform {
-          rustc = rustToolchain;
-          cargo = rustToolchain;
-        };
+        # Use crane with our custom rust toolchain for building packages
+        craneLib = (crane.mkLib pkgs).overrideToolchain rustToolchain;
 
-        # Common args for all binary packages
-        commonBuildArgs = {
-          version = "0.1.0";
-          src = ./..;
-          cargoLock = {
-            lockFile = ../Cargo.lock;
-            outputHashes = {
-              "aptos-indexer-processor-sdk-0.1.0" = "11rwy4zy46y28r6q1cpzswyjm5sg6anf114ak1a8ckscjqqv8av5";
-              "aptos-indexer-transaction-stream-0.1.0" = "11rwy4zy46y28r6q1cpzswyjm5sg6anf114ak1a8ckscjqqv8av5";
-              "aptos-moving-average-0.1.0" = "1bwprk7w7p9q46am45gal4jsx2nz90maasdd8m818vd8yl1x4nal";
-              "aptos-profiler-0.1.0" = "1q6wf7vfny14lvwm416j2996dq9d46c8vn88g21m5abxw5qkx3hd";
-              "aptos-protos-1.3.1" = "1q6wf7vfny14lvwm416j2996dq9d46c8vn88g21m5abxw5qkx3hd";
-              "aptos-system-utils-0.1.0" = "1q6wf7vfny14lvwm416j2996dq9d46c8vn88g21m5abxw5qkx3hd";
-              "aptos-transaction-filter-0.1.0" = "1q6wf7vfny14lvwm416j2996dq9d46c8vn88g21m5abxw5qkx3hd";
-              "bcs-0.1.4" = "1n0syyqxz6k3g02wriggmm111z1pqpzd67irqv21ahfj68286csb";
-              "diesel-async-0.5.2" = "0x1rzrqmlxfz1l5iikg8sapbnvvkxqg1ibpzdd9gjy656zpgr4cf";
-              "firebase-token-0.3.0" = "1xb7jhvmxpnwb3ys5wfbg21m9krxrzbm937k376xq8ay7l3rhfkc";
-              "futures-0.3.30" = "10m8k8s64m693n801gj0ygd8p5h89y1a7x5lkyh8w5316d7wcfcd";
-              "futures-channel-0.3.30" = "10m8k8s64m693n801gj0ygd8p5h89y1a7x5lkyh8w5316d7wcfcd";
-              "futures-core-0.3.30" = "10m8k8s64m693n801gj0ygd8p5h89y1a7x5lkyh8w5316d7wcfcd";
-              "futures-executor-0.3.30" = "10m8k8s64m693n801gj0ygd8p5h89y1a7x5lkyh8w5316d7wcfcd";
-              "futures-io-0.3.30" = "10m8k8s64m693n801gj0ygd8p5h89y1a7x5lkyh8w5316d7wcfcd";
-              "futures-macro-0.3.30" = "10m8k8s64m693n801gj0ygd8p5h89y1a7x5lkyh8w5316d7wcfcd";
-              "futures-sink-0.3.30" = "10m8k8s64m693n801gj0ygd8p5h89y1a7x5lkyh8w5316d7wcfcd";
-              "futures-task-0.3.30" = "10m8k8s64m693n801gj0ygd8p5h89y1a7x5lkyh8w5316d7wcfcd";
-              "futures-util-0.3.30" = "10m8k8s64m693n801gj0ygd8p5h89y1a7x5lkyh8w5316d7wcfcd";
-              "instrumented-channel-0.1.0" = "11rwy4zy46y28r6q1cpzswyjm5sg6anf114ak1a8ckscjqqv8av5";
-              "merlin-3.0.0" = "0ljb9gdxkh76iss6mnx12aj3b4qiskf192f1h7vhs45mljcxy114";
-              "poseidon-ark-0.0.1" = "0q6zzyx3mhr6lb6mifc2i7z5ni3gwv3wki3pdzmyqf5z439dydy4";
-              "processor-0.1.0" = "1di9iig9hyihsf12v29wfln1rccaj7vivjcmm80zpr4idwzi2j7i";
-              "sample-0.1.0" = "11rwy4zy46y28r6q1cpzswyjm5sg6anf114ak1a8ckscjqqv8av5";
-              "self_update-0.39.0" = "1z88scq08ap9zhfbndrfjjw9mwcifca61gvn4wz57b972lb58xn1";
-              "serde-generate-0.20.6" = "04xnizqnlsvy3af83iy0p5l3prybj47s546497shngck52gn5brr";
-              "serde-reflection-0.3.5" = "04xnizqnlsvy3af83iy0p5l3prybj47s546497shngck52gn5brr";
-              "x25519-dalek-1.2.0" = "06qqrzf4k8qzpsq5n7ipxjv0himafrjyiw3dnq1m1xk3n0nsi5k8";
-            };
-          };
+        # Use the full source tree (includes .proto, .mv, .mrb, .yaml, etc.)
+        src = ./..;
+
+        # Common args shared between buildDepsOnly and buildPackage
+        commonArgs = {
+          inherit src;
+          strictDeps = true;
 
           nativeBuildInputs = with pkgs; [
             pkg-config
@@ -75,7 +43,6 @@
             rocksdb
             libclang
             zlib
-            jemalloc
           ] ++ pkgs.lib.optionals pkgs.stdenv.isLinux [
             pkgs.elfutils
             pkgs.udev
@@ -84,9 +51,10 @@
           LIBCLANG_PATH = "${pkgs.libclang.lib}/lib";
           BINDGEN_EXTRA_CLANG_ARGS = "-I${pkgs.libclang.dev}/include";
           ROCKSDB_LIB_DIR = "${pkgs.rocksdb}/lib";
-          JEMALLOC_OVERRIDE = "${pkgs.jemalloc}/lib/libjemalloc${if pkgs.stdenv.isDarwin then ".dylib" else ".so"}";
+          # Let jemalloc-sys build from source with correct _rjem_ prefix
+          # (system jemalloc lacks the prefix, causing linker errors)
           LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath (with pkgs; [
-            libclang.lib llvm.lib zlib jemalloc rocksdb stdenv.cc.cc.lib openssl.out
+            libclang.lib llvm.lib zlib rocksdb stdenv.cc.cc.lib openssl.out
           ] ++ pkgs.lib.optionals pkgs.stdenv.isLinux [
             elfutils
           ]);
@@ -94,22 +62,33 @@
           doCheck = false;
         };
 
+        # Build workspace dependencies (cached separately from source changes)
+        cargoArtifacts = craneLib.buildDepsOnly commonArgs;
+
+        # Common args for individual crate builds
+        crateArgs = commonArgs // {
+          inherit cargoArtifacts;
+        };
+
       in
       {
         packages = {
-          aptos-node = customRustPlatform.buildRustPackage (commonBuildArgs // {
+          aptos-node = craneLib.buildPackage (crateArgs // {
             pname = "aptos-node";
-            cargoBuildFlags = ["-p" "aptos-node"];
+            version = "0.1.0";
+            cargoExtraArgs = "-p aptos-node";
           });
 
-          movement = customRustPlatform.buildRustPackage (commonBuildArgs // {
+          movement = craneLib.buildPackage (crateArgs // {
             pname = "movement";
-            cargoBuildFlags = ["-p" "movement"];
+            version = "0.1.0";
+            cargoExtraArgs = "-p movement";
           });
 
-          l1-migration = customRustPlatform.buildRustPackage (commonBuildArgs // {
+          l1-migration = craneLib.buildPackage (crateArgs // {
             pname = "l1-migration";
-            cargoBuildFlags = ["-p" "l1-migration"];
+            version = "0.1.0";
+            cargoExtraArgs = "-p l1-migration";
           });
 
           all-binaries = pkgs.symlinkJoin {

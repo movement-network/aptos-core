@@ -3,6 +3,71 @@
 # Set the shell to bash
 set shell := ["bash", "-c"]
 
+# Install Nix using the Determinate Systems installer
+install-nix:
+    #!/usr/bin/env bash
+    if command -v nix &> /dev/null; then
+        echo "Nix is already installed: $(nix --version)"
+        exit 0
+    fi
+    echo "Installing Nix via Determinate Systems installer..."
+    curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install
+    echo ""
+    echo "Nix installed! Restart your shell, then run: just build"
+
+# Install 1Password CLI (op)
+install-op:
+    #!/usr/bin/env bash
+    if command -v op &> /dev/null; then
+        echo "1Password CLI is already installed: $(op --version)"
+        exit 0
+    fi
+    echo "Installing 1Password CLI..."
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        if command -v brew &> /dev/null; then
+            brew install --cask 1password-cli
+        else
+            echo "Error: Homebrew is required to install op on macOS."
+            echo "Install Homebrew first: https://brew.sh"
+            exit 1
+        fi
+    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        curl -sS https://downloads.1password.com/linux/keys/1password.asc | \
+            sudo gpg --dearmor --output /usr/share/keyrings/1password-archive-keyring.gpg
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/1password-archive-keyring.gpg] https://downloads.1password.com/linux/debian/$(dpkg --print-architecture) stable main" | \
+            sudo tee /etc/apt/sources.list.d/1password.list
+        sudo apt update && sudo apt install -y 1password-cli
+    else
+        echo "Error: Unsupported OS. Install manually: https://developer.1password.com/docs/cli/get-started/"
+        exit 1
+    fi
+    echo "1Password CLI installed! Run 'op signin' to authenticate."
+
+# Setup CACHIX_AUTH_TOKEN from 1Password
+setup-cachix:
+    #!/usr/bin/env bash
+    if ! command -v op &> /dev/null; then
+        echo "Error: 1Password CLI (op) is not installed."
+        echo "Install with: just install-op"
+        exit 1
+    fi
+    if ! command -v cachix &> /dev/null; then
+        echo "Installing cachix..."
+        nix profile install nixpkgs#cachix
+    fi
+    echo "Fetching CACHIX_AUTH_TOKEN from 1Password (vault: team-move-dev)..."
+    TOKEN=$(op read "op://team-move-dev/CACHIX_AUTH_TOKEN/credential" 2>/dev/null)
+    if [ -z "$TOKEN" ]; then
+        echo "Error: Failed to read token. Make sure you are signed in:"
+        echo "  op signin"
+        exit 1
+    fi
+    cachix authtoken "$TOKEN"
+    echo "Cachix auth token configured!"
+    echo ""
+    echo "You can now push builds:"
+    echo "  just cache-push-all"
+
 # Default target
 default: build
 
@@ -256,34 +321,20 @@ cache-push binary:
     #!/usr/bin/env bash
     if ! command -v cachix &> /dev/null; then
         echo "Error: cachix is not installed."
-        echo "Install with: nix-env -iA cachix -f https://cachix.org/api/v1/install"
-        echo "Or: nix profile install nixpkgs#cachix"
-        exit 1
-    fi
-    if [ -z "$CACHIX_AUTH_TOKEN" ]; then
-        echo "Error: CACHIX_AUTH_TOKEN is not set."
-        echo "Get the token from 1Password and export it:"
-        echo "  export CACHIX_AUTH_TOKEN=<token-from-1password>"
+        echo "Run: just setup-cachix"
         exit 1
     fi
     echo "Building {{binary}} and pushing to Cachix..."
     nix build .#{{binary}} -L
-    cachix push movementlabs result
-    echo "Done! {{binary}} pushed to movementlabs cache."
+    cachix push movement-m1 result
+    echo "Done! {{binary}} pushed to movement-m1 cache."
 
 # Build all binaries and push to Cachix
 cache-push-all:
     #!/usr/bin/env bash
     if ! command -v cachix &> /dev/null; then
         echo "Error: cachix is not installed."
-        echo "Install with: nix-env -iA cachix -f https://cachix.org/api/v1/install"
-        echo "Or: nix profile install nixpkgs#cachix"
-        exit 1
-    fi
-    if [ -z "$CACHIX_AUTH_TOKEN" ]; then
-        echo "Error: CACHIX_AUTH_TOKEN is not set."
-        echo "Get the token from 1Password and export it:"
-        echo "  export CACHIX_AUTH_TOKEN=<token-from-1password>"
+        echo "Run: just setup-cachix"
         exit 1
     fi
     echo "Building all binaries and pushing to Cachix..."
@@ -291,11 +342,11 @@ cache-push-all:
         echo ""
         echo "=== Building $binary ==="
         nix build .#$binary -L
-        cachix push movementlabs result
+        cachix push movement-m1 result
         echo "$binary pushed to cache."
     done
     echo ""
-    echo "All binaries pushed to movementlabs cache."
+    echo "All binaries pushed to movement-m1 cache."
 
 # Check Cachix setup status
 cache-status:
@@ -303,28 +354,30 @@ cache-status:
     echo "Cachix Configuration"
     echo "===================="
     echo ""
-    echo "Cache name: aptos-core"
+    echo "Cache name: movement-m1"
+    echo "Public key: movement-m1.cachix.org-1:S/LYIoBq5MoEE8L4WY3ITVzrJYJo+Tmbx/lP3EORmgY="
     echo ""
     if command -v cachix &> /dev/null; then
         echo "cachix CLI: installed ($(cachix --version 2>&1))"
     else
         echo "cachix CLI: NOT INSTALLED"
-        echo "  Install with: nix profile install nixpkgs#cachix"
+        echo "  Run: just setup-cachix"
     fi
     echo ""
-    if [ -n "$CACHIX_AUTH_TOKEN" ]; then
-        echo "CACHIX_AUTH_TOKEN: set"
+    if command -v op &> /dev/null; then
+        echo "1Password CLI: installed ($(op --version))"
     else
-        echo "CACHIX_AUTH_TOKEN: NOT SET"
-        echo "  Get the token from 1Password and export it:"
-        echo "  export CACHIX_AUTH_TOKEN=<token-from-1password>"
+        echo "1Password CLI: NOT INSTALLED"
+        echo "  Run: just install-op"
     fi
+    echo ""
+    echo "To set up cachix auth (requires 1Password):"
+    echo "  just setup-cachix"
     echo ""
     echo "To use the cache (pull only, no auth needed):"
-    echo "  cachix use movementlabs"
+    echo "  cachix use movement-m1"
     echo ""
     echo "To push builds to the cache:"
-    echo "  export CACHIX_AUTH_TOKEN=<token-from-1password>"
     echo "  just cache-push aptos-node"
     echo "  just cache-push-all"
 

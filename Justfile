@@ -43,23 +43,32 @@ install-op:
     fi
     echo "1Password CLI installed! Run 'op signin' to authenticate."
 
-# Setup CACHIX_AUTH_TOKEN from 1Password
+# Setup cachix auth token
+# Reads from .cachix-token file (preferred) or 1Password vault
 setup-cachix:
     #!/usr/bin/env bash
-    if ! command -v op &> /dev/null; then
-        echo "Error: 1Password CLI (op) is not installed."
-        echo "Install with: just install-op"
-        exit 1
-    fi
     if ! command -v cachix &> /dev/null; then
         echo "Installing cachix..."
         nix profile install nixpkgs#cachix
     fi
-    echo "Fetching CACHIX_AUTH_TOKEN from 1Password (vault: cachix)..."
-    TOKEN=$(op read "op://cachix/CACHIX_AUTH_TOKEN/credential" 2>/dev/null)
+    # Try .cachix-token file first (local dev), then 1Password
+    if [ -f .cachix-token ]; then
+        echo "Using token from .cachix-token file..."
+        TOKEN=$(cat .cachix-token)
+    elif command -v op &> /dev/null; then
+        echo "Fetching token from 1Password (vault: cachix)..."
+        TOKEN=$(op read "op://team-move-dev/CACHIX_AUTH_TOKEN/credential" --account moveindustries.1password.com 2>/dev/null)
+    fi
     if [ -z "$TOKEN" ]; then
-        echo "Error: Failed to read token. Make sure you are signed in:"
-        echo "  op signin"
+        echo "Error: No cachix token found."
+        echo ""
+        echo "Option 1: Save token to .cachix-token file:"
+        echo "  1. Go to https://app.cachix.org/cache/movement-m1 -> Settings -> Auth Tokens"
+        echo "  2. Generate a new token"
+        echo "  3. echo 'YOUR_TOKEN' > .cachix-token"
+        echo ""
+        echo "Option 2: Use 1Password (vault: cachix, item: CACHIX_AUTH_TOKEN):"
+        echo "  op signin && just setup-cachix"
         exit 1
     fi
     cachix authtoken "$TOKEN"

@@ -47,11 +47,25 @@ op signin
 
 ### Setup Cachix
 
+**Option 1: Token file (preferred for local dev)**
+
+1. Go to https://app.cachix.org/cache/movement-m1 -> Settings -> Auth Tokens
+2. Generate a new token (or get one from a teammate)
+3. Save it:
+
 ```bash
+echo 'YOUR_TOKEN' > .cachix-token   # gitignored, never committed
 just setup-cachix
 ```
 
-This installs `cachix` (if needed), fetches `CACHIX_AUTH_TOKEN` from 1Password, and configures the auth token.
+**Option 2: 1Password (Move Industries account)**
+
+```bash
+op signin --account moveindustries.1password.com
+just setup-cachix   # falls back to op://team-move-dev/CACHIX_AUTH_TOKEN/credential
+```
+
+`just setup-cachix` reads from `.cachix-token` first, then 1Password as fallback.
 
 To pull from the cache (no auth needed):
 
@@ -141,12 +155,12 @@ Pre-built binaries are shared via [Cachix](https://app.cachix.org/cache/movement
 
 - **Cache name**: `movement-m1`
 - **Public key**: `movement-m1.cachix.org-1:S/LYIoBq5MoEE8L4WY3ITVzrJYJo+Tmbx/lP3EORmgY=`
-- **Auth token**: 1Password `op://cachix/CACHIX_AUTH_TOKEN/credential`
+- **Auth token**: `.cachix-token` file (gitignored) or 1Password `op://team-move-dev/CACHIX_AUTH_TOKEN/credential` (Move Industries account)
 
 ### Push builds to cache
 
 ```bash
-just setup-cachix       # One-time setup (requires 1Password)
+just setup-cachix       # One-time setup (reads .cachix-token or 1Password)
 just cache-push-all     # Build and push all 5 binaries
 just cache-push aptos-node  # Push a single binary
 ```

@@ -38,7 +38,7 @@ curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix 
 
 #### Install 1Password CLI (for Cachix push access)
 
-The [1Password CLI](https://developer.1password.com/docs/cli/get-started/) (`op`) is used to securely fetch the Cachix auth token from the `cachix` vault.
+The [1Password CLI](https://developer.1password.com/docs/cli/get-started/) (`op`) is used to securely fetch the Cachix auth token from the `team-move-dev` vault (Move Industries account).
 
 ```bash
 just install-op
@@ -60,7 +60,7 @@ Pre-built binaries are shared via [Cachix](https://app.cachix.org/cache/movement
 just setup-cachix
 ```
 
-This fetches `CACHIX_AUTH_TOKEN` from 1Password (`cachix` vault) and configures cachix.
+This reads from `.cachix-token` file or fetches `CACHIX_AUTH_TOKEN` from 1Password (Move Industries `team-move-dev` vault).
 
 To pull from the cache (no auth needed):
 

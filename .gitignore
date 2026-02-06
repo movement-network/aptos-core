@@ -153,3 +153,6 @@ result
 result-*
 nix/result
 nix/result-*
+
+# Cachix auth token (local-only, not committed)
+.cachix-token

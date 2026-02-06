@@ -31,7 +31,7 @@ Restart your shell after installation.
 
 ### Install 1Password CLI (for Cachix push access)
 
-The `op` CLI fetches the Cachix auth token from the `team-move-dev` vault (Move Industries account).
+The `op` CLI fetches the Cachix auth token from the `cachix` vault.
 
 ```bash
 just install-op
@@ -141,7 +141,7 @@ Pre-built binaries are shared via [Cachix](https://app.cachix.org/cache/movement
 
 - **Cache name**: `movement-m1`
 - **Public key**: `movement-m1.cachix.org-1:S/LYIoBq5MoEE8L4WY3ITVzrJYJo+Tmbx/lP3EORmgY=`
-- **Auth token**: 1Password `op://team-move-dev/CACHIX_AUTH_TOKEN/credential` (Move Industries account)
+- **Auth token**: 1Password `op://cachix/CACHIX_AUTH_TOKEN/credential`
 
 ### Push builds to cache
 

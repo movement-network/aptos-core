@@ -55,8 +55,8 @@ setup-cachix:
         echo "Installing cachix..."
         nix profile install nixpkgs#cachix
     fi
-    echo "Fetching CACHIX_AUTH_TOKEN from 1Password (vault: team-move-dev)..."
-    TOKEN=$(op read "op://team-move-dev/CACHIX_AUTH_TOKEN/credential" 2>/dev/null)
+    echo "Fetching CACHIX_AUTH_TOKEN from 1Password (vault: cachix)..."
+    TOKEN=$(op read "op://cachix/CACHIX_AUTH_TOKEN/credential" 2>/dev/null)
     if [ -z "$TOKEN" ]; then
         echo "Error: Failed to read token. Make sure you are signed in:"
         echo "  op signin"

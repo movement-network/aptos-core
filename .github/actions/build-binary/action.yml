@@ -14,6 +14,10 @@ inputs:
   github_token:
     description: "GitHub token for Nix installation"
     required: true
+  cachix_auth_token:
+    description: "Optional Cachix auth token for write access"
+    required: false
+    default: ""
   git_sha:
     description: "Git SHA to use for artifact naming (defaults to GITHUB_SHA)"
     required: false
@@ -33,18 +37,40 @@ runs:
     with:
       github_access_token: ${{ inputs.github_token }}
       nix_path: nixpkgs=channel:nixos-unstable
+  - uses: cachix/cachix-action@v15
+    if: ${{ inputs.cachix_auth_token != '' }}
+    with:
+      name: movement-m1
+      authToken: ${{ inputs.cachix_auth_token }}
+      skipPush: true
+  - uses: cachix/cachix-action@v15
+    if: ${{ inputs.cachix_auth_token == '' }}
+    with:
+      name: movement-m1
+      skipPush: true
   - run: |
-      nix develop -c cargo build -p ${{ inputs.binary_package }} --profile ${{ inputs.profile }} --features "${{ inputs.features }}"
-    shell: bash
-  - name: determine output directory
-    run: |
-      if [ -d "target/release" ]; then
-        echo "Using release build output directory"
-        echo "TARGET_FOLDER=target/release" >> $GITHUB_ENV
+      set -euo pipefail
+      set -o pipefail
+      TARGET_FOLDER="target/${{ inputs.profile }}"
+      mkdir -p "$TARGET_FOLDER"
+
+      if [ "${{ inputs.profile }}" = "release" ]; then
+        nix --extra-experimental-features "nix-command flakes" build ".#${{ inputs.binary_package }}" -L --print-build-logs 2>&1 | tee /tmp/nix-build-${{ inputs.binary_package }}.log
+
+        if grep -Eiq "cachix\\.org|copying path" /tmp/nix-build-${{ inputs.binary_package }}.log; then
+          echo "Cache activity detected for ${{ inputs.binary_package }}"
+        else
+          echo "No explicit cache download line detected for ${{ inputs.binary_package }}"
+        fi
+
+        cp "result/bin/${{ inputs.binary_package }}" "$TARGET_FOLDER/${{ inputs.binary_package }}"
       else
-        echo "Using debug build output directory"
-        echo "TARGET_FOLDER=target/debug" >> $GITHUB_ENV
+        echo "::warning::Profile '${{ inputs.profile }}' is not exposed as a Nix flake output; falling back to cargo build in nix develop."
+        nix --extra-experimental-features "nix-command flakes" develop -c cargo build -p "${{ inputs.binary_package }}" --profile "${{ inputs.profile }}" --features "${{ inputs.features }}"
       fi
+
+      chmod +x "$TARGET_FOLDER/${{ inputs.binary_package }}"
+      echo "TARGET_FOLDER=$TARGET_FOLDER" >> "$GITHUB_ENV"
     shell: bash
   - name: shorten sha
     run: |

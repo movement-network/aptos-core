@@ -70,22 +70,54 @@ jobs:
   build-binaries:
     needs: build-checks
     if: needs.build-checks.outputs.members_changed == 'true' || needs.build-checks.outputs.docker_changed == 'true'
-    runs-on: k8s-movement-labs
-    name: "Build Binaries with Nix"
+    runs-on: ${{ matrix.runner }}
+    name: "Build ${{ matrix.binary_file }} with Nix (${{ matrix.arch }})"
     strategy:
+      fail-fast: false
       matrix:
-        binary:
-          - name: "aptos-node"
-            package: "aptos-node"
-            profile: "dev"
-          - name: "aptos-cli"
-            package: "aptos"
-            profile: "dev"
-          - name: "l1-migration"
-            package: "l1-migration"
-            profile: "dev"
+        include:
+          - runner: k8s-movement-labs
+            arch: amd64
+            binary_attr: aptos-node
+            binary_file: aptos-node
+          - runner: k8s-movement-labs
+            arch: amd64
+            binary_attr: movement
+            binary_file: movement
+          - runner: k8s-movement-labs
+            arch: amd64
+            binary_attr: l1-migration
+            binary_file: l1-migration
+          - runner: k8s-movement-labs
+            arch: amd64
+            binary_attr: aptos-faucet-service
+            binary_file: aptos-faucet-service
+          - runner: k8s-movement-labs
+            arch: amd64
+            binary_attr: aptos-transaction-emitter
+            binary_file: aptos-transaction-emitter
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+            binary_attr: aptos-node
+            binary_file: aptos-node
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+            binary_attr: movement
+            binary_file: movement
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+            binary_attr: l1-migration
+            binary_file: l1-migration
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+            binary_attr: aptos-faucet-service
+            binary_file: aptos-faucet-service
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+            binary_attr: aptos-transaction-emitter
+            binary_file: aptos-transaction-emitter
     env:
-      TARGET_FOLDER: target/debug
+      TARGET_FOLDER: target/${{ matrix.arch }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -101,48 +133,45 @@ jobs:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
           nix_path: nixpkgs=channel:nixos-unstable
 
-      # - name: Cache Rust dependencies
-      #   uses: actions/cache@v4
-      #   with:
-      #     path: |
-      #       ~/.cargo/registry/index/
-      #       ~/.cargo/registry/cache/
-      #       ~/.cargo/git/db/
-      #       target/
-      #     key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('nix/flake.lock') }}
-      #     restore-keys: |
-      #       ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-
-      #       ${{ runner.os }}-cargo-
+      - name: Configure Cachix (pull)
+        uses: cachix/cachix-action@v15
+        with:
+          name: movement-m1
+          skipPush: true
 
-      # - name: Cache Nix store
-      #   uses: actions/cache@v4
-      #   with:
-      #     path: /nix/store
-      #     key: ${{ runner.os }}-nix-${{ hashFiles('nix/flake.lock') }}
-      #     restore-keys: |
-      #       ${{ runner.os }}-nix-
-
-      - name: Build ${{ matrix.binary.package }}
+      - name: Build ${{ matrix.binary_file }}
         run: |
-          echo "Building ${{ matrix.binary.package }} with Nix development shell..."
-          nix develop -c cargo build -p ${{ matrix.binary.package }} --profile ${{ matrix.binary.profile }} --features "${{ env.FEATURES }}"
-          echo "Binary available at ${{ env.TARGET_FOLDER }}/${{ matrix.binary.package }}"
+          set -euo pipefail
+          set -o pipefail
+          echo "Building ${{ matrix.binary_attr }} for ${{ matrix.arch }}..."
+          nix --extra-experimental-features "nix-command flakes" build ".#${{ matrix.binary_attr }}" -L --print-build-logs 2>&1 | tee /tmp/nix-build-${{ matrix.binary_attr }}-${{ matrix.arch }}.log
+          mkdir -p "${{ env.TARGET_FOLDER }}"
+          cp "result/bin/${{ matrix.binary_file }}" "${{ env.TARGET_FOLDER }}/${{ matrix.binary_file }}"
+          chmod +x "${{ env.TARGET_FOLDER }}/${{ matrix.binary_file }}"
+
+          CACHE_LINES=$(grep -Ei "movement-m1\.cachix\.org|copying path" /tmp/nix-build-${{ matrix.binary_attr }}-${{ matrix.arch }}.log || true)
+          if [ -n "$CACHE_LINES" ]; then
+            echo "Detected cache activity for ${{ matrix.binary_file }} (${{ matrix.arch }}):"
+            echo "$CACHE_LINES"
+          else
+            echo "::warning::No explicit Cachix download line detected for ${{ matrix.binary_file }} (${{ matrix.arch }})."
+          fi
 
       - name: Verify binary
         run: |
-          if [ -f "${{ env.TARGET_FOLDER }}/${{ matrix.binary.package }}" ]; then
-            echo "✅ Binary ${{ matrix.binary.package }} built successfully"
-            ls -la "${{ env.TARGET_FOLDER }}/${{ matrix.binary.package }}"
+          if [ -f "${{ env.TARGET_FOLDER }}/${{ matrix.binary_file }}" ]; then
+            echo "✅ Binary ${{ matrix.binary_file }} built successfully"
+            ls -la "${{ env.TARGET_FOLDER }}/${{ matrix.binary_file }}"
           else
-            echo "❌ Binary ${{ matrix.binary.package }} not found"
+            echo "❌ Binary ${{ matrix.binary_file }} not found"
             exit 1
           fi
 
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.binary.package }}-${{ github.sha }}
-          path: ${{ env.TARGET_FOLDER }}/${{ matrix.binary.package }}
+          name: ${{ matrix.binary_file }}-${{ matrix.arch }}-${{ github.sha }}
+          path: ${{ env.TARGET_FOLDER }}/${{ matrix.binary_file }}
           retention-days: 7
 
   build-docker:
@@ -161,17 +190,17 @@ jobs:
       - name: Download aptos-node binary
         uses: actions/download-artifact@v4
         with:
-          name: aptos-node-${{ github.sha }}
+          name: aptos-node-amd64-${{ github.sha }}
           path: ${{ env.TARGET_FOLDER }}
-      - name: Download aptos binary
+      - name: Download movement binary
         uses: actions/download-artifact@v4
         with:
-          name: aptos-${{ github.sha }}
+          name: movement-amd64-${{ github.sha }}
           path: ${{ env.TARGET_FOLDER }}
       - name: Download l1-migration binary
         uses: actions/download-artifact@v4
         with:
-          name: l1-migration-${{ github.sha }}
+          name: l1-migration-amd64-${{ github.sha }}
           path: ${{ env.TARGET_FOLDER }}
       - name: List binaries
         run: ls -la ${{ env.TARGET_FOLDER }}

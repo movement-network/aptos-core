@@ -90,13 +90,42 @@ jobs:
         run: |
           for binary in aptos-node movement l1-migration aptos-faucet-service aptos-transaction-emitter; do
             echo "=== Building and caching $binary ==="
-            nix build .#$binary -L
+            nix --extra-experimental-features "nix-command flakes" build .#$binary -L --print-build-logs
             cachix push movement-m1 result
           done
+
+  cachix-verify-download:
+    needs: cachix-push
+    runs-on: buildjet-16vcpu-ubuntu-2204
+    name: "Verify Cachix download path (amd64)"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: cachix/install-nix-action@v27
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: cachix/cachix-action@v15
+        with:
+          name: movement-m1
+          skipPush: true
+      - name: Rebuild one binary and detect cache download logs
+        run: |
+          set -euo pipefail
+          set -o pipefail
+          nix --extra-experimental-features "nix-command flakes" build .#movement -L --print-build-logs 2>&1 | tee /tmp/nix-cache-verify.log
+          CACHE_LINES=$(grep -Ei "movement-m1\.cachix\.org|copying path" /tmp/nix-cache-verify.log || true)
+          if [ -n "$CACHE_LINES" ]; then
+            echo "Detected cache activity:"
+            echo "$CACHE_LINES"
+          else
+            echo "::warning::No explicit Cachix download line detected in logs."
+          fi
 
   binaries-aptos-node:
     needs:
       - setup
+      - cachix-push
     runs-on: buildjet-16vcpu-ubuntu-2204
     name: "Build ${{ matrix.binary.package }} with Nix"
     strategy:
@@ -112,11 +141,12 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha}}
       - name: Build binary ${{ matrix.binary.package }}
-        uses: movementlabsxyz/aptos-core/.github/actions/build-binary@ci/version-builds
+        uses: ./.github/actions/build-binary
         with:
           binary_package: ${{ matrix.binary.package }}
           profile: ${{ needs.setup.outputs.build_profile }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          cachix_auth_token: ${{ secrets.CACHIX_AUTH_TOKEN }}
           git_sha: ${{ needs.setup.outputs.git_sha }}
   container-aptos-node:
     needs: 
@@ -171,6 +201,7 @@ jobs:
   binaries-aptos-faucet-service:
     needs: 
       - setup
+      - cachix-push
     runs-on: buildjet-16vcpu-ubuntu-2204
     name: "Build ${{ matrix.binary.package }} with Nix"
     strategy:
@@ -184,11 +215,12 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha}}
       - name: Build binary ${{ matrix.binary.package }}
-        uses: movementlabsxyz/aptos-core/.github/actions/build-binary@ci/version-builds
+        uses: ./.github/actions/build-binary
         with:
           binary_package: ${{ matrix.binary.package }}
           profile: ${{ needs.setup.outputs.build_profile }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          cachix_auth_token: ${{ secrets.CACHIX_AUTH_TOKEN }}
           git_sha: ${{ needs.setup.outputs.git_sha }}
   container-aptos-faucet-service:
     needs: 
@@ -233,6 +265,7 @@ jobs:
   binaries-aptos-tools:
     needs: 
       - setup
+      - cachix-push
     runs-on: buildjet-16vcpu-ubuntu-2204
     name: "Build ${{ matrix.binary.package }} with Nix"
     strategy:
@@ -246,9 +279,36 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha}}
       - name: Build binary ${{ matrix.binary.package }}
-        uses: movementlabsxyz/aptos-core/.github/actions/build-binary@ci/version-builds
+        uses: ./.github/actions/build-binary
         with:
           binary_package: ${{ matrix.binary.package }}
           profile: ${{ needs.setup.outputs.build_profile }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          cachix_auth_token: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          git_sha: ${{ needs.setup.outputs.git_sha }}
+
+  binaries-arm64:
+    needs:
+      - setup
+    runs-on: ubuntu-24.04-arm
+    name: "Build ${{ matrix.binary.package }} with Nix (arm64)"
+    strategy:
+      matrix:
+        binary:
+          - package: "aptos-node"
+          - package: "movement"
+          - package: "l1-migration"
+          - package: "aptos-faucet-service"
+          - package: "aptos-transaction-emitter"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha}}
+      - name: Build binary ${{ matrix.binary.package }} (arm64)
+        uses: ./.github/actions/build-binary
+        with:
+          binary_package: ${{ matrix.binary.package }}
+          profile: ${{ needs.setup.outputs.build_profile }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          cachix_auth_token: ${{ secrets.CACHIX_AUTH_TOKEN }}
           git_sha: ${{ needs.setup.outputs.git_sha }}

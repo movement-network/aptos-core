@@ -54,20 +54,21 @@ runs:
       TARGET_FOLDER="target/${{ inputs.profile }}"
       mkdir -p "$TARGET_FOLDER"
 
-      if [ "${{ inputs.profile }}" = "release" ]; then
-        nix --extra-experimental-features "nix-command flakes" build ".#${{ inputs.binary_package }}" -L --print-build-logs 2>&1 | tee /tmp/nix-build-${{ inputs.binary_package }}.log
-
-        if grep -Eiq "cachix\\.org|copying path" /tmp/nix-build-${{ inputs.binary_package }}.log; then
-          echo "Cache activity detected for ${{ inputs.binary_package }}"
-        else
-          echo "No explicit cache download line detected for ${{ inputs.binary_package }}"
-        fi
-
-        cp "result/bin/${{ inputs.binary_package }}" "$TARGET_FOLDER/${{ inputs.binary_package }}"
-      else
-        echo "::warning::Profile '${{ inputs.profile }}' is not exposed as a Nix flake output; falling back to cargo build in nix develop."
-        nix --extra-experimental-features "nix-command flakes" develop -c cargo build -p "${{ inputs.binary_package }}" --profile "${{ inputs.profile }}" --features "${{ inputs.features }}"
+      if [ "${{ inputs.profile }}" != "release" ]; then
+        echo "::error::Only 'release' is supported in CI for reproducibility and Cachix reuse."
+        echo "::error::Requested profile: '${{ inputs.profile }}'"
+        exit 1
       fi
+
+      nix --extra-experimental-features "nix-command flakes" build ".#${{ inputs.binary_package }}" -L --print-build-logs 2>&1 | tee /tmp/nix-build-${{ inputs.binary_package }}.log
+
+      if grep -Eiq "cachix\\.org|copying path" /tmp/nix-build-${{ inputs.binary_package }}.log; then
+        echo "Cache activity detected for ${{ inputs.binary_package }}"
+      else
+        echo "No explicit cache download line detected for ${{ inputs.binary_package }}"
+      fi
+
+      cp "result/bin/${{ inputs.binary_package }}" "$TARGET_FOLDER/${{ inputs.binary_package }}"
 
       chmod +x "$TARGET_FOLDER/${{ inputs.binary_package }}"
       echo "TARGET_FOLDER=$TARGET_FOLDER" >> "$GITHUB_ENV"

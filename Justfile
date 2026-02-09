@@ -3,6 +3,80 @@
 # Set the shell to bash
 set shell := ["bash", "-c"]
 
+# Install Nix using the Determinate Systems installer
+install-nix:
+    #!/usr/bin/env bash
+    if command -v nix &> /dev/null; then
+        echo "Nix is already installed: $(nix --version)"
+        exit 0
+    fi
+    echo "Installing Nix via Determinate Systems installer..."
+    curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install
+    echo ""
+    echo "Nix installed! Restart your shell, then run: just build"
+
+# Install 1Password CLI (op)
+install-op:
+    #!/usr/bin/env bash
+    if command -v op &> /dev/null; then
+        echo "1Password CLI is already installed: $(op --version)"
+        exit 0
+    fi
+    echo "Installing 1Password CLI..."
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        if command -v brew &> /dev/null; then
+            brew install --cask 1password-cli
+        else
+            echo "Error: Homebrew is required to install op on macOS."
+            echo "Install Homebrew first: https://brew.sh"
+            exit 1
+        fi
+    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        curl -sS https://downloads.1password.com/linux/keys/1password.asc | \
+            sudo gpg --dearmor --output /usr/share/keyrings/1password-archive-keyring.gpg
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/1password-archive-keyring.gpg] https://downloads.1password.com/linux/debian/$(dpkg --print-architecture) stable main" | \
+            sudo tee /etc/apt/sources.list.d/1password.list
+        sudo apt update && sudo apt install -y 1password-cli
+    else
+        echo "Error: Unsupported OS. Install manually: https://developer.1password.com/docs/cli/get-started/"
+        exit 1
+    fi
+    echo "1Password CLI installed! Run 'op signin' to authenticate."
+
+# Setup cachix auth token
+# Reads from .cachix-token file (preferred) or 1Password vault
+setup-cachix:
+    #!/usr/bin/env bash
+    if ! command -v cachix &> /dev/null; then
+        echo "Installing cachix..."
+        nix profile install nixpkgs#cachix
+    fi
+    # Try .cachix-token file first (local dev), then 1Password
+    if [ -f .cachix-token ]; then
+        echo "Using token from .cachix-token file..."
+        TOKEN=$(cat .cachix-token)
+    elif command -v op &> /dev/null; then
+        echo "Fetching token from 1Password (vault: cachix)..."
+        TOKEN=$(op read "op://team-move-dev/CACHIX_AUTH_TOKEN/credential" --account moveindustries.1password.com 2>/dev/null)
+    fi
+    if [ -z "$TOKEN" ]; then
+        echo "Error: No cachix token found."
+        echo ""
+        echo "Option 1: Save token to .cachix-token file:"
+        echo "  1. Go to https://app.cachix.org/cache/movement-m1 -> Settings -> Auth Tokens"
+        echo "  2. Generate a new token"
+        echo "  3. echo 'YOUR_TOKEN' > .cachix-token"
+        echo ""
+        echo "Option 2: Use 1Password (vault: cachix, item: CACHIX_AUTH_TOKEN):"
+        echo "  op signin && just setup-cachix"
+        exit 1
+    fi
+    cachix authtoken "$TOKEN"
+    echo "Cachix auth token configured!"
+    echo ""
+    echo "You can now push builds:"
+    echo "  just cache-push-all"
+
 # Default target
 default: build
 
@@ -118,28 +192,326 @@ build-bin package:
     nix develop -c cargo build --release -p {{package}}
     @echo "Binary available at target/release/{{package}}"
 
+# Build container using Docker buildx with Nix (works on macOS/Apple Silicon)
+container-buildx container="aptos-node" tag="":
+    #!/usr/bin/env bash
+    # Default tag to git short SHA if not provided
+    if [ -z "{{tag}}" ]; then
+        TAG=$(git rev-parse --short HEAD)
+    else
+        TAG="{{tag}}"
+    fi
+
+    echo "Building {{container}} container using Docker buildx with Nix..."
+    echo "Tag: $TAG"
+    echo ""
+    echo "This builds inside a Linux container using Nix, then creates a minimal runtime image."
+    echo "Works on macOS/Apple Silicon by building inside Docker's Linux VM."
+    echo ""
+
+    # Check for Dockerfile.nix
+    if [ ! -f "docker/{{container}}/Dockerfile.nix" ]; then
+        echo "Error: docker/{{container}}/Dockerfile.nix not found"
+        exit 1
+    fi
+
+    # Build using buildx for linux/amd64 platform
+    docker buildx build \
+        --platform linux/amd64 \
+        -f docker/{{container}}/Dockerfile.nix \
+        --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        --build-arg GIT_SHA="$(git rev-parse HEAD)" \
+        --build-arg GIT_BRANCH="$(git rev-parse --abbrev-ref HEAD)" \
+        --build-arg GIT_TAG="$(git describe --tags --always 2>/dev/null || echo 'none')" \
+        -t ghcr.io/movementlabsxyz/{{container}}:$TAG \
+        --load \
+        .
+
+    echo ""
+    echo "Container built successfully!"
+    echo "  Image: ghcr.io/movementlabsxyz/{{container}}:$TAG"
+    echo ""
+    echo "To test: docker run --rm ghcr.io/movementlabsxyz/{{container}}:$TAG --version"
+
+# ==============================================================================
+# Local Validator Commands (Docker Compose)
+# ==============================================================================
+
+# Start a local validator node using Docker Compose
+start-local-validator config_dir="./docker/config":
+    #!/usr/bin/env bash
+    echo "Starting local validator node..."
+    echo "Config directory: {{config_dir}}"
+    echo ""
+
+    # Check if config directory exists
+    if [ ! -d "{{config_dir}}" ]; then
+        echo "Error: Configuration directory '{{config_dir}}' not found."
+        echo ""
+        echo "To set up, create the directory and add required files:"
+        echo "  mkdir -p {{config_dir}}"
+        echo "  cp docker/config-example/validator.yaml.example {{config_dir}}/validator.yaml"
+        echo "  # Download genesis.blob and waypoint.txt for your network"
+        echo ""
+        echo "See docker/config-example/README.md for more details."
+        exit 1
+    fi
+
+    # Check for required config files
+    for file in validator.yaml genesis.blob waypoint.txt; do
+        if [ ! -f "{{config_dir}}/$file" ]; then
+            echo "Error: Required file '{{config_dir}}/$file' not found."
+            echo "See docker/config-example/README.md for setup instructions."
+            exit 1
+        fi
+    done
+
+    CONFIG_DIR="{{config_dir}}" docker compose -f docker/docker-compose.yml up -d
+
+    echo ""
+    echo "Validator started!"
+    echo ""
+    echo "REST API: http://localhost:8080/v1"
+    echo "Metrics:  http://localhost:9101/metrics"
+    echo ""
+    echo "Use 'just validator-logs' to view logs"
+    echo "Use 'just stop-local-validator' to stop"
+
+# Stop the local validator node
+stop-local-validator:
+    @echo "Stopping local validator..."
+    docker compose -f docker/docker-compose.yml down
+    @echo "Validator stopped."
+
+# View local validator logs
+validator-logs:
+    @echo "Streaming validator logs (Ctrl+C to exit)..."
+    docker compose -f docker/docker-compose.yml logs -f
+
+# Check local validator status
+validator-status:
+    #!/usr/bin/env bash
+    echo "Local Validator Status"
+    echo "======================"
+    echo ""
+
+    # Check container status
+    if docker compose -f docker/docker-compose.yml ps --format json 2>/dev/null | grep -q "aptos-validator"; then
+        echo "Container: RUNNING"
+        docker compose -f docker/docker-compose.yml ps
+    else
+        echo "Container: NOT RUNNING"
+        echo ""
+        echo "Use 'just start-local-validator' to start the validator."
+        exit 0
+    fi
+
+    echo ""
+
+    # Check health
+    HEALTH=$(docker inspect aptos-validator --format='{{`{{.State.Health.Status}}`}}' 2>/dev/null || echo "unknown")
+    echo "Health: $HEALTH"
+
+    # Try to get node info
+    echo ""
+    echo "REST API Status:"
+    if curl -sf http://localhost:8080/v1 2>/dev/null | head -c 200; then
+        echo ""
+    else
+        echo "  Unable to connect (node may still be starting)"
+    fi
+
+# ==============================================================================
+# Cachix Commands (binary cache sharing)
+# ==============================================================================
+
+# Build a binary with Nix and push to Cachix
+cache-push binary:
+    #!/usr/bin/env bash
+    if ! command -v cachix &> /dev/null; then
+        echo "Error: cachix is not installed."
+        echo "Run: just setup-cachix"
+        exit 1
+    fi
+    echo "Building {{binary}} and pushing to Cachix..."
+    nix build .#{{binary}} -L
+    cachix push movement-m1 result
+    echo "Done! {{binary}} pushed to movement-m1 cache."
+
+# Build all binaries and push to Cachix
+cache-push-all:
+    #!/usr/bin/env bash
+    if ! command -v cachix &> /dev/null; then
+        echo "Error: cachix is not installed."
+        echo "Run: just setup-cachix"
+        exit 1
+    fi
+    echo "Building all binaries and pushing to Cachix..."
+    for binary in aptos-node movement l1-migration aptos-faucet-service aptos-transaction-emitter; do
+        echo ""
+        echo "=== Building $binary ==="
+        nix build .#$binary -L
+        cachix push movement-m1 result
+        echo "$binary pushed to cache."
+    done
+    echo ""
+    echo "All binaries pushed to movement-m1 cache."
+
+# Check Cachix setup status
+cache-status:
+    #!/usr/bin/env bash
+    echo "Cachix Configuration"
+    echo "===================="
+    echo ""
+    echo "Cache name: movement-m1"
+    echo "Public key: movement-m1.cachix.org-1:S/LYIoBq5MoEE8L4WY3ITVzrJYJo+Tmbx/lP3EORmgY="
+    echo ""
+    if command -v cachix &> /dev/null; then
+        echo "cachix CLI: installed ($(cachix --version 2>&1))"
+    else
+        echo "cachix CLI: NOT INSTALLED"
+        echo "  Run: just setup-cachix"
+    fi
+    echo ""
+    if command -v op &> /dev/null; then
+        echo "1Password CLI: installed ($(op --version))"
+    else
+        echo "1Password CLI: NOT INSTALLED"
+        echo "  Run: just install-op"
+    fi
+    echo ""
+    echo "To set up cachix auth (requires 1Password):"
+    echo "  just setup-cachix"
+    echo ""
+    echo "To use the cache (pull only, no auth needed):"
+    echo "  cachix use movement-m1"
+    echo ""
+    echo "To push builds to the cache:"
+    echo "  just cache-push aptos-node"
+    echo "  just cache-push-all"
+
+# ==============================================================================
+# Test Scripts
+# ==============================================================================
+
+# Test nix builds locally (all binaries + version checks)
+test-nix-build:
+    @bash scripts/test-nix-build.sh
+
+# Test cachix push works for all binaries
+test-cachix:
+    @bash scripts/test-cachix.sh
+
+# ==============================================================================
+# K8s Test Jobs (validate Docker images on real amd64 Linux)
+# ==============================================================================
+
+# Setup K8s namespace for test jobs
+k8s-setup:
+    @bash scripts/k8s-setup.sh
+
+# Test Docker image on K8s (validates binaries on real amd64 Linux)
+k8s-test-docker tag="":
+    @bash scripts/k8s-test-docker.sh {{tag}}
+
+# Stream logs from K8s test job
+k8s-test-logs job="test-docker-image":
+    @bash scripts/k8s-test-logs.sh {{job}}
+
+# Check K8s test job status
+k8s-test-status:
+    @bash scripts/k8s-test-status.sh
+
+# Clean up K8s test jobs
+k8s-test-cleanup:
+    @bash scripts/k8s-test-cleanup.sh
+
+# End-to-end: build Docker image, push to GHCR, validate on K8s
+k8s-test-e2e tag="":
+    @bash scripts/k8s-test-e2e.sh {{tag}}
+
 # List available binary build targets
 list-binaries:
-    @echo "Available binary build targets:"
-    @echo "  Generic: just build <binary-name>"
-    @echo "  Common binaries:"
-    @echo "    aptos-node          - Main Aptos node"
-    @echo "    aptos               - Aptos CLI tool"
-    @echo "    aptos-debugger      - Debugging tool"
-    @echo "    aptos-backup-cli    - Backup CLI tool"
-    @echo "    aptos-keygen        - Key generation tool"
-    @echo "    transaction-emitter - Transaction emitter"
-    @echo "    aptos-node-checker  - Node checker tool"
+    @echo "================================================================================"
+    @echo "                        Available Binary Build Targets"
+    @echo "================================================================================"
     @echo ""
-    @echo "Use 'just build' to build all packages"
-    @echo "Use 'just build-bin <package-name>' for custom package builds"
+    @echo "NIX BUILD TARGETS (reproducible, cached via Cachix):"
+    @echo "  nix build .#aptos-node                 - Main Aptos node binary"
+    @echo "  nix build .#movement                   - Movement CLI (renamed from aptos)"
+    @echo "  nix build .#l1-migration               - L1 migration tool"
+    @echo "  nix build .#aptos-faucet-service       - Faucet service for test networks"
+    @echo "  nix build .#aptos-transaction-emitter  - Transaction testing tool"
+    @echo "  nix build .#all-binaries               - Build all five binaries"
+    @echo ""
+    @echo "CARGO BUILD TARGETS (faster iteration, uses dev shell):"
+    @echo "  just build aptos-node                  - Build with cargo (dev profile)"
+    @echo "  just build aptos-node release          - Build with cargo (release profile)"
+    @echo "  just build                             - Build entire workspace"
+    @echo "  just build-bin <package-name>          - Build any cargo package"
+    @echo ""
+    @echo "CONTAINER TARGETS (Nix-based containers, Linux only):"
+    @echo "  just container-nix aptos-node          - Build aptos-node container"
+    @echo "  just container-nix aptos-faucet-service - Build faucet container"
+    @echo "  just container-load <name>             - Load container into Docker"
+    @echo "  just container-push <name> [tag]       - Push container to GHCR"
+    @echo ""
+    @echo "CONTAINER TARGETS (Docker buildx, works on macOS/Apple Silicon):"
+    @echo "  just container-buildx aptos-node       - Build container using buildx"
+    @echo "  just container-buildx aptos-node v1.0  - Build with specific tag"
+    @echo ""
+    @echo "LOCAL VALIDATOR (Docker Compose):"
+    @echo "  just start-local-validator             - Start validator with docker-compose"
+    @echo "  just stop-local-validator              - Stop validator container"
+    @echo "  just validator-logs                    - Stream validator logs"
+    @echo "  just validator-status                  - Check validator health"
+    @echo ""
+    @echo "CACHIX (share builds with team):"
+    @echo "  just cache-push <binary>               - Build and push to Cachix"
+    @echo "  just cache-push-all                    - Build and push all binaries"
+    @echo "  just cache-status                      - Check Cachix setup status"
+    @echo ""
+    @echo "================================================================================"
 
 # Help - list available recipes
 help:
     @just --list
     @echo ""
-    @echo "Binary Build Options:"
-    @echo "  Use 'just list-binaries' to see available binary build targets"
-    @echo "  Use 'just build <binary-name>' for common binary builds"
-    @echo "  Use 'just build' to build all packages"
-    @echo "  Use 'just build-bin <package-name>' for custom package builds"
+    @echo "================================================================================"
+    @echo "                              Quick Reference"
+    @echo "================================================================================"
+    @echo ""
+    @echo "DEVELOPMENT:"
+    @echo "  just dev                 - Enter Nix development shell"
+    @echo "  just build               - Build all with cargo (fast iteration)"
+    @echo "  just test                - Run tests"
+    @echo ""
+    @echo "PRODUCTION BUILDS:"
+    @echo "  just build-nix <binary>  - Build single binary (reproducible, cached)"
+    @echo "  just build-all-nix       - Build all binaries (reproducible, cached)"
+    @echo ""
+    @echo "CONTAINERS:"
+    @echo "  just container-buildx <name> - Build container (macOS/Apple Silicon)"
+    @echo "  just container-nix <name>    - Build container with Nix (Linux only)"
+    @echo "  just container-push <name>   - Push to GHCR"
+    @echo ""
+    @echo "LOCAL VALIDATOR:"
+    @echo "  just start-local-validator - Start validator with docker-compose"
+    @echo "  just stop-local-validator  - Stop validator"
+    @echo "  just validator-status      - Check health"
+    @echo ""
+    @echo "SHARE BUILDS (Cachix):"
+    @echo "  just cache-push-all        - Build all & push to cache"
+    @echo "  just cache-status          - Check Cachix setup"
+    @echo ""
+    @echo "TESTING:"
+    @echo "  just test-nix-build        - Test all nix builds locally"
+    @echo "  just test-cachix           - Test cachix push for all binaries"
+    @echo ""
+    @echo "K8s VALIDATION (amd64 Docker image testing):"
+    @echo "  just k8s-test-e2e          - Build, push, validate on K8s"
+    @echo "  just k8s-test-docker <tag> - Test image on K8s"
+    @echo "  just k8s-test-logs         - Stream K8s test logs"
+    @echo ""
+    @echo "Use 'just list-binaries' for complete list of build targets"
+    @echo "================================================================================"

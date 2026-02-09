@@ -24,9 +24,37 @@
         # Use the full source tree (includes .proto, .mv, .mrb, .yaml, etc.)
         src = ./..;
 
+        # Some git dependencies are pinned to commits no longer reachable from
+        # their recorded branch ref. Vendor by locked rev across all refs.
+        overrideVendorGitCheckoutAllRefs = ps: _drv:
+          let
+            p = builtins.head ps;
+            sourceWithoutPrefix = pkgs.lib.removePrefix "git+" p.source;
+            sourceSplit = builtins.split "#" sourceWithoutPrefix;
+            sourceBeforeRev = builtins.head sourceSplit;
+            lockedRev =
+              if 3 == builtins.length sourceSplit then
+                builtins.elemAt sourceSplit 2
+              else
+                throw "Malformed Cargo.lock git source for ${p.name}: ${p.source}";
+            gitUrl = builtins.head (builtins.split "\\?" sourceBeforeRev);
+          in
+          craneLib.downloadCargoPackageFromGit {
+            git = gitUrl;
+            rev = lockedRev;
+            allRefs = true;
+            ref = null;
+          };
+
+        cargoVendorDir = craneLib.vendorCargoDeps {
+          inherit src;
+          cargoLock = ../Cargo.lock;
+          overrideVendorGitCheckout = overrideVendorGitCheckoutAllRefs;
+        };
+
         # Common args shared between buildDepsOnly and buildPackage
         commonArgs = {
-          inherit src;
+          inherit src cargoVendorDir;
           strictDeps = true;
 
           nativeBuildInputs = with pkgs; [

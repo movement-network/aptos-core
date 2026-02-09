@@ -76,43 +76,43 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: k8s-movement-labs
+          - runner: buildjet-16vcpu-ubuntu-2204
             arch: amd64
             binary_attr: aptos-node
             binary_file: aptos-node
-          - runner: k8s-movement-labs
+          - runner: buildjet-16vcpu-ubuntu-2204
             arch: amd64
             binary_attr: movement
             binary_file: movement
-          - runner: k8s-movement-labs
+          - runner: buildjet-16vcpu-ubuntu-2204
             arch: amd64
             binary_attr: l1-migration
             binary_file: l1-migration
-          - runner: k8s-movement-labs
+          - runner: buildjet-16vcpu-ubuntu-2204
             arch: amd64
             binary_attr: aptos-faucet-service
             binary_file: aptos-faucet-service
-          - runner: k8s-movement-labs
+          - runner: buildjet-16vcpu-ubuntu-2204
             arch: amd64
             binary_attr: aptos-transaction-emitter
             binary_file: aptos-transaction-emitter
-          - runner: ubuntu-24.04-arm
+          - runner: buildjet-16vcpu-ubuntu-2204-arm
             arch: arm64
             binary_attr: aptos-node
             binary_file: aptos-node
-          - runner: ubuntu-24.04-arm
+          - runner: buildjet-16vcpu-ubuntu-2204-arm
             arch: arm64
             binary_attr: movement
             binary_file: movement
-          - runner: ubuntu-24.04-arm
+          - runner: buildjet-16vcpu-ubuntu-2204-arm
             arch: arm64
             binary_attr: l1-migration
             binary_file: l1-migration
-          - runner: ubuntu-24.04-arm
+          - runner: buildjet-16vcpu-ubuntu-2204-arm
             arch: arm64
             binary_attr: aptos-faucet-service
             binary_file: aptos-faucet-service
-          - runner: ubuntu-24.04-arm
+          - runner: buildjet-16vcpu-ubuntu-2204-arm
             arch: arm64
             binary_attr: aptos-transaction-emitter
             binary_file: aptos-transaction-emitter
@@ -176,7 +176,7 @@ jobs:
 
   build-docker:
     needs: build-binaries
-    runs-on: ubuntu-latest
+    runs-on: buildjet-16vcpu-ubuntu-2204
     name: "Build Docker Images"
     permissions:
       contents: read

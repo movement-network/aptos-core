@@ -129,9 +129,31 @@ target "aptos-node-builder" {
   ]
 }
 
+target "aptos-node-core-builder" {
+  dockerfile = "docker/builder/builder.Dockerfile"
+  target     = "aptos-node-core-builder"
+  contexts = {
+    builder-base = "target:builder-base"
+  }
+  secret = [
+    "id=GIT_CREDENTIALS,env=GIT_CREDENTIALS"
+  ]
+}
+
 target "tools-builder" {
   dockerfile = "docker/builder/builder.Dockerfile"
   target     = "tools-builder"
+  contexts = {
+    builder-base = "target:builder-base"
+  }
+  secret = [
+    "id=GIT_CREDENTIALS,env=GIT_CREDENTIALS"
+  ]
+}
+
+target "tools-core-builder" {
+  dockerfile = "docker/builder/builder.Dockerfile"
+  target     = "tools-core-builder"
   contexts = {
     builder-base = "target:builder-base"
   }
@@ -185,8 +207,8 @@ target "_common-core" {
   inherits = ["_common-base"]
   contexts = {
     debian-base   = "target:debian-base"
-    node-builder  = "target:aptos-node-builder"
-    tools-builder = "target:tools-builder"
+    node-builder  = "target:aptos-node-core-builder"
+    tools-builder = "target:tools-core-builder"
   }
 }
 

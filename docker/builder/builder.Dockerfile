@@ -60,6 +60,14 @@ RUN --mount=type=secret,id=GIT_CREDENTIALS,target=/root/.git-credentials \
     --mount=type=cache,target=/aptos/target,id=node-builder-target-cache \
     docker/builder/build-node.sh
 
+FROM builder-base as aptos-node-core-builder
+
+RUN --mount=type=secret,id=GIT_CREDENTIALS,target=/root/.git-credentials \
+    --mount=type=cache,target=/usr/local/cargo/git,id=node-core-builder-cargo-git-cache \
+    --mount=type=cache,target=/usr/local/cargo/registry,id=node-core-builder-cargo-registry-cache \
+    --mount=type=cache,target=/aptos/target,id=node-core-builder-target-cache \
+    docker/builder/build-node-core.sh
+
 FROM builder-base as tools-builder
 
 RUN --mount=type=secret,id=GIT_CREDENTIALS,target=/root/.git-credentials \
@@ -67,6 +75,14 @@ RUN --mount=type=secret,id=GIT_CREDENTIALS,target=/root/.git-credentials \
     --mount=type=cache,target=/usr/local/cargo/registry,id=tools-builder-cargo-registry-cache \
     --mount=type=cache,target=/aptos/target,id=tools-builder-target-cache \
     docker/builder/build-tools.sh
+
+FROM builder-base as tools-core-builder
+
+RUN --mount=type=secret,id=GIT_CREDENTIALS,target=/root/.git-credentials \
+    --mount=type=cache,target=/usr/local/cargo/git,id=tools-core-builder-cargo-git-cache \
+    --mount=type=cache,target=/usr/local/cargo/registry,id=tools-core-builder-cargo-registry-cache \
+    --mount=type=cache,target=/aptos/target,id=tools-core-builder-target-cache \
+    docker/builder/build-tools-core.sh
 
 FROM builder-base as indexer-builder
 

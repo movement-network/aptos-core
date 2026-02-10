@@ -14,7 +14,11 @@ set -ex
 
 GIT_SHA=$(git rev-parse HEAD)
 export GIT_SHA
-GIT_BRANCH=$(git symbolic-ref --short HEAD)
+# GitHub Actions often checks out a detached HEAD, so fall back to workflow refs.
+GIT_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || true)
+if [ -z "$GIT_BRANCH" ]; then
+  GIT_BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME:-detached-head}}"
+fi
 export GIT_BRANCH
 GIT_TAG=$(git tag -l --contains HEAD)
 export GIT_TAG

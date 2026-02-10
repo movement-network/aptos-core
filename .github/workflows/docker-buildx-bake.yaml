@@ -80,6 +80,7 @@ jobs:
       TARGET_REGISTRY: ${{ inputs.push_images && 'ghcr' || 'local' }}
       PUSH_IMAGES: ${{ inputs.push_images && 'true' || 'false' }}
       CI: "true"
+      DOCKER_API_VERSION: "1.43"
       GHCR_DOCKER_ARTIFACT_REPO: ghcr.io/movementlabsxyz
       CUSTOM_IMAGE_TAG_PREFIX: ${{ matrix.arch }}
       GIT_CREDENTIALS: ${{ secrets.GIT_CREDENTIALS }}
@@ -91,7 +92,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
-          version: latest
+          version: v0.11.2
 
       - name: Login to GHCR
         if: ${{ inputs.push_images }}

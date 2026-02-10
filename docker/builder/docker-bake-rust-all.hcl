@@ -151,13 +151,7 @@ target "indexer-builder" {
   ]
 }
 
-target "_common" {
-  contexts = {
-    debian-base     = "target:debian-base"
-    node-builder    = "target:aptos-node-builder"
-    tools-builder   = "target:tools-builder"
-    indexer-builder = "target:indexer-builder"
-  }
+target "_common-base" {
   labels = {
     "org.label-schema.schema-version" = "1.0",
     "org.label-schema.build-date"     = "${BUILD_DATE}"
@@ -176,6 +170,26 @@ target "_common" {
   cache-to   = generate_cache_to("shared")
 }
 
+target "_common" {
+  inherits = ["_common-base"]
+  contexts = {
+    debian-base     = "target:debian-base"
+    node-builder    = "target:aptos-node-builder"
+    tools-builder   = "target:tools-builder"
+    indexer-builder = "target:indexer-builder"
+  }
+}
+
+# Lean shared context for movement-core images; avoids unnecessary indexer builder work.
+target "_common-core" {
+  inherits = ["_common-base"]
+  contexts = {
+    debian-base   = "target:debian-base"
+    node-builder  = "target:aptos-node-builder"
+    tools-builder = "target:tools-builder"
+  }
+}
+
 target "validator-testing" {
   inherits   = ["_common"]
   dockerfile = "docker/builder/validator-testing.Dockerfile"
@@ -192,7 +206,7 @@ target "validator" {
 
 # Alias for existing external naming conventions in movement repos.
 target "aptos-node" {
-  inherits   = ["_common"]
+  inherits   = ["_common-core"]
   dockerfile = "docker/builder/validator.Dockerfile"
   target     = "validator"
   tags       = generate_tags("aptos-node")
@@ -228,7 +242,7 @@ target "faucet" {
 
 # Alias for existing external naming conventions in movement repos.
 target "aptos-faucet-service" {
-  inherits   = ["_common"]
+  inherits   = ["_common-core"]
   dockerfile = "docker/builder/faucet.Dockerfile"
   target     = "faucet"
   tags       = generate_tags("aptos-faucet-service")

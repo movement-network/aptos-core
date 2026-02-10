@@ -38,6 +38,8 @@ ARG FEATURES
 ENV FEATURES ${FEATURES}
 ARG CARGO_TARGET_DIR
 ENV CARGO_TARGET_DIR ${CARGO_TARGET_DIR}
+ARG CARGO_BUILD_JOBS
+ENV CARGO_BUILD_JOBS ${CARGO_BUILD_JOBS}
 
 RUN ARCHITECTURE=$(uname -m | sed -e "s/arm64/arm_64/g" | sed -e "s/aarch64/aarch_64/g") \
     && curl -LOs "https://github.com/protocolbuffers/protobuf/releases/download/v21.5/protoc-21.5-linux-$ARCHITECTURE.zip" \

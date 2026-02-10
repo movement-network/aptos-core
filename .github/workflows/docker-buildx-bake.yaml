@@ -2,6 +2,22 @@ name: "🐳 Docker Buildx Bake (Alt Pipeline)"
 run-name: "Docker Buildx Bake for ${{ inputs.ref || github.ref_name }}"
 
 on:
+  push:
+    branches:
+      - '**'
+    paths:
+      - ".github/workflows/docker-buildx-bake.yaml"
+      - "docker/builder/**"
+      - "Justfile"
+      - "README.md"
+  pull_request:
+    branches:
+      - m1
+    paths:
+      - ".github/workflows/docker-buildx-bake.yaml"
+      - "docker/builder/**"
+      - "Justfile"
+      - "README.md"
   workflow_dispatch:
     inputs:
       ref:

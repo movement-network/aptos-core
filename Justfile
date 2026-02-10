@@ -156,6 +156,7 @@ container-bake target="movement-core" push="false":
     export PUSH_IMAGES="{{push}}"
     export GHCR_DOCKER_ARTIFACT_REPO="ghcr.io/movementlabsxyz"
     export CUSTOM_IMAGE_TAG_PREFIX="$(uname -m)"
+    export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-2}"
     export GIT_CREDENTIALS="${GIT_CREDENTIALS:-}"
 
     chmod +x docker/builder/docker-bake-rust-all.sh

@@ -31,6 +31,7 @@ export PUSH_IMAGES="${PUSH_IMAGES:-false}"
 
 export PROFILE=${PROFILE:-release}
 export FEATURES=${FEATURES:-""}
+export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-2}"
 NORMALIZED_FEATURES_LIST=$(printf '%s' "$FEATURES" | sed -e 's/[^a-zA-Z0-9]/_/g')
 export NORMALIZED_FEATURES_LIST
 export CUSTOM_IMAGE_TAG_PREFIX=${CUSTOM_IMAGE_TAG_PREFIX:-""}
@@ -64,6 +65,7 @@ echo "E.g. docker/builder/docker-bake-rust-all.sh movement-core"
 echo "TARGET_REGISTRY=${TARGET_REGISTRY}"
 echo "TARGET_CACHE_ID=${TARGET_CACHE_ID}"
 echo "PUSH_IMAGES=${PUSH_IMAGES}"
+echo "CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}"
 
 if [ "$CI" == "true" ] || [ "$PUSH_IMAGES" == "true" ]; then
   if [ "$PUSH_IMAGES" == "true" ]; then

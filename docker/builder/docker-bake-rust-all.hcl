@@ -62,6 +62,10 @@ variable "CARGO_TARGET_DIR" {
   default = "target/default"
 }
 
+variable "CARGO_BUILD_JOBS" {
+  default = "2"
+}
+
 group "all" {
   targets = flatten([
     "validator",
@@ -106,6 +110,7 @@ target "builder-base" {
     PROFILE            = "${PROFILE}"
     FEATURES           = "${FEATURES}"
     CARGO_TARGET_DIR   = "${CARGO_TARGET_DIR}"
+    CARGO_BUILD_JOBS   = "${CARGO_BUILD_JOBS}"
     BUILT_VIA_BUILDKIT = "true"
   }
   secret = [

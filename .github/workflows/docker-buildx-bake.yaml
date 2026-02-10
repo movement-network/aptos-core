@@ -1,6 +1,10 @@
 name: "🐳 Docker Buildx Bake (Alt Pipeline)"
 run-name: "Docker Buildx Bake for ${{ inputs.ref || github.ref_name }}"
 
+concurrency:
+  group: docker-bake-${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}-${{ inputs.target || 'movement-core' }}
+  cancel-in-progress: true
+
 on:
   push:
     branches:

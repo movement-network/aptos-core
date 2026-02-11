@@ -112,6 +112,49 @@ jobs:
           chmod +x docker/builder/docker-bake-rust-all.sh
           docker/builder/docker-bake-rust-all.sh "${TARGET}"
 
+      - name: Verify image provenance labels (local mode)
+        if: ${{ !inputs.push_images }}
+        env:
+          EXPECTED_GIT_SHA: ${{ needs.metadata.outputs.git_sha }}
+          IMAGE_TAG_PREFIX: ${{ matrix.arch }}_
+        run: |
+          set -euo pipefail
+
+          candidates=(
+            "aptos-core/aptos-node:${IMAGE_TAG_PREFIX}${EXPECTED_GIT_SHA}-from-local"
+            "aptos-core/aptos-faucet-service:${IMAGE_TAG_PREFIX}${EXPECTED_GIT_SHA}-from-local"
+          )
+
+          validated=0
+          for image_ref in "${candidates[@]}"; do
+            if ! docker image inspect "$image_ref" >/dev/null 2>&1; then
+              echo "Skipping provenance check for missing image: $image_ref"
+              continue
+            fi
+
+            actual_sha=$(docker image inspect "$image_ref" \
+              --format '{{ index .Config.Labels "org.label-schema.git-sha" }}')
+            if [ -z "$actual_sha" ]; then
+              echo "Missing org.label-schema.git-sha label on $image_ref"
+              exit 1
+            fi
+
+            if [ "$actual_sha" != "$EXPECTED_GIT_SHA" ]; then
+              echo "Provenance mismatch for $image_ref"
+              echo "Expected git sha: $EXPECTED_GIT_SHA"
+              echo "Actual git sha:   $actual_sha"
+              exit 1
+            fi
+
+            echo "Provenance OK: $image_ref (git-sha=$actual_sha)"
+            validated=$((validated + 1))
+          done
+
+          if [ "$validated" -eq 0 ]; then
+            echo "No movement-core alias images found to verify in local Docker daemon."
+            echo "This is expected when building a different target."
+          fi
+
       - name: Show built images (local mode)
         if: ${{ !inputs.push_images }}
         run: |

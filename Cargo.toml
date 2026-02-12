@@ -467,9 +467,9 @@ ark-groth16 = "0.4.0"
 ark-serialize = "0.4.0"
 ark-std = { version = "0.4.0", features = ["getrandom"] }
 
-aptos-moving-average = { git = "https://github.com/movementlabsxyz/aptos-indexer-processors", rev = "77a36245400250e7d8a854360194288d078681bc" }
-processor = { git = "https://github.com/movementlabsxyz/aptos-indexer-processors", rev = "77a36245400250e7d8a854360194288d078681bc", default-features = false }
-server-framework = { git = "https://github.com/movementlabsxyz/aptos-indexer-processors", rev = "77a36245400250e7d8a854360194288d078681bc", default-features = false }
+aptos-moving-average = { git = "https://github.com/movementlabsxyz/aptos-indexer-processors", rev = "467589826baae23dd26aed8bfb3e33ef84b0bf2b" }
+processor = { git = "https://github.com/movementlabsxyz/aptos-indexer-processors", rev = "467589826baae23dd26aed8bfb3e33ef84b0bf2b", default-features = false }
+server-framework = { git = "https://github.com/movementlabsxyz/aptos-indexer-processors", rev = "467589826baae23dd26aed8bfb3e33ef84b0bf2b", default-features = false }
 
 assert_approx_eq = "1.1.0"
 assert_unordered = "0.3.5"
@@ -532,7 +532,7 @@ derivation-path = "0.2.0"
 derive_builder = "0.20.0"
 determinator = "0.12.0"
 derive_more = "0.99.11"
-diesel = "2.2.3"
+diesel = "2.2.0"
 diesel-async = { version = "0.5", features = [
     "async-connection-wrapper",
     "postgres",

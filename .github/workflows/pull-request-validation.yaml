@@ -49,8 +49,8 @@ jobs:
             git remote add aptos-labs https://github.com/aptos-labs/aptos-core.git
           fi
 
-          # Fetch from aptos-labs
-          git fetch aptos-labs --quiet
+          # Fetch from aptos-labs (suppress .gitmodules warnings)
+          git fetch aptos-labs --quiet 2>&1 | grep -v "\.gitmodules" || true
 
           # Get the main/master branch from aptos-labs
           APTOS_BRANCH=""
@@ -72,10 +72,15 @@ jobs:
             exit 1
           fi
 
-          # Get commits from cutoff onwards, including the cutoff itself
+          # Get commits from cutoff onwards, including the cutoff itself (suppress .gitmodules warnings)
           CUTOFF_ONLY=$(git log --format=%H "$CUTOFF_COMMIT^..$CUTOFF_COMMIT" 2>/dev/null || echo "")
           AFTER_CUTOFF=$(git log --format=%H "$CUTOFF_COMMIT..aptos-labs/$APTOS_BRANCH" 2>/dev/null || echo "")
           FORBIDDEN_COMMITS=$(printf "%s\n%s" "$CUTOFF_ONLY" "$AFTER_CUTOFF" | grep -v '^$')
+
+          FORBIDDEN_COUNT=$(echo "$FORBIDDEN_COMMITS" | wc -l | tr -d ' ')
+          echo "Found $FORBIDDEN_COUNT forbidden commit(s) in aptos-labs history to check against"
+          echo ""
+          echo "Checking these commits against PR branch HEAD..."
 
           # Check if any of these commits are in our current branch
           VIOLATIONS_FOUND=0
@@ -122,7 +127,9 @@ jobs:
             exit 1
           fi
 
+          echo ""
           echo "✅ No license violations detected"
+          echo "Checked $FORBIDDEN_COUNT commits from aptos-labs against this PR branch"
 
   check-dynamic-deps:
     runs-on: macos-latest

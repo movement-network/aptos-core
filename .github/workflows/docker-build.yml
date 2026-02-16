@@ -1,0 +1,82 @@
+name: Build Docker Images
+
+on:
+  push:
+    branches: [ main, movement, ci/* ]
+    tags:
+      - 'v*'
+      - 'release-*'
+  pull_request:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch, tag, or SHA to build (e.g., main, v1.0.0, abc123)'
+        required: false
+        default: ''
+      GIT_SHA:
+        description: 'Git SHA to build (deprecated - use ref instead)'
+        required: false
+      FEATURES:
+        description: 'Cargo features to enable'
+        required: false
+      PROFILE:
+        description: 'Cargo build profile'
+        required: false
+        default: 'release'
+
+# Add permissions block to ensure the workflow has access to packages
+permissions:
+  contents: read
+  packages: write
+  id-token: write  # Needed for OIDC authentication to ghcr.io
+
+jobs:
+  build:
+    runs-on: buildjet-16vcpu-ubuntu-2204
+    # Only run if it's not a PR event, or if it's a PR with the movement-docker-build label
+    if: |
+      github.event_name != 'pull_request' || 
+      (github.event_name == 'pull_request' && github.event.label.name == 'movement-docker-build')
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Fetch all history
+          # For PRs, checkout the PR branch; for manual triggers use provided ref; otherwise use github.ref
+          ref: ${{ github.event.pull_request.head.sha || github.event.inputs.ref || github.event.inputs.GIT_SHA || github.ref }}
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Build and Push Images
+        run: |
+          # Use the original working approach from ci/build branch
+          export TARGET_CACHE_ID=${GITHUB_REF#refs/heads/}
+          
+          # Set registry variables for GitHub Container Registry only
+          export GCP_DOCKER_ARTIFACT_REPO=""  # Not using GCP
+          export AWS_ECR_ACCOUNT_NUM=""  # Not using AWS
+          export TARGET_REGISTRY="local"  # This triggers ghcr.io usage in generate_tags
+          
+          # GitHub Container Registry configuration
+          export GHCR_ORG="movementlabsxyz"
+          export PROFILE=${{ github.event.inputs.PROFILE || 'release' }}
+          export FEATURES="${{ github.event.inputs.FEATURES }}"
+          export CARGO_TARGET_DIR="target/${FEATURES:-default}"
+          
+          # Show build configuration
+          echo "Building with:"
+          echo "  TARGET_CACHE_ID: $TARGET_CACHE_ID"
+          echo "  PROFILE: $PROFILE"
+          echo "  FEATURES: $FEATURES"
+          echo "  Git SHA: $(git rev-parse HEAD)"
+          echo "  Event: ${{ github.event_name }}"
+          
+          docker/builder/docker-bake-rust-all.sh 

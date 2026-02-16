@@ -24,6 +24,8 @@ variable "GCP_DOCKER_ARTIFACT_REPO" {}
 
 variable "AWS_ECR_ACCOUNT_NUM" {}
 
+variable "GHCR_ORG" {}
+
 variable "TARGET_REGISTRY" {
   // must be "gcp" | "local" | "remote-all" | "remote" (deprecated, but kept for backwards compatibility. Same as "gcp"), informs which docker tags are being generated
   default = CI == "true" ? "remote" : "local"
@@ -54,10 +56,7 @@ group "all" {
     "faucet",
     "forge",
     "telemetry-service",
-    "keyless-pepper-service",
-    "indexer-grpc",
     "validator-testing",
-    "nft-metadata-crawler",
   ])
 }
 
@@ -203,26 +202,8 @@ target "telemetry-service" {
   tags       = generate_tags("telemetry-service")
 }
 
-target "keyless-pepper-service" {
-  inherits   = ["_common"]
-  dockerfile = "docker/builder/keyless-pepper-service.Dockerfile"
-  target     = "keyless-pepper-service"
-  tags       = generate_tags("keyless-pepper-service")
-}
 
-target "indexer-grpc" {
-  inherits   = ["_common"]
-  dockerfile = "docker/builder/indexer-grpc.Dockerfile"
-  target     = "indexer-grpc"
-  tags       = generate_tags("indexer-grpc")
-}
 
-target "nft-metadata-crawler" {
-  inherits   = ["_common"]
-  target     = "nft-metadata-crawler"
-  dockerfile = "docker/builder/nft-metadata-crawler.Dockerfile"
-  tags       = generate_tags("nft-metadata-crawler")
-}
 
 function "generate_tags" {
   params = [target]
@@ -235,9 +216,9 @@ function "generate_tags" {
     TARGET_REGISTRY == "gcp" || TARGET_REGISTRY == "remote" ? [
       "${GCP_DOCKER_ARTIFACT_REPO}/${target}:${IMAGE_TAG_PREFIX}${GIT_SHA}",
       "${GCP_DOCKER_ARTIFACT_REPO}/${target}:${IMAGE_TAG_PREFIX}${NORMALIZED_GIT_BRANCH_OR_PR}",
-      ] : [ // "local" or any other value
-      "aptos-core/${target}:${IMAGE_TAG_PREFIX}${GIT_SHA}-from-local",
-      "aptos-core/${target}:${IMAGE_TAG_PREFIX}from-local",
+      ] : [ // Use GitHub Container Registry for local/default builds
+      "ghcr.io/${GHCR_ORG}/${target}:${IMAGE_TAG_PREFIX}${GIT_SHA}",
+      "ghcr.io/${GHCR_ORG}/${target}:${IMAGE_TAG_PREFIX}${NORMALIZED_GIT_BRANCH_OR_PR}",
     ]
   )
 }

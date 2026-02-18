@@ -163,20 +163,23 @@ impl AptosDB {
         readonly: bool,
         max_num_nodes_per_lru_cache_shard: usize,
     ) -> Result<(LedgerDb, StateMerkleDb, StateKvDb)> {
+        println!("open_dbs");
         let ledger_db = LedgerDb::new(db_paths.ledger_db_root_path(), rocksdb_configs, readonly)?;
+        println!("open_dbs 2");
         let state_kv_db = StateKvDb::new(
             db_paths,
             rocksdb_configs,
             readonly,
             ledger_db.metadata_db_arc(),
         )?;
+        println!("open_dbs 3");
         let state_merkle_db = StateMerkleDb::new(
             db_paths,
             rocksdb_configs,
             readonly,
             max_num_nodes_per_lru_cache_shard,
         )?;
-
+        println!("open_dbs 4");
         Ok((ledger_db, state_merkle_db, state_kv_db))
     }
 

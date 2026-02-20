@@ -310,16 +310,42 @@ impl NewBlockEventAggregation {
 
             &history[start..]
         } else {
-            if let (Some(first), Some(last)) = (history.first(), history.last()) {
-                assert!((first.epoch(), first.round()) >= (last.epoch(), last.round()));
-            }
-            let end = if history.len() > window_size {
-                window_size
+            // History is expected to be in descending order (newest first).
+            // If it's ascending (e.g. due to DB state inconsistency during bootstrap),
+            // fall back to taking from the tail to get the most recent events.
+            let is_ascending = if let (Some(first), Some(last)) = (history.first(), history.last()) {
+                if (first.epoch(), first.round()) < (last.epoch(), last.round()) {
+                    warn!(
+                        "Block history not in expected descending order: \
+                         first=({},{}) last=({},{}) len={}. \
+                         Falling back to stale-end window selection.",
+                        first.epoch(), first.round(),
+                        last.epoch(), last.round(),
+                        history.len()
+                    );
+                    true
+                } else {
+                    false
+                }
             } else {
-                history.len()
+                false
             };
 
-            &history[..end]
+            if is_ascending {
+                let start = if history.len() > window_size {
+                    history.len() - window_size
+                } else {
+                    0
+                };
+                &history[start..]
+            } else {
+                let end = if history.len() > window_size {
+                    window_size
+                } else {
+                    history.len()
+                };
+                &history[..end]
+            }
         };
         sub_history
             .iter()

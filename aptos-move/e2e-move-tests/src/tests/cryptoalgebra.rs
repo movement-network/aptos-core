@@ -36,6 +36,5 @@ fn crypto_algebra_type_tag_limit_exceeded_handled() {
             result,
             TransactionStatus::Keep(ExecutionStatus::MoveAbort { .. })
         ),
-
     );
 }

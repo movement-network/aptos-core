@@ -4,8 +4,7 @@
 use crate::{
     abort_unless_feature_flag_enabled,
     natives::cryptography::algebra::{
-        AlgebraContext, HashToStructureSuite, Structure, E_TOO_MUCH_MEMORY_USED,
-        MEMORY_LIMIT_IN_BYTES, MOVE_ABORT_CODE_NOT_IMPLEMENTED,
+        AlgebraContext, E_TOO_MUCH_MEMORY_USED, HashToStructureSuite, MEMORY_LIMIT_IN_BYTES, MOVE_ABORT_CODE_NOT_IMPLEMENTED, MOVE_ABORT_CODE_TYPE_TAG_CONVERSION_FAILED, Structure
     },
     store_element, structure_from_ty_arg,
 };
@@ -53,7 +52,7 @@ fn suite_from_ty_arg(
             return Ok(HashToStructureSuite::try_from(type_tag).ok());
         } else {
             return Err(SafeNativeError::Abort {
-                abort_code: MOVE_ABORT_CODE_NOT_IMPLEMENTED,
+                abort_code: MOVE_ABORT_CODE_TYPE_TAG_CONVERSION_FAILED,
             });
         }
     } else {

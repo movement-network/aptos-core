@@ -26,7 +26,7 @@ fn deep_type_tag_panic_regression() {
 }
 
 #[test]
-fn crypto_algebra_type_tag_limit_exceeded_handled() {
+fn test_deep_type_tag() {
     let mut h = MoveHarness::new();
     h.new_epoch();
     let result = deep_type_tag(&mut h);

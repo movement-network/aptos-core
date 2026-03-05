@@ -135,18 +135,10 @@ impl TimedFeatureFlag {
                 .unwrap()
                 .with_timezone(&Utc),
 
-            // For testing, time set to 1 hour after the beginning of time to test the old and new behaviors in tests.
-            (FixCryptoAlgebraNativesResultHandling, TESTING) => {
+            // 1 hour after the beginning of time
+            (FixCryptoAlgebraNativesTypeTagConversion, _) => {
                 Utc.with_ymd_and_hms(1970, 1, 1, 1, 0, 0).unwrap()
             },
-            (FixCryptoAlgebraNativesResultHandling, TESTNET) => Los_Angeles
-                .with_ymd_and_hms(2026, 3, 3, 0, 0, 0)
-                .unwrap()
-                .with_timezone(&Utc),
-            (FixCryptoAlgebraNativesResultHandling, MAINNET) => Los_Angeles
-                .with_ymd_and_hms(2026, 3, 8, 0, 0, 0)
-                .unwrap()
-                .with_timezone(&Utc),
 
             // For chains other than testnet and mainnet, a timed feature is considered enabled from
             // the very beginning, if left unspecified.

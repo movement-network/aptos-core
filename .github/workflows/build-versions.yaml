@@ -11,6 +11,10 @@ on:
       build_profile:
         description: 'The cargo build profile to use.'
         default: 'release'
+      custom_tag:
+        description: 'Custom tag to use instead of git SHA (e.g., "82ae2e0-rebuilt"). Leave empty to use default SHA tag.'
+        required: false
+        default: ''
 
 jobs:
   setup:
@@ -22,6 +26,7 @@ jobs:
       git_tag: ${{ steps.git_tag.outputs.git_tag }}
       build_profile: ${{ steps.build_profile.outputs.build_profile }}
       git_sha: ${{ steps.get_sha.outputs.git_sha }}
+      image_tag: ${{ steps.determine_tag.outputs.image_tag }}
     env:
       BUILD_REF: ${{ inputs.ref || github.sha}}
     steps:
@@ -70,6 +75,14 @@ jobs:
       - id: build_profile
         run: |
           echo "build_profile=${{ inputs.build_profile || 'release' }}" >> $GITHUB_OUTPUT
+      - id: determine_tag
+        run: |
+          # Use custom tag if provided, otherwise use short SHA
+          if [ -n "${{ inputs.custom_tag }}" ]; then
+            echo "image_tag=${{ inputs.custom_tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "image_tag=${{ steps.chop_sha.outputs.short_sha }}" >> $GITHUB_OUTPUT
+          fi
 
   binaries-aptos-node:
     needs: 
@@ -96,7 +109,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           git_sha: ${{ needs.setup.outputs.git_sha }}
   container-aptos-node:
-    needs: 
+    needs:
       - setup
       - binaries-aptos-node
     runs-on: buildjet-16vcpu-ubuntu-2204
@@ -107,6 +120,7 @@ jobs:
     env:
       TARGET_FOLDER: target/${{ needs.setup.outputs.build_profile }}
       SHORT_SHA: ${{ needs.setup.outputs.short_sha }}
+      IMAGE_TAG: ${{ needs.setup.outputs.image_tag }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -144,6 +158,7 @@ jobs:
           ghcr_username: ${{ vars.INFRA_GH_USER }}
           ghcr_password: ${{ secrets.INFRA_GH_PAT }}
           git_sha: ${{ needs.setup.outputs.git_sha }}
+          custom_tag: ${{ env.IMAGE_TAG }}
 
   binaries-aptos-faucet-service:
     needs: 
@@ -168,7 +183,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           git_sha: ${{ needs.setup.outputs.git_sha }}
   container-aptos-faucet-service:
-    needs: 
+    needs:
       - setup
       - binaries-aptos-faucet-service
     runs-on: buildjet-16vcpu-ubuntu-2204
@@ -179,6 +194,7 @@ jobs:
     env:
       TARGET_FOLDER: target/${{ needs.setup.outputs.build_profile }}
       SHORT_SHA: ${{ needs.setup.outputs.short_sha }}
+      IMAGE_TAG: ${{ needs.setup.outputs.image_tag }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -206,6 +222,7 @@ jobs:
           ghcr_username: ${{ vars.INFRA_GH_USER }}
           ghcr_password: ${{ secrets.INFRA_GH_PAT }}
           git_sha: ${{ needs.setup.outputs.git_sha }}
+          custom_tag: ${{ env.IMAGE_TAG }}
 
   binaries-aptos-tools:
     needs: 

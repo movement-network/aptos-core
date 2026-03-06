@@ -21,6 +21,10 @@ inputs:
     description: "Git SHA to use for image tagging (defaults to github.sha)"
     required: false
     default: ""
+  custom_tag:
+    description: "Custom tag to use instead of git SHA (optional)"
+    required: false
+    default: ""
 
 outputs:
   image_name:
@@ -41,12 +45,18 @@ runs:
   steps:
   - name: Set build environment
     run: |
-      if [ -n "${{ inputs.git_sha }}" ]; then
-        GIT_SHA_SHORT=$(echo "${{ inputs.git_sha }}" | cut -c1-7)
+      # Determine the tag to use
+      if [ -n "${{ inputs.custom_tag }}" ]; then
+        # Use custom tag if provided
+        IMAGE_TAG="${{ inputs.custom_tag }}"
+      elif [ -n "${{ inputs.git_sha }}" ]; then
+        # Otherwise use git SHA (shortened)
+        IMAGE_TAG=$(echo "${{ inputs.git_sha }}" | cut -c1-7)
       else
-        GIT_SHA_SHORT=$(echo ${{ github.sha }} | cut -c1-7)
+        # Fallback to github.sha
+        IMAGE_TAG=$(echo ${{ github.sha }} | cut -c1-7)
       fi
-      echo "GIT_SHA_SHORT=$GIT_SHA_SHORT" >> $GITHUB_ENV
+      echo "GIT_SHA_SHORT=$IMAGE_TAG" >> $GITHUB_ENV
       echo "BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_ENV
     shell: bash
 

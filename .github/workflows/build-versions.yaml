@@ -33,6 +33,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref || github.sha}}
+          fetch-depth: 0
       - id: get_sha
         run: |
           GIT_SHA=$(git rev-parse HEAD)
@@ -101,6 +102,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref || github.sha}}
+          fetch-depth: 0
       - name: Build binary ${{ matrix.binary.package }}
         uses: movementlabsxyz/aptos-core/.github/actions/build-binary@ci/version-builds
         with:
@@ -125,6 +127,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref || github.sha}}
+          fetch-depth: 0
       # Download artifacts
       - name: Download aptos-node binary
         uses: actions/download-artifact@v4
@@ -175,6 +178,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref || github.sha}}
+          fetch-depth: 0
       - name: Build binary ${{ matrix.binary.package }}
         uses: movementlabsxyz/aptos-core/.github/actions/build-binary@ci/version-builds
         with:
@@ -199,6 +203,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref || github.sha}}
+          fetch-depth: 0
       # Download artifacts
       - name: Download aptos-faucet-service binary
         uses: actions/download-artifact@v4
@@ -239,6 +244,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref || github.sha}}
+          fetch-depth: 0
       - name: Build binary ${{ matrix.binary.package }}
         uses: movementlabsxyz/aptos-core/.github/actions/build-binary@ci/version-builds
         with:

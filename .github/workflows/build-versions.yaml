@@ -104,7 +104,7 @@ jobs:
           ref: ${{ inputs.ref || github.sha}}
           fetch-depth: 0
       - name: Build binary ${{ matrix.binary.package }}
-        uses: movementlabsxyz/aptos-core/.github/actions/build-binary@ci/version-builds
+        uses: movementlabsxyz/aptos-core/.github/actions/build-binary@add-custom-tag-support
         with:
           binary_package: ${{ matrix.binary.package }}
           profile: ${{ needs.setup.outputs.build_profile }}
@@ -148,7 +148,7 @@ jobs:
         run: ls -la ${{ env.TARGET_FOLDER }}
         
       - name: Build Container
-        uses: movementlabsxyz/aptos-core/.github/actions/build-container@ci/version-builds
+        uses: movementlabsxyz/aptos-core/.github/actions/build-container@add-custom-tag-support
         with:
           image_name: ghcr.io/movementlabsxyz/aptos-node
           dockerfile_subdir: aptos-node
@@ -180,7 +180,7 @@ jobs:
           ref: ${{ inputs.ref || github.sha}}
           fetch-depth: 0
       - name: Build binary ${{ matrix.binary.package }}
-        uses: movementlabsxyz/aptos-core/.github/actions/build-binary@ci/version-builds
+        uses: movementlabsxyz/aptos-core/.github/actions/build-binary@add-custom-tag-support
         with:
           binary_package: ${{ matrix.binary.package }}
           profile: ${{ needs.setup.outputs.build_profile }}
@@ -214,7 +214,7 @@ jobs:
         run: ls -la ${{ env.TARGET_FOLDER }}
         
       - name: Build Container
-        uses: movementlabsxyz/aptos-core/.github/actions/build-container@ci/version-builds
+        uses: movementlabsxyz/aptos-core/.github/actions/build-container@add-custom-tag-support
         with:
           image_name: ghcr.io/movementlabsxyz/aptos-faucet-service
           dockerfile_subdir: aptos-faucet-service
@@ -246,7 +246,7 @@ jobs:
           ref: ${{ inputs.ref || github.sha}}
           fetch-depth: 0
       - name: Build binary ${{ matrix.binary.package }}
-        uses: movementlabsxyz/aptos-core/.github/actions/build-binary@ci/version-builds
+        uses: movementlabsxyz/aptos-core/.github/actions/build-binary@add-custom-tag-support
         with:
           binary_package: ${{ matrix.binary.package }}
           profile: ${{ needs.setup.outputs.build_profile }}

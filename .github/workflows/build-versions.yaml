@@ -94,7 +94,7 @@ jobs:
       matrix:
         binary:
           - package: "aptos-node"
-          - package: "movement"
+          - package: "aptos"
           - package: "l1-migration"
     env:
       TARGET_FOLDER: target/${{ needs.setup.outputs.build_profile }}
@@ -134,10 +134,10 @@ jobs:
         with:
           name: aptos-node-${{ env.SHORT_SHA }}
           path: ${{ env.TARGET_FOLDER }}
-      - name: Download movement binary
+      - name: Download aptos binary
         uses: actions/download-artifact@v4
         with:
-          name: movement-${{ env.SHORT_SHA }}
+          name: aptos-${{ env.SHORT_SHA }}
           path: ${{ env.TARGET_FOLDER }}
       - name: Download l1-migration binary
         uses: actions/download-artifact@v4

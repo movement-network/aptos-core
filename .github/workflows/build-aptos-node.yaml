@@ -10,6 +10,10 @@ on:
       build_profile:
         description: 'The cargo build profile to use'
         default: 'release'
+      custom_tag:
+        description: 'Custom Docker tag (optional, defaults to short SHA)'
+        required: false
+        default: ''
 
 jobs:
   setup:
@@ -21,6 +25,7 @@ jobs:
       git_tag: ${{ steps.git_tag.outputs.git_tag }}
       build_profile: ${{ steps.build_profile.outputs.build_profile }}
       git_sha: ${{ steps.get_sha.outputs.git_sha }}
+      docker_tag: ${{ steps.docker_tag.outputs.docker_tag }}
     env:
       BUILD_REF: ${{ inputs.ref || github.sha}}
     steps:
@@ -64,6 +69,13 @@ jobs:
       - id: build_profile
         run: |
           echo "build_profile=${{ inputs.build_profile || 'release' }}" >> $GITHUB_OUTPUT
+      - id: docker_tag
+        run: |
+          if [ -n "${{ inputs.custom_tag }}" ]; then
+            echo "docker_tag=${{ inputs.custom_tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "docker_tag=${{ steps.chop_sha.outputs.short_sha }}" >> $GITHUB_OUTPUT
+          fi
 
   build-binaries:
     needs:
@@ -128,17 +140,34 @@ jobs:
       - name: List binaries
         run: ls -la ${{ env.TARGET_FOLDER }}
 
-      - name: Build and push container
-        uses: ./.github/actions/build-container
-        with:
-          image_name: ghcr.io/movementlabsxyz/aptos-node
-          dockerfile_subdir: aptos-node
-          build_args: |
-            BINARY_PATH=${{ env.TARGET_FOLDER }}
-            GIT_SHA=${{ env.SHORT_SHA }}
-            GIT_TAG=${{ needs.setup.outputs.git_tag }}
-            GIT_BRANCH=${{ needs.setup.outputs.git_branch }}
-            BUILD_DATE=${{ needs.setup.outputs.build_date }}
-          ghcr_username: ${{ vars.INFRA_GH_USER }}
-          ghcr_password: ${{ secrets.INFRA_GH_PAT }}
-          git_sha: ${{ needs.setup.outputs.git_sha }}
+      - name: Login to GHCR
+        run: |
+          echo "${{ secrets.INFRA_GH_PAT }}" | docker login ghcr.io -u "${{ vars.INFRA_GH_USER }}" --password-stdin
+
+      - name: Build and push Docker image
+        env:
+          DOCKER_TAG: ${{ needs.setup.outputs.docker_tag }}
+          IMAGE_NAME: ghcr.io/movementlabsxyz/aptos-node
+        run: |
+          docker build \
+            --build-arg BINARY_PATH=${{ env.TARGET_FOLDER }} \
+            --build-arg GIT_SHA=${{ env.SHORT_SHA }} \
+            --build-arg GIT_TAG=${{ needs.setup.outputs.git_tag }} \
+            --build-arg GIT_BRANCH=${{ needs.setup.outputs.git_branch }} \
+            --build-arg BUILD_DATE=${{ needs.setup.outputs.build_date }} \
+            -f docker/aptos-node/Dockerfile \
+            -t ${{ env.IMAGE_NAME }}:${{ env.DOCKER_TAG }} \
+            -t ${{ env.IMAGE_NAME }}:latest .
+          docker push ${{ env.IMAGE_NAME }}:${{ env.DOCKER_TAG }}
+          docker push ${{ env.IMAGE_NAME }}:latest
+
+      - name: Output image information
+        env:
+          DOCKER_TAG: ${{ needs.setup.outputs.docker_tag }}
+          IMAGE_NAME: ghcr.io/movementlabsxyz/aptos-node
+        run: |
+          echo "✅ Docker image built and pushed successfully!"
+          echo "📦 Image: ${{ env.IMAGE_NAME }}:${{ env.DOCKER_TAG }}"
+          echo "🏷️  Tag: ${{ env.DOCKER_TAG }}"
+          echo "🏷️  Tag: latest"
+          echo "🌐 Registry: ${{ env.IMAGE_NAME }}"

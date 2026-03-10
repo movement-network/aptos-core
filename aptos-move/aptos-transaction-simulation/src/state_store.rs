@@ -249,10 +249,6 @@ impl TStateView for EmptyStateView {
     fn contains_state_value(&self, _state_key: &Self::Key) -> StateViewResult<bool> {
         Ok(false)
     }
-
-    fn next_version(&self) -> Version {
-        0
-    }
 }
 
 /***************************************************************************************************
@@ -361,10 +357,6 @@ where
         }
 
         self.base.contains_state_value(state_key)
-    }
-
-    fn next_version(&self) -> Version {
-        self.base.next_version()
     }
 }
 

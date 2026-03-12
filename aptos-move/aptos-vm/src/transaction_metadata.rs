@@ -5,9 +5,15 @@
 use aptos_crypto::HashValue;
 use aptos_gas_algebra::{FeePerGasUnit, Gas, NumBytes};
 use aptos_types::{
-    account_address::AccountAddress, chain_id::ChainId, on_chain_config::{TimedFeatureFlag, TimedFeatures}, transaction::{
-        EntryFunction, Multisig, MultisigTransactionPayload, ReplayProtector, SignedTransaction, TransactionExecutable, TransactionExecutableRef, TransactionExtraConfig, TransactionPayload, TransactionPayloadInner, authenticator::AuthenticationProof, user_transaction_context::UserTransactionContext
-    }
+    account_address::AccountAddress,
+    chain_id::ChainId,
+    on_chain_config::{TimedFeatureFlag, TimedFeatures},
+    transaction::{
+        authenticator::AuthenticationProof, user_transaction_context::UserTransactionContext,
+        EntryFunction, Multisig, MultisigTransactionPayload, ReplayProtector, SignedTransaction,
+        TransactionExecutable, TransactionExecutableRef, TransactionExtraConfig,
+        TransactionPayload, TransactionPayloadInner,
+    },
 };
 
 pub struct TransactionMetadata {
@@ -34,7 +40,9 @@ pub struct TransactionMetadata {
 
 impl TransactionMetadata {
     pub fn new(txn: &SignedTransaction, timed_features: &TimedFeatures) -> Self {
-        let txn_size = if timed_features.is_enabled(TimedFeatureFlag::UseFullTransactionSizeForTransactionMetadata) {
+        let txn_size = if timed_features
+            .is_enabled(TimedFeatureFlag::UseFullTransactionSizeForTransactionMetadata)
+        {
             txn.txn_bytes_len()
         } else {
             txn.raw_txn_bytes_len()

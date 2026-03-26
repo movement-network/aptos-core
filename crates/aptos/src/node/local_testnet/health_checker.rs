@@ -138,17 +138,20 @@ impl HealthChecker {
         waiting_service: Option<&str>,
     ) -> Result<()> {
         let prefix = self.to_string();
-        wait_for_startup(|| self.check(), match waiting_service {
-            Some(waiting_service) => {
-                format!(
-                    "{} at {} did not start up before {}",
-                    prefix,
-                    self.address_str(),
-                    waiting_service,
-                )
+        wait_for_startup(
+            || self.check(),
+            match waiting_service {
+                Some(waiting_service) => {
+                    format!(
+                        "{} at {} did not start up before {}",
+                        prefix,
+                        self.address_str(),
+                        waiting_service,
+                    )
+                },
+                None => format!("{} at {} did not start up", prefix, self.address_str()),
             },
-            None => format!("{} at {} did not start up", prefix, self.address_str()),
-        })
+        )
         .await
     }
 

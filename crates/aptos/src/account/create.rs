@@ -36,6 +36,6 @@ impl CliCommand<TransactionSummary> for CreateAccount {
         self.txn_options
             .submit_transaction(aptos_stdlib::aptos_account_create_account(address))
             .await
-            .map(TransactionSummary::from)
+            .map(|t| self.txn_options.summarize_submitted_transaction(t))
     }
 }

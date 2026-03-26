@@ -7,6 +7,7 @@ pub mod local_testnet;
 use self::local_testnet::RunLocalnet;
 use crate::{
     common::{
+        cli_output::CliOutputMode,
         types::{
             CliCommand, CliError, CliResult, CliTypedResult, OptionalPoolAddressArgs,
             PoolAddressArgs, ProfileOptions, RestOptions, TransactionOptions, TransactionSummary,
@@ -14,6 +15,7 @@ use crate::{
         utils::read_from_file,
     },
     genesis::git::from_yaml,
+    human_println,
     node::analyze::{
         analyze_validators::{AnalyzeValidators, ValidatorStats},
         fetch_metadata::FetchMetadata,
@@ -101,10 +103,14 @@ impl NodeTool {
             ShowValidatorSet(tool) => tool.execute_serialized().await,
             ShowValidatorStake(tool) => tool.execute_serialized().await,
             ShowValidatorConfig(tool) => tool.execute_serialized().await,
-            RunLocalnet(tool) => tool
-                .execute_serialized_without_logger()
-                .await
-                .map(|_| "".to_string()),
+            RunLocalnet(tool) => {
+                let out = tool.execute_serialized_without_logger().await?;
+                if CliOutputMode::current().is_json_agent_mode() {
+                    Ok(out)
+                } else {
+                    Ok("".to_string())
+                }
+            },
             UpdateConsensusKey(tool) => tool.execute_serialized().await,
             UpdateValidatorNetworkAddresses(tool) => tool.execute_serialized().await,
         }
@@ -647,7 +653,7 @@ impl CliCommand<TransactionSummary> for InitializeValidator {
                 bcs::to_bytes(&full_node_network_addresses)?,
             ))
             .await
-            .map(|inner| inner.into())
+            .map(|t| self.txn_options.summarize_submitted_transaction(t))
     }
 }
 
@@ -708,7 +714,7 @@ impl CliCommand<TransactionSummary> for JoinValidatorSet {
         self.txn_options
             .submit_transaction(aptos_stdlib::stake_join_validator_set(address))
             .await
-            .map(|inner| inner.into())
+            .map(|t| self.txn_options.summarize_submitted_transaction(t))
     }
 }
 
@@ -738,7 +744,7 @@ impl CliCommand<TransactionSummary> for LeaveValidatorSet {
         self.txn_options
             .submit_transaction(aptos_stdlib::stake_leave_validator_set(address))
             .await
-            .map(|inner| inner.into())
+            .map(|t| self.txn_options.summarize_submitted_transaction(t))
     }
 }
 
@@ -1083,7 +1089,7 @@ impl CliCommand<TransactionSummary> for UpdateConsensusKey {
                 consensus_proof_of_possession.to_bytes().to_vec(),
             ))
             .await
-            .map(|inner| inner.into())
+            .map(|t| self.txn_options.summarize_submitted_transaction(t))
     }
 }
 
@@ -1144,7 +1150,7 @@ impl CliCommand<TransactionSummary> for UpdateValidatorNetworkAddresses {
                 bcs::to_bytes(&full_node_network_addresses)?,
             ))
             .await
-            .map(|inner| inner.into())
+            .map(|t| self.txn_options.summarize_submitted_transaction(t))
     }
 }
 
@@ -1229,7 +1235,7 @@ impl CliCommand<()> for AnalyzeValidatorPerformance {
                 epoch_stats.validator_stats = filtered_stats;
             }
             if print_detailed {
-                println!(
+                human_println!(
                     "Detailed table for {}epoch {}:",
                     if epoch_info.partial { "partial " } else { "" },
                     epoch_info.epoch
@@ -1249,7 +1255,7 @@ impl CliCommand<()> for AnalyzeValidatorPerformance {
             }
             if print_max_tps {
                 for (num_blocks_for_max_tps, max_tps) in &epoch_stats.max_tps_per_block_interval {
-                    println!(
+                    human_println!(
                         "In {}epoch {}: during consecutive {:?}, found peak of {} TPS, ending on version: {}, {} txns over {}s and {} blocks",
                         if epoch_info.partial { "partial " } else { "" },
                         epoch_info.epoch,
@@ -1268,12 +1274,12 @@ impl CliCommand<()> for AnalyzeValidatorPerformance {
         }
 
         if stats.is_empty() {
-            println!("No data found for given input");
+            human_println!("No data found for given input");
             return Ok(());
         }
         let total_stats = stats.values().cloned().reduce(|a, b| a + b).unwrap();
         if print_detailed {
-            println!(
+            human_println!(
                 "Detailed table for all epochs [{}, {}]:",
                 stats.keys().min().unwrap(),
                 stats.keys().max().unwrap()
@@ -1282,7 +1288,7 @@ impl CliCommand<()> for AnalyzeValidatorPerformance {
         }
         if print_max_tps {
             for (num_blocks_for_max_tps, max_tps) in &total_stats.max_tps_per_block_interval {
-                println!(
+                human_println!(
                     "Across all epochs: during consecutive {:?}, found peak of {} TPS, ending on version: {}, {} txns over {}s and {} blocks",
                     num_blocks_for_max_tps,
                     max_tps.tps,
@@ -1297,7 +1303,7 @@ impl CliCommand<()> for AnalyzeValidatorPerformance {
         if self.analyze_mode == AnalyzeMode::ValidatorHealthOverTime
             || self.analyze_mode == AnalyzeMode::All
         {
-            println!(
+            human_println!(
                 "Validator health over epochs [{}, {}]:",
                 stats.keys().min().unwrap(),
                 stats.keys().max().unwrap()
@@ -1307,7 +1313,7 @@ impl CliCommand<()> for AnalyzeValidatorPerformance {
         if self.analyze_mode == AnalyzeMode::NetworkHealthOverTime
             || self.analyze_mode == AnalyzeMode::All
         {
-            println!(
+            human_println!(
                 "Network health over epochs [{}, {}]:",
                 stats.keys().min().unwrap(),
                 stats.keys().max().unwrap()
@@ -1491,7 +1497,7 @@ impl Time {
 
 #[cfg(test)]
 mod tests {
-    use crate::{CliResult, Tool};
+    use crate::{CliResult, MovementCli};
     use clap::Parser;
 
     // TODO: there have to be cleaner ways to test things. Maybe a CLI test framework?
@@ -1525,8 +1531,9 @@ mod tests {
     }
 
     async fn run_tool_with_args(args: &[&str]) -> CliResult {
-        let tool: Tool = Tool::try_parse_from(args).map_err(|msg| msg.to_string())?;
-        tool.execute().await
+        let cli = MovementCli::try_parse_from(args).map_err(|msg| msg.to_string())?;
+        cli.install_output_mode();
+        cli.tool.execute().await
     }
 
     fn assert_contains(message: String, expected_string: &str) {

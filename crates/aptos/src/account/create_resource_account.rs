@@ -80,12 +80,16 @@ impl CliCommand<CreateResourceAccountSummary> for CreateResourceAccount {
         } else {
             vec![]
         };
-        self.txn_options
+        let txn = self
+            .txn_options
             .submit_transaction(resource_account_create_resource_account(
                 self.seed_args.seed()?,
                 authentication_key,
             ))
-            .await
-            .map(CreateResourceAccountSummary::from)
+            .await?;
+        let mut summary = CreateResourceAccountSummary::from(txn);
+        self.txn_options
+            .attach_explorer_url(&mut summary.transaction_summary);
+        Ok(summary)
     }
 }

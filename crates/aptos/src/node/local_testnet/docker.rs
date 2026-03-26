@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::traits::ShutdownStep;
+use crate::human_eprintln;
 use anyhow::{Context, Result};
 pub use aptos_localnet::docker::get_docker;
 use async_trait::async_trait;
@@ -95,7 +96,7 @@ pub async fn pull_docker_image(image_name: &str) -> Result<()> {
     }
 
     // The image is not present, let the user know we'll pull it.
-    eprintln!("Image {} not found, pulling it now...", image_name);
+    human_eprintln!("Image {} not found, pulling it now...", image_name);
 
     // The docker pull CLI command is just sugar around this API.
     docker

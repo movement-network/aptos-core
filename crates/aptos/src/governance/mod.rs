@@ -15,6 +15,7 @@ use crate::{
         utils::prompt_yes_with_override,
     },
     governance::utils::*,
+    human_eprintln, human_println,
     move_tool::{FrameworkPackageArgs, IncludedArtifacts},
     CliCommand, CliResult,
 };
@@ -196,9 +197,10 @@ impl CliCommand<Vec<ProposalSummary>> for ListProposals {
             match bcs::from_bytes::<CreateProposalFullEvent>(event.event.event_data()) {
                 Ok(valid_event) => proposals.push(valid_event.into()),
                 Err(err) => {
-                    eprintln!(
+                    human_eprintln!(
                         "Event: {:?} cannot be parsed as a proposal: {:?}",
-                        event, err
+                        event,
+                        err
                     )
                 },
             }
@@ -331,9 +333,11 @@ impl SubmitProposalArgs {
         // Validate the proposal metadata
         let (metadata, metadata_hash) = self.get_metadata().await?;
 
-        println!(
+        human_println!(
             "{}\n\tMetadata Hash: {}\n\tScript Hash: {}",
-            metadata, metadata_hash, script_hash
+            metadata,
+            metadata_hash,
+            script_hash
         );
         Ok((script_hash, metadata_hash))
     }
@@ -408,7 +412,10 @@ impl CliCommand<ProposalSubmissionSummary> for SubmitProposal {
                 ))
                 .await?
         };
-        let txn_summary = TransactionSummary::from(&txn);
+        let txn_summary = self
+            .args
+            .txn_options
+            .summarize_submitted_transaction_ref(&txn);
         let proposal_id = extract_proposal_id(&txn)?;
         Ok(ProposalSubmissionSummary {
             proposal_id,
@@ -564,7 +571,7 @@ impl SubmitVote {
                 false
             };
             if voted {
-                println!("Stake pool {} already voted", *pool_address);
+                human_println!("Stake pool {} already voted", *pool_address);
                 continue;
             }
 
@@ -593,7 +600,7 @@ impl SubmitVote {
                         vote,
                     ))
                     .await
-                    .map(TransactionSummary::from)?,
+                    .map(|t| self.args.txn_options.summarize_submitted_transaction(t))?,
             );
         }
         Ok(summaries)
@@ -658,11 +665,12 @@ impl SubmitVote {
                 .parse()
                 .unwrap();
             if remaining_voting_power == 0 {
-                println!(
+                human_println!(
                     "Stake pool {} has no voting power on proposal {}. This is because the \
                     stake pool has already voted before enabling partial governance voting, or the \
                     stake pool has already used all its voting power.",
-                    *pool_address, proposal_id
+                    *pool_address,
+                    proposal_id
                 );
                 continue;
             }
@@ -689,7 +697,7 @@ impl SubmitVote {
                         vote,
                     ))
                     .await
-                    .map(TransactionSummary::from)?,
+                    .map(|t| self.args.txn_options.summarize_submitted_transaction(t))?,
             );
         }
         Ok(summaries)
@@ -741,13 +749,13 @@ impl CliCommand<TransactionSummary> for ApproveExecutionHash {
     }
 
     async fn execute(mut self) -> CliTypedResult<TransactionSummary> {
-        Ok(self
+        let t = self
             .txn_options
             .submit_transaction(
                 aptos_stdlib::aptos_governance_add_approved_script_hash_script(self.proposal_id),
             )
-            .await
-            .map(TransactionSummary::from)?)
+            .await?;
+        Ok(self.txn_options.summarize_submitted_transaction_ref(&t))
     }
 }
 
@@ -894,7 +902,7 @@ impl CliCommand<TransactionSummary> for ExecuteProposal {
         self.txn_options
             .submit_transaction(txn)
             .await
-            .map(TransactionSummary::from)
+            .map(|t| self.txn_options.summarize_submitted_transaction(t))
     }
 }
 

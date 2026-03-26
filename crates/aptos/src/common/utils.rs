@@ -3,6 +3,7 @@
 
 use crate::{
     common::{
+        cli_output::CliOutputMode,
         init::Network,
         types::{
             account_address_from_public_key, CliError, CliTypedResult, PromptOptions,
@@ -28,10 +29,10 @@ use aptos_types::{
     transaction::{authenticator::AuthenticationKey, TransactionPayload},
 };
 use itertools::Itertools;
-use std::io::IsTerminal;
 use move_core_types::{account_address::AccountAddress, language_storage::CORE_CODE_ADDRESS};
 use reqwest::Url;
 use serde::{ser::Error, Deserialize, Deserializer, Serialize, Serializer};
+use std::io::IsTerminal;
 #[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
 use std::{
@@ -119,10 +120,15 @@ pub async fn to_common_result<T: Serialize>(
 
     let is_err = result.is_err();
     let result = ResultWrapper::<T>::from(result);
-    let string = serde_json::to_string_pretty(&result).unwrap();
+    let agent_json = CliOutputMode::current().is_json_agent_mode();
+    let string = if agent_json {
+        serde_json::to_string(&result).unwrap()
+    } else {
+        serde_json::to_string_pretty(&result).unwrap()
+    };
     // Unescape newlines and quotes so they render properly in terminal output
     // Both Ok and Err are printed to stdout in main.rs
-    let string = if std::io::stdout().is_terminal() {
+    let string = if !agent_json && std::io::stdout().is_terminal() {
         string.replace("\\n", "\n").replace("\\\"", "\"")
     } else {
         string
@@ -196,6 +202,36 @@ pub fn check_if_file_exists(file: &Path, prompt_options: PromptOptions) -> CliTy
     }
 
     Ok(())
+}
+
+/// Like [`check_if_file_exists`], but accepts an exact confirmation phrase for non-interactive use.
+pub fn check_if_file_exists_with_confirm(
+    file: &Path,
+    prompt_options: PromptOptions,
+    confirm_phrase: Option<&str>,
+    expected_phrase: &'static str,
+) -> CliTypedResult<()> {
+    if !file.exists() {
+        return Ok(());
+    }
+    if prompt_options.assume_yes {
+        return Ok(());
+    }
+    if let Some(phrase) = confirm_phrase {
+        if phrase == expected_phrase {
+            return Ok(());
+        }
+        return Err(CliError::CommandArgumentError(format!(
+            "`--confirm-overwrite` must be exactly `{expected_phrase}` when replacing an existing file"
+        )));
+    }
+    prompt_yes_with_override(
+        &format!(
+            "{:?} already exists, are you sure you want to overwrite it?",
+            file.as_os_str(),
+        ),
+        prompt_options,
+    )
 }
 
 pub fn prompt_yes_with_override(prompt: &str, prompt_options: PromptOptions) -> CliTypedResult<()> {
@@ -529,7 +565,7 @@ pub async fn profile_or_submit(
         txn_options_ref
             .submit_transaction(payload)
             .await
-            .map(TransactionSummary::from)
+            .map(|t| txn_options_ref.summarize_submitted_transaction(t))
     }
 }
 

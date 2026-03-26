@@ -17,6 +17,7 @@ use crate::{
     },
     config::GlobalConfig,
     genesis::git::from_yaml,
+    human_eprintln, human_println,
     move_tool::{ArgWithType, FunctionArgType, MemberId},
 };
 use anyhow::{bail, Context};
@@ -442,7 +443,7 @@ impl CliConfig {
         // As a cleanup, delete the old if it exists
         let legacy_config_file = aptos_folder.join(LEGACY_CONFIG_FILE);
         if legacy_config_file.exists() {
-            eprintln!("Removing legacy config file {}", LEGACY_CONFIG_FILE);
+            human_eprintln!("Removing legacy config file {}", LEGACY_CONFIG_FILE);
             let _ = std::fs::remove_file(legacy_config_file);
         }
         Ok(())
@@ -1504,6 +1505,8 @@ pub struct TransactionSummary {
     pub version: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub vm_status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub explorer_url: Option<String>,
 }
 
 impl From<Transaction> for TransactionSummary {
@@ -1525,6 +1528,7 @@ impl From<&Transaction> for TransactionSummary {
                 version: None,
                 vm_status: None,
                 timestamp_us: None,
+                explorer_url: None,
             },
             Transaction::UserTransaction(txn) => TransactionSummary {
                 transaction_hash: txn.info.hash,
@@ -1537,6 +1541,7 @@ impl From<&Transaction> for TransactionSummary {
                 sequence_number: Some(txn.request.sequence_number.0),
                 timestamp_us: Some(txn.timestamp.0),
                 pending: None,
+                explorer_url: None,
             },
             Transaction::GenesisTransaction(txn) => TransactionSummary {
                 transaction_hash: txn.info.hash,
@@ -1549,6 +1554,7 @@ impl From<&Transaction> for TransactionSummary {
                 pending: None,
                 sequence_number: None,
                 timestamp_us: None,
+                explorer_url: None,
             },
             Transaction::BlockMetadataTransaction(txn) => TransactionSummary {
                 transaction_hash: txn.info.hash,
@@ -1561,6 +1567,7 @@ impl From<&Transaction> for TransactionSummary {
                 gas_unit_price: None,
                 pending: None,
                 sequence_number: None,
+                explorer_url: None,
             },
             Transaction::StateCheckpointTransaction(txn) => TransactionSummary {
                 transaction_hash: txn.info.hash,
@@ -1573,6 +1580,7 @@ impl From<&Transaction> for TransactionSummary {
                 gas_unit_price: None,
                 pending: None,
                 sequence_number: None,
+                explorer_url: None,
             },
             Transaction::BlockEpilogueTransaction(txn) => TransactionSummary {
                 transaction_hash: txn.info.hash,
@@ -1585,6 +1593,7 @@ impl From<&Transaction> for TransactionSummary {
                 gas_unit_price: None,
                 pending: None,
                 sequence_number: None,
+                explorer_url: None,
             },
             Transaction::ValidatorTransaction(txn) => TransactionSummary {
                 transaction_hash: txn.transaction_info().hash,
@@ -1597,6 +1606,7 @@ impl From<&Transaction> for TransactionSummary {
                 timestamp_us: Some(txn.timestamp().0),
                 version: Some(txn.transaction_info().version.0),
                 vm_status: Some(txn.transaction_info().vm_status.clone()),
+                explorer_url: None,
             },
         }
     }
@@ -1781,9 +1791,62 @@ pub struct TransactionOptions {
     /// flamegraphs that reflect the gas usage.
     #[clap(long)]
     pub(crate) profile_gas: bool,
+
+    /// Simulate the transaction on the connected network and return results without submitting.
+    #[clap(long)]
+    pub dry_run: bool,
 }
 
 impl TransactionOptions {
+    /// Explorer network hint for transaction links, inferred from the profile when possible.
+    pub fn explorer_network(&self) -> Option<Network> {
+        self.profile_options.profile().ok().and_then(|profile| {
+            if let Some(network) = profile.network {
+                Some(network)
+            } else {
+                match profile.rest_url {
+                    None => None,
+                    Some(url) => {
+                        if url.contains("mainnet") {
+                            Some(Network::Mainnet)
+                        } else if url.contains("testnet") {
+                            Some(Network::Testnet)
+                        } else if url.contains("devnet") {
+                            Some(Network::Devnet)
+                        } else if url.contains("localhost") || url.contains("127.0.0.1") {
+                            Some(Network::Local)
+                        } else {
+                            None
+                        }
+                    },
+                }
+            }
+        })
+    }
+
+    /// Build a [`TransactionSummary`] after submission (or final state), including an explorer URL.
+    pub fn summarize_submitted_transaction(&self, transaction: Transaction) -> TransactionSummary {
+        self.summarize_submitted_transaction_ref(&transaction)
+    }
+
+    /// [`summarize_submitted_transaction`](Self::summarize_submitted_transaction) for a borrowed transaction.
+    pub fn summarize_submitted_transaction_ref(
+        &self,
+        transaction: &Transaction,
+    ) -> TransactionSummary {
+        let mut summary = TransactionSummary::from(transaction);
+        self.attach_explorer_url(&mut summary);
+        summary
+    }
+
+    /// Fills [`TransactionSummary::explorer_url`] from this transaction context.
+    pub fn attach_explorer_url(&self, summary: &mut TransactionSummary) {
+        summary.explorer_url = Some(explorer_transaction_link(
+            summary.transaction_hash.into(),
+            self.explorer_network(),
+        ));
+    }
+
     /// Builds a rest client
     pub fn rest_client(&self) -> CliTypedResult<Client> {
         self.rest_options.client(&self.profile_options)
@@ -1897,7 +1960,7 @@ impl TransactionOptions {
         // Warn local user that clock is skewed behind the blockchain.
         // There will always be a little lag from real time to blockchain time
         if now_usecs < state.timestamp_usecs - ACCEPTED_CLOCK_SKEW_US {
-            eprintln!("Local clock is is skewed from blockchain clock.  Clock is more than {} seconds behind the blockchain {}", ACCEPTED_CLOCK_SKEW_US, state.timestamp_usecs / US_IN_SECS );
+            human_eprintln!("Local clock is is skewed from blockchain clock.  Clock is more than {} seconds behind the blockchain {}", ACCEPTED_CLOCK_SKEW_US, state.timestamp_usecs / US_IN_SECS );
         }
         let expiration_time_secs = now + self.gas_options.expiration_secs;
 
@@ -1991,36 +2054,26 @@ impl TransactionOptions {
             Err(err) => return Err(err),
         };
 
+        if self.dry_run {
+            let txns = client
+                .simulate_with_gas_estimation(&transaction, true, false)
+                .await
+                .map_err(|err| CliError::ApiError(err.to_string()))?
+                .into_inner();
+            let user_txn = txns.into_iter().next().ok_or_else(|| {
+                CliError::UnexpectedError("Empty simulation response from dry-run".to_string())
+            })?;
+            return Ok(Transaction::UserTransaction(user_txn));
+        }
+
         // Submit the transaction, printing out a useful transaction link
         client
             .submit_bcs(&transaction)
             .await
             .map_err(|err| CliError::ApiError(err.to_string()))?;
         let transaction_hash = transaction.clone().committed_hash();
-        let network = self.profile_options.profile().ok().and_then(|profile| {
-            if let Some(network) = profile.network {
-                Some(network)
-            } else {
-                // Approximate network from URL
-                match profile.rest_url {
-                    None => None,
-                    Some(url) => {
-                        if url.contains("mainnet") {
-                            Some(Network::Mainnet)
-                        } else if url.contains("testnet") {
-                            Some(Network::Testnet)
-                        } else if url.contains("devnet") {
-                            Some(Network::Devnet)
-                        } else if url.contains("localhost") || url.contains("127.0.0.1") {
-                            Some(Network::Local)
-                        } else {
-                            None
-                        }
-                    },
-                }
-            }
-        });
-        eprintln!(
+        let network = self.explorer_network();
+        human_eprintln!(
             "Transaction submitted: {}",
             explorer_transaction_link(transaction_hash, network)
         );
@@ -2105,6 +2158,7 @@ impl TransactionOptions {
             timestamp_us: None,
             version: Some(version), // The transaction is not comitted so there is no new version.
             vm_status: Some(vm_status.to_string()),
+            explorer_url: None,
         };
 
         Ok(summary)
@@ -2115,8 +2169,8 @@ impl TransactionOptions {
         &self,
         payload: TransactionPayload,
     ) -> CliTypedResult<TransactionSummary> {
-        println!();
-        println!("Simulating transaction locally...");
+        human_println!();
+        human_println!("Simulating transaction locally...");
 
         self.simulate_using_debugger(payload, local_simulation::run_transaction_using_debugger)
             .await
@@ -2129,8 +2183,8 @@ impl TransactionOptions {
         &self,
         payload: TransactionPayload,
     ) -> CliTypedResult<TransactionSummary> {
-        println!();
-        println!("Benchmarking transaction locally...");
+        human_println!();
+        human_println!("Benchmarking transaction locally...");
 
         self.simulate_using_debugger(
             payload,
@@ -2144,8 +2198,8 @@ impl TransactionOptions {
         &self,
         payload: TransactionPayload,
     ) -> CliTypedResult<TransactionSummary> {
-        println!();
-        println!("Simulating transaction locally using the gas profiler...");
+        human_println!();
+        human_println!("Simulating transaction locally using the gas profiler...");
 
         self.simulate_using_debugger(
             payload,

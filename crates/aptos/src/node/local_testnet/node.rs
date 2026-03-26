@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::{health_checker::HealthChecker, traits::ServiceManager, RunLocalnet};
-use crate::node::local_testnet::utils::socket_addr_to_url;
+use crate::{human_eprintln, node::local_testnet::utils::socket_addr_to_url};
 use anyhow::{anyhow, Context, Result};
 use aptos_config::config::{NodeConfig, DEFAULT_GRPC_STREAM_PORT};
 use aptos_node::{load_node_config, start_test_environment_node};
@@ -146,7 +146,7 @@ impl NodeManager {
         txn_stream_port: u16,
         no_node: bool,
     ) -> Result<Self> {
-        eprintln!();
+        human_eprintln!();
 
         // Enable the grpc stream on the node if we will run a txn stream service.
         node_config.indexer_grpc.enabled = run_txn_stream;
@@ -220,7 +220,7 @@ impl ServiceManager for NodeManager {
 
         let node_thread_handle = thread::spawn(move || {
             let result = start_test_environment_node(self.config, self.test_dir, false);
-            eprintln!("Node stopped unexpectedly {:#?}", result);
+            human_eprintln!("Node stopped unexpectedly {:#?}", result);
         });
 
         // This just waits for the node thread forever.

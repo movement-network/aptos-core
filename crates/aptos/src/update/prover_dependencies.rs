@@ -4,6 +4,7 @@
 use crate::{
     cli_build_information,
     common::types::{CliCommand, CliError, CliTypedResult, PromptOptions},
+    human_eprintln, human_println,
     update::{
         get_additional_binaries_dir, prover_dependency_installer::DependencyInstaller,
         update_binary,
@@ -81,13 +82,13 @@ impl ProverDependencyInstaller {
 
         set_env::set(env_var, install_path.to_string_lossy())
             .map_err(|e| CliError::UnexpectedError(format!("Failed to set {}: {}", env_var, e)))?;
-        println!(
+        human_println!(
             "Added {} to environment with value: {} to the profile.",
             env_var,
             install_path.to_string_lossy()
         );
         if env::var(env_var).is_err() {
-            eprintln!("Please use the `source` command or reboot the terminal to check whether {} is set with the correct value. \
+            human_eprintln!("Please use the `source` command or reboot the terminal to check whether {} is set with the correct value. \
             If not, please set it manually.", env_var);
         }
         Ok(())
@@ -130,7 +131,7 @@ impl ProverDependencyInstaller {
                 BOOGIE_EXE_ENV,
             )
             .await?;
-        println!("{}", res);
+        human_println!("{}", res);
 
         BoogieOptions::check_version_is_compatible(
             Z3_BINARY_NAME,
@@ -149,7 +150,7 @@ impl ProverDependencyInstaller {
                 Z3_EXE_ENV,
             )
             .await?;
-        println!("{}", res);
+        human_println!("{}", res);
 
         #[cfg(unix)]
         {
@@ -170,7 +171,7 @@ impl ProverDependencyInstaller {
                     CVC5_EXE_ENV,
                 )
                 .await?;
-            println!("{}", res);
+            human_println!("{}", res);
         }
 
         Ok("Succeeded".to_string())
@@ -201,7 +202,7 @@ impl ProverDependencyInstaller {
 
         let install_dir = install_dir.join(exe_name);
         if let Err(err) = self.add_env_var(env_name, &install_dir) {
-            eprintln!("{:#}. Please set it manually", err);
+            human_eprintln!("{:#}. Please set it manually", err);
         }
         Ok(result)
     }

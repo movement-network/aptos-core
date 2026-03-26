@@ -10,7 +10,7 @@ use crate::{
         utils::{create_dir_if_not_exist, current_dir, read_from_file, write_to_user_only_file},
     },
     genesis::git::{from_yaml, to_yaml},
-    Tool,
+    MovementCli,
 };
 use aptos_cli_common::generate_cli_completions;
 use aptos_crypto::ValidCryptoMaterialStringExt;
@@ -71,7 +71,7 @@ impl CliCommand<()> for GenerateShellCompletions {
     }
 
     async fn execute(self) -> CliTypedResult<()> {
-        generate_cli_completions::<Tool>("movement", self.shell, self.output_file.as_path())
+        generate_cli_completions::<MovementCli>("movement", self.shell, self.output_file.as_path())
             .map_err(|err| CliError::IO(self.output_file.display().to_string(), err))
     }
 }

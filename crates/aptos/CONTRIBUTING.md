@@ -245,3 +245,12 @@ current types.
 
 All output from the CLI should use `eprintln!()`, rather than `println!()`.  `stdout` is reserved for the JSON output at
 the end of the command, `stderr` is used for the rest of the output.
+
+## Agent and automation output
+
+- **Global flags:** `movement --output json …` or environment variable `MOVEMENT_OUTPUT=json` set the CLI to machine-oriented mode (CLI flag wins when both are set). Default is `human` and preserves historical behavior (pretty JSON envelope, terminal-oriented formatting).
+- **Envelope:** Serialized commands print a single JSON document to stdout: either `{"Result":…}` or `{"Error":…}` (see `to_common_result` in `common/utils.rs`). In `json` mode the document is compact and auxiliary human messages avoid stdout where feasible.
+- **Explorer links:** On successful submission paths, `TransactionSummary` may include `explorer_url` so automation does not need to parse stderr.
+- **Schema:** `movement meta commands-schema` emits a JSON description of the command tree (names, arguments, help text).
+- **Dry-run:** Transaction-accepting flows that use `TransactionOptions` support `--dry-run` to simulate without submitting.
+- **Destructive confirmation:** Non-interactive replacement of sensitive files uses explicit phrases documented on the relevant flags (e.g. genesis `--confirm-overwrite`, localnet `--destructive-confirm`), in addition to existing `--assume-yes`.

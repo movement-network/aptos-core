@@ -15,6 +15,7 @@ use crate::{
             strip_private_key_prefix,
         },
     },
+    human_eprintln,
 };
 use aptos_crypto::{ed25519::Ed25519PrivateKey, PrivateKey, ValidCryptoMaterialStringExt};
 use aptos_ledger;
@@ -101,11 +102,11 @@ impl CliCommand<()> for InitTool {
         } else {
             ProfileConfig::default()
         };
-        eprintln!("Configuring for profile {}", profile_name);
+        human_eprintln!("Configuring for profile {}", profile_name);
 
         // Choose a network
         let network = if let Some(network) = self.network {
-            eprintln!("Configuring for network {:?}", network);
+            human_eprintln!("Configuring for network {:?}", network);
             network
         } else {
             eprintln!(
@@ -114,7 +115,7 @@ impl CliCommand<()> for InitTool {
             let input = read_line("network")?;
             let input = input.trim();
             if input.is_empty() {
-                eprintln!("No network given, using testnet...");
+                human_eprintln!("No network given, using testnet...");
                 Network::Testnet
             } else {
                 Network::from_str(input)?
@@ -208,7 +209,7 @@ impl CliCommand<()> for InitTool {
                 .private_key_options
                 .extract_private_key_cli(self.encoding_options.encoding)?
             {
-                eprintln!("Using command line argument for private key");
+                human_eprintln!("Using command line argument for private key");
                 key
             } else {
                 eprintln!("Enter your private key as a hex literal (0x...) [Current: {} | No input: Generate new key (or keep one if present)]", profile_config.private_key.as_ref().map(|_| "Redacted").unwrap_or("None"));
@@ -216,10 +217,10 @@ impl CliCommand<()> for InitTool {
                 let input = input.trim();
                 if input.is_empty() {
                     if let Some(key) = profile_config.private_key {
-                        eprintln!("No key given, keeping existing key...");
+                        human_eprintln!("No key given, keeping existing key...");
                         key
                     } else {
-                        eprintln!("No key given, generating key...");
+                        human_eprintln!("No key given, generating key...");
                         self.rng_args
                             .key_generator()?
                             .generate_ed25519_private_key()
@@ -291,11 +292,12 @@ impl CliCommand<()> for InitTool {
 
         if let Some(faucet_url) = maybe_faucet_url {
             if funded {
-                eprintln!("Account {} has been already funded onchain", address);
+                human_eprintln!("Account {} has been already funded onchain", address);
             } else {
-                eprintln!(
+                human_eprintln!(
                     "Account {} is not funded, funding it with {} Octas",
-                    address, NUM_DEFAULT_OCTAS
+                    address,
+                    NUM_DEFAULT_OCTAS
                 );
                 fund_account(
                     client,
@@ -306,14 +308,14 @@ impl CliCommand<()> for InitTool {
                     NUM_DEFAULT_OCTAS,
                 )
                 .await?;
-                eprintln!("Account {} funded successfully", address);
+                human_eprintln!("Account {} funded successfully", address);
             }
         } else if funded {
-            eprintln!("Account {} has been already funded onchain", address);
+            human_eprintln!("Account {} has been already funded onchain", address);
         } else if network == Network::Mainnet || network == Network::Testnet {
             // Do nothing, we print information later.
         } else {
-            eprintln!("Account {} has been initialized locally, but you must transfer coins to it to send transactions", address);
+            human_eprintln!("Account {} has been initialized locally, but you must transfer coins to it to send transactions", address);
         }
 
         // Ensure the loaded config has profiles setup for a possible empty file
@@ -332,7 +334,7 @@ impl CliCommand<()> for InitTool {
             .profile_name()
             .unwrap_or(DEFAULT_PROFILE);
 
-        eprintln!(
+        human_eprintln!(
             "\n---\nMovement CLI is now set up for account {} as profile {}!\n See the account here: {}\n 
             Run `movement --help` for more information about commands. \n 
             Visit https://faucet.movementlabs.xyz to use the testnet faucet.",
@@ -350,7 +352,7 @@ impl InitTool {
     fn custom_network(&self, profile_config: &mut ProfileConfig) -> CliTypedResult<()> {
         // Rest Endpoint
         let rest_url = if let Some(ref rest_url) = self.rest_url {
-            eprintln!("Using command line argument for rest URL {}", rest_url);
+            human_eprintln!("Using command line argument for rest URL {}", rest_url);
             Some(rest_url.to_string())
         } else {
             let current = profile_config.rest_url.as_deref();
@@ -362,10 +364,10 @@ impl InitTool {
             let input = input.trim();
             if input.is_empty() {
                 if let Some(current) = current {
-                    eprintln!("No rest url given, keeping the existing url...");
+                    human_eprintln!("No rest url given, keeping the existing url...");
                     Some(current.to_string())
                 } else {
-                    eprintln!("No rest url given, exiting...");
+                    human_eprintln!("No rest url given, exiting...");
                     return Err(CliError::AbortedError);
                 }
             } else {
@@ -380,10 +382,10 @@ impl InitTool {
 
         // Faucet Endpoint
         let faucet_url = if self.skip_faucet {
-            eprintln!("Not configuring a faucet because --skip-faucet was provided");
+            human_eprintln!("Not configuring a faucet because --skip-faucet was provided");
             None
         } else if let Some(ref faucet_url) = self.faucet_options.faucet_url {
-            eprintln!("Using command line argument for faucet URL {}", faucet_url);
+            human_eprintln!("Using command line argument for faucet URL {}", faucet_url);
             Some(faucet_url.to_string())
         } else {
             let current = profile_config.faucet_url.as_deref();
@@ -396,14 +398,14 @@ impl InitTool {
             let input = input.trim();
             if input.is_empty() {
                 if let Some(current) = current {
-                    eprintln!("No faucet url given, keeping the existing url...");
+                    human_eprintln!("No faucet url given, keeping the existing url...");
                     Some(current.to_string())
                 } else {
-                    eprintln!("No faucet url given, skipping faucet...");
+                    human_eprintln!("No faucet url given, skipping faucet...");
                     None
                 }
             } else if input.to_lowercase() == "skip" {
-                eprintln!("Skipping faucet...");
+                human_eprintln!("Skipping faucet...");
                 None
             } else {
                 Some(

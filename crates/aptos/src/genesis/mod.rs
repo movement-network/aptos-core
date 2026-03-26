@@ -10,7 +10,7 @@ pub mod tools;
 use crate::{
     common::{
         types::{CliError, CliTypedResult, PromptOptions},
-        utils::{check_if_file_exists, dir_default_to_current, write_to_file},
+        utils::{check_if_file_exists_with_confirm, dir_default_to_current, write_to_file},
     },
     genesis::git::{
         Client, GitOptions, BALANCES_FILE, EMPLOYEE_VESTING_ACCOUNTS_FILE, LAYOUT_FILE,
@@ -48,6 +48,9 @@ use std::{
 
 const WAYPOINT_FILE: &str = "waypoint.txt";
 const GENESIS_FILE: &str = "genesis.blob";
+
+/// Pass this exact string to `--confirm-overwrite` to replace existing `genesis.blob` / `waypoint.txt` without `--assume-yes`.
+pub const CONFIRM_OVERWRITE_GENESIS_ARTIFACTS: &str = "overwrite-genesis-artifacts";
 
 /// Tool for setting up an Aptos chain Genesis transaction
 ///
@@ -97,6 +100,10 @@ pub struct GenerateGenesis {
     prompt_options: PromptOptions,
     #[clap(flatten)]
     git_options: GitOptions,
+
+    /// When output files already exist, pass exactly `overwrite-genesis-artifacts` to proceed without `--assume-yes`.
+    #[clap(long)]
+    confirm_overwrite: Option<String>,
 }
 
 #[async_trait]
@@ -109,8 +116,18 @@ impl CliCommand<Vec<PathBuf>> for GenerateGenesis {
         let output_dir = dir_default_to_current(self.output_dir.clone())?;
         let genesis_file = output_dir.join(GENESIS_FILE);
         let waypoint_file = output_dir.join(WAYPOINT_FILE);
-        check_if_file_exists(genesis_file.as_path(), self.prompt_options)?;
-        check_if_file_exists(waypoint_file.as_path(), self.prompt_options)?;
+        check_if_file_exists_with_confirm(
+            genesis_file.as_path(),
+            self.prompt_options,
+            self.confirm_overwrite.as_deref(),
+            CONFIRM_OVERWRITE_GENESIS_ARTIFACTS,
+        )?;
+        check_if_file_exists_with_confirm(
+            waypoint_file.as_path(),
+            self.prompt_options,
+            self.confirm_overwrite.as_deref(),
+            CONFIRM_OVERWRITE_GENESIS_ARTIFACTS,
+        )?;
 
         // Generate genesis and waypoint files
         let (genesis_bytes, waypoint) = if self.mainnet {

@@ -8,6 +8,7 @@ pub mod common;
 pub mod config;
 pub mod genesis;
 pub mod governance;
+pub mod meta;
 pub mod move_tool;
 pub mod node;
 pub mod op;
@@ -17,18 +18,40 @@ pub mod test;
 pub mod update;
 pub mod workspace;
 
+pub use common::types::{CliResult, CliTypedResult};
+
 use crate::common::{
-    types::{CliCommand, CliResult, CliTypedResult},
+    cli_output::{CliOutputMode, GlobalOptions},
+    types::CliCommand,
     utils::cli_build_information,
 };
 use aptos_workspace_server::WorkspaceCommand;
 use async_trait::async_trait;
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use std::collections::BTreeMap;
 
 /// Command Line Interface (CLI) for developing and interacting with the Movement blockchain
 #[derive(Parser)]
 #[clap(name = "movement", author, version, propagate_version = true, styles = aptos_cli_common::aptos_cli_style())]
+pub struct MovementCli {
+    #[clap(flatten)]
+    pub global: GlobalOptions,
+    #[clap(subcommand)]
+    pub tool: Tool,
+}
+
+impl MovementCli {
+    /// Apply [`GlobalOptions`] such as output mode. Call once before [`execute`](Self::execute).
+    pub fn install_output_mode(&self) {
+        CliOutputMode::install(self.global.resolved_output_mode());
+    }
+
+    pub async fn execute(self) -> CliResult {
+        self.tool.execute().await
+    }
+}
+
+#[derive(Subcommand)]
 pub enum Tool {
     #[clap(subcommand)]
     Account(account::AccountTool),
@@ -42,6 +65,8 @@ pub enum Tool {
     Init(common::init::InitTool),
     #[clap(subcommand)]
     Key(op::key::KeyTool),
+    #[clap(subcommand)]
+    Meta(meta::MetaTool),
     #[clap(subcommand)]
     Move(move_tool::MoveTool),
     #[clap(subcommand)]
@@ -68,6 +93,7 @@ impl Tool {
             // TODO: Replace entirely with config init
             Init(tool) => tool.execute_serialized_success().await,
             Key(tool) => tool.execute().await,
+            Meta(tool) => tool.execute().await,
             Move(tool) => tool.execute().await,
             Multisig(tool) => tool.execute().await,
             Node(tool) => tool.execute().await,
@@ -98,5 +124,5 @@ impl CliCommand<BTreeMap<String, String>> for InfoTool {
 #[test]
 fn verify_tool() {
     use clap::CommandFactory;
-    Tool::command().debug_assert()
+    MovementCli::command().debug_assert()
 }

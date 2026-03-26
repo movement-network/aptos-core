@@ -1,7 +1,10 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::governance::{utils::*, *};
+use crate::{
+    governance::{utils::*, *},
+    human_println,
+};
 use clap::Subcommand;
 
 /// Tool for on-chain governance from delegation pools
@@ -80,7 +83,11 @@ impl CliCommand<ProposalSubmissionSummary> for SubmitProposal {
             ))
             .await?;
         let proposal_id = extract_proposal_id(&txn)?;
-        summaries.push(TransactionSummary::from(&txn));
+        summaries.push(
+            self.args
+                .txn_options
+                .summarize_submitted_transaction_ref(&txn),
+        );
         Ok(ProposalSubmissionSummary {
             proposal_id,
             txn_summaries: summaries,
@@ -162,7 +169,7 @@ impl CliCommand<Vec<TransactionSummary>> for SubmitVote {
                     vote,
                 ))
                 .await
-                .map(TransactionSummary::from)?,
+                .map(|t| self.args.txn_options.summarize_submitted_transaction(t))?,
         );
 
         Ok(summaries)
@@ -192,14 +199,16 @@ async fn delegation_pool_governance_precheck(
     if is_partial_governance_voting_enabled_for_delegation_pool(client, pool_address).await? {
         Ok(None)
     } else {
-        println!("Partial governance voting for delegation pool {} hasn't been enabled yet. Enabling it now...",
-                 pool_address);
-        let txn_summary = txn_options
+        human_println!(
+            "Partial governance voting for delegation pool {} hasn't been enabled yet. Enabling it now...",
+            pool_address
+        );
+        let txn = txn_options
             .submit_transaction(
                 aptos_stdlib::delegation_pool_enable_partial_governance_voting(pool_address),
             )
-            .await
-            .map(TransactionSummary::from)?;
+            .await?;
+        let txn_summary = txn_options.summarize_submitted_transaction_ref(&txn);
         Ok(Some(txn_summary))
     }
 }

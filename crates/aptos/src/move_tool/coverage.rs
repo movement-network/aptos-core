@@ -2,7 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    common::types::{CliCommand, CliError, CliResult, CliTypedResult, MovePackageOptions},
+    common::{
+        cli_output::CliOutputMode,
+        types::{CliCommand, CliError, CliResult, CliTypedResult, MovePackageOptions},
+    },
+    human_println,
     move_tool::fix_bytecode_version,
 };
 use aptos_framework::extended_checks;
@@ -59,12 +63,30 @@ impl SummaryCoverage {
             })
             .collect();
         let coverage_map = coverage_map.to_unified_exec_map();
+        let agent_stdout_clean = CliOutputMode::current().is_json_agent_mode();
         if self.output_csv {
-            format_csv_summary(
+            if agent_stdout_clean {
+                format_csv_summary(
+                    modules.as_slice(),
+                    &coverage_map,
+                    summarize_inst_cov,
+                    &mut std::io::stderr(),
+                )
+            } else {
+                format_csv_summary(
+                    modules.as_slice(),
+                    &coverage_map,
+                    summarize_inst_cov,
+                    &mut std::io::stdout(),
+                )
+            }
+        } else if agent_stdout_clean {
+            format_human_summary(
                 modules.as_slice(),
                 &coverage_map,
                 summarize_inst_cov,
-                &mut std::io::stdout(),
+                &mut std::io::stderr(),
+                self.summarize_functions,
             )
         } else {
             format_human_summary(
@@ -134,8 +156,11 @@ impl CliCommand<()> for SourceCoverage {
             .collect();
         let source_coverage = SourceCoverageBuilder::new(&coverage_map, source_map, root_modules);
         let source_coverage = source_coverage.compute_source_coverage(source_path);
-        let output_result =
-            source_coverage.output_source_coverage(&mut std::io::stdout(), self.color, self.tag);
+        let output_result = if CliOutputMode::current().is_json_agent_mode() {
+            source_coverage.output_source_coverage(&mut std::io::stderr(), self.color, self.tag)
+        } else {
+            source_coverage.output_source_coverage(&mut std::io::stdout(), self.color, self.tag)
+        };
         output_result
             .map_err(|err| CliError::UnexpectedError(format!("Failed to get coverage {}", err)))
     }
@@ -161,7 +186,12 @@ impl CliCommand<()> for BytecodeCoverage {
         let unit = package.get_module_by_name_from_root(&self.module_name)?;
         let mut disassembler = Disassembler::from_unit(&unit.unit);
         disassembler.add_coverage_map(coverage_map.to_unified_exec_map());
-        println!("{}", disassembler.disassemble()?);
+        let listing = disassembler.disassemble()?;
+        if CliOutputMode::current().is_json_agent_mode() {
+            eprintln!("{}", listing);
+        } else {
+            human_println!("{}", listing);
+        }
         Ok(())
     }
 }

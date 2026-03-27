@@ -244,7 +244,7 @@ module aptos_experimental::confidential_proof {
         let rhs = ristretto255::point_decompress(&r_compressed);
 
         assert!(
-            option::is_some(&rhs) && ristretto255::point_equals(&lhs, option::borrow(&rhs)),
+            ristretto255::point_equals(&lhs, &rhs),
             error::invalid_argument(ESIGMA_PROTOCOL_VERIFY_FAILED)
         );
     }

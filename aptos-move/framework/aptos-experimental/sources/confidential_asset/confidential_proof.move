@@ -2224,4 +2224,46 @@ module aptos_experimental::confidential_proof {
             x5s: vector::range(0, 8).map(|_| ristretto255::random_scalar()),
         }
     }
+
+    #[test_only]
+    public fun prove_registration(
+        chain_id: u8,
+        sender: address,
+        dk: &Scalar,
+        ek: &twisted_elgamal::CompressedPubkey,
+        token_address: address,
+    ): (vector<u8>, vector<u8>) {
+        let k = ristretto255::random_scalar();
+        let h = ristretto255::hash_to_point_base();
+        let r = ristretto255::point_mul(&h, &k);
+        let r_compressed = ristretto255::point_compress(&r);
+
+        let msg = vector::singleton(chain_id);
+        msg.append(std::bcs::to_bytes(&sender));
+        msg.append(std::bcs::to_bytes(&token_address));
+        msg.append(twisted_elgamal::pubkey_to_bytes(ek));
+        msg.append(ristretto255::compressed_point_to_bytes(r_compressed));
+        let e = new_scalar_from_tagged_hash(FIAT_SHAMIR_REGISTRATION_SIGMA_DST, msg);
+
+        // s = k - e * dk_inv (since ek = dk_inv * H)
+        let dk_inv = ristretto255::scalar_invert(dk).extract();
+        let s = ristretto255::scalar_sub(&k, &ristretto255::scalar_mul(&e, &dk_inv));
+
+        let commitment_bytes = ristretto255::compressed_point_to_bytes(r_compressed);
+        let response_bytes = ristretto255::scalar_to_bytes(&s);
+
+        (commitment_bytes, response_bytes)
+    }
+
+    #[test_only]
+    public fun verify_registration_proof_for_test(
+        chain_id: u8,
+        sender: address,
+        ek: &twisted_elgamal::CompressedPubkey,
+        token_address: address,
+        commitment_bytes: vector<u8>,
+        response_bytes: vector<u8>)
+    {
+        verify_registration_proof(chain_id, sender, ek, token_address, commitment_bytes, response_bytes);
+    }
 }

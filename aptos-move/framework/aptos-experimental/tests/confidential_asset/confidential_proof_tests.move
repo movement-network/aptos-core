@@ -313,6 +313,8 @@ module aptos_experimental::confidential_proof_tests {
         let params = transfer();
 
         confidential_proof::verify_transfer_proof(
+            TEST_CHAIN_ID,
+            TEST_SENDER,
             &params.recipient_ek,
             &params.recipient_ek,
             &params.current_balance,
@@ -496,6 +498,8 @@ module aptos_experimental::confidential_proof_tests {
         let params = rotate();
 
         confidential_proof::verify_rotation_proof(
+            TEST_CHAIN_ID,
+            TEST_SENDER,
             &params.new_ek,
             &params.new_ek,
             &params.current_balance,
@@ -577,6 +581,8 @@ module aptos_experimental::confidential_proof_tests {
         let (_, ek) = generate_twisted_elgamal_keypair();
 
         confidential_proof::verify_normalization_proof(
+            TEST_CHAIN_ID,
+            TEST_SENDER,
             &ek,
             &params.current_balance,
             &params.new_balance,
@@ -616,6 +622,198 @@ module aptos_experimental::confidential_proof_tests {
                 &confidential_balance::generate_balance_randomness(),
                 &params.ek
             ),
+            &params.proof);
+    }
+
+    // ==========================================
+    // Registration proof tests
+    // ==========================================
+
+    const TEST_TOKEN_ADDRESS: address = @0xbeef;
+
+    #[test]
+    fun success_registration() {
+        let (dk, ek) = generate_twisted_elgamal_keypair();
+        let (commitment, response) = confidential_proof::prove_registration(
+            TEST_CHAIN_ID, TEST_SENDER, &dk, &ek, TEST_TOKEN_ADDRESS);
+
+        confidential_proof::verify_registration_proof_for_test(
+            TEST_CHAIN_ID, TEST_SENDER, &ek, TEST_TOKEN_ADDRESS, commitment, response);
+    }
+
+    #[test]
+    #[expected_failure(abort_code = 0x010001, location = confidential_proof)]
+    fun fail_registration_if_wrong_ek() {
+        let (dk, ek) = generate_twisted_elgamal_keypair();
+        let (commitment, response) = confidential_proof::prove_registration(
+            TEST_CHAIN_ID, TEST_SENDER, &dk, &ek, TEST_TOKEN_ADDRESS);
+
+        let (_, wrong_ek) = generate_twisted_elgamal_keypair();
+
+        confidential_proof::verify_registration_proof_for_test(
+            TEST_CHAIN_ID, TEST_SENDER, &wrong_ek, TEST_TOKEN_ADDRESS, commitment, response);
+    }
+
+    #[test]
+    #[expected_failure(abort_code = 0x010001, location = confidential_proof)]
+    fun fail_registration_if_wrong_token() {
+        let (dk, ek) = generate_twisted_elgamal_keypair();
+        let (commitment, response) = confidential_proof::prove_registration(
+            TEST_CHAIN_ID, TEST_SENDER, &dk, &ek, TEST_TOKEN_ADDRESS);
+
+        confidential_proof::verify_registration_proof_for_test(
+            TEST_CHAIN_ID, TEST_SENDER, &ek, @0xdead, commitment, response);
+    }
+
+    #[test]
+    #[expected_failure(abort_code = 0x010001, location = confidential_proof)]
+    fun fail_registration_if_wrong_chain_id() {
+        let (dk, ek) = generate_twisted_elgamal_keypair();
+        let (commitment, response) = confidential_proof::prove_registration(
+            TEST_CHAIN_ID, TEST_SENDER, &dk, &ek, TEST_TOKEN_ADDRESS);
+
+        confidential_proof::verify_registration_proof_for_test(
+            TEST_CHAIN_ID + 1, TEST_SENDER, &ek, TEST_TOKEN_ADDRESS, commitment, response);
+    }
+
+    #[test]
+    #[expected_failure(abort_code = 0x010001, location = confidential_proof)]
+    fun fail_registration_if_wrong_sender() {
+        let (dk, ek) = generate_twisted_elgamal_keypair();
+        let (commitment, response) = confidential_proof::prove_registration(
+            TEST_CHAIN_ID, TEST_SENDER, &dk, &ek, TEST_TOKEN_ADDRESS);
+
+        confidential_proof::verify_registration_proof_for_test(
+            TEST_CHAIN_ID, @0xb2, &ek, TEST_TOKEN_ADDRESS, commitment, response);
+    }
+
+    // ==========================================
+    // Cross-chain replay rejection tests
+    // ==========================================
+
+    #[test]
+    #[expected_failure(abort_code = 0x010001, location = confidential_proof)]
+    fun fail_withdraw_if_wrong_chain_id() {
+        let params = withdraw();
+
+        confidential_proof::verify_withdrawal_proof(
+            TEST_CHAIN_ID + 1,
+            TEST_SENDER,
+            &params.ek,
+            params.amount,
+            &params.current_balance,
+            &params.new_balance,
+            &params.proof);
+    }
+
+    #[test]
+    #[expected_failure(abort_code = 0x010001, location = confidential_proof)]
+    fun fail_withdraw_if_wrong_sender() {
+        let params = withdraw();
+
+        confidential_proof::verify_withdrawal_proof(
+            TEST_CHAIN_ID,
+            @0xb2,
+            &params.ek,
+            params.amount,
+            &params.current_balance,
+            &params.new_balance,
+            &params.proof);
+    }
+
+    #[test]
+    #[expected_failure(abort_code = 0x010001, location = confidential_proof)]
+    fun fail_transfer_if_wrong_chain_id() {
+        let params = transfer();
+
+        confidential_proof::verify_transfer_proof(
+            TEST_CHAIN_ID + 1,
+            TEST_SENDER,
+            &params.sender_ek,
+            &params.recipient_ek,
+            &params.current_balance,
+            &params.new_balance,
+            &params.sender_amount,
+            &params.recipient_amount,
+            &params.auditor_eks,
+            &params.auditor_amounts,
+            &params.proof);
+    }
+
+    #[test]
+    #[expected_failure(abort_code = 0x010001, location = confidential_proof)]
+    fun fail_transfer_if_wrong_sender() {
+        let params = transfer();
+
+        confidential_proof::verify_transfer_proof(
+            TEST_CHAIN_ID,
+            @0xb2,
+            &params.sender_ek,
+            &params.recipient_ek,
+            &params.current_balance,
+            &params.new_balance,
+            &params.sender_amount,
+            &params.recipient_amount,
+            &params.auditor_eks,
+            &params.auditor_amounts,
+            &params.proof);
+    }
+
+    #[test]
+    #[expected_failure(abort_code = 0x010001, location = confidential_proof)]
+    fun fail_rotate_if_wrong_chain_id() {
+        let params = rotate();
+
+        confidential_proof::verify_rotation_proof(
+            TEST_CHAIN_ID + 1,
+            TEST_SENDER,
+            &params.current_ek,
+            &params.new_ek,
+            &params.current_balance,
+            &params.new_balance,
+            &params.proof);
+    }
+
+    #[test]
+    #[expected_failure(abort_code = 0x010001, location = confidential_proof)]
+    fun fail_rotate_if_wrong_sender() {
+        let params = rotate();
+
+        confidential_proof::verify_rotation_proof(
+            TEST_CHAIN_ID,
+            @0xb2,
+            &params.current_ek,
+            &params.new_ek,
+            &params.current_balance,
+            &params.new_balance,
+            &params.proof);
+    }
+
+    #[test]
+    #[expected_failure(abort_code = 0x010001, location = confidential_proof)]
+    fun fail_normalize_if_wrong_chain_id() {
+        let params = normalize();
+
+        confidential_proof::verify_normalization_proof(
+            TEST_CHAIN_ID + 1,
+            TEST_SENDER,
+            &params.ek,
+            &params.current_balance,
+            &params.new_balance,
+            &params.proof);
+    }
+
+    #[test]
+    #[expected_failure(abort_code = 0x010001, location = confidential_proof)]
+    fun fail_normalize_if_wrong_sender() {
+        let params = normalize();
+
+        confidential_proof::verify_normalization_proof(
+            TEST_CHAIN_ID,
+            @0xb2,
+            &params.ek,
+            &params.current_balance,
+            &params.new_balance,
             &params.proof);
     }
 }

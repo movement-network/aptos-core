@@ -5,6 +5,7 @@ module aptos_experimental::confidential_proof {
     use std::option;
     use std::option::Option;
     use std::vector;
+    use aptos_std::aptos_hash;
     use aptos_std::ristretto255::{Self, CompressedRistretto, Scalar};
     use aptos_std::ristretto255_bulletproofs::{Self as bulletproofs, RangeProof};
 
@@ -24,10 +25,11 @@ module aptos_experimental::confidential_proof {
     // Constants
     //
 
-    const FIAT_SHAMIR_WITHDRAWAL_SIGMA_DST: vector<u8> = b"AptosConfidentialAsset/WithdrawalProofFiatShamir";
-    const FIAT_SHAMIR_TRANSFER_SIGMA_DST: vector<u8> = b"AptosConfidentialAsset/TransferProofFiatShamir";
-    const FIAT_SHAMIR_ROTATION_SIGMA_DST: vector<u8> = b"AptosConfidentialAsset/RotationProofFiatShamir";
-    const FIAT_SHAMIR_NORMALIZATION_SIGMA_DST: vector<u8> = b"AptosConfidentialAsset/NormalizationProofFiatShamir";
+    const FIAT_SHAMIR_WITHDRAWAL_SIGMA_DST: vector<u8> = b"MovementConfidentialAsset/Withdrawal";
+    const FIAT_SHAMIR_TRANSFER_SIGMA_DST: vector<u8> = b"MovementConfidentialAsset/Transfer";
+    const FIAT_SHAMIR_ROTATION_SIGMA_DST: vector<u8> = b"MovementConfidentialAsset/Rotation";
+    const FIAT_SHAMIR_NORMALIZATION_SIGMA_DST: vector<u8> = b"MovementConfidentialAsset/Normalization";
+    const FIAT_SHAMIR_REGISTRATION_SIGMA_DST: vector<u8> = b"MovementConfidentialAsset/Registration";
 
     const BULLETPROOFS_DST: vector<u8> = b"AptosConfidentialAsset/BulletproofRangeProof";
     const BULLETPROOFS_NUM_BITS: u64 = 16;
@@ -202,16 +204,63 @@ module aptos_experimental::confidential_proof {
     ///    under the same encryption key (`ek`) before and after the withdrawal of the specified amount (`amount`), respectively.
     /// 2. The relationship `new_balance = current_balance - amount` holds, verifying that the withdrawal amount is deducted correctly.
     /// 3. The new balance (`new_balance`) is normalized, with each chunk adhering to the range [0, 2^16).
+    /// Verifies a registration proof (ZKPoK of decryption key).
+    /// Ensures the registrant knows the decryption key dk such that ek = dk^{-1} * H.
+    /// The proof is a Schnorr proof: verifier checks s * H + e * ek == R.
+    public(friend) fun verify_registration_proof(
+        chain_id: u8,
+        sender: address,
+        ek: &twisted_elgamal::CompressedPubkey,
+        token_address: address,
+        commitment_bytes: vector<u8>,
+        response_bytes: vector<u8>)
+    {
+        // Decompress the commitment point R
+        let r_point = ristretto255::new_compressed_point_from_bytes(commitment_bytes);
+        assert!(option::is_some(&r_point), error::invalid_argument(ESIGMA_PROTOCOL_VERIFY_FAILED));
+        let r_compressed = option::extract(&mut r_point);
+
+        // Parse the response scalar
+        let s = ristretto255::new_scalar_from_bytes(response_bytes);
+        assert!(option::is_some(&s), error::invalid_argument(ESIGMA_PROTOCOL_VERIFY_FAILED));
+        let s = option::extract(&mut s);
+
+        // Recompute Fiat-Shamir challenge: e = tagged_hash("Registration", chain_id || sender || token || ek || R)
+        let msg = vector::singleton(chain_id);
+        msg.append(std::bcs::to_bytes(&sender));
+        msg.append(std::bcs::to_bytes(&token_address));
+        msg.append(twisted_elgamal::pubkey_to_bytes(ek));
+        msg.append(ristretto255::compressed_point_to_bytes(r_compressed));
+        let e = new_scalar_from_tagged_hash(FIAT_SHAMIR_REGISTRATION_SIGMA_DST, msg);
+
+        // Verify: s * H + e * ek == R
+        let h = ristretto255::hash_to_point_base();
+        let ek_point = twisted_elgamal::pubkey_to_point(ek);
+
+        let lhs = ristretto255::point_add(
+            &ristretto255::point_mul(&h, &s),
+            &ristretto255::point_mul(&ek_point, &e)
+        );
+        let rhs = ristretto255::point_decompress(&r_compressed);
+
+        assert!(
+            option::is_some(&rhs) && ristretto255::point_equals(&lhs, option::borrow(&rhs)),
+            error::invalid_argument(ESIGMA_PROTOCOL_VERIFY_FAILED)
+        );
+    }
+
     ///
     /// If all conditions are satisfied, the proof validates the withdrawal; otherwise, the function causes an error.
     public fun verify_withdrawal_proof(
+        chain_id: u8,
+        sender: address,
         ek: &twisted_elgamal::CompressedPubkey,
         amount: u64,
         current_balance: &confidential_balance::ConfidentialBalance,
         new_balance: &confidential_balance::ConfidentialBalance,
         proof: &WithdrawalProof)
     {
-        verify_withdrawal_sigma_proof(ek, amount, current_balance, new_balance, &proof.sigma_proof);
+        verify_withdrawal_sigma_proof(chain_id, sender, ek, amount, current_balance, new_balance, &proof.sigma_proof);
         verify_new_balance_range_proof(new_balance, &proof.zkrp_new_balance);
     }
 
@@ -229,6 +278,8 @@ module aptos_experimental::confidential_proof {
     ///
     /// If all conditions are satisfied, the proof validates the transfer; otherwise, the function causes an error.
     public fun verify_transfer_proof(
+        chain_id: u8,
+        sender: address,
         sender_ek: &twisted_elgamal::CompressedPubkey,
         recipient_ek: &twisted_elgamal::CompressedPubkey,
         current_balance: &confidential_balance::ConfidentialBalance,
@@ -240,6 +291,8 @@ module aptos_experimental::confidential_proof {
         proof: &TransferProof)
     {
         verify_transfer_sigma_proof(
+            chain_id,
+            sender,
             sender_ek,
             recipient_ek,
             current_balance,
@@ -264,12 +317,14 @@ module aptos_experimental::confidential_proof {
     ///
     /// If all conditions are satisfied, the proof validates the normalization; otherwise, the function causes an error.
     public fun verify_normalization_proof(
+        chain_id: u8,
+        sender: address,
         ek: &twisted_elgamal::CompressedPubkey,
         current_balance: &confidential_balance::ConfidentialBalance,
         new_balance: &confidential_balance::ConfidentialBalance,
         proof: &NormalizationProof)
     {
-        verify_normalization_sigma_proof(ek, current_balance, new_balance, &proof.sigma_proof);
+        verify_normalization_sigma_proof(chain_id, sender, ek, current_balance, new_balance, &proof.sigma_proof);
         verify_new_balance_range_proof(new_balance, &proof.zkrp_new_balance);
     }
 
@@ -284,13 +339,15 @@ module aptos_experimental::confidential_proof {
     ///
     /// If all conditions are satisfied, the proof validates the key rotation; otherwise, the function causes an error.
     public fun verify_rotation_proof(
+        chain_id: u8,
+        sender: address,
         current_ek: &twisted_elgamal::CompressedPubkey,
         new_ek: &twisted_elgamal::CompressedPubkey,
         current_balance: &confidential_balance::ConfidentialBalance,
         new_balance: &confidential_balance::ConfidentialBalance,
         proof: &RotationProof)
     {
-        verify_rotation_sigma_proof(current_ek, new_ek, current_balance, new_balance, &proof.sigma_proof);
+        verify_rotation_sigma_proof(chain_id, sender, current_ek, new_ek, current_balance, new_balance, &proof.sigma_proof);
         verify_new_balance_range_proof(new_balance, &proof.zkrp_new_balance);
     }
 
@@ -300,6 +357,8 @@ module aptos_experimental::confidential_proof {
 
     /// Verifies the validity of the `WithdrawalSigmaProof`.
     fun verify_withdrawal_sigma_proof(
+        chain_id: u8,
+        sender: address,
         ek: &twisted_elgamal::CompressedPubkey,
         amount: u64,
         current_balance: &confidential_balance::ConfidentialBalance,
@@ -309,7 +368,7 @@ module aptos_experimental::confidential_proof {
         let amount_chunks = confidential_balance::split_into_chunks_u64(amount);
         let amount = ristretto255::new_scalar_from_u64(amount);
 
-        let rho = fiat_shamir_withdrawal_sigma_proof_challenge(ek, &amount_chunks, current_balance, &proof.xs);
+        let rho = fiat_shamir_withdrawal_sigma_proof_challenge(chain_id, sender, ek, &amount_chunks, current_balance, &proof.xs);
 
         let gammas = msm_withdrawal_gammas(&rho);
 
@@ -390,6 +449,8 @@ module aptos_experimental::confidential_proof {
 
     /// Verifies the validity of the `TransferSigmaProof`.
     fun verify_transfer_sigma_proof(
+        chain_id: u8,
+        sender: address,
         sender_ek: &twisted_elgamal::CompressedPubkey,
         recipient_ek: &twisted_elgamal::CompressedPubkey,
         current_balance: &confidential_balance::ConfidentialBalance,
@@ -401,6 +462,8 @@ module aptos_experimental::confidential_proof {
         proof: &TransferSigmaProof)
     {
         let rho = fiat_shamir_transfer_sigma_proof_challenge(
+            chain_id,
+            sender,
             sender_ek,
             recipient_ek,
             current_balance,
@@ -582,12 +645,14 @@ module aptos_experimental::confidential_proof {
 
     /// Verifies the validity of the `NormalizationSigmaProof`.
     fun verify_normalization_sigma_proof(
+        chain_id: u8,
+        sender: address,
         ek: &twisted_elgamal::CompressedPubkey,
         current_balance: &confidential_balance::ConfidentialBalance,
         new_balance: &confidential_balance::ConfidentialBalance,
         proof: &NormalizationSigmaProof)
     {
-        let rho = fiat_shamir_normalization_sigma_proof_challenge(ek, current_balance, new_balance, &proof.xs);
+        let rho = fiat_shamir_normalization_sigma_proof_challenge(chain_id, sender, ek, current_balance, new_balance, &proof.xs);
         let gammas = msm_normalization_gammas(&rho);
 
         let scalars_lhs = vector[gammas.g1, gammas.g2];
@@ -666,6 +731,8 @@ module aptos_experimental::confidential_proof {
 
     /// Verifies the validity of the `RotationSigmaProof`.
     fun verify_rotation_sigma_proof(
+        chain_id: u8,
+        sender: address,
         current_ek: &twisted_elgamal::CompressedPubkey,
         new_ek: &twisted_elgamal::CompressedPubkey,
         current_balance: &confidential_balance::ConfidentialBalance,
@@ -673,6 +740,8 @@ module aptos_experimental::confidential_proof {
         proof: &RotationSigmaProof)
     {
         let rho = fiat_shamir_rotation_sigma_proof_challenge(
+            chain_id,
+            sender,
             current_ek,
             new_ek,
             current_balance,
@@ -1121,6 +1190,43 @@ module aptos_experimental::confidential_proof {
     }
 
     //
+    // Tagged hashing helpers for Fiat-Shamir challenge derivation.
+    // Uses SHA3-512 with BIP-340-style tagged hashing for domain separation.
+    // This is distinct from Aptos's approach (SHA2-512 with raw prefix concatenation).
+    //
+
+    /// BIP-340-style tagged hash using SHA3-512:
+    ///   tagged_hash(tag, msg) = SHA3-512(SHA3-512(tag) || SHA3-512(tag) || msg)
+    fun tagged_hash(tag: vector<u8>, msg: vector<u8>): vector<u8> {
+        let tag_hash = aptos_hash::sha3_512(tag);
+        let input = tag_hash;
+        input.append(tag_hash);
+        input.append(msg);
+        aptos_hash::sha3_512(input)
+    }
+
+    /// Derives a scalar from a tagged hash, using ristretto255::new_scalar_uniform_from_64_bytes
+    /// to reduce the 64-byte SHA3-512 output modulo the curve order l.
+    fun new_scalar_from_tagged_hash(tag: vector<u8>, msg: vector<u8>): Scalar {
+        let hash = tagged_hash(tag, msg);
+        std::option::extract(&mut ristretto255::new_scalar_uniform_from_64_bytes(hash))
+    }
+
+    /// Derives a scalar from a plain SHA3-512 hash (used for MSM gamma scalars).
+    fun new_scalar_from_sha3_512(bytes: vector<u8>): Scalar {
+        let hash = aptos_hash::sha3_512(bytes);
+        std::option::extract(&mut ristretto255::new_scalar_uniform_from_64_bytes(hash))
+    }
+
+    /// Prepends chain_id (as a single byte) and sender address to a Fiat-Shamir message buffer.
+    fun prepend_domain_context(bytes: &mut vector<u8>, chain_id: u8, sender: address) {
+        let context = vector::singleton(chain_id);
+        context.append(std::bcs::to_bytes(&sender));
+        context.append(*bytes);
+        *bytes = context;
+    }
+
+    //
     // Private functions for Fiat-Shamir challenge derivation.
     // The Fiat Shamir is used to make the proofs non-interactive.
     // The challenge has the same for the proof generation and verification and is derived from the public parameters.
@@ -1128,13 +1234,15 @@ module aptos_experimental::confidential_proof {
 
     /// Derives the Fiat-Shamir challenge for the `WithdrawalSigmaProof`.
     fun fiat_shamir_withdrawal_sigma_proof_challenge(
+        chain_id: u8,
+        sender: address,
         ek: &twisted_elgamal::CompressedPubkey,
         amount_chunks: &vector<Scalar>,
         current_balance: &confidential_balance::ConfidentialBalance,
         proof_xs: &WithdrawalSigmaProofXs): Scalar
     {
-        // rho = H(DST, G, H, P, v_{1..4}, (C_cur, D_cur)_{1..8}, X_{1..18})
-        let bytes = FIAT_SHAMIR_WITHDRAWAL_SIGMA_DST;
+        // rho = tagged_hash(DST, chain_id || sender || G || H || P || v_{1..4} || (C_cur, D_cur)_{1..8} || X_{1..18})
+        let bytes = vector[];
 
         bytes.append(ristretto255::compressed_point_to_bytes(ristretto255::basepoint_compressed()));
         bytes.append(
@@ -1154,11 +1262,14 @@ module aptos_experimental::confidential_proof {
             bytes.append(ristretto255::point_to_bytes(x));
         });
 
-        ristretto255::new_scalar_from_sha2_512(bytes)
+        prepend_domain_context(&mut bytes, chain_id, sender);
+        new_scalar_from_tagged_hash(FIAT_SHAMIR_WITHDRAWAL_SIGMA_DST, bytes)
     }
 
     /// Derives the Fiat-Shamir challenge for the `TransferSigmaProof`.
     fun fiat_shamir_transfer_sigma_proof_challenge(
+        chain_id: u8,
+        sender: address,
         sender_ek: &twisted_elgamal::CompressedPubkey,
         recipient_ek: &twisted_elgamal::CompressedPubkey,
         current_balance: &confidential_balance::ConfidentialBalance,
@@ -1169,8 +1280,8 @@ module aptos_experimental::confidential_proof {
         auditor_amounts: &vector<confidential_balance::ConfidentialBalance>,
         proof_xs: &TransferSigmaProofXs): Scalar
     {
-        // rho = H(DST, G, H, P_s, P_r, P_a_{1..n}, (C_cur, D_cur)_{1..8}, (C_v, D_v)_{1..4}, D_a_{1..4n}, D_s_{1..4}, (C_new, D_new)_{1..8}, X_{1..30 + 4n})
-        let bytes = FIAT_SHAMIR_TRANSFER_SIGMA_DST;
+        // rho = tagged_hash(DST, chain_id || sender || G || H || P_s || P_r || ...)
+        let bytes = vector[];
 
         bytes.append(ristretto255::compressed_point_to_bytes(ristretto255::basepoint_compressed()));
         bytes.append(
@@ -1215,18 +1326,21 @@ module aptos_experimental::confidential_proof {
             bytes.append(ristretto255::point_to_bytes(x));
         });
 
-        ristretto255::new_scalar_from_sha2_512(bytes)
+        prepend_domain_context(&mut bytes, chain_id, sender);
+        new_scalar_from_tagged_hash(FIAT_SHAMIR_TRANSFER_SIGMA_DST, bytes)
     }
 
     /// Derives the Fiat-Shamir challenge for the `NormalizationSigmaProof`.
     fun fiat_shamir_normalization_sigma_proof_challenge(
+        chain_id: u8,
+        sender: address,
         ek: &twisted_elgamal::CompressedPubkey,
         current_balance: &confidential_balance::ConfidentialBalance,
         new_balance: &confidential_balance::ConfidentialBalance,
         proof_xs: &NormalizationSigmaProofXs): Scalar
     {
-        // rho = H(DST, G, H, P, (C_cur, D_cur)_{1..8}, (C_new, D_new)_{1..8}, X_{1..18})
-        let bytes = FIAT_SHAMIR_NORMALIZATION_SIGMA_DST;
+        // rho = tagged_hash(DST, chain_id || sender || G || H || P || ...)
+        let bytes = vector[];
 
         bytes.append(ristretto255::compressed_point_to_bytes(ristretto255::basepoint_compressed()));
         bytes.append(
@@ -1244,19 +1358,22 @@ module aptos_experimental::confidential_proof {
             bytes.append(ristretto255::point_to_bytes(x));
         });
 
-        ristretto255::new_scalar_from_sha2_512(bytes)
+        prepend_domain_context(&mut bytes, chain_id, sender);
+        new_scalar_from_tagged_hash(FIAT_SHAMIR_NORMALIZATION_SIGMA_DST, bytes)
     }
 
     /// Derives the Fiat-Shamir challenge for the `RotationSigmaProof`.
     fun fiat_shamir_rotation_sigma_proof_challenge(
+        chain_id: u8,
+        sender: address,
         current_ek: &twisted_elgamal::CompressedPubkey,
         new_ek: &twisted_elgamal::CompressedPubkey,
         current_balance: &confidential_balance::ConfidentialBalance,
         new_balance: &confidential_balance::ConfidentialBalance,
         proof_xs: &RotationSigmaProofXs): Scalar
     {
-        // rho = H(DST, G, H, P_cur, P_new, (C_cur, D_cur)_{1..8}, (C_new, D_new)_{1..8}, X_{1..19})
-        let bytes = FIAT_SHAMIR_ROTATION_SIGMA_DST;
+        // rho = tagged_hash(DST, chain_id || sender || G || H || P_cur || P_new || ...)
+        let bytes = vector[];
 
         bytes.append(ristretto255::compressed_point_to_bytes(ristretto255::basepoint_compressed()));
         bytes.append(
@@ -1276,7 +1393,8 @@ module aptos_experimental::confidential_proof {
             bytes.append(ristretto255::point_to_bytes(x));
         });
 
-        ristretto255::new_scalar_from_sha2_512(bytes)
+        prepend_domain_context(&mut bytes, chain_id, sender);
+        new_scalar_from_tagged_hash(FIAT_SHAMIR_ROTATION_SIGMA_DST, bytes)
     }
 
     //
@@ -1287,13 +1405,13 @@ module aptos_experimental::confidential_proof {
     /// Returns the scalar multipliers for the `WithdrawalSigmaProof`.
     fun msm_withdrawal_gammas(rho: &Scalar): WithdrawalSigmaProofGammas {
         WithdrawalSigmaProofGammas {
-            g1: ristretto255::new_scalar_from_sha2_512(msm_gamma_1(rho, 1)),
-            g2: ristretto255::new_scalar_from_sha2_512(msm_gamma_1(rho, 2)),
+            g1: new_scalar_from_sha3_512(msm_gamma_1(rho, 1)),
+            g2: new_scalar_from_sha3_512(msm_gamma_1(rho, 2)),
             g3s: vector::range(0, 8).map(|i| {
-                ristretto255::new_scalar_from_sha2_512(msm_gamma_2(rho, 3, (i as u8)))
+                new_scalar_from_sha3_512(msm_gamma_2(rho, 3, (i as u8)))
             }),
             g4s: vector::range(0, 8).map(|i| {
-                ristretto255::new_scalar_from_sha2_512(msm_gamma_2(rho, 4, (i as u8)))
+                new_scalar_from_sha3_512(msm_gamma_2(rho, 4, (i as u8)))
             }),
         }
     }
@@ -1301,27 +1419,27 @@ module aptos_experimental::confidential_proof {
     /// Returns the scalar multipliers for the `TransferSigmaProof`.
     fun msm_transfer_gammas(rho: &Scalar, auditors_count: u64): TransferSigmaProofGammas {
         TransferSigmaProofGammas {
-            g1: ristretto255::new_scalar_from_sha2_512(msm_gamma_1(rho, 1)),
+            g1: new_scalar_from_sha3_512(msm_gamma_1(rho, 1)),
             g2s: vector::range(0, 8).map(|i| {
-                ristretto255::new_scalar_from_sha2_512(msm_gamma_2(rho, 2, (i as u8)))
+                new_scalar_from_sha3_512(msm_gamma_2(rho, 2, (i as u8)))
             }),
             g3s: vector::range(0, 4).map(|i| {
-                ristretto255::new_scalar_from_sha2_512(msm_gamma_2(rho, 3, (i as u8)))
+                new_scalar_from_sha3_512(msm_gamma_2(rho, 3, (i as u8)))
             }),
             g4s: vector::range(0, 4).map(|i| {
-                ristretto255::new_scalar_from_sha2_512(msm_gamma_2(rho, 4, (i as u8)))
+                new_scalar_from_sha3_512(msm_gamma_2(rho, 4, (i as u8)))
             }),
-            g5: ristretto255::new_scalar_from_sha2_512(msm_gamma_1(rho, 5)),
+            g5: new_scalar_from_sha3_512(msm_gamma_1(rho, 5)),
             g6s: vector::range(0, 8).map(|i| {
-                ristretto255::new_scalar_from_sha2_512(msm_gamma_2(rho, 6, (i as u8)))
+                new_scalar_from_sha3_512(msm_gamma_2(rho, 6, (i as u8)))
             }),
             g7s: vector::range(0, auditors_count).map(|i| {
                 vector::range(0, 4).map(|j| {
-                    ristretto255::new_scalar_from_sha2_512(msm_gamma_2(rho, (i + 7 as u8), (j as u8)))
+                    new_scalar_from_sha3_512(msm_gamma_2(rho, (i + 7 as u8), (j as u8)))
                 })
             }),
             g8s: vector::range(0, 4).map(|i| {
-                ristretto255::new_scalar_from_sha2_512(msm_gamma_2(rho, 8, (i as u8)))
+                new_scalar_from_sha3_512(msm_gamma_2(rho, 8, (i as u8)))
             }),
         }
     }
@@ -1329,13 +1447,13 @@ module aptos_experimental::confidential_proof {
     /// Returns the scalar multipliers for the `NormalizationSigmaProof`.
     fun msm_normalization_gammas(rho: &Scalar): NormalizationSigmaProofGammas {
         NormalizationSigmaProofGammas {
-            g1: ristretto255::new_scalar_from_sha2_512(msm_gamma_1(rho, 1)),
-            g2: ristretto255::new_scalar_from_sha2_512(msm_gamma_1(rho, 2)),
+            g1: new_scalar_from_sha3_512(msm_gamma_1(rho, 1)),
+            g2: new_scalar_from_sha3_512(msm_gamma_1(rho, 2)),
             g3s: vector::range(0, 8).map(|i| {
-                ristretto255::new_scalar_from_sha2_512(msm_gamma_2(rho, 3, (i as u8)))
+                new_scalar_from_sha3_512(msm_gamma_2(rho, 3, (i as u8)))
             }),
             g4s: vector::range(0, 8).map(|i| {
-                ristretto255::new_scalar_from_sha2_512(msm_gamma_2(rho, 4, (i as u8)))
+                new_scalar_from_sha3_512(msm_gamma_2(rho, 4, (i as u8)))
             }),
         }
     }
@@ -1343,14 +1461,14 @@ module aptos_experimental::confidential_proof {
     /// Returns the scalar multipliers for the `RotationSigmaProof`.
     fun msm_rotation_gammas(rho: &Scalar): RotationSigmaProofGammas {
         RotationSigmaProofGammas {
-            g1: ristretto255::new_scalar_from_sha2_512(msm_gamma_1(rho, 1)),
-            g2: ristretto255::new_scalar_from_sha2_512(msm_gamma_1(rho, 2)),
-            g3: ristretto255::new_scalar_from_sha2_512(msm_gamma_1(rho, 3)),
+            g1: new_scalar_from_sha3_512(msm_gamma_1(rho, 1)),
+            g2: new_scalar_from_sha3_512(msm_gamma_1(rho, 2)),
+            g3: new_scalar_from_sha3_512(msm_gamma_1(rho, 3)),
             g4s: vector::range(0, 8).map(|i| {
-                ristretto255::new_scalar_from_sha2_512(msm_gamma_2(rho, 4, (i as u8)))
+                new_scalar_from_sha3_512(msm_gamma_2(rho, 4, (i as u8)))
             }),
             g5s: vector::range(0, 8).map(|i| {
-                ristretto255::new_scalar_from_sha2_512(msm_gamma_2(rho, 5, (i as u8)))
+                new_scalar_from_sha3_512(msm_gamma_2(rho, 5, (i as u8)))
             }),
         }
     }
@@ -1437,6 +1555,8 @@ module aptos_experimental::confidential_proof {
 
     #[test_only]
     public fun prove_withdrawal(
+        chain_id: u8,
+        sender: address,
         dk: &Scalar,
         ek: &twisted_elgamal::CompressedPubkey,
         amount: u64,
@@ -1489,7 +1609,7 @@ module aptos_experimental::confidential_proof {
 
         let amount_chunks = confidential_balance::split_into_chunks_u64(amount);
 
-        let rho = fiat_shamir_withdrawal_sigma_proof_challenge(ek, &amount_chunks, current_balance, &proof_xs);
+        let rho = fiat_shamir_withdrawal_sigma_proof_challenge(chain_id, sender, ek, &amount_chunks, current_balance, &proof_xs);
 
         let new_amount_chunks = confidential_balance::split_into_chunks_u128(new_amount);
 
@@ -1519,6 +1639,8 @@ module aptos_experimental::confidential_proof {
 
     #[test_only]
     public fun prove_transfer(
+        chain_id: u8,
+        sender: address,
         sender_dk: &Scalar,
         sender_ek: &twisted_elgamal::CompressedPubkey,
         recipient_ek: &twisted_elgamal::CompressedPubkey,
@@ -1643,6 +1765,8 @@ module aptos_experimental::confidential_proof {
         };
 
         let rho = fiat_shamir_transfer_sigma_proof_challenge(
+            chain_id,
+            sender,
             sender_ek,
             recipient_ek,
             current_balance,
@@ -1693,6 +1817,8 @@ module aptos_experimental::confidential_proof {
 
     #[test_only]
     public fun prove_normalization(
+        chain_id: u8,
+        sender: address,
         dk: &Scalar,
         ek: &twisted_elgamal::CompressedPubkey,
         amount: u128,
@@ -1745,6 +1871,8 @@ module aptos_experimental::confidential_proof {
         };
 
         let rho = fiat_shamir_normalization_sigma_proof_challenge(
+            chain_id,
+            sender,
             ek,
             current_balance,
             &new_balance,
@@ -1779,6 +1907,8 @@ module aptos_experimental::confidential_proof {
 
     #[test_only]
     public fun prove_rotation(
+        chain_id: u8,
+        sender: address,
         current_dk: &Scalar,
         new_dk: &Scalar,
         current_ek: &twisted_elgamal::CompressedPubkey,
@@ -1834,6 +1964,8 @@ module aptos_experimental::confidential_proof {
         };
 
         let rho = fiat_shamir_rotation_sigma_proof_challenge(
+            chain_id,
+            sender,
             current_ek,
             new_ek,
             current_balance,

@@ -4,6 +4,10 @@ module aptos_experimental::confidential_proof_tests {
     use aptos_experimental::confidential_proof;
     use aptos_experimental::ristretto255_twisted_elgamal::{Self as twisted_elgamal, generate_twisted_elgamal_keypair};
 
+    // Test constants for domain separation
+    const TEST_CHAIN_ID: u8 = 4;
+    const TEST_SENDER: address = @0xa1;
+
     struct WithdrawParameters has drop {
         ek: twisted_elgamal::CompressedPubkey,
         amount: u64,
@@ -62,6 +66,8 @@ module aptos_experimental::confidential_proof_tests {
             proof,
             new_balance
         ) = confidential_proof::prove_withdrawal(
+            TEST_CHAIN_ID,
+            TEST_SENDER,
             &dk,
             &ek,
             amount,
@@ -104,6 +110,8 @@ module aptos_experimental::confidential_proof_tests {
             recipient_amount,
             auditor_amounts,
         ) = confidential_proof::prove_transfer(
+            TEST_CHAIN_ID,
+            TEST_SENDER,
             &sender_dk,
             &sender_ek,
             &recipient_ek,
@@ -145,6 +153,8 @@ module aptos_experimental::confidential_proof_tests {
             proof,
             new_balance,
         ) = confidential_proof::prove_rotation(
+            TEST_CHAIN_ID,
+            TEST_SENDER,
             &current_dk,
             &new_dk,
             &current_ek,
@@ -178,6 +188,8 @@ module aptos_experimental::confidential_proof_tests {
             proof,
             new_balance
         ) = confidential_proof::prove_normalization(
+            TEST_CHAIN_ID,
+            TEST_SENDER,
             &dk,
             &ek,
             amount,
@@ -198,6 +210,8 @@ module aptos_experimental::confidential_proof_tests {
         let params = withdraw();
 
         confidential_proof::verify_withdrawal_proof(
+            TEST_CHAIN_ID,
+            TEST_SENDER,
             &params.ek,
             params.amount,
             &params.current_balance,
@@ -211,6 +225,8 @@ module aptos_experimental::confidential_proof_tests {
         let params = withdraw();
 
         confidential_proof::verify_withdrawal_proof(
+            TEST_CHAIN_ID,
+            TEST_SENDER,
             &params.ek,
             1000,
             &params.current_balance,
@@ -224,6 +240,8 @@ module aptos_experimental::confidential_proof_tests {
         let params = withdraw();
 
         confidential_proof::verify_withdrawal_proof(
+            TEST_CHAIN_ID,
+            TEST_SENDER,
             &params.ek,
             params.amount,
             &confidential_balance::new_actual_balance_from_u128(
@@ -241,6 +259,8 @@ module aptos_experimental::confidential_proof_tests {
         let params = withdraw();
 
         confidential_proof::verify_withdrawal_proof(
+            TEST_CHAIN_ID,
+            TEST_SENDER,
             &params.ek,
             params.amount,
             &params.current_balance,
@@ -260,6 +280,8 @@ module aptos_experimental::confidential_proof_tests {
         let params = withdraw_with_params(0, max_uint128 - 1, 1);
 
         confidential_proof::verify_withdrawal_proof(
+            TEST_CHAIN_ID,
+            TEST_SENDER,
             &params.ek,
             params.amount,
             &params.current_balance,
@@ -272,6 +294,8 @@ module aptos_experimental::confidential_proof_tests {
         let params = transfer();
 
         confidential_proof::verify_transfer_proof(
+            TEST_CHAIN_ID,
+            TEST_SENDER,
             &params.sender_ek,
             &params.recipient_ek,
             &params.current_balance,
@@ -306,6 +330,8 @@ module aptos_experimental::confidential_proof_tests {
         let params = transfer();
 
         confidential_proof::verify_transfer_proof(
+            TEST_CHAIN_ID,
+            TEST_SENDER,
             &params.sender_ek,
             &params.sender_ek,
             &params.current_balance,
@@ -323,6 +349,8 @@ module aptos_experimental::confidential_proof_tests {
         let params = transfer();
 
         confidential_proof::verify_transfer_proof(
+            TEST_CHAIN_ID,
+            TEST_SENDER,
             &params.sender_ek,
             &params.recipient_ek,
             &confidential_balance::new_actual_balance_from_u128(
@@ -346,6 +374,8 @@ module aptos_experimental::confidential_proof_tests {
         let params = transfer_with_parameters(0, max_uint128 - 1, 1);
 
         confidential_proof::verify_transfer_proof(
+            TEST_CHAIN_ID,
+            TEST_SENDER,
             &params.sender_ek,
             &params.recipient_ek,
             &params.current_balance,
@@ -363,6 +393,8 @@ module aptos_experimental::confidential_proof_tests {
         let params = transfer();
 
         confidential_proof::verify_transfer_proof(
+            TEST_CHAIN_ID,
+            TEST_SENDER,
             &params.sender_ek,
             &params.recipient_ek,
             &params.current_balance,
@@ -381,6 +413,8 @@ module aptos_experimental::confidential_proof_tests {
         let params = transfer();
 
         confidential_proof::verify_transfer_proof(
+            TEST_CHAIN_ID,
+            TEST_SENDER,
             &params.sender_ek,
             &params.recipient_ek,
             &params.current_balance,
@@ -402,6 +436,8 @@ module aptos_experimental::confidential_proof_tests {
         let auditor_eks = vector[auditor_ek];
 
         confidential_proof::verify_transfer_proof(
+            TEST_CHAIN_ID,
+            TEST_SENDER,
             &params.sender_ek,
             &params.recipient_ek,
             &params.current_balance,
@@ -427,6 +463,8 @@ module aptos_experimental::confidential_proof_tests {
         let auditor_amounts = vector[auditor_amount];
 
         confidential_proof::verify_transfer_proof(
+            TEST_CHAIN_ID,
+            TEST_SENDER,
             &params.sender_ek,
             &params.recipient_ek,
             &params.current_balance,
@@ -443,6 +481,8 @@ module aptos_experimental::confidential_proof_tests {
         let params = rotate();
 
         confidential_proof::verify_rotation_proof(
+            TEST_CHAIN_ID,
+            TEST_SENDER,
             &params.current_ek,
             &params.new_ek,
             &params.current_balance,
@@ -469,6 +509,8 @@ module aptos_experimental::confidential_proof_tests {
         let params = rotate();
 
         confidential_proof::verify_rotation_proof(
+            TEST_CHAIN_ID,
+            TEST_SENDER,
             &params.current_ek,
             &params.current_ek,
             &params.current_balance,
@@ -482,6 +524,8 @@ module aptos_experimental::confidential_proof_tests {
         let params = rotate();
 
         confidential_proof::verify_rotation_proof(
+            TEST_CHAIN_ID,
+            TEST_SENDER,
             &params.current_ek,
             &params.new_ek,
             &confidential_balance::new_actual_balance_from_u128(
@@ -499,6 +543,8 @@ module aptos_experimental::confidential_proof_tests {
         let params = rotate();
 
         confidential_proof::verify_rotation_proof(
+            TEST_CHAIN_ID,
+            TEST_SENDER,
             &params.current_ek,
             &params.new_ek,
             &params.current_balance,
@@ -515,6 +561,8 @@ module aptos_experimental::confidential_proof_tests {
         let params = normalize();
 
         confidential_proof::verify_normalization_proof(
+            TEST_CHAIN_ID,
+            TEST_SENDER,
             &params.ek,
             &params.current_balance,
             &params.new_balance,
@@ -541,6 +589,8 @@ module aptos_experimental::confidential_proof_tests {
         let params = normalize();
 
         confidential_proof::verify_normalization_proof(
+            TEST_CHAIN_ID,
+            TEST_SENDER,
             &params.ek,
             &confidential_balance::new_actual_balance_from_u128(
                 1000,
@@ -557,6 +607,8 @@ module aptos_experimental::confidential_proof_tests {
         let params = normalize();
 
         confidential_proof::verify_normalization_proof(
+            TEST_CHAIN_ID,
+            TEST_SENDER,
             &params.ek,
             &params.current_balance,
             &confidential_balance::new_actual_balance_from_u128(

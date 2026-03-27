@@ -215,9 +215,19 @@ module aptos_experimental::confidential_asset {
     public entry fun register(
         sender: &signer,
         token: Object<Metadata>,
-        ek: vector<u8>) acquires FAController, FAConfig
+        ek: vector<u8>,
+        registration_proof_commitment: vector<u8>,
+        registration_proof_response: vector<u8>) acquires FAController, FAConfig
     {
         let ek = twisted_elgamal::new_pubkey_from_bytes(ek).extract();
+
+        // Verify registration proof (ZKPoK of decryption key)
+        let cid = (chain_id::get() as u8);
+        let user = signer::address_of(sender);
+        confidential_proof::verify_registration_proof(
+            cid, user, &ek, object::object_address(&token),
+            registration_proof_commitment, registration_proof_response
+        );
 
         register_internal(sender, token, ek);
     }
@@ -695,7 +705,8 @@ module aptos_experimental::confidential_asset {
         let ca_store = borrow_global_mut<ConfidentialAssetStore>(get_user_address(from, token));
         let current_balance = confidential_balance::decompress_balance(&ca_store.actual_balance);
 
-        confidential_proof::verify_withdrawal_proof(&sender_ek, amount, &current_balance, &new_balance, &proof);
+        let cid = (chain_id::get() as u8);
+        confidential_proof::verify_withdrawal_proof(cid, from, &sender_ek, amount, &current_balance, &new_balance, &proof);
 
         ca_store.normalized = true;
         ca_store.actual_balance = confidential_balance::compress_balance(&new_balance);
@@ -737,7 +748,10 @@ module aptos_experimental::confidential_asset {
             &sender_ca_store.actual_balance
         );
 
+        let cid = (chain_id::get() as u8);
         confidential_proof::verify_transfer_proof(
+            cid,
+            from,
             &sender_ek,
             &recipient_ek,
             &sender_current_actual_balance,
@@ -793,7 +807,8 @@ module aptos_experimental::confidential_asset {
 
         let current_balance = confidential_balance::decompress_balance(&ca_store.actual_balance);
 
-        confidential_proof::verify_rotation_proof(&current_ek, &new_ek, &current_balance, &new_balance, &proof);
+        let cid = (chain_id::get() as u8);
+        confidential_proof::verify_rotation_proof(cid, user, &current_ek, &new_ek, &current_balance, &new_balance, &proof);
 
         ca_store.ek = new_ek;
         // We don't need to update the pending balance here, as it has been asserted to be zero.
@@ -817,7 +832,8 @@ module aptos_experimental::confidential_asset {
 
         let current_balance = confidential_balance::decompress_balance(&ca_store.actual_balance);
 
-        confidential_proof::verify_normalization_proof(&sender_ek, &current_balance, &new_balance, &proof);
+        let cid = (chain_id::get() as u8);
+        confidential_proof::verify_normalization_proof(cid, user, &sender_ek, &current_balance, &new_balance, &proof);
 
         ca_store.actual_balance = confidential_balance::compress_balance(&new_balance);
         ca_store.normalized = true;
@@ -1087,6 +1103,17 @@ module aptos_experimental::confidential_asset {
     #[test_only]
     public fun init_module_for_testing(deployer: &signer) {
         init_module(deployer)
+    }
+
+    #[test_only]
+    /// Register without requiring a registration proof (for test convenience).
+    public fun register_for_testing(
+        sender: &signer,
+        token: Object<Metadata>,
+        ek: vector<u8>) acquires FAController, FAConfig
+    {
+        let ek = twisted_elgamal::new_pubkey_from_bytes(ek).extract();
+        register_internal(sender, token, ek);
     }
 
     #[test_only]

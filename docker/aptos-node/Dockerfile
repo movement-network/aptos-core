@@ -20,17 +20,9 @@ WORKDIR /app
 
 ARG BINARY_PATH=target/release
 # Copy the binaries and modify their interpreter
-# Note: The CLI binary is named 'movement' (from the 'movement' package in Cargo.toml)
 COPY --chmod=0755 ${BINARY_PATH}/aptos-node /usr/local/bin/aptos-node
-COPY --chmod=0755 ${BINARY_PATH}/movement /usr/local/bin/movement
-COPY --chmod=0755 ${BINARY_PATH}/l1-migration /usr/local/bin/l1-migration
 
 RUN patchelf --set-interpreter /lib64/ld-linux-x86-64.so.2 /usr/local/bin/aptos-node
-RUN patchelf --set-interpreter /lib64/ld-linux-x86-64.so.2 /usr/local/bin/movement
-RUN patchelf --set-interpreter /lib64/ld-linux-x86-64.so.2 /usr/local/bin/l1-migration
-
-# Create symlink for backwards compatibility (aptos -> movement)
-RUN ln -s /usr/local/bin/movement /usr/local/bin/aptos
 
 # add build info
 ARG BUILD_DATE

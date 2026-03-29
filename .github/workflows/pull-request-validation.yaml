@@ -8,11 +8,23 @@ on:
       - l1-migration
       - m1
     types: [labeled, opened, synchronize, reopened, auto_merge_enabled]
+  workflow_dispatch:
+    inputs:
+      force_build:
+        description: 'Force build even if no files changed'
+        required: false
+        default: true
+        type: boolean
+      skip_checks:
+        description: 'Skip initial checks (dynamic deps and semgrep)'
+        required: false
+        default: false
+        type: boolean
 
 env:
   GIT_SHA: ${{ github.sha }}
   GIT_BRANCH: ${{ github.ref_name }}
-  BUILD_DATE: ${{ github.event.head_commit.timestamp }}
+  BUILD_DATE: ${{ github.event.head_commit.timestamp || github.event.workflow_run.created_at || github.run_id }}
   BUILT_VIA_BUILDKIT: "true"
   FEATURES: ""
 
@@ -23,11 +35,9 @@ concurrency:
 jobs:
   check-dynamic-deps:
     runs-on: macos-latest
+    if: ${{ !inputs.skip_checks }}
     steps:
       - uses: actions/checkout@v4
-        if: ${{ !inputs.SKIP_JOB }}
-        with:
-          ref: ${{ inputs.GIT_SHA }}
           
       # This will exit with failure if any of the banned dynamic deps are found.
       - run: ./crates/aptos/scripts/check_dynamic_deps.sh
@@ -41,7 +51,7 @@ jobs:
       options: --user root
 
     # Skip any PR created by dependabot to avoid permission issues:
-    if: (github.actor != 'dependabot[bot]')
+    if: (github.actor != 'dependabot[bot]') && !inputs.skip_checks
 
     steps:
       - uses: actions/checkout@v4
@@ -51,7 +61,7 @@ jobs:
              ./.github/linters/semgrep/pull-request-target-code-checkout.yaml
 
   build-checks:
-    runs-on: k8s-movement-labs
+    runs-on: buildjet-16vcpu-ubuntu-2204
     outputs:
       members_changed: ${{ steps.members_check.outputs.changed }}
       docker_changed: ${{ steps.docker_check.outputs.changed }}
@@ -70,23 +80,23 @@ jobs:
 
   build-binaries:
     needs: build-checks
-    if: needs.build-checks.outputs.members_changed == 'true' || needs.build-checks.outputs.docker_changed == 'true'
-    runs-on: k8s-movement-labs
+    if: (needs.build-checks.outputs.members_changed == 'true' || needs.build-checks.outputs.docker_changed == 'true') || (github.event_name == 'workflow_dispatch' && inputs.force_build)
+    runs-on: buildjet-16vcpu-ubuntu-2204
     name: "Build Binaries with Nix"
     strategy:
       matrix:
         binary:
           - name: "aptos-node"
             package: "aptos-node"
-            profile: "dev"
+            profile: "release"
           - name: "aptos-cli"
-            package: "aptos"
-            profile: "dev"
+            package: "movement"
+            profile: "release"
           - name: "l1-migration"
             package: "l1-migration"
-            profile: "dev"
+            profile: "release"
     env:
-      TARGET_FOLDER: target/debug
+      TARGET_FOLDER: target/release
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -142,19 +152,19 @@ jobs:
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.binary.package }}-${{ github.sha }}
+          name: ${{ matrix.binary.name }}-${{ github.sha }}
           path: ${{ env.TARGET_FOLDER }}/${{ matrix.binary.package }}
           retention-days: 7
 
   build-docker:
     needs: build-binaries
-    runs-on: ubuntu-latest
+    runs-on: buildjet-16vcpu-ubuntu-2204
     name: "Build Docker Images"
     permissions:
       contents: read
       packages: write
     env:
-      TARGET_FOLDER: target/debug
+      TARGET_FOLDER: target/release
     steps:
       - uses: actions/checkout@v4
       
@@ -164,10 +174,10 @@ jobs:
         with:
           name: aptos-node-${{ github.sha }}
           path: ${{ env.TARGET_FOLDER }}
-      - name: Download aptos binary
+      - name: Download movement CLI binary
         uses: actions/download-artifact@v4
         with:
-          name: aptos-${{ github.sha }}
+          name: aptos-cli-${{ github.sha }}
           path: ${{ env.TARGET_FOLDER }}
       - name: Download l1-migration binary
         uses: actions/download-artifact@v4
@@ -199,7 +209,7 @@ jobs:
       # Build and push Docker image
       - name: Build and push aptos-node Docker image
         run: |
-          docker build --build-arg BINARY_PATH=target/debug -f docker/aptos-node/Dockerfile -t ghcr.io/movementlabsxyz/aptos-node:${{ env.GIT_SHA_SHORT }} .
+          docker build --build-arg BINARY_PATH=target/release -f docker/aptos-node/Dockerfile -t ghcr.io/movementlabsxyz/aptos-node:${{ env.GIT_SHA_SHORT }} .
           docker push ghcr.io/movementlabsxyz/aptos-node:${{ env.GIT_SHA_SHORT }}
       
       # Output image information

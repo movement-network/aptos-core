@@ -56,7 +56,7 @@ permissions:
 
 jobs:
   determine-forge-run-metadata:
-    runs-on: ubuntu-latest
+    runs-on: k8s-movement-labs
     steps:
       - name: collect metadata
         run: |
@@ -82,7 +82,7 @@ jobs:
       forgeRetainDebugLogs: ${{ inputs.FORGE_RETAIN_DEBUG_LOGS }}
       forgeIndexerDeployerProfile: ${{ inputs.FORGE_INDEXER_DEPLOYER_PROFILE }}
   adhoc-forge-test:
-    uses: aptos-labs/aptos-core/.github/workflows/workflow-run-forge.yaml@main
+    uses: ./.github/workflows/workflow-run-forge.yaml
     needs: [determine-forge-run-metadata]
     secrets: inherit
     with:

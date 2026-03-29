@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   check-dynamic-deps:
-    runs-on: macos-latest
+    runs-on: k8s-movement-labs
     steps:
       - uses: actions/checkout@v4
         if: ${{ !inputs.SKIP_JOB }}
@@ -34,7 +34,7 @@ jobs:
   
   semgrep:
     name: semgrep/ci
-    runs-on: ubuntu-latest
+    runs-on: k8s-movement-labs
 
     container:
       image: returntocorp/semgrep
@@ -148,7 +148,7 @@ jobs:
 
   build-docker:
     needs: build-binaries
-    runs-on: ubuntu-latest
+    runs-on: k8s-movement-labs
     name: "Build Docker Images"
     permissions:
       contents: read

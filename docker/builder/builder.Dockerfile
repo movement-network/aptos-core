@@ -38,6 +38,8 @@ ARG FEATURES
 ENV FEATURES ${FEATURES}
 ARG CARGO_TARGET_DIR
 ENV CARGO_TARGET_DIR ${CARGO_TARGET_DIR}
+ARG CARGO_BUILD_JOBS
+ENV CARGO_BUILD_JOBS ${CARGO_BUILD_JOBS}
 
 RUN ARCHITECTURE=$(uname -m | sed -e "s/arm64/arm_64/g" | sed -e "s/aarch64/aarch_64/g") \
     && curl -LOs "https://github.com/protocolbuffers/protobuf/releases/download/v21.5/protoc-21.5-linux-$ARCHITECTURE.zip" \
@@ -55,18 +57,37 @@ FROM builder-base as aptos-node-builder
 RUN --mount=type=secret,id=GIT_CREDENTIALS,target=/root/.git-credentials \
     --mount=type=cache,target=/usr/local/cargo/git,id=node-builder-cargo-git-cache \
     --mount=type=cache,target=/usr/local/cargo/registry,id=node-builder-cargo-registry-cache \
+    --mount=type=cache,target=/aptos/target,id=node-builder-target-cache \
     docker/builder/build-node.sh
+
+FROM builder-base as aptos-node-core-builder
+
+RUN --mount=type=secret,id=GIT_CREDENTIALS,target=/root/.git-credentials \
+    --mount=type=cache,target=/usr/local/cargo/git,id=node-core-builder-cargo-git-cache \
+    --mount=type=cache,target=/usr/local/cargo/registry,id=node-core-builder-cargo-registry-cache \
+    --mount=type=cache,target=/aptos/target,id=node-core-builder-target-cache \
+    docker/builder/build-node-core.sh
 
 FROM builder-base as tools-builder
 
 RUN --mount=type=secret,id=GIT_CREDENTIALS,target=/root/.git-credentials \
     --mount=type=cache,target=/usr/local/cargo/git,id=tools-builder-cargo-git-cache \
     --mount=type=cache,target=/usr/local/cargo/registry,id=tools-builder-cargo-registry-cache \
+    --mount=type=cache,target=/aptos/target,id=tools-builder-target-cache \
     docker/builder/build-tools.sh
+
+FROM builder-base as tools-core-builder
+
+RUN --mount=type=secret,id=GIT_CREDENTIALS,target=/root/.git-credentials \
+    --mount=type=cache,target=/usr/local/cargo/git,id=tools-core-builder-cargo-git-cache \
+    --mount=type=cache,target=/usr/local/cargo/registry,id=tools-core-builder-cargo-registry-cache \
+    --mount=type=cache,target=/aptos/target,id=tools-core-builder-target-cache \
+    docker/builder/build-tools-core.sh
 
 FROM builder-base as indexer-builder
 
 RUN --mount=type=secret,id=GIT_CREDENTIALS,target=/root/.git-credentials \
     --mount=type=cache,target=/usr/local/cargo/git,id=indexer-builder-cargo-git-cache \
     --mount=type=cache,target=/usr/local/cargo/registry,id=indexer-builder-cargo-registry-cache \
+    --mount=type=cache,target=/aptos/target,id=indexer-builder-target-cache \
     docker/builder/build-indexer.sh

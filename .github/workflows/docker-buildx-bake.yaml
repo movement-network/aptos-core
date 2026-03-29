@@ -1,0 +1,161 @@
+name: "🐳 Docker Buildx Bake (Alt Pipeline)"
+run-name: "Docker Buildx Bake for ${{ inputs.ref || github.ref_name }}"
+
+concurrency:
+  group: docker-bake-${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}-${{ inputs.target || 'movement-core' }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches:
+      - '**'
+    paths:
+      - ".github/workflows/docker-buildx-bake.yaml"
+      - "docker/builder/**"
+      - "Justfile"
+      - "README.md"
+  pull_request:
+    branches:
+      - m1
+    paths:
+      - ".github/workflows/docker-buildx-bake.yaml"
+      - "docker/builder/**"
+      - "Justfile"
+      - "README.md"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to build (branch/tag/sha)"
+        required: true
+        default: "main"
+      target:
+        description: "Bake target/group (e.g. movement-core, aptos-node, all)"
+        required: true
+        default: "movement-core"
+      push_images:
+        description: "Push built images to GHCR"
+        type: boolean
+        required: true
+        default: false
+
+jobs:
+  metadata:
+    runs-on: buildjet-16vcpu-ubuntu-2204
+    outputs:
+      git_sha: ${{ steps.git_sha.outputs.git_sha }}
+      short_sha: ${{ steps.short_sha.outputs.short_sha }}
+      branch_name: ${{ steps.branch_name.outputs.branch_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - id: git_sha
+        run: |
+          echo "git_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - id: short_sha
+        run: |
+          echo "short_sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - id: branch_name
+        run: |
+          echo "branch_name=$(git rev-parse --abbrev-ref HEAD)" >> "$GITHUB_OUTPUT"
+
+  buildx-bake:
+    needs: metadata
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: buildjet-16vcpu-ubuntu-2204
+          - arch: arm64
+            runner: buildjet-16vcpu-ubuntu-2204-arm
+    runs-on: ${{ matrix.runner }}
+    name: "Bake ${{ inputs.target || 'movement-core' }} (${{ matrix.arch }})"
+    permissions:
+      contents: read
+      packages: write
+      actions: read
+    env:
+      TARGET: ${{ inputs.target || 'movement-core' }}
+      TARGET_CACHE_ID: ${{ format('{0}-{1}', needs.metadata.outputs.short_sha, matrix.arch) }}
+      TARGET_REGISTRY: ${{ inputs.push_images && 'ghcr' || 'local' }}
+      PUSH_IMAGES: ${{ inputs.push_images && 'true' || 'false' }}
+      CI: "true"
+      DOCKER_API_VERSION: "1.43"
+      GHCR_DOCKER_ARTIFACT_REPO: ghcr.io/movementlabsxyz
+      CUSTOM_IMAGE_TAG_PREFIX: ${{ matrix.arch }}
+      GIT_CREDENTIALS: ${{ secrets.GIT_CREDENTIALS }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          version: v0.11.2
+
+      - name: Login to GHCR
+        if: ${{ inputs.push_images }}
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ vars.INFRA_GH_USER }}
+          password: ${{ secrets.INFRA_GH_PAT }}
+
+      - name: Build target via Docker bake
+        run: |
+          set -euo pipefail
+          chmod +x docker/builder/docker-bake-rust-all.sh
+          docker/builder/docker-bake-rust-all.sh "${TARGET}"
+
+      - name: Verify image provenance labels (local mode)
+        if: ${{ !inputs.push_images }}
+        env:
+          EXPECTED_GIT_SHA: ${{ needs.metadata.outputs.git_sha }}
+          IMAGE_TAG_PREFIX: ${{ matrix.arch }}_
+        run: |
+          set -euo pipefail
+
+          candidates=(
+            "aptos-core/aptos-node:${IMAGE_TAG_PREFIX}${EXPECTED_GIT_SHA}-from-local"
+            "aptos-core/aptos-faucet-service:${IMAGE_TAG_PREFIX}${EXPECTED_GIT_SHA}-from-local"
+          )
+
+          validated=0
+          for image_ref in "${candidates[@]}"; do
+            if ! docker image inspect "$image_ref" >/dev/null 2>&1; then
+              echo "Skipping provenance check for missing image: $image_ref"
+              continue
+            fi
+
+            actual_sha=$(docker image inspect "$image_ref" \
+              --format '{{ index .Config.Labels "org.label-schema.git-sha" }}')
+            if [ -z "$actual_sha" ]; then
+              echo "Missing org.label-schema.git-sha label on $image_ref"
+              exit 1
+            fi
+
+            if [ "$actual_sha" != "$EXPECTED_GIT_SHA" ]; then
+              echo "Provenance mismatch for $image_ref"
+              echo "Expected git sha: $EXPECTED_GIT_SHA"
+              echo "Actual git sha:   $actual_sha"
+              exit 1
+            fi
+
+            echo "Provenance OK: $image_ref (git-sha=$actual_sha)"
+            validated=$((validated + 1))
+          done
+
+          if [ "$validated" -eq 0 ]; then
+            echo "No movement-core alias images found to verify in local Docker daemon."
+            echo "This is expected when building a different target."
+          fi
+
+      - name: Show built images (local mode)
+        if: ${{ !inputs.push_images }}
+        run: |
+          docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.Size}}" | head -n 50

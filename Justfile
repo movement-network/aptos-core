@@ -118,6 +118,50 @@ build-bin package:
     nix develop -c cargo build --release -p {{package}}
     @echo "Binary available at target/release/{{package}}"
 
+# Build images using Aptos-Labs-style Docker Buildx Bake pipeline
+# Examples:
+#   just container-bake
+#   just container-bake aptos-node
+#   just container-bake movement-core true
+container-bake target="movement-core" push="false":
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    if ! command -v docker &> /dev/null; then
+        echo "Error: Docker is not installed."
+        exit 1
+    fi
+
+    if ! docker buildx version &> /dev/null; then
+        echo "Error: Docker Buildx is not available."
+        exit 1
+    fi
+
+    if [ "{{push}}" = "true" ] && [ -z "${INFRA_GH_PAT:-}" ]; then
+        echo "Error: push=true requires INFRA_GH_PAT and INFRA_GH_USER env vars."
+        echo "Example: INFRA_GH_USER=<user> INFRA_GH_PAT=<token> just container-bake {{target}} true"
+        exit 1
+    fi
+
+    if [ "{{push}}" = "true" ]; then
+        echo "$INFRA_GH_PAT" | docker login ghcr.io -u "$INFRA_GH_USER" --password-stdin
+        TARGET_REGISTRY="ghcr"
+    else
+        TARGET_REGISTRY="local"
+    fi
+
+    export CI=true
+    export TARGET_CACHE_ID="local-$(git rev-parse --short HEAD)-$(uname -m)"
+    export TARGET_REGISTRY
+    export PUSH_IMAGES="{{push}}"
+    export GHCR_DOCKER_ARTIFACT_REPO="ghcr.io/movementlabsxyz"
+    export CUSTOM_IMAGE_TAG_PREFIX="$(uname -m)"
+    export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-2}"
+    export GIT_CREDENTIALS="${GIT_CREDENTIALS:-}"
+
+    chmod +x docker/builder/docker-bake-rust-all.sh
+    docker/builder/docker-bake-rust-all.sh "{{target}}"
+
 # List available binary build targets
 list-binaries:
     @echo "Available binary build targets:"
@@ -143,3 +187,8 @@ help:
     @echo "  Use 'just build <binary-name>' for common binary builds"
     @echo "  Use 'just build' to build all packages"
     @echo "  Use 'just build-bin <package-name>' for custom package builds"
+    @echo ""
+    @echo "Docker Bake Options:"
+    @echo "  Use 'just container-bake' to build movement-core images with buildx bake"
+    @echo "  Use 'just container-bake aptos-node' to build only aptos-node image"
+    @echo "  Use 'just container-bake movement-core true' to push images to GHCR"

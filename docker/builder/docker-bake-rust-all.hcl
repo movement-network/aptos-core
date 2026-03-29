@@ -1,49 +1,69 @@
-# This is a docker bake file in HCL syntax.
-# It provides a high-level mechenanism to build multiple dockerfiles in one shot.
-# Check https://crazymax.dev/docker-allhands2-buildx-bake and https://docs.docker.com/engine/reference/commandline/buildx_bake/#file-definition for an intro.
+# Docker Buildx Bake definition for rust image builds.
+# Modeled after Aptos Labs' bake-driven image pipeline and adapted for GHCR.
 
 variable "CI" {
-  # whether this build runs in aptos-labs' CI environment which makes certain assumptions about certain registries being available to push to cache layers.
-  # for local builds we simply default to relying on dockers local caching.
   default = "false"
 }
-variable "TARGET_CACHE_ID" {}
-variable "BUILD_DATE" {}
-// this is the full GIT_SHA - let's use that as primary identifier going forward
-variable "GIT_SHA" {}
 
-variable "GIT_BRANCH" {}
+variable "TARGET_CACHE_ID" {
+  default = "local"
+}
 
-variable "GIT_TAG" {}
+variable "BUILD_DATE" {
+  default = ""
+}
 
-variable "GIT_CREDENTIALS" {}
+variable "GIT_SHA" {
+  default = "dev"
+}
 
-variable "BUILT_VIA_BUILDKIT" {}
+variable "GIT_BRANCH" {
+  default = "unknown"
+}
 
-variable "GCP_DOCKER_ARTIFACT_REPO" {}
+variable "GIT_TAG" {
+  default = "none"
+}
 
-variable "AWS_ECR_ACCOUNT_NUM" {}
+variable "GIT_CREDENTIALS" {
+  default = ""
+}
+
+variable "BUILT_VIA_BUILDKIT" {
+  default = "true"
+}
+
+variable "GHCR_DOCKER_ARTIFACT_REPO" {
+  default = "ghcr.io/movementlabsxyz"
+}
 
 variable "TARGET_REGISTRY" {
-  // must be "gcp" | "local" | "remote-all" | "remote" (deprecated, but kept for backwards compatibility. Same as "gcp"), informs which docker tags are being generated
-  default = CI == "true" ? "remote" : "local"
+  # Supported: "local" | "ghcr"
+  default = CI == "true" ? "ghcr" : "local"
 }
 
-variable "ecr_base" {
-  default = "${AWS_ECR_ACCOUNT_NUM}.dkr.ecr.us-west-2.amazonaws.com/aptos"
+variable "NORMALIZED_GIT_BRANCH_OR_PR" {
+  default = "local"
 }
 
-variable "NORMALIZED_GIT_BRANCH_OR_PR" {}
-variable "IMAGE_TAG_PREFIX" {}
+variable "IMAGE_TAG_PREFIX" {
+  default = ""
+}
+
 variable "PROFILE" {
-  // Cargo compilation profile
   default = "release"
 }
+
 variable "FEATURES" {
-  // Cargo features to enable, as a comma separated string
+  default = ""
 }
+
 variable "CARGO_TARGET_DIR" {
-  // Cargo target directory
+  default = "target/default"
+}
+
+variable "CARGO_BUILD_JOBS" {
+  default = "2"
 }
 
 group "all" {
@@ -65,10 +85,15 @@ group "forge-images" {
   targets = ["validator-testing", "tools", "forge"]
 }
 
+# Minimal Movement-focused group for the alternate pipeline rollout.
+group "movement-core" {
+  targets = ["aptos-node", "aptos-faucet-service"]
+}
+
 target "debian-base" {
   dockerfile = "docker/builder/debian-base.Dockerfile"
   contexts = {
-    # Run `docker buildx imagetools inspect debian:bullseye` to find the latest multi-platform hash
+    # Run `docker buildx imagetools inspect debian:bullseye` to refresh this digest.
     debian = "docker-image://debian:bullseye@sha256:cf48c31af360e1c0a0aedd33aae4d928b68c2cdf093f1612650eb1ff434d1c34"
   }
 }
@@ -78,17 +103,18 @@ target "builder-base" {
   target     = "builder-base"
   context    = "."
   contexts = {
-    # Run `docker buildx imagetools inspect rust:1.80.1-bullseye` to find the latest multi-platform hash
+    # Run `docker buildx imagetools inspect rust:1.80.1-bullseye` to refresh this digest.
     rust = "docker-image://rust:1.80.1-bullseye@sha256:f6f599d3f027a97fb60cb87854199fcde390e25cee216712c3f9eede545b052e"
   }
   args = {
     PROFILE            = "${PROFILE}"
     FEATURES           = "${FEATURES}"
     CARGO_TARGET_DIR   = "${CARGO_TARGET_DIR}"
+    CARGO_BUILD_JOBS   = "${CARGO_BUILD_JOBS}"
     BUILT_VIA_BUILDKIT = "true"
   }
   secret = [
-    "id=GIT_CREDENTIALS"
+    "id=GIT_CREDENTIALS,env=GIT_CREDENTIALS"
   ]
 }
 
@@ -99,7 +125,18 @@ target "aptos-node-builder" {
     builder-base = "target:builder-base"
   }
   secret = [
-    "id=GIT_CREDENTIALS"
+    "id=GIT_CREDENTIALS,env=GIT_CREDENTIALS"
+  ]
+}
+
+target "aptos-node-core-builder" {
+  dockerfile = "docker/builder/builder.Dockerfile"
+  target     = "aptos-node-core-builder"
+  contexts = {
+    builder-base = "target:builder-base"
+  }
+  secret = [
+    "id=GIT_CREDENTIALS,env=GIT_CREDENTIALS"
   ]
 }
 
@@ -110,7 +147,18 @@ target "tools-builder" {
     builder-base = "target:builder-base"
   }
   secret = [
-    "id=GIT_CREDENTIALS"
+    "id=GIT_CREDENTIALS,env=GIT_CREDENTIALS"
+  ]
+}
+
+target "tools-core-builder" {
+  dockerfile = "docker/builder/builder.Dockerfile"
+  target     = "tools-core-builder"
+  contexts = {
+    builder-base = "target:builder-base"
+  }
+  secret = [
+    "id=GIT_CREDENTIALS,env=GIT_CREDENTIALS"
   ]
 }
 
@@ -121,17 +169,11 @@ target "indexer-builder" {
     builder-base = "target:builder-base"
   }
   secret = [
-    "id=GIT_CREDENTIALS"
+    "id=GIT_CREDENTIALS,env=GIT_CREDENTIALS"
   ]
 }
 
-target "_common" {
-  contexts = {
-    debian-base     = "target:debian-base"
-    node-builder    = "target:aptos-node-builder"
-    tools-builder   = "target:tools-builder"
-    indexer-builder = "target:indexer-builder"
-  }
+target "_common-base" {
   labels = {
     "org.label-schema.schema-version" = "1.0",
     "org.label-schema.build-date"     = "${BUILD_DATE}"
@@ -146,6 +188,28 @@ target "_common" {
     BUILD_DATE = "${BUILD_DATE}"
   }
   output     = ["type=image,compression=zstd,force-compression=true"]
+  cache-from = generate_cache_from("shared")
+  cache-to   = generate_cache_to("shared")
+}
+
+target "_common" {
+  inherits = ["_common-base"]
+  contexts = {
+    debian-base     = "target:debian-base"
+    node-builder    = "target:aptos-node-builder"
+    tools-builder   = "target:tools-builder"
+    indexer-builder = "target:indexer-builder"
+  }
+}
+
+# Lean shared context for movement-core images; avoids unnecessary indexer builder work.
+target "_common-core" {
+  inherits = ["_common-base"]
+  contexts = {
+    debian-base   = "target:debian-base"
+    node-builder  = "target:aptos-node-core-builder"
+    tools-builder = "target:tools-core-builder"
+  }
 }
 
 target "validator-testing" {
@@ -153,6 +217,21 @@ target "validator-testing" {
   dockerfile = "docker/builder/validator-testing.Dockerfile"
   target     = "validator-testing"
   tags       = generate_tags("validator-testing")
+}
+
+target "validator" {
+  inherits   = ["_common"]
+  dockerfile = "docker/builder/validator.Dockerfile"
+  target     = "validator"
+  tags       = generate_tags("validator")
+}
+
+# Alias for existing external naming conventions in movement repos.
+target "aptos-node" {
+  inherits   = ["_common-core"]
+  dockerfile = "docker/builder/validator.Dockerfile"
+  target     = "validator"
+  tags       = generate_tags("aptos-node")
 }
 
 target "tools" {
@@ -169,20 +248,6 @@ target "forge" {
   tags       = generate_tags("forge")
 }
 
-target "validator" {
-  inherits   = ["_common"]
-  dockerfile = "docker/builder/validator.Dockerfile"
-  target     = "validator"
-  tags       = generate_tags("validator")
-}
-
-target "tools" {
-  inherits   = ["_common"]
-  dockerfile = "docker/builder/tools.Dockerfile"
-  target     = "tools"
-  tags       = generate_tags("tools")
-}
-
 target "node-checker" {
   inherits   = ["_common"]
   dockerfile = "docker/builder/node-checker.Dockerfile"
@@ -195,6 +260,14 @@ target "faucet" {
   dockerfile = "docker/builder/faucet.Dockerfile"
   target     = "faucet"
   tags       = generate_tags("faucet")
+}
+
+# Alias for existing external naming conventions in movement repos.
+target "aptos-faucet-service" {
+  inherits   = ["_common-core"]
+  dockerfile = "docker/builder/faucet.Dockerfile"
+  target     = "faucet"
+  tags       = generate_tags("aptos-faucet-service")
 }
 
 target "telemetry-service" {
@@ -220,25 +293,28 @@ target "indexer-grpc" {
 
 target "nft-metadata-crawler" {
   inherits   = ["_common"]
-  target     = "nft-metadata-crawler"
   dockerfile = "docker/builder/nft-metadata-crawler.Dockerfile"
+  target     = "nft-metadata-crawler"
   tags       = generate_tags("nft-metadata-crawler")
 }
 
 function "generate_tags" {
   params = [target]
-  result = TARGET_REGISTRY == "remote-all" ? [
-    "${GCP_DOCKER_ARTIFACT_REPO}/${target}:${IMAGE_TAG_PREFIX}${GIT_SHA}",
-    "${GCP_DOCKER_ARTIFACT_REPO}/${target}:${IMAGE_TAG_PREFIX}${NORMALIZED_GIT_BRANCH_OR_PR}",
-    "${ecr_base}/${target}:${IMAGE_TAG_PREFIX}${GIT_SHA}",
-    "${ecr_base}/${target}:${IMAGE_TAG_PREFIX}${NORMALIZED_GIT_BRANCH_OR_PR}",
-    ] : (
-    TARGET_REGISTRY == "gcp" || TARGET_REGISTRY == "remote" ? [
-      "${GCP_DOCKER_ARTIFACT_REPO}/${target}:${IMAGE_TAG_PREFIX}${GIT_SHA}",
-      "${GCP_DOCKER_ARTIFACT_REPO}/${target}:${IMAGE_TAG_PREFIX}${NORMALIZED_GIT_BRANCH_OR_PR}",
-      ] : [ // "local" or any other value
+  result = TARGET_REGISTRY == "ghcr" ? [
+    "${GHCR_DOCKER_ARTIFACT_REPO}/${target}:${IMAGE_TAG_PREFIX}${GIT_SHA}",
+    "${GHCR_DOCKER_ARTIFACT_REPO}/${target}:${IMAGE_TAG_PREFIX}${NORMALIZED_GIT_BRANCH_OR_PR}",
+    ] : [
       "aptos-core/${target}:${IMAGE_TAG_PREFIX}${GIT_SHA}-from-local",
       "aptos-core/${target}:${IMAGE_TAG_PREFIX}from-local",
-    ]
-  )
+  ]
+}
+
+function "generate_cache_from" {
+  params = [scope]
+  result = CI == "true" ? ["type=gha,scope=${scope}-${TARGET_CACHE_ID}"] : []
+}
+
+function "generate_cache_to" {
+  params = [scope]
+  result = CI == "true" ? ["type=gha,scope=${scope}-${TARGET_CACHE_ID},mode=max"] : []
 }

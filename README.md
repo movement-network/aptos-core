@@ -24,4 +24,17 @@ Movement is a layer 1 blockchain bringing a paradigm shift to Web3 through bette
 
 You can learn more about contributing to the Movement project by reading our [Contribution Guide](./CONTRIBUTING.md) and by viewing our [Code of Conduct](./CODE_OF_CONDUCT.md).
 
+## Docker Buildx Bake (Alt Pipeline)
+
+This repository includes an Aptos-Labs-style Docker Buildx/Bake pipeline under
+`docker/builder/` as an alternative image build path.
+
+- Local build (no push): `just container-bake`
+- Local build for one image: `just container-bake aptos-node`
+- Local build with push to GHCR:
+  `INFRA_GH_USER=<user> INFRA_GH_PAT=<token> just container-bake movement-core true`
+
+The corresponding CI workflow is `.github/workflows/docker-buildx-bake.yaml` and can be
+triggered manually with target selection and optional push.
+
 Aptos Core is licensed under [Apache 2.0](./LICENSE).

@@ -243,13 +243,20 @@ still having output converted for the total CLI.
 It's an anti-pattern to `panic`, please avoid panicking, and instead provide `CliError` or `CliError` conversion for the
 current types.
 
-All output from the CLI should use `eprintln!()`, rather than `println!()`.  `stdout` is reserved for the JSON output at
-the end of the command, `stderr` is used for the rest of the output.
+**Streams:** `main` prints the final JSON envelope to **stdout** (success and error strings from `to_common_result`).
+Prefer **stderr** for diagnostics, progress, and prompts so the envelope stays the primary stdout payload. For human-only
+text (progress, tables, prompts that are not part of the serialized result), use the `human_println!` / `human_eprintln!`
+macros in `common/cli_output.rs` so **`--output json` / `MOVEMENT_OUTPUT=json`** can suppress them. Use raw `eprintln!` /
+`println!` only when output must appear regardless of mode (e.g. interactive prompts, hardware-wallet instructions, large
+listings directed to stderr, or error context before returning `Err`). Avoid raw `println!` for incidental chatter.
 
 ## Agent and automation output
 
 - **Global flags:** `movement --output json …` or environment variable `MOVEMENT_OUTPUT=json` set the CLI to machine-oriented mode (CLI flag wins when both are set). Default is `human` and preserves historical behavior (pretty JSON envelope, terminal-oriented formatting).
-- **Envelope:** Serialized commands print a single JSON document to stdout: either `{"Result":…}` or `{"Error":…}` (see `to_common_result` in `common/utils.rs`). In `json` mode the document is compact and auxiliary human messages avoid stdout where feasible.
+- **Envelope:** Serialized commands print a single JSON document to stdout: either `{"Result":…}` or `{"Error":…}` (see
+  `to_common_result` in `common/utils.rs`). Integrators should **parse stdout** for that document and use the **process
+  exit code**; treat **stderr** as ancillary unless a command documents otherwise. In `json` mode the document is compact
+  and auxiliary human messages avoid stdout where feasible.
 - **Explorer links:** On successful submission paths, `TransactionSummary` may include `explorer_url` so automation does not need to parse stderr.
 - **Schema:** `movement meta commands-schema` emits a JSON description of the command tree (names, arguments, help text).
 - **Dry-run:** Transaction-accepting flows that use `TransactionOptions` support `--dry-run` to simulate without submitting.

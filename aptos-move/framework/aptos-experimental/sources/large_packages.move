@@ -34,9 +34,7 @@
 ///
 /// # Notes
 ///
-/// * Make sure LargePackages is deployed to your network of choice, you can currently find it both on
-///   mainnet and testnet at `0xa29df848eebfe5d981f708c2a5b06d31af2be53bbd8ddc94c8523f4b903f7adb`, and
-///   in 0x7 (aptos-experimental) on devnet/localnet.
+/// * Make sure LargePackages is deployed to your network of choice.
 /// * Ensure that `code_indices` have no gaps. For example, if code_indices are
 ///   provided as [0, 1, 3] (skipping index 2), `assemble_module_code` aborts with
 ///   `EINDEX_GAP` (invalid state) once it reaches the missing index, instead of an opaque table error.

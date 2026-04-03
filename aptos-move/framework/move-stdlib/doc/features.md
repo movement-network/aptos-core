@@ -166,6 +166,8 @@ return true.
 -  [Function `is_distribute_transaction_fee_enabled`](#0x1_features_is_distribute_transaction_fee_enabled)
 -  [Function `get_stake_reward_using_treasury_feature`](#0x1_features_get_stake_reward_using_treasury_feature)
 -  [Function `stake_reward_using_treasury_enabled`](#0x1_features_stake_reward_using_treasury_enabled)
+-  [Function `get_governed_gas_pool_aggregators_feature`](#0x1_features_get_governed_gas_pool_aggregators_feature)
+-  [Function `governed_gas_pool_aggregators_enabled`](#0x1_features_governed_gas_pool_aggregators_enabled)
 -  [Function `change_feature_flags`](#0x1_features_change_feature_flags)
 -  [Function `change_feature_flags_internal`](#0x1_features_change_feature_flags_internal)
 -  [Function `change_feature_flags_for_next_epoch`](#0x1_features_change_feature_flags_for_next_epoch)
@@ -688,6 +690,19 @@ Lifetime: permanent
 
 
 <pre><code><b>const</b> <a href="features.md#0x1_features_GOVERNED_GAS_POOL">GOVERNED_GAS_POOL</a>: u64 = 223;
+</code></pre>
+
+
+
+<a id="0x1_features_GOVERNED_GAS_POOL_AGGREGATORS"></a>
+
+Whether the Governed Gas Pool uses Aggregator V2 for concurrent accounting.
+Enables parallel tracking of gas fees, treasury deposits, governance payouts, and rewards.
+
+Lifetime: transient
+
+
+<pre><code><b>const</b> <a href="features.md#0x1_features_GOVERNED_GAS_POOL_AGGREGATORS">GOVERNED_GAS_POOL_AGGREGATORS</a>: u64 = 225;
 </code></pre>
 
 
@@ -4279,6 +4294,52 @@ Whether the Governed Gas Pool is enabled.
 
 <pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_stake_reward_using_treasury_enabled">stake_reward_using_treasury_enabled</a>(): bool <b>acquires</b> <a href="features.md#0x1_features_Features">Features</a> {
     <a href="features.md#0x1_features_is_enabled">is_enabled</a>(<a href="features.md#0x1_features_STAKE_REWARD_USING_TREASURY">STAKE_REWARD_USING_TREASURY</a>)
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_features_get_governed_gas_pool_aggregators_feature"></a>
+
+## Function `get_governed_gas_pool_aggregators_feature`
+
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_get_governed_gas_pool_aggregators_feature">get_governed_gas_pool_aggregators_feature</a>(): u64
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_get_governed_gas_pool_aggregators_feature">get_governed_gas_pool_aggregators_feature</a>(): u64 { <a href="features.md#0x1_features_GOVERNED_GAS_POOL_AGGREGATORS">GOVERNED_GAS_POOL_AGGREGATORS</a> }
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_features_governed_gas_pool_aggregators_enabled"></a>
+
+## Function `governed_gas_pool_aggregators_enabled`
+
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_governed_gas_pool_aggregators_enabled">governed_gas_pool_aggregators_enabled</a>(): bool
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_governed_gas_pool_aggregators_enabled">governed_gas_pool_aggregators_enabled</a>(): bool <b>acquires</b> <a href="features.md#0x1_features_Features">Features</a> {
+    <a href="features.md#0x1_features_is_enabled">is_enabled</a>(<a href="features.md#0x1_features_GOVERNED_GAS_POOL_AGGREGATORS">GOVERNED_GAS_POOL_AGGREGATORS</a>)
 }
 </code></pre>
 

@@ -197,14 +197,8 @@ module aptos_experimental::confidential_proof {
     // Proof verification functions
     //
 
-    /// Verifies the validity of the `withdraw` operation.
-    ///
-    /// This function ensures that the provided proof (`WithdrawalProof`) meets the following conditions:
-    /// 1. The current balance (`current_balance`) and new balance (`new_balance`) encrypt the corresponding values
-    ///    under the same encryption key (`ek`) before and after the withdrawal of the specified amount (`amount`), respectively.
-    /// 2. The relationship `new_balance = current_balance - amount` holds, verifying that the withdrawal amount is deducted correctly.
-    /// 3. The new balance (`new_balance`) is normalized, with each chunk adhering to the range [0, 2^16).
     /// Verifies a registration proof (ZKPoK of decryption key).
+    ///
     /// Ensures the registrant knows the decryption key dk such that ek = dk^{-1} * H.
     /// The proof is a Schnorr proof: verifier checks s * H + e * ek == R.
     public(friend) fun verify_registration_proof(
@@ -249,6 +243,13 @@ module aptos_experimental::confidential_proof {
         );
     }
 
+    /// Verifies the validity of the `withdraw` operation.
+    ///
+    /// This function ensures that the provided proof (`WithdrawalProof`) meets the following conditions:
+    /// 1. The current balance (`current_balance`) and new balance (`new_balance`) encrypt the corresponding values
+    ///    under the same encryption key (`ek`) before and after the withdrawal of the specified amount (`amount`), respectively.
+    /// 2. The relationship `new_balance = current_balance - amount` holds, verifying that the withdrawal amount is deducted correctly.
+    /// 3. The new balance (`new_balance`) is normalized, with each chunk adhering to the range [0, 2^16).
     ///
     /// If all conditions are satisfied, the proof validates the withdrawal; otherwise, the function causes an error.
     public fun verify_withdrawal_proof(
@@ -269,7 +270,7 @@ module aptos_experimental::confidential_proof {
     /// This function ensures that the provided proof (`TransferProof`) meets the following conditions:
     /// 1. The transferred amount (`recipient_amount` and `sender_amount`) and the auditors' amounts
     ///    (`auditor_amounts`), if provided, encrypt the transfer value using the recipient's, sender's,
-    ///    and auditors' encryption keys, repectively.
+    ///    and auditors' encryption keys, respectively.
     /// 2. The sender's current balance (`current_balance`) and new balance (`new_balance`) encrypt the corresponding values
     ///    under the sender's encryption key (`sender_ek`) before and after the transfer, respectively.
     /// 3. The relationship `new_balance = current_balance - transfer_amount` is maintained, ensuring balance integrity.
@@ -829,7 +830,7 @@ module aptos_experimental::confidential_proof {
         );
     }
 
-    /// Verifies the validity of the `NewBalanceRangeProof`.
+    /// Verifies the Bulletproofs range proof for `new_balance` ciphertext chunks (normalized 16-bit limbs).
     fun verify_new_balance_range_proof(
         new_balance: &confidential_balance::ConfidentialBalance,
         zkrp_new_balance: &RangeProof)
@@ -849,7 +850,7 @@ module aptos_experimental::confidential_proof {
         );
     }
 
-    /// Verifies the validity of the `TransferBalanceRangeProof`.
+    /// Verifies the Bulletproofs range proof for the encrypted transfer amount (`transfer_amount`).
     fun verify_transfer_amount_range_proof(
         transfer_amount: &confidential_balance::ConfidentialBalance,
         zkrp_transfer_amount: &RangeProof)
@@ -873,8 +874,8 @@ module aptos_experimental::confidential_proof {
     // Friend public functions
     //
 
-    /// Returns the number of range proofs in the provided `WithdrawalProof`.
-    /// Used in the `confidential_asset` module to validate input parameters of the `confidential_transfer` function.
+    /// Returns the number of auditors encoded in the transfer sigma proof (length of `proof.sigma_proof.xs.x7s`).
+    /// Used by `confidential_asset` when validating `confidential_transfer` inputs (e.g. auditor ciphertext vectors).
     public(friend) fun auditors_count_in_transfer_proof(proof: &TransferProof): u64 {
         proof.sigma_proof.xs.x7s.length()
     }

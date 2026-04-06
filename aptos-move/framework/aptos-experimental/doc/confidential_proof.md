@@ -1068,14 +1068,8 @@ Represents the proof structure for validating a key rotation operation.
 
 ## Function `verify_registration_proof`
 
-Verifies the validity of the <code>withdraw</code> operation.
-
-This function ensures that the provided proof (<code><a href="confidential_proof.md#0x7_confidential_proof_WithdrawalProof">WithdrawalProof</a></code>) meets the following conditions:
-1. The current balance (<code>current_balance</code>) and new balance (<code>new_balance</code>) encrypt the corresponding values
-under the same encryption key (<code>ek</code>) before and after the withdrawal of the specified amount (<code>amount</code>), respectively.
-2. The relationship <code>new_balance = current_balance - amount</code> holds, verifying that the withdrawal amount is deducted correctly.
-3. The new balance (<code>new_balance</code>) is normalized, with each chunk adhering to the range [0, 2^16).
 Verifies a registration proof (ZKPoK of decryption key).
+
 Ensures the registrant knows the decryption key dk such that ek = dk^{-1} * H.
 The proof is a Schnorr proof: verifier checks s * H + e * ek == R.
 
@@ -1140,6 +1134,13 @@ The proof is a Schnorr proof: verifier checks s * H + e * ek == R.
 
 ## Function `verify_withdrawal_proof`
 
+Verifies the validity of the <code>withdraw</code> operation.
+
+This function ensures that the provided proof (<code><a href="confidential_proof.md#0x7_confidential_proof_WithdrawalProof">WithdrawalProof</a></code>) meets the following conditions:
+1. The current balance (<code>current_balance</code>) and new balance (<code>new_balance</code>) encrypt the corresponding values
+under the same encryption key (<code>ek</code>) before and after the withdrawal of the specified amount (<code>amount</code>), respectively.
+2. The relationship <code>new_balance = current_balance - amount</code> holds, verifying that the withdrawal amount is deducted correctly.
+3. The new balance (<code>new_balance</code>) is normalized, with each chunk adhering to the range [0, 2^16).
 
 If all conditions are satisfied, the proof validates the withdrawal; otherwise, the function causes an error.
 
@@ -1180,7 +1181,7 @@ Verifies the validity of the <code>confidential_transfer</code> operation.
 This function ensures that the provided proof (<code><a href="confidential_proof.md#0x7_confidential_proof_TransferProof">TransferProof</a></code>) meets the following conditions:
 1. The transferred amount (<code>recipient_amount</code> and <code>sender_amount</code>) and the auditors' amounts
 (<code>auditor_amounts</code>), if provided, encrypt the transfer value using the recipient's, sender's,
-and auditors' encryption keys, repectively.
+and auditors' encryption keys, respectively.
 2. The sender's current balance (<code>current_balance</code>) and new balance (<code>new_balance</code>) encrypt the corresponding values
 under the sender's encryption key (<code>sender_ek</code>) before and after the transfer, respectively.
 3. The relationship <code>new_balance = current_balance - transfer_amount</code> is maintained, ensuring balance integrity.
@@ -1876,7 +1877,7 @@ Verifies the validity of the <code><a href="confidential_proof.md#0x7_confidenti
 
 ## Function `verify_new_balance_range_proof`
 
-Verifies the validity of the <code>NewBalanceRangeProof</code>.
+Verifies the Bulletproofs range proof for <code>new_balance</code> ciphertext chunks (normalized 16-bit limbs).
 
 
 <pre><code><b>fun</b> <a href="confidential_proof.md#0x7_confidential_proof_verify_new_balance_range_proof">verify_new_balance_range_proof</a>(new_balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>, zkrp_new_balance: &<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255_bulletproofs.md#0x1_ristretto255_bulletproofs_RangeProof">ristretto255_bulletproofs::RangeProof</a>)
@@ -1916,7 +1917,7 @@ Verifies the validity of the <code>NewBalanceRangeProof</code>.
 
 ## Function `verify_transfer_amount_range_proof`
 
-Verifies the validity of the <code>TransferBalanceRangeProof</code>.
+Verifies the Bulletproofs range proof for the encrypted transfer amount (<code>transfer_amount</code>).
 
 
 <pre><code><b>fun</b> <a href="confidential_proof.md#0x7_confidential_proof_verify_transfer_amount_range_proof">verify_transfer_amount_range_proof</a>(transfer_amount: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>, zkrp_transfer_amount: &<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255_bulletproofs.md#0x1_ristretto255_bulletproofs_RangeProof">ristretto255_bulletproofs::RangeProof</a>)
@@ -1956,8 +1957,8 @@ Verifies the validity of the <code>TransferBalanceRangeProof</code>.
 
 ## Function `auditors_count_in_transfer_proof`
 
-Returns the number of range proofs in the provided <code><a href="confidential_proof.md#0x7_confidential_proof_WithdrawalProof">WithdrawalProof</a></code>.
-Used in the <code><a href="confidential_asset.md#0x7_confidential_asset">confidential_asset</a></code> module to validate input parameters of the <code>confidential_transfer</code> function.
+Returns the number of auditors encoded in the transfer sigma proof (length of <code>proof.sigma_proof.xs.x7s</code>).
+Used by <code><a href="confidential_asset.md#0x7_confidential_asset">confidential_asset</a></code> when validating <code>confidential_transfer</code> inputs (e.g. auditor ciphertext vectors).
 
 
 <pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="confidential_proof.md#0x7_confidential_proof_auditors_count_in_transfer_proof">auditors_count_in_transfer_proof</a>(proof: &<a href="confidential_proof.md#0x7_confidential_proof_TransferProof">confidential_proof::TransferProof</a>): u64

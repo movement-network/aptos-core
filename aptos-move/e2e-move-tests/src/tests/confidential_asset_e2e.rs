@@ -40,7 +40,7 @@ const APTOS_EXPERIMENTAL: AccountAddress = AccountAddress::new({
     b
 });
 /// Published fungible metadata object for gas/APT in test genesis.
-const APT_METADATA: AccountAddress = AccountAddress::new({
+const MOVE_METADATA: AccountAddress = AccountAddress::new({
     let mut b = [0u8; AccountAddress::LENGTH];
     b[31] = 0x0a;
     b
@@ -329,7 +329,7 @@ fn run_register(
         Identifier::new("register").unwrap(),
         vec![],
         vec![
-            bcs::to_bytes(&APT_METADATA).unwrap(),
+            bcs::to_bytes(&MOVE_METADATA).unwrap(),
             // `vector<u8>` returns from the VM are already BCS (ULEB length + bytes); do not wrap again.
             ek_pubkey_32.to_vec(),
             comm.to_vec(),
@@ -346,7 +346,7 @@ fn run_deposit(h: &mut MoveHarness, account: &Account, amount: u64) -> Transacti
         Identifier::new("deposit").unwrap(),
         vec![],
         vec![
-            bcs::to_bytes(&APT_METADATA).unwrap(),
+            bcs::to_bytes(&MOVE_METADATA).unwrap(),
             bcs::to_bytes(&amount).unwrap(),
         ],
     ));
@@ -359,7 +359,7 @@ fn run_rollover(h: &mut MoveHarness, account: &Account) -> TransactionStatus {
         ca_module_id(),
         Identifier::new("rollover_pending_balance").unwrap(),
         vec![],
-        vec![bcs::to_bytes(&APT_METADATA).unwrap()],
+        vec![bcs::to_bytes(&MOVE_METADATA).unwrap()],
     ));
     let txn = h.create_transaction_payload(account, payload);
     h.run(txn)
@@ -370,7 +370,7 @@ fn run_rollover_and_freeze(h: &mut MoveHarness, account: &Account) -> Transactio
         ca_module_id(),
         Identifier::new("rollover_pending_balance_and_freeze").unwrap(),
         vec![],
-        vec![bcs::to_bytes(&APT_METADATA).unwrap()],
+        vec![bcs::to_bytes(&MOVE_METADATA).unwrap()],
     ));
     let txn = h.create_transaction_payload(account, payload);
     h.run(txn)
@@ -381,7 +381,7 @@ fn set_asset_auditor(h: &mut MoveHarness, auditor_pubkey_32: &[u8]) {
         MoveValue::Signer(AccountAddress::ONE)
             .simple_serialize()
             .unwrap(),
-        bcs::to_bytes(&APT_METADATA).unwrap(),
+        bcs::to_bytes(&MOVE_METADATA).unwrap(),
         auditor_pubkey_32.to_vec(),
     ];
     bypass_at(
@@ -409,7 +409,7 @@ fn pack_transfer_simple(
         dk.to_vec(),
         bcs::to_bytes(&amount).unwrap(),
         bcs::to_bytes(&new_balance).unwrap(),
-        bcs::to_bytes(&APT_METADATA).unwrap(),
+        bcs::to_bytes(&MOVE_METADATA).unwrap(),
     ];
     let ret = bypass_at(
         h,
@@ -443,7 +443,7 @@ fn pack_transfer_audited(
         dk.to_vec(),
         bcs::to_bytes(&amount).unwrap(),
         bcs::to_bytes(&new_balance).unwrap(),
-        bcs::to_bytes(&APT_METADATA).unwrap(),
+        bcs::to_bytes(&MOVE_METADATA).unwrap(),
         bcs::to_bytes(&auditor_inner).unwrap(),
     ];
     let ret = bypass_at(
@@ -468,7 +468,7 @@ fn run_confidential_transfer(
         Identifier::new("confidential_transfer").unwrap(),
         vec![],
         vec![
-            bcs::to_bytes(&APT_METADATA).unwrap(),
+            bcs::to_bytes(&MOVE_METADATA).unwrap(),
             bcs::to_bytes(&recipient).unwrap(),
             parts[0].clone(),
             parts[1].clone(),
@@ -500,7 +500,7 @@ fn pack_withdraw(
         ek_struct.to_vec(),
         bcs::to_bytes(&withdraw_amt).unwrap(),
         bcs::to_bytes(&new_balance).unwrap(),
-        bcs::to_bytes(&APT_METADATA).unwrap(),
+        bcs::to_bytes(&MOVE_METADATA).unwrap(),
     ];
     let ret = bypass_at(
         h,
@@ -531,7 +531,7 @@ fn run_withdraw_to(
         Identifier::new("withdraw_to").unwrap(),
         vec![],
         vec![
-            bcs::to_bytes(&APT_METADATA).unwrap(),
+            bcs::to_bytes(&MOVE_METADATA).unwrap(),
             bcs::to_bytes(&to).unwrap(),
             bcs::to_bytes(&amount).unwrap(),
             new_bal.to_vec(),
@@ -559,7 +559,7 @@ fn pack_rotate(
         new_dk.to_vec(),
         new_ek.to_vec(),
         bcs::to_bytes(&balance).unwrap(),
-        bcs::to_bytes(&APT_METADATA).unwrap(),
+        bcs::to_bytes(&MOVE_METADATA).unwrap(),
     ];
     let ret = bypass_at(
         h,
@@ -590,7 +590,7 @@ fn run_rotate(
         Identifier::new("rotate_encryption_key").unwrap(),
         vec![],
         vec![
-            bcs::to_bytes(&APT_METADATA).unwrap(),
+            bcs::to_bytes(&MOVE_METADATA).unwrap(),
             new_ek.to_vec(),
             new_bal.to_vec(),
             zkrp.to_vec(),
@@ -612,7 +612,7 @@ fn baseline_fa_transfer_gas(h: &mut MoveHarness, from: &Account, to: AccountAddr
             type_args: vec![],
         }))],
         vec![
-            bcs::to_bytes(&APT_METADATA).unwrap(),
+            bcs::to_bytes(&MOVE_METADATA).unwrap(),
             bcs::to_bytes(&to).unwrap(),
             bcs::to_bytes(&amount).unwrap(),
         ],
@@ -654,7 +654,7 @@ fn confidential_asset_register_deposit_rollover_and_gas() {
     let (dk, ek_struct) = generate_elgamal_keypair(&mut h);
     let ek_pk = twisted_pubkey_bytes(&mut h, &ek_struct);
     let (comm, resp) =
-        prove_registration_parts(&mut h, chain, alice_addr, &dk, &ek_struct, APT_METADATA);
+        prove_registration_parts(&mut h, chain, alice_addr, &dk, &ek_struct, MOVE_METADATA);
     let st = run_register(&mut h, &alice, &ek_pk, &comm, &resp);
     assert_kept_success(&st, "register");
 
@@ -669,7 +669,7 @@ fn confidential_asset_register_deposit_rollover_and_gas() {
         Identifier::new("deposit").unwrap(),
         vec![],
         vec![
-            bcs::to_bytes(&APT_METADATA).unwrap(),
+            bcs::to_bytes(&MOVE_METADATA).unwrap(),
             bcs::to_bytes(&1_000u64).unwrap(),
         ],
     ));
@@ -694,7 +694,7 @@ fn confidential_asset_transfer_withdraw_rotate_and_auditor() {
         (&bob, bob_addr, &bob_dk, &bob_ek),
     ] {
         let ek_pk = twisted_pubkey_bytes(&mut h, ek_struct);
-        let (c, r) = prove_registration_parts(&mut h, chain, addr, dk, ek_struct, APT_METADATA);
+        let (c, r) = prove_registration_parts(&mut h, chain, addr, dk, ek_struct, MOVE_METADATA);
         assert_kept_success(&run_register(&mut h, acct, &ek_pk, &c, &r), "register");
     }
 
@@ -794,7 +794,7 @@ fn confidential_asset_pending_balance_view_matches_deposit() {
     let account = h.new_account_with_balance_at(u, 40_000_000_000_000);
     let (dk, ek_struct) = generate_elgamal_keypair(&mut h);
     let ek_pk = twisted_pubkey_bytes(&mut h, &ek_struct);
-    let (c, r) = prove_registration_parts(&mut h, chain, u, &dk, &ek_struct, APT_METADATA);
+    let (c, r) = prove_registration_parts(&mut h, chain, u, &dk, &ek_struct, MOVE_METADATA);
     assert_kept_success(&run_register(&mut h, &account, &ek_pk, &c, &r), "register");
 
     let deposit_amt: u64 = 777;
@@ -802,7 +802,7 @@ fn confidential_asset_pending_balance_view_matches_deposit() {
 
     let args = vec![
         bcs::to_bytes(&u).unwrap(),
-        bcs::to_bytes(&APT_METADATA).unwrap(),
+        bcs::to_bytes(&MOVE_METADATA).unwrap(),
         dk.clone(),
         bcs::to_bytes(&deposit_amt).unwrap(),
     ];
@@ -845,7 +845,7 @@ fn confidential_transfer_with_voluntary_auditors_only() {
         let (bob_dk, bob_ek) = generate_elgamal_keypair(&mut h);
         for (acct, addr, dk, ek) in [(&alice, alice_addr, &alice_dk, &alice_ek), (&bob, bob_addr, &bob_dk, &bob_ek)] {
             let pk = twisted_pubkey_bytes(&mut h, ek);
-            let (c, r) = prove_registration_parts(&mut h, chain, addr, dk, ek, APT_METADATA);
+            let (c, r) = prove_registration_parts(&mut h, chain, addr, dk, ek, MOVE_METADATA);
             assert_kept_success(&run_register(&mut h, acct, &pk, &c, &r), "register");
         }
 
@@ -916,7 +916,7 @@ fn confidential_transfer_asset_auditor_plus_voluntary_auditors() {
         let (bob_dk, bob_ek) = generate_elgamal_keypair(&mut h);
         for (acct, addr, dk, ek) in [(&alice, alice_addr, &alice_dk, &alice_ek), (&bob, bob_addr, &bob_dk, &bob_ek)] {
             let pk = twisted_pubkey_bytes(&mut h, ek);
-            let (c, r) = prove_registration_parts(&mut h, chain, addr, dk, ek, APT_METADATA);
+            let (c, r) = prove_registration_parts(&mut h, chain, addr, dk, ek, MOVE_METADATA);
             assert_kept_success(&run_register(&mut h, acct, &pk, &c, &r), "register");
         }
 
@@ -957,7 +957,7 @@ fn confidential_withdraw_without_asset_auditor() {
     let account = h.new_account_with_balance_at(u, 40_000_000_000_000);
     let (dk, ek) = generate_elgamal_keypair(&mut h);
     let pk = twisted_pubkey_bytes(&mut h, &ek);
-    let (c, r) = prove_registration_parts(&mut h, chain, u, &dk, &ek, APT_METADATA);
+    let (c, r) = prove_registration_parts(&mut h, chain, u, &dk, &ek, MOVE_METADATA);
     assert_kept_success(&run_register(&mut h, &account, &pk, &c, &r), "register");
 
     let deposit_amt: u64 = 4_000;
@@ -994,7 +994,7 @@ fn confidential_withdraw_after_asset_auditor_enabled() {
 
     let (dk, ek) = generate_elgamal_keypair(&mut h);
     let pk = twisted_pubkey_bytes(&mut h, &ek);
-    let (c, r) = prove_registration_parts(&mut h, chain, u, &dk, &ek, APT_METADATA);
+    let (c, r) = prove_registration_parts(&mut h, chain, u, &dk, &ek, MOVE_METADATA);
     assert_kept_success(&run_register(&mut h, &account, &pk, &c, &r), "register");
 
     let deposit_amt: u64 = 3_000;
@@ -1027,7 +1027,7 @@ fn confidential_transfer_rejects_empty_auditors_when_asset_auditor_set() {
     let (bob_dk, bob_ek) = generate_elgamal_keypair(&mut h);
     for (acct, addr, dk, ek) in [(&alice, alice_addr, &alice_dk, &alice_ek), (&bob, bob_addr, &bob_dk, &bob_ek)] {
         let pk = twisted_pubkey_bytes(&mut h, ek);
-        let (c, r) = prove_registration_parts(&mut h, chain, addr, dk, ek, APT_METADATA);
+        let (c, r) = prove_registration_parts(&mut h, chain, addr, dk, ek, MOVE_METADATA);
         assert_kept_success(&run_register(&mut h, acct, &pk, &c, &r), "register");
     }
 
@@ -1067,7 +1067,7 @@ fn confidential_transfer_rejects_non_matching_asset_auditor_pubkey() {
     let (bob_dk, bob_ek) = generate_elgamal_keypair(&mut h);
     for (acct, addr, dk, ek) in [(&alice, alice_addr, &alice_dk, &alice_ek), (&bob, bob_addr, &bob_dk, &bob_ek)] {
         let pk = twisted_pubkey_bytes(&mut h, ek);
-        let (c, r) = prove_registration_parts(&mut h, chain, addr, dk, ek, APT_METADATA);
+        let (c, r) = prove_registration_parts(&mut h, chain, addr, dk, ek, MOVE_METADATA);
         assert_kept_success(&run_register(&mut h, acct, &pk, &c, &r), "register");
     }
 

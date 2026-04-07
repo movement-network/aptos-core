@@ -37,6 +37,7 @@ module aptos_experimental::confidential_asset_tests {
         let (proof, new_balance) = confidential_proof::prove_withdrawal(
             cid,
             from,
+            @aptos_experimental,
             sender_dk,
             &sender_ek,
             amount,
@@ -78,6 +79,7 @@ module aptos_experimental::confidential_asset_tests {
         ) = confidential_proof::prove_transfer(
             4u8, // test chain ID
             from,
+            @aptos_experimental,
             sender_dk,
             &sender_ek,
             &recipient_ek,
@@ -131,6 +133,7 @@ module aptos_experimental::confidential_asset_tests {
         ) = confidential_proof::prove_transfer(
             4u8, // test chain ID
             from,
+            @aptos_experimental,
             sender_dk,
             &sender_ek,
             &recipient_ek,
@@ -178,6 +181,7 @@ module aptos_experimental::confidential_asset_tests {
         let (proof, new_balance) = confidential_proof::prove_rotation(
             4u8, // test chain ID
             from,
+            @aptos_experimental,
             sender_dk,
             new_dk,
             &sender_ek,
@@ -213,6 +217,7 @@ module aptos_experimental::confidential_asset_tests {
         let (proof, new_balance) = confidential_proof::prove_normalization(
             4u8, // test chain ID
             from,
+            @aptos_experimental,
             sender_dk,
             &sender_ek,
             amount,

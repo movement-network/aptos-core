@@ -7,6 +7,8 @@ module aptos_experimental::confidential_proof_tests {
     // Test constants for domain separation
     const TEST_CHAIN_ID: u8 = 4;
     const TEST_SENDER: address = @0xa1;
+    /// Published package account for `confidential_asset` / `confidential_proof` (matches `[addresses]` in experimental `Move.toml`).
+    const TEST_CONTRACT_ADDRESS: address = @aptos_experimental;
 
     struct WithdrawParameters has drop {
         ek: twisted_elgamal::CompressedPubkey,
@@ -68,6 +70,7 @@ module aptos_experimental::confidential_proof_tests {
         ) = confidential_proof::prove_withdrawal(
             TEST_CHAIN_ID,
             TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
             &dk,
             &ek,
             amount,
@@ -112,6 +115,7 @@ module aptos_experimental::confidential_proof_tests {
         ) = confidential_proof::prove_transfer(
             TEST_CHAIN_ID,
             TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
             &sender_dk,
             &sender_ek,
             &recipient_ek,
@@ -155,6 +159,7 @@ module aptos_experimental::confidential_proof_tests {
         ) = confidential_proof::prove_rotation(
             TEST_CHAIN_ID,
             TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
             &current_dk,
             &new_dk,
             &current_ek,
@@ -190,6 +195,7 @@ module aptos_experimental::confidential_proof_tests {
         ) = confidential_proof::prove_normalization(
             TEST_CHAIN_ID,
             TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
             &dk,
             &ek,
             amount,
@@ -212,6 +218,7 @@ module aptos_experimental::confidential_proof_tests {
         confidential_proof::verify_withdrawal_proof(
             TEST_CHAIN_ID,
             TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
             &params.ek,
             params.amount,
             &params.current_balance,
@@ -227,6 +234,7 @@ module aptos_experimental::confidential_proof_tests {
         confidential_proof::verify_withdrawal_proof(
             TEST_CHAIN_ID,
             TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
             &params.ek,
             1000,
             &params.current_balance,
@@ -242,6 +250,7 @@ module aptos_experimental::confidential_proof_tests {
         confidential_proof::verify_withdrawal_proof(
             TEST_CHAIN_ID,
             TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
             &params.ek,
             params.amount,
             &confidential_balance::new_actual_balance_from_u128(
@@ -261,6 +270,7 @@ module aptos_experimental::confidential_proof_tests {
         confidential_proof::verify_withdrawal_proof(
             TEST_CHAIN_ID,
             TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
             &params.ek,
             params.amount,
             &params.current_balance,
@@ -282,6 +292,7 @@ module aptos_experimental::confidential_proof_tests {
         confidential_proof::verify_withdrawal_proof(
             TEST_CHAIN_ID,
             TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
             &params.ek,
             params.amount,
             &params.current_balance,
@@ -296,6 +307,7 @@ module aptos_experimental::confidential_proof_tests {
         confidential_proof::verify_transfer_proof(
             TEST_CHAIN_ID,
             TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
             &params.sender_ek,
             &params.recipient_ek,
             &params.current_balance,
@@ -315,6 +327,7 @@ module aptos_experimental::confidential_proof_tests {
         confidential_proof::verify_transfer_proof(
             TEST_CHAIN_ID,
             TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
             &params.recipient_ek,
             &params.recipient_ek,
             &params.current_balance,
@@ -334,6 +347,7 @@ module aptos_experimental::confidential_proof_tests {
         confidential_proof::verify_transfer_proof(
             TEST_CHAIN_ID,
             TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
             &params.sender_ek,
             &params.sender_ek,
             &params.current_balance,
@@ -353,6 +367,7 @@ module aptos_experimental::confidential_proof_tests {
         confidential_proof::verify_transfer_proof(
             TEST_CHAIN_ID,
             TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
             &params.sender_ek,
             &params.recipient_ek,
             &confidential_balance::new_actual_balance_from_u128(
@@ -378,6 +393,7 @@ module aptos_experimental::confidential_proof_tests {
         confidential_proof::verify_transfer_proof(
             TEST_CHAIN_ID,
             TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
             &params.sender_ek,
             &params.recipient_ek,
             &params.current_balance,
@@ -397,6 +413,7 @@ module aptos_experimental::confidential_proof_tests {
         confidential_proof::verify_transfer_proof(
             TEST_CHAIN_ID,
             TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
             &params.sender_ek,
             &params.recipient_ek,
             &params.current_balance,
@@ -417,6 +434,7 @@ module aptos_experimental::confidential_proof_tests {
         confidential_proof::verify_transfer_proof(
             TEST_CHAIN_ID,
             TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
             &params.sender_ek,
             &params.recipient_ek,
             &params.current_balance,
@@ -440,6 +458,7 @@ module aptos_experimental::confidential_proof_tests {
         confidential_proof::verify_transfer_proof(
             TEST_CHAIN_ID,
             TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
             &params.sender_ek,
             &params.recipient_ek,
             &params.current_balance,
@@ -467,6 +486,7 @@ module aptos_experimental::confidential_proof_tests {
         confidential_proof::verify_transfer_proof(
             TEST_CHAIN_ID,
             TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
             &params.sender_ek,
             &params.recipient_ek,
             &params.current_balance,
@@ -485,6 +505,7 @@ module aptos_experimental::confidential_proof_tests {
         confidential_proof::verify_rotation_proof(
             TEST_CHAIN_ID,
             TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
             &params.current_ek,
             &params.new_ek,
             &params.current_balance,
@@ -500,6 +521,7 @@ module aptos_experimental::confidential_proof_tests {
         confidential_proof::verify_rotation_proof(
             TEST_CHAIN_ID,
             TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
             &params.new_ek,
             &params.new_ek,
             &params.current_balance,
@@ -515,6 +537,7 @@ module aptos_experimental::confidential_proof_tests {
         confidential_proof::verify_rotation_proof(
             TEST_CHAIN_ID,
             TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
             &params.current_ek,
             &params.current_ek,
             &params.current_balance,
@@ -530,6 +553,7 @@ module aptos_experimental::confidential_proof_tests {
         confidential_proof::verify_rotation_proof(
             TEST_CHAIN_ID,
             TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
             &params.current_ek,
             &params.new_ek,
             &confidential_balance::new_actual_balance_from_u128(
@@ -549,6 +573,7 @@ module aptos_experimental::confidential_proof_tests {
         confidential_proof::verify_rotation_proof(
             TEST_CHAIN_ID,
             TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
             &params.current_ek,
             &params.new_ek,
             &params.current_balance,
@@ -567,6 +592,7 @@ module aptos_experimental::confidential_proof_tests {
         confidential_proof::verify_normalization_proof(
             TEST_CHAIN_ID,
             TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
             &params.ek,
             &params.current_balance,
             &params.new_balance,
@@ -583,6 +609,7 @@ module aptos_experimental::confidential_proof_tests {
         confidential_proof::verify_normalization_proof(
             TEST_CHAIN_ID,
             TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
             &ek,
             &params.current_balance,
             &params.new_balance,
@@ -597,6 +624,7 @@ module aptos_experimental::confidential_proof_tests {
         confidential_proof::verify_normalization_proof(
             TEST_CHAIN_ID,
             TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
             &params.ek,
             &confidential_balance::new_actual_balance_from_u128(
                 1000,
@@ -615,6 +643,7 @@ module aptos_experimental::confidential_proof_tests {
         confidential_proof::verify_normalization_proof(
             TEST_CHAIN_ID,
             TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
             &params.ek,
             &params.current_balance,
             &confidential_balance::new_actual_balance_from_u128(
@@ -635,10 +664,23 @@ module aptos_experimental::confidential_proof_tests {
     fun success_registration() {
         let (dk, ek) = generate_twisted_elgamal_keypair();
         let (commitment, response) = confidential_proof::prove_registration(
-            TEST_CHAIN_ID, TEST_SENDER, &dk, &ek, TEST_TOKEN_ADDRESS);
+            TEST_CHAIN_ID,
+            TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
+            &dk,
+            &ek,
+            TEST_TOKEN_ADDRESS,
+        );
 
         confidential_proof::verify_registration_proof_for_test(
-            TEST_CHAIN_ID, TEST_SENDER, &ek, TEST_TOKEN_ADDRESS, commitment, response);
+            TEST_CHAIN_ID,
+            TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
+            &ek,
+            TEST_TOKEN_ADDRESS,
+            commitment,
+            response,
+        );
     }
 
     #[test]
@@ -646,12 +688,25 @@ module aptos_experimental::confidential_proof_tests {
     fun fail_registration_if_wrong_ek() {
         let (dk, ek) = generate_twisted_elgamal_keypair();
         let (commitment, response) = confidential_proof::prove_registration(
-            TEST_CHAIN_ID, TEST_SENDER, &dk, &ek, TEST_TOKEN_ADDRESS);
+            TEST_CHAIN_ID,
+            TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
+            &dk,
+            &ek,
+            TEST_TOKEN_ADDRESS,
+        );
 
         let (_, wrong_ek) = generate_twisted_elgamal_keypair();
 
         confidential_proof::verify_registration_proof_for_test(
-            TEST_CHAIN_ID, TEST_SENDER, &wrong_ek, TEST_TOKEN_ADDRESS, commitment, response);
+            TEST_CHAIN_ID,
+            TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
+            &wrong_ek,
+            TEST_TOKEN_ADDRESS,
+            commitment,
+            response,
+        );
     }
 
     #[test]
@@ -659,10 +714,23 @@ module aptos_experimental::confidential_proof_tests {
     fun fail_registration_if_wrong_token() {
         let (dk, ek) = generate_twisted_elgamal_keypair();
         let (commitment, response) = confidential_proof::prove_registration(
-            TEST_CHAIN_ID, TEST_SENDER, &dk, &ek, TEST_TOKEN_ADDRESS);
+            TEST_CHAIN_ID,
+            TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
+            &dk,
+            &ek,
+            TEST_TOKEN_ADDRESS,
+        );
 
         confidential_proof::verify_registration_proof_for_test(
-            TEST_CHAIN_ID, TEST_SENDER, &ek, @0xdead, commitment, response);
+            TEST_CHAIN_ID,
+            TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
+            &ek,
+            @0xdead,
+            commitment,
+            response,
+        );
     }
 
     #[test]
@@ -670,10 +738,23 @@ module aptos_experimental::confidential_proof_tests {
     fun fail_registration_if_wrong_chain_id() {
         let (dk, ek) = generate_twisted_elgamal_keypair();
         let (commitment, response) = confidential_proof::prove_registration(
-            TEST_CHAIN_ID, TEST_SENDER, &dk, &ek, TEST_TOKEN_ADDRESS);
+            TEST_CHAIN_ID,
+            TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
+            &dk,
+            &ek,
+            TEST_TOKEN_ADDRESS,
+        );
 
         confidential_proof::verify_registration_proof_for_test(
-            TEST_CHAIN_ID + 1, TEST_SENDER, &ek, TEST_TOKEN_ADDRESS, commitment, response);
+            TEST_CHAIN_ID + 1,
+            TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
+            &ek,
+            TEST_TOKEN_ADDRESS,
+            commitment,
+            response,
+        );
     }
 
     #[test]
@@ -681,10 +762,47 @@ module aptos_experimental::confidential_proof_tests {
     fun fail_registration_if_wrong_sender() {
         let (dk, ek) = generate_twisted_elgamal_keypair();
         let (commitment, response) = confidential_proof::prove_registration(
-            TEST_CHAIN_ID, TEST_SENDER, &dk, &ek, TEST_TOKEN_ADDRESS);
+            TEST_CHAIN_ID,
+            TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
+            &dk,
+            &ek,
+            TEST_TOKEN_ADDRESS,
+        );
 
         confidential_proof::verify_registration_proof_for_test(
-            TEST_CHAIN_ID, @0xb2, &ek, TEST_TOKEN_ADDRESS, commitment, response);
+            TEST_CHAIN_ID,
+            @0xb2,
+            TEST_CONTRACT_ADDRESS,
+            &ek,
+            TEST_TOKEN_ADDRESS,
+            commitment,
+            response,
+        );
+    }
+
+    #[test]
+    #[expected_failure(abort_code = 0x010001, location = confidential_proof)]
+    fun fail_registration_if_wrong_contract_address() {
+        let (dk, ek) = generate_twisted_elgamal_keypair();
+        let (commitment, response) = confidential_proof::prove_registration(
+            TEST_CHAIN_ID,
+            TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
+            &dk,
+            &ek,
+            TEST_TOKEN_ADDRESS,
+        );
+
+        confidential_proof::verify_registration_proof_for_test(
+            TEST_CHAIN_ID,
+            TEST_SENDER,
+            @0xc0ffee,
+            &ek,
+            TEST_TOKEN_ADDRESS,
+            commitment,
+            response,
+        );
     }
 
     // ==========================================
@@ -699,6 +817,7 @@ module aptos_experimental::confidential_proof_tests {
         confidential_proof::verify_withdrawal_proof(
             TEST_CHAIN_ID + 1,
             TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
             &params.ek,
             params.amount,
             &params.current_balance,
@@ -714,6 +833,7 @@ module aptos_experimental::confidential_proof_tests {
         confidential_proof::verify_withdrawal_proof(
             TEST_CHAIN_ID,
             @0xb2,
+            TEST_CONTRACT_ADDRESS,
             &params.ek,
             params.amount,
             &params.current_balance,
@@ -729,6 +849,7 @@ module aptos_experimental::confidential_proof_tests {
         confidential_proof::verify_transfer_proof(
             TEST_CHAIN_ID + 1,
             TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
             &params.sender_ek,
             &params.recipient_ek,
             &params.current_balance,
@@ -748,6 +869,7 @@ module aptos_experimental::confidential_proof_tests {
         confidential_proof::verify_transfer_proof(
             TEST_CHAIN_ID,
             @0xb2,
+            TEST_CONTRACT_ADDRESS,
             &params.sender_ek,
             &params.recipient_ek,
             &params.current_balance,
@@ -767,6 +889,7 @@ module aptos_experimental::confidential_proof_tests {
         confidential_proof::verify_rotation_proof(
             TEST_CHAIN_ID + 1,
             TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
             &params.current_ek,
             &params.new_ek,
             &params.current_balance,
@@ -782,6 +905,7 @@ module aptos_experimental::confidential_proof_tests {
         confidential_proof::verify_rotation_proof(
             TEST_CHAIN_ID,
             @0xb2,
+            TEST_CONTRACT_ADDRESS,
             &params.current_ek,
             &params.new_ek,
             &params.current_balance,
@@ -797,6 +921,7 @@ module aptos_experimental::confidential_proof_tests {
         confidential_proof::verify_normalization_proof(
             TEST_CHAIN_ID + 1,
             TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
             &params.ek,
             &params.current_balance,
             &params.new_balance,
@@ -811,6 +936,7 @@ module aptos_experimental::confidential_proof_tests {
         confidential_proof::verify_normalization_proof(
             TEST_CHAIN_ID,
             @0xb2,
+            TEST_CONTRACT_ADDRESS,
             &params.ek,
             &params.current_balance,
             &params.new_balance,

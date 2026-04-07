@@ -204,6 +204,7 @@ module aptos_experimental::confidential_proof {
     public(friend) fun verify_registration_proof(
         chain_id: u8,
         sender: address,
+        contract_address: address,
         ek: &twisted_elgamal::CompressedPubkey,
         token_address: address,
         commitment_bytes: vector<u8>,
@@ -219,9 +220,10 @@ module aptos_experimental::confidential_proof {
         assert!(option::is_some(&s), error::invalid_argument(ESIGMA_PROTOCOL_VERIFY_FAILED));
         let s = option::extract(&mut s);
 
-        // Recompute Fiat-Shamir challenge: e = tagged_hash("Registration", chain_id || sender || token || ek || R)
+        // Recompute Fiat-Shamir challenge: e = tagged_hash("Registration", chain_id || sender || contract || token || ek || R)
         let msg = vector::singleton(chain_id);
         msg.append(std::bcs::to_bytes(&sender));
+        msg.append(std::bcs::to_bytes(&contract_address));
         msg.append(std::bcs::to_bytes(&token_address));
         msg.append(twisted_elgamal::pubkey_to_bytes(ek));
         msg.append(ristretto255::compressed_point_to_bytes(r_compressed));
@@ -255,13 +257,23 @@ module aptos_experimental::confidential_proof {
     public fun verify_withdrawal_proof(
         chain_id: u8,
         sender: address,
+        contract_address: address,
         ek: &twisted_elgamal::CompressedPubkey,
         amount: u64,
         current_balance: &confidential_balance::ConfidentialBalance,
         new_balance: &confidential_balance::ConfidentialBalance,
         proof: &WithdrawalProof)
     {
-        verify_withdrawal_sigma_proof(chain_id, sender, ek, amount, current_balance, new_balance, &proof.sigma_proof);
+        verify_withdrawal_sigma_proof(
+            chain_id,
+            sender,
+            contract_address,
+            ek,
+            amount,
+            current_balance,
+            new_balance,
+            &proof.sigma_proof
+        );
         verify_new_balance_range_proof(new_balance, &proof.zkrp_new_balance);
     }
 
@@ -281,6 +293,7 @@ module aptos_experimental::confidential_proof {
     public fun verify_transfer_proof(
         chain_id: u8,
         sender: address,
+        contract_address: address,
         sender_ek: &twisted_elgamal::CompressedPubkey,
         recipient_ek: &twisted_elgamal::CompressedPubkey,
         current_balance: &confidential_balance::ConfidentialBalance,
@@ -294,6 +307,7 @@ module aptos_experimental::confidential_proof {
         verify_transfer_sigma_proof(
             chain_id,
             sender,
+            contract_address,
             sender_ek,
             recipient_ek,
             current_balance,
@@ -320,12 +334,21 @@ module aptos_experimental::confidential_proof {
     public fun verify_normalization_proof(
         chain_id: u8,
         sender: address,
+        contract_address: address,
         ek: &twisted_elgamal::CompressedPubkey,
         current_balance: &confidential_balance::ConfidentialBalance,
         new_balance: &confidential_balance::ConfidentialBalance,
         proof: &NormalizationProof)
     {
-        verify_normalization_sigma_proof(chain_id, sender, ek, current_balance, new_balance, &proof.sigma_proof);
+        verify_normalization_sigma_proof(
+            chain_id,
+            sender,
+            contract_address,
+            ek,
+            current_balance,
+            new_balance,
+            &proof.sigma_proof
+        );
         verify_new_balance_range_proof(new_balance, &proof.zkrp_new_balance);
     }
 
@@ -342,13 +365,23 @@ module aptos_experimental::confidential_proof {
     public fun verify_rotation_proof(
         chain_id: u8,
         sender: address,
+        contract_address: address,
         current_ek: &twisted_elgamal::CompressedPubkey,
         new_ek: &twisted_elgamal::CompressedPubkey,
         current_balance: &confidential_balance::ConfidentialBalance,
         new_balance: &confidential_balance::ConfidentialBalance,
         proof: &RotationProof)
     {
-        verify_rotation_sigma_proof(chain_id, sender, current_ek, new_ek, current_balance, new_balance, &proof.sigma_proof);
+        verify_rotation_sigma_proof(
+            chain_id,
+            sender,
+            contract_address,
+            current_ek,
+            new_ek,
+            current_balance,
+            new_balance,
+            &proof.sigma_proof
+        );
         verify_new_balance_range_proof(new_balance, &proof.zkrp_new_balance);
     }
 
@@ -360,6 +393,7 @@ module aptos_experimental::confidential_proof {
     fun verify_withdrawal_sigma_proof(
         chain_id: u8,
         sender: address,
+        contract_address: address,
         ek: &twisted_elgamal::CompressedPubkey,
         amount: u64,
         current_balance: &confidential_balance::ConfidentialBalance,
@@ -369,7 +403,15 @@ module aptos_experimental::confidential_proof {
         let amount_chunks = confidential_balance::split_into_chunks_u64(amount);
         let amount = ristretto255::new_scalar_from_u64(amount);
 
-        let rho = fiat_shamir_withdrawal_sigma_proof_challenge(chain_id, sender, ek, &amount_chunks, current_balance, &proof.xs);
+        let rho = fiat_shamir_withdrawal_sigma_proof_challenge(
+            chain_id,
+            sender,
+            contract_address,
+            ek,
+            &amount_chunks,
+            current_balance,
+            &proof.xs
+        );
 
         let gammas = msm_withdrawal_gammas(&rho);
 
@@ -452,6 +494,7 @@ module aptos_experimental::confidential_proof {
     fun verify_transfer_sigma_proof(
         chain_id: u8,
         sender: address,
+        contract_address: address,
         sender_ek: &twisted_elgamal::CompressedPubkey,
         recipient_ek: &twisted_elgamal::CompressedPubkey,
         current_balance: &confidential_balance::ConfidentialBalance,
@@ -465,6 +508,7 @@ module aptos_experimental::confidential_proof {
         let rho = fiat_shamir_transfer_sigma_proof_challenge(
             chain_id,
             sender,
+            contract_address,
             sender_ek,
             recipient_ek,
             current_balance,
@@ -648,12 +692,21 @@ module aptos_experimental::confidential_proof {
     fun verify_normalization_sigma_proof(
         chain_id: u8,
         sender: address,
+        contract_address: address,
         ek: &twisted_elgamal::CompressedPubkey,
         current_balance: &confidential_balance::ConfidentialBalance,
         new_balance: &confidential_balance::ConfidentialBalance,
         proof: &NormalizationSigmaProof)
     {
-        let rho = fiat_shamir_normalization_sigma_proof_challenge(chain_id, sender, ek, current_balance, new_balance, &proof.xs);
+        let rho = fiat_shamir_normalization_sigma_proof_challenge(
+            chain_id,
+            sender,
+            contract_address,
+            ek,
+            current_balance,
+            new_balance,
+            &proof.xs
+        );
         let gammas = msm_normalization_gammas(&rho);
 
         let scalars_lhs = vector[gammas.g1, gammas.g2];
@@ -734,6 +787,7 @@ module aptos_experimental::confidential_proof {
     fun verify_rotation_sigma_proof(
         chain_id: u8,
         sender: address,
+        contract_address: address,
         current_ek: &twisted_elgamal::CompressedPubkey,
         new_ek: &twisted_elgamal::CompressedPubkey,
         current_balance: &confidential_balance::ConfidentialBalance,
@@ -743,6 +797,7 @@ module aptos_experimental::confidential_proof {
         let rho = fiat_shamir_rotation_sigma_proof_challenge(
             chain_id,
             sender,
+            contract_address,
             current_ek,
             new_ek,
             current_balance,
@@ -1219,10 +1274,16 @@ module aptos_experimental::confidential_proof {
         std::option::extract(&mut ristretto255::new_scalar_uniform_from_64_bytes(hash))
     }
 
-    /// Prepends chain_id (as a single byte) and sender address to a Fiat-Shamir message buffer.
-    fun prepend_domain_context(bytes: &mut vector<u8>, chain_id: u8, sender: address) {
+    /// Prepends `chain_id` (single byte), `sender`, and `contract_address` (BCS) to a Fiat-Shamir message buffer.
+    fun prepend_domain_context(
+        bytes: &mut vector<u8>,
+        chain_id: u8,
+        sender: address,
+        contract_address: address
+    ) {
         let context = vector::singleton(chain_id);
         context.append(std::bcs::to_bytes(&sender));
+        context.append(std::bcs::to_bytes(&contract_address));
         context.append(*bytes);
         *bytes = context;
     }
@@ -1237,12 +1298,13 @@ module aptos_experimental::confidential_proof {
     fun fiat_shamir_withdrawal_sigma_proof_challenge(
         chain_id: u8,
         sender: address,
+        contract_address: address,
         ek: &twisted_elgamal::CompressedPubkey,
         amount_chunks: &vector<Scalar>,
         current_balance: &confidential_balance::ConfidentialBalance,
         proof_xs: &WithdrawalSigmaProofXs): Scalar
     {
-        // rho = tagged_hash(DST, chain_id || sender || G || H || P || v_{1..4} || (C_cur, D_cur)_{1..8} || X_{1..18})
+        // rho = tagged_hash(DST, chain_id || sender || contract || G || H || P || v_{1..4} || (C_cur, D_cur)_{1..8} || X_{1..18})
         let bytes = vector[];
 
         bytes.append(ristretto255::compressed_point_to_bytes(ristretto255::basepoint_compressed()));
@@ -1263,7 +1325,7 @@ module aptos_experimental::confidential_proof {
             bytes.append(ristretto255::point_to_bytes(x));
         });
 
-        prepend_domain_context(&mut bytes, chain_id, sender);
+        prepend_domain_context(&mut bytes, chain_id, sender, contract_address);
         new_scalar_from_tagged_hash(FIAT_SHAMIR_WITHDRAWAL_SIGMA_DST, bytes)
     }
 
@@ -1271,6 +1333,7 @@ module aptos_experimental::confidential_proof {
     fun fiat_shamir_transfer_sigma_proof_challenge(
         chain_id: u8,
         sender: address,
+        contract_address: address,
         sender_ek: &twisted_elgamal::CompressedPubkey,
         recipient_ek: &twisted_elgamal::CompressedPubkey,
         current_balance: &confidential_balance::ConfidentialBalance,
@@ -1281,7 +1344,7 @@ module aptos_experimental::confidential_proof {
         auditor_amounts: &vector<confidential_balance::ConfidentialBalance>,
         proof_xs: &TransferSigmaProofXs): Scalar
     {
-        // rho = tagged_hash(DST, chain_id || sender || G || H || P_s || P_r || ...)
+        // rho = tagged_hash(DST, chain_id || sender || contract || G || H || P_s || P_r || ...)
         let bytes = vector[];
 
         bytes.append(ristretto255::compressed_point_to_bytes(ristretto255::basepoint_compressed()));
@@ -1327,7 +1390,7 @@ module aptos_experimental::confidential_proof {
             bytes.append(ristretto255::point_to_bytes(x));
         });
 
-        prepend_domain_context(&mut bytes, chain_id, sender);
+        prepend_domain_context(&mut bytes, chain_id, sender, contract_address);
         new_scalar_from_tagged_hash(FIAT_SHAMIR_TRANSFER_SIGMA_DST, bytes)
     }
 
@@ -1335,12 +1398,13 @@ module aptos_experimental::confidential_proof {
     fun fiat_shamir_normalization_sigma_proof_challenge(
         chain_id: u8,
         sender: address,
+        contract_address: address,
         ek: &twisted_elgamal::CompressedPubkey,
         current_balance: &confidential_balance::ConfidentialBalance,
         new_balance: &confidential_balance::ConfidentialBalance,
         proof_xs: &NormalizationSigmaProofXs): Scalar
     {
-        // rho = tagged_hash(DST, chain_id || sender || G || H || P || ...)
+        // rho = tagged_hash(DST, chain_id || sender || contract || G || H || P || ...)
         let bytes = vector[];
 
         bytes.append(ristretto255::compressed_point_to_bytes(ristretto255::basepoint_compressed()));
@@ -1359,7 +1423,7 @@ module aptos_experimental::confidential_proof {
             bytes.append(ristretto255::point_to_bytes(x));
         });
 
-        prepend_domain_context(&mut bytes, chain_id, sender);
+        prepend_domain_context(&mut bytes, chain_id, sender, contract_address);
         new_scalar_from_tagged_hash(FIAT_SHAMIR_NORMALIZATION_SIGMA_DST, bytes)
     }
 
@@ -1367,13 +1431,14 @@ module aptos_experimental::confidential_proof {
     fun fiat_shamir_rotation_sigma_proof_challenge(
         chain_id: u8,
         sender: address,
+        contract_address: address,
         current_ek: &twisted_elgamal::CompressedPubkey,
         new_ek: &twisted_elgamal::CompressedPubkey,
         current_balance: &confidential_balance::ConfidentialBalance,
         new_balance: &confidential_balance::ConfidentialBalance,
         proof_xs: &RotationSigmaProofXs): Scalar
     {
-        // rho = tagged_hash(DST, chain_id || sender || G || H || P_cur || P_new || ...)
+        // rho = tagged_hash(DST, chain_id || sender || contract || G || H || P_cur || P_new || ...)
         let bytes = vector[];
 
         bytes.append(ristretto255::compressed_point_to_bytes(ristretto255::basepoint_compressed()));
@@ -1394,7 +1459,7 @@ module aptos_experimental::confidential_proof {
             bytes.append(ristretto255::point_to_bytes(x));
         });
 
-        prepend_domain_context(&mut bytes, chain_id, sender);
+        prepend_domain_context(&mut bytes, chain_id, sender, contract_address);
         new_scalar_from_tagged_hash(FIAT_SHAMIR_ROTATION_SIGMA_DST, bytes)
     }
 
@@ -1558,6 +1623,7 @@ module aptos_experimental::confidential_proof {
     public fun prove_withdrawal(
         chain_id: u8,
         sender: address,
+        contract_address: address,
         dk: &Scalar,
         ek: &twisted_elgamal::CompressedPubkey,
         amount: u64,
@@ -1610,7 +1676,15 @@ module aptos_experimental::confidential_proof {
 
         let amount_chunks = confidential_balance::split_into_chunks_u64(amount);
 
-        let rho = fiat_shamir_withdrawal_sigma_proof_challenge(chain_id, sender, ek, &amount_chunks, current_balance, &proof_xs);
+        let rho = fiat_shamir_withdrawal_sigma_proof_challenge(
+            chain_id,
+            sender,
+            contract_address,
+            ek,
+            &amount_chunks,
+            current_balance,
+            &proof_xs
+        );
 
         let new_amount_chunks = confidential_balance::split_into_chunks_u128(new_amount);
 
@@ -1642,6 +1716,7 @@ module aptos_experimental::confidential_proof {
     public fun prove_transfer(
         chain_id: u8,
         sender: address,
+        contract_address: address,
         sender_dk: &Scalar,
         sender_ek: &twisted_elgamal::CompressedPubkey,
         recipient_ek: &twisted_elgamal::CompressedPubkey,
@@ -1768,6 +1843,7 @@ module aptos_experimental::confidential_proof {
         let rho = fiat_shamir_transfer_sigma_proof_challenge(
             chain_id,
             sender,
+            contract_address,
             sender_ek,
             recipient_ek,
             current_balance,
@@ -1820,6 +1896,7 @@ module aptos_experimental::confidential_proof {
     public fun prove_normalization(
         chain_id: u8,
         sender: address,
+        contract_address: address,
         dk: &Scalar,
         ek: &twisted_elgamal::CompressedPubkey,
         amount: u128,
@@ -1874,6 +1951,7 @@ module aptos_experimental::confidential_proof {
         let rho = fiat_shamir_normalization_sigma_proof_challenge(
             chain_id,
             sender,
+            contract_address,
             ek,
             current_balance,
             &new_balance,
@@ -1910,6 +1988,7 @@ module aptos_experimental::confidential_proof {
     public fun prove_rotation(
         chain_id: u8,
         sender: address,
+        contract_address: address,
         current_dk: &Scalar,
         new_dk: &Scalar,
         current_ek: &twisted_elgamal::CompressedPubkey,
@@ -1967,6 +2046,7 @@ module aptos_experimental::confidential_proof {
         let rho = fiat_shamir_rotation_sigma_proof_challenge(
             chain_id,
             sender,
+            contract_address,
             current_ek,
             new_ek,
             current_balance,
@@ -2230,6 +2310,7 @@ module aptos_experimental::confidential_proof {
     public fun prove_registration(
         chain_id: u8,
         sender: address,
+        contract_address: address,
         dk: &Scalar,
         ek: &twisted_elgamal::CompressedPubkey,
         token_address: address,
@@ -2241,6 +2322,7 @@ module aptos_experimental::confidential_proof {
 
         let msg = vector::singleton(chain_id);
         msg.append(std::bcs::to_bytes(&sender));
+        msg.append(std::bcs::to_bytes(&contract_address));
         msg.append(std::bcs::to_bytes(&token_address));
         msg.append(twisted_elgamal::pubkey_to_bytes(ek));
         msg.append(ristretto255::compressed_point_to_bytes(r_compressed));
@@ -2260,11 +2342,20 @@ module aptos_experimental::confidential_proof {
     public fun verify_registration_proof_for_test(
         chain_id: u8,
         sender: address,
+        contract_address: address,
         ek: &twisted_elgamal::CompressedPubkey,
         token_address: address,
         commitment_bytes: vector<u8>,
         response_bytes: vector<u8>)
     {
-        verify_registration_proof(chain_id, sender, ek, token_address, commitment_bytes, response_bytes);
+        verify_registration_proof(
+            chain_id,
+            sender,
+            contract_address,
+            ek,
+            token_address,
+            commitment_bytes,
+            response_bytes
+        );
     }
 }

@@ -621,8 +621,13 @@ Users are also responsible for generating a Twisted ElGamal key pair on their si
     <b>let</b> cid = (<a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id_get">chain_id::get</a>() <b>as</b> u8);
     <b>let</b> user = <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(sender);
     <a href="confidential_proof.md#0x7_confidential_proof_verify_registration_proof">confidential_proof::verify_registration_proof</a>(
-        cid, user, &ek, <a href="../../aptos-framework/doc/object.md#0x1_object_object_address">object::object_address</a>(&token),
-        registration_proof_commitment, registration_proof_response
+        cid,
+        user,
+        @aptos_experimental,
+        &ek,
+        <a href="../../aptos-framework/doc/object.md#0x1_object_object_address">object::object_address</a>(&token),
+        registration_proof_commitment,
+        registration_proof_response
     );
 
     <a href="confidential_asset.md#0x7_confidential_asset_register_internal">register_internal</a>(sender, token, ek);
@@ -1729,7 +1734,16 @@ Withdrawals are always allowed, regardless of the token allow status.
     <b>let</b> current_balance = <a href="confidential_balance.md#0x7_confidential_balance_decompress_balance">confidential_balance::decompress_balance</a>(&ca_store.actual_balance);
 
     <b>let</b> cid = (<a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id_get">chain_id::get</a>() <b>as</b> u8);
-    <a href="confidential_proof.md#0x7_confidential_proof_verify_withdrawal_proof">confidential_proof::verify_withdrawal_proof</a>(cid, from, &sender_ek, amount, &current_balance, &new_balance, &proof);
+    <a href="confidential_proof.md#0x7_confidential_proof_verify_withdrawal_proof">confidential_proof::verify_withdrawal_proof</a>(
+        cid,
+        from,
+        @aptos_experimental,
+        &sender_ek,
+        amount,
+        &current_balance,
+        &new_balance,
+        &proof
+    );
 
     ca_store.normalized = <b>true</b>;
     ca_store.actual_balance = <a href="confidential_balance.md#0x7_confidential_balance_compress_balance">confidential_balance::compress_balance</a>(&new_balance);
@@ -1795,6 +1809,7 @@ Implementation of the <code>confidential_transfer</code> entry function.
     <a href="confidential_proof.md#0x7_confidential_proof_verify_transfer_proof">confidential_proof::verify_transfer_proof</a>(
         cid,
         from,
+        @aptos_experimental,
         &sender_ek,
         &recipient_ek,
         &sender_current_actual_balance,
@@ -1871,7 +1886,16 @@ Implementation of the <code>rotate_encryption_key</code> entry function.
     <b>let</b> current_balance = <a href="confidential_balance.md#0x7_confidential_balance_decompress_balance">confidential_balance::decompress_balance</a>(&ca_store.actual_balance);
 
     <b>let</b> cid = (<a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id_get">chain_id::get</a>() <b>as</b> u8);
-    <a href="confidential_proof.md#0x7_confidential_proof_verify_rotation_proof">confidential_proof::verify_rotation_proof</a>(cid, user, &current_ek, &new_ek, &current_balance, &new_balance, &proof);
+    <a href="confidential_proof.md#0x7_confidential_proof_verify_rotation_proof">confidential_proof::verify_rotation_proof</a>(
+        cid,
+        user,
+        @aptos_experimental,
+        &current_ek,
+        &new_ek,
+        &current_balance,
+        &new_balance,
+        &proof
+    );
 
     ca_store.ek = new_ek;
     // We don't need <b>to</b> <b>update</b> the pending balance here, <b>as</b> it <b>has</b> been asserted <b>to</b> be zero.
@@ -1916,7 +1940,15 @@ Implementation of the <code>normalize</code> entry function.
     <b>let</b> current_balance = <a href="confidential_balance.md#0x7_confidential_balance_decompress_balance">confidential_balance::decompress_balance</a>(&ca_store.actual_balance);
 
     <b>let</b> cid = (<a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id_get">chain_id::get</a>() <b>as</b> u8);
-    <a href="confidential_proof.md#0x7_confidential_proof_verify_normalization_proof">confidential_proof::verify_normalization_proof</a>(cid, user, &sender_ek, &current_balance, &new_balance, &proof);
+    <a href="confidential_proof.md#0x7_confidential_proof_verify_normalization_proof">confidential_proof::verify_normalization_proof</a>(
+        cid,
+        user,
+        @aptos_experimental,
+        &sender_ek,
+        &current_balance,
+        &new_balance,
+        &proof
+    );
 
     ca_store.actual_balance = <a href="confidential_balance.md#0x7_confidential_balance_compress_balance">confidential_balance::compress_balance</a>(&new_balance);
     ca_store.normalized = <b>true</b>;

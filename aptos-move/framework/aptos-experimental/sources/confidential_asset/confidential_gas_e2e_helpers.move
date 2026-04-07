@@ -26,6 +26,7 @@ module aptos_experimental::confidential_gas_e2e_helpers {
         let (proof, new_balance) = confidential_proof::prove_withdrawal(
             chain_id,
             sender,
+            @aptos_experimental,
             dk,
             ek,
             withdraw_amount,
@@ -147,6 +148,7 @@ module aptos_experimental::confidential_gas_e2e_helpers {
         ) = confidential_proof::prove_transfer(
             chain_id,
             sender,
+            @aptos_experimental,
             sender_dk,
             &sender_ek,
             &recipient_ek,
@@ -185,6 +187,7 @@ module aptos_experimental::confidential_gas_e2e_helpers {
         let (proof, new_balance) = confidential_proof::prove_rotation(
             chain_id,
             sender,
+            @aptos_experimental,
             sender_dk,
             new_dk,
             &sender_ek,

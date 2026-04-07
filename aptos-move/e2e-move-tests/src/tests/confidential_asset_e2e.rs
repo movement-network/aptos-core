@@ -304,6 +304,7 @@ fn prove_registration_parts(
     let args = vec![
         bcs::to_bytes(&chain_byte).unwrap(),
         bcs::to_bytes(&user).unwrap(),
+        bcs::to_bytes(&APTOS_EXPERIMENTAL).unwrap(),
         dk.to_vec(),
         ek.to_vec(),
         bcs::to_bytes(&token).unwrap(),

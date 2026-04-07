@@ -69,6 +69,9 @@ module confidential_asset_example::transfer_example {
             // It won't be stored on-chain, but an auditor can decrypt the transfer amount with its dk.
             auditor_amounts
         ) = confidential_proof::prove_transfer(
+            4u8,
+            bob_addr,
+            @aptos_experimental,
             &bob_dk,
             &bob_ek,
             &alice_ek,

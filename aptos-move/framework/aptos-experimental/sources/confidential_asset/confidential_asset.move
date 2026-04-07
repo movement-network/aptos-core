@@ -225,8 +225,13 @@ module aptos_experimental::confidential_asset {
         let cid = (chain_id::get() as u8);
         let user = signer::address_of(sender);
         confidential_proof::verify_registration_proof(
-            cid, user, &ek, object::object_address(&token),
-            registration_proof_commitment, registration_proof_response
+            cid,
+            user,
+            @aptos_experimental,
+            &ek,
+            object::object_address(&token),
+            registration_proof_commitment,
+            registration_proof_response
         );
 
         register_internal(sender, token, ek);
@@ -706,7 +711,16 @@ module aptos_experimental::confidential_asset {
         let current_balance = confidential_balance::decompress_balance(&ca_store.actual_balance);
 
         let cid = (chain_id::get() as u8);
-        confidential_proof::verify_withdrawal_proof(cid, from, &sender_ek, amount, &current_balance, &new_balance, &proof);
+        confidential_proof::verify_withdrawal_proof(
+            cid,
+            from,
+            @aptos_experimental,
+            &sender_ek,
+            amount,
+            &current_balance,
+            &new_balance,
+            &proof
+        );
 
         ca_store.normalized = true;
         ca_store.actual_balance = confidential_balance::compress_balance(&new_balance);
@@ -752,6 +766,7 @@ module aptos_experimental::confidential_asset {
         confidential_proof::verify_transfer_proof(
             cid,
             from,
+            @aptos_experimental,
             &sender_ek,
             &recipient_ek,
             &sender_current_actual_balance,
@@ -808,7 +823,16 @@ module aptos_experimental::confidential_asset {
         let current_balance = confidential_balance::decompress_balance(&ca_store.actual_balance);
 
         let cid = (chain_id::get() as u8);
-        confidential_proof::verify_rotation_proof(cid, user, &current_ek, &new_ek, &current_balance, &new_balance, &proof);
+        confidential_proof::verify_rotation_proof(
+            cid,
+            user,
+            @aptos_experimental,
+            &current_ek,
+            &new_ek,
+            &current_balance,
+            &new_balance,
+            &proof
+        );
 
         ca_store.ek = new_ek;
         // We don't need to update the pending balance here, as it has been asserted to be zero.
@@ -833,7 +857,15 @@ module aptos_experimental::confidential_asset {
         let current_balance = confidential_balance::decompress_balance(&ca_store.actual_balance);
 
         let cid = (chain_id::get() as u8);
-        confidential_proof::verify_normalization_proof(cid, user, &sender_ek, &current_balance, &new_balance, &proof);
+        confidential_proof::verify_normalization_proof(
+            cid,
+            user,
+            @aptos_experimental,
+            &sender_ek,
+            &current_balance,
+            &new_balance,
+            &proof
+        );
 
         ca_store.actual_balance = confidential_balance::compress_balance(&new_balance);
         ca_store.normalized = true;

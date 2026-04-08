@@ -1,6 +1,6 @@
 // Script hash: 96ae9088 
-// Framework commit hash: 091faa1693ac15740e7560180283af2eaae41c5a
-// Builder commit hash: 091faa1693ac15740e7560180283af2eaae41c5a
+// Framework commit hash: f8304dc5511e916082c8f331310d70dacc6f924f
+// Builder commit hash: f8304dc5511e916082c8f331310d70dacc6f924f
 // Upgrade proposal for package `AptosFramework`
 
 // source digest: 193D243869B38CFD64B1E2A92B92EA83CBB44759C80C86D02BC1F71C0AD42CFC

@@ -101,7 +101,7 @@ Balances are encrypted using a twisted variant of ElGamal encryption over Ristre
 
 $$dk \xleftarrow{R} \mathbb{Z}_q, \quad ek = dk^{-1} \cdot H$$
 
-where $H$ is a hash-to-point basepoint and $dk$ is the decryption key.
+where $H$ is a hash-to-point basepoint, $dk \in \mathbb{Z}_q$ is the secret **decryption** scalar, and $ek \in \mathbb{G}$ is the public **encryption** key (a curve point, stored on-chain as `CompressedPubkey`). This follows the Twisted ElGamal convention in this repository: public key $Y = sk^{-1} \cdot H$ for secret $sk$ (here $sk = dk$ and $Y = ek$)—not the more familiar textbook ElGamal form $Y = sk \cdot G$ with a basepoint $G$. Equivalently, $dk \cdot ek = H$ (scalar multiplication of the point $ek$ by $dk$).
 
 **Encryption of value $v$ with randomness $r$:**
 

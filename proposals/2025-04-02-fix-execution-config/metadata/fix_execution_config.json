@@ -1,0 +1,6 @@
+{
+  "title": "Fix ExecutionConfig deserialization",
+  "description": "Re-serialize ExecutionConfig with UseCaseAware shuffler to fix DeprecatedFairness BCS bug",
+  "source_code_url": "https://github.com/movementlabsxyz/aptos-core",
+  "discussion_url": "https://github.com/movementlabsxyz/aptos-core"
+}

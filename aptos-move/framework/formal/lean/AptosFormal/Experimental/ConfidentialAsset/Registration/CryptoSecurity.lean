@@ -8,8 +8,9 @@ Machine-checked proofs of:
   yield the witness `dk` with an explicit extraction formula.
 - **HVZK simulator** (§6.4b): a simulator producing accepting transcripts without
   the witness, establishing honest-verifier zero-knowledge.
-- **Fiat–Shamir note** (§6.4c): the NIZK security argument is **not** formalized;
-  see §3.4–3.5 of `REGISTRATION_VERIFY_REVIEW.md` for the pen-and-paper ROM proof.
+- **Fiat–Shamir symbolic model** (§6.4c): see `FiatShamirSymbolic.lean` for the
+  machine-checked algebraic core (forking reduction, challenge binding, NIZK
+  completeness, NIZK simulation).  The probabilistic ROM argument is not formalized.
 
 These properties, together with the end-to-end verification equivalence in
 `EndToEnd.lean`, establish that `verify_registration_proof` implements a
@@ -115,22 +116,23 @@ theorem registrationSchnorr_simulate_accepts (H ek : Point) (e s : RistrettoScal
 end HVZK
 
 /-!
-## §6.4c  Fiat–Shamir NIZK (not formalized)
+## §6.4c  Fiat–Shamir NIZK (symbolic model)
 
 The deployed verifier uses `e := Hash(DST, msg)` (Fiat–Shamir transform) instead
-of an interactive uniform challenge. Soundness of this non-interactive variant
-holds in the **random oracle model** (ROM):
+of an interactive uniform challenge.  The **algebraic core** of the ROM security
+argument is machine-checked in `FiatShamirSymbolic.lean`:
 
-- The ROM argument replaces the real hash with a lazy random oracle, then shows
-  that a forger implies either breaking special soundness (§6.4a) or predicting
-  the oracle output before querying it (negligible probability).
-- Standard reference: Pointcheval–Stern [PS00] (J. Cryptology 2000) for Σ-protocols;
-  tagged-hash construction follows BIP-340 style (see §3.5 and §7 References
-  in `REGISTRATION_VERIFY_REVIEW.md`).
+- `fiatShamir_forking_extraction` — two oracle worlds with different challenges
+  yield witness extraction (the algebraic heart of [PS00]'s forking lemma).
+- `fiatShamir_challenge_binding` — a single hash function cannot produce two
+  challenges for the same commitment, so oracle reprogramming is necessary.
+- `fiatShamir_completeness` — the honest NIZK prover always passes.
+- `fiatShamir_nizk_simulate_accepts` — a simulator with oracle-programming
+  ability produces valid proofs without the witness (NIZK zero-knowledge).
 
-Formalizing this in Lean would require a computational game / probability monad
-framework. This is a **separate, large** project and is out of scope for the
-current formalization.
+**Not formalized**: the *probability* that an adversary triggers the forking
+condition.  In [PS00], this is shown via a rewinding argument over a random
+oracle; formalizing it requires a probability monad or game-based framework.
 -/
 
 end AptosFormal.Experimental.ConfidentialAsset.Registration.CryptoSecurity

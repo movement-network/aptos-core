@@ -35,5 +35,6 @@ lean_lib «AptosFormal» where
     `AptosFormal.Experimental.ConfidentialAsset.Registration.TranscriptAlignment,
     `AptosFormal.Experimental.ConfidentialAsset.Registration.GroupAxioms,
     `AptosFormal.Experimental.ConfidentialAsset.Registration.EndToEnd,
-    `AptosFormal.Experimental.ConfidentialAsset.Registration.CryptoSecurity
+    `AptosFormal.Experimental.ConfidentialAsset.Registration.CryptoSecurity,
+    `AptosFormal.Experimental.ConfidentialAsset.Registration.FiatShamirSymbolic
   ]

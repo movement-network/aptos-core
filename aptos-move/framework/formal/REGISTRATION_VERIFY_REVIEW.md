@@ -41,7 +41,8 @@ Lean is written to track **these files** as they appear in **this** `aptos-core`
 | `**…Registration.TranscriptAlignment**`                                  | `registration_fiat_shamir_msg_matches_move_golden`: FS `msg` bytes = Move `registration_fs_message_for_test` (two goldens: `@0x1`/`@0x2`/`@0x3` and `@0x10`/`@0x20`/`@0x30`).             |
 | `**…Registration.GroupAxioms**`                                          | `RistrettoGroupAxioms`: axiom bundle asserting Move's `ristretto255` ops form an `AddCommGroup` + `Module RistrettoScalar` (§6.2 obligation).                                             |
 | `**…Registration.EndToEnd**`                                             | `registration_verification_iff_schnorr` + `registration_honest_prover_accepted`: under group axioms, Move's verifier accepts iff the Schnorr equation holds; honest prover always passes. |
-| `**…Registration.CryptoSecurity**`                                       | Machine-checked **special soundness** (witness extraction with explicit formula `dk = (s₁−s₂)⁻¹·(e₂−e₁)`) + **HVZK simulator** (§6.4).                                                    |
+| `**…Registration.CryptoSecurity**`                                       | Machine-checked **special soundness** (witness extraction with explicit formula `dk = (s₁−s₂)⁻¹·(e₂−e₁)`) + **HVZK simulator** (§6.4a–b).                                                 |
+| `**…Registration.FiatShamirSymbolic**`                                   | Symbolic Fiat–Shamir model: **forking reduction**, **challenge binding**, **NIZK completeness**, **NIZK simulation** (§6.4c).                                                              |
 
 
 Lean **narrows the statement**: “verification succeeds iff these parses succeed and this equation holds.” It does **not** prove that the **framework natives used in this branch** (e.g. tagged hash, `ristretto255`, `std::bcs`) match the IRTF Ristretto spec or any independent reference, unless you add a large crypto formalization or external proof.
@@ -311,11 +312,16 @@ The theorem `execVerifyRegistrationProof_iff` proves this `Option`-returning fun
 - **Completeness** of the Schnorr check for an honest prover (`registrationSchnorr_completeness`, `registrationVerifySpec_completeness` in `…Registration.SchnorrCompleteness`).
 - **Special soundness** (`registrationSchnorr_witness_extraction` in `…Registration.CryptoSecurity`): two accepting transcripts `(R, e₁, s₁)` and `(R, e₂, s₂)` with `e₁ ≠ e₂` yield an explicit witness `dk = (s₁ − s₂)⁻¹ · (e₂ − e₁)` with `H = dk · ek`. The proof uses `Field RistrettoScalar` (via the `Fact (Nat.Prime ℓ)` instance) for scalar inversion.
 - **HVZK simulator** (`registrationSchnorr_simulate` / `registrationSchnorr_simulate_accepts`): given `(H, ek, e, s)`, the simulator produces `R := s·H + e·ek` which is always an accepting transcript.
+- **Fiat–Shamir symbolic model** (`…Registration.FiatShamirSymbolic`):
+  - **Forking reduction** (`fiatShamir_forking_extraction`): two valid NIZK proofs in "oracle worlds" with different challenges for the same FS message yield witness extraction — the algebraic core of the ROM forking lemma [PS00].
+  - **Explicit extraction formula** (`fiatShamir_forking_explicit`): `dk = (s₁ − s₂)⁻¹ · (e₂ − e₁)`.
+  - **Challenge binding** (`fiatShamir_challenge_binding`): for a fixed hash function, two proofs with the same commitment share the same challenge, so a single-oracle adversary cannot fork.
+  - **NIZK completeness** (`fiatShamir_completeness`): the honest Fiat–Shamir prover always passes.
+  - **NIZK zero-knowledge** (`fiatShamir_nizk_simulate_accepts`): a simulator with oracle-programming ability produces valid proofs without the witness.
 
 **Not proved in Lean (pen-and-paper / ROM in §3):**
 
-- **Knowledge soundness** as a computational reduction (the witness extraction is algebraic; the computational game argument reducing a successful forger to DLOG is not formalized).
-- **Fiat–Shamir** — replacing uniform `e` by `e = Hash(DST, msg)` is sound in the **random oracle model** (standard result for Σ-protocols: Pointcheval–Stern [PS00] §7).
+- **Forking probability** — the probability that an adversary triggers the two-oracle-world scenario is shown to be non-negligible in [PS00] via a rewinding argument; this probabilistic argument requires a probability monad or game-based framework.
 - **Hardness** — discrete logarithm (or equivalent) on the Ristretto255 group.
 
 Lean does **not** formalize a random oracle, a computational game, or a reduction to DLOG.
@@ -344,7 +350,7 @@ Trial division (`native_decide` on `Nat.Prime`) is infeasible for a 252-bit prim
 [ ] §6.1  VM: verify_registration_proof success/abort matches Option/False split in verifyRegistrationProofProp.
 [ ] §6.2  Natives: each CryptoOracle field matched to Move; SHA3/tagged hash vs `AptosFormal/Std/Hash/Sha3_512.lean` explicitly reviewed.
 [ ] §6.3  BCS: sender/contract/token bytes are to_bytes(&address) as in this framework version (32-byte model).
-[ ] §6.4  Crypto: soundness / FS / ROM / DLOG documented (§3 templates); not claimed as Lean theorems.
+[ ] §6.4  Crypto: special soundness + HVZK + symbolic FS model machine-checked; forking probability + DLOG hardness remain external.
 [ ] §6.5  ℓ prime: accepted as axiom or replaced by a certificate proof in Lean.
 ```
 

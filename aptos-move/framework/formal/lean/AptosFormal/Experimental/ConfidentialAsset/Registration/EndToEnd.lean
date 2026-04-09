@@ -26,7 +26,8 @@ See §6 of `REGISTRATION_VERIFY_REVIEW.md`:
 - §6.1 VM semantics (Move execution matches `verifyRegistrationProofProp`)
 - §6.2 Native correctness (`RistrettoGroupAxioms` holds for this branch's natives)
 - §6.3 BCS address encoding
-- §6.4 Cryptographic security (soundness / knowledge-soundness / Fiat–Shamir in ROM)
+- §6.4 Cryptographic security (special soundness + HVZK in `CryptoSecurity.lean`;
+  symbolic Fiat–Shamir in `FiatShamirSymbolic.lean`; forking probability not formalized)
 - §6.5 Primality of ℓ (currently an axiom)
 -/
 

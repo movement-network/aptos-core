@@ -59,14 +59,20 @@ You can also check what axioms any theorem depends on. Create a file `_check_axi
 ```lean
 import AptosFormal.Experimental.ConfidentialAsset.Registration.EndToEnd
 import AptosFormal.Experimental.ConfidentialAsset.Registration.CryptoSecurity
+import AptosFormal.Experimental.ConfidentialAsset.Registration.FiatShamirSymbolic
 
 open AptosFormal.Experimental.ConfidentialAsset.Registration.EndToEnd
 open AptosFormal.Experimental.ConfidentialAsset.Registration.CryptoSecurity
+open AptosFormal.Experimental.ConfidentialAsset.Registration.FiatShamirSymbolic
 
 #print axioms registration_verification_iff_schnorr
 #print axioms registration_honest_prover_accepted
 #print axioms registrationSchnorr_witness_extraction
 #print axioms registrationSchnorr_simulate_accepts
+#print axioms fiatShamir_forking_extraction
+#print axioms fiatShamir_challenge_binding
+#print axioms fiatShamir_completeness
+#print axioms fiatShamir_nizk_simulate_accepts
 ```
 
 Then run it:

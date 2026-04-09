@@ -63,7 +63,7 @@ theorem execVerifyRegistrationProof_iff (C : CryptoOracleWithBoolEq Point)
     · -- `pointEqBool` false ⇒ `exec` is `none`, contradicts `h`
       simp [hb, hs, hr, hek, hR, hpk, he, lhs] at h ⊢
     · -- `pointEqBool` true ⇒ `pointEq`
-      simp [verifyRegistrationProofProp, hs, hr, hek, hR, hpk, he, lhs]
+      simp [verifyRegistrationProofProp, hs, hr, hek, hR, hpk, he]
       exact (C.pointEq_bool_iff lhs rhs).mp hb
   · -- mpr: `verifyRegistrationProofProp` ⇒ `exec = some ()`
     intro hp
@@ -82,8 +82,8 @@ theorem execVerifyRegistrationProof_iff (C : CryptoOracleWithBoolEq Point)
     rcases he : C.challengeScalarFromMsg (registrationFiatShamirMsg i) with (_ | e)
     · simp [hs, hr, hek, hR, hpk, he] at hp
     let lhs := C.pointAdd (C.pointMul C.hashToPointBase s) (C.pointMul ek e)
-    simp [hs, hr, hek, hR, hpk, he, lhs] at hp
+    simp [hs, hr, hek, hR, hpk, he] at hp
     have hb : C.pointEqBool lhs rhs = true := (C.pointEq_bool_iff lhs rhs).2 hp
-    simp [hs, hr, hek, hR, hpk, he, hb, lhs]
+    simp [hR, hpk, hb, lhs]
 
 end AptosFormal.Experimental.ConfidentialAsset.Registration.Operational

@@ -1,0 +1,39 @@
+/-
+Copyright (c) Move Industries.
+
+Machine-checked alignment between `AptosFormal` models and **Move stdlib** expectations.
+
+Move anchor tests (unchanged originals): `aptos-move/framework/move-stdlib/tests/hash_tests.move`,
+`bcs_tests.move`. Curated duplicates live in `aptos-move/framework/move-stdlib/tests/formal_goldens_*.move`.
+-/
+
+import AptosFormal.Std.Bcs.Primitives
+import AptosFormal.Std.Hash.Sha3_256
+
+namespace AptosFormal.Std.MoveStdlibGoldens
+
+open AptosFormal.Std.Bcs
+open AptosFormal.Std.Hash.Sha3_256
+
+/-! ## `std::hash::sha3_256` (see `hash_tests.move`) -/
+
+example : sha3_256 (ByteArray.mk #[97, 98, 99]) = expectedSha3_256_abc := by native_decide
+
+/-! ## `std::bcs` (see `bcs_tests.move`) -/
+
+example : boolBytes true = ByteArray.mk #[1] := by native_decide
+
+example : boolBytes false = ByteArray.mk #[0] := by native_decide
+
+example : u8Bytes 1 = ByteArray.mk #[1] := by native_decide
+
+example : u64Le 1 = ByteArray.mk #[1, 0, 0, 0, 0, 0, 0, 0] := by native_decide
+
+example : u128LeNat 1 = ByteArray.mk #[
+    1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] := by native_decide
+
+example : vectorU8Short (ByteArray.mk #[0x0f]) (by decide) = ByteArray.mk #[1, 0x0f] := by native_decide
+
+example : vectorU8Short ByteArray.empty (by decide) = ByteArray.mk #[0] := by native_decide
+
+end AptosFormal.Std.MoveStdlibGoldens

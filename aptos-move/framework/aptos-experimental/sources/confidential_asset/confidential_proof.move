@@ -245,6 +245,26 @@ module aptos_experimental::confidential_proof {
         );
     }
 
+    #[test_only]
+    /// Byte-for-byte the Fiat–Shamir prefix `msg` built in `verify_registration_proof` before
+    /// `new_scalar_from_tagged_hash(FIAT_SHAMIR_REGISTRATION_SIGMA_DST, msg)`.
+    public fun registration_fs_message_for_test(
+        chain_id: u8,
+        sender: address,
+        contract_address: address,
+        token_address: address,
+        ek: &twisted_elgamal::CompressedPubkey,
+        commitment_bytes: vector<u8>,
+    ): vector<u8> {
+        let msg = vector::singleton(chain_id);
+        msg.append(std::bcs::to_bytes(&sender));
+        msg.append(std::bcs::to_bytes(&contract_address));
+        msg.append(std::bcs::to_bytes(&token_address));
+        msg.append(twisted_elgamal::pubkey_to_bytes(ek));
+        msg.append(commitment_bytes);
+        msg
+    }
+
     /// Verifies the validity of the `withdraw` operation.
     ///
     /// This function ensures that the provided proof (`WithdrawalProof`) meets the following conditions:

@@ -11,6 +11,11 @@ standard **prime-order subgroup** ℤ/ℓℤ used for Ristretto255 scalars (same
 matching **`aptos_std::ristretto255`** in this repo
 (`aptos-move/framework/aptos-stdlib/sources/cryptography/ristretto255.move`).
 
+- Ristretto spec: <https://ristretto.group>
+- Curve25519: D. J. Bernstein, "Curve25519", 2006. <https://cr.yp.to/ecdh.html>
+- RFC 8032 (Ed25519, shares the curve): <https://www.rfc-editor.org/rfc/rfc8032>
+- Move module: `aptos-move/framework/aptos-stdlib/sources/cryptography/ristretto255.move`
+
 Full curve geometry belongs in a dedicated crypto library; here we keep point operations abstract
 while fixing **scalar** and **encoding** types. Other framework packages (framework `aptos-framework`,
 `aptos-experimental`, …) can depend on this module.

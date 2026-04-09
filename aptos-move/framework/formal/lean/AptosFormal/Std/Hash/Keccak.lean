@@ -3,6 +3,9 @@ Copyright (c) Move Industries.
 
 Shared Keccak-f[1600] sponge used by SHA3-256 and SHA3-512 models in `AptosFormal`.
 Layout matches `tiny-keccak` / RustCrypto `sha3` (delimiter `0x06` for SHA3).
+
+- NIST FIPS 202: <https://doi.org/10.6028/NIST.FIPS.202>
+- Keccak reference: <https://keccak.team/keccak.html>
 -/
 
 import Batteries.Data.List.Basic

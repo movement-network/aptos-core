@@ -4,7 +4,9 @@ Copyright (c) Move Industries.
 Minimal BCS serializers matching Move `std::bcs::to_bytes` for a few primitive shapes.
 Vectors use unsigned LEB128 length prefixes (values `< 128` are a single byte).
 
-Goldens align with `aptos-move/framework/move-stdlib/tests/bcs_tests.move`.
+- BCS spec: <https://github.com/diem/bcs>
+- Move module: `aptos-move/framework/move-stdlib/sources/bcs.move`
+- Goldens: `aptos-move/framework/move-stdlib/tests/bcs_tests.move`
 -/
 
 import Init.Data.List.Basic

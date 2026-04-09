@@ -7,6 +7,9 @@ Pure Lean SHA3-512 (FIPS 202), sponge layout matching `tiny-keccak` / RustCrypto
 delimiter `0x06`, rate `72` bytes (`200 - 512/4`). Intended to match **`aptos_std::aptos_hash::sha3_512`**
 in this repository (`aptos-move/framework/aptos-stdlib/sources/hash.move`).
 
+- NIST FIPS 202: <https://doi.org/10.6028/NIST.FIPS.202>
+- Move module: `aptos-move/framework/aptos-stdlib/sources/hash.move`
+
 Shared Keccak permutation lives in `AptosFormal.Std.Hash.Keccak`.
 -/
 

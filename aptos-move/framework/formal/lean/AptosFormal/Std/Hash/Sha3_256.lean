@@ -6,7 +6,9 @@ Copyright (c) Move Industries.
 Pure Lean SHA3-256 (FIPS 202), rate `136` bytes (`200 - 256/4`), matching `tiny-keccak` /
 RustCrypto `sha3::Sha3_256` as used by `aptos-move/framework/move-stdlib/src/natives/hash.rs`.
 
-Goldens align with `aptos-move/framework/move-stdlib/tests/hash_tests.move`.
+- NIST FIPS 202: <https://doi.org/10.6028/NIST.FIPS.202>
+- Move native: `aptos-move/framework/move-stdlib/src/natives/hash.rs`
+- Goldens: `aptos-move/framework/move-stdlib/tests/hash_tests.move`
 -/
 
 import AptosFormal.Std.Hash.Keccak

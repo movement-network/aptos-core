@@ -9,9 +9,14 @@ beyond a single package.
 | `AptosFormal.AptosStd.Crypto.*` | Ristretto scalar / wire types vs `aptos_std::ristretto255` |
 | `AptosFormal.Std.Bcs.*` | BCS primitives |
 | `AptosFormal.Std.MoveStdlibGoldens` | Byte-level golden tests for hash/BCS/vector |
-| `AptosFormal.Experimental.ConfidentialAsset.Registration.*` | `verify_registration_proof` spec + proofs |
+| `AptosFormal.Move.*` | Move bytecode interpreter (`Step`, `Programs`, natives → specs); roadmap: [`AptosFormal/Move/README.md`](AptosFormal/Move/README.md) |
+| `AptosFormal.Refinement.*` | Proofs that selected bytecode matches `Std.*` specs (e.g. `vector::contains`) |
+| `AptosFormal.DiffTest.*` | Lean side of VM ↔ Lean differential tests (JSON oracles); see [`../difftest/README.md`](../difftest/README.md) |
+| `AptosFormal.Tests.*` | Concrete smoke tests (`native_decide`) on the evaluator |
+| `AptosFormal.Experimental.ConfidentialAsset.Registration.*` | `verify_registration_proof` spec + proofs (source-level crypto story, not bytecode) |
 
-Auditor-oriented narrative: [`../REGISTRATION_VERIFY_REVIEW.md`](../REGISTRATION_VERIFY_REVIEW.md).
+**Auditor-oriented narrative** (Confidential Asset registration / **`verify_registration_proof` only**):
+[`../REGISTRATION_VERIFY_REVIEW.md`](../REGISTRATION_VERIFY_REVIEW.md).
 
 ## Prerequisites
 

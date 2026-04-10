@@ -36,12 +36,12 @@ import AptosFormal.Experimental.ConfidentialAsset.Registration.VerifyMath
 import AptosFormal.Experimental.ConfidentialAsset.Registration.SchnorrCompleteness
 import AptosFormal.Experimental.ConfidentialAsset.Registration.GroupAxioms
 import AptosFormal.Experimental.ConfidentialAsset.Registration.TranscriptAlignment
-import AptosFormal.Std.Crypto.Ristretto255
+import AptosFormal.AptosStd.Crypto.Ristretto255
 
 open AptosFormal.Experimental.ConfidentialAsset.Registration.Formal
 open AptosFormal.Experimental.ConfidentialAsset.Registration.SchnorrCompleteness
 open AptosFormal.Experimental.ConfidentialAsset.Registration.GroupAxioms
-open AptosFormal.Std.Crypto.Ristretto255
+open AptosFormal.AptosStd.Crypto.Ristretto255
 open RegistrationVerify
 open RegistrationTranscriptAlignment
 

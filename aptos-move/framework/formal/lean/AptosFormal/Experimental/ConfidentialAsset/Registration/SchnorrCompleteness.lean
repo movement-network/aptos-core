@@ -4,16 +4,16 @@ Copyright (c) Move Industries.
 Machine-checked **completeness** for registration Schnorr verification
 (`confidential_proof.move` — honest prover vs verifier).
 
-Imports **`AptosFormal.Std.Crypto.Ristretto255`** for scalars and **`Registration.Formal`** for the abstract spec.
+Imports **`AptosFormal.AptosStd.Crypto.Ristretto255`** for scalars and **`Registration.Formal`** for the abstract spec.
 -/
 
 import AptosFormal.Experimental.ConfidentialAsset.Registration.Formal
 import AptosFormal.Experimental.ConfidentialAsset.Registration.VerifyMath
-import AptosFormal.Std.Crypto.Ristretto255
+import AptosFormal.AptosStd.Crypto.Ristretto255
 import Mathlib.Algebra.Module.Basic
 
 open AptosFormal.Experimental.ConfidentialAsset.Registration.Formal
-open AptosFormal.Std.Crypto.Ristretto255
+open AptosFormal.AptosStd.Crypto.Ristretto255
 
 namespace AptosFormal.Experimental.ConfidentialAsset.Registration.SchnorrCompleteness
 

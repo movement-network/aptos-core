@@ -1,0 +1,2 @@
+# VM oracle output from `cargo run -p move-lean-difftest` — regenerate before `lake exe difftest`.
+difftest_oracle*.json

@@ -11,6 +11,7 @@ tracks **stdlib**-aligned primitives (`aptos-stdlib`, `move-stdlib`, …) and
 | `../move-stdlib/tests/formal_goldens_*.move` | Curated Move stdlib tests (hash / BCS / vector) aligned with `AptosFormal.Std.MoveStdlibGoldens` |
 | `../aptos-experimental/tests/confidential_asset/formal_goldens_*.move` | Move golden tests for Ristretto group laws, Fiat–Shamir transcript bytes, and verification equation |
 | [`check_golden_consistency.sh`](check_golden_consistency.sh) | Script to verify Move and Lean golden bytes haven't drifted apart |
+| [`difftest.sh`](difftest.sh) | **Differential** tests (vector + BCS + hash): VM → `difftest/difftest_oracle.json` → Lean (see [`difftest/README.md`](difftest/README.md)) |
 
 ## Quick start
 
@@ -23,7 +24,7 @@ lake build
 ```
 
 See [`lean/README.md`](lean/README.md) for full details on verifying no `sorry` exists, checking
-axioms, running companion Move golden tests, and editor setup.
+axioms, running companion Move golden tests, differential tests (`difftest.sh`), and editor setup.
 
 ## Directory design
 

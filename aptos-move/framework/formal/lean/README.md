@@ -6,7 +6,7 @@ beyond a single package.
 | Prefix | Role |
 | ------ | ---- |
 | `AptosFormal.Std.Hash.*` | SHA3-512 tagged hash vs `aptos_std::aptos_hash` |
-| `AptosFormal.Std.Crypto.*` | Ristretto scalar / wire types vs `aptos_std::ristretto255` |
+| `AptosFormal.AptosStd.Crypto.*` | Ristretto scalar / wire types vs `aptos_std::ristretto255` |
 | `AptosFormal.Std.Bcs.*` | BCS primitives |
 | `AptosFormal.Std.MoveStdlibGoldens` | Byte-level golden tests for hash/BCS/vector |
 | `AptosFormal.Experimental.ConfidentialAsset.Registration.*` | `verify_registration_proof` spec + proofs |
@@ -120,6 +120,10 @@ Run all formal golden tests at once:
 aptos move test --package-dir aptos-move/framework/move-stdlib --filter formal_goldens
 aptos move test --package-dir aptos-move/framework/aptos-experimental --filter formal_goldens
 ```
+
+## Differential tests (Lean evaluator vs real Move VM)
+
+**One command** (from repo root): `./aptos-move/framework/formal/difftest.sh` — runs the Rust oracle (all suites), then Lean, using **`difftest/difftest_oracle.json`**. Per-suite runs and CLI flags: **[`../difftest/README.md`](../difftest/README.md)**.
 
 ## Checking Move / Lean golden consistency
 

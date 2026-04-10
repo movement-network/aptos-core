@@ -1,0 +1,26 @@
+[package]
+name = "move-lean-difftest"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Differential testing harness: runs Move functions through the real VM and exports JSON test vectors for the Lean evaluator to compare against."
+
+[[bin]]
+name = "move-lean-difftest"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+codespan-reporting = { workspace = true }
+move-binary-format = { workspace = true }
+move-compiler-v2 = { workspace = true }
+move-core-types = { workspace = true }
+move-model = { workspace = true }
+move-stdlib = { path = "../../../../third_party/move/move-stdlib" }
+move-vm-runtime = { workspace = true, features = ["testing"] }
+move-vm-test-utils = { workspace = true }
+move-vm-types = { workspace = true, features = ["testing"] }
+legacy-move-compiler = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tempfile = { workspace = true }

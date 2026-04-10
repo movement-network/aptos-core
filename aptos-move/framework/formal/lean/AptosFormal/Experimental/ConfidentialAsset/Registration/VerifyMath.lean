@@ -10,12 +10,12 @@ Move reference: `aptos-move/framework/aptos-experimental/sources/confidential_as
 -/
 
 import AptosFormal.Experimental.ConfidentialAsset.Registration.Formal
-import AptosFormal.Std.Crypto.Ristretto255
-import AptosFormal.Std.Hash.Sha3_512
+import AptosFormal.AptosStd.Crypto.Ristretto255
+import AptosFormal.AptosStd.Hash.Sha3_512
 
 open AptosFormal.Experimental.ConfidentialAsset.Registration.Formal
-open AptosFormal.Std.Crypto.Ristretto255
-open AptosFormal.Std.Hash.Sha3_512
+open AptosFormal.AptosStd.Crypto.Ristretto255
+open AptosFormal.AptosStd.Hash.Sha3_512
 
 namespace RegistrationVerify
 

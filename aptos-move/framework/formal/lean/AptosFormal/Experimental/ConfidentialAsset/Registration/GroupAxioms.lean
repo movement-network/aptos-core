@@ -13,9 +13,9 @@ Accepting them collapses all remaining oracle boundaries for
 -/
 
 import AptosFormal.Experimental.ConfidentialAsset.Registration.VerifyMath
-import AptosFormal.Std.Crypto.Ristretto255
+import AptosFormal.AptosStd.Crypto.Ristretto255
 
-open AptosFormal.Std.Crypto.Ristretto255
+open AptosFormal.AptosStd.Crypto.Ristretto255
 open RegistrationVerify
 
 namespace AptosFormal.Experimental.ConfidentialAsset.Registration.GroupAxioms

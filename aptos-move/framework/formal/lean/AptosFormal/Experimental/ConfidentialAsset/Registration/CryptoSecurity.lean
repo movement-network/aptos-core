@@ -18,12 +18,12 @@ sound and zero-knowledge proof of knowledge for `H = dk · ek`.
 -/
 
 import AptosFormal.Experimental.ConfidentialAsset.Registration.Formal
-import AptosFormal.Std.Crypto.Ristretto255
+import AptosFormal.AptosStd.Crypto.Ristretto255
 import Mathlib.Algebra.Module.Basic
 import Mathlib.Tactic.FieldSimp
 
 open AptosFormal.Experimental.ConfidentialAsset.Registration.Formal
-open AptosFormal.Std.Crypto.Ristretto255
+open AptosFormal.AptosStd.Crypto.Ristretto255
 
 namespace AptosFormal.Experimental.ConfidentialAsset.Registration.CryptoSecurity
 

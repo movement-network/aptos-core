@@ -4,8 +4,10 @@ open Lake DSL
 /-!
 Lake package **`AptosFormal`**: Aptos Move framework formalization (Lean 4).
 
-- **`AptosFormal.Std.*`** — primitives aligned with **`aptos-stdlib`** / shared framework (e.g. SHA3-512,
-  Ristretto scalar scaffolding). Intended for reuse when formalizing **`aptos_framework`** and beyond.
+- **`AptosFormal.Std.*`** — specs for **`move-stdlib`** (`third_party/move/move-stdlib/`): BCS, SHA3-256,
+  vector operations, Keccak sponge.
+- **`AptosFormal.AptosStd.*`** — specs for **`aptos-stdlib`** (`aptos-move/framework/aptos-stdlib/`):
+  SHA3-512, Ristretto255 scalar/wire scaffolding.
 - **`AptosFormal.Experimental.ConfidentialAsset.Registration.*`** — registration proof verifier spec
   (`confidential_proof.move` `verify_registration_proof` in this repo).
 
@@ -23,10 +25,11 @@ lean_lib «AptosFormal» where
   roots := #[
     `AptosFormal.Std.Hash.Keccak,
     `AptosFormal.Std.Hash.Sha3_256,
-    `AptosFormal.Std.Hash.Sha3_512,
+    `AptosFormal.AptosStd.Hash.Sha3_512,
     `AptosFormal.Std.Bcs.Primitives,
     `AptosFormal.Std.MoveStdlibGoldens,
-    `AptosFormal.Std.Crypto.Ristretto255,
+    `AptosFormal.AptosStd.Crypto.Ristretto255,
+    `AptosFormal.Std.Vector.Operations,
     `AptosFormal.Experimental.ConfidentialAsset.Registration.Formal,
     `AptosFormal.Experimental.ConfidentialAsset.Registration.VerifyMath,
     `AptosFormal.Experimental.ConfidentialAsset.Registration.Refinement,
@@ -36,5 +39,20 @@ lean_lib «AptosFormal» where
     `AptosFormal.Experimental.ConfidentialAsset.Registration.GroupAxioms,
     `AptosFormal.Experimental.ConfidentialAsset.Registration.EndToEnd,
     `AptosFormal.Experimental.ConfidentialAsset.Registration.CryptoSecurity,
-    `AptosFormal.Experimental.ConfidentialAsset.Registration.FiatShamirSymbolic
+    `AptosFormal.Experimental.ConfidentialAsset.Registration.FiatShamirSymbolic,
+    `AptosFormal.Move.Value,
+    `AptosFormal.Move.Instr,
+    `AptosFormal.Move.State,
+    `AptosFormal.Move.Step,
+    `AptosFormal.Move.Native,
+    `AptosFormal.Move.Programs,
+    `AptosFormal.Refinement.Core,
+    `AptosFormal.Refinement.Vector,
+    `AptosFormal.Tests.Defs,
+    `AptosFormal.Tests.Vector,
+    `AptosFormal.DiffTest.JsonParser,
+    `AptosFormal.DiffTest.Runner
   ]
+
+lean_exe «difftest» where
+  root := `AptosFormal.DiffTest.Runner

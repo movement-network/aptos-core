@@ -20,10 +20,10 @@ those remain oracle obligations in `REGISTRATION_VERIFY_REVIEW.md`.
 
 import AptosFormal.Experimental.ConfidentialAsset.Registration.Formal
 import AptosFormal.Experimental.ConfidentialAsset.Registration.VerifyMath
-import AptosFormal.Std.Hash.Sha3_512
+import AptosFormal.AptosStd.Hash.Sha3_512
 
 open AptosFormal.Experimental.ConfidentialAsset.Registration.Formal
-open AptosFormal.Std.Hash.Sha3_512
+open AptosFormal.AptosStd.Hash.Sha3_512
 open RegistrationVerify
 
 namespace RegistrationTranscriptAlignment
@@ -99,7 +99,7 @@ theorem tagged_hash_golden_msg_matches :
 
 theorem registration_challenge_scalar_is_some :
     registrationChallengeScalarMove expectedRegistrationFsMsgMoveGolden ≠ none := by
-  simp [registrationChallengeScalarMove, AptosFormal.Std.Crypto.Ristretto255.scalarUniformFrom64Bytes]
+  simp [registrationChallengeScalarMove, AptosFormal.AptosStd.Crypto.Ristretto255.scalarUniformFrom64Bytes]
   native_decide
 
 /-! ## Second golden scenario (chain_id=42, @0x10/@0x20/@0x30, basepoint ek/R) -/
@@ -150,7 +150,7 @@ theorem registration_fiat_shamir_msg_matches_golden_2 :
 
 theorem registration_challenge_scalar_is_some_2 :
     registrationChallengeScalarMove expectedRegistrationFsMsg2 ≠ none := by
-  simp [registrationChallengeScalarMove, AptosFormal.Std.Crypto.Ristretto255.scalarUniformFrom64Bytes]
+  simp [registrationChallengeScalarMove, AptosFormal.AptosStd.Crypto.Ristretto255.scalarUniformFrom64Bytes]
   native_decide
 
 end RegistrationTranscriptAlignment

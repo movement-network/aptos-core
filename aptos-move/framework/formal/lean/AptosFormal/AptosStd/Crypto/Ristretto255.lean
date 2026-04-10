@@ -23,7 +23,7 @@ while fixing **scalar** and **encoding** types. Other framework packages (framew
 
 import Mathlib.Data.ZMod.Basic
 
-namespace AptosFormal.Std.Crypto.Ristretto255
+namespace AptosFormal.AptosStd.Crypto.Ristretto255
 
 /-- Curve25519 base field prime `2^255 - 19`. -/
 def curve25519FieldPrime : ℕ :=
@@ -91,4 +91,4 @@ def scalarReducedFrom32Bytes (b : ByteArray) : Option RistrettoScalar :=
   else
     none
 
-end AptosFormal.Std.Crypto.Ristretto255
+end AptosFormal.AptosStd.Crypto.Ristretto255

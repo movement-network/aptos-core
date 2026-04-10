@@ -16,7 +16,7 @@ Shared Keccak permutation lives in `AptosFormal.Std.Hash.Keccak`.
 import AptosFormal.Std.Hash.Keccak
 import Batteries.Data.List.Basic
 
-namespace AptosFormal.Std.Hash.Sha3_512
+namespace AptosFormal.AptosStd.Hash.Sha3_512
 
 open AptosFormal.Std.Hash.Keccak
 
@@ -63,4 +63,4 @@ def expectedSha3_512_testing : ByteArray :=
 
 example : sha3_512 (ByteArray.mk #[116, 101, 115, 116, 105, 110, 103]) = expectedSha3_512_testing := by native_decide
 
-end AptosFormal.Std.Hash.Sha3_512
+end AptosFormal.AptosStd.Hash.Sha3_512

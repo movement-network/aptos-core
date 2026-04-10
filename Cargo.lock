@@ -12134,6 +12134,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "move-lean-difftest"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "codespan-reporting",
+ "legacy-move-compiler",
+ "move-binary-format",
+ "move-compiler-v2",
+ "move-core-types",
+ "move-model",
+ "move-stdlib",
+ "move-vm-runtime",
+ "move-vm-test-utils",
+ "move-vm-types",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "move-linter"
 version = "0.1.0"
 dependencies = [

@@ -50,7 +50,7 @@ bridge: every `verifyRegistrationProofProp` instance that passes also satisfies
 import AptosFormal.Experimental.ConfidentialAsset.Registration.CryptoSecurity
 
 open AptosFormal.Experimental.ConfidentialAsset.Registration.CryptoSecurity
-open AptosFormal.Std.Crypto.Ristretto255
+open AptosFormal.AptosStd.Crypto.Ristretto255
 
 namespace AptosFormal.Experimental.ConfidentialAsset.Registration.FiatShamirSymbolic
 

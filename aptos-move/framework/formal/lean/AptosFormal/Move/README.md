@@ -144,7 +144,7 @@ values of type `Array MoveInstr`. Start with simple stdlib functions:
 - `vector::length<u8>`
 
 These can be obtained by compiling the Move source and inspecting the bytecode
-output (`aptos move disassemble`).
+output (`movement move disassemble`).
 
 ### Phase 5: Refinement proofs — Core (done)
 

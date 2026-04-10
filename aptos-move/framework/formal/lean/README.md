@@ -102,23 +102,24 @@ If you see `sorryAx` in the output, something is wrong — a proof has been bypa
 ## Companion Move golden tests
 
 These Move test files provide empirical evidence for assumptions that Lean cannot check
-(native crypto operations, BCS encoding). Run them from the repo root:
+(native crypto operations, BCS encoding). Run them from the repo root using the **Movement**
+CLI (`movement move test`, …), not the Aptos CLI.
 
 | Test file | What it checks | Run command |
 | --------- | -------------- | ----------- |
-| `move-stdlib/tests/formal_goldens_bcs.move` | BCS encoding of primitives | `aptos move test --package-dir aptos-move/framework/move-stdlib` |
+| `move-stdlib/tests/formal_goldens_bcs.move` | BCS encoding of primitives | `movement move test --package-dir aptos-move/framework/move-stdlib` |
 | `move-stdlib/tests/formal_goldens_hash.move` | SHA3-256/512 + keccak golden bytes | same as above |
 | `move-stdlib/tests/formal_goldens_vector.move` | Vector operations | same as above |
 | `move-stdlib/tests/formal_goldens_bcs_address.move` | BCS address → 32 raw bytes (§6.3) | same as above |
-| `aptos-experimental/tests/confidential_asset/formal_goldens_registration.move` | Fiat-Shamir transcript bytes | `aptos move test --package-dir aptos-move/framework/aptos-experimental` |
+| `aptos-experimental/tests/confidential_asset/formal_goldens_registration.move` | Fiat-Shamir transcript bytes | `movement move test --package-dir aptos-move/framework/aptos-experimental` |
 | `aptos-experimental/tests/confidential_asset/formal_goldens_ristretto.move` | Ristretto group-law properties (§6.2) | same as above |
 | `aptos-experimental/tests/confidential_asset/formal_goldens_verification_equation.move` | Full verification equation: honest proof passes, corrupted/wrong-dk rejected (§6.1) | same as above |
 
 Run all formal golden tests at once:
 
 ```bash
-aptos move test --package-dir aptos-move/framework/move-stdlib --filter formal_goldens
-aptos move test --package-dir aptos-move/framework/aptos-experimental --filter formal_goldens
+movement move test --package-dir aptos-move/framework/move-stdlib --filter formal_goldens
+movement move test --package-dir aptos-move/framework/aptos-experimental --filter formal_goldens
 ```
 
 ## Differential tests (Lean evaluator vs real Move VM)

@@ -1254,6 +1254,70 @@ pub enum EntryFunctionCall {
         new_voter: AccountAddress,
     },
 
+    /// Add new creators to the timelock account.
+    /// Can only be invoked by the timelock account itself via the proposal flow.
+    TimelockAddCreators {
+        new_creators: Vec<AccountAddress>,
+    },
+
+    /// Add new executors to the timelock account.
+    /// Can only be invoked by the timelock account itself via the proposal flow.
+    TimelockAddExecutors {
+        new_executors: Vec<AccountAddress>,
+    },
+
+    /// Cancel a pending transaction. The transaction's executed field is set to true.
+    /// Any creator or executor (or creator when executors is empty) can cancel at any time.
+    TimelockCancelTransaction {
+        timelock_account: AccountAddress,
+        salt: Vec<u8>,
+    },
+
+    /// Create a new timelock account with the calling signer as the initial creator.
+    ///
+    /// @param additional_creators Additional creator addresses. The calling signer is always
+    ///        included. No duplicates allowed.
+    /// @param executors Addresses authorized to execute transactions after the timelock period.
+    ///        If empty, creators can also execute.
+    /// @param num_seconds_execute Delay in seconds before a proposed transaction can be executed.
+    TimelockCreate {
+        additional_creators: Vec<AccountAddress>,
+        executors: Vec<AccountAddress>,
+        num_seconds_execute: u64,
+    },
+
+    /// Propose a new transaction to be executed after the timelock period.
+    ///
+    /// @param payload BCS-encoded transaction payload. Must not be empty.
+    /// @param salt    Unique identifier for this proposal. Use a different salt to submit
+    ///                the same payload again.
+    TimelockCreateTransaction {
+        timelock_account: AccountAddress,
+        payload: Vec<u8>,
+        num_seconds_execute: u64,
+        salt: Vec<u8>,
+    },
+
+    /// Remove creators from the timelock account. At least one creator must remain.
+    /// Can only be invoked by the timelock account itself via the proposal flow.
+    TimelockRemoveCreators {
+        creators_to_remove: Vec<AccountAddress>,
+    },
+
+    /// Remove executors from the timelock account.
+    /// After removal the executor list may be empty, which means creators can execute.
+    /// Can only be invoked by the timelock account itself via the proposal flow.
+    TimelockRemoveExecutors {
+        executors_to_remove: Vec<AccountAddress>,
+    },
+
+    /// Update the timelock delay. The new value takes effect immediately for future proposals.
+    /// Existing pending transactions are not affected.
+    /// Can only be invoked by the timelock account itself via the proposal flow.
+    TimelockUpdateMinNumSecondsExecute {
+        new_min_num_seconds_execute: u64,
+    },
+
     TransactionFeeConvertToAptosFaBurnRef {},
 
     /// Used in on-chain governances to update the major version for the next epoch.
@@ -2082,6 +2146,32 @@ impl EntryFunctionCall {
                 operator,
                 new_voter,
             } => staking_proxy_set_voter(operator, new_voter),
+            TimelockAddCreators { new_creators } => timelock_add_creators(new_creators),
+            TimelockAddExecutors { new_executors } => timelock_add_executors(new_executors),
+            TimelockCancelTransaction {
+                timelock_account,
+                salt,
+            } => timelock_cancel_transaction(timelock_account, salt),
+            TimelockCreate {
+                additional_creators,
+                executors,
+                num_seconds_execute,
+            } => timelock_create(additional_creators, executors, num_seconds_execute),
+            TimelockCreateTransaction {
+                timelock_account,
+                payload,
+                num_seconds_execute,
+                salt,
+            } => timelock_create_transaction(timelock_account, payload, num_seconds_execute, salt),
+            TimelockRemoveCreators { creators_to_remove } => {
+                timelock_remove_creators(creators_to_remove)
+            },
+            TimelockRemoveExecutors {
+                executors_to_remove,
+            } => timelock_remove_executors(executors_to_remove),
+            TimelockUpdateMinNumSecondsExecute {
+                new_min_num_seconds_execute,
+            } => timelock_update_min_num_seconds_execute(new_min_num_seconds_execute),
             TransactionFeeConvertToAptosFaBurnRef {} => {
                 transaction_fee_convert_to_aptos_fa_burn_ref()
             },
@@ -5576,6 +5666,178 @@ pub fn staking_proxy_set_voter(
     ))
 }
 
+/// Add new creators to the timelock account.
+/// Can only be invoked by the timelock account itself via the proposal flow.
+pub fn timelock_add_creators(new_creators: Vec<AccountAddress>) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("timelock").to_owned(),
+        ),
+        ident_str!("add_creators").to_owned(),
+        vec![],
+        vec![bcs::to_bytes(&new_creators).unwrap()],
+    ))
+}
+
+/// Add new executors to the timelock account.
+/// Can only be invoked by the timelock account itself via the proposal flow.
+pub fn timelock_add_executors(new_executors: Vec<AccountAddress>) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("timelock").to_owned(),
+        ),
+        ident_str!("add_executors").to_owned(),
+        vec![],
+        vec![bcs::to_bytes(&new_executors).unwrap()],
+    ))
+}
+
+/// Cancel a pending transaction. The transaction's executed field is set to true.
+/// Any creator or executor (or creator when executors is empty) can cancel at any time.
+pub fn timelock_cancel_transaction(
+    timelock_account: AccountAddress,
+    salt: Vec<u8>,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("timelock").to_owned(),
+        ),
+        ident_str!("cancel_transaction").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&timelock_account).unwrap(),
+            bcs::to_bytes(&salt).unwrap(),
+        ],
+    ))
+}
+
+/// Create a new timelock account with the calling signer as the initial creator.
+///
+/// @param additional_creators Additional creator addresses. The calling signer is always
+///        included. No duplicates allowed.
+/// @param executors Addresses authorized to execute transactions after the timelock period.
+///        If empty, creators can also execute.
+/// @param num_seconds_execute Delay in seconds before a proposed transaction can be executed.
+pub fn timelock_create(
+    additional_creators: Vec<AccountAddress>,
+    executors: Vec<AccountAddress>,
+    num_seconds_execute: u64,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("timelock").to_owned(),
+        ),
+        ident_str!("create").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&additional_creators).unwrap(),
+            bcs::to_bytes(&executors).unwrap(),
+            bcs::to_bytes(&num_seconds_execute).unwrap(),
+        ],
+    ))
+}
+
+/// Propose a new transaction to be executed after the timelock period.
+///
+/// @param payload BCS-encoded transaction payload. Must not be empty.
+/// @param salt    Unique identifier for this proposal. Use a different salt to submit
+///                the same payload again.
+pub fn timelock_create_transaction(
+    timelock_account: AccountAddress,
+    payload: Vec<u8>,
+    num_seconds_execute: u64,
+    salt: Vec<u8>,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("timelock").to_owned(),
+        ),
+        ident_str!("create_transaction").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&timelock_account).unwrap(),
+            bcs::to_bytes(&payload).unwrap(),
+            bcs::to_bytes(&num_seconds_execute).unwrap(),
+            bcs::to_bytes(&salt).unwrap(),
+        ],
+    ))
+}
+
+/// Remove creators from the timelock account. At least one creator must remain.
+/// Can only be invoked by the timelock account itself via the proposal flow.
+pub fn timelock_remove_creators(creators_to_remove: Vec<AccountAddress>) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("timelock").to_owned(),
+        ),
+        ident_str!("remove_creators").to_owned(),
+        vec![],
+        vec![bcs::to_bytes(&creators_to_remove).unwrap()],
+    ))
+}
+
+/// Remove executors from the timelock account.
+/// After removal the executor list may be empty, which means creators can execute.
+/// Can only be invoked by the timelock account itself via the proposal flow.
+pub fn timelock_remove_executors(executors_to_remove: Vec<AccountAddress>) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("timelock").to_owned(),
+        ),
+        ident_str!("remove_executors").to_owned(),
+        vec![],
+        vec![bcs::to_bytes(&executors_to_remove).unwrap()],
+    ))
+}
+
+/// Update the timelock delay. The new value takes effect immediately for future proposals.
+/// Existing pending transactions are not affected.
+/// Can only be invoked by the timelock account itself via the proposal flow.
+pub fn timelock_update_min_num_seconds_execute(
+    new_min_num_seconds_execute: u64,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("timelock").to_owned(),
+        ),
+        ident_str!("update_min_num_seconds_execute").to_owned(),
+        vec![],
+        vec![bcs::to_bytes(&new_min_num_seconds_execute).unwrap()],
+    ))
+}
+
 pub fn transaction_fee_convert_to_aptos_fa_burn_ref() -> TransactionPayload {
     TransactionPayload::EntryFunction(EntryFunction::new(
         ModuleId::new(
@@ -7910,6 +8172,94 @@ mod decoder {
         }
     }
 
+    pub fn timelock_add_creators(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::TimelockAddCreators {
+                new_creators: bcs::from_bytes(script.args().get(0)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn timelock_add_executors(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::TimelockAddExecutors {
+                new_executors: bcs::from_bytes(script.args().get(0)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn timelock_cancel_transaction(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::TimelockCancelTransaction {
+                timelock_account: bcs::from_bytes(script.args().get(0)?).ok()?,
+                salt: bcs::from_bytes(script.args().get(1)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn timelock_create(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::TimelockCreate {
+                additional_creators: bcs::from_bytes(script.args().get(0)?).ok()?,
+                executors: bcs::from_bytes(script.args().get(1)?).ok()?,
+                num_seconds_execute: bcs::from_bytes(script.args().get(2)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn timelock_create_transaction(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::TimelockCreateTransaction {
+                timelock_account: bcs::from_bytes(script.args().get(0)?).ok()?,
+                payload: bcs::from_bytes(script.args().get(1)?).ok()?,
+                num_seconds_execute: bcs::from_bytes(script.args().get(2)?).ok()?,
+                salt: bcs::from_bytes(script.args().get(3)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn timelock_remove_creators(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::TimelockRemoveCreators {
+                creators_to_remove: bcs::from_bytes(script.args().get(0)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn timelock_remove_executors(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::TimelockRemoveExecutors {
+                executors_to_remove: bcs::from_bytes(script.args().get(0)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn timelock_update_min_num_seconds_execute(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::TimelockUpdateMinNumSecondsExecute {
+                new_min_num_seconds_execute: bcs::from_bytes(script.args().get(0)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
     pub fn transaction_fee_convert_to_aptos_fa_burn_ref(
         payload: &TransactionPayload,
     ) -> Option<EntryFunctionCall> {
@@ -8760,6 +9110,38 @@ static SCRIPT_FUNCTION_DECODER_MAP: once_cell::sync::Lazy<EntryFunctionDecoderMa
         map.insert(
             "staking_proxy_set_voter".to_string(),
             Box::new(decoder::staking_proxy_set_voter),
+        );
+        map.insert(
+            "timelock_add_creators".to_string(),
+            Box::new(decoder::timelock_add_creators),
+        );
+        map.insert(
+            "timelock_add_executors".to_string(),
+            Box::new(decoder::timelock_add_executors),
+        );
+        map.insert(
+            "timelock_cancel_transaction".to_string(),
+            Box::new(decoder::timelock_cancel_transaction),
+        );
+        map.insert(
+            "timelock_create".to_string(),
+            Box::new(decoder::timelock_create),
+        );
+        map.insert(
+            "timelock_create_transaction".to_string(),
+            Box::new(decoder::timelock_create_transaction),
+        );
+        map.insert(
+            "timelock_remove_creators".to_string(),
+            Box::new(decoder::timelock_remove_creators),
+        );
+        map.insert(
+            "timelock_remove_executors".to_string(),
+            Box::new(decoder::timelock_remove_executors),
+        );
+        map.insert(
+            "timelock_update_min_num_seconds_execute".to_string(),
+            Box::new(decoder::timelock_update_min_num_seconds_execute),
         );
         map.insert(
             "transaction_fee_convert_to_aptos_fa_burn_ref".to_string(),

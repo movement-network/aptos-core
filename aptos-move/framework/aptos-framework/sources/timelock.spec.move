@@ -112,9 +112,9 @@ spec aptos_framework::timelock {
         ensures result == global<TimelockAccount>(timelock_account).executors;
     }
 
-    spec num_seconds_execute(timelock_account: address): u64 {
+    spec min_num_seconds_execute(timelock_account: address): u64 {
         aborts_if !exists<TimelockAccount>(timelock_account);
-        ensures result == global<TimelockAccount>(timelock_account).num_seconds_execute;
+        ensures result == global<TimelockAccount>(timelock_account).min_num_seconds_execute;
     }
 
     spec is_creator(addr: address, timelock_account: address): bool {
@@ -137,12 +137,13 @@ spec aptos_framework::timelock {
     }
 
     spec can_be_executed(timelock_account: address, salt: vector<u8>): bool {
-        pragma aborts_if_is_partial;
+        // Only aborts when the timelock account resource does not exist.
+        // Returns false (does not abort) when the salt is absent, executed, or delay not elapsed.
         aborts_if !exists<TimelockAccount>(timelock_account);
     }
 
     spec get_next_timelock_account_address(creator: address): address {
-        pragma aborts_if_is_partial;
+        // Only aborts when the creator account does not exist (sequence number not readable).
         aborts_if !exists<account::Account>(creator);
     }
 
@@ -154,54 +155,73 @@ spec aptos_framework::timelock {
         executors: vector<address>,
         num_seconds_execute: u64,
     ) {
-        pragma aborts_if_is_partial;
+        // Full verification is disabled because create_resource_account involves complex
+        // cross-module side-effects (coin registration, nonce derivation) that the prover
+        // cannot fully reason about.
         pragma verify = false;
+        aborts_if num_seconds_execute <= 360;
+        aborts_if !exists<account::Account>(address_of(creator));
     }
 
     spec create_timelock_account_internal(
         timelock_account: &signer,
         creators: vector<address>,
         executors: vector<address>,
-        num_seconds_execute: u64,
+        min_num_seconds_execute: u64,
         signer_cap: Option<SignerCapability>,
     ) {
-        pragma aborts_if_is_partial;
         aborts_if len(creators) < 1;
+        aborts_if min_num_seconds_execute <= 360;
         aborts_if exists<TimelockAccount>(address_of(timelock_account));
+        // Aborts if creators or executors contain duplicates or include the timelock address.
+        aborts_if exists i in 0..len(creators): creators[i] == address_of(timelock_account);
+        aborts_if exists i in 0..len(creators): exists j in 0..i: creators[i] == creators[j];
+        aborts_if exists i in 0..len(executors): executors[i] == address_of(timelock_account);
+        aborts_if exists i in 0..len(executors): exists j in 0..i: executors[i] == executors[j];
         ensures exists<TimelockAccount>(address_of(timelock_account));
-        ensures global<TimelockAccount>(address_of(timelock_account)).num_seconds_execute == num_seconds_execute;
+        ensures global<TimelockAccount>(address_of(timelock_account)).min_num_seconds_execute == min_num_seconds_execute;
+        ensures global<TimelockAccount>(address_of(timelock_account)).creators == creators;
+        ensures global<TimelockAccount>(address_of(timelock_account)).executors == executors;
     }
 
     // =============================== Self-governance ===============================
 
     spec add_creators(timelock_account: &signer, new_creators: vector<address>) {
-        pragma aborts_if_is_partial;
         aborts_if !exists<TimelockAccount>(address_of(timelock_account));
+        // Aborts if any new creator is the timelock address itself.
+        aborts_if exists i in 0..len(new_creators): new_creators[i] == address_of(timelock_account);
+        // Aborts if new_creators list has internal duplicates.
+        aborts_if exists i in 0..len(new_creators): exists j in 0..i: new_creators[i] == new_creators[j];
         ensures exists<TimelockAccount>(address_of(timelock_account));
     }
 
     spec remove_creators(timelock_account: &signer, creators_to_remove: vector<address>) {
         pragma aborts_if_is_partial;
         aborts_if !exists<TimelockAccount>(address_of(timelock_account));
+        // Aborts if removing these creators would leave zero creators.
+        // (Full enumeration of the post-removal set is complex; partial spec retained here.)
         // Must retain at least one creator.
         ensures len(global<TimelockAccount>(address_of(timelock_account)).creators) >= 1;
     }
 
     spec add_executors(timelock_account: &signer, new_executors: vector<address>) {
-        pragma aborts_if_is_partial;
         aborts_if !exists<TimelockAccount>(address_of(timelock_account));
+        // Aborts if any new executor is the timelock address itself.
+        aborts_if exists i in 0..len(new_executors): new_executors[i] == address_of(timelock_account);
+        // Aborts if new_executors list has internal duplicates.
+        aborts_if exists i in 0..len(new_executors): exists j in 0..i: new_executors[i] == new_executors[j];
         ensures exists<TimelockAccount>(address_of(timelock_account));
     }
 
     spec remove_executors(timelock_account: &signer, executors_to_remove: vector<address>) {
-        pragma aborts_if_is_partial;
         aborts_if !exists<TimelockAccount>(address_of(timelock_account));
         ensures exists<TimelockAccount>(address_of(timelock_account));
     }
 
-    spec update_num_seconds_execute(timelock_account: &signer, new_num_seconds_execute: u64) {
+    spec update_min_num_seconds_execute(timelock_account: &signer, new_min_num_seconds_execute: u64) {
         aborts_if !exists<TimelockAccount>(address_of(timelock_account));
-        ensures global<TimelockAccount>(address_of(timelock_account)).num_seconds_execute == new_num_seconds_execute;
+        aborts_if new_min_num_seconds_execute <= 360;
+        ensures global<TimelockAccount>(address_of(timelock_account)).min_num_seconds_execute == new_min_num_seconds_execute;
     }
 
     // =============================== Transaction flow ===============================
@@ -210,6 +230,7 @@ spec aptos_framework::timelock {
         creator: &signer,
         timelock_account: address,
         payload: vector<u8>,
+        num_seconds_execute: u64,
         salt: vector<u8>,
     ) {
         pragma aborts_if_is_partial;
@@ -245,11 +266,29 @@ spec aptos_framework::timelock {
         payload: vector<u8>,
         salt: vector<u8>,
     ) {
-        pragma aborts_if_is_partial;
         let timelock = global<TimelockAccount>(timelock_account);
         aborts_if !exists<TimelockAccount>(timelock_account);
+        // Aborts if executor is not authorized (ENOT_EXECUTOR).
+        aborts_if {
+            let execs = timelock.executors;
+            let creators = timelock.creators;
+            if (len(execs) == 0) {
+                !contains(creators, address_of(executor))
+            } else {
+                !contains(execs, address_of(executor))
+            }
+        };
         aborts_if !table::spec_contains(timelock.transactions, salt);
         aborts_if table::spec_get(timelock.transactions, salt).executed;
+        // Aborts if the timelock period has not yet elapsed (ETIMELOCK_NOT_EXPIRED).
+        aborts_if aptos_framework::timestamp::now_seconds() < table::spec_get(timelock.transactions, salt).creation_time_secs
+            + table::spec_get(timelock.transactions, salt).num_seconds_execute;
+        // Aborts if a stored payload exists and the provided payload is non-empty but mismatches (EPAYLOAD_DOES_NOT_MATCH).
+        aborts_if {
+            let tx = table::spec_get(timelock.transactions, salt);
+            option::is_some(tx.payload) && len(payload) > 0
+                && payload != option::borrow(tx.payload)
+        };
     }
 
     spec successful_transaction_execution_cleanup(
@@ -258,7 +297,6 @@ spec aptos_framework::timelock {
         salt: vector<u8>,
         transaction_payload: vector<u8>,
     ) {
-        pragma aborts_if_is_partial;
         aborts_if !exists<TimelockAccount>(timelock_account);
         aborts_if !table::spec_contains(global<TimelockAccount>(timelock_account).transactions, salt);
         ensures table::spec_get(global<TimelockAccount>(timelock_account).transactions, salt).executed;
@@ -273,7 +311,6 @@ spec aptos_framework::timelock {
         transaction_payload: vector<u8>,
         execution_error: ExecutionError,
     ) {
-        pragma aborts_if_is_partial;
         aborts_if !exists<TimelockAccount>(timelock_account);
         aborts_if !table::spec_contains(global<TimelockAccount>(timelock_account).transactions, salt);
         ensures table::spec_get(global<TimelockAccount>(timelock_account).transactions, salt).executed;
@@ -284,8 +321,9 @@ spec aptos_framework::timelock {
     // =============================== Private helpers ===============================
 
     spec create_timelock_account(creator: &signer): (signer, SignerCapability) {
-        pragma aborts_if_is_partial;
+        // Full verification disabled; create_resource_account involves complex cross-module effects.
         pragma verify = false;
+        aborts_if !exists<account::Account>(address_of(creator));
     }
 
     spec create_timelock_account_seed(seed: vector<u8>): vector<u8> {
@@ -293,7 +331,6 @@ spec aptos_framework::timelock {
     }
 
     spec validate_members(members: &vector<address>, timelock_address: address, duplicate_error: u64) {
-        pragma aborts_if_is_partial;
         // Aborts if any member equals the timelock address itself.
         aborts_if exists i in 0..len(members): members[i] == timelock_address;
         // Aborts if any member appears more than once.

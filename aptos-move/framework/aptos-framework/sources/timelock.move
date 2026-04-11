@@ -20,15 +20,14 @@
 ///   (analogous to validate_multisig_transaction in multisig_account) and requires VM support
 ///   for a TimelockTransaction transaction type.
 module aptos_framework::timelock {
-    use aptos_framework::account::{Self, SignerCapability, new_event_handle, create_resource_address};
+    use aptos_framework::account::{Self, SignerCapability, create_resource_address};
     use aptos_framework::aptos_coin::AptosCoin;
     use aptos_framework::coin;
-    use aptos_framework::event::{EventHandle, emit_event, emit};
+    use aptos_framework::event::emit;
     use aptos_framework::timestamp::now_seconds;
     use aptos_std::table::{Self, Table};
     use std::bcs::to_bytes;
     use std::error;
-    use std::features;
     use std::option::{Self, Option};
     use std::signer::address_of;
     use std::string::String;
@@ -79,34 +78,30 @@ module aptos_framework::timelock {
         // Addresses allowed to execute transactions after the timelock period.
         // If empty, creators can also execute.
         executors: vector<address>,
-        // Seconds that must elapse after proposal before a transaction can be executed.
-        num_seconds_execute: u64,
+        // Minimum seconds that must elapse after proposal before a transaction can be executed.
+        min_num_seconds_execute: u64,
         // Map from salt to transaction. Entries are never deleted; executed/canceled
         // transactions are kept with executed = true for historical record.
         transactions: Table<vector<u8>, TimelockTransaction>,
         // Signer capability for the resource account.
         signer_cap: Option<SignerCapability>,
-
-        // Event handles (legacy pattern kept for migration compatibility).
-        add_creators_events: EventHandle<AddCreatorsEvent>,
-        remove_creators_events: EventHandle<RemoveCreatorsEvent>,
-        add_executors_events: EventHandle<AddExecutorsEvent>,
-        remove_executors_events: EventHandle<RemoveExecutorsEvent>,
-        update_num_seconds_execute_events: EventHandle<UpdateNumSecondsExecuteEvent>,
-        create_transaction_events: EventHandle<CreateTransactionEvent>,
-        cancel_transaction_events: EventHandle<CancelTransactionEvent>,
-        execute_transaction_events: EventHandle<TransactionExecutionSucceededEvent>,
-        transaction_execution_failed_events: EventHandle<TransactionExecutionFailedEvent>,
     }
 
     /// A transaction proposed for timelock execution.
     struct TimelockTransaction has copy, drop, store {
-        // Full transaction payload. Can be None if only a hash is stored off chain.
+        // BCS-encoded `TimelockTransactionPayload`.
+        // - `Some(bytes)`: the full payload is stored on-chain. During execution the VM verifies
+        //   that the bytes in the submitted transaction match exactly what is stored here.
+        // - `None`: no payload is stored on-chain (e.g. the proposer chose off-chain storage).
+        //   In this case the VM uses whatever payload is supplied in the transaction without
+        //   performing a byte-equality check.
         payload: Option<vector<u8>>,
         // The creator who proposed this transaction.
         creator: address,
         // Unix timestamp (seconds) when this transaction was proposed.
         creation_time_secs: u64,
+        // Amount of seconds that must elapse after creation_time_secs before this transaction can be executed.
+        num_seconds_execute: u64,
         // User-provided salt. Acts as the table key and differentiates transactions.
         // To submit the same payload again, use a different salt.
         salt: vector<u8>,
@@ -124,18 +119,10 @@ module aptos_framework::timelock {
 
     // =============================== Events ===============================
 
-    struct AddCreatorsEvent has drop, store {
-        creators_added: vector<address>,
-    }
-
     #[event]
     struct AddCreators has drop, store {
         timelock_account: address,
         creators_added: vector<address>,
-    }
-
-    struct RemoveCreatorsEvent has drop, store {
-        creators_removed: vector<address>,
     }
 
     #[event]
@@ -144,18 +131,10 @@ module aptos_framework::timelock {
         creators_removed: vector<address>,
     }
 
-    struct AddExecutorsEvent has drop, store {
-        executors_added: vector<address>,
-    }
-
     #[event]
     struct AddExecutors has drop, store {
         timelock_account: address,
         executors_added: vector<address>,
-    }
-
-    struct RemoveExecutorsEvent has drop, store {
-        executors_removed: vector<address>,
     }
 
     #[event]
@@ -164,22 +143,11 @@ module aptos_framework::timelock {
         executors_removed: vector<address>,
     }
 
-    struct UpdateNumSecondsExecuteEvent has drop, store {
-        old_num_seconds_execute: u64,
-        new_num_seconds_execute: u64,
-    }
-
     #[event]
-    struct UpdateNumSecondsExecute has drop, store {
+    struct UpdateMinNumSecondsExecute has drop, store {
         timelock_account: address,
-        old_num_seconds_execute: u64,
-        new_num_seconds_execute: u64,
-    }
-
-    struct CreateTransactionEvent has drop, store {
-        creator: address,
-        salt: vector<u8>,
-        transaction: TimelockTransaction,
+        old_min_num_seconds_execute: u64,
+        new_min_num_seconds_execute: u64,
     }
 
     #[event]
@@ -190,22 +158,11 @@ module aptos_framework::timelock {
         transaction: TimelockTransaction,
     }
 
-    struct CancelTransactionEvent has drop, store {
-        actor: address,
-        salt: vector<u8>,
-    }
-
     #[event]
     struct CancelTransaction has drop, store {
         timelock_account: address,
         actor: address,
         salt: vector<u8>,
-    }
-
-    struct TransactionExecutionSucceededEvent has drop, store {
-        executor: address,
-        salt: vector<u8>,
-        transaction_payload: vector<u8>,
     }
 
     #[event]
@@ -214,13 +171,6 @@ module aptos_framework::timelock {
         executor: address,
         salt: vector<u8>,
         transaction_payload: vector<u8>,
-    }
-
-    struct TransactionExecutionFailedEvent has drop, store {
-        executor: address,
-        salt: vector<u8>,
-        transaction_payload: vector<u8>,
-        execution_error: ExecutionError,
     }
 
     #[event]
@@ -247,9 +197,9 @@ module aptos_framework::timelock {
     }
 
     #[view]
-    /// Return the timelock delay in seconds.
-    public fun num_seconds_execute(timelock_account: address): u64 acquires TimelockAccount {
-        borrow_global<TimelockAccount>(timelock_account).num_seconds_execute
+    /// Return the minimum timelock delay in seconds.
+    public fun min_num_seconds_execute(timelock_account: address): u64 acquires TimelockAccount {
+        borrow_global<TimelockAccount>(timelock_account).min_num_seconds_execute
     }
 
     #[view]
@@ -293,7 +243,7 @@ module aptos_framework::timelock {
             return false
         };
         let tx = timelock.transactions.borrow(salt);
-        !tx.executed && now_seconds() >= tx.creation_time_secs + timelock.num_seconds_execute
+        !tx.executed && now_seconds() >= tx.creation_time_secs + tx.num_seconds_execute
     }
 
     #[view]
@@ -333,7 +283,7 @@ module aptos_framework::timelock {
         timelock_account: &signer,
         creators: vector<address>,
         executors: vector<address>,
-        num_seconds_execute: u64,
+        min_num_seconds_execute: u64,
         signer_cap: Option<SignerCapability>,
     ) {
         let timelock_address = address_of(timelock_account);
@@ -343,23 +293,14 @@ module aptos_framework::timelock {
         );
         validate_members(&creators, timelock_address, EDUPLICATE_CREATOR);
         validate_members(&executors, timelock_address, EDUPLICATE_EXECUTOR);
-        assert!(num_seconds_execute > 360, error::invalid_argument(ENUMBER_SECONDS_TOO_SMALL));
+        assert!(min_num_seconds_execute > 360, error::invalid_argument(ENUMBER_SECONDS_TOO_SMALL));
 
         move_to(timelock_account, TimelockAccount {
             creators,
             executors,
-            num_seconds_execute,
+            min_num_seconds_execute,
             transactions: table::new<vector<u8>, TimelockTransaction>(),
             signer_cap,
-            add_creators_events: new_event_handle<AddCreatorsEvent>(timelock_account),
-            remove_creators_events: new_event_handle<RemoveCreatorsEvent>(timelock_account),
-            add_executors_events: new_event_handle<AddExecutorsEvent>(timelock_account),
-            remove_executors_events: new_event_handle<RemoveExecutorsEvent>(timelock_account),
-            update_num_seconds_execute_events: new_event_handle<UpdateNumSecondsExecuteEvent>(timelock_account),
-            create_transaction_events: new_event_handle<CreateTransactionEvent>(timelock_account),
-            cancel_transaction_events: new_event_handle<CancelTransactionEvent>(timelock_account),
-            execute_transaction_events: new_event_handle<TransactionExecutionSucceededEvent>(timelock_account),
-            transaction_execution_failed_events: new_event_handle<TransactionExecutionFailedEvent>(timelock_account),
         });
     }
 
@@ -383,11 +324,7 @@ module aptos_framework::timelock {
         timelock.creators.append(new_creators);
         // Re-validate the combined list to catch cross-list duplicates.
         validate_members(&timelock.creators, timelock_address, EDUPLICATE_CREATOR);
-        if (features::module_event_migration_enabled()) {
-            emit(AddCreators { timelock_account: timelock_address, creators_added });
-        } else {
-            emit_event(&mut timelock.add_creators_events, AddCreatorsEvent { creators_added });
-        };
+        emit(AddCreators { timelock_account: timelock_address, creators_added });
     }
 
     /// Remove creators from the timelock account. At least one creator must remain.
@@ -411,11 +348,7 @@ module aptos_framework::timelock {
             error::invalid_state(EWOULD_REMOVE_ALL_CREATORS),
         );
         if (creators_removed.length() > 0) {
-            if (features::module_event_migration_enabled()) {
-                emit(RemoveCreators { timelock_account: timelock_address, creators_removed });
-            } else {
-                emit_event(&mut timelock.remove_creators_events, RemoveCreatorsEvent { creators_removed });
-            };
+            emit(RemoveCreators { timelock_account: timelock_address, creators_removed });
         };
     }
 
@@ -432,11 +365,7 @@ module aptos_framework::timelock {
         let timelock = borrow_global_mut<TimelockAccount>(timelock_address);
         timelock.executors.append(new_executors);
         validate_members(&timelock.executors, timelock_address, EDUPLICATE_EXECUTOR);
-        if (features::module_event_migration_enabled()) {
-            emit(AddExecutors { timelock_account: timelock_address, executors_added });
-        } else {
-            emit_event(&mut timelock.add_executors_events, AddExecutorsEvent { executors_added });
-        };
+        emit(AddExecutors { timelock_account: timelock_address, executors_added });
     }
 
     /// Remove executors from the timelock account.
@@ -457,38 +386,28 @@ module aptos_framework::timelock {
             }
         });
         if (executors_removed.length() > 0) {
-            if (features::module_event_migration_enabled()) {
-                emit(RemoveExecutors { timelock_account: timelock_address, executors_removed });
-            } else {
-                emit_event(&mut timelock.remove_executors_events, RemoveExecutorsEvent { executors_removed });
-            };
+            emit(RemoveExecutors { timelock_account: timelock_address, executors_removed });
         };
     }
 
     /// Update the timelock delay. The new value takes effect immediately for future proposals.
     /// Existing pending transactions are not affected.
     /// Can only be invoked by the timelock account itself via the proposal flow.
-    entry fun update_num_seconds_execute(
+    entry fun update_min_num_seconds_execute(
         timelock_account: &signer,
-        new_num_seconds_execute: u64,
+        new_min_num_seconds_execute: u64,
     ) acquires TimelockAccount {
         let timelock_address = address_of(timelock_account);
         assert_timelock_account_exists(timelock_address);
+        assert!(new_min_num_seconds_execute > 360, error::invalid_argument(ENUMBER_SECONDS_TOO_SMALL));
         let timelock = borrow_global_mut<TimelockAccount>(timelock_address);
-        let old_num_seconds_execute = timelock.num_seconds_execute;
-        timelock.num_seconds_execute = new_num_seconds_execute;
-        if (features::module_event_migration_enabled()) {
-            emit(UpdateNumSecondsExecute {
-                timelock_account: timelock_address,
-                old_num_seconds_execute,
-                new_num_seconds_execute,
-            });
-        } else {
-            emit_event(
-                &mut timelock.update_num_seconds_execute_events,
-                UpdateNumSecondsExecuteEvent { old_num_seconds_execute, new_num_seconds_execute },
-            );
-        };
+        let old_min_num_seconds_execute = timelock.min_num_seconds_execute;
+        timelock.min_num_seconds_execute = new_min_num_seconds_execute;
+        emit(UpdateMinNumSecondsExecute {
+            timelock_account: timelock_address,
+            old_min_num_seconds_execute,
+            new_min_num_seconds_execute,
+        });
     }
 
     // =============================== Transaction flow ===============================
@@ -502,6 +421,7 @@ module aptos_framework::timelock {
         creator: &signer,
         timelock_account: address,
         payload: vector<u8>,
+        num_seconds_execute: u64,
         salt: vector<u8>,
     ) acquires TimelockAccount {
         assert!(!payload.is_empty(), error::invalid_argument(EPAYLOAD_CANNOT_BE_EMPTY));
@@ -514,24 +434,19 @@ module aptos_framework::timelock {
             !timelock.transactions.contains(salt),
             error::already_exists(EDUPLICATE_SALT),
         );
+        assert!(num_seconds_execute >= timelock.min_num_seconds_execute, error::invalid_argument(ENUMBER_SECONDS_TOO_SMALL));
 
         let transaction = TimelockTransaction {
             payload: option::some(payload),
             creator: creator_addr,
             creation_time_secs: now_seconds(),
+            num_seconds_execute,
             salt,
             executed: false,
         };
         timelock.transactions.add(salt, transaction);
 
-        if (features::module_event_migration_enabled()) {
-            emit(CreateTransaction { timelock_account, creator: creator_addr, salt, transaction });
-        } else {
-            emit_event(
-                &mut timelock.create_transaction_events,
-                CreateTransactionEvent { creator: creator_addr, salt, transaction },
-            );
-        };
+        emit(CreateTransaction { timelock_account, creator: creator_addr, salt, transaction });
     }
 
     /// Cancel a pending transaction. The transaction's executed field is set to true.
@@ -561,14 +476,7 @@ module aptos_framework::timelock {
         assert!(!transaction.executed, error::invalid_state(ETRANSACTION_ALREADY_EXECUTED));
         transaction.executed = true;
 
-        if (features::module_event_migration_enabled()) {
-            emit(CancelTransaction { timelock_account, actor: actor_addr, salt });
-        } else {
-            emit_event(
-                &mut timelock.cancel_transaction_events,
-                CancelTransactionEvent { actor: actor_addr, salt },
-            );
-        };
+        emit(CancelTransaction { timelock_account, actor: actor_addr, salt });
     }
 
     // =============================== VM-called functions ===============================
@@ -598,7 +506,7 @@ module aptos_framework::timelock {
         let transaction = timelock.transactions.borrow(salt);
         assert!(!transaction.executed, error::invalid_state(ETRANSACTION_ALREADY_EXECUTED));
         assert!(
-            now_seconds() >= transaction.creation_time_secs + timelock.num_seconds_execute,
+            now_seconds() >= transaction.creation_time_secs + transaction.num_seconds_execute,
             error::invalid_state(ETIMELOCK_NOT_EXPIRED),
         );
         // If a payload is stored on chain and a non-empty payload is provided, verify they match.
@@ -618,14 +526,7 @@ module aptos_framework::timelock {
     ) acquires TimelockAccount {
         let timelock = borrow_global_mut<TimelockAccount>(timelock_account);
         timelock.transactions.borrow_mut(salt).executed = true;
-        if (features::module_event_migration_enabled()) {
-            emit(TransactionExecutionSucceeded { timelock_account, executor, salt, transaction_payload });
-        } else {
-            emit_event(
-                &mut timelock.execute_transaction_events,
-                TransactionExecutionSucceededEvent { executor, salt, transaction_payload },
-            );
-        };
+        emit(TransactionExecutionSucceeded { timelock_account, executor, salt, transaction_payload });
     }
 
     /// Called by the VM after a failed timelock transaction execution.
@@ -639,16 +540,9 @@ module aptos_framework::timelock {
     ) acquires TimelockAccount {
         let timelock = borrow_global_mut<TimelockAccount>(timelock_account);
         timelock.transactions.borrow_mut(salt).executed = true;
-        if (features::module_event_migration_enabled()) {
-            emit(TransactionExecutionFailed {
-                timelock_account, executor, salt, transaction_payload, execution_error,
-            });
-        } else {
-            emit_event(
-                &mut timelock.transaction_execution_failed_events,
-                TransactionExecutionFailedEvent { executor, salt, transaction_payload, execution_error },
-            );
-        };
+        emit(TransactionExecutionFailed {
+            timelock_account, executor, salt, transaction_payload, execution_error,
+        });
     }
 
     // =============================== Private helpers ===============================
@@ -740,6 +634,7 @@ module aptos_framework::timelock {
     const ERROR_CODE: u64 = 10;
     #[test_only]
     const TIMELOCK_SECS: u64 = 3600;
+    
 
     #[test_only]
     fun execution_error(): ExecutionError {
@@ -778,7 +673,7 @@ module aptos_framework::timelock {
         assert_timelock_account_exists(timelock_addr);
         assert!(creators(timelock_addr) == vector[address_of(creator)], 0);
         assert!(executors(timelock_addr) == vector[], 1);
-        assert!(num_seconds_execute(timelock_addr) == TIMELOCK_SECS, 2);
+        assert!(min_num_seconds_execute(timelock_addr) == TIMELOCK_SECS, 2);
     }
 
     #[test(framework = @0x1, creator_1 = @0x123, creator_2 = @0x124, executor_1 = @0x125)]
@@ -839,7 +734,7 @@ module aptos_framework::timelock {
         create_account(address_of(creator));
         let timelock_addr = get_next_timelock_account_address(address_of(creator));
         create(creator, vector[], vector[address_of(executor)], TIMELOCK_SECS);
-        create_transaction(creator, timelock_addr, PAYLOAD, SALT);
+        create_transaction(creator, timelock_addr, PAYLOAD, TIMELOCK_SECS, SALT);
         let tx = get_transaction(timelock_addr, SALT);
         assert!(tx.creator == address_of(creator), 0);
         assert!(!tx.executed, 1);
@@ -856,9 +751,9 @@ module aptos_framework::timelock {
         create_account(address_of(creator));
         let timelock_addr = get_next_timelock_account_address(address_of(creator));
         create(creator, vector[], vector[], TIMELOCK_SECS);
-        create_transaction(creator, timelock_addr, PAYLOAD, SALT);
+        create_transaction(creator, timelock_addr, PAYLOAD, TIMELOCK_SECS, SALT);
         // Same salt — must fail.
-        create_transaction(creator, timelock_addr, PAYLOAD, SALT);
+        create_transaction(creator, timelock_addr, PAYLOAD, TIMELOCK_SECS, SALT);
     }
 
     #[test(framework = @0x1, creator = @0x123)]
@@ -870,9 +765,9 @@ module aptos_framework::timelock {
         create_account(address_of(creator));
         let timelock_addr = get_next_timelock_account_address(address_of(creator));
         create(creator, vector[], vector[], TIMELOCK_SECS);
-        create_transaction(creator, timelock_addr, PAYLOAD, SALT);
+        create_transaction(creator, timelock_addr, PAYLOAD, TIMELOCK_SECS, SALT);
         // Different salt — must succeed.
-        create_transaction(creator, timelock_addr, PAYLOAD, SALT_2);
+        create_transaction(creator, timelock_addr, PAYLOAD, TIMELOCK_SECS, SALT_2);
     }
 
     #[test(framework = @0x1, creator = @0x123, non_creator = @0x999)]
@@ -887,7 +782,7 @@ module aptos_framework::timelock {
         let timelock_addr = get_next_timelock_account_address(address_of(creator));
         create(creator, vector[], vector[], TIMELOCK_SECS);
         // non_creator tries to propose — must fail with ENOT_CREATOR (error::permission_denied(2003) = 0x507D3).
-        create_transaction(non_creator, timelock_addr, PAYLOAD, SALT);
+        create_transaction(non_creator, timelock_addr, PAYLOAD, TIMELOCK_SECS, SALT);
     }
 
     // --- Cancellation tests ---
@@ -902,7 +797,7 @@ module aptos_framework::timelock {
         create_account(address_of(creator));
         let timelock_addr = get_next_timelock_account_address(address_of(creator));
         create(creator, vector[], vector[address_of(executor)], TIMELOCK_SECS);
-        create_transaction(creator, timelock_addr, PAYLOAD, SALT);
+        create_transaction(creator, timelock_addr, PAYLOAD, TIMELOCK_SECS, SALT);
         cancel_transaction(creator, timelock_addr, SALT);
         let tx = get_transaction(timelock_addr, SALT);
         assert!(tx.executed, 0);
@@ -918,7 +813,7 @@ module aptos_framework::timelock {
         create_account(address_of(creator));
         let timelock_addr = get_next_timelock_account_address(address_of(creator));
         create(creator, vector[], vector[address_of(executor)], TIMELOCK_SECS);
-        create_transaction(creator, timelock_addr, PAYLOAD, SALT);
+        create_transaction(creator, timelock_addr, PAYLOAD,TIMELOCK_SECS, SALT);
         cancel_transaction(executor, timelock_addr, SALT);
         let tx = get_transaction(timelock_addr, SALT);
         assert!(tx.executed, 0);
@@ -933,7 +828,7 @@ module aptos_framework::timelock {
         create_account(address_of(creator));
         let timelock_addr = get_next_timelock_account_address(address_of(creator));
         create(creator, vector[], vector[], TIMELOCK_SECS);
-        create_transaction(creator, timelock_addr, PAYLOAD, SALT);
+        create_transaction(creator, timelock_addr, PAYLOAD, TIMELOCK_SECS, SALT);
         cancel_transaction(creator, timelock_addr, SALT);
         let tx = get_transaction(timelock_addr, SALT);
         assert!(tx.executed, 0);
@@ -950,7 +845,7 @@ module aptos_framework::timelock {
         create_account(address_of(creator));
         let timelock_addr = get_next_timelock_account_address(address_of(creator));
         create(creator, vector[], vector[address_of(executor)], TIMELOCK_SECS);
-        create_transaction(creator, timelock_addr, PAYLOAD, SALT);
+        create_transaction(creator, timelock_addr, PAYLOAD,TIMELOCK_SECS, SALT);
         cancel_transaction(creator, timelock_addr, SALT);
         // Cancel again — must fail.
         cancel_transaction(creator, timelock_addr, SALT);
@@ -967,7 +862,7 @@ module aptos_framework::timelock {
         create_account(address_of(creator));
         let timelock_addr = get_next_timelock_account_address(address_of(creator));
         create(creator, vector[], vector[], TIMELOCK_SECS);
-        create_transaction(creator, timelock_addr, PAYLOAD, SALT);
+        create_transaction(creator, timelock_addr, PAYLOAD, TIMELOCK_SECS, SALT);
         cancel_transaction(non_member, timelock_addr, SALT);
     }
 
@@ -983,7 +878,7 @@ module aptos_framework::timelock {
         create_account(address_of(creator));
         let timelock_addr = get_next_timelock_account_address(address_of(creator));
         create(creator, vector[], vector[address_of(executor)], TIMELOCK_SECS);
-        create_transaction(creator, timelock_addr, PAYLOAD, SALT);
+        create_transaction(creator, timelock_addr, PAYLOAD, TIMELOCK_SECS,SALT);
 
         timestamp::fast_forward_seconds(TIMELOCK_SECS + 1);
 
@@ -1007,7 +902,7 @@ module aptos_framework::timelock {
         create_account(address_of(creator));
         let timelock_addr = get_next_timelock_account_address(address_of(creator));
         create(creator, vector[], vector[address_of(executor)], TIMELOCK_SECS);
-        create_transaction(creator, timelock_addr, PAYLOAD, SALT);
+        create_transaction(creator, timelock_addr, PAYLOAD, TIMELOCK_SECS, SALT);
         // No time advance — must fail with ETIMELOCK_NOT_EXPIRED (error::invalid_state(2008) = 0x307D8).
         validate_timelock_transaction(executor, timelock_addr, PAYLOAD, SALT);
     }
@@ -1022,7 +917,7 @@ module aptos_framework::timelock {
         let timelock_addr = get_next_timelock_account_address(address_of(creator));
         // No executors provided.
         create(creator, vector[], vector[], TIMELOCK_SECS);
-        create_transaction(creator, timelock_addr, PAYLOAD, SALT);
+        create_transaction(creator, timelock_addr, PAYLOAD, TIMELOCK_SECS, SALT);
         timestamp::fast_forward_seconds(TIMELOCK_SECS + 1);
         validate_timelock_transaction(creator, timelock_addr, PAYLOAD, SALT);
         successful_transaction_execution_cleanup(address_of(creator), timelock_addr, SALT, PAYLOAD);
@@ -1040,7 +935,7 @@ module aptos_framework::timelock {
         create_account(address_of(creator));
         let timelock_addr = get_next_timelock_account_address(address_of(creator));
         create(creator, vector[], vector[address_of(executor)], TIMELOCK_SECS);
-        create_transaction(creator, timelock_addr, PAYLOAD, SALT);
+        create_transaction(creator, timelock_addr, PAYLOAD, TIMELOCK_SECS, SALT);
         timestamp::fast_forward_seconds(TIMELOCK_SECS + 1);
         failed_transaction_execution_cleanup(
             address_of(executor), timelock_addr, SALT, PAYLOAD, execution_error(),
@@ -1059,8 +954,8 @@ module aptos_framework::timelock {
         create_account(address_of(creator));
         let timelock_addr = get_next_timelock_account_address(address_of(creator));
         create(creator, vector[], vector[address_of(executor)], TIMELOCK_SECS);
-        create_transaction(creator, timelock_addr, PAYLOAD, SALT);
-        create_transaction(creator, timelock_addr, PAYLOAD, SALT_2);
+        create_transaction(creator, timelock_addr, PAYLOAD, TIMELOCK_SECS, SALT);
+        create_transaction(creator, timelock_addr, PAYLOAD, TIMELOCK_SECS, SALT_2);
 
         timestamp::fast_forward_seconds(TIMELOCK_SECS + 1);
 
@@ -1076,8 +971,65 @@ module aptos_framework::timelock {
 
     // --- Self-governance tests ---
 
-    #[test(framework = @0x1, creator = @0x123)]
+    /// Full end-to-end test for a self-governance proposal.
+    ///
+    /// Flow:
+    ///   1. Creator proposes a transaction whose payload encodes the call to
+    ///      update_num_seconds_execute with a new delay value.
+    ///   2. Timelock period elapses.
+    ///   3. Executor validates the transaction (VM prologue simulation).
+    ///   4. VM executes the encoded entry function using the timelock account's signer.
+    ///   5. VM calls the successful cleanup.
+    ///   6. Verify the delay changed and the transaction is permanently recorded as executed.
+    #[test(framework = @0x1, creator = @0x123, executor = @0x124)]
     public entry fun test_update_num_seconds_execute(
+        framework: &signer,
+        creator: &signer,
+        executor: &signer,
+    ) acquires TimelockAccount {
+        setup(framework);
+        create_account(address_of(creator));
+        let timelock_addr = get_next_timelock_account_address(address_of(creator));
+        create(creator, vector[], vector[address_of(executor)], TIMELOCK_SECS);
+
+        // Build the transaction payload. In production this is a BCS-encoded EntryFunction
+        // (module address + name + function name + type args + serialized args). Here we
+        // encode the single u64 argument so the payload is realistic and self-describing.
+        let new_delay: u64 = 7200;
+        let payload = to_bytes(&new_delay);
+        let salt = b"update_delay_1";
+
+        // --- Step 1: Creator proposes the governance transaction ---
+        create_transaction(creator, timelock_addr, payload, TIMELOCK_SECS, salt);
+        // The delay must not have changed yet.
+        assert!(min_num_seconds_execute(timelock_addr) == TIMELOCK_SECS, 0);
+        assert!(!get_transaction(timelock_addr, salt).executed, 1);
+
+        // --- Step 2: Timelock period elapses ---
+        timestamp::fast_forward_seconds(TIMELOCK_SECS + 1);
+        assert!(can_be_executed(timelock_addr, salt), 2);
+
+        // --- Step 3: Executor submits the transaction (VM prologue) ---
+        validate_timelock_transaction(executor, timelock_addr, payload, salt);
+
+        // --- Step 4: VM executes the encoded function using the timelock account's signer ---
+        // The VM would decode the EntryFunction payload and call update_num_seconds_execute
+        // with the timelock account as signer. We simulate that directly here.
+        let timelock_signer = get_timelock_signer(timelock_addr);
+        update_min_num_seconds_execute(&timelock_signer, new_delay);
+
+        // --- Step 5: VM calls post-execution cleanup ---
+        successful_transaction_execution_cleanup(address_of(executor), timelock_addr, salt, payload);
+
+        // --- Step 6: Verify outcome ---
+        assert!(min_num_seconds_execute(timelock_addr) == new_delay, 3);
+        // Transaction is permanently recorded as executed in the table.
+        assert!(get_transaction(timelock_addr, salt).executed, 4);
+        assert!(borrow_global<TimelockAccount>(timelock_addr).transactions.contains(salt), 5);
+    }
+
+    #[test(framework = @0x1, creator = @0x123)]
+    public entry fun test_update_num_seconds_execute_custom_payload(
         framework: &signer,
         creator: &signer,
     ) acquires TimelockAccount {
@@ -1085,10 +1037,23 @@ module aptos_framework::timelock {
         create_account(address_of(creator));
         let timelock_addr = get_next_timelock_account_address(address_of(creator));
         create(creator, vector[], vector[], TIMELOCK_SECS);
-        // Simulate the timelock account calling itself (normally via VM after proposal executes).
-        let timelock_signer = get_timelock_signer(timelock_addr);
-        update_num_seconds_execute(&timelock_signer, 7200);
-        assert!(num_seconds_execute(timelock_addr) == 7200, 0);
+        
+        // BCS-encoded EntryFunction payload for:
+        //   0x1::timelock::update_min_num_seconds_execute(<timelock_signer>, 7200)
+        // Layout: module_addr (32B) | module_name | func_name | ty_args_count | args_count | arg
+        let new_min_num_seconds: u64 = 7200;
+        let update_time_payload = to_bytes(&@aptos_framework);
+        update_time_payload.append(to_bytes(&b"timelock"));
+        update_time_payload.append(to_bytes(&b"update_min_num_seconds_execute"));
+        update_time_payload.push_back(0u8); // 0 type arguments
+        update_time_payload.push_back(1u8); // 1 argument
+        update_time_payload.append(to_bytes(&to_bytes(&new_min_num_seconds))); // BCS(7200u64) wrapped as vector<u8>
+        create_transaction(creator, timelock_addr, update_time_payload, TIMELOCK_SECS, SALT);
+        timestamp::fast_forward_seconds(TIMELOCK_SECS + 1);
+        validate_timelock_transaction(creator, timelock_addr, update_time_payload, SALT);
+        successful_transaction_execution_cleanup(address_of(creator), timelock_addr, SALT, update_time_payload);
+
+        assert!(min_num_seconds_execute(timelock_addr) == 7200, 0);
     }
 
     #[test(framework = @0x1, creator_1 = @0x123, creator_2 = @0x124)]

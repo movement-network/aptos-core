@@ -73,10 +73,10 @@ use aptos_types::{
         authenticator::{AbstractionAuthData, AnySignature, AuthenticationProof},
         signature_verified_transaction::SignatureVerifiedTransaction,
         BlockOutput, EntryFunction, ExecutionError, ExecutionStatus, ModuleBundle,
-        MultisigTransactionPayload, ReplayProtector, Script, SignedTransaction, Transaction,
-        TransactionArgument, TransactionExecutableRef, TransactionExtraConfig, TransactionOutput,
-        TransactionPayload, TransactionStatus, VMValidatorResult, ViewFunctionOutput,
-        WriteSetPayload,
+        MultisigTransactionPayload, ReplayProtector, Script, SignedTransaction, Timelock,
+        TimelockTransactionPayload, Transaction, TransactionArgument, TransactionExecutableRef,
+        TransactionExtraConfig, TransactionOutput, TransactionPayload, TransactionStatus,
+        VMValidatorResult, ViewFunctionOutput, WriteSetPayload,
     },
     vm::module_metadata::{
         get_compilation_metadata, get_metadata, get_randomness_annotation_for_entry_function,
@@ -1314,6 +1314,203 @@ impl AptosVM {
         Ok(epilogue_session)
     }
 
+    // 1. Execute the target payload as the timelock account signer.
+    // 2. Call post transaction cleanup function in timelock module with the result.
+    fn execute_timelock_transaction<'r>(
+        &self,
+        resolver: &'r impl AptosMoveResolver,
+        module_storage: &impl AptosModuleStorage,
+        mut session: UserSession<'r>,
+        serialized_signers: &SerializedSigners,
+        prologue_session_change_set: &SystemSessionChangeSet,
+        gas_meter: &mut impl AptosGasMeter,
+        traversal_context: &mut TraversalContext,
+        txn_data: &TransactionMetadata,
+        timelock: &Timelock,
+        log_context: &AdapterLogSchema,
+        change_set_configs: &ChangeSetConfigs,
+    ) -> Result<(VMStatus, VMOutput), VMStatus> {
+        fail_point!("move_adapter::execute_timelock_transaction", |_| {
+            Err(VMStatus::error(
+                StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR,
+                None,
+            ))
+        });
+
+        gas_meter.charge_intrinsic_gas_for_transaction(txn_data.transaction_size())?;
+        if txn_data.is_keyless() {
+            gas_meter.charge_keyless()?;
+        }
+
+        let invariant_violation_error = || {
+            PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR)
+                .with_message("Timelock transaction error".to_string())
+                .finish(Location::Undefined)
+        };
+
+        // Obtain the payload. Must be provided in the transaction since timelock has no
+        // sequence-number-based on-chain fetch (payload is identified by salt).
+        let (entry_function, payload_bytes) = match &timelock.transaction_payload {
+            Some(TimelockTransactionPayload::EntryFunction(entry_function)) => {
+                let payload_bytes =
+                    bcs::to_bytes(&TimelockTransactionPayload::EntryFunction(
+                        entry_function.clone(),
+                    ))
+                    .map_err(|_| invariant_violation_error())?;
+                (entry_function.clone(), payload_bytes)
+            },
+            None => {
+                return Ok((
+                    VMStatus::error(
+                        StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR,
+                        Some(
+                            "Timelock transaction payload must be provided in the transaction"
+                                .to_string(),
+                        ),
+                    ),
+                    discarded_output(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR),
+                ));
+            },
+        };
+
+        // Execute the payload as the timelock account signer.
+        let execution_result = self.execute_timelock_entry_function(
+            resolver,
+            module_storage,
+            session,
+            gas_meter,
+            traversal_context,
+            timelock.timelock_address,
+            &entry_function,
+            change_set_configs,
+        );
+
+        // Cleanup args: (executor_addr, timelock_addr, salt, payload_bytes)
+        let cleanup_args = serialize_values(&vec![
+            MoveValue::Address(txn_data.sender),
+            MoveValue::Address(timelock.timelock_address),
+            MoveValue::vector_u8(timelock.salt.clone()),
+            MoveValue::vector_u8(payload_bytes),
+        ]);
+
+        let epilogue_session = match execution_result {
+            Err(execution_error) => self.failure_timelock_payload_cleanup(
+                resolver,
+                module_storage,
+                prologue_session_change_set,
+                execution_error,
+                txn_data,
+                cleanup_args,
+                traversal_context,
+            )?,
+            Ok(user_session_change_set) => {
+                let mut epilogue_session = self.charge_change_set_and_respawn_session(
+                    user_session_change_set,
+                    resolver,
+                    module_storage,
+                    gas_meter,
+                    txn_data,
+                )?;
+                epilogue_session.execute(|session| {
+                    session
+                        .execute_function_bypass_visibility(
+                            &TIMELOCK_MODULE,
+                            SUCCESSFUL_TRANSACTION_EXECUTION_CLEANUP,
+                            vec![],
+                            cleanup_args,
+                            &mut UnmeteredGasMeter,
+                            traversal_context,
+                            module_storage,
+                        )
+                        .map_err(|e| e.into_vm_status())
+                })?;
+                epilogue_session
+            },
+        };
+
+        self.success_transaction_cleanup(
+            epilogue_session,
+            module_storage,
+            serialized_signers,
+            gas_meter,
+            txn_data,
+            log_context,
+            change_set_configs,
+            traversal_context,
+        )
+    }
+
+    fn execute_timelock_entry_function(
+        &self,
+        resolver: &impl AptosMoveResolver,
+        module_storage: &impl AptosModuleStorage,
+        mut session: UserSession,
+        gas_meter: &mut impl AptosGasMeter,
+        traversal_context: &mut TraversalContext,
+        timelock_address: AccountAddress,
+        payload: &EntryFunction,
+        change_set_configs: &ChangeSetConfigs,
+    ) -> Result<UserSessionChangeSet, VMStatus> {
+        session.execute(|session| {
+            self.validate_and_execute_entry_function(
+                module_storage,
+                session,
+                &SerializedSigners::new(vec![serialized_signer(&timelock_address)], None),
+                gas_meter,
+                traversal_context,
+                payload,
+            )
+        })?;
+
+        self.resolve_pending_code_publish_and_finish_user_session(
+            session,
+            resolver,
+            module_storage,
+            gas_meter,
+            traversal_context,
+            change_set_configs,
+        )
+    }
+
+    fn failure_timelock_payload_cleanup<'r>(
+        &self,
+        resolver: &'r impl AptosMoveResolver,
+        module_storage: &impl AptosModuleStorage,
+        prologue_session_change_set: &SystemSessionChangeSet,
+        execution_error: VMStatus,
+        txn_data: &TransactionMetadata,
+        mut cleanup_args: Vec<Vec<u8>>,
+        traversal_context: &mut TraversalContext,
+    ) -> Result<EpilogueSession<'r>, VMStatus> {
+        let mut epilogue_session = EpilogueSession::on_user_session_failure(
+            self,
+            txn_data,
+            resolver,
+            prologue_session_change_set.clone(),
+        );
+        let execution_error = ExecutionError::try_from(execution_error)
+            .map_err(|_| VMStatus::error(StatusCode::UNREACHABLE, None))?;
+        cleanup_args.push(bcs::to_bytes(&execution_error).map_err(|_| {
+            PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR)
+                .with_message("Timelock payload cleanup error.".to_string())
+                .finish(Location::Undefined)
+        })?);
+        epilogue_session.execute(|session| {
+            session
+                .execute_function_bypass_visibility(
+                    &TIMELOCK_MODULE,
+                    FAILED_TRANSACTION_EXECUTION_CLEANUP,
+                    vec![],
+                    cleanup_args,
+                    &mut UnmeteredGasMeter,
+                    traversal_context,
+                    module_storage,
+                )
+                .map_err(|e| e.into_vm_status())
+        })?;
+        Ok(epilogue_session)
+    }
+
     /// Deserialize a module bundle.
     fn deserialize_module_bundle(&self, modules: &ModuleBundle) -> VMResult<Vec<CompiledModule>> {
         let mut result = vec![];
@@ -1858,6 +2055,21 @@ impl AptosVM {
                 &txn_data,
                 executable,
                 multisig_address,
+                log_context,
+                change_set_configs,
+            )
+        } else if let TransactionPayload::Timelock(timelock) = txn.payload() {
+            let timelock = timelock.clone();
+            self.execute_timelock_transaction(
+                resolver,
+                code_storage,
+                user_session,
+                &serialized_signers,
+                &prologue_change_set,
+                gas_meter,
+                &mut traversal_context,
+                &txn_data,
+                &timelock,
                 log_context,
                 change_set_configs,
             )
@@ -2423,7 +2635,7 @@ impl AptosVM {
             is_approved_gov_script,
             log_context,
         )?;
-        if executable.is_empty() && !extra_config.is_multisig() {
+        if executable.is_empty() && !extra_config.is_multisig() && txn_data.timelock_payload.is_none() {
             return Err(VMStatus::error(
                 StatusCode::EMPTY_PAYLOAD_PROVIDED,
                 Some("Empty provided for a non-multisig transaction".to_string()),
@@ -2468,7 +2680,25 @@ impl AptosVM {
                     traversal_context,
                 )?
             }
+        } else if let Some(timelock) = &txn_data.timelock_payload {
+            if !self.is_simulation
+                || self
+                    .features()
+                    .is_transaction_simulation_enhancement_enabled()
+            {
+                transaction_validation::run_timelock_prologue(
+                    session,
+                    module_storage,
+                    txn_data,
+                    executable,
+                    timelock.timelock_address,
+                    timelock.salt.clone(),
+                    log_context,
+                    traversal_context,
+                )?
+            }
         }
+
         Ok(())
     }
 

@@ -32,7 +32,7 @@ fn parse_use_case(payload: &TransactionPayload) -> UseCaseKey {
     use UseCaseKey::*;
 
     let maybe_entry_func = match payload {
-        Script(_) | ModuleBundle(_) | Multisig(_) => None,
+        Script(_) | ModuleBundle(_) | Multisig(_) | Timelock(_) => None,
         EntryFunction(entry_fun) => Some(entry_fun),
         v2 @ Payload(_) => {
             if let Ok(TransactionExecutableRef::EntryFunction(entry_fun)) = v2.executable_ref() {

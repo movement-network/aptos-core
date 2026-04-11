@@ -6,8 +6,8 @@ use crate::{
     errors::{convert_epilogue_error, convert_prologue_error, expect_only_successful_execution},
     move_vm_ext::{AptosMoveResolver, SessionExt},
     system_module_names::{
-        EMIT_FEE_STATEMENT, MULTISIG_ACCOUNT_MODULE, TRANSACTION_FEE_MODULE,
-        VALIDATE_MULTISIG_TRANSACTION,
+        EMIT_FEE_STATEMENT, MULTISIG_ACCOUNT_MODULE, TIMELOCK_MODULE, TRANSACTION_FEE_MODULE,
+        VALIDATE_MULTISIG_TRANSACTION, VALIDATE_TIMELOCK_TRANSACTION,
     },
     testing::{maybe_raise_injected_error, InjectedError},
     transaction_metadata::TransactionMetadata,
@@ -18,7 +18,10 @@ use aptos_types::{
     fee_statement::FeeStatement,
     move_utils::as_move_value::AsMoveValue,
     on_chain_config::Features,
-    transaction::{MultisigTransactionPayload, ReplayProtector, TransactionExecutableRef},
+    transaction::{
+        MultisigTransactionPayload, ReplayProtector, TimelockTransactionPayload,
+        TransactionExecutableRef,
+    },
 };
 use aptos_vm_logging::log_schema::AdapterLogSchema;
 use fail::fail_point;
@@ -437,6 +440,56 @@ pub(crate) fn run_multisig_prologue(
                 MoveValue::Signer(txn_data.sender),
                 MoveValue::Address(multisig_address),
                 MoveValue::vector_u8(provided_payload),
+            ]),
+            &mut UnmeteredGasMeter,
+            traversal_context,
+            module_storage,
+        )
+        .map(|_return_vals| ())
+        .map_err(expect_no_verification_errors)
+        .or_else(|err| convert_prologue_error(err, log_context))
+}
+
+/// Run the prologue for a timelock transaction. This needs to verify that:
+/// 1. The timelock tx identified by salt exists in the timelock account
+/// 2. The executor is authorized
+/// 3. The timelock delay has elapsed since the transaction was proposed
+/// 4. If a payload is stored on chain, the provided payload matches it
+pub(crate) fn run_timelock_prologue(
+    session: &mut SessionExt<impl AptosMoveResolver>,
+    module_storage: &impl ModuleStorage,
+    txn_data: &TransactionMetadata,
+    executable: TransactionExecutableRef,
+    timelock_address: AccountAddress,
+    salt: Vec<u8>,
+    log_context: &AdapterLogSchema,
+    traversal_context: &mut TraversalContext,
+) -> Result<(), VMStatus> {
+    let unreachable_error = VMStatus::error(StatusCode::UNREACHABLE, None);
+    let provided_payload = match executable {
+        TransactionExecutableRef::EntryFunction(entry_function) => bcs::to_bytes(
+            &TimelockTransactionPayload::EntryFunction(entry_function.clone()),
+        )
+        .map_err(|_| unreachable_error.clone())?,
+        TransactionExecutableRef::Empty => vec![],
+        TransactionExecutableRef::Script(_) => {
+            return Err(VMStatus::error(
+                StatusCode::FEATURE_UNDER_GATING,
+                Some("Script payload not supported for timelock transactions".to_string()),
+            ));
+        },
+    };
+
+    session
+        .execute_function_bypass_visibility(
+            &TIMELOCK_MODULE,
+            VALIDATE_TIMELOCK_TRANSACTION,
+            vec![],
+            serialize_values(&vec![
+                MoveValue::Signer(txn_data.sender),
+                MoveValue::Address(timelock_address),
+                MoveValue::vector_u8(provided_payload),
+                MoveValue::vector_u8(salt),
             ]),
             &mut UnmeteredGasMeter,
             traversal_context,

@@ -52,8 +52,17 @@ const EMULTISIG_TRANSACTION_NOT_FOUND: u64 = 2006;
 const EMULTISIG_PAYLOAD_DOES_NOT_MATCH_HASH: u64 = 2008;
 // Multisig transaction has not received enough approvals to be executed.
 const EMULTISIG_NOT_ENOUGH_APPROVALS: u64 = 2009;
-// Provided target function does not match the payload stored in the on-chain transaction.
-const EPAYLOAD_DOES_NOT_MATCH: u64 = 2010;
+// Provided target function does not match the payload stored in the on-chain multisig transaction.
+const EMULTISIG_PAYLOAD_DOES_NOT_MATCH: u64 = 2010;
+
+// The caller is not an executor of the timelock account.
+const ENOT_TIMELOCK_EXECUTOR: u64 = 2004;
+// Provided payload does not match the payload stored on chain for this timelock transaction.
+const ETIMELOCK_PAYLOAD_DOES_NOT_MATCH: u64 = 2007;
+// The timelock period has not elapsed yet.
+const ETIMELOCK_NOT_EXPIRED: u64 = 2008;
+// Timelock transaction has already been executed or canceled.
+const ETIMELOCK_TRANSACTION_ALREADY_EXECUTED: u64 = 9;
 
 const INVALID_ARGUMENT: u8 = 0x1;
 const LIMIT_EXCEEDED: u8 = 0x2;
@@ -94,8 +103,21 @@ pub fn convert_prologue_error(
                 (INVALID_ARGUMENT, EMULTISIG_PAYLOAD_DOES_NOT_MATCH_HASH) => {
                     StatusCode::MULTISIG_TRANSACTION_PAYLOAD_DOES_NOT_MATCH_HASH
                 },
-                (INVALID_ARGUMENT, EPAYLOAD_DOES_NOT_MATCH) => {
+                (INVALID_ARGUMENT, EMULTISIG_PAYLOAD_DOES_NOT_MATCH) => {
                     StatusCode::MULTISIG_TRANSACTION_PAYLOAD_DOES_NOT_MATCH
+                },
+                // Timelock-specific abort codes.
+                (PERMISSION_DENIED, ENOT_TIMELOCK_EXECUTOR) => {
+                    StatusCode::NOT_TIMELOCK_EXECUTOR
+                },
+                (INVALID_STATE, ETIMELOCK_NOT_EXPIRED) => {
+                    StatusCode::TIMELOCK_NOT_EXPIRED
+                },
+                (INVALID_STATE, ETIMELOCK_TRANSACTION_ALREADY_EXECUTED) => {
+                    StatusCode::TIMELOCK_TRANSACTION_ALREADY_EXECUTED
+                },
+                (INVALID_ARGUMENT, ETIMELOCK_PAYLOAD_DOES_NOT_MATCH) => {
+                    StatusCode::TIMELOCK_TRANSACTION_PAYLOAD_DOES_NOT_MATCH
                 },
                 (category, reason) => {
                     let err_msg = format!("[aptos_vm] Unexpected prologue Move abort: {:?}::{:?} (Category: {:?} Reason: {:?})",

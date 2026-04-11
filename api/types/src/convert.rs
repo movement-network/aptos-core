@@ -6,7 +6,8 @@ use crate::{
     transaction::{
         BlockEpilogueTransaction, BlockMetadataTransaction, DecodedTableData, DeleteModule,
         DeleteResource, DeleteTableItem, DeletedTableData, MultisigPayload,
-        MultisigTransactionPayload, StateCheckpointTransaction, UserTransactionRequestInner,
+        MultisigTransactionPayload, TimelockPayload, TimelockTransactionPayload,
+        StateCheckpointTransaction, UserTransactionRequestInner,
         WriteModule, WriteResource, WriteTableItem,
     },
     view::{ViewFunction, ViewRequest},
@@ -32,7 +33,7 @@ use aptos_types::{
         StateView,
     },
     transaction::{
-        BlockEndInfo, BlockEpiloguePayload, EntryFunction, ExecutionStatus, Multisig,
+        BlockEndInfo, BlockEpiloguePayload, EntryFunction, ExecutionStatus, Multisig, Timelock,
         RawTransaction, Script, SignedTransaction, TransactionAuxiliaryData,
     },
     vm::module_metadata::get_metadata,
@@ -48,6 +49,7 @@ use move_core_types::{
     transaction_argument::convert_txn_args,
     value::{MoveStructLayout, MoveTypeLayout},
 };
+use poem_openapi::payload;
 use serde_json::Value;
 use std::{
     collections::BTreeMap,
@@ -352,6 +354,28 @@ impl<'a, S: StateView> MoveConverter<'a, S> {
                 };
                 TransactionPayload::MultisigPayload(MultisigPayload {
                     multisig_address: multisig.multisig_address.into(),
+                    transaction_payload,
+                })
+            },
+            Timelock(timelock) => {
+                let transaction_payload = if let Some(payload) = timelock.transaction_payload {
+                    match payload {
+                        aptos_types::transaction::TimelockTransactionPayload::EntryFunction(
+                            entry_function,
+                        ) => {
+                            let entry_function_payload =
+                                try_into_entry_function_payload(entry_function)?;
+                            Some(TimelockTransactionPayload::EntryFunctionPayload(
+                                entry_function_payload,
+                            ))
+                        },
+                    }
+                } else {
+                    None
+                };
+                TransactionPayload::TimelockPayload(TimelockPayload {
+                    timelock_address: timelock.timelock_address.into(),
+                    salt: timelock.salt.into(),
                     transaction_payload,
                 })
             },
@@ -827,6 +851,30 @@ impl<'a, S: StateView> MoveConverter<'a, S> {
                         transaction_payload,
                     })
                 }
+            },
+            TransactionPayload::TimelockPayload(timelock) => {
+                let transaction_payload: Option<
+                    aptos_types::transaction::TimelockTransactionPayload,
+                > = if let Some(payload) = timelock.transaction_payload {
+                    match payload {
+                        TimelockTransactionPayload::EntryFunctionPayload(entry_func_payload) => {
+                            let entry_function: EntryFunction =
+                                try_into_entry_function(entry_func_payload)?;
+                            Some(
+                                aptos_types::transaction::TimelockTransactionPayload::EntryFunction(
+                                    entry_function,
+                                ),
+                            )
+                        },
+                    }
+                } else {
+                    None
+                };
+                Target::Timelock(Timelock {
+                    timelock_address: timelock.timelock_address.into(),
+                    salt: timelock.salt.0,
+                    transaction_payload,
+                })
             },
             // Deprecated.
             TransactionPayload::ModuleBundlePayload(_) => {

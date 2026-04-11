@@ -30,9 +30,9 @@ use aptos_types::{
         state_value::{StateValue, StateValueMetadata},
     },
     transaction::{
-        EntryFunction, Multisig, MultisigTransactionPayload, Script, SignedTransaction,
-        TransactionArgument, TransactionOutput, TransactionPayload, TransactionStatus,
-        ViewFunctionOutput,
+        EntryFunction, Multisig, MultisigTransactionPayload, Script, SignedTransaction, Timelock,
+        TimelockTransactionPayload, TransactionArgument, TransactionOutput, TransactionPayload,
+        TransactionStatus, ViewFunctionOutput,
     },
     AptosCoinType,
 };
@@ -251,10 +251,20 @@ impl MoveHarness {
 
     /// Runs a signed transaction. On success, applies the write set.
     pub fn run_raw(&mut self, txn: SignedTransaction) -> TransactionOutput {
+        let sender = txn.sender();
         let output = self.executor.execute_transaction(txn);
         if matches!(output.status(), TransactionStatus::Keep(_)) {
             self.executor.apply_write_set(output.write_set());
             self.executor.append_events(output.events().to_vec());
+        } else if matches!(output.status(), TransactionStatus::Discard(_)) {
+            // A Discarded transaction does not increment the on-chain sequence number.
+            // Sync the local counter back to the on-chain value so that any subsequent
+            // transaction for the same sender uses the correct nonce.
+            if let Some(on_chain_seq) = self.sequence_number_opt(&sender) {
+                if let Some(seq_no_ref) = self.txn_seq_no.get_mut(&sender) {
+                    *seq_no_ref = on_chain_seq;
+                }
+            }
         }
         output
     }
@@ -470,6 +480,36 @@ impl MoveHarness {
         transaction_payload: Option<MultisigTransactionPayload>,
     ) -> TransactionStatus {
         let txn = self.create_multisig(account, multisig_address, transaction_payload);
+        self.run(txn)
+    }
+
+    /// Create a timelock transaction.
+    pub fn create_timelock(
+        &mut self,
+        account: &Account,
+        timelock_address: AccountAddress,
+        salt: Vec<u8>,
+        transaction_payload: Option<TimelockTransactionPayload>,
+    ) -> SignedTransaction {
+        self.create_transaction_payload(
+            account,
+            TransactionPayload::Timelock(Timelock {
+                timelock_address,
+                salt,
+                transaction_payload,
+            }),
+        )
+    }
+
+    /// Run a timelock transaction.
+    pub fn run_timelock(
+        &mut self,
+        account: &Account,
+        timelock_address: AccountAddress,
+        salt: Vec<u8>,
+        transaction_payload: Option<TimelockTransactionPayload>,
+    ) -> TransactionStatus {
+        let txn = self.create_timelock(account, timelock_address, salt, transaction_payload);
         self.run(txn)
     }
 

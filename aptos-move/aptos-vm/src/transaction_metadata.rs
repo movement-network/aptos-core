@@ -11,7 +11,7 @@ use aptos_types::{
     transaction::{
         authenticator::AuthenticationProof, user_transaction_context::UserTransactionContext,
         EntryFunction, Multisig, MultisigTransactionPayload, ReplayProtector, SignedTransaction,
-        TransactionExecutable, TransactionExecutableRef, TransactionExtraConfig,
+        Timelock, TransactionExecutable, TransactionExecutableRef, TransactionExtraConfig,
         TransactionPayload, TransactionPayloadInner,
     },
 };
@@ -36,6 +36,7 @@ pub struct TransactionMetadata {
     pub is_keyless: bool,
     pub entry_function_payload: Option<EntryFunction>,
     pub multisig_payload: Option<Multisig>,
+    pub timelock_payload: Option<Timelock>,
 }
 
 impl TransactionMetadata {
@@ -85,7 +86,9 @@ impl TransactionMetadata {
             is_keyless: aptos_types::keyless::get_authenticators(txn)
                 .map(|res| !res.is_empty())
                 .unwrap_or(false),
-            entry_function_payload: if txn.payload().is_multisig() {
+            entry_function_payload: if txn.payload().is_multisig()
+                || txn.payload().is_timelock()
+            {
                 None
             } else if let Ok(TransactionExecutableRef::EntryFunction(e)) =
                 txn.payload().executable_ref()
@@ -113,6 +116,10 @@ impl TransactionMetadata {
                         _ => None,
                     },
                 }),
+                _ => None,
+            },
+            timelock_payload: match txn.payload() {
+                TransactionPayload::Timelock(t) => Some(t.clone()),
                 _ => None,
             },
         }

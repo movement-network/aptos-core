@@ -1348,8 +1348,16 @@ impl AptosVM {
                 .finish(Location::Undefined)
         };
 
-        // Obtain the payload. Must be provided in the transaction since timelock has no
-        // sequence-number-based on-chain fetch (payload is identified by salt).
+        // Obtain the authoritative payload. If the executor included the payload in the
+        // transaction envelope, use it directly. Otherwise fetch the stored payload from
+        // on-chain state via `timelock::get_transaction_payload` (mirrors the multisig
+        // `get_next_transaction_payload` pattern).
+        let deserialization_error = || {
+            VMStatus::error(
+                StatusCode::FAILED_TO_DESERIALIZE_ARGUMENT,
+                Some("Failed to deserialize timelock payload".to_string()),
+            )
+        };
         let (entry_function, payload_bytes) = match &timelock.transaction_payload {
             Some(TimelockTransactionPayload::EntryFunction(entry_function)) => {
                 let payload_bytes =
@@ -1360,16 +1368,49 @@ impl AptosVM {
                 (entry_function.clone(), payload_bytes)
             },
             None => {
-                return Ok((
+                // Payload not provided in the transaction; fetch from on-chain state.
+                let fetched: Vec<Vec<u8>> = session
+                    .execute(|session| {
+                        session.execute_function_bypass_visibility(
+                            &TIMELOCK_MODULE,
+                            GET_TRANSACTION_PAYLOAD,
+                            vec![],
+                            serialize_values(&vec![
+                                MoveValue::Address(timelock.timelock_address),
+                                MoveValue::vector_u8(timelock.salt.clone()),
+                                MoveValue::vector_u8(vec![]),
+                            ]),
+                            gas_meter,
+                            traversal_context,
+                            module_storage,
+                        )
+                    })?
+                    .return_values
+                    .into_iter()
+                    .map(|(bytes, _)| bytes)
+                    .collect();
+
+                let raw = fetched.first().ok_or_else(|| {
                     VMStatus::error(
                         StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR,
-                        Some(
-                            "Timelock transaction payload must be provided in the transaction"
-                                .to_string(),
-                        ),
-                    ),
-                    discarded_output(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR),
-                ));
+                        Some("get_transaction_payload returned no values".to_string()),
+                    )
+                })?;
+                // Double-decode: the VM wraps the Move vector<u8> return as BCS bytes,
+                // and the inner bytes are themselves BCS-encoded TimelockTransactionPayload.
+                let payload_bytes =
+                    bcs::from_bytes::<Vec<u8>>(raw).map_err(|_| deserialization_error())?;
+                let payload = bcs::from_bytes::<TimelockTransactionPayload>(&payload_bytes)
+                    .map_err(|_| deserialization_error())?;
+                match payload {
+                    TimelockTransactionPayload::EntryFunction(entry_function) => {
+                        let encoded = bcs::to_bytes(&TimelockTransactionPayload::EntryFunction(
+                            entry_function.clone(),
+                        ))
+                        .map_err(|_| invariant_violation_error())?;
+                        (entry_function, encoded)
+                    },
+                }
             },
         };
 

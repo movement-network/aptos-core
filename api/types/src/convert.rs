@@ -49,7 +49,6 @@ use move_core_types::{
     transaction_argument::convert_txn_args,
     value::{MoveStructLayout, MoveTypeLayout},
 };
-use poem_openapi::payload;
 use serde_json::Value;
 use std::{
     collections::BTreeMap,

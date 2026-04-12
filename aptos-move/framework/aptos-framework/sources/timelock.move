@@ -42,7 +42,7 @@ module aptos_framework::timelock {
     /// Executor list cannot contain duplicate addresses.
     const EDUPLICATE_EXECUTOR: u64 = 2;
     /// Specified account is not a timelock account.
-    const EACCOUNT_NOT_TIMELOCK: u64 = 2002;
+    const EACCOUNT_NOT_TIMELOCK: u64 = 2011;
     /// The caller is not a creator of the timelock account.
     const ENOT_CREATOR: u64 = 2003;
     /// The caller is not an executor of the timelock account (or a creator when executors is empty).
@@ -52,11 +52,11 @@ module aptos_framework::timelock {
     /// Timelock account must have at least one creator.
     const ENOT_ENOUGH_CREATORS: u64 = 5;
     /// Transaction with the specified salt was not found.
-    const ETRANSACTION_NOT_FOUND: u64 = 2006;
+    const ETRANSACTION_NOT_FOUND: u64 = 2012;
     /// Provided payload does not match the payload stored on chain for this transaction.
     const EPAYLOAD_DOES_NOT_MATCH: u64 = 2007;
     /// The timelock period has not elapsed yet.
-    const ETIMELOCK_NOT_EXPIRED: u64 = 2008;
+    const ETIMELOCK_NOT_EXPIRED: u64 = 2013;
     /// Transaction has already been executed or canceled.
     const ETRANSACTION_ALREADY_EXECUTED: u64 = 9;
     /// The timelock account itself cannot be a creator or executor.
@@ -251,6 +251,32 @@ module aptos_framework::timelock {
     public fun get_next_timelock_account_address(creator: address): address {
         let owner_nonce = account::get_sequence_number(creator);
         create_resource_address(&creator, create_timelock_account_seed(to_bytes(&owner_nonce)))
+    }
+
+    #[view]
+    /// Return the authoritative payload bytes for the transaction identified by `salt`.
+    /// If a payload is stored on-chain for this transaction, that stored value is returned.
+    /// Otherwise `provided_payload` is returned as-is (off-chain storage path).
+    ///
+    /// This is called by the VM when executing a timelock transaction whose payload was not
+    /// included in the transaction envelope (analogous to `get_next_transaction_payload` in
+    /// multisig_account).
+    public fun get_transaction_payload(
+        timelock_account: address,
+        salt: vector<u8>,
+        provided_payload: vector<u8>,
+    ): vector<u8> acquires TimelockAccount {
+        let timelock = borrow_global<TimelockAccount>(timelock_account);
+        assert!(
+            timelock.transactions.contains(salt),
+            error::not_found(ETRANSACTION_NOT_FOUND),
+        );
+        let transaction = timelock.transactions.borrow(salt);
+        if (transaction.payload.is_some()) {
+            *transaction.payload.borrow()
+        } else {
+            provided_payload
+        }
     }
 
     // =============================== Account creation ===============================
@@ -892,7 +918,7 @@ module aptos_framework::timelock {
     }
 
     #[test(framework = @0x1, creator = @0x123, executor = @0x124)]
-    #[expected_failure(abort_code = 0x307D8, location = Self)]
+    #[expected_failure(abort_code = 0x307DD, location = Self)]
     public entry fun test_validate_before_timelock_expires_fails(
         framework: &signer,
         creator: &signer,
@@ -903,7 +929,7 @@ module aptos_framework::timelock {
         let timelock_addr = get_next_timelock_account_address(address_of(creator));
         create(creator, vector[], vector[address_of(executor)], TIMELOCK_SECS);
         create_transaction(creator, timelock_addr, PAYLOAD, TIMELOCK_SECS, SALT);
-        // No time advance — must fail with ETIMELOCK_NOT_EXPIRED (error::invalid_state(2008) = 0x307D8).
+        // No time advance — must fail with ETIMELOCK_NOT_EXPIRED (error::invalid_state(2013) = 0x307DD).
         validate_timelock_transaction(executor, timelock_addr, PAYLOAD, SALT);
     }
 

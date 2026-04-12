@@ -47,6 +47,7 @@ for a TimelockTransaction transaction type.
 -  [Function `get_transaction`](#0x1_timelock_get_transaction)
 -  [Function `can_be_executed`](#0x1_timelock_can_be_executed)
 -  [Function `get_next_timelock_account_address`](#0x1_timelock_get_next_timelock_account_address)
+-  [Function `get_transaction_payload`](#0x1_timelock_get_transaction_payload)
 -  [Function `create`](#0x1_timelock_create)
 -  [Function `create_timelock_account_internal`](#0x1_timelock_create_timelock_account_internal)
 -  [Function `add_creators`](#0x1_timelock_add_creators)
@@ -661,7 +662,7 @@ Provided payload does not match the payload stored on chain for this transaction
 Transaction with the specified salt was not found.
 
 
-<pre><code><b>const</b> <a href="timelock.md#0x1_timelock_ETRANSACTION_NOT_FOUND">ETRANSACTION_NOT_FOUND</a>: u64 = 2006;
+<pre><code><b>const</b> <a href="timelock.md#0x1_timelock_ETRANSACTION_NOT_FOUND">ETRANSACTION_NOT_FOUND</a>: u64 = 2012;
 </code></pre>
 
 
@@ -671,7 +672,7 @@ Transaction with the specified salt was not found.
 Specified account is not a timelock account.
 
 
-<pre><code><b>const</b> <a href="timelock.md#0x1_timelock_EACCOUNT_NOT_TIMELOCK">EACCOUNT_NOT_TIMELOCK</a>: u64 = 2002;
+<pre><code><b>const</b> <a href="timelock.md#0x1_timelock_EACCOUNT_NOT_TIMELOCK">EACCOUNT_NOT_TIMELOCK</a>: u64 = 2011;
 </code></pre>
 
 
@@ -771,7 +772,7 @@ The timelock account itself cannot be a creator or executor.
 The timelock period has not elapsed yet.
 
 
-<pre><code><b>const</b> <a href="timelock.md#0x1_timelock_ETIMELOCK_NOT_EXPIRED">ETIMELOCK_NOT_EXPIRED</a>: u64 = 2008;
+<pre><code><b>const</b> <a href="timelock.md#0x1_timelock_ETIMELOCK_NOT_EXPIRED">ETIMELOCK_NOT_EXPIRED</a>: u64 = 2013;
 </code></pre>
 
 
@@ -1018,6 +1019,52 @@ Return the predicted address for the next timelock account created by the given 
 <pre><code><b>public</b> <b>fun</b> <a href="timelock.md#0x1_timelock_get_next_timelock_account_address">get_next_timelock_account_address</a>(creator: <b>address</b>): <b>address</b> {
     <b>let</b> owner_nonce = <a href="account.md#0x1_account_get_sequence_number">account::get_sequence_number</a>(creator);
     create_resource_address(&creator, <a href="timelock.md#0x1_timelock_create_timelock_account_seed">create_timelock_account_seed</a>(to_bytes(&owner_nonce)))
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_timelock_get_transaction_payload"></a>
+
+## Function `get_transaction_payload`
+
+Return the authoritative payload bytes for the transaction identified by <code>salt</code>.
+If a payload is stored on-chain for this transaction, that stored value is returned.
+Otherwise <code>provided_payload</code> is returned as-is (off-chain storage path).
+
+This is called by the VM when executing a timelock transaction whose payload was not
+included in the transaction envelope (analogous to <code>get_next_transaction_payload</code> in
+multisig_account).
+
+
+<pre><code>#[view]
+<b>public</b> <b>fun</b> <a href="timelock.md#0x1_timelock_get_transaction_payload">get_transaction_payload</a>(timelock_account: <b>address</b>, salt: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, provided_payload: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="timelock.md#0x1_timelock_get_transaction_payload">get_transaction_payload</a>(
+    timelock_account: <b>address</b>,
+    salt: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
+    provided_payload: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
+): <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt; <b>acquires</b> <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a> {
+    <b>let</b> <a href="timelock.md#0x1_timelock">timelock</a> = <b>borrow_global</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(timelock_account);
+    <b>assert</b>!(
+        <a href="timelock.md#0x1_timelock">timelock</a>.transactions.contains(salt),
+        <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_not_found">error::not_found</a>(<a href="timelock.md#0x1_timelock_ETRANSACTION_NOT_FOUND">ETRANSACTION_NOT_FOUND</a>),
+    );
+    <b>let</b> transaction = <a href="timelock.md#0x1_timelock">timelock</a>.transactions.borrow(salt);
+    <b>if</b> (transaction.payload.is_some()) {
+        *transaction.payload.borrow()
+    } <b>else</b> {
+        provided_payload
+    }
 }
 </code></pre>
 

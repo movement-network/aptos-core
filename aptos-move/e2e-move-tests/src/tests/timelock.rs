@@ -1068,6 +1068,143 @@ fn test_duplicate_salt_rejected() {
 }
 
 // ──────────────────────────────────────────────────────────────
+// Test 13 — payload mismatch is rejected in the prologue
+// ──────────────────────────────────────────────────────────────
+
+/// Propose a transaction with payload A stored on-chain, then attempt to execute it
+/// while supplying a different payload B. The prologue should reject the transaction
+/// with TIMELOCK_TRANSACTION_PAYLOAD_DOES_NOT_MATCH (Discard).
+#[test]
+fn test_timelock_transaction_payload_mismatch() {
+    let mut h = MoveHarness::new();
+    let creator = h.new_account_at(AccountAddress::from_hex_literal("0xF010").unwrap());
+    let timelock_addr = timelock_account_address(*creator.address(), 10);
+    const DELAY: u64 = 3700;
+
+    assert_success!(h.run_entry_function(
+        &creator,
+        str::parse("0x1::timelock::create").unwrap(),
+        vec![],
+        vec![
+            bcs::to_bytes::<Vec<AccountAddress>>(&vec![]).unwrap(),
+            bcs::to_bytes::<Vec<AccountAddress>>(&vec![]).unwrap(),
+            bcs::to_bytes(&DELAY).unwrap(),
+        ],
+    ));
+
+    // Payload A — what is stored on-chain.
+    let payload_a = make_noop_entry_function();
+    let payload_a_bytes =
+        bcs::to_bytes(&TimelockTransactionPayload::EntryFunction(payload_a)).unwrap();
+    let salt = b"mismatch_salt".to_vec();
+
+    assert_success!(h.run_entry_function(
+        &creator,
+        str::parse("0x1::timelock::create_transaction").unwrap(),
+        vec![],
+        vec![
+            bcs::to_bytes(&timelock_addr).unwrap(),
+            bcs::to_bytes(&payload_a_bytes).unwrap(),
+            bcs::to_bytes(&DELAY).unwrap(),
+            bcs::to_bytes(&salt).unwrap(),
+        ],
+    ));
+
+    h.fast_forward(DELAY + 1);
+    h.executor.new_block();
+
+    // Payload B — a different entry function submitted at execution time.
+    let payload_b = EntryFunction::new(
+        ModuleId::new(CORE_CODE_ADDRESS, ident_str!("account").to_owned()),
+        ident_str!("create_account_if_does_not_exist").to_owned(),
+        vec![],
+        vec![bcs::to_bytes(&AccountAddress::new([0xCC; 32])).unwrap()],
+    );
+
+    let status = h.run_timelock(
+        &creator,
+        timelock_addr,
+        salt,
+        Some(TimelockTransactionPayload::EntryFunction(payload_b)),
+    );
+    assert!(
+        matches!(status, aptos_types::transaction::TransactionStatus::Discard(_)),
+        "Expected Discard (TIMELOCK_TRANSACTION_PAYLOAD_DOES_NOT_MATCH), got: {:?}",
+        status
+    );
+}
+
+// ──────────────────────────────────────────────────────────────
+// Test 14 — executing against a non-timelock account is rejected
+// ──────────────────────────────────────────────────────────────
+
+/// Submitting a TimelockTransaction whose `timelock_address` does not have a
+/// TimelockAccount resource must be rejected in the prologue with ACCOUNT_NOT_TIMELOCK.
+#[test]
+fn test_timelock_transaction_non_timelock_account() {
+    let mut h = MoveHarness::new();
+    let executor = h.new_account_at(AccountAddress::from_hex_literal("0xF020").unwrap());
+
+    // Use the executor's own address — it is a regular account, not a timelock account.
+    let fake_timelock_addr = *executor.address();
+    let salt = b"no_timelock_salt".to_vec();
+
+    let status = h.run_timelock(
+        &executor,
+        fake_timelock_addr,
+        salt,
+        Some(TimelockTransactionPayload::EntryFunction(make_noop_entry_function())),
+    );
+    assert!(
+        matches!(status, aptos_types::transaction::TransactionStatus::Discard(_)),
+        "Expected Discard (ACCOUNT_NOT_TIMELOCK), got: {:?}",
+        status
+    );
+}
+
+// ──────────────────────────────────────────────────────────────
+// Test 15 — executing a salt that was never proposed is rejected
+// ──────────────────────────────────────────────────────────────
+
+/// Submitting a TimelockTransaction with a salt that has no corresponding on-chain
+/// proposal must be rejected in the prologue with TIMELOCK_TRANSACTION_NOT_FOUND.
+#[test]
+fn test_timelock_transaction_salt_not_found() {
+    let mut h = MoveHarness::new();
+    let creator = h.new_account_at(AccountAddress::from_hex_literal("0xF030").unwrap());
+    let timelock_addr = timelock_account_address(*creator.address(), 10);
+    const DELAY: u64 = 3700;
+
+    // Create the timelock account but do NOT propose any transaction.
+    assert_success!(h.run_entry_function(
+        &creator,
+        str::parse("0x1::timelock::create").unwrap(),
+        vec![],
+        vec![
+            bcs::to_bytes::<Vec<AccountAddress>>(&vec![]).unwrap(),
+            bcs::to_bytes::<Vec<AccountAddress>>(&vec![]).unwrap(),
+            bcs::to_bytes(&DELAY).unwrap(),
+        ],
+    ));
+
+    h.fast_forward(DELAY + 1);
+    h.executor.new_block();
+
+    // Attempt to execute with a salt that was never proposed.
+    let status = h.run_timelock(
+        &creator,
+        timelock_addr,
+        b"ghost_salt".to_vec(),
+        Some(TimelockTransactionPayload::EntryFunction(make_noop_entry_function())),
+    );
+    assert!(
+        matches!(status, aptos_types::transaction::TransactionStatus::Discard(_)),
+        "Expected Discard (TIMELOCK_TRANSACTION_NOT_FOUND), got: {:?}",
+        status
+    );
+}
+
+// ──────────────────────────────────────────────────────────────
 // Test 12 (L4) — non-creator cannot propose a transaction
 // ──────────────────────────────────────────────────────────────
 

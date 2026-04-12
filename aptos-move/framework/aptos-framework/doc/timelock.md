@@ -3,7 +3,7 @@
 
 # Module `0x1::timelock`
 
-Timelock account module for Aptos. Unlike multisig accounts which require n-of-m signatures,
+Timelock account module for Movement. Unlike multisig accounts which require n-of-m signatures,
 a timelock account enforces a time delay before transactions can be executed.
 
 The timelock account is a resource account underneath. It has:

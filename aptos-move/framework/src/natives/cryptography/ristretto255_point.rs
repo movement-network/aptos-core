@@ -104,6 +104,10 @@ impl PointStore {
         self.points.get(handle.0 as usize).unwrap()
     }
 
+    pub fn try_get_point(&self, handle: &RistrettoPointHandle) -> Option<&RistrettoPoint> {
+        self.points.get(handle.0 as usize)
+    }
+
     /// Gets a RistrettoPoint that was previously allocated.
     pub fn get_point_mut(&mut self, handle: &RistrettoPointHandle) -> &mut RistrettoPoint {
         //&mut self.points[handle.0 as usize]

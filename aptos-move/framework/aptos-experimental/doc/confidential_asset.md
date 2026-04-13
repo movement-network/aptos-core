@@ -23,6 +23,7 @@ It enables private transfers by obfuscating token amounts while keeping sender a
 -  [Function `withdraw_to`](#0x7_confidential_asset_withdraw_to)
 -  [Function `withdraw`](#0x7_confidential_asset_withdraw)
 -  [Function `confidential_transfer`](#0x7_confidential_asset_confidential_transfer)
+-  [Function `max_sender_auditor_hint_bytes`](#0x7_confidential_asset_max_sender_auditor_hint_bytes)
 -  [Function `rotate_encryption_key`](#0x7_confidential_asset_rotate_encryption_key)
 -  [Function `normalize`](#0x7_confidential_asset_normalize)
 -  [Function `freeze_token`](#0x7_confidential_asset_freeze_token)
@@ -63,7 +64,6 @@ It enables private transfers by obfuscating token amounts while keeping sender a
 -  [Function `get_fa_config_address`](#0x7_confidential_asset_get_fa_config_address)
 -  [Function `construct_user_seed`](#0x7_confidential_asset_construct_user_seed)
 -  [Function `construct_fa_seed`](#0x7_confidential_asset_construct_fa_seed)
--  [Function `compress_auditor_transfer_amounts`](#0x7_confidential_asset_compress_auditor_transfer_amounts)
 -  [Function `validate_auditors`](#0x7_confidential_asset_validate_auditors)
 -  [Function `deserialize_auditor_eks`](#0x7_confidential_asset_deserialize_auditor_eks)
 -  [Function `deserialize_auditor_amounts`](#0x7_confidential_asset_deserialize_auditor_amounts)
@@ -339,8 +339,11 @@ Emitted when tokens are brought out of the protocol.
 
 ## Struct `Transferred`
 
-Emitted when tokens are transferred within the protocol between users' confidential balances.
-Plain <code>amount</code> is not included; ciphertexts are emitted for indexing and off-chain verification.
+Emitted after a successful <code>confidential_transfer</code> between two registered confidential accounts.
+
+This is the primary on-chain signal for indexers and tooling: **plaintext amounts are not** included;
+fields carry **compressed Twisted-ElGamal ciphertexts** and a **subset of sigma commitment bytes** copied
+from the verified proof. See the technical whitepaper (<code>whitepaper.md</code>, §5) for a field-by-field guide.
 
 
 <pre><code>#[<a href="../../aptos-framework/doc/event.md#0x1_event">event</a>]
@@ -358,49 +361,60 @@ Plain <code>amount</code> is not included; ciphertexts are emitted for indexing 
 <code>from: <b>address</b></code>
 </dt>
 <dd>
-
+ Address of the sender's confidential account (the <code><a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a></code> of the transfer entry).
 </dd>
 <dt>
 <code><b>to</b>: <b>address</b></code>
 </dt>
 <dd>
-
+ Recipient confidential account address.
 </dd>
 <dt>
 <code>asset_type: <b>address</b></code>
 </dt>
 <dd>
- Fungible asset metadata object address.
+ Fungible-asset metadata object address (<code><a href="../../aptos-framework/doc/object.md#0x1_object_object_address">object::object_address</a>(&token)</code>); identifies which token moved.
 </dd>
 <dt>
-<code>transfer_amount: <a href="confidential_balance.md#0x7_confidential_balance_CompressedConfidentialBalance">confidential_balance::CompressedConfidentialBalance</a></code>
+<code>amount: <a href="confidential_balance.md#0x7_confidential_balance_CompressedConfidentialBalance">confidential_balance::CompressedConfidentialBalance</a></code>
 </dt>
 <dd>
- Encrypted transfer amount under the recipient key (pending-balance layout).
+ Encrypted transfer amount under the recipient key (pending-balance / four-chunk layout).
 </dd>
 <dt>
-<code>auditor_eks: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedPubkey">ristretto255_twisted_elgamal::CompressedPubkey</a>&gt;</code>
+<code>ek_volun_auds: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;</code>
 </dt>
 <dd>
- Auditor public keys supplied for this transfer.
+ Flattened **transfer sigma <code>x7s</code>** commitments taken from the verified <code>TransferProof</code>: for each
+ auditor encryption key row in the proof, exactly **four** compressed Ristretto points (32 bytes each),
+ concatenated in **row-major** order (auditor index, then inner index 0..3). Empty when the proof carries
+ **no** auditor rows. Total byte length is always **<code>128 × n</code>** with <code>n</code> = number of auditor rows
+ (<code><a href="confidential_proof.md#0x7_confidential_proof_auditors_count_in_transfer_proof">confidential_proof::auditors_count_in_transfer_proof</a></code> / <code>proof.sigma_proof.xs.x7s.length()</code>).
 </dd>
 <dt>
-<code>auditor_transfer_amounts: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="confidential_balance.md#0x7_confidential_balance_CompressedConfidentialBalance">confidential_balance::CompressedConfidentialBalance</a>&gt;</code>
+<code>sender_auditor_hint: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;</code>
 </dt>
 <dd>
- Encrypted transfer amounts under each auditor key (parallel to <code>auditor_eks</code>).
+ Opaque sender-supplied bytes (bounded by [<code><a href="confidential_asset.md#0x7_confidential_asset_MAX_SENDER_AUDITOR_HINT_BYTES">MAX_SENDER_AUDITOR_HINT_BYTES</a></code>]); same bytes bound into
+ the transfer sigma Fiat–Shamir challenge and passed as the <code>sender_auditor_hint</code> entry argument.
 </dd>
 <dt>
 <code>new_sender_available_balance: <a href="confidential_balance.md#0x7_confidential_balance_CompressedConfidentialBalance">confidential_balance::CompressedConfidentialBalance</a></code>
 </dt>
 <dd>
-
+ Sender's new **actual** (spendable) balance ciphertext after the debit, compressed for storage/events.
 </dd>
 <dt>
 <code>new_recip_pending_balance: <a href="confidential_balance.md#0x7_confidential_balance_CompressedConfidentialBalance">confidential_balance::CompressedConfidentialBalance</a></code>
 </dt>
 <dd>
-
+ Recipient's new **pending** balance ciphertext after the credit, compressed for storage/events.
+</dd>
+<dt>
+<code>memo: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;</code>
+</dt>
+<dd>
+ Reserved memo payload for future or off-chain conventions; currently emitted as an empty <code><a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a></code>.
 </dd>
 </dl>
 
@@ -468,6 +482,16 @@ The deserialization of the auditor EK failed.
 
 
 <pre><code><b>const</b> <a href="confidential_asset.md#0x7_confidential_asset_EAUDITOR_EK_DESERIALIZATION_FAILED">EAUDITOR_EK_DESERIALIZATION_FAILED</a>: u64 = 4;
+</code></pre>
+
+
+
+<a id="0x7_confidential_asset_EAUDITOR_HINT_TOO_LONG"></a>
+
+<code>sender_auditor_hint</code> exceeds [<code><a href="confidential_asset.md#0x7_confidential_asset_MAX_SENDER_AUDITOR_HINT_BYTES">MAX_SENDER_AUDITOR_HINT_BYTES</a></code>].
+
+
+<pre><code><b>const</b> <a href="confidential_asset.md#0x7_confidential_asset_EAUDITOR_HINT_TOO_LONG">EAUDITOR_HINT_TOO_LONG</a>: u64 = 18;
 </code></pre>
 
 
@@ -588,6 +612,16 @@ The mainnet chain ID. If the chain ID is 1, the allow list is enabled.
 
 
 <pre><code><b>const</b> <a href="confidential_asset.md#0x7_confidential_asset_MAINNET_CHAIN_ID">MAINNET_CHAIN_ID</a>: u8 = 1;
+</code></pre>
+
+
+
+<a id="0x7_confidential_asset_MAX_SENDER_AUDITOR_HINT_BYTES"></a>
+
+Maximum length (bytes) of the opaque <code>sender_auditor_hint</code> passed to [<code>confidential_transfer</code>].
+
+
+<pre><code><b>const</b> <a href="confidential_asset.md#0x7_confidential_asset_MAX_SENDER_AUDITOR_HINT_BYTES">MAX_SENDER_AUDITOR_HINT_BYTES</a>: u64 = 256;
 </code></pre>
 
 
@@ -904,8 +938,12 @@ The sender provides their new normalized confidential balance, encrypted with fr
 Warning: If the auditor feature is enabled, the sender must include the auditor as the first element in the
 <code>auditor_eks</code> vector.
 
+<code>sender_auditor_hint</code> is emitted on [<code><a href="confidential_asset.md#0x7_confidential_asset_Transferred">Transferred</a></code>] and is **bound into the transfer sigma Fiat–Shamir
+transcript** (must match the hint used when generating the proof). Length must not exceed
+[<code><a href="confidential_asset.md#0x7_confidential_asset_MAX_SENDER_AUDITOR_HINT_BYTES">MAX_SENDER_AUDITOR_HINT_BYTES</a></code>].
 
-<pre><code><b>public</b> entry <b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_confidential_transfer">confidential_transfer</a>(sender: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, token: <a href="../../aptos-framework/doc/object.md#0x1_object_Object">object::Object</a>&lt;<a href="../../aptos-framework/doc/fungible_asset.md#0x1_fungible_asset_Metadata">fungible_asset::Metadata</a>&gt;, <b>to</b>: <b>address</b>, new_balance: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, sender_amount: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, recipient_amount: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, auditor_eks: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, auditor_amounts: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, zkrp_new_balance: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, zkrp_transfer_amount: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, sigma_proof: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;)
+
+<pre><code><b>public</b> entry <b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_confidential_transfer">confidential_transfer</a>(sender: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, token: <a href="../../aptos-framework/doc/object.md#0x1_object_Object">object::Object</a>&lt;<a href="../../aptos-framework/doc/fungible_asset.md#0x1_fungible_asset_Metadata">fungible_asset::Metadata</a>&gt;, <b>to</b>: <b>address</b>, new_balance: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, sender_amount: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, recipient_amount: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, auditor_eks: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, auditor_amounts: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, zkrp_new_balance: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, zkrp_transfer_amount: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, sigma_proof: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, sender_auditor_hint: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;)
 </code></pre>
 
 
@@ -925,7 +963,8 @@ Warning: If the auditor feature is enabled, the sender must include the auditor 
     auditor_amounts: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
     zkrp_new_balance: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
     zkrp_transfer_amount: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
-    sigma_proof: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;) <b>acquires</b> <a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>, <a href="confidential_asset.md#0x7_confidential_asset_FAConfig">FAConfig</a>, <a href="confidential_asset.md#0x7_confidential_asset_FAController">FAController</a>
+    sigma_proof: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
+    sender_auditor_hint: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;) <b>acquires</b> <a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>, <a href="confidential_asset.md#0x7_confidential_asset_FAConfig">FAConfig</a>, <a href="confidential_asset.md#0x7_confidential_asset_FAController">FAController</a>
 {
     <b>let</b> new_balance = <a href="confidential_balance.md#0x7_confidential_balance_new_actual_balance_from_bytes">confidential_balance::new_actual_balance_from_bytes</a>(new_balance).extract();
     <b>let</b> sender_amount = <a href="confidential_balance.md#0x7_confidential_balance_new_pending_balance_from_bytes">confidential_balance::new_pending_balance_from_bytes</a>(sender_amount).extract();
@@ -947,8 +986,35 @@ Warning: If the auditor feature is enabled, the sender must include the auditor 
         recipient_amount,
         auditor_eks,
         auditor_amounts,
-        proof
+        proof,
+        sender_auditor_hint
     )
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x7_confidential_asset_max_sender_auditor_hint_bytes"></a>
+
+## Function `max_sender_auditor_hint_bytes`
+
+Returns the maximum allowed <code>sender_auditor_hint</code> length for [<code>confidential_transfer</code>].
+
+
+<pre><code>#[view]
+<b>public</b> <b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_max_sender_auditor_hint_bytes">max_sender_auditor_hint_bytes</a>(): u64
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_max_sender_auditor_hint_bytes">max_sender_auditor_hint_bytes</a>(): u64 {
+    <a href="confidential_asset.md#0x7_confidential_asset_MAX_SENDER_AUDITOR_HINT_BYTES">MAX_SENDER_AUDITOR_HINT_BYTES</a>
 }
 </code></pre>
 
@@ -1822,7 +1888,7 @@ Withdrawals are always allowed, regardless of the token allow status.
 Implementation of the <code>confidential_transfer</code> entry function.
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_confidential_transfer_internal">confidential_transfer_internal</a>(sender: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, token: <a href="../../aptos-framework/doc/object.md#0x1_object_Object">object::Object</a>&lt;<a href="../../aptos-framework/doc/fungible_asset.md#0x1_fungible_asset_Metadata">fungible_asset::Metadata</a>&gt;, <b>to</b>: <b>address</b>, new_balance: <a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>, sender_amount: <a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>, recipient_amount: <a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>, auditor_eks: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedPubkey">ristretto255_twisted_elgamal::CompressedPubkey</a>&gt;, auditor_amounts: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>&gt;, proof: <a href="confidential_proof.md#0x7_confidential_proof_TransferProof">confidential_proof::TransferProof</a>)
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_confidential_transfer_internal">confidential_transfer_internal</a>(sender: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, token: <a href="../../aptos-framework/doc/object.md#0x1_object_Object">object::Object</a>&lt;<a href="../../aptos-framework/doc/fungible_asset.md#0x1_fungible_asset_Metadata">fungible_asset::Metadata</a>&gt;, <b>to</b>: <b>address</b>, new_balance: <a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>, sender_amount: <a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>, recipient_amount: <a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>, auditor_eks: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedPubkey">ristretto255_twisted_elgamal::CompressedPubkey</a>&gt;, auditor_amounts: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>&gt;, proof: <a href="confidential_proof.md#0x7_confidential_proof_TransferProof">confidential_proof::TransferProof</a>, sender_auditor_hint: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;)
 </code></pre>
 
 
@@ -1840,7 +1906,8 @@ Implementation of the <code>confidential_transfer</code> entry function.
     recipient_amount: <a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>,
     auditor_eks: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;twisted_elgamal::CompressedPubkey&gt;,
     auditor_amounts: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>&gt;,
-    proof: TransferProof) <b>acquires</b> <a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>, <a href="confidential_asset.md#0x7_confidential_asset_FAConfig">FAConfig</a>, <a href="confidential_asset.md#0x7_confidential_asset_FAController">FAController</a>
+    proof: TransferProof,
+    sender_auditor_hint: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;) <b>acquires</b> <a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>, <a href="confidential_asset.md#0x7_confidential_asset_FAConfig">FAConfig</a>, <a href="confidential_asset.md#0x7_confidential_asset_FAController">FAController</a>
 {
     <b>assert</b>!(<a href="confidential_asset.md#0x7_confidential_asset_is_token_allowed">is_token_allowed</a>(token), <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="confidential_asset.md#0x7_confidential_asset_ETOKEN_DISABLED">ETOKEN_DISABLED</a>));
     <b>assert</b>!(!<a href="confidential_asset.md#0x7_confidential_asset_is_frozen">is_frozen</a>(<b>to</b>, token), <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_state">error::invalid_state</a>(<a href="confidential_asset.md#0x7_confidential_asset_EALREADY_FROZEN">EALREADY_FROZEN</a>));
@@ -1851,6 +1918,10 @@ Implementation of the <code>confidential_transfer</code> entry function.
     <b>assert</b>!(
         <a href="confidential_balance.md#0x7_confidential_balance_balance_c_equals">confidential_balance::balance_c_equals</a>(&sender_amount, &recipient_amount),
         <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="confidential_asset.md#0x7_confidential_asset_EINVALID_SENDER_AMOUNT">EINVALID_SENDER_AMOUNT</a>)
+    );
+    <b>assert</b>!(
+        sender_auditor_hint.length() &lt;= <a href="confidential_asset.md#0x7_confidential_asset_MAX_SENDER_AUDITOR_HINT_BYTES">MAX_SENDER_AUDITOR_HINT_BYTES</a>,
+        <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="confidential_asset.md#0x7_confidential_asset_EAUDITOR_HINT_TOO_LONG">EAUDITOR_HINT_TOO_LONG</a>)
     );
 
     <b>let</b> from = <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(sender);
@@ -1877,14 +1948,15 @@ Implementation of the <code>confidential_transfer</code> entry function.
         &recipient_amount,
         &auditor_eks,
         &auditor_amounts,
+        &sender_auditor_hint,
         &proof);
 
     sender_ca_store.normalized = <b>true</b>;
     <b>let</b> new_sender_available_balance = <a href="confidential_balance.md#0x7_confidential_balance_compress_balance">confidential_balance::compress_balance</a>(&new_balance);
     sender_ca_store.actual_balance = new_sender_available_balance;
 
-    <b>let</b> transfer_amount = <a href="confidential_balance.md#0x7_confidential_balance_compress_balance">confidential_balance::compress_balance</a>(&recipient_amount);
-    <b>let</b> auditor_transfer_amounts = <a href="confidential_asset.md#0x7_confidential_asset_compress_auditor_transfer_amounts">compress_auditor_transfer_amounts</a>(&auditor_amounts);
+    <b>let</b> amount = <a href="confidential_balance.md#0x7_confidential_balance_compress_balance">confidential_balance::compress_balance</a>(&recipient_amount);
+    <b>let</b> ek_volun_auds = <a href="confidential_proof.md#0x7_confidential_proof_transfer_proof_ek_volun_auds_flat_bytes">confidential_proof::transfer_proof_ek_volun_auds_flat_bytes</a>(&proof);
 
     // Cannot create multiple mutable references <b>to</b> the same type, so we need <b>to</b> drop it
     <b>let</b> <a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a> { .. } = sender_ca_store;
@@ -1909,11 +1981,12 @@ Implementation of the <code>confidential_transfer</code> entry function.
         from,
         <b>to</b>,
         asset_type: <a href="../../aptos-framework/doc/object.md#0x1_object_object_address">object::object_address</a>(&token),
-        transfer_amount,
-        auditor_eks,
-        auditor_transfer_amounts,
+        amount,
+        ek_volun_auds,
+        sender_auditor_hint,
         new_sender_available_balance,
         new_recip_pending_balance,
+        memo: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>[],
     });
 }
 </code></pre>
@@ -2403,42 +2476,6 @@ As all the <code><a href="confidential_asset.md#0x7_confidential_asset_FAConfig"
             <a href="../../aptos-framework/doc/object.md#0x1_object_object_address">object::object_address</a>(&token)
         )
     )
-}
-</code></pre>
-
-
-
-</details>
-
-<a id="0x7_confidential_asset_compress_auditor_transfer_amounts"></a>
-
-## Function `compress_auditor_transfer_amounts`
-
-
-
-<pre><code><b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_compress_auditor_transfer_amounts">compress_auditor_transfer_amounts</a>(amounts: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>&gt;): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="confidential_balance.md#0x7_confidential_balance_CompressedConfidentialBalance">confidential_balance::CompressedConfidentialBalance</a>&gt;
-</code></pre>
-
-
-
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_compress_auditor_transfer_amounts">compress_auditor_transfer_amounts</a>(
-    amounts: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>&gt;
-): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="confidential_balance.md#0x7_confidential_balance_CompressedConfidentialBalance">confidential_balance::CompressedConfidentialBalance</a>&gt; {
-    <b>let</b> out = <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>[];
-    <b>let</b> len = <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector_length">vector::length</a>(amounts);
-    <b>let</b> i = 0;
-    <b>while</b> (i &lt; len) {
-        <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector_push_back">vector::push_back</a>(
-            &<b>mut</b> out,
-            <a href="confidential_balance.md#0x7_confidential_balance_compress_balance">confidential_balance::compress_balance</a>(<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector_borrow">vector::borrow</a>(amounts, i))
-        );
-        i = i + 1;
-    };
-    out
 }
 </code></pre>
 

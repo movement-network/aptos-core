@@ -29,6 +29,7 @@ module aptos_experimental::confidential_proof_tests {
         recipient_amount: confidential_balance::ConfidentialBalance,
         auditor_eks: vector<twisted_elgamal::CompressedPubkey>,
         auditor_amounts: vector<confidential_balance::ConfidentialBalance>,
+        sender_auditor_hint: vector<u8>,
         proof: confidential_proof::TransferProof,
     }
 
@@ -88,10 +89,15 @@ module aptos_experimental::confidential_proof_tests {
     }
 
     fun transfer(): TransferParameters {
-        transfer_with_parameters(150, 100, 50)
+        transfer_with_parameters(150, 100, 50, vector[])
     }
 
-    fun transfer_with_parameters(current_amount: u128, new_amount: u128, amount: u64): TransferParameters {
+    fun transfer_with_parameters(
+        current_amount: u128,
+        new_amount: u128,
+        amount: u64,
+        sender_auditor_hint: vector<u8>
+    ): TransferParameters {
         let (sender_dk, sender_ek) = generate_twisted_elgamal_keypair();
         let (_, recipient_ek) = generate_twisted_elgamal_keypair();
 
@@ -123,6 +129,7 @@ module aptos_experimental::confidential_proof_tests {
             new_amount,
             &current_balance,
             &auditor_eks,
+            sender_auditor_hint,
         );
 
         TransferParameters {
@@ -136,6 +143,7 @@ module aptos_experimental::confidential_proof_tests {
             recipient_amount,
             auditor_eks,
             auditor_amounts,
+            sender_auditor_hint,
             proof,
         }
     }
@@ -316,6 +324,48 @@ module aptos_experimental::confidential_proof_tests {
             &params.recipient_amount,
             &params.auditor_eks,
             &params.auditor_amounts,
+            &params.sender_auditor_hint,
+            &params.proof);
+    }
+
+    #[test]
+    fun success_transfer_with_non_empty_auditor_hint() {
+        let params = transfer_with_parameters(150, 100, 50, vector[0xabu8, 0xcdu8]);
+
+        confidential_proof::verify_transfer_proof(
+            TEST_CHAIN_ID,
+            TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
+            &params.sender_ek,
+            &params.recipient_ek,
+            &params.current_balance,
+            &params.new_balance,
+            &params.sender_amount,
+            &params.recipient_amount,
+            &params.auditor_eks,
+            &params.auditor_amounts,
+            &params.sender_auditor_hint,
+            &params.proof);
+    }
+
+    #[test]
+    #[expected_failure(abort_code = 0x010001, location = confidential_proof)]
+    fun fail_transfer_if_wrong_sender_auditor_hint() {
+        let params = transfer_with_parameters(150, 100, 50, vector[1u8]);
+
+        confidential_proof::verify_transfer_proof(
+            TEST_CHAIN_ID,
+            TEST_SENDER,
+            TEST_CONTRACT_ADDRESS,
+            &params.sender_ek,
+            &params.recipient_ek,
+            &params.current_balance,
+            &params.new_balance,
+            &params.sender_amount,
+            &params.recipient_amount,
+            &params.auditor_eks,
+            &params.auditor_amounts,
+            &vector[2u8],
             &params.proof);
     }
 
@@ -336,6 +386,7 @@ module aptos_experimental::confidential_proof_tests {
             &params.recipient_amount,
             &params.auditor_eks,
             &params.auditor_amounts,
+            &params.sender_auditor_hint,
             &params.proof);
     }
 
@@ -356,6 +407,7 @@ module aptos_experimental::confidential_proof_tests {
             &params.recipient_amount,
             &params.auditor_eks,
             &params.auditor_amounts,
+            &params.sender_auditor_hint,
             &params.proof);
     }
 
@@ -380,6 +432,7 @@ module aptos_experimental::confidential_proof_tests {
             &params.recipient_amount,
             &params.auditor_eks,
             &params.auditor_amounts,
+            &params.sender_auditor_hint,
             &params.proof);
     }
 
@@ -388,7 +441,7 @@ module aptos_experimental::confidential_proof_tests {
     fun fail_transfer_if_negative_new_balance() {
         // 0 - 1 = max_uint128
         let max_uint128 = 340282366920938463463374607431768211455;
-        let params = transfer_with_parameters(0, max_uint128 - 1, 1);
+        let params = transfer_with_parameters(0, max_uint128 - 1, 1, vector[]);
 
         confidential_proof::verify_transfer_proof(
             TEST_CHAIN_ID,
@@ -402,6 +455,7 @@ module aptos_experimental::confidential_proof_tests {
             &params.recipient_amount,
             &params.auditor_eks,
             &params.auditor_amounts,
+            &params.sender_auditor_hint,
             &params.proof);
     }
 
@@ -423,6 +477,7 @@ module aptos_experimental::confidential_proof_tests {
             &params.recipient_amount,
             &params.auditor_eks,
             &params.auditor_amounts,
+            &params.sender_auditor_hint,
             &params.proof);
     }
 
@@ -444,6 +499,7 @@ module aptos_experimental::confidential_proof_tests {
                 1000, &confidential_balance::generate_balance_randomness(), &params.recipient_ek),
             &params.auditor_eks,
             &params.auditor_amounts,
+            &params.sender_auditor_hint,
             &params.proof);
     }
 
@@ -467,6 +523,7 @@ module aptos_experimental::confidential_proof_tests {
             &params.recipient_amount,
             &auditor_eks,
             &params.auditor_amounts,
+            &params.sender_auditor_hint,
             &params.proof);
     }
 
@@ -495,6 +552,7 @@ module aptos_experimental::confidential_proof_tests {
             &params.recipient_amount,
             &params.auditor_eks,
             &auditor_amounts,
+            &params.sender_auditor_hint,
             &params.proof);
     }
 
@@ -858,6 +916,7 @@ module aptos_experimental::confidential_proof_tests {
             &params.recipient_amount,
             &params.auditor_eks,
             &params.auditor_amounts,
+            &params.sender_auditor_hint,
             &params.proof);
     }
 
@@ -878,6 +937,7 @@ module aptos_experimental::confidential_proof_tests {
             &params.recipient_amount,
             &params.auditor_eks,
             &params.auditor_amounts,
+            &params.sender_auditor_hint,
             &params.proof);
     }
 

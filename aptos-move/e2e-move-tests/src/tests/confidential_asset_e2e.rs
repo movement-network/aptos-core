@@ -9,8 +9,10 @@
 // signatures)—not transcribed from other repositories' test code.
 //
 // The harness hot-swaps all `0x1` modules from a test-mode compile of `aptos-stdlib` (MoveStdlib +
-// AptosStdlib, so `ristretto255::random_scalar` and friends resolve consistently), plus
-// every `0x7` module from a matching `aptos-experimental` test compile. Genesis already publishes
+// AptosStdlib, so `ristretto255::random_scalar` and friends resolve consistently), then overlays
+// `0x1::event` from the same compile graph as `aptos-experimental` so `event::emitted_events` matches
+// `confidential_asset` (genesis `event` bytecode can lag). It also injects every `0x7` module from that
+// experimental build. Genesis already publishes
 // `FAController` for an older bytecode revision; we delete that resource and re-run
 // `init_module_for_testing` so on-disk layout matches the injected `confidential_asset` module.
 
@@ -36,6 +38,7 @@ use move_model::metadata::{CompilerVersion, LanguageVersion};
 use move_package::BuildConfig;
 use move_vm_runtime::move_vm::SerializedReturnValues;
 use once_cell::sync::OnceCell;
+use std::collections::BTreeMap;
 
 const APTOS_EXPERIMENTAL: AccountAddress = AccountAddress::new({
     let mut b = [0u8; AccountAddress::LENGTH];
@@ -116,7 +119,7 @@ fn compile_stdlib_inject_modules() -> Vec<(ModuleId, Vec<u8>)> {
     out
 }
 
-fn compile_experimental_with_tests() -> Vec<(ModuleId, Vec<u8>)> {
+fn compile_experimental_with_tests() -> (Vec<(ModuleId, Vec<u8>)>, (ModuleId, Vec<u8>)) {
     let pkg = framework_dir_path("aptos-experimental");
     let build_config = move_test_build_config();
 
@@ -142,14 +145,17 @@ fn compile_experimental_with_tests() -> Vec<(ModuleId, Vec<u8>)> {
         });
 
     let mut out = Vec::new();
+    let mut event_bytes: Option<(ModuleId, Vec<u8>)> = None;
     for unit in compiled.all_modules() {
         if let CompiledUnit::Module(NamedCompiledModule { module, .. }) = &unit.unit {
             let id = module.self_id();
-            if id.address() != &APTOS_EXPERIMENTAL {
-                continue;
+            if id.address() == &APTOS_EXPERIMENTAL {
+                let bytes = unit.unit.serialize(Some(module.version));
+                out.push((id, bytes));
+            } else if id.address() == &AccountAddress::ONE && id.name().as_str() == "event" {
+                let bytes = unit.unit.serialize(Some(module.version));
+                event_bytes = Some((id, bytes));
             }
-            let bytes = unit.unit.serialize(Some(module.version));
-            out.push((id, bytes));
         }
     }
     out.sort_by(|a, b| a.0.name().as_str().cmp(b.0.name().as_str()));
@@ -157,12 +163,17 @@ fn compile_experimental_with_tests() -> Vec<(ModuleId, Vec<u8>)> {
         !out.is_empty(),
         "expected at least one aptos_experimental module from test build"
     );
-    out
+    let event = event_bytes.expect("aptos-experimental compile graph must include 0x1::event");
+    (out, event)
 }
 
 fn compile_confidential_e2e_inject_modules() -> Vec<(ModuleId, Vec<u8>)> {
-    let mut v = compile_stdlib_inject_modules();
-    v.extend(compile_experimental_with_tests());
+    let (experimental_0x7, event_overlay) = compile_experimental_with_tests();
+    let mut by_id: BTreeMap<ModuleId, Vec<u8>> = compile_stdlib_inject_modules().into_iter().collect();
+    by_id.insert(event_overlay.0, event_overlay.1);
+    let mut v: Vec<(ModuleId, Vec<u8>)> = by_id.into_iter().collect();
+    v.sort_by(|a, b| a.0.name().as_str().cmp(b.0.name().as_str()));
+    v.extend(experimental_0x7);
     v
 }
 
@@ -404,6 +415,7 @@ fn pack_transfer_simple(
     dk: &[u8],
     amount: u64,
     new_balance: u128,
+    sender_auditor_hint: Vec<u8>,
 ) -> [Vec<u8>; 8] {
     let args = vec![
         bcs::to_bytes(&chain_byte).unwrap(),
@@ -413,6 +425,7 @@ fn pack_transfer_simple(
         bcs::to_bytes(&amount).unwrap(),
         bcs::to_bytes(&new_balance).unwrap(),
         bcs::to_bytes(&MOVE_METADATA).unwrap(),
+        bcs::to_bytes(&sender_auditor_hint).unwrap(),
     ];
     let ret = bypass_at(
         h,
@@ -434,6 +447,7 @@ fn pack_transfer_audited(
     amount: u64,
     new_balance: u128,
     auditor_eks: Vec<Vec<u8>>,
+    sender_auditor_hint: Vec<u8>,
 ) -> [Vec<u8>; 8] {
     let auditor_inner: Vec<Vec<u8>> = auditor_eks
         .iter()
@@ -448,6 +462,7 @@ fn pack_transfer_audited(
         bcs::to_bytes(&new_balance).unwrap(),
         bcs::to_bytes(&MOVE_METADATA).unwrap(),
         bcs::to_bytes(&auditor_inner).unwrap(),
+        bcs::to_bytes(&sender_auditor_hint).unwrap(),
     ];
     let ret = bypass_at(
         h,
@@ -465,6 +480,7 @@ fn run_confidential_transfer(
     sender: &Account,
     recipient: AccountAddress,
     parts: &[Vec<u8>; 8],
+    sender_auditor_hint: Vec<u8>,
 ) -> TransactionStatus {
     let payload = TransactionPayload::EntryFunction(EntryFunction::new(
         ca_module_id(),
@@ -481,6 +497,7 @@ fn run_confidential_transfer(
             parts[5].clone(),
             parts[6].clone(),
             parts[7].clone(),
+            bcs::to_bytes(&sender_auditor_hint).unwrap(),
         ],
     ));
     let txn = h.create_transaction_payload(sender, payload);
@@ -706,6 +723,7 @@ fn confidential_asset_transfer_withdraw_rotate_and_auditor() {
 
     let xfer_amt = 400u64;
     let mut remaining: u128 = 10_000 - xfer_amt as u128;
+    let xfer_hint = vec![1u8, 2, 3];
     let parts = pack_transfer_simple(
         &mut h,
         chain,
@@ -714,9 +732,10 @@ fn confidential_asset_transfer_withdraw_rotate_and_auditor() {
         &alice_dk,
         xfer_amt,
         remaining,
+        xfer_hint.clone(),
     );
     assert_kept_success(
-        &run_confidential_transfer(&mut h, &alice, bob_addr, &parts),
+        &run_confidential_transfer(&mut h, &alice, bob_addr, &parts, xfer_hint),
         "confidential_transfer",
     );
 
@@ -729,9 +748,10 @@ fn confidential_asset_transfer_withdraw_rotate_and_auditor() {
         &alice_dk,
         xfer_amt,
         remaining,
+        vec![],
     );
     assert_kept_success(
-        &run_confidential_transfer(&mut h, &alice, bob_addr, &parts2),
+        &run_confidential_transfer(&mut h, &alice, bob_addr, &parts2, vec![]),
         "confidential_transfer (second)",
     );
 
@@ -748,9 +768,10 @@ fn confidential_asset_transfer_withdraw_rotate_and_auditor() {
         xfer_amt,
         remaining,
         vec![aud_pk.clone()],
+        vec![],
     );
     assert_kept_success(
-        &run_confidential_transfer(&mut h, &alice, bob_addr, &warm),
+        &run_confidential_transfer(&mut h, &alice, bob_addr, &warm, vec![]),
         "audited transfer",
     );
 
@@ -873,9 +894,10 @@ fn confidential_transfer_with_voluntary_auditors_only() {
             xfer,
             remaining,
             vol_pks,
+            vec![],
         );
         assert_kept_success(
-            &run_confidential_transfer(&mut h, &alice, bob_addr, &parts),
+            &run_confidential_transfer(&mut h, &alice, bob_addr, &parts, vec![]),
             &format!("transfer {num_voluntary} voluntary auditors"),
         );
 
@@ -893,9 +915,10 @@ fn confidential_transfer_with_voluntary_auditors_only() {
             xfer,
             remaining,
             vol_pks2,
+            vec![],
         );
         assert_kept_success(
-            &run_confidential_transfer(&mut h, &alice, bob_addr, &parts2),
+            &run_confidential_transfer(&mut h, &alice, bob_addr, &parts2, vec![]),
             "second transfer (new voluntary auditor set)",
         );
     }
@@ -944,9 +967,10 @@ fn confidential_transfer_asset_auditor_plus_voluntary_auditors() {
             xfer,
             remaining,
             auditor_keys,
+            vec![],
         );
         assert_kept_success(
-            &run_confidential_transfer(&mut h, &alice, bob_addr, &parts),
+            &run_confidential_transfer(&mut h, &alice, bob_addr, &parts, vec![]),
             &format!("audited transfer asset auditor + {num_voluntary} voluntary"),
         );
     }
@@ -1045,8 +1069,9 @@ fn confidential_transfer_rejects_empty_auditors_when_asset_auditor_set() {
         &alice_dk,
         100,
         1900,
+        vec![],
     );
-    let st = run_confidential_transfer(&mut h, &alice, bob_addr, &parts);
+    let st = run_confidential_transfer(&mut h, &alice, bob_addr, &parts, vec![]);
     assert_kept_failure(&st, "transfer with zero auditors in proof when asset auditor required");
 }
 
@@ -1086,7 +1111,8 @@ fn confidential_transfer_rejects_non_matching_asset_auditor_pubkey() {
         100,
         1900,
         vec![wrong_pk],
+        vec![],
     );
-    let st = run_confidential_transfer(&mut h, &alice, bob_addr, &parts);
+    let st = run_confidential_transfer(&mut h, &alice, bob_addr, &parts, vec![]);
     assert_kept_failure(&st, "first auditor EK must match asset auditor");
 }

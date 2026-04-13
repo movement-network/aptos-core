@@ -63,6 +63,7 @@ It enables private transfers by obfuscating token amounts while keeping sender a
 -  [Function `get_fa_config_address`](#0x7_confidential_asset_get_fa_config_address)
 -  [Function `construct_user_seed`](#0x7_confidential_asset_construct_user_seed)
 -  [Function `construct_fa_seed`](#0x7_confidential_asset_construct_fa_seed)
+-  [Function `compress_auditor_transfer_amounts`](#0x7_confidential_asset_compress_auditor_transfer_amounts)
 -  [Function `validate_auditors`](#0x7_confidential_asset_validate_auditors)
 -  [Function `deserialize_auditor_eks`](#0x7_confidential_asset_deserialize_auditor_eks)
 -  [Function `deserialize_auditor_amounts`](#0x7_confidential_asset_deserialize_auditor_amounts)
@@ -271,6 +272,12 @@ Emitted when tokens are brought into the protocol.
 
 </dd>
 <dt>
+<code>asset_type: <b>address</b></code>
+</dt>
+<dd>
+ Fungible asset metadata object address.
+</dd>
+<dt>
 <code>amount: u64</code>
 </dt>
 <dd>
@@ -312,6 +319,12 @@ Emitted when tokens are brought out of the protocol.
 
 </dd>
 <dt>
+<code>asset_type: <b>address</b></code>
+</dt>
+<dd>
+ Fungible asset metadata object address.
+</dd>
+<dt>
 <code>amount: u64</code>
 </dt>
 <dd>
@@ -327,7 +340,7 @@ Emitted when tokens are brought out of the protocol.
 ## Struct `Transferred`
 
 Emitted when tokens are transferred within the protocol between users' confidential balances.
-Note that a numeric amount is not included, as it is hidden.
+Plain <code>amount</code> is not included; ciphertexts are emitted for indexing and off-chain verification.
 
 
 <pre><code>#[<a href="../../aptos-framework/doc/event.md#0x1_event">event</a>]
@@ -349,6 +362,42 @@ Note that a numeric amount is not included, as it is hidden.
 </dd>
 <dt>
 <code><b>to</b>: <b>address</b></code>
+</dt>
+<dd>
+
+</dd>
+<dt>
+<code>asset_type: <b>address</b></code>
+</dt>
+<dd>
+ Fungible asset metadata object address.
+</dd>
+<dt>
+<code>transfer_amount: <a href="confidential_balance.md#0x7_confidential_balance_CompressedConfidentialBalance">confidential_balance::CompressedConfidentialBalance</a></code>
+</dt>
+<dd>
+ Encrypted transfer amount under the recipient key (pending-balance layout).
+</dd>
+<dt>
+<code>auditor_eks: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedPubkey">ristretto255_twisted_elgamal::CompressedPubkey</a>&gt;</code>
+</dt>
+<dd>
+ Auditor public keys supplied for this transfer.
+</dd>
+<dt>
+<code>auditor_transfer_amounts: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="confidential_balance.md#0x7_confidential_balance_CompressedConfidentialBalance">confidential_balance::CompressedConfidentialBalance</a>&gt;</code>
+</dt>
+<dd>
+ Encrypted transfer amounts under each auditor key (parallel to <code>auditor_eks</code>).
+</dd>
+<dt>
+<code>new_sender_available_balance: <a href="confidential_balance.md#0x7_confidential_balance_CompressedConfidentialBalance">confidential_balance::CompressedConfidentialBalance</a></code>
+</dt>
+<dd>
+
+</dd>
+<dt>
+<code>new_recip_pending_balance: <a href="confidential_balance.md#0x7_confidential_balance_CompressedConfidentialBalance">confidential_balance::CompressedConfidentialBalance</a></code>
 </dt>
 <dd>
 
@@ -794,8 +843,6 @@ The sender provides their new normalized confidential balance, encrypted with fr
     <b>let</b> proof = <a href="confidential_proof.md#0x7_confidential_proof_deserialize_withdrawal_proof">confidential_proof::deserialize_withdrawal_proof</a>(sigma_proof, zkrp_new_balance).extract();
 
     <a href="confidential_asset.md#0x7_confidential_asset_withdraw_to_internal">withdraw_to_internal</a>(sender, token, <b>to</b>, amount, new_balance, proof);
-
-    <a href="../../aptos-framework/doc/event.md#0x1_event_emit">event::emit</a>(<a href="confidential_asset.md#0x7_confidential_asset_Withdrawn">Withdrawn</a> { from: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(sender), <b>to</b>, amount });
 }
 </code></pre>
 
@@ -1693,7 +1740,12 @@ Implementation of the <code>deposit_to</code> entry function.
 
     ca_store.pending_counter += 1;
 
-    <a href="../../aptos-framework/doc/event.md#0x1_event_emit">event::emit</a>(<a href="confidential_asset.md#0x7_confidential_asset_Deposited">Deposited</a> { from, <b>to</b>, amount });
+    <a href="../../aptos-framework/doc/event.md#0x1_event_emit">event::emit</a>(<a href="confidential_asset.md#0x7_confidential_asset_Deposited">Deposited</a> {
+        from,
+        <b>to</b>,
+        asset_type: <a href="../../aptos-framework/doc/object.md#0x1_object_object_address">object::object_address</a>(&token),
+        amount,
+    });
 }
 </code></pre>
 
@@ -1749,6 +1801,13 @@ Withdrawals are always allowed, regardless of the token allow status.
     ca_store.actual_balance = <a href="confidential_balance.md#0x7_confidential_balance_compress_balance">confidential_balance::compress_balance</a>(&new_balance);
 
     <a href="../../aptos-framework/doc/primary_fungible_store.md#0x1_primary_fungible_store_transfer">primary_fungible_store::transfer</a>(&<a href="confidential_asset.md#0x7_confidential_asset_get_fa_store_signer">get_fa_store_signer</a>(), token, <b>to</b>, amount);
+
+    <a href="../../aptos-framework/doc/event.md#0x1_event_emit">event::emit</a>(<a href="confidential_asset.md#0x7_confidential_asset_Withdrawn">Withdrawn</a> {
+        from,
+        <b>to</b>,
+        asset_type: <a href="../../aptos-framework/doc/object.md#0x1_object_object_address">object::object_address</a>(&token),
+        amount,
+    });
 }
 </code></pre>
 
@@ -1821,7 +1880,11 @@ Implementation of the <code>confidential_transfer</code> entry function.
         &proof);
 
     sender_ca_store.normalized = <b>true</b>;
-    sender_ca_store.actual_balance = <a href="confidential_balance.md#0x7_confidential_balance_compress_balance">confidential_balance::compress_balance</a>(&new_balance);
+    <b>let</b> new_sender_available_balance = <a href="confidential_balance.md#0x7_confidential_balance_compress_balance">confidential_balance::compress_balance</a>(&new_balance);
+    sender_ca_store.actual_balance = new_sender_available_balance;
+
+    <b>let</b> transfer_amount = <a href="confidential_balance.md#0x7_confidential_balance_compress_balance">confidential_balance::compress_balance</a>(&recipient_amount);
+    <b>let</b> auditor_transfer_amounts = <a href="confidential_asset.md#0x7_confidential_asset_compress_auditor_transfer_amounts">compress_auditor_transfer_amounts</a>(&auditor_amounts);
 
     // Cannot create multiple mutable references <b>to</b> the same type, so we need <b>to</b> drop it
     <b>let</b> <a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a> { .. } = sender_ca_store;
@@ -1839,9 +1902,19 @@ Implementation of the <code>confidential_transfer</code> entry function.
     <a href="confidential_balance.md#0x7_confidential_balance_add_balances_mut">confidential_balance::add_balances_mut</a>(&<b>mut</b> recipient_pending_balance, &recipient_amount);
 
     recipient_ca_store.pending_counter += 1;
-    recipient_ca_store.pending_balance = <a href="confidential_balance.md#0x7_confidential_balance_compress_balance">confidential_balance::compress_balance</a>(&recipient_pending_balance);
+    <b>let</b> new_recip_pending_balance = <a href="confidential_balance.md#0x7_confidential_balance_compress_balance">confidential_balance::compress_balance</a>(&recipient_pending_balance);
+    recipient_ca_store.pending_balance = new_recip_pending_balance;
 
-    <a href="../../aptos-framework/doc/event.md#0x1_event_emit">event::emit</a>(<a href="confidential_asset.md#0x7_confidential_asset_Transferred">Transferred</a> { from, <b>to</b> });
+    <a href="../../aptos-framework/doc/event.md#0x1_event_emit">event::emit</a>(<a href="confidential_asset.md#0x7_confidential_asset_Transferred">Transferred</a> {
+        from,
+        <b>to</b>,
+        asset_type: <a href="../../aptos-framework/doc/object.md#0x1_object_object_address">object::object_address</a>(&token),
+        transfer_amount,
+        auditor_eks,
+        auditor_transfer_amounts,
+        new_sender_available_balance,
+        new_recip_pending_balance,
+    });
 }
 </code></pre>
 
@@ -2330,6 +2403,42 @@ As all the <code><a href="confidential_asset.md#0x7_confidential_asset_FAConfig"
             <a href="../../aptos-framework/doc/object.md#0x1_object_object_address">object::object_address</a>(&token)
         )
     )
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x7_confidential_asset_compress_auditor_transfer_amounts"></a>
+
+## Function `compress_auditor_transfer_amounts`
+
+
+
+<pre><code><b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_compress_auditor_transfer_amounts">compress_auditor_transfer_amounts</a>(amounts: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>&gt;): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="confidential_balance.md#0x7_confidential_balance_CompressedConfidentialBalance">confidential_balance::CompressedConfidentialBalance</a>&gt;
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_compress_auditor_transfer_amounts">compress_auditor_transfer_amounts</a>(
+    amounts: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>&gt;
+): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="confidential_balance.md#0x7_confidential_balance_CompressedConfidentialBalance">confidential_balance::CompressedConfidentialBalance</a>&gt; {
+    <b>let</b> out = <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>[];
+    <b>let</b> len = <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector_length">vector::length</a>(amounts);
+    <b>let</b> i = 0;
+    <b>while</b> (i &lt; len) {
+        <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector_push_back">vector::push_back</a>(
+            &<b>mut</b> out,
+            <a href="confidential_balance.md#0x7_confidential_balance_compress_balance">confidential_balance::compress_balance</a>(<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector_borrow">vector::borrow</a>(amounts, i))
+        );
+        i = i + 1;
+    };
+    out
 }
 </code></pre>
 

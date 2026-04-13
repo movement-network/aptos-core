@@ -1,6 +1,9 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 //
+// If `cargo test` fails with a stack overflow on this module, set `RUST_MIN_STACK=4297152` (see
+// `aptos-move/framework/README.md` and historical CI) and re-run.
+//
 // VM-level confidential-asset checks for this fork. Scenarios are written against the behavior
 // documented in `aptos_experimental::confidential_asset` (e.g. `validate_auditors`, entry
 // signatures)—not transcribed from other repositories' test code.

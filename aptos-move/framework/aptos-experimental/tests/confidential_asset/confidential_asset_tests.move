@@ -393,6 +393,38 @@ module aptos_experimental::confidential_asset_tests {
         alice = @0xa1,
         bob = @0xb0
     )]
+    fun transferred_event_matches_on_chain_balances(
+        confidential_asset: signer,
+        aptos_fx: signer,
+        fa: signer,
+        alice: signer,
+        bob: signer)
+    {
+        let token = set_up_for_confidential_asset_test(&confidential_asset, &aptos_fx, &fa, &alice, &bob, 500, 500);
+
+        let alice_addr = signer::address_of(&alice);
+        let bob_addr = signer::address_of(&bob);
+
+        let (alice_dk, alice_ek) = generate_twisted_elgamal_keypair();
+        let (_, bob_ek) = generate_twisted_elgamal_keypair();
+
+        confidential_asset::register_for_testing(&alice, token, twisted_elgamal::pubkey_to_bytes(&alice_ek));
+        confidential_asset::register_for_testing(&bob, token, twisted_elgamal::pubkey_to_bytes(&bob_ek));
+
+        confidential_asset::deposit(&alice, token, 200);
+        confidential_asset::rollover_pending_balance(&alice, token);
+
+        transfer(&alice, &alice_dk, token, bob_addr, 100, 100);
+        confidential_asset::assert_last_transferred_event_matches_state(token, alice_addr, bob_addr, 0);
+    }
+
+    #[test(
+        confidential_asset = @aptos_experimental,
+        aptos_fx = @aptos_framework,
+        fa = @0xfa,
+        alice = @0xa1,
+        bob = @0xb0
+    )]
     fun success_audit_transfer_test(
         confidential_asset: signer,
         aptos_fx: signer,
@@ -435,6 +467,58 @@ module aptos_experimental::confidential_asset_tests {
 
         assert!(confidential_balance::verify_pending_balance(&auditor_amounts[0], &auditor1_dk, 100), 1);
         assert!(confidential_balance::verify_pending_balance(&auditor_amounts[1], &auditor2_dk, 100), 1);
+    }
+
+    #[test(
+        confidential_asset = @aptos_experimental,
+        aptos_fx = @aptos_framework,
+        fa = @0xfa,
+        alice = @0xa1,
+        bob = @0xb0
+    )]
+    fun transferred_event_matches_on_chain_balances_audited(
+        confidential_asset: signer,
+        aptos_fx: signer,
+        fa: signer,
+        alice: signer,
+        bob: signer)
+    {
+        let token = set_up_for_confidential_asset_test(&confidential_asset, &aptos_fx, &fa, &alice, &bob, 500, 500);
+
+        let alice_addr = signer::address_of(&alice);
+        let bob_addr = signer::address_of(&bob);
+
+        let (alice_dk, alice_ek) = generate_twisted_elgamal_keypair();
+        let (bob_dk, bob_ek) = generate_twisted_elgamal_keypair();
+        let (auditor1_dk, auditor1_ek) = generate_twisted_elgamal_keypair();
+        let (auditor2_dk, auditor2_ek) = generate_twisted_elgamal_keypair();
+
+        confidential_asset::set_auditor(
+            &aptos_fx,
+            token,
+            twisted_elgamal::pubkey_to_bytes(&auditor1_ek));
+
+        confidential_asset::register_for_testing(&alice, token, twisted_elgamal::pubkey_to_bytes(&alice_ek));
+        confidential_asset::register_for_testing(&bob, token, twisted_elgamal::pubkey_to_bytes(&bob_ek));
+
+        confidential_asset::deposit(&alice, token, 200);
+        confidential_asset::rollover_pending_balance(&alice, token);
+
+        let auditor_amounts = audit_transfer(
+            &alice,
+            &alice_dk,
+            token,
+            bob_addr,
+            100,
+            100,
+            &vector[auditor1_ek, auditor2_ek]);
+
+        assert!(confidential_asset::verify_actual_balance(alice_addr, token, &alice_dk, 100), 1);
+        assert!(confidential_asset::verify_pending_balance(bob_addr, token, &bob_dk, 100), 1);
+        assert!(confidential_balance::verify_pending_balance(&auditor_amounts[0], &auditor1_dk, 100), 2);
+        assert!(confidential_balance::verify_pending_balance(&auditor_amounts[1], &auditor2_dk, 100), 3);
+
+        confidential_asset::assert_last_transferred_event_matches_state(token, alice_addr, bob_addr, 2);
     }
 
     #[test(

@@ -1,0 +1,9 @@
+{
+  "name": "bulletproofs_dst_sha3_512",
+  "length_bytes": 64,
+  "encoding": "hex",
+  "bytes_file": "bulletproofs_dst_sha3_512.hex",
+  "move_anchor": "aptos_std::aptos_hash::sha3_512(BULLETPROOFS_DST)",
+  "lean_def": "AptosFormal.Move.Programs.Confidential.bulletproofsDstSha3Bytes",
+  "lean_theorem": "AptosFormal.Move.Programs.Confidential.bulletproofsDstSha3Bytes_length"
+}

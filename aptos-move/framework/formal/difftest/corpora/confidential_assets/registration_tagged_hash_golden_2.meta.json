@@ -1,0 +1,9 @@
+{
+  "name": "registration_tagged_hash_sha3_512_golden_2",
+  "length_bytes": 64,
+  "encoding": "hex",
+  "bytes_file": "registration_tagged_hash_golden_2.hex",
+  "lean_theorem": "AptosFormal.Experimental.ConfidentialAsset.Registration.TranscriptAlignment.tagged_hash_golden2_msg_matches",
+  "difftest_harness": "0x1::difftest_confidential_proof::test_registration_tagged_hash_golden_move_second [reg_tagged_hash_golden_2] — Lean oracle index 175",
+  "description": "SHA3-512 output of tagged Fiat–Shamir hash on `expectedRegistrationFsMsg2` (same DST as golden 1)."
+}

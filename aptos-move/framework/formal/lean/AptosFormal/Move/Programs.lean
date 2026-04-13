@@ -1,4 +1,5 @@
 import AptosFormal.Move.Programs.Core
+import AptosFormal.Move.Programs.GlobalSmoke
 import AptosFormal.Move.Programs.Vector
 
 /-!
@@ -18,6 +19,7 @@ namespace AptosFormal.Move.Programs
 open AptosFormal.Move
 open AptosFormal.Move.Native
 open AptosFormal.Move.Programs.Core
+open AptosFormal.Move.Programs.GlobalSmoke
 open AptosFormal.Move.Programs.Vector
 
 /-! ## Hand-written module environment
@@ -38,6 +40,9 @@ open AptosFormal.Move.Programs.Vector
 | 18    | `vector_contains` (hand-written, self-contained) |
 | 19    | `vector_index_of` (hand-written, self-contained) |
 | 20    | `hash::sha3_256` (native) |
+| 21    | `global_exists_smoke` (`GlobalSmoke`, empty store → `false`) |
+| 22    | `global_move_exists_borrow_smoke` (`GlobalSmoke`, publish `7` → read) |
+| 23    | `global_move_signed_borrow_smoke` (`GlobalSmoke`, signer-checked publish → read) |
 -/
 
 def sha3_256NativeDesc : FuncDesc :=
@@ -58,7 +63,10 @@ def stdModuleEnv : ModuleEnv :=
       vectorReverseDesc,
       vectorContainsDesc,
       vectorIndexOfDesc,
-      sha3_256NativeDesc
+      sha3_256NativeDesc,
+      globalExistsFalseDesc,
+      globalMoveExistsBorrowDesc,
+      globalMoveSignedBorrowDesc
     ] }
 
 /-! ## Real compiler module environment
@@ -68,15 +76,22 @@ Extends `stdModuleEnv` with programs transcribed from actual
 
 | Index | Function |
 |-------|----------|
-| 0–20  | Same as `stdModuleEnv` (through `sha3_256_native`) |
-| 21    | `realReverseSlice` (compiler output) |
-| 22    | `realReverse` (compiler output, calls 21) |
-| 23    | `realContains` (compiler output) |
-| 24    | `realIndexOf` (compiler output) |
-| 25    | `testRealContains` (wrapper, calls 23) |
-| 26    | `testRealIndexOf` (wrapper, calls 24) |
-| 27    | `testRealReverse` (wrapper, calls 22) |
+| 0–22  | Same as `stdModuleEnv` through `global_move_exists_borrow_smoke` |
+| 23–33 | `realReverseSlice` … `vector::singleton` (unchanged indices vs pre–L4-gap fill) |
+| 34    | `global_move_signed_borrow_smoke` (signer-checked global smoke; Lean-only tail slot) |
 -/
+
+def vectorRemoveDesc : FuncDesc :=
+  { numParams := 2, numReturns := 2, body := .native vectorRemove }
+
+def vectorSwapRemoveDesc : FuncDesc :=
+  { numParams := 2, numReturns := 2, body := .native vectorSwapRemove }
+
+def vectorAppendDesc : FuncDesc :=
+  { numParams := 2, numReturns := 1, body := .native vectorAppend }
+
+def vectorSingletonDesc : FuncDesc :=
+  { numParams := 1, numReturns := 1, body := .native vectorSingleton }
 
 def realModuleEnv : ModuleEnv :=
   { constants := #[]
@@ -94,13 +109,20 @@ def realModuleEnv : ModuleEnv :=
       vectorContainsDesc,
       vectorIndexOfDesc,
       sha3_256NativeDesc,
+      globalExistsFalseDesc,
+      globalMoveExistsBorrowDesc,
       realReverseSliceDesc,
-      realReverseDesc 21,
+      realReverseDesc 23,
       realContainsDesc,
       realIndexOfDesc,
-      testRealContainsDesc 23,
-      testRealIndexOfDesc 24,
-      testRealReverseDesc 22
+      testRealContainsDesc 25,
+      testRealIndexOfDesc 26,
+      testRealReverseDesc 24,
+      vectorRemoveDesc,
+      vectorSwapRemoveDesc,
+      vectorAppendDesc,
+      vectorSingletonDesc,
+      globalMoveSignedBorrowDesc
     ] }
 
 end AptosFormal.Move.Programs

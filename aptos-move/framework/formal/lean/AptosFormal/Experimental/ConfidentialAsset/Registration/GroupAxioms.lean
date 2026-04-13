@@ -9,7 +9,9 @@ the `Module RistrettoScalar` laws.
 
 These are **external obligations** (§6.2 of `REGISTRATION_VERIFY_REVIEW.md`).
 Accepting them collapses all remaining oracle boundaries for
-`verify_registration_proof`'s curve arithmetic layer.
+`verify_registration_proof`'s curve arithmetic layer. The **`challenge_eq_move`** field is what
+`EndToEnd.registration_verification_iff_schnorr` uses to align Fiat–Shamir challenges with
+`TranscriptAlignment.registrationChallengeScalarMove` on goldens.
 -/
 
 import AptosFormal.Experimental.ConfidentialAsset.Registration.VerifyMath

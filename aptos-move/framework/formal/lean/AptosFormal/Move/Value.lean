@@ -10,6 +10,11 @@ Lean model of Move's bytecode-level value and type representation.
 
 namespace AptosFormal.Move
 
+/-- `ByteArray` has no built-in `Repr`; we only show length (bytecode uses small literals). -/
+instance instReprByteArray : Repr ByteArray where
+  reprPrec b prec :=
+    Repr.addAppParen ("ByteArray ⟨" ++ repr b.size ++ " bytes⟩") prec
+
 /-! ## Runtime type tags
 
 `MoveType` mirrors `SignatureToken` restricted to runtime (non-reference,
@@ -80,6 +85,60 @@ def U128.zero : U128 := ⟨0, by omega⟩
 def U256.zero : U256 := ⟨0, by omega⟩
 
 abbrev RefId := Nat
+
+/-- Aptos-style `(account, module, struct)` path for globals (L4 slice).
+
+Real `StructTag` includes generic type arguments; we omit them here. See
+`Move/README.md`. -/
+structure StructTag where
+  /-- Module owner address bytes (32-byte BCS account in production). -/
+  account : ByteArray
+  moduleName : ByteArray
+  structName : ByteArray
+  deriving DecidableEq
+
+instance : Repr StructTag where
+  reprPrec t prec :=
+    Repr.addAppParen
+      ("StructTag ⟨accountBytes := " ++ repr t.account.size ++
+        ", moduleNameBytes := " ++ repr t.moduleName.size ++
+        ", structNameBytes := " ++ repr t.structName.size ++ "⟩")
+      prec
+
+/-- Key for published module resources (`move_to` / `borrow_global` / `exists`).
+
+Lives in `Value.lean` (not `State.lean`) so `MoveInstr` can mention it without an
+import cycle (`State` imports `Instr`). See `State.MachineState.globals`.
+
+`DecidableEq` yields a lawful `BEq` instance used in list/filter proofs (e.g.
+`Move.State.lookupGlobal_registerGlobal`). -/
+structure GlobalResourceKey where
+  /-- Publish address bytes (`MoveValue.address` / account `address`). -/
+  address : ByteArray
+  /-- Fingerprint for `(module, struct)`; may duplicate information also kept in
+  `structTag` when present. -/
+  structTagHash : Nat
+  /-- Disambiguator for FA / `Object` identities (pool id, etc.); `0` if unused. -/
+  instanceNonce : Nat := 0
+  /-- Optional concrete tag bytes (still abstract vs VM constant pool / BCS). -/
+  structTag : Option StructTag := none
+  deriving DecidableEq
+
+namespace GlobalResourceKey
+
+def ofNatKey (tag : Nat) : GlobalResourceKey :=
+  { address := ByteArray.empty, structTagHash := tag, instanceNonce := 0, structTag := none }
+
+instance : Repr GlobalResourceKey where
+  reprPrec k prec :=
+    Repr.addAppParen
+      ("GlobalResourceKey ⟨addrBytes := " ++ repr k.address.size ++
+        ", structTagHash := " ++ repr k.structTagHash ++
+        ", instanceNonce := " ++ repr k.instanceNonce ++
+        ", structTag := " ++ repr k.structTag ++ "⟩")
+      prec
+
+end GlobalResourceKey
 
 inductive MoveValue where
   | bool (b : Bool)

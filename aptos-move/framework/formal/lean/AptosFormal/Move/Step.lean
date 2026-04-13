@@ -9,6 +9,8 @@ Each call to `step` consumes one instruction and produces an `ExecResult`.
 **Source:**
 - `third_party/move/move-vm/runtime/src/interpreter.rs` — `execute_code_impl`
 - `third_party/move/move-vm/runtime/src/frame.rs` — `Frame::execute_code`
+
+**Store bookkeeping:** successful **`globalMoveTo`** / **`registerGlobal`** shape lemmas for unrelated keys live in **`MachineState`** (`lookupGlobal_with_globals_of_registerGlobal_of_keys_bne`, `hasGlobal_with_globals_of_registerGlobal_of_keys_bne`).
 -/
 
 namespace AptosFormal.Move
@@ -185,42 +187,47 @@ def getRefId : MoveValue → Option RefId
 
 /-! ## Single-step evaluator
 
-`step env frame callStack stack containers` executes the instruction at
+`step env frame callStack stack ms` executes the instruction at
 `frame.code[frame.pc]` and produces an `ExecResult`. -/
 
 def step (env : ModuleEnv) (frame : Frame) (callStack : List Frame)
-    (stack : List MoveValue) (containers : ContainerStore) : ExecResult :=
+    (stack : List MoveValue) (ms : MachineState) : ExecResult :=
   if h : frame.pc < frame.code.size then
     let instr := frame.code[frame.pc]
+    let containers := ms.containers
+    let globals := ms.globals
     let advance (f : Frame) : Frame := { f with pc := f.pc + 1 }
-    let ok' (f : Frame) (cs : List Frame) (s : List MoveValue)
-        (ct : ContainerStore) :=
-      ExecResult.ok (advance f) cs s ct
+    let withCG (msb : MachineState) (ct : ContainerStore) (gl : List (GlobalResourceKey × RefId)) : MachineState :=
+      { msb with containers := ct, globals := gl }
+    let ok' (f : Frame) (cs : List Frame) (s : List MoveValue) (ms' : MachineState) :=
+      ExecResult.ok (advance f) cs s ms'
     match instr with
 
     -- Stack and locals
     | .pop => match stack with
-      | _ :: rest => ok' frame callStack rest containers
+      | _ :: rest => ok' frame callStack rest (withCG ms containers globals)
       | _ => .error
 
-    | .ldU8 val    => ok' frame callStack (.u8 val :: stack) containers
-    | .ldU16 val   => ok' frame callStack (.u16 val :: stack) containers
-    | .ldU32 val   => ok' frame callStack (.u32 val :: stack) containers
-    | .ldU64 val   => ok' frame callStack (.u64 val :: stack) containers
-    | .ldU128 val  => ok' frame callStack (.u128 val :: stack) containers
-    | .ldU256 val  => ok' frame callStack (.u256 val :: stack) containers
-    | .ldTrue      => ok' frame callStack (.bool true :: stack) containers
-    | .ldFalse     => ok' frame callStack (.bool false :: stack) containers
+    | .ldU8 val    => ok' frame callStack (.u8 val :: stack) (withCG ms containers globals)
+    | .ldU16 val   => ok' frame callStack (.u16 val :: stack) (withCG ms containers globals)
+    | .ldU32 val   => ok' frame callStack (.u32 val :: stack) (withCG ms containers globals)
+    | .ldU64 val   => ok' frame callStack (.u64 val :: stack) (withCG ms containers globals)
+    | .ldU128 val  => ok' frame callStack (.u128 val :: stack) (withCG ms containers globals)
+    | .ldU256 val  => ok' frame callStack (.u256 val :: stack) (withCG ms containers globals)
+    | .ldTrue      => ok' frame callStack (.bool true :: stack) (withCG ms containers globals)
+    | .ldFalse     => ok' frame callStack (.bool false :: stack) (withCG ms containers globals)
+    | .ldSigner addrBytes =>
+      ok' frame callStack (.signer addrBytes :: stack) (withCG ms containers globals)
 
     | .ldConst idx =>
       if h : idx < env.constants.size then
-        ok' frame callStack (env.constants[idx].value :: stack) containers
+        ok' frame callStack (env.constants[idx].value :: stack) (withCG ms containers globals)
       else .error
 
     | .copyLoc idx =>
       if h : idx < frame.locals.size then
         match frame.locals[idx] with
-        | some v => ok' frame callStack (v :: stack) containers
+        | some v => ok' frame callStack (v :: stack) (withCG ms containers globals)
         | none => .error
       else .error
 
@@ -230,7 +237,7 @@ def step (env : ModuleEnv) (frame : Frame) (callStack : List Frame)
         | some v =>
           let locals' := frame.locals.set idx none (by omega)
           let frame' := { frame with locals := locals' }
-          ok' frame' callStack (v :: stack) containers
+          ok' frame' callStack (v :: stack) (withCG ms containers globals)
         | none => .error
       else .error
 
@@ -240,7 +247,7 @@ def step (env : ModuleEnv) (frame : Frame) (callStack : List Frame)
         | v :: rest =>
           let locals' := frame.locals.set idx (some v) (by omega)
           let frame' := { frame with locals := locals' }
-          ok' frame' callStack rest containers
+          ok' frame' callStack rest (withCG ms containers globals)
         | _ => .error
       else .error
 
@@ -248,23 +255,23 @@ def step (env : ModuleEnv) (frame : Frame) (callStack : List Frame)
     | .ret =>
       match callStack with
       | caller :: restCalls =>
-        ExecResult.ok caller restCalls stack containers
-      | [] => .returned stack containers
+        ExecResult.ok caller restCalls stack (withCG ms containers globals)
+      | [] => .returned stack (withCG ms containers globals)
 
     | .brTrue offset => match stack with
       | .bool true :: rest =>
-        .ok { frame with pc := offset } callStack rest containers
-      | .bool false :: rest => ok' frame callStack rest containers
+        .ok { frame with pc := offset } callStack rest (withCG ms containers globals)
+      | .bool false :: rest => ok' frame callStack rest (withCG ms containers globals)
       | _ => .error
 
     | .brFalse offset => match stack with
       | .bool false :: rest =>
-        .ok { frame with pc := offset } callStack rest containers
-      | .bool true :: rest => ok' frame callStack rest containers
+        .ok { frame with pc := offset } callStack rest (withCG ms containers globals)
+      | .bool true :: rest => ok' frame callStack rest (withCG ms containers globals)
       | _ => .error
 
     | .branch offset =>
-      .ok { frame with pc := offset } callStack stack containers
+      .ok { frame with pc := offset } callStack stack (withCG ms containers globals)
 
     | .call funcIdx =>
       if h : funcIdx < env.functions.size then
@@ -274,7 +281,7 @@ def step (env : ModuleEnv) (frame : Frame) (callStack : List Frame)
           match fdesc.body with
           | .native impl =>
             match impl args with
-            | some results => ok' frame callStack (results ++ rest) containers
+            | some results => ok' frame callStack (results ++ rest) (withCG ms containers globals)
             | none => .error
           | .bytecode code numLocals =>
             let newLocals := args.map some ++
@@ -285,7 +292,7 @@ def step (env : ModuleEnv) (frame : Frame) (callStack : List Frame)
               locals := newLocals.toArray
             }
             let savedFrame := { frame with pc := frame.pc + 1 }
-            .ok newFrame (savedFrame :: callStack) rest containers
+            .ok newFrame (savedFrame :: callStack) rest (withCG ms containers globals)
         | none => .error
       else .error
 
@@ -293,74 +300,74 @@ def step (env : ModuleEnv) (frame : Frame) (callStack : List Frame)
       | .u64 code :: _ => .aborted code
       | _ => .error
 
-    | .nop => ok' frame callStack stack containers
+    | .nop => ok' frame callStack stack (withCG ms containers globals)
 
     -- Arithmetic
     | .add => match stack with
       | rhs :: lhs :: rest => match intAdd lhs rhs with
-        | some v => ok' frame callStack (v :: rest) containers
+        | some v => ok' frame callStack (v :: rest) (withCG ms containers globals)
         | none => .error
       | _ => .error
     | .sub => match stack with
       | rhs :: lhs :: rest => match intSub lhs rhs with
-        | some v => ok' frame callStack (v :: rest) containers
+        | some v => ok' frame callStack (v :: rest) (withCG ms containers globals)
         | none => .error
       | _ => .error
     | .mul => match stack with
       | rhs :: lhs :: rest => match intMul lhs rhs with
-        | some v => ok' frame callStack (v :: rest) containers
+        | some v => ok' frame callStack (v :: rest) (withCG ms containers globals)
         | none => .error
       | _ => .error
     | .div => match stack with
       | rhs :: lhs :: rest => match intDiv lhs rhs with
-        | some v => ok' frame callStack (v :: rest) containers
+        | some v => ok' frame callStack (v :: rest) (withCG ms containers globals)
         | none => .error
       | _ => .error
     | .mod_ => match stack with
       | rhs :: lhs :: rest => match intMod lhs rhs with
-        | some v => ok' frame callStack (v :: rest) containers
+        | some v => ok' frame callStack (v :: rest) (withCG ms containers globals)
         | none => .error
       | _ => .error
 
     -- Bitwise
     | .bitOr => match stack with
       | rhs :: lhs :: rest => match intBitOr lhs rhs with
-        | some v => ok' frame callStack (v :: rest) containers
+        | some v => ok' frame callStack (v :: rest) (withCG ms containers globals)
         | none => .error
       | _ => .error
     | .bitAnd => match stack with
       | rhs :: lhs :: rest => match intBitAnd lhs rhs with
-        | some v => ok' frame callStack (v :: rest) containers
+        | some v => ok' frame callStack (v :: rest) (withCG ms containers globals)
         | none => .error
       | _ => .error
     | .xor => match stack with
       | rhs :: lhs :: rest => match intXor lhs rhs with
-        | some v => ok' frame callStack (v :: rest) containers
+        | some v => ok' frame callStack (v :: rest) (withCG ms containers globals)
         | none => .error
       | _ => .error
     | .shl => match stack with
       | .u8 n :: lhs :: rest => match intShl lhs n with
-        | some v => ok' frame callStack (v :: rest) containers
+        | some v => ok' frame callStack (v :: rest) (withCG ms containers globals)
         | none => .error
       | _ => .error
     | .shr => match stack with
       | .u8 n :: lhs :: rest => match intShr lhs n with
-        | some v => ok' frame callStack (v :: rest) containers
+        | some v => ok' frame callStack (v :: rest) (withCG ms containers globals)
         | none => .error
       | _ => .error
 
     -- Boolean
     | .or => match stack with
       | .bool b :: .bool a :: rest =>
-        ok' frame callStack (.bool (a || b) :: rest) containers
+        ok' frame callStack (.bool (a || b) :: rest) (withCG ms containers globals)
       | _ => .error
     | .and => match stack with
       | .bool b :: .bool a :: rest =>
-        ok' frame callStack (.bool (a && b) :: rest) containers
+        ok' frame callStack (.bool (a && b) :: rest) (withCG ms containers globals)
       | _ => .error
     | .not => match stack with
       | .bool b :: rest =>
-        ok' frame callStack (.bool (!b) :: rest) containers
+        ok' frame callStack (.bool (!b) :: rest) (withCG ms containers globals)
       | _ => .error
 
     -- Comparison
@@ -374,7 +381,7 @@ def step (env : ModuleEnv) (frame : Frame) (callStack : List Frame)
         let rhs' := match rhs with
           | .immRef id | .mutRef id => (containers.read id).getD rhs
           | v => v
-        ok' frame callStack (.bool (lhs' == rhs') :: rest) containers
+        ok' frame callStack (.bool (lhs' == rhs') :: rest) (withCG ms containers globals)
       | _ => .error
     | .neq => match stack with
       | rhs :: lhs :: rest =>
@@ -384,98 +391,98 @@ def step (env : ModuleEnv) (frame : Frame) (callStack : List Frame)
         let rhs' := match rhs with
           | .immRef id | .mutRef id => (containers.read id).getD rhs
           | v => v
-        ok' frame callStack (.bool (!(lhs' == rhs')) :: rest) containers
+        ok' frame callStack (.bool (!(lhs' == rhs')) :: rest) (withCG ms containers globals)
       | _ => .error
     | .lt => match stack with
       | rhs :: lhs :: rest => match intLt lhs rhs with
-        | some b => ok' frame callStack (.bool b :: rest) containers
+        | some b => ok' frame callStack (.bool b :: rest) (withCG ms containers globals)
         | none => .error
       | _ => .error
     | .gt => match stack with
       | rhs :: lhs :: rest => match intGt lhs rhs with
-        | some b => ok' frame callStack (.bool b :: rest) containers
+        | some b => ok' frame callStack (.bool b :: rest) (withCG ms containers globals)
         | none => .error
       | _ => .error
     | .le => match stack with
       | rhs :: lhs :: rest => match intLe lhs rhs with
-        | some b => ok' frame callStack (.bool b :: rest) containers
+        | some b => ok' frame callStack (.bool b :: rest) (withCG ms containers globals)
         | none => .error
       | _ => .error
     | .ge => match stack with
       | rhs :: lhs :: rest => match intGe lhs rhs with
-        | some b => ok' frame callStack (.bool b :: rest) containers
+        | some b => ok' frame callStack (.bool b :: rest) (withCG ms containers globals)
         | none => .error
       | _ => .error
 
     -- Casting
     | .castU8 => match stack with
       | v :: rest => match castToU8 v with
-        | some v' => ok' frame callStack (v' :: rest) containers
+        | some v' => ok' frame callStack (v' :: rest) (withCG ms containers globals)
         | none => .error
       | _ => .error
     | .castU16 => match stack with
       | v :: rest => match castToU16 v with
-        | some v' => ok' frame callStack (v' :: rest) containers
+        | some v' => ok' frame callStack (v' :: rest) (withCG ms containers globals)
         | none => .error
       | _ => .error
     | .castU32 => match stack with
       | v :: rest => match castToU32 v with
-        | some v' => ok' frame callStack (v' :: rest) containers
+        | some v' => ok' frame callStack (v' :: rest) (withCG ms containers globals)
         | none => .error
       | _ => .error
     | .castU64 => match stack with
       | v :: rest => match castToU64 v with
-        | some v' => ok' frame callStack (v' :: rest) containers
+        | some v' => ok' frame callStack (v' :: rest) (withCG ms containers globals)
         | none => .error
       | _ => .error
     | .castU128 => match stack with
       | v :: rest => match castToU128 v with
-        | some v' => ok' frame callStack (v' :: rest) containers
+        | some v' => ok' frame callStack (v' :: rest) (withCG ms containers globals)
         | none => .error
       | _ => .error
     | .castU256 => match stack with
       | v :: rest => match castToU256 v with
-        | some v' => ok' frame callStack (v' :: rest) containers
+        | some v' => ok' frame callStack (v' :: rest) (withCG ms containers globals)
         | none => .error
       | _ => .error
 
     -- Struct
     | .pack _structIdx numFields => match takeN stack numFields with
       | some (fields, rest) =>
-        ok' frame callStack (.struct_ fields :: rest) containers
+        ok' frame callStack (.struct_ fields :: rest) (withCG ms containers globals)
       | none => .error
     | .unpack _structIdx numFields => match stack with
       | .struct_ fields :: rest =>
         if fields.length == numFields then
-          ok' frame callStack (fields.reverse ++ rest) containers
+          ok' frame callStack (fields.reverse ++ rest) (withCG ms containers globals)
         else .error
       | _ => .error
 
     -- Vector (value-level)
     | .vecPack elemType numElems => match takeN stack numElems with
       | some (elems, rest) =>
-        ok' frame callStack (.vector elemType elems :: rest) containers
+        ok' frame callStack (.vector elemType elems :: rest) (withCG ms containers globals)
       | none => .error
     | .vecLen _elemType => match stack with
       | .vector _ elems :: rest =>
-        ok' frame callStack (.u64 elems.length.toUInt64 :: rest) containers
+        ok' frame callStack (.u64 elems.length.toUInt64 :: rest) (withCG ms containers globals)
       | _ => .error
     | .vecPushBack _elemType => match stack with
       | val :: .vector et elems :: rest =>
-        ok' frame callStack (.vector et (elems ++ [val]) :: rest) containers
+        ok' frame callStack (.vector et (elems ++ [val]) :: rest) (withCG ms containers globals)
       | _ => .error
     | .vecPopBack _elemType => match stack with
       | .vector et elems :: rest =>
         match elems.reverse with
         | last :: init =>
           ok' frame callStack
-            (last :: .vector et init.reverse :: rest) containers
+            (last :: .vector et init.reverse :: rest) (withCG ms containers globals)
         | [] => .error
       | _ => .error
     | .vecUnpack _elemType numElems => match stack with
       | .vector _ elems :: rest =>
         if elems.length == numElems then
-          ok' frame callStack (elems.reverse ++ rest) containers
+          ok' frame callStack (elems.reverse ++ rest) (withCG ms containers globals)
         else .error
       | _ => .error
     | .vecSwap _elemType => match stack with
@@ -487,7 +494,7 @@ def step (env : ModuleEnv) (frame : Frame) (callStack : List Frame)
             let vi := elems[ia]
             let vj := elems[ja]
             let elems' := (elems.set ia vj).set ja vi
-            ok' frame callStack (.vector et elems' :: rest) containers
+            ok' frame callStack (.vector et elems' :: rest) (withCG ms containers globals)
           else .error
         else .error
       | _ => .error
@@ -500,7 +507,7 @@ def step (env : ModuleEnv) (frame : Frame) (callStack : List Frame)
           let (containers', refId) := containers.alloc v
           let locals' := frame.locals.set idx none (by omega)
           let frame' := { frame with locals := locals' }
-          ok' frame' callStack (.mutRef refId :: stack) containers'
+          ok' frame' callStack (.mutRef refId :: stack) (withCG ms containers' globals)
         | none => .error
       else .error
 
@@ -509,14 +516,14 @@ def step (env : ModuleEnv) (frame : Frame) (callStack : List Frame)
         match frame.locals[idx] with
         | some v =>
           let (containers', refId) := containers.alloc v
-          ok' frame callStack (.immRef refId :: stack) containers'
+          ok' frame callStack (.immRef refId :: stack) (withCG ms containers' globals)
         | none => .error
       else .error
 
     | .readRef => match stack with
       | ref :: rest => match getRefId ref with
         | some id => match containers.read id with
-          | some v => ok' frame callStack (v :: rest) containers
+          | some v => ok' frame callStack (v :: rest) (withCG ms containers globals)
           | none => .error
         | none => .error
       | _ => .error
@@ -524,14 +531,14 @@ def step (env : ModuleEnv) (frame : Frame) (callStack : List Frame)
     | .writeRef => match stack with
       | ref :: val :: rest => match ref with
         | .mutRef id => match containers.write id val with
-          | some containers' => ok' frame callStack rest containers'
+          | some containers' => ok' frame callStack rest (withCG ms containers' globals)
           | none => .error
         | _ => .error
       | _ => .error
 
     | .freezeRef => match stack with
       | .mutRef id :: rest =>
-        ok' frame callStack (.immRef id :: rest) containers
+        ok' frame callStack (.immRef id :: rest) (withCG ms containers globals)
       | _ => .error
 
     | .immBorrowField fieldIdx => match stack with
@@ -540,7 +547,7 @@ def step (env : ModuleEnv) (frame : Frame) (callStack : List Frame)
           | some (.struct_ fields) =>
             if h : fieldIdx < fields.length then
               let (containers', fid) := containers.alloc fields[fieldIdx]
-              ok' frame callStack (.immRef fid :: rest) containers'
+              ok' frame callStack (.immRef fid :: rest) (withCG ms containers' globals)
             else .error
           | _ => .error
         | none => .error
@@ -551,7 +558,7 @@ def step (env : ModuleEnv) (frame : Frame) (callStack : List Frame)
         | some (.struct_ fields) =>
           if h : fieldIdx < fields.length then
             let (containers', fid) := containers.alloc fields[fieldIdx]
-            ok' frame callStack (.mutRef fid :: rest) containers'
+            ok' frame callStack (.mutRef fid :: rest) (withCG ms containers' globals)
           else .error
         | _ => .error
       | _ => .error
@@ -562,7 +569,7 @@ def step (env : ModuleEnv) (frame : Frame) (callStack : List Frame)
         | some id => match containers.read id with
           | some (.vector _ elems) =>
             ok' frame callStack
-              (.u64 elems.length.toUInt64 :: rest) containers
+              (.u64 elems.length.toUInt64 :: rest) (withCG ms containers globals)
           | _ => .error
         | none => .error
       | _ => .error
@@ -574,7 +581,7 @@ def step (env : ModuleEnv) (frame : Frame) (callStack : List Frame)
             let ia := i.toNat
             if h : ia < elems.length then
               let (containers', eid) := containers.alloc elems[ia]
-              ok' frame callStack (.immRef eid :: rest) containers'
+              ok' frame callStack (.immRef eid :: rest) (withCG ms containers' globals)
             else .error
           | _ => .error
         | none => .error
@@ -586,7 +593,7 @@ def step (env : ModuleEnv) (frame : Frame) (callStack : List Frame)
           let ia := i.toNat
           if h : ia < elems.length then
             let (containers', eid) := containers.alloc elems[ia]
-            ok' frame callStack (.mutRef eid :: rest) containers'
+            ok' frame callStack (.mutRef eid :: rest) (withCG ms containers' globals)
           else .error
         | _ => .error
       | _ => .error
@@ -595,7 +602,7 @@ def step (env : ModuleEnv) (frame : Frame) (callStack : List Frame)
       | val :: .mutRef id :: rest => match containers.read id with
         | some (.vector et elems) =>
           match containers.write id (.vector et (elems ++ [val])) with
-          | some containers' => ok' frame callStack rest containers'
+          | some containers' => ok' frame callStack rest (withCG ms containers' globals)
           | none => .error
         | _ => .error
       | _ => .error
@@ -607,7 +614,7 @@ def step (env : ModuleEnv) (frame : Frame) (callStack : List Frame)
           | last :: init =>
             match containers.write id (.vector et init.reverse) with
             | some containers' =>
-              ok' frame callStack (last :: rest) containers'
+              ok' frame callStack (last :: rest) (withCG ms containers' globals)
             | none => .error
           | [] => .error
         | _ => .error
@@ -626,38 +633,80 @@ def step (env : ModuleEnv) (frame : Frame) (callStack : List Frame)
               let elems' := (elems.set ia vj).set ja vi
               match containers.write id (.vector et elems') with
               | some containers' =>
-                ok' frame callStack rest containers'
+                ok' frame callStack rest (withCG ms containers' globals)
               | none => .error
             else .error
           else .error
         | _ => .error
       | _ => .error
 
+    | .faReadBalance => match stack with
+      | .u64 owner :: .u64 metaId :: rest =>
+        let bal := MachineState.lookupFaBalance ms metaId owner
+        ok' frame callStack (.u64 bal :: rest) (withCG ms containers globals)
+      | _ => .error
+
+    | .faWriteBalance => match stack with
+      | .u64 amt :: .u64 owner :: .u64 metaId :: rest =>
+        let msFa := MachineState.setFaBalance ms metaId owner amt
+        ok' frame callStack rest (withCG msFa containers globals)
+      | _ => .error
+
+    -- Abstract global resources (`MachineState.globals`)
+    | .globalExists k =>
+      ok' frame callStack (.bool (MachineState.hasGlobal ms k) :: stack) (withCG ms containers globals)
+
+    | .globalMoveTo k => match stack with
+      | v :: rest =>
+        if MachineState.hasGlobal ms k then .error
+        else
+          let (containers', rid) := containers.alloc v
+          let gl' := (globals.filter fun p => (p.1 == k) == false) ++ [(k, rid)]
+          ok' frame callStack rest (withCG ms containers' gl')
+
+      | _ => .error
+
+    | .globalMoveToSigned k => match stack with
+      | v :: .signer sig :: rest =>
+        if sig != k.address then .error
+        else if MachineState.hasGlobal ms k then .error
+        else
+          let (containers', rid) := containers.alloc v
+          let gl' := (globals.filter fun p => (p.1 == k) == false) ++ [(k, rid)]
+          ok' frame callStack rest (withCG ms containers' gl')
+
+      | _ => .error
+
+    | .mutBorrowGlobal k =>
+      match MachineState.lookupGlobal ms k with
+      | some rid => ok' frame callStack (.mutRef rid :: stack) (withCG ms containers globals)
+      | none => .error
+
   else .error
 
 /-! ## Multi-step evaluation -/
 
 def run (env : ModuleEnv) (frame : Frame) (callStack : List Frame)
-    (stack : List MoveValue) (containers : ContainerStore)
+    (stack : List MoveValue) (ms : MachineState)
     (fuel : Nat) : ExecResult :=
   match fuel with
   | 0 => .error
   | fuel' + 1 =>
-    match step env frame callStack stack containers with
-    | .ok frame' cs' stack' containers' =>
-      run env frame' cs' stack' containers' fuel'
+    match step env frame callStack stack ms with
+    | .ok frame' cs' stack' ms' =>
+      run env frame' cs' stack' ms' fuel'
     | result => result
 
 /-! ## Top-level entry point -/
 
 def eval (env : ModuleEnv) (funcIdx : FuncIndex) (args : List MoveValue)
-    (fuel : Nat) : ExecResult :=
+    (fuel : Nat) (initMs : MachineState := MachineState.empty) : ExecResult :=
   if h : funcIdx < env.functions.size then
     let fdesc := env.functions[funcIdx]
     match fdesc.body with
     | .native impl =>
       match impl args with
-      | some results => .returned results ContainerStore.empty
+      | some results => .returned results MachineState.empty
       | none => .error
     | .bytecode code numLocals =>
       let initLocals := args.map some ++
@@ -667,7 +716,125 @@ def eval (env : ModuleEnv) (funcIdx : FuncIndex) (args : List MoveValue)
         pc := 0
         locals := initLocals.toArray
       }
-      run env frame [] [] ContainerStore.empty fuel
+      run env frame [] [] initMs fuel
   else .error
+
+/-! ## Minimal ldU64 + abort bytecode (merged CA txn-abort witness stubs)
+
+Used by `Programs.Confidential` indices 42, 176, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, and 193 (`caE2eAbort65542Desc`, `caE2eAbort196617Desc`, `caE2eAbort65553Desc`, `caE2eAbort196615Desc`, `caE2eAbort196619Desc`, `caE2eAbort196616Desc`, `caE2eAbort524290Desc`, `caE2eAbort196618Desc`, `caE2eAbort196620Desc`, `caE2eAbort65549Desc`, `caE2eAbort196622Desc`, `caE2eAbort196623Desc`, `caE2eAbort393219Desc`, `caE2eAbort196621Desc`); index **192** is the shared **`393219`** witness for several merged e2e rows (**`freeze_token`** / **`unfreeze_token`** / **`rollover_pending_balance`** / **`rollover_pending_balance_and_freeze`** without a published store). **`Refinement.Confidential`** + **`Tests.Confidential`** also pin **`evalCA 42`** (**`ca_e2e_abort_65542_*`**, **`evalCA_42_eq_eval`**).
+-/
+
+/-- One function, no locals: push abort code then abort. -/
+def bytecodeLdU64AbortModuleEnv (code : UInt64) : ModuleEnv :=
+  let fd : FuncDesc := {
+    numParams := 0
+    numReturns := 0
+    body := .bytecode #[.ldU64 code, .abort_] 0
+  }
+  { functions := #[fd], constants := #[] }
+
+theorem eval_bytecodeLdU64AbortModuleEnv_aborted_65542 :
+    eval (bytecodeLdU64AbortModuleEnv (UInt64.ofNat 65542)) 0 [] 20 ==
+      .aborted (UInt64.ofNat 65542) := by
+  native_decide
+
+theorem eval_bytecodeLdU64AbortModuleEnv_aborted_65553 :
+    eval (bytecodeLdU64AbortModuleEnv (UInt64.ofNat 65553)) 0 [] 20 ==
+      .aborted (UInt64.ofNat 65553) := by
+  native_decide
+
+theorem eval_bytecodeLdU64AbortModuleEnv_aborted_196615 :
+    eval (bytecodeLdU64AbortModuleEnv (UInt64.ofNat 196615)) 0 [] 20 ==
+      .aborted (UInt64.ofNat 196615) := by
+  native_decide
+
+theorem eval_bytecodeLdU64AbortModuleEnv_aborted_196619 :
+    eval (bytecodeLdU64AbortModuleEnv (UInt64.ofNat 196619)) 0 [] 20 ==
+      .aborted (UInt64.ofNat 196619) := by
+  native_decide
+
+theorem eval_bytecodeLdU64AbortModuleEnv_aborted_196616 :
+    eval (bytecodeLdU64AbortModuleEnv (UInt64.ofNat 196616)) 0 [] 20 ==
+      .aborted (UInt64.ofNat 196616) := by
+  native_decide
+
+theorem eval_bytecodeLdU64AbortModuleEnv_aborted_196617 :
+    eval (bytecodeLdU64AbortModuleEnv (UInt64.ofNat 196617)) 0 [] 20 ==
+      .aborted (UInt64.ofNat 196617) := by
+  native_decide
+
+theorem eval_bytecodeLdU64AbortModuleEnv_aborted_524290 :
+    eval (bytecodeLdU64AbortModuleEnv (UInt64.ofNat 524290)) 0 [] 20 ==
+      .aborted (UInt64.ofNat 524290) := by
+  native_decide
+
+theorem eval_bytecodeLdU64AbortModuleEnv_aborted_196618 :
+    eval (bytecodeLdU64AbortModuleEnv (UInt64.ofNat 196618)) 0 [] 20 ==
+      .aborted (UInt64.ofNat 196618) := by
+  native_decide
+
+theorem eval_bytecodeLdU64AbortModuleEnv_aborted_196620 :
+    eval (bytecodeLdU64AbortModuleEnv (UInt64.ofNat 196620)) 0 [] 20 ==
+      .aborted (UInt64.ofNat 196620) := by
+  native_decide
+
+theorem eval_bytecodeLdU64AbortModuleEnv_aborted_65549 :
+    eval (bytecodeLdU64AbortModuleEnv (UInt64.ofNat 65549)) 0 [] 20 ==
+      .aborted (UInt64.ofNat 65549) := by
+  native_decide
+
+theorem eval_bytecodeLdU64AbortModuleEnv_aborted_196622 :
+    eval (bytecodeLdU64AbortModuleEnv (UInt64.ofNat 196622)) 0 [] 20 ==
+      .aborted (UInt64.ofNat 196622) := by
+  native_decide
+
+theorem eval_bytecodeLdU64AbortModuleEnv_aborted_196623 :
+    eval (bytecodeLdU64AbortModuleEnv (UInt64.ofNat 196623)) 0 [] 20 ==
+      .aborted (UInt64.ofNat 196623) := by
+  native_decide
+
+theorem eval_bytecodeLdU64AbortModuleEnv_aborted_393219 :
+    eval (bytecodeLdU64AbortModuleEnv (UInt64.ofNat 393219)) 0 [] 20 ==
+      .aborted (UInt64.ofNat 393219) := by
+  native_decide
+
+theorem eval_bytecodeLdU64AbortModuleEnv_aborted_196621 :
+    eval (bytecodeLdU64AbortModuleEnv (UInt64.ofNat 196621)) 0 [] 20 ==
+      .aborted (UInt64.ofNat 196621) := by
+  native_decide
+
+/-- One function: `ldU64 n` then `ret` — trivial `u64` return bytecode (CA pool witness stubs). -/
+def bytecodeLdU64RetModuleEnv (n : UInt64) : ModuleEnv :=
+  let fd : FuncDesc := {
+    numParams := 0
+    numReturns := 1
+    body := .bytecode #[.ldU64 n, .ret] 0
+  }
+  { functions := #[fd], constants := #[] }
+
+theorem eval_bytecodeLdU64RetModuleEnv_u64_8881 :
+    eval (bytecodeLdU64RetModuleEnv (UInt64.ofNat 8881)) 0 [] 20 ==
+      .returned [.u64 (UInt64.ofNat 8881)] MachineState.empty := by
+  native_decide
+
+theorem eval_bytecodeLdU64RetModuleEnv_u64_10003 :
+    eval (bytecodeLdU64RetModuleEnv (UInt64.ofNat 10003)) 0 [] 20 ==
+      .returned [.u64 (UInt64.ofNat 10003)] MachineState.empty := by
+  native_decide
+
+theorem eval_bytecodeLdU64RetModuleEnv_u64_8901 :
+    eval (bytecodeLdU64RetModuleEnv (UInt64.ofNat 8901)) 0 [] 20 ==
+      .returned [.u64 (UInt64.ofNat 8901)] MachineState.empty := by
+  native_decide
+
+theorem eval_bytecodeLdU64RetModuleEnv_u64_6601 :
+    eval (bytecodeLdU64RetModuleEnv (UInt64.ofNat 6601)) 0 [] 20 ==
+      .returned [.u64 (UInt64.ofNat 6601)] MachineState.empty := by
+  native_decide
+
+theorem eval_bytecodeLdU64RetModuleEnv_u64_7111 :
+    eval (bytecodeLdU64RetModuleEnv (UInt64.ofNat 7111)) 0 [] 20 ==
+      .returned [.u64 (UInt64.ofNat 7111)] MachineState.empty := by
+  native_decide
 
 end AptosFormal.Move

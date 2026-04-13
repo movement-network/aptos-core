@@ -4,11 +4,17 @@ Copyright (c) Move Industries.
 Operational `Option Unit` runner ↔ `verifyRegistrationProofProp` (first machine-checked control-flow link).
 
 Models `assert!` / `option` success vs abort at the same branching structure as the spec.
+
+See **`execVerifyRegistrationProof_eq_some_iff_pointEqBool_of_parsed`** for the post-parse branch: success
+iff `pointEqBool` on the Schnorr LHS vs decompressed `R`, and
+**`execVerifyRegistrationProof_eq_none_of_pointEqBool_false_of_parsed`** for the matching **`none`** branch.
 -/
 
 import AptosFormal.Experimental.ConfidentialAsset.Registration.VerifyMath
+import AptosFormal.AptosStd.Crypto.Ristretto255
 
 open AptosFormal.Experimental.ConfidentialAsset.Registration.Formal
+open AptosFormal.AptosStd.Crypto.Ristretto255
 open RegistrationVerify
 
 namespace AptosFormal.Experimental.ConfidentialAsset.Registration.Operational
@@ -85,5 +91,44 @@ theorem execVerifyRegistrationProof_iff (C : CryptoOracleWithBoolEq Point)
     simp [hs, hr, hek, hR, hpk, he] at hp
     have hb : C.pointEqBool lhs rhs = true := (C.pointEq_bool_iff lhs rhs).2 hp
     simp [hR, hpk, hb, lhs]
+
+/-! ## Branch decomposition (challenge + curve check) -/
+
+/--
+When parsing succeeds through the challenge step, `execVerifyRegistrationProof` returns `some ()`
+iff the native boolean equality reports **`true`** on the Schnorr LHS vs decompressed **`R`**.
+-/
+theorem execVerifyRegistrationProof_eq_some_iff_pointEqBool_of_parsed
+    (C : CryptoOracleWithBoolEq Point) (i : RegistrationFiatShamirInputs) (responseBytes : ByteArray)
+    (s : RistrettoScalar) (rComm ekComm : CompressedRistretto32) (rhs ek : Point) (e : RistrettoScalar)
+    (hs : C.scalarFromBytes responseBytes = some s)
+    (hr : compressed32? i.commitmentRBytes = some rComm)
+    (hek : compressed32? i.ekBytes = some ekComm)
+    (hR : C.pointDecompress rComm = some rhs)
+    (hpk : C.pubkeyToPoint ekComm = some ek)
+    (he : C.challengeScalarFromMsg (registrationFiatShamirMsg i) = some e) :
+    execVerifyRegistrationProof C i responseBytes = some () ↔
+      C.pointEqBool (C.pointAdd (C.pointMul C.hashToPointBase s) (C.pointMul ek e)) rhs = true := by
+  unfold execVerifyRegistrationProof
+  simp [hs, hr, hek, hR, hpk, he]
+
+/--
+Same parsed prefix as **`execVerifyRegistrationProof_eq_some_iff_pointEqBool_of_parsed`**: when the native
+point equality reports **`false`**, the runner returns **`none`** (rejected proof).
+-/
+theorem execVerifyRegistrationProof_eq_none_of_pointEqBool_false_of_parsed
+    (C : CryptoOracleWithBoolEq Point) (i : RegistrationFiatShamirInputs) (responseBytes : ByteArray)
+    (s : RistrettoScalar) (rComm ekComm : CompressedRistretto32) (rhs ek : Point) (e : RistrettoScalar)
+    (hs : C.scalarFromBytes responseBytes = some s)
+    (hr : compressed32? i.commitmentRBytes = some rComm)
+    (hek : compressed32? i.ekBytes = some ekComm)
+    (hR : C.pointDecompress rComm = some rhs)
+    (hpk : C.pubkeyToPoint ekComm = some ek)
+    (he : C.challengeScalarFromMsg (registrationFiatShamirMsg i) = some e)
+    (hfalse :
+      C.pointEqBool (C.pointAdd (C.pointMul C.hashToPointBase s) (C.pointMul ek e)) rhs = false) :
+    execVerifyRegistrationProof C i responseBytes = none := by
+  unfold execVerifyRegistrationProof
+  simp [hs, hr, hek, hR, hpk, he, hfalse]
 
 end AptosFormal.Experimental.ConfidentialAsset.Registration.Operational

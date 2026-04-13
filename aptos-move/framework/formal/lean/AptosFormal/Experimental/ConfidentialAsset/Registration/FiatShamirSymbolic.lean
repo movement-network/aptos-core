@@ -15,7 +15,12 @@ under a symbolic (abstract function) hash model.
 | `fiatShamir_forking_explicit` | Explicit extraction formula `dk = (s₁−s₂)⁻¹(e₂−e₁)` |
 | `fiatShamir_challenge_binding` | Fixed oracle → no forking possible |
 | `fiatShamir_completeness` | Honest NIZK prover always passes |
+| `fiatShamirProve_fst_eq` / `fiatShamirProve_snd_eq` | Definitional projections of **`fiatShamirProve`** |
+| `fiatShamir_completeness_on_fiatShamirProve` | Same, as **`fiatShamirVerify`** on **`fiatShamirProve`** output |
 | `fiatShamir_nizk_simulate_accepts` | Simulator produces valid proofs without witness |
+| `programmedOracle_apply` | `programmedOracle e fsMsg = e` (definitional; used in `fiatShamir_nizk_simulate_accepts`) |
+| `fiatShamirVerify_iff_registrationSchnorrEq_module` | **`fiatShamirVerify`** ↔ **`registrationSchnorrEq`** with module **`smul` / `add`** |
+| `registrationSchnorrEq_of_fiatShamirProve_output` | Honest **`fiatShamirProve`** output satisfies **`registrationSchnorrEq`** at **`taggedHash fsMsg`** |
 
 ## What this captures
 
@@ -48,8 +53,10 @@ bridge: every `verifyRegistrationProofProp` instance that passes also satisfies
 -/
 
 import AptosFormal.Experimental.ConfidentialAsset.Registration.CryptoSecurity
+import AptosFormal.Experimental.ConfidentialAsset.Registration.Formal
 
 open AptosFormal.Experimental.ConfidentialAsset.Registration.CryptoSecurity
+open AptosFormal.Experimental.ConfidentialAsset.Registration.Formal
 open AptosFormal.AptosStd.Crypto.Ristretto255
 
 namespace AptosFormal.Experimental.ConfidentialAsset.Registration.FiatShamirSymbolic
@@ -72,9 +79,43 @@ def fiatShamirProve {Point : Type} [AddCommGroup Point] [Module RistrettoScalar 
     (fsMsg : ByteArray) : Point × RistrettoScalar :=
   (k • H, k - taggedHash fsMsg * dk_inv)
 
+theorem fiatShamirProve_fst_eq {Point : Type} [AddCommGroup Point] [Module RistrettoScalar Point]
+    (taggedHash : ByteArray → RistrettoScalar) (H : Point) (dk_inv k : RistrettoScalar) (fsMsg : ByteArray) :
+    (fiatShamirProve taggedHash H dk_inv k fsMsg).1 = k • H :=
+  rfl
+
+theorem fiatShamirProve_snd_eq {Point : Type} [AddCommGroup Point] [Module RistrettoScalar Point]
+    (taggedHash : ByteArray → RistrettoScalar) (H : Point) (dk_inv k : RistrettoScalar) (fsMsg : ByteArray) :
+    (fiatShamirProve taggedHash H dk_inv k fsMsg).2 = k - taggedHash fsMsg * dk_inv :=
+  rfl
+
+/-! ## Bridge to `Registration.Formal` (Schnorr equation shape) -/
+
+section FormalBridge
+
+variable {Point : Type} [AddCommGroup Point] [Module RistrettoScalar Point]
+
+/--
+**`fiatShamirVerify`** is definitionally the same predicate as **`registrationSchnorrEq`** when scalar
+action is **`•`** and addition is **`+`**, with challenge **`taggedHash fsMsg`** (the registration
+spec’s abstract Schnorr shape from `Formal.lean`).
+-/
+theorem fiatShamirVerify_iff_registrationSchnorrEq_module
+    (taggedHash : ByteArray → RistrettoScalar) (H ek R : Point) (s : RistrettoScalar) (fsMsg : ByteArray) :
+    fiatShamirVerify taggedHash H ek R s fsMsg ↔
+      registrationSchnorrEq (fun s' p => s' • p) (· + ·) H ek R s (taggedHash fsMsg) := by
+  simp [fiatShamirVerify, registrationSchnorrEq]
+
+end FormalBridge
+
 /-- Programmed oracle returning a fixed challenge (used by the simulator). -/
 def programmedOracle (e : RistrettoScalar) : ByteArray → RistrettoScalar :=
   fun _ => e
+
+@[simp]
+theorem programmedOracle_apply (e : RistrettoScalar) (fsMsg : ByteArray) :
+    programmedOracle e fsMsg = e :=
+  rfl
 
 /-! ## §6.4c-i  Forking reduction (algebraic core of ROM proof [PS00]) -/
 
@@ -168,6 +209,33 @@ theorem fiatShamir_completeness
   simp only [fiatShamirVerify]
   rw [hek, sub_smul, ← smul_smul (taggedHash fsMsg) dk_inv H, sub_add_cancel]
 
+/-- Same as **`fiatShamir_completeness`**, packaged as verification on **`fiatShamirProve`**’s pair. -/
+theorem fiatShamir_completeness_on_fiatShamirProve
+    (taggedHash : ByteArray → RistrettoScalar)
+    (H : Point) (dk_inv k : RistrettoScalar)
+    (ek : Point) (hek : ek = dk_inv • H)
+    (fsMsg : ByteArray) :
+    fiatShamirVerify taggedHash H ek (fiatShamirProve taggedHash H dk_inv k fsMsg).1
+      (fiatShamirProve taggedHash H dk_inv k fsMsg).2 fsMsg := by
+  rw [fiatShamirProve_fst_eq taggedHash H dk_inv k fsMsg,
+    fiatShamirProve_snd_eq taggedHash H dk_inv k fsMsg]
+  exact fiatShamir_completeness taggedHash H dk_inv k ek hek fsMsg
+
+/--
+The honest **`fiatShamirProve`** transcript satisfies the abstract **`registrationSchnorrEq`** from
+`Formal.lean` (same content as **`fiatShamir_completeness_on_fiatShamirProve`** via **`fiatShamirVerify_iff_*`**).
+-/
+theorem registrationSchnorrEq_of_fiatShamirProve_output
+    (taggedHash : ByteArray → RistrettoScalar)
+    (H : Point) (dk_inv k : RistrettoScalar)
+    (ek : Point) (hek : ek = dk_inv • H)
+    (fsMsg : ByteArray) :
+    registrationSchnorrEq (fun s' p => s' • p) (· + ·) H ek (k • H)
+      (fiatShamirProve taggedHash H dk_inv k fsMsg).2 (taggedHash fsMsg) :=
+  (fiatShamirVerify_iff_registrationSchnorrEq_module taggedHash H ek (k • H)
+        (fiatShamirProve taggedHash H dk_inv k fsMsg).2 fsMsg).mp
+    (fiatShamir_completeness_on_fiatShamirProve taggedHash H dk_inv k ek hek fsMsg)
+
 end Completeness
 
 /-! ## §6.4c-iv  NIZK zero-knowledge (simulation with programmed oracle) -/
@@ -187,7 +255,7 @@ when the simulator can program the random oracle [PS00, §4].
 theorem fiatShamir_nizk_simulate_accepts
     (H ek : Point) (e s : RistrettoScalar) (fsMsg : ByteArray) :
     fiatShamirVerify (programmedOracle e) H ek (s • H + e • ek) s fsMsg := by
-  simp [fiatShamirVerify, programmedOracle]
+  simp [fiatShamirVerify, programmedOracle_apply]
 
 end ZeroKnowledge
 

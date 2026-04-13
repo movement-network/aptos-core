@@ -4,15 +4,20 @@ Copyright (c) Move Industries.
 Machine-checked **completeness** for registration Schnorr verification
 (`confidential_proof.move` — honest prover vs verifier).
 
+**HVZK (simulator always accepts)** is in **`CryptoSecurity`** (`registrationSchnorr_simulate_accepts`,
+`registrationSchnorr_simulate_lhs_and_schnorr_eq_bundle`).
+
 Imports **`AptosFormal.AptosStd.Crypto.Ristretto255`** for scalars and **`Registration.Formal`** for the abstract spec.
 -/
 
 import AptosFormal.Experimental.ConfidentialAsset.Registration.Formal
+import AptosFormal.Experimental.ConfidentialAsset.Registration.FiatShamirSymbolic
 import AptosFormal.Experimental.ConfidentialAsset.Registration.VerifyMath
 import AptosFormal.AptosStd.Crypto.Ristretto255
 import Mathlib.Algebra.Module.Basic
 
 open AptosFormal.Experimental.ConfidentialAsset.Registration.Formal
+open AptosFormal.Experimental.ConfidentialAsset.Registration.FiatShamirSymbolic
 open AptosFormal.AptosStd.Crypto.Ristretto255
 
 namespace AptosFormal.Experimental.ConfidentialAsset.Registration.SchnorrCompleteness
@@ -47,6 +52,27 @@ theorem registrationVerifySpec_completeness (taggedHash : ByteArray → Ristrett
     simp [registrationChallenge_eq, he]
   rw [hch]
   exact registrationSchnorr_completeness H ek R k e dk_inv s hR hek hs
+
+/--
+**`registrationVerifySpec`** on the honest **`fiatShamirProve`** transcript when the prover’s FS message
+equals **`registrationFiatShamirMsg i`** (the verifier’s transcript). Packages
+**`registrationSchnorrEq_of_fiatShamirProve_output`** via **`registrationVerifySpec_eq`**.
+-/
+theorem registrationVerifySpec_of_fiatShamirProve_when_fsMsg_eq_registrationFiatShamirMsg
+    (taggedHash : ByteArray → RistrettoScalar)
+    (i : RegistrationFiatShamirInputs)
+    (H : Point) (dk_inv k : RistrettoScalar) (ek : Point) (fsMsg : ByteArray)
+    (hek : ek = dk_inv • H)
+    (hmsg : fsMsg = registrationFiatShamirMsg i) :
+    registrationVerifySpec movePointMul (· + ·) taggedHash i H ek (k • H)
+      (fiatShamirProve taggedHash H dk_inv k fsMsg).2 := by
+  have hschnorr :=
+    registrationSchnorrEq_of_fiatShamirProve_output taggedHash H dk_inv k ek hek fsMsg
+  have h' :
+      registrationSchnorrEq movePointMul (· + ·) H ek (k • H)
+        (fiatShamirProve taggedHash H dk_inv k fsMsg).2 (taggedHash (registrationFiatShamirMsg i)) := by
+    simpa [movePointMul, hmsg] using hschnorr
+  exact (registrationVerifySpec_eq movePointMul (· + ·) taggedHash i H ek (k • H) _).mpr h'
 
 end ModuleAction
 

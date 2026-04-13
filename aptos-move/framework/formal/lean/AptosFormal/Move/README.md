@@ -6,7 +6,8 @@ spec-level definitions in `AptosFormal.Std.*` and `AptosFormal.Experimental.*`.
 **Build and run:** from `aptos-move/framework/formal/lean`, `lake build` (see
 [`../../README.md`](../../README.md)). **Differential tests** (real Move VM vs Lean
 evaluator): [`../../../difftest/README.md`](../../../difftest/README.md), or
-`./aptos-move/framework/formal/difftest.sh` from the repo root.
+`./aptos-move/framework/formal/difftest.sh` from the repo root. **Stub / bytecode /
+globals policy** for the Lean column: [`../../../difftest/STUB_POLICY.md`](../../../difftest/STUB_POLICY.md).
 
 ## Directory relationships
 
@@ -31,14 +32,15 @@ AptosFormal/
 │       └── TranscriptAlignment
 │
 ├── Move/                 execution model: how Move bytecode runs  ← THIS DIRECTORY
-│   ├── Value.lean            MoveValue, MoveType, RefId
+│   ├── Value.lean            MoveValue, MoveType, RefId, GlobalResourceKey
 │   ├── Instr.lean            MoveInstr bytecode instruction set
-│   ├── State.lean            Frame, ContainerStore, ExecResult, ModuleEnv
+│   ├── State.lean            Frame, ContainerStore, MachineState, ExecResult, ModuleEnv
 │   ├── Step.lean             small-step evaluator (step/run/eval)
 │   ├── Native.lean           native function bindings to Std.* specs
 │   ├── Programs.lean         module env definitions (imports Core + Vector)
 │   └── Programs/
 │       ├── Core.lean         basic programs (add, max, bcs, refs)
+│       ├── GlobalSmoke.lean  minimal `globalExists` / `globalMoveTo` / `mutBorrowGlobal` smoke
 │       └── Vector.lean       vector programs (hand-written + real compiler)
 │
 ├── Refinement/           ∀-quantified proofs connecting execution to specs
@@ -93,7 +95,11 @@ for the runtime value types.
 ### Phase 2: Instruction set
 
 Define `MoveInstr` — a subset of Move bytecode instructions, starting with
-pure operations (no resources, no global storage):
+pure operations. **Abstract** global ops (`globalExists` / `globalMoveTo` /
+`globalMoveToSigned` / `mutBorrowGlobal`) model publishing keyed by
+`GlobalResourceKey`; optional `StructTag` bytes live on the key (see `Value.lean`).
+Full Aptos BCS / generic `StructTag`, **`Object<Metadata>`** layout, and VM-accurate
+`BorrowGlobal` from metadata remain future work (see L4 gap below).
 
 - Integer arithmetic: `Add`, `Sub`, `Mul`, `Div`, `Mod`
 - Comparisons: `Lt`, `Gt`, `Le`, `Ge`, `Eq`, `Neq`
@@ -120,8 +126,13 @@ structure Frame where
 structure ContainerStore where
   store : Array MoveValue
 
+structure MachineState where
+  containers : ContainerStore
+  globals : List (GlobalResourceKey × RefId)
+  faBalances : List ((UInt64 × UInt64) × UInt64) := []
+
 def step (env : ModuleEnv) (frame : Frame) (callStack : List Frame)
-    (stack : List MoveValue) (containers : ContainerStore) : ExecResult := ...
+    (stack : List MoveValue) (ms : MachineState) : ExecResult := ...
 ```
 
 `ModuleEnv` bundles the constant pool and function table. Native functions
@@ -130,6 +141,28 @@ allowing crypto operations (SHA3, Ristretto) to be plugged in from `Std.*`
 definitions without modeling Rust internals. `ContainerStore` is the
 pure-functional model of the VM's `Container` sharing mechanism
 (`Rc<RefCell<Vec<ValueImpl>>>`).
+
+**`MachineState`:** pairs that heap with `globals`, a list mapping
+`GlobalResourceKey` (publish `address` bytes + `structTagHash` + optional
+`instanceNonce` + optional `StructTag` path bytes) to a `RefId` into the same store.
+Additionally **`faBalances`** is a difftest-only stub map `(metadataId, ownerKey) ↦ u64`
+(see `faReadBalance` / `faWriteBalance` in `Instr.lean` and Phase L5 in
+[`../../../difftest/STUB_POLICY.md`](../../../difftest/STUB_POLICY.md)).
+`MachineState.ofContainers` / coercion lifts a locals-only heap (`globals := []`,
+`faBalances := []`).
+Abstract instructions `globalExists`, `globalMoveTo`, `globalMoveToSigned`,
+`mutBorrowGlobal`, and `ldSigner` live in `Instr.lean` (not the real
+`file_format.rs` global opcodes yet). Smoke bytecode: `Programs/GlobalSmoke.lean`;
+kernel-checked equalities: `Tests/GlobalSmoke.lean`.
+
+**L4 gap (remaining):** we still do **not** model full Aptos **`StructTag`** BCS
+(including generic type arguments), real **`Object<Metadata>`** /
+**`primary_fungible_store`** layout, or VM-accurate **`BorrowGlobal`** keyed off
+compiled metadata. `globalMoveToSigned` checks signer address bytes against
+`GlobalResourceKey.address` only (no module publish rules). The `faBalances` stub
+is for **narrow** oracle alignment only; extending keys + `step` + difftest
+inventory rows remains the path for fuller FA. See
+[`../../../difftest/STUB_POLICY.md`](../../../difftest/STUB_POLICY.md).
 
 Reference: `third_party/move/move-vm/runtime/src/interpreter.rs` for the
 execution loop.
@@ -266,7 +299,8 @@ functions that compose multiple primitives:
 - `coin::transfer`, `coin::merge`, `coin::extract`
 - `account::create_account`, `account::exists_at`
 
-These exercise the full model — references, structs, global storage, native
+These exercise the full model — references, structs, **abstract** global
+publishing (`MachineState` / `GlobalResourceKey`; not yet FA-accurate), native
 calls, and control flow — on the functions developers interact with most.
 
 ## Bytecode reference

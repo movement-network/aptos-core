@@ -21,8 +21,11 @@ structure TestCase where
   function : String
   args : List MoveValue
   expected : ExpectedResult
+  /-- When true, Lean skips evaluation (`skip_lean` in JSON). -/
+  skipLean : Bool := false
 
 structure TestSuite where
+  schemaVersion : Option Nat
   generator : String
   module_ : String
   testCases : List TestCase
@@ -100,14 +103,27 @@ private def parseTestCase (obj : Json) : Except String TestCase := do
   let args ← argsArr.toList.mapM parseTypedValue
   let resultObj ← obj.getObjVal? "result"
   let expected ← parseResult resultObj
-  return { function, args, expected }
+  let skipLean :=
+    match (obj.getObjVal? "skip_lean").toOption with
+    | none => false
+    | some j =>
+      match j.getBool? with
+      | Except.ok b => b
+      | Except.error _ => false
+  return { function, args, expected, skipLean }
 
 def parseTestSuite (jsonStr : String) : Except String TestSuite := do
   let json ← Json.parse jsonStr
+  let schemaVersion ← match (json.getObjVal? "schema_version").toOption with
+    | Option.none => pure (Option.none : Option Nat)
+    | Option.some j =>
+      match j.getNat? with
+      | Except.ok n => pure (Option.some n)
+      | Except.error _ => pure (Option.none : Option Nat)
   let generator ← json.getObjValAs? String "generator"
   let module_ ← json.getObjValAs? String "module"
   let casesArr ← json.getObjValAs? (Array Json) "test_cases"
   let cases ← casesArr.toList.mapM parseTestCase
-  return { generator, module_, testCases := cases }
+  return { schemaVersion, generator, module_, testCases := cases : TestSuite }
 
 end AptosFormal.DiffTest

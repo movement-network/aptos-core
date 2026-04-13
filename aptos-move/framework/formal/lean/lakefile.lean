@@ -46,11 +46,17 @@ lean_lib «AptosFormal» where
     `AptosFormal.Move.Step,
     `AptosFormal.Move.Native,
     `AptosFormal.Move.Programs,
+    `AptosFormal.Move.Programs.RegistrationDifftestOracle,
+    `AptosFormal.Move.Programs.Confidential,
     `AptosFormal.Refinement.Core,
     `AptosFormal.Refinement.Vector,
+    `AptosFormal.Refinement.Confidential,
     `AptosFormal.Tests.Defs,
     `AptosFormal.Tests.Vector,
+    `AptosFormal.Tests.GlobalSmoke,
+    `AptosFormal.Tests.Confidential,
     `AptosFormal.DiffTest.JsonParser,
+    `AptosFormal.DiffTest.RunnerFuncMappingAux,
     `AptosFormal.DiffTest.Runner
   ]
 

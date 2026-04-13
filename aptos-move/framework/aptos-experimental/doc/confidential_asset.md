@@ -67,6 +67,8 @@ It enables private transfers by obfuscating token amounts while keeping sender a
 -  [Function `deserialize_auditor_eks`](#0x7_confidential_asset_deserialize_auditor_eks)
 -  [Function `deserialize_auditor_amounts`](#0x7_confidential_asset_deserialize_auditor_amounts)
 -  [Function `ensure_sufficient_fa`](#0x7_confidential_asset_ensure_sufficient_fa)
+-  [Function `serialize_auditor_eks`](#0x7_confidential_asset_serialize_auditor_eks)
+-  [Function `serialize_auditor_amounts`](#0x7_confidential_asset_serialize_auditor_amounts)
 
 
 <pre><code><b>use</b> <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/bcs.md#0x1_bcs">0x1::bcs</a>;
@@ -852,7 +854,7 @@ The function hides the transferred amount while keeping the sender and recipient
 The sender encrypts the transferred amount with the recipient's encryption key and the function updates the
 recipient's confidential balance homomorphically.
 Additionally, the sender encrypts the transferred amount with the auditors' EKs, allowing auditors to decrypt
-the it on their side.
+it on their side.
 The sender provides their new normalized confidential balance, encrypted with fresh randomness to preserve privacy.
 Warning: If the auditor feature is enabled, the sender must include the auditor as the first element in the
 <code>auditor_eks</code> vector.
@@ -2489,7 +2491,7 @@ Returns <code>Some(<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib
 ## Function `ensure_sufficient_fa`
 
 Converts coins to missing FA.
-Returns <code>Some(Object&lt;Metadata&gt;)</code> if user has a suffucient amount of FA to proceed, otherwise <code>None</code>.
+Returns <code>Some(Object&lt;Metadata&gt;)</code> if user has a sufficient amount of FA to proceed, otherwise <code>None</code>.
 
 
 <pre><code><b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_ensure_sufficient_fa">ensure_sufficient_fa</a>&lt;CoinType&gt;(sender: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, amount: u64): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_Option">option::Option</a>&lt;<a href="../../aptos-framework/doc/object.md#0x1_object_Object">object::Object</a>&lt;<a href="../../aptos-framework/doc/fungible_asset.md#0x1_fungible_asset_Metadata">fungible_asset::Metadata</a>&gt;&gt;
@@ -2525,6 +2527,70 @@ Returns <code>Some(Object&lt;Metadata&gt;)</code> if user has a suffucient amoun
     <a href="../../aptos-framework/doc/primary_fungible_store.md#0x1_primary_fungible_store_deposit">primary_fungible_store::deposit</a>(user, fa_amount);
 
     fa
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x7_confidential_asset_serialize_auditor_eks"></a>
+
+## Function `serialize_auditor_eks`
+
+Pure serialization helpers (no <code><b>borrow_global</b></code>). Public so <code><b>move</b>-lean-difftest</code> and other
+tooling can exercise the same entrypoints as tests without <code>#[test_only]</code> harness modules.
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_serialize_auditor_eks">serialize_auditor_eks</a>(auditor_eks: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedPubkey">ristretto255_twisted_elgamal::CompressedPubkey</a>&gt;): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_serialize_auditor_eks">serialize_auditor_eks</a>(auditor_eks: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;twisted_elgamal::CompressedPubkey&gt;): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt; {
+    <b>let</b> auditor_eks_bytes = <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>[];
+
+    auditor_eks.for_each_ref(|auditor| {
+        auditor_eks_bytes.append(twisted_elgamal::pubkey_to_bytes(auditor));
+    });
+
+    auditor_eks_bytes
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x7_confidential_asset_serialize_auditor_amounts"></a>
+
+## Function `serialize_auditor_amounts`
+
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_serialize_auditor_amounts">serialize_auditor_amounts</a>(auditor_amounts: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>&gt;): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_serialize_auditor_amounts">serialize_auditor_amounts</a>(
+    auditor_amounts: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>&gt;
+): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt; {
+    <b>let</b> auditor_amounts_bytes = <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>[];
+
+    auditor_amounts.for_each_ref(|balance| {
+        auditor_amounts_bytes.append(<a href="confidential_balance.md#0x7_confidential_balance_balance_to_bytes">confidential_balance::balance_to_bytes</a>(balance));
+    });
+
+    auditor_amounts_bytes
 }
 </code></pre>
 

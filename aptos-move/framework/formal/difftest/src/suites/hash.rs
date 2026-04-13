@@ -1,10 +1,10 @@
 use anyhow::Result;
 use move_vm_test_utils::InMemoryStorage;
 
-use crate::compiler::compile_with_stdlib;
+use crate::compiler::compile_with_aptos_head_bundle;
 use crate::schema::TestCase;
 use crate::typed_value::make_u8_vec;
-use crate::vm::run_test_case;
+use crate::vm::{module_blob, run_test_case, STD_ADDR};
 
 use super::DiffTestSuite;
 
@@ -32,16 +32,15 @@ impl DiffTestSuite for HashSuite {
     }
 
     fn load_module(&self, storage: &mut InMemoryStorage) -> Result<()> {
-        let modules = compile_with_stdlib(TEST_SOURCE)?;
+        let modules = compile_with_aptos_head_bundle(TEST_SOURCE)?;
         for module in &modules {
-            let mut blob = vec![];
-            module.serialize(&mut blob)?;
+            let blob = module_blob(module)?;
             storage.add_module_bytes(module.self_addr(), module.self_name(), blob.into());
         }
         Ok(())
     }
 
-    fn generate_test_cases(&self, storage: &InMemoryStorage) -> Result<Vec<TestCase>> {
+    fn generate_test_cases(&self, storage: &mut InMemoryStorage) -> Result<Vec<TestCase>> {
         let mut cases = Vec::new();
 
         let inputs: Vec<(&[u8], &str)> = vec![
@@ -59,12 +58,13 @@ impl DiffTestSuite for HashSuite {
 
         for (bytes, label) in inputs {
             let args = vec![make_u8_vec(bytes)];
-            let result = run_test_case(storage, MODULE_NAME, "test_sha3_256", &args)?;
+            let result = run_test_case(storage, STD_ADDR, MODULE_NAME, "test_sha3_256", &args)?;
             cases.push(TestCase {
                 function: format!("test_sha3_256 [{}]", label),
                 type_args: None,
                 args,
                 result,
+                skip_lean: false,
             });
         }
 

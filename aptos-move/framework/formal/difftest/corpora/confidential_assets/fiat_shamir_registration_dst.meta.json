@@ -1,0 +1,9 @@
+{
+  "name": "fiat_shamir_registration_dst",
+  "length_bytes": 38,
+  "encoding": "hex",
+  "bytes_file": "fiat_shamir_registration_dst.hex",
+  "move_anchor": "aptos_experimental::confidential_proof (tagged Fiat–Shamir registration DST string)",
+  "lean_def": "AptosFormal.Experimental.ConfidentialAsset.Registration.VerifyMath.RegistrationVerify.fiatShamirRegistrationDst",
+  "lean_theorem": "AptosFormal.Experimental.ConfidentialAsset.Registration.VerifyMath.RegistrationVerify.fiatShamirRegistrationDst_byte_length"
+}

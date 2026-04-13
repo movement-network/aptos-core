@@ -93,6 +93,49 @@ def vectorPopBack : List MoveValue → Option (List MoveValue)
     | [] => none
   | _ => none
 
+/-- `vector::remove` on `vector<u64>` — returns `[removed, new_vec]` for `lake exe difftest` stack order (see `Runner.runTestCase`). -/
+def vectorRemove : List MoveValue → Option (List MoveValue)
+  | [.vector .u64 elems, .u64 i] =>
+      let n := elems.length
+      let iNat := i.toNat
+      if h : iNat < n then
+        let removed := elems.get ⟨iNat, h⟩
+        let rest := elems.take iNat ++ elems.drop (iNat + 1)
+        some [removed, .vector .u64 rest]
+      else
+        none
+  | _ => none
+
+/-- `vector::swap_remove` on `vector<u64>`. -/
+def vectorSwapRemove : List MoveValue → Option (List MoveValue)
+  | [.vector .u64 elems, .u64 i] =>
+      let n := elems.length
+      let iNat := i.toNat
+      if h : iNat < n then
+        let lastIdx := n - 1
+        let removed := elems.get ⟨iNat, h⟩
+        if hi : iNat = lastIdx then
+          some [removed, .vector .u64 (elems.take lastIdx)]
+        else
+          let lastElem := elems.get ⟨lastIdx, by omega⟩
+          let before := elems.take iNat
+          let midLen := n - iNat - 2
+          let mid := (elems.drop (iNat + 1)).take midLen
+          some [removed, .vector .u64 (before ++ [lastElem] ++ mid)]
+      else
+        none
+  | _ => none
+
+/-- `vector::append` on two `vector<u64>` values (consumes both lists). -/
+def vectorAppend : List MoveValue → Option (List MoveValue)
+  | [.vector .u64 a, .vector .u64 b] => some [.vector .u64 (a ++ b)]
+  | _ => none
+
+/-- `vector::singleton` for `u64`. -/
+def vectorSingleton : List MoveValue → Option (List MoveValue)
+  | [.u64 x] => some [.vector .u64 [.u64 x]]
+  | _ => none
+
 /-! ## Standard native table
 
 A pre-built function table with natives at fixed indices for use in

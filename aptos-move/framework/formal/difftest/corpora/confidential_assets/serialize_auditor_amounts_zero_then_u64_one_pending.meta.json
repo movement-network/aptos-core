@@ -1,0 +1,9 @@
+{
+  "name": "serialize_auditor_amounts_zero_then_u64_one_pending",
+  "length_bytes": 512,
+  "encoding": "hex",
+  "bytes_file": "serialize_auditor_amounts_zero_then_u64_one_pending.hex",
+  "move_anchor": "0x1::difftest_confidential_asset_layer::test_serialize_auditor_amounts_zero_then_u64_one_framework → `[new_pending_balance_no_randomness(), new_pending_balance_u64_no_randonmess(1)]`",
+  "lean_def": "AptosFormal.Move.Programs.Confidential.serializeAuditorAmountsZeroThenU64OneWireBytes",
+  "lean_theorem": "AptosFormal.Move.Programs.Confidential.serializeAuditorAmountsZeroThenU64OneWireBytes_length"
+}

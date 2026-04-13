@@ -48,14 +48,14 @@ theorem bcsU64_correct (v : UInt64) :
 
 theorem readViaRef_correct (n : UInt64) :
     evalProg 14 [.u64 n] 5 =
-      .returned [.u64 n] { store := #[.u64 n] } := by
+      .returned [.u64 n] (MachineState.ofContainers { store := #[.u64 n] }) := by
   rfl
 
 /-! ## inc_via_ref correctness -/
 
 theorem incViaRef_correct (n : UInt64) :
     evalProg 15 [.u64 n] 15 =
-      .returned [.u64 (n + 1)] { store := #[.u64 (n + 1)] } := by
+      .returned [.u64 (n + 1)] (MachineState.ofContainers { store := #[.u64 (n + 1)] }) := by
   rfl
 
 /-! ## vec_push_and_len correctness -/
@@ -64,7 +64,7 @@ theorem vecPushAndLen_correct (elems : List MoveValue) (val : UInt64) :
     let pushed := elems ++ [MoveValue.u64 val]
     evalProg 16 [.vector .u64 elems, .u64 val] 10 =
       .returned [.u64 pushed.length.toUInt64]
-        { store := #[.vector .u64 pushed] } := by
+        (MachineState.ofContainers { store := #[.vector .u64 pushed] }) := by
   rfl
 
 end AptosFormal.Refinement.Core

@@ -21,9 +21,11 @@ those remain oracle obligations in `REGISTRATION_VERIFY_REVIEW.md`.
 import AptosFormal.Experimental.ConfidentialAsset.Registration.Formal
 import AptosFormal.Experimental.ConfidentialAsset.Registration.VerifyMath
 import AptosFormal.AptosStd.Hash.Sha3_512
+import AptosFormal.AptosStd.Crypto.Ristretto255
 
 open AptosFormal.Experimental.ConfidentialAsset.Registration.Formal
 open AptosFormal.AptosStd.Hash.Sha3_512
+open AptosFormal.AptosStd.Crypto.Ristretto255
 open RegistrationVerify
 
 namespace RegistrationTranscriptAlignment
@@ -95,12 +97,45 @@ theorem tagged_hash_golden_msg_matches :
       = expectedTaggedHashGolden := by
   native_decide
 
+theorem tagged_hash_golden_msg_toList_eq_expected_toList :
+    (taggedHash fiatShamirRegistrationDst expectedRegistrationFsMsgMoveGolden).toList
+      = expectedTaggedHashGolden.toList := by
+  rw [tagged_hash_golden_msg_matches]
+
+theorem tagged_hash_golden_msg_toList_length_eq_64 :
+    (taggedHash fiatShamirRegistrationDst expectedRegistrationFsMsgMoveGolden).toList.length = 64 := by
+  native_decide
+
+theorem tagged_hash_golden_msg_toList_length_eq_expectedTaggedHashGolden_toList_length :
+    (taggedHash fiatShamirRegistrationDst expectedRegistrationFsMsgMoveGolden).toList.length =
+      expectedTaggedHashGolden.toList.length := by
+  rw [tagged_hash_golden_msg_toList_eq_expected_toList]
+
+theorem expectedTaggedHashGolden_byte_length :
+    expectedTaggedHashGolden.size = 64 := by
+  native_decide
+
+theorem expectedTaggedHashGolden_toList_length_eq_64 :
+    expectedTaggedHashGolden.toList.length = 64 := by
+  native_decide
+
+theorem tagged_hash_golden_msg_byte_length :
+    (taggedHash fiatShamirRegistrationDst expectedRegistrationFsMsgMoveGolden).size = 64 := by
+  rw [tagged_hash_golden_msg_matches, expectedTaggedHashGolden_byte_length]
+
 /-! ## Full challenge scalar derivation (tagged hash → `scalarUniformFrom64Bytes` → ℤ/ℓℤ) -/
 
 theorem registration_challenge_scalar_is_some :
     registrationChallengeScalarMove expectedRegistrationFsMsgMoveGolden ≠ none := by
   simp [registrationChallengeScalarMove, AptosFormal.AptosStd.Crypto.Ristretto255.scalarUniformFrom64Bytes]
   native_decide
+
+/-- The Move challenge pipeline on golden **1** FS `msg` is **`scalarUniformFrom64Bytes`** on the **64**-byte tagged digest (`registration_tagged_hash_golden_1.hex`). -/
+theorem registrationChallengeScalarMove_golden1_msg_eq_uniform_expectedTaggedHashGolden :
+    registrationChallengeScalarMove expectedRegistrationFsMsgMoveGolden =
+      scalarUniformFrom64Bytes expectedTaggedHashGolden := by
+  rw [registrationChallengeScalarMove_eq_uniform_tagged expectedRegistrationFsMsgMoveGolden]
+  simp_rw [tagged_hash_golden_msg_matches]
 
 /-! ## Second golden scenario (chain_id=42, @0x10/@0x20/@0x30, basepoint ek/R) -/
 
@@ -148,9 +183,152 @@ theorem registration_fiat_shamir_msg_matches_golden_2 :
     registrationFiatShamirMsg goldenRegistrationInputs2 = expectedRegistrationFsMsg2 := by
   native_decide
 
+/-! ## tagged hash of the second golden FS message (SHA3-512 chain) -/
+
+def expectedTaggedHashGolden2 : ByteArray :=
+  ByteArray.mk #[
+    0x39, 0xd9, 0x1d, 0x95, 0xe0, 0x55, 0x72, 0x4b, 0x8f, 0x3f, 0xa4, 0xae, 0x05, 0x02, 0x8f, 0x76,
+    0x04, 0xdc, 0x00, 0x25, 0x8c, 0x6a, 0x73, 0x59, 0xb1, 0xae, 0x7a, 0xe6, 0xc1, 0xf4, 0x19, 0xe6,
+    0x6f, 0x37, 0x3d, 0x80, 0x1b, 0x07, 0xe0, 0xd6, 0x56, 0xbe, 0x69, 0xbd, 0xc7, 0x4b, 0xe6, 0xaf,
+    0x60, 0x09, 0xe2, 0x6e, 0xad, 0xb7, 0x1b, 0xd8, 0x16, 0x3a, 0x9b, 0x6b, 0x61, 0xd8, 0xe9, 0x14
+  ]
+
+theorem tagged_hash_golden2_msg_matches :
+    taggedHash fiatShamirRegistrationDst expectedRegistrationFsMsg2 =
+      expectedTaggedHashGolden2 := by
+  native_decide
+
+theorem tagged_hash_golden2_msg_toList_eq_expected_toList :
+    (taggedHash fiatShamirRegistrationDst expectedRegistrationFsMsg2).toList
+      = expectedTaggedHashGolden2.toList := by
+  rw [tagged_hash_golden2_msg_matches]
+
+theorem tagged_hash_golden2_msg_toList_length_eq_64 :
+    (taggedHash fiatShamirRegistrationDst expectedRegistrationFsMsg2).toList.length = 64 := by
+  native_decide
+
+theorem tagged_hash_golden2_msg_toList_length_eq_expectedTaggedHashGolden2_toList_length :
+    (taggedHash fiatShamirRegistrationDst expectedRegistrationFsMsg2).toList.length =
+      expectedTaggedHashGolden2.toList.length := by
+  rw [tagged_hash_golden2_msg_toList_eq_expected_toList]
+
+theorem expectedTaggedHashGolden2_byte_length :
+    expectedTaggedHashGolden2.size = 64 := by
+  native_decide
+
+theorem expectedTaggedHashGolden2_toList_length_eq_64 :
+    expectedTaggedHashGolden2.toList.length = 64 := by
+  native_decide
+
+theorem tagged_hash_golden2_msg_byte_length :
+    (taggedHash fiatShamirRegistrationDst expectedRegistrationFsMsg2).size = 64 := by
+  rw [tagged_hash_golden2_msg_matches, expectedTaggedHashGolden2_byte_length]
+
+/-- Both Move FS `msg` goldens yield **64**-byte tagged SHA3-512 digests (corpus / `verify-corpora` hygiene). -/
+theorem tagged_hash_golden_msgs_tagged_digest_byte_length_bundle :
+    (taggedHash fiatShamirRegistrationDst expectedRegistrationFsMsgMoveGolden).size = 64 ∧
+    (taggedHash fiatShamirRegistrationDst expectedRegistrationFsMsg2).size = 64 :=
+  And.intro tagged_hash_golden_msg_byte_length tagged_hash_golden2_msg_byte_length
+
 theorem registration_challenge_scalar_is_some_2 :
     registrationChallengeScalarMove expectedRegistrationFsMsg2 ≠ none := by
   simp [registrationChallengeScalarMove, AptosFormal.AptosStd.Crypto.Ristretto255.scalarUniformFrom64Bytes]
   native_decide
+
+/-- Both formal FS `msg` goldens yield a defined challenge scalar (no `none` from `scalarUniformFrom64Bytes`). -/
+theorem registration_challenge_scalar_is_some_both_move_golden_msgs :
+    registrationChallengeScalarMove expectedRegistrationFsMsgMoveGolden ≠ none ∧
+    registrationChallengeScalarMove expectedRegistrationFsMsg2 ≠ none :=
+  And.intro registration_challenge_scalar_is_some registration_challenge_scalar_is_some_2
+
+/-- Same for golden **2** FS `msg` and **`registration_tagged_hash_golden_2.hex`**. -/
+theorem registrationChallengeScalarMove_golden2_msg_eq_uniform_expectedTaggedHashGolden2 :
+    registrationChallengeScalarMove expectedRegistrationFsMsg2 =
+      scalarUniformFrom64Bytes expectedTaggedHashGolden2 := by
+  rw [registrationChallengeScalarMove_eq_uniform_tagged expectedRegistrationFsMsg2]
+  simp_rw [tagged_hash_golden2_msg_matches]
+
+/-- `registrationChallengeScalarMove` depends only on FS `msg` bytes; golden **1** inputs use the Move golden `msg`. -/
+theorem registrationChallengeScalarMove_eq_on_golden1_inputs :
+    registrationChallengeScalarMove (registrationFiatShamirMsg goldenRegistrationInputs) =
+      registrationChallengeScalarMove expectedRegistrationFsMsgMoveGolden := by
+  rw [registration_fiat_shamir_msg_matches_move_golden]
+
+/-- Same for golden **2** (`expectedRegistrationFsMsg2`). -/
+theorem registrationChallengeScalarMove_eq_on_golden2_inputs :
+    registrationChallengeScalarMove (registrationFiatShamirMsg goldenRegistrationInputs2) =
+      registrationChallengeScalarMove expectedRegistrationFsMsg2 := by
+  rw [registration_fiat_shamir_msg_matches_golden_2]
+
+/-! ## Byte lengths (corpus + review hygiene)
+
+Machine-checked lengths for the checked-in hex corpora under
+`difftest/corpora/confidential_assets/registration_fs_msg_move_golden_*.hex`.
+-/
+
+theorem expectedRegistrationFsMsgMoveGolden_byte_length :
+    expectedRegistrationFsMsgMoveGolden.size = 161 := by
+  native_decide
+
+theorem expectedRegistrationFsMsg2_byte_length :
+    expectedRegistrationFsMsg2.size = 161 := by
+  native_decide
+
+theorem registrationFiatShamirMsg_golden1_byte_length :
+    (registrationFiatShamirMsg goldenRegistrationInputs).size = 161 := by
+  rw [registration_fiat_shamir_msg_matches_move_golden, expectedRegistrationFsMsgMoveGolden_byte_length]
+
+theorem registrationFiatShamirMsg_golden2_byte_length :
+    (registrationFiatShamirMsg goldenRegistrationInputs2).size = 161 := by
+  rw [registration_fiat_shamir_msg_matches_golden_2, expectedRegistrationFsMsg2_byte_length]
+
+/-- Both golden **`registrationFiatShamirMsg`** wires are **161** B (inputs **1** and **2**). -/
+theorem registrationFiatShamirMsg_golden_inputs_byte_length_bundle :
+    (registrationFiatShamirMsg goldenRegistrationInputs).size = 161 ∧
+    (registrationFiatShamirMsg goldenRegistrationInputs2).size = 161 :=
+  And.intro registrationFiatShamirMsg_golden1_byte_length registrationFiatShamirMsg_golden2_byte_length
+
+/-- Both Move FS `msg` golden byte arrays are **161** B (`registration_fs_msg_move_golden_*.hex`). -/
+theorem expectedRegistrationFsMsgMoveGolden_and_golden2_byte_length_bundle :
+    expectedRegistrationFsMsgMoveGolden.size = 161 ∧ expectedRegistrationFsMsg2.size = 161 :=
+  And.intro expectedRegistrationFsMsgMoveGolden_byte_length expectedRegistrationFsMsg2_byte_length
+
+/-- Golden FS **`msg`** wires (**161** B) and their tagged SHA3-512 digests (**64** B), both scenarios. -/
+theorem registration_golden_fs_msgs_and_tagged_digests_length_bundle :
+    (registrationFiatShamirMsg goldenRegistrationInputs).size = 161 ∧
+    (registrationFiatShamirMsg goldenRegistrationInputs2).size = 161 ∧
+    (taggedHash fiatShamirRegistrationDst expectedRegistrationFsMsgMoveGolden).size = 64 ∧
+    (taggedHash fiatShamirRegistrationDst expectedRegistrationFsMsg2).size = 64 :=
+  And.intro registrationFiatShamirMsg_golden1_byte_length
+    (And.intro registrationFiatShamirMsg_golden2_byte_length
+      (And.intro tagged_hash_golden_msg_byte_length tagged_hash_golden2_msg_byte_length))
+
+/-- Both goldens yield a defined challenge scalar **and** **64**-byte tagged digests. -/
+theorem registration_golden_challenge_defined_and_digest_length_bundle :
+    registrationChallengeScalarMove expectedRegistrationFsMsgMoveGolden ≠ none ∧
+    registrationChallengeScalarMove expectedRegistrationFsMsg2 ≠ none ∧
+    (taggedHash fiatShamirRegistrationDst expectedRegistrationFsMsgMoveGolden).size = 64 ∧
+    (taggedHash fiatShamirRegistrationDst expectedRegistrationFsMsg2).size = 64 :=
+  And.intro registration_challenge_scalar_is_some
+    (And.intro registration_challenge_scalar_is_some_2
+      (And.intro tagged_hash_golden_msg_byte_length tagged_hash_golden2_msg_byte_length))
+
+/--
+**Golden registration transcript hygiene** in one statement: both FS **`msg`** wires are **161** B,
+tagged SHA3-512 digests are **64** B, and the Move-modeled challenge scalars are defined (**`≠ none`**)
+on both golden FS byte arrays.
+-/
+theorem registration_golden_fs_digest_and_challenge_bundle :
+    (registrationFiatShamirMsg goldenRegistrationInputs).size = 161 ∧
+    (registrationFiatShamirMsg goldenRegistrationInputs2).size = 161 ∧
+    (taggedHash fiatShamirRegistrationDst expectedRegistrationFsMsgMoveGolden).size = 64 ∧
+    (taggedHash fiatShamirRegistrationDst expectedRegistrationFsMsg2).size = 64 ∧
+    registrationChallengeScalarMove expectedRegistrationFsMsgMoveGolden ≠ none ∧
+    registrationChallengeScalarMove expectedRegistrationFsMsg2 ≠ none :=
+  And.intro registrationFiatShamirMsg_golden1_byte_length
+    (And.intro registrationFiatShamirMsg_golden2_byte_length
+      (And.intro tagged_hash_golden_msg_byte_length
+        (And.intro tagged_hash_golden2_msg_byte_length
+          (And.intro registration_challenge_scalar_is_some registration_challenge_scalar_is_some_2))))
 
 end RegistrationTranscriptAlignment

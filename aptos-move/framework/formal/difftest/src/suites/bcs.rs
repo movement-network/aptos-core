@@ -1,10 +1,10 @@
 use anyhow::Result;
 use move_vm_test_utils::InMemoryStorage;
 
-use crate::compiler::compile_with_stdlib;
+use crate::compiler::compile_with_aptos_head_bundle;
 use crate::schema::TestCase;
 use crate::typed_value::{make_bool, make_u128_str, make_u64, make_u8};
-use crate::vm::run_test_case;
+use crate::vm::{module_blob, run_test_case, STD_ADDR};
 
 use super::DiffTestSuite;
 
@@ -44,16 +44,15 @@ impl DiffTestSuite for BcsSuite {
     }
 
     fn load_module(&self, storage: &mut InMemoryStorage) -> Result<()> {
-        let modules = compile_with_stdlib(TEST_SOURCE)?;
+        let modules = compile_with_aptos_head_bundle(TEST_SOURCE)?;
         for module in &modules {
-            let mut blob = vec![];
-            module.serialize(&mut blob)?;
+            let blob = module_blob(module)?;
             storage.add_module_bytes(module.self_addr(), module.self_name(), blob.into());
         }
         Ok(())
     }
 
-    fn generate_test_cases(&self, storage: &InMemoryStorage) -> Result<Vec<TestCase>> {
+    fn generate_test_cases(&self, storage: &mut InMemoryStorage) -> Result<Vec<TestCase>> {
         let mut cases = Vec::new();
 
         for (label, arg) in [
@@ -95,18 +94,19 @@ impl DiffTestSuite for BcsSuite {
 }
 
 fn push_case(
-    storage: &InMemoryStorage,
+    storage: &mut InMemoryStorage,
     cases: &mut Vec<TestCase>,
     function: &str,
     label: &str,
     args: Vec<crate::schema::TypedValue>,
 ) -> Result<()> {
-    let result = run_test_case(storage, MODULE_NAME, function, &args)?;
+    let result = run_test_case(storage, STD_ADDR, MODULE_NAME, function, &args)?;
     cases.push(TestCase {
         function: format!("{} [{}]", function, label),
         type_args: None,
         args,
         result,
+        skip_lean: false,
     });
     Ok(())
 }

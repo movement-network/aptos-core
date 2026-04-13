@@ -245,9 +245,11 @@ module aptos_experimental::confidential_proof {
         );
     }
 
-    #[test_only]
     /// Byte-for-byte the Fiat–Shamir prefix `msg` built in `verify_registration_proof` before
     /// `new_scalar_from_tagged_hash(FIAT_SHAMIR_REGISTRATION_SIGMA_DST, msg)`.
+    ///
+    /// Exposed as a normal `public` entry (not `#[test_only]`) so off-chain tooling and
+    /// `move-lean-difftest` harnesses can pin the transcript without duplicating concatenation logic.
     public fun registration_fs_message_for_test(
         chain_id: u8,
         sender: address,
@@ -263,6 +265,62 @@ module aptos_experimental::confidential_proof {
         msg.append(twisted_elgamal::pubkey_to_bytes(ek));
         msg.append(commitment_bytes);
         msg
+    }
+
+    /// Deterministic registration Schnorr commitment/response using caller-supplied nonce `k`
+    /// (same transcript + algebra as `prove_registration`, but without `random_scalar()`).
+    ///
+    /// Intended for `move-lean-difftest` and off-chain parity checks against `verify_registration_proof`.
+    public fun prove_registration_deterministic_for_difftest(
+        chain_id: u8,
+        sender: address,
+        contract_address: address,
+        dk: &Scalar,
+        ek: &twisted_elgamal::CompressedPubkey,
+        token_address: address,
+        k: &Scalar,
+    ): (vector<u8>, vector<u8>) {
+        let h = ristretto255::hash_to_point_base();
+        let r = ristretto255::point_mul(&h, k);
+        let r_compressed = ristretto255::point_compress(&r);
+
+        let msg = vector::singleton(chain_id);
+        msg.append(std::bcs::to_bytes(&sender));
+        msg.append(std::bcs::to_bytes(&contract_address));
+        msg.append(std::bcs::to_bytes(&token_address));
+        msg.append(twisted_elgamal::pubkey_to_bytes(ek));
+        msg.append(ristretto255::compressed_point_to_bytes(r_compressed));
+        let e = new_scalar_from_tagged_hash(FIAT_SHAMIR_REGISTRATION_SIGMA_DST, msg);
+
+        let dk_inv = ristretto255::scalar_invert(dk).extract();
+        let s = ristretto255::scalar_sub(k, &ristretto255::scalar_mul(&e, &dk_inv));
+
+        let commitment_bytes = ristretto255::compressed_point_to_bytes(r_compressed);
+        let response_bytes = ristretto255::scalar_to_bytes(&s);
+
+        (commitment_bytes, response_bytes)
+    }
+
+    /// Public wrapper around [`verify_registration_proof`] for harnesses that are not `friend`
+    /// of `confidential_proof` (e.g. `0x1::difftest_confidential_proof` in `move-lean-difftest`).
+    public fun verify_registration_proof_for_difftest(
+        chain_id: u8,
+        sender: address,
+        contract_address: address,
+        ek: &twisted_elgamal::CompressedPubkey,
+        token_address: address,
+        commitment_bytes: vector<u8>,
+        response_bytes: vector<u8>,
+    ) {
+        verify_registration_proof(
+            chain_id,
+            sender,
+            contract_address,
+            ek,
+            token_address,
+            commitment_bytes,
+            response_bytes,
+        );
     }
 
     /// Verifies the validity of the `withdraw` operation.
@@ -1254,6 +1312,12 @@ module aptos_experimental::confidential_proof {
     }
 
     #[view]
+    /// Returns the Fiat Shamir DST for registration sigma (`verify_registration_proof`).
+    public fun get_fiat_shamir_registration_sigma_dst(): vector<u8> {
+        FIAT_SHAMIR_REGISTRATION_SIGMA_DST
+    }
+
+    #[view]
     /// Returns the DST for the range proofs.
     public fun get_bulletproofs_dst(): vector<u8> {
         BULLETPROOFS_DST
@@ -1285,13 +1349,17 @@ module aptos_experimental::confidential_proof {
     /// to reduce the 64-byte SHA3-512 output modulo the curve order l.
     fun new_scalar_from_tagged_hash(tag: vector<u8>, msg: vector<u8>): Scalar {
         let hash = tagged_hash(tag, msg);
-        std::option::extract(&mut ristretto255::new_scalar_uniform_from_64_bytes(hash))
+        let sc_opt = ristretto255::new_scalar_uniform_from_64_bytes(hash);
+        assert!(option::is_some(&sc_opt), error::invalid_argument(ESIGMA_PROTOCOL_VERIFY_FAILED));
+        option::extract(&mut sc_opt)
     }
 
     /// Derives a scalar from a plain SHA3-512 hash (used for MSM gamma scalars).
     fun new_scalar_from_sha3_512(bytes: vector<u8>): Scalar {
         let hash = aptos_hash::sha3_512(bytes);
-        std::option::extract(&mut ristretto255::new_scalar_uniform_from_64_bytes(hash))
+        let sc_opt = ristretto255::new_scalar_uniform_from_64_bytes(hash);
+        assert!(option::is_some(&sc_opt), error::invalid_argument(ESIGMA_PROTOCOL_VERIFY_FAILED));
+        option::extract(&mut sc_opt)
     }
 
     /// Prepends `chain_id` (single byte), `sender`, and `contract_address` (BCS) to a Fiat-Shamir message buffer.
@@ -2336,26 +2404,15 @@ module aptos_experimental::confidential_proof {
         token_address: address,
     ): (vector<u8>, vector<u8>) {
         let k = ristretto255::random_scalar();
-        let h = ristretto255::hash_to_point_base();
-        let r = ristretto255::point_mul(&h, &k);
-        let r_compressed = ristretto255::point_compress(&r);
-
-        let msg = vector::singleton(chain_id);
-        msg.append(std::bcs::to_bytes(&sender));
-        msg.append(std::bcs::to_bytes(&contract_address));
-        msg.append(std::bcs::to_bytes(&token_address));
-        msg.append(twisted_elgamal::pubkey_to_bytes(ek));
-        msg.append(ristretto255::compressed_point_to_bytes(r_compressed));
-        let e = new_scalar_from_tagged_hash(FIAT_SHAMIR_REGISTRATION_SIGMA_DST, msg);
-
-        // s = k - e * dk_inv (since ek = dk_inv * H)
-        let dk_inv = ristretto255::scalar_invert(dk).extract();
-        let s = ristretto255::scalar_sub(&k, &ristretto255::scalar_mul(&e, &dk_inv));
-
-        let commitment_bytes = ristretto255::compressed_point_to_bytes(r_compressed);
-        let response_bytes = ristretto255::scalar_to_bytes(&s);
-
-        (commitment_bytes, response_bytes)
+        prove_registration_deterministic_for_difftest(
+            chain_id,
+            sender,
+            contract_address,
+            dk,
+            ek,
+            token_address,
+            &k,
+        )
     }
 
     #[test_only]

@@ -197,6 +197,16 @@ pub fn configure_for_unit_test() {
     move_unit_test::extensions::set_extension_hook(Box::new(unit_test_extensions_hook))
 }
 
+/// Build `NativeContextExtensions` the same way as the Move unit-test / Aptos VM test harness.
+/// Intended for in-process VM callers (e.g. formal `move-lean-difftest`) that execute Aptos
+/// framework natives outside `move_unit_test::extensions::new_extensions`.
+#[cfg(feature = "testing")]
+pub fn new_unit_test_native_extensions<'a>() -> NativeContextExtensions<'a> {
+    let mut exts = NativeContextExtensions::default();
+    unit_test_extensions_hook(&mut exts);
+    exts
+}
+
 #[cfg(feature = "testing")]
 fn unit_test_extensions_hook(exts: &mut NativeContextExtensions) {
     use aptos_framework::natives::object::NativeObjectContext;

@@ -15,8 +15,16 @@ beyond a single package.
 | `AptosFormal.Tests.*` | Concrete smoke tests (`native_decide`) on the evaluator |
 | `AptosFormal.Experimental.ConfidentialAsset.Registration.*` | `verify_registration_proof` spec + proofs (source-level crypto story, not bytecode) |
 
+### Confidential assets: difftest (L1) vs formal verification (L0–L2+)
+
+- **Difftest (alignment, not a proof):** real Move VM JSON oracles vs Lean `eval` on the same cases. CA adds a **transactional** fragment from `e2e-move-tests` merged in CI; many rows use **witness** bytecode in Lean (`RunnerFuncMappingAux` / `Programs.Confidential`), not a full FA + storage replay. **Roadmap / Option B (globals):** [`../CONFIDENTIAL_ASSETS_DIFFERENTIAL_TESTING_PLAN.md`](../CONFIDENTIAL_ASSETS_DIFFERENTIAL_TESTING_PLAN.md). **Inventory log:** [`../difftest/inventory/confidential_assets.md`](../difftest/inventory/confidential_assets.md). **Local CI-shaped run:** `DIFTEST_MERGE_CA_E2E=1 ./aptos-move/framework/formal/difftest.sh` (from repo root; see [`../difftest/README.md`](../difftest/README.md) § “CI parity”).
+- **Formal verification:** registration **crypto / transcript** story in `AptosFormal.Experimental.ConfidentialAsset.Registration.*` (L0-heavy); bytecode **refinement** and constant views in `AptosFormal.Refinement.Confidential` + `Move.State` / `Move.Step` scaffolding toward L2–L4. **Program bar (A)/(B)/(C) and levels L0–L5:** [`../CONFIDENTIAL_ASSETS_FORMAL_VERIFICATION_PLAN.md`](../CONFIDENTIAL_ASSETS_FORMAL_VERIFICATION_PLAN.md).
+
 **Auditor-oriented narrative** (Confidential Asset registration / **`verify_registration_proof` only**):
 [`../REGISTRATION_VERIFY_REVIEW.md`](../REGISTRATION_VERIFY_REVIEW.md).
+
+**CA Move audit notes** (API semantics / `#[test_only]` prover preconditions — formal-track review):
+[`../CONFIDENTIAL_ASSETS_MOVE_AUDIT_NOTES.md`](../CONFIDENTIAL_ASSETS_MOVE_AUDIT_NOTES.md).
 
 ## Prerequisites
 

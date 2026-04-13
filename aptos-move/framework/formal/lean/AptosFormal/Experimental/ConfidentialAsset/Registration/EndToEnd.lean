@@ -17,8 +17,28 @@ Ties together every Lean module in the registration proof stack:
 - `registration_honest_prover_accepted` — honest prover always passes.
 - `golden_challenge_exists` / `golden2_challenge_exists` — the challenge scalar is
   well-defined for both golden scenarios.
+- `RegistrationTranscriptAlignment.registration_challenge_scalar_is_some_both_move_golden_msgs` —
+  both Move FS `msg` goldens yield a **non-`none`** challenge via `registrationChallengeScalarMove`.
+- `RegistrationTranscriptAlignment.tagged_hash_golden_msgs_tagged_digest_byte_length_bundle` —
+  both goldens’ tagged digests are **64** bytes (SHA3-512 output width).
+- `RegistrationTranscriptAlignment.expectedRegistrationFsMsgMoveGolden_and_golden2_byte_length_bundle` —
+  both FS `msg` goldens are **161** bytes.
+- `RegistrationTranscriptAlignment.registrationFiatShamirMsg_golden_inputs_byte_length_bundle` —
+  both golden **`registrationFiatShamirMsg`** wires are **161** bytes.
+- `RegistrationTranscriptAlignment.registration_golden_fs_msgs_and_tagged_digests_length_bundle` —
+  golden FS **`msg`** (**161** B) and tagged digests (**64** B) for both scenarios in one statement.
+- `RegistrationTranscriptAlignment.registration_golden_challenge_defined_and_digest_length_bundle` —
+  both goldens have a **non-`none`** challenge and **64**-byte tagged digests.
+- `RegistrationTranscriptAlignment.registration_golden_fs_digest_and_challenge_bundle` —
+  **161** B FS `msg` goldens, **64** B tagged digests, and both challenges **defined** in one statement.
 - `golden_registration_verification_iff_schnorr` — instantiation at golden inputs.
+- `golden2_registration_verification_iff_schnorr` — same for the second golden inputs.
+- `golden_registration_completeness` / `golden2_registration_completeness` — honest prover acceptance at each golden.
 - `registration_challenge_deterministic` — Fiat–Shamir challenge is unique.
+- `FiatShamirSymbolic.fiatShamirVerify_iff_registrationSchnorrEq_module` — **`fiatShamirVerify`** ↔ abstract **`registrationSchnorrEq`** with module **`smul` / `add`**.
+- `FiatShamirSymbolic.registrationSchnorrEq_of_fiatShamirProve_output` — honest **`fiatShamirProve`** satisfies **`registrationSchnorrEq`** at **`taggedHash fsMsg`**.
+- `SchnorrCompleteness.registrationVerifySpec_of_fiatShamirProve_when_fsMsg_eq_registrationFiatShamirMsg` — same honest transcript satisfies **`registrationVerifySpec`** when **`fsMsg`** matches the verifier’s **`registrationFiatShamirMsg i`**.
+- `Operational.execVerifyRegistrationProof_eq_none_of_pointEqBool_false_of_parsed` — parsed path with **`pointEqBool = false`** ⇒ **`execVerifyRegistrationProof = none`**.
 
 ## Remaining external obligations
 
@@ -26,7 +46,8 @@ See §6 of `REGISTRATION_VERIFY_REVIEW.md`:
 - §6.1 VM semantics (Move execution matches `verifyRegistrationProofProp`)
 - §6.2 Native correctness (`RistrettoGroupAxioms` holds for this branch's natives)
 - §6.3 BCS address encoding
-- §6.4 Cryptographic security (special soundness + HVZK in `CryptoSecurity.lean`;
+- §6.4 Cryptographic security (special soundness + HVZK in `CryptoSecurity.lean`, including
+  `registrationSchnorr_simulate_lhs_eq` / `registrationSchnorr_simulate_satisfies_schnorr_eq`;
   symbolic Fiat–Shamir in `FiatShamirSymbolic.lean`; forking probability not formalized)
 - §6.5 Primality of ℓ (currently an axiom)
 -/
@@ -235,6 +256,28 @@ theorem golden2_registration_verification_iff_schnorr
       s • C.hashToPointBase + e • ek = rhs :=
   registration_verification_iff_schnorr C ax _ responseBytes s rComm ekComm rhs ek e
     parse_s parse_rComm parse_ekComm decompress_R decompress_ek challenge_some
+
+/-- Honest prover always succeeds for the **second** golden inputs (`chain_id=42`, …). -/
+theorem golden2_registration_completeness
+    (C : CryptoOracle Point)
+    (ax : RistrettoGroupAxioms C)
+    (responseBytes : ByteArray)
+    (s : RistrettoScalar) (rComm ekComm : CompressedRistretto32) (rhs ek : Point)
+    (e : RistrettoScalar)
+    (parse_s : C.scalarFromBytes responseBytes = some s)
+    (parse_rComm : compressed32? goldenRegistrationInputs2.commitmentRBytes = some rComm)
+    (parse_ekComm : compressed32? goldenRegistrationInputs2.ekBytes = some ekComm)
+    (decompress_R : C.pointDecompress rComm = some rhs)
+    (decompress_ek : C.pubkeyToPoint ekComm = some ek)
+    (challenge_some : registrationChallengeScalarMove
+      (registrationFiatShamirMsg goldenRegistrationInputs2) = some e)
+    (k dk_inv : RistrettoScalar)
+    (hR : rhs = k • C.hashToPointBase)
+    (hek : ek = dk_inv • C.hashToPointBase)
+    (hs : s = k - e * dk_inv) :
+    verifyRegistrationProofProp C goldenRegistrationInputs2 responseBytes :=
+  registration_honest_prover_accepted C ax _ responseBytes s rComm ekComm rhs ek e
+    parse_s parse_rComm parse_ekComm decompress_R decompress_ek challenge_some k dk_inv hR hek hs
 
 end Golden2
 

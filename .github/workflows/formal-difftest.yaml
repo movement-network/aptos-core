@@ -1,0 +1,58 @@
+---
+# Move VM → JSON oracle → Lean differential smoke (formal framework).
+# Runs on ubuntu-latest; does not use repo-specific k8s runners.
+name: "Formal — Move–Lean difftest"
+on:
+  pull_request:
+    paths:
+      - "aptos-move/framework/formal/difftest/**"
+      - "aptos-move/framework/formal/lean/**"
+      - "aptos-move/framework/formal/difftest.sh"
+      - "aptos-move/e2e-move-tests/src/tests/confidential_asset_e2e.rs"
+      - "aptos-move/e2e-move-tests/src/tests/confidential_asset_e2e_oracle_impl.rs"
+      - "aptos-move/e2e-move-tests/Cargo.toml"
+      - "aptos-move/aptos-vm/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  move-lean-difftest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@1.86.0
+
+      - name: Verify CA formal corpora (hex files, SHA3-512 chains; Rust)
+        run: cargo run -p move-lean-difftest -- verify-corpora
+
+      - name: Install Elan (Lean)
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: VM oracle (harness)
+        run: cargo run -p move-lean-difftest -- --quiet
+
+      - name: CA e2e → oracle fragment (VM + Lean witness rows)
+        run: |
+          export CONFIDENTIAL_ASSET_E2E_ORACLE_OUT="$GITHUB_WORKSPACE/aptos-move/framework/formal/difftest/difftest_ca_e2e_fragment.json"
+          RUST_MIN_STACK=8388608 cargo test -p e2e-move-tests export_confidential_asset_e2e_oracle_fragment -- --test-threads=1
+
+      - name: Merge harness oracle + e2e fragment
+        run: |
+          cargo run -p move-lean-difftest -- merge -o aptos-move/framework/formal/difftest/difftest_ci_merged.json \
+            aptos-move/framework/formal/difftest/difftest_oracle.json \
+            aptos-move/framework/formal/difftest/difftest_ca_e2e_fragment.json
+
+      - name: Lean difftest (merged oracle)
+        run: |
+          cd aptos-move/framework/formal/lean
+          lake build difftest
+          lake exe difftest ../difftest/difftest_ci_merged.json

@@ -7,6 +7,15 @@ Depends on **`AptosFormal.Std`** for hash/scalar types shared with the wider `ap
 and **`AptosFormal.Experimental.ConfidentialAsset.Registration.Formal`** for the transcript + abstract Schnorr spec.
 
 Move reference: `aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_proof.move`.
+
+Tagged-hash **64**-byte digests on FS goldens: **`TranscriptAlignment`** (`expectedTaggedHashGolden*_byte_length`,
+`tagged_hash_golden*_msg_toList_length_eq_64`, list-length equalities vs goldens,
+`tagged_hash_golden_msgs_tagged_digest_byte_length_bundle`,
+`expectedRegistrationFsMsgMoveGolden_and_golden2_byte_length_bundle`,
+`registrationFiatShamirMsg_golden_inputs_byte_length_bundle`,
+`registration_golden_fs_msgs_and_tagged_digests_length_bundle`,
+`registration_golden_challenge_defined_and_digest_length_bundle`,
+`registration_golden_fs_digest_and_challenge_bundle`).
 -/
 
 import AptosFormal.Experimental.ConfidentialAsset.Registration.Formal
@@ -24,6 +33,9 @@ def fiatShamirRegistrationDst : ByteArray :=
     77, 111, 118, 101, 109, 101, 110, 116, 67, 111, 110, 102, 105, 100, 101, 110, 116, 105, 97, 108,
     65, 115, 115, 101, 116, 47, 82, 101, 103, 105, 115, 116, 114, 97, 116, 105, 111, 110
   ]
+
+theorem fiatShamirRegistrationDst_byte_length : fiatShamirRegistrationDst.size = 38 := by
+  native_decide
 
 def compressed32? (b : ByteArray) : Option CompressedRistretto32 :=
   if hb : b.size = 32 then
@@ -94,6 +106,10 @@ theorem verifyRegistrationProofProp_eq {Point : Type} (C : CryptoOracle Point)
         (C.pointAdd (C.pointMul C.hashToPointBase s) (C.pointMul ek e)) rhs := by
   simp [verifyRegistrationProofProp, hs, hr, hek, hR, hek2, he]
 
+/-- Move `new_scalar_from_tagged_hash(FIAT_SHAMIR_REGISTRATION_SIGMA_DST, msg)` on **64**-byte tagged SHA3-512 bytes.
+
+Transcript / golden alignment: **`RegistrationTranscriptAlignment`** (`tagged_hash_golden*_msg_matches`,
+`registrationChallengeScalarMove_eq_on_golden{1,2}_inputs`). -/
 def registrationChallengeScalarMove (msg : ByteArray) : Option RistrettoScalar :=
   scalarUniformFrom64Bytes (taggedHash fiatShamirRegistrationDst msg)
 

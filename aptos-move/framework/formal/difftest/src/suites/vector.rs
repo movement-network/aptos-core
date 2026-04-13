@@ -1,10 +1,10 @@
 use anyhow::Result;
 use move_vm_test_utils::InMemoryStorage;
 
-use crate::compiler::compile_with_stdlib;
+use crate::compiler::compile_with_aptos_head_bundle;
 use crate::schema::TestCase;
 use crate::typed_value::{make_u64, make_u64_vec};
-use crate::vm::run_test_case;
+use crate::vm::{module_blob, run_test_case, STD_ADDR};
 
 use super::DiffTestSuite;
 
@@ -68,16 +68,15 @@ impl DiffTestSuite for VectorSuite {
     }
 
     fn load_module(&self, storage: &mut InMemoryStorage) -> Result<()> {
-        let modules = compile_with_stdlib(TEST_SOURCE)?;
+        let modules = compile_with_aptos_head_bundle(TEST_SOURCE)?;
         for module in &modules {
-            let mut blob = vec![];
-            module.serialize(&mut blob)?;
+            let blob = module_blob(module)?;
             storage.add_module_bytes(module.self_addr(), module.self_name(), blob.into());
         }
         Ok(())
     }
 
-    fn generate_test_cases(&self, storage: &InMemoryStorage) -> Result<Vec<TestCase>> {
+    fn generate_test_cases(&self, storage: &mut InMemoryStorage) -> Result<Vec<TestCase>> {
         let mut cases = Vec::new();
 
         gen_contains(storage, &mut cases)?;
@@ -95,23 +94,24 @@ impl DiffTestSuite for VectorSuite {
 }
 
 fn push_case(
-    storage: &InMemoryStorage,
+    storage: &mut InMemoryStorage,
     cases: &mut Vec<TestCase>,
     function: &str,
     label: &str,
     args: Vec<crate::schema::TypedValue>,
 ) -> Result<()> {
-    let result = run_test_case(storage, MODULE_NAME, function, &args)?;
+    let result = run_test_case(storage, STD_ADDR, MODULE_NAME, function, &args)?;
     cases.push(TestCase {
         function: format!("{} [{}]", function, label),
         type_args: None,
         args,
         result,
+        skip_lean: false,
     });
     Ok(())
 }
 
-fn gen_contains(storage: &InMemoryStorage, cases: &mut Vec<TestCase>) -> Result<()> {
+fn gen_contains(storage: &mut InMemoryStorage, cases: &mut Vec<TestCase>) -> Result<()> {
     let inputs: Vec<(&[u64], u64, &str)> = vec![
         (&[10, 20, 30], 20, "found_middle"),
         (&[10, 20, 30], 10, "found_first"),
@@ -133,7 +133,7 @@ fn gen_contains(storage: &InMemoryStorage, cases: &mut Vec<TestCase>) -> Result<
     Ok(())
 }
 
-fn gen_index_of(storage: &InMemoryStorage, cases: &mut Vec<TestCase>) -> Result<()> {
+fn gen_index_of(storage: &mut InMemoryStorage, cases: &mut Vec<TestCase>) -> Result<()> {
     let inputs: Vec<(&[u64], u64, &str)> = vec![
         (&[10, 20, 30], 20, "found_at_1"),
         (&[10, 20, 30], 10, "found_at_0"),
@@ -154,7 +154,7 @@ fn gen_index_of(storage: &InMemoryStorage, cases: &mut Vec<TestCase>) -> Result<
     Ok(())
 }
 
-fn gen_reverse(storage: &InMemoryStorage, cases: &mut Vec<TestCase>) -> Result<()> {
+fn gen_reverse(storage: &mut InMemoryStorage, cases: &mut Vec<TestCase>) -> Result<()> {
     let inputs: Vec<(&[u64], &str)> = vec![
         (&[1, 2, 3, 4, 5], "five_elements"),
         (&[1, 2, 3], "three_elements"),
@@ -175,7 +175,7 @@ fn gen_reverse(storage: &InMemoryStorage, cases: &mut Vec<TestCase>) -> Result<(
     Ok(())
 }
 
-fn gen_remove(storage: &InMemoryStorage, cases: &mut Vec<TestCase>) -> Result<()> {
+fn gen_remove(storage: &mut InMemoryStorage, cases: &mut Vec<TestCase>) -> Result<()> {
     let inputs: Vec<(&[u64], u64, &str)> = vec![
         (&[10, 20, 30], 0, "remove_first"),
         (&[10, 20, 30], 1, "remove_middle"),
@@ -194,7 +194,7 @@ fn gen_remove(storage: &InMemoryStorage, cases: &mut Vec<TestCase>) -> Result<()
     Ok(())
 }
 
-fn gen_swap_remove(storage: &InMemoryStorage, cases: &mut Vec<TestCase>) -> Result<()> {
+fn gen_swap_remove(storage: &mut InMemoryStorage, cases: &mut Vec<TestCase>) -> Result<()> {
     let inputs: Vec<(&[u64], u64, &str)> = vec![
         (&[10, 20, 30], 0, "swap_remove_first"),
         (&[10, 20, 30], 1, "swap_remove_middle"),
@@ -213,7 +213,7 @@ fn gen_swap_remove(storage: &InMemoryStorage, cases: &mut Vec<TestCase>) -> Resu
     Ok(())
 }
 
-fn gen_append(storage: &InMemoryStorage, cases: &mut Vec<TestCase>) -> Result<()> {
+fn gen_append(storage: &mut InMemoryStorage, cases: &mut Vec<TestCase>) -> Result<()> {
     let inputs: Vec<(&[u64], &[u64], &str)> = vec![
         (&[1, 2], &[3, 4], "two_plus_two"),
         (&[], &[1, 2, 3], "empty_plus_three"),
@@ -232,7 +232,7 @@ fn gen_append(storage: &InMemoryStorage, cases: &mut Vec<TestCase>) -> Result<()
     Ok(())
 }
 
-fn gen_singleton(storage: &InMemoryStorage, cases: &mut Vec<TestCase>) -> Result<()> {
+fn gen_singleton(storage: &mut InMemoryStorage, cases: &mut Vec<TestCase>) -> Result<()> {
     for val in &[0u64, 42, u64::MAX] {
         push_case(
             storage,
@@ -245,7 +245,7 @@ fn gen_singleton(storage: &InMemoryStorage, cases: &mut Vec<TestCase>) -> Result
     Ok(())
 }
 
-fn gen_is_empty(storage: &InMemoryStorage, cases: &mut Vec<TestCase>) -> Result<()> {
+fn gen_is_empty(storage: &mut InMemoryStorage, cases: &mut Vec<TestCase>) -> Result<()> {
     let inputs: Vec<(&[u64], &str)> = vec![
         (&[], "empty"),
         (&[1], "singleton"),
@@ -263,7 +263,7 @@ fn gen_is_empty(storage: &InMemoryStorage, cases: &mut Vec<TestCase>) -> Result<
     Ok(())
 }
 
-fn gen_length(storage: &InMemoryStorage, cases: &mut Vec<TestCase>) -> Result<()> {
+fn gen_length(storage: &mut InMemoryStorage, cases: &mut Vec<TestCase>) -> Result<()> {
     let inputs: Vec<(&[u64], &str)> = vec![
         (&[], "empty"),
         (&[1], "singleton"),

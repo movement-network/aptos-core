@@ -9,9 +9,11 @@ casting, struct pack/unpack, vector operations, references
 (`ReadRef`, `WriteRef`, `*BorrowLoc`, `*BorrowField`, `FreezeRef`),
 and function calls (including native dispatch).
 
-Omitted for now: global storage (`MoveFrom`, `MoveTo`, `Exists`,
-`*BorrowGlobal*`), closures (`PackClosure*`, `CallClosure`), and
-variants (`*Variant*`).
+Full Move global opcodes (`MoveFrom`, generic `Exists`, …) are still omitted.
+Instead we provide **abstract** `globalExists` / `globalMoveTo` /
+`globalMoveToSigned` / `mutBorrowGlobal` keyed by `GlobalResourceKey` (see
+`Value.lean`).  `ldSigner` loads a `MoveValue.signer` for signer-checked publish.
+Closures and variants remain omitted.
 
 **Source:** `Bytecode` enum in
 `third_party/move/move-binary-format/src/file_format.rs`
@@ -28,9 +30,7 @@ abbrev StructIndex := Nat
 /-! ## Instruction set
 
 The instruction set is partitioned into groups matching the Rust `Bytecode`
-enum.  Omitted for now: global storage (`MoveFrom`, `MoveTo`, `Exists`,
-`*BorrowGlobal*`), closures (`PackClosure*`, `CallClosure`), and
-variants (`*Variant*`). -/
+enum.  See module doc: abstract globals + omitted closures / variants. -/
 
 inductive MoveInstr where
   -- Stack and locals
@@ -43,6 +43,8 @@ inductive MoveInstr where
   | ldU256  (val : U256)
   | ldTrue
   | ldFalse
+  /-- Load `signer` with the given address bytes (VM: `Signer` token). -/
+  | ldSigner (addrBytes : ByteArray)
   | ldConst (idx : ConstPoolIndex)
   | copyLoc (idx : LocalIndex)
   | moveLoc (idx : LocalIndex)
@@ -120,6 +122,18 @@ inductive MoveInstr where
   | vecPushBackRef (elemType : MoveType)
   | vecPopBackRef  (elemType : MoveType)
   | vecSwapRef     (elemType : MoveType)
+
+  -- Abstract global resources (see `Value.GlobalResourceKey`)
+  | globalExists (resourceKey : GlobalResourceKey)
+  | globalMoveTo (resourceKey : GlobalResourceKey)
+  /-- Pop `resource :: signer`; publish only if `signer` address bytes equal `k.address`. -/
+  | globalMoveToSigned (resourceKey : GlobalResourceKey)
+  | mutBorrowGlobal (resourceKey : GlobalResourceKey)
+
+  -- FA stub (`MachineState.faBalances`): stack `owner_u64 :: meta_u64 :: rest` → balance `u64`
+  | faReadBalance
+  -- Pop `amt :: owner :: meta`, write `(meta, owner) ↦ amt`
+  | faWriteBalance
   deriving Repr, BEq
 
 /-! ## Constant pool

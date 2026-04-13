@@ -11,7 +11,9 @@ tracks **stdlib**-aligned primitives (`aptos-stdlib`, `move-stdlib`, …) and
 | `../move-stdlib/tests/formal_goldens_*.move` | Curated Move stdlib tests (hash / BCS / vector) aligned with `AptosFormal.Std.MoveStdlibGoldens` |
 | `../aptos-experimental/tests/confidential_asset/formal_goldens_*.move` | Move golden tests for Ristretto group laws, Fiat–Shamir transcript bytes, and verification equation |
 | [`check_golden_consistency.sh`](check_golden_consistency.sh) | Script to verify Move and Lean golden bytes haven't drifted apart |
-| [`difftest.sh`](difftest.sh) | **Differential** tests (vector + BCS + hash): VM → `difftest/difftest_oracle.json` → Lean (see [`difftest/README.md`](difftest/README.md)) |
+| [`difftest.sh`](difftest.sh) | **Differential** tests: VM → `difftest/difftest_oracle.json` → Lean. Set **`DIFTEST_MERGE_CA_E2E=1`** to also export the CA e2e fragment, merge into `difftest_ci_merged.json`, and run Lean on the merged oracle (matches CI). See [`difftest/README.md`](difftest/README.md). |
+| [`difftest/INVENTORY.md`](difftest/INVENTORY.md) | **Phase 0** hub: difftest methodology, `--list-suites`, per-package inventories (e.g. confidential assets) |
+| [`CONFIDENTIAL_ASSETS_DIFFERENTIAL_TESTING_PLAN.md`](CONFIDENTIAL_ASSETS_DIFFERENTIAL_TESTING_PLAN.md) | Roadmap for confidential-asset **difftest-only** track (Phases 0–5); Option **B** for globals-free slices |
 
 ## Quick start
 

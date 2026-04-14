@@ -171,9 +171,56 @@ private def castToU256 (v : MoveValue) : Option MoveValue := do
 
 /-! ## List helpers for stack operations -/
 
-private def takeN (stack : List MoveValue) (n : Nat) : Option (List MoveValue × List MoveValue) :=
+def takeN (stack : List MoveValue) (n : Nat) : Option (List MoveValue × List MoveValue) :=
   if stack.length < n then none
   else some (stack.take n |>.reverse, stack.drop n)
+
+/-- Process a native call result: check that the result list length matches
+    `numReturns` and push the results onto the operand stack.
+
+    Factored out of `step` so that `simp` can target `handleNativeResult` as a
+    **function application** (always matchable by `@[simp]` lemmas) instead of
+    an inline case-tree (whose `casesOn` representation is equation-compiler
+    dependent and cannot be matched by external `@[simp]` lemmas).
+
+    The `frame` argument should already be advanced (pc + 1). -/
+def handleNativeResult (result : Option (List MoveValue)) (numReturns : Nat)
+    (frame : Frame) (cs : List Frame) (rest : List MoveValue) (ms : MachineState)
+    : ExecResult :=
+  match result with
+  | some [] =>
+    if numReturns == 0 then .ok frame cs rest ms else .error
+  | some [v] =>
+    if numReturns == 1 then .ok frame cs (v :: rest) ms else .error
+  | some results =>
+    if results.length == numReturns then .ok frame cs (results ++ rest) ms else .error
+  | none => .error
+
+theorem handleNativeResult_ret0 (result : Option (List MoveValue))
+    (frame : Frame) (cs : List Frame) (rest : List MoveValue) (ms : MachineState) :
+    handleNativeResult result 0 frame cs rest ms =
+    (match result with
+     | some [] => .ok frame cs rest ms
+     | _ => .error) := by
+  unfold handleNativeResult
+  match result with
+  | none => rfl
+  | some [] => rfl
+  | some [_] => rfl
+  | some (_ :: _ :: _) => simp [List.length]
+
+theorem handleNativeResult_ret1 (result : Option (List MoveValue))
+    (frame : Frame) (cs : List Frame) (rest : List MoveValue) (ms : MachineState) :
+    handleNativeResult result 1 frame cs rest ms =
+    (match result with
+     | some [v] => .ok frame cs (v :: rest) ms
+     | _ => .error) := by
+  unfold handleNativeResult
+  match result with
+  | none => rfl
+  | some [] => rfl
+  | some [_] => rfl
+  | some (_ :: _ :: _) => simp [List.length]
 
 /-! ## Reference helper: extract RefId from a reference value -/
 
@@ -227,7 +274,15 @@ def step (env : ModuleEnv) (frame : Frame) (callStack : List Frame)
     | .copyLoc idx =>
       if h : idx < frame.locals.size then
         match frame.locals[idx] with
-        | some v => ok' frame callStack (v :: stack) (withCG ms containers globals)
+        | some v =>
+          if hRef : idx < frame.localRefs.size then
+            match frame.localRefs[idx] with
+            | some rid =>
+              match containers.read rid with
+              | some cv => ok' frame callStack (cv :: stack) (withCG ms containers globals)
+              | none => .error
+            | none => ok' frame callStack (v :: stack) (withCG ms containers globals)
+          else ok' frame callStack (v :: stack) (withCG ms containers globals)
         | none => .error
       else .error
 
@@ -236,8 +291,20 @@ def step (env : ModuleEnv) (frame : Frame) (callStack : List Frame)
         match frame.locals[idx] with
         | some v =>
           let locals' := frame.locals.set idx none (by omega)
-          let frame' := { frame with locals := locals' }
-          ok' frame' callStack (v :: stack) (withCG ms containers globals)
+          if hRef : idx < frame.localRefs.size then
+            match frame.localRefs[idx] with
+            | some rid =>
+              let localRefs' := frame.localRefs.set idx none (by omega)
+              let frame' := { frame with locals := locals', localRefs := localRefs' }
+              match containers.read rid with
+              | some cv => ok' frame' callStack (cv :: stack) (withCG ms containers globals)
+              | none => .error
+            | none =>
+              let frame' := { frame with locals := locals' }
+              ok' frame' callStack (v :: stack) (withCG ms containers globals)
+          else
+            let frame' := { frame with locals := locals' }
+            ok' frame' callStack (v :: stack) (withCG ms containers globals)
         | none => .error
       else .error
 
@@ -280,8 +347,13 @@ def step (env : ModuleEnv) (frame : Frame) (callStack : List Frame)
         | some (args, rest) =>
           match fdesc.body with
           | .native impl =>
-            match impl args with
-            | some results => ok' frame callStack (results ++ rest) (withCG ms containers globals)
+            handleNativeResult (impl args) fdesc.numReturns
+              (advance frame) callStack rest (withCG ms containers globals)
+          | .nativeRef impl =>
+            match impl containers args with
+            | some (results, containers') =>
+              handleNativeResult (some results) fdesc.numReturns
+                (advance frame) callStack rest (withCG ms containers' globals)
             | none => .error
           | .bytecode code numLocals =>
             let newLocals := args.map some ++
@@ -290,6 +362,7 @@ def step (env : ModuleEnv) (frame : Frame) (callStack : List Frame)
               code := code
               pc := 0
               locals := newLocals.toArray
+              localRefs := (List.replicate numLocals none).toArray
             }
             let savedFrame := { frame with pc := frame.pc + 1 }
             .ok newFrame (savedFrame :: callStack) rest (withCG ms containers globals)
@@ -504,10 +577,18 @@ def step (env : ModuleEnv) (frame : Frame) (callStack : List Frame)
       if h : idx < frame.locals.size then
         match frame.locals[idx] with
         | some v =>
-          let (containers', refId) := containers.alloc v
-          let locals' := frame.locals.set idx none (by omega)
-          let frame' := { frame with locals := locals' }
-          ok' frame' callStack (.mutRef refId :: stack) (withCG ms containers' globals)
+          if hRef : idx < frame.localRefs.size then
+            match frame.localRefs[idx] with
+            | some existingRid =>
+              ok' frame callStack (.mutRef existingRid :: stack) (withCG ms containers globals)
+            | none =>
+              let (containers', refId) := containers.alloc v
+              let localRefs' := frame.localRefs.set idx (some refId) (by omega)
+              let frame' := { frame with localRefs := localRefs' }
+              ok' frame' callStack (.mutRef refId :: stack) (withCG ms containers' globals)
+          else
+            let (containers', refId) := containers.alloc v
+            ok' frame callStack (.mutRef refId :: stack) (withCG ms containers' globals)
         | none => .error
       else .error
 
@@ -515,8 +596,16 @@ def step (env : ModuleEnv) (frame : Frame) (callStack : List Frame)
       if h : idx < frame.locals.size then
         match frame.locals[idx] with
         | some v =>
-          let (containers', refId) := containers.alloc v
-          ok' frame callStack (.immRef refId :: stack) (withCG ms containers' globals)
+          if hRef : idx < frame.localRefs.size then
+            match frame.localRefs[idx] with
+            | some existingRid =>
+              ok' frame callStack (.immRef existingRid :: stack) (withCG ms containers globals)
+            | none =>
+              let (containers', refId) := containers.alloc v
+              ok' frame callStack (.immRef refId :: stack) (withCG ms containers' globals)
+          else
+            let (containers', refId) := containers.alloc v
+            ok' frame callStack (.immRef refId :: stack) (withCG ms containers' globals)
         | none => .error
       else .error
 
@@ -708,6 +797,11 @@ def eval (env : ModuleEnv) (funcIdx : FuncIndex) (args : List MoveValue)
       match impl args with
       | some results => .returned results MachineState.empty
       | none => .error
+    | .nativeRef impl =>
+      match impl initMs.containers args with
+      | some (results, containers') =>
+        .returned results { initMs with containers := containers' }
+      | none => .error
     | .bytecode code numLocals =>
       let initLocals := args.map some ++
         List.replicate (numLocals - fdesc.numParams) none
@@ -715,6 +809,7 @@ def eval (env : ModuleEnv) (funcIdx : FuncIndex) (args : List MoveValue)
         code := code
         pc := 0
         locals := initLocals.toArray
+        localRefs := (List.replicate numLocals none).toArray
       }
       run env frame [] [] initMs fuel
   else .error

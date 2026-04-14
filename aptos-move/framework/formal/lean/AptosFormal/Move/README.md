@@ -23,7 +23,14 @@ AptosFormal/
 │   └── ConfidentialAsset/Registration/
 │       ├── Formal            FS transcript, abstract Schnorr equation
 │       ├── VerifyMath         CryptoOracle, verifyRegistrationProofProp
-│       ├── Operational        execVerifyRegistrationProof (Option Unit model)
+│       ├── Operational        execVerifyRegistrationProof (Option Unit model, L1)
+│       ├── FunctionalSim     verifyRegistrationBytecodeResult (L1.5 functional sim)
+│       ├── EvalEquiv          eval_eq_func_100 (L2≡L1.5), ExecResult.dropMs, fuel lemmas
+│       ├── Refinement         L2≡L1.5≡L1↔L0 refinement chain (eval → prop)
+│       ├── BytecodeSmoke      eval smoke: valid/invalid proof on golden inputs (ref args)
+│       ├── BytecodeDifftestEval  native_decide: eval vs func on 4 oracle traces
+│       ├── BytecodeDifftestBridge  L2→L0 concrete chain (dk=42/k=9999 trace)
+│       ├── RegisterEntryStub  L4 register entry-point stub (verify+store)
 │       ├── SchnorrCompleteness
 │       ├── CryptoSecurity     special soundness, HVZK
 │       ├── FiatShamirSymbolic symbolic Fiat-Shamir model
@@ -38,9 +45,13 @@ AptosFormal/
 │   ├── Step.lean             small-step evaluator (step/run/eval)
 │   ├── Native.lean           native function bindings to Std.* specs
 │   ├── Programs.lean         module env definitions (imports Core + Vector)
+│   ├── Native/
+│   │   └── Registration.lean oracle-parameterized natives (nativeRef + derefImm)
 │   └── Programs/
 │       ├── Core.lean         basic programs (add, max, bcs, refs)
 │       ├── GlobalSmoke.lean  minimal `globalExists` / `globalMoveTo` / `mutBorrowGlobal` smoke
+│       ├── Registration.lean transcribed bytecode for verify_registration_proof (83 instrs)
+│       ├── RegistrationDifftestOracle.lean  table oracle for difftest roundtrip
 │       └── Vector.lean       vector programs (hand-written + real compiler)
 │
 ├── Refinement/           ∀-quantified proofs connecting execution to specs

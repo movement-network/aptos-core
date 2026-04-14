@@ -2425,7 +2425,8 @@ def confidentialModuleEnv : ModuleEnv :=
       caE2eAbort196622Desc, -- 190 second **`enable_allow_list`** (**196622**)
       caE2eAbort196623Desc, -- 191 second **`disable_allow_list`** (**196623**)
       caE2eAbort393219Desc, -- 192 shared **`not_found`** stub: **`freeze_token`** / **`unfreeze_token`** / **`rollover_pending_balance`** / **`rollover_pending_balance_and_freeze`** without CA store (**393219**)
-      caE2eAbort196621Desc -- 193 second **`disable_token`** (**196621**)
+      caE2eAbort196621Desc, -- 193 second **`disable_token`** (**196621**)
+      { numParams := 0, numReturns := 1, body := .native caRegistrationBytecodeEvalNative } -- 194 registration bytecode eval (L2 honest column)
     ] }
 
 private def evalConfidentialIdx (idx : Nat) (fuel : Nat) : ExecResult :=

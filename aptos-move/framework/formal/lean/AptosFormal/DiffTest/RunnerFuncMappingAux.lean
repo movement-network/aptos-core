@@ -662,6 +662,8 @@ private def funcNameToMappingPart5 (base : String) : Option FuncMapping :=
       some { funcIdx := 174, useConfidentialEnv := true, useRealEnv := false }
   | "test_registration_tagged_hash_golden_move_second" =>
       some { funcIdx := 175, useConfidentialEnv := true, useRealEnv := false }
+  | "test_registration_bytecode_eval_roundtrip" =>
+      some { funcIdx := 194, useConfidentialEnv := true, useRealEnv := false }
   | _                  => none
 
 def funcNameToMappingFromBase (base : String) : Option FuncMapping :=

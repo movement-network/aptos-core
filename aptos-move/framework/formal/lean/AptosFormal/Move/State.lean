@@ -24,60 +24,33 @@ structure Frame where
   code : Array MoveInstr
   pc : Nat
   locals : Array (Option MoveValue)
+  /-- Tracks which locals are "container-backed" from `MutBorrowLoc`.
+      When `localRefs[idx] = some rid`, reads of local `idx` go through
+      `ContainerStore.read rid` (getting the current value, which may have
+      been modified through a mutable reference). -/
+  localRefs : Array (Option RefId) := #[]
   deriving BEq
 
-/-! ## Container store
+/-! ## Container store theorems
 
-`ContainerStore` is the pure-functional model of the VM's `Container`
-sharing mechanism (`Rc<RefCell<Vec<ValueImpl>>>`).  Each `RefId` maps to
-a live value that can be read or written through `ReadRef` / `WriteRef`.
-
-In the VM, a borrowed local and the reference point to the same
-`Rc`-wrapped cell, so mutations are immediately visible in both.
-Our model achieves the same semantics with an explicit flat store:
-both the reference and the local (after write-back) see the same
-`RefId`, so reads after writes are consistent.
-
-**Source:** `Container`, `ContainerRef` in
-`third_party/move/move-vm/types/src/values/values_impl.rs` -/
-
-structure ContainerStore where
-  store : Array MoveValue
-  deriving BEq
-
-namespace ContainerStore
-
-def empty : ContainerStore := { store := #[] }
-
-def alloc (cs : ContainerStore) (v : MoveValue) : ContainerStore × RefId :=
-  let id := cs.store.size
-  ({ store := cs.store.push v }, id)
-
-def read (cs : ContainerStore) (id : RefId) : Option MoveValue :=
-  if hlt : id < cs.store.size then some cs.store[id] else none
-
-def write (cs : ContainerStore) (id : RefId) (v : MoveValue) : Option ContainerStore :=
-  if hlt : id < cs.store.size then
-    some { store := cs.store.set id v (by omega) }
-  else none
+`ContainerStore` structure and basic operations are in `Value.lean` (to avoid
+an import cycle with `FuncBody.nativeRef` in `Instr.lean`). Theorems live here. -/
 
 /-- After **`alloc`**, the new cell at the returned **`RefId`** holds the allocated value. -/
 theorem ContainerStore.read_of_alloc (cs : ContainerStore) (v : MoveValue) (cs' : ContainerStore) (rid : RefId)
     (h : ContainerStore.alloc cs v = (cs', rid)) : cs'.read rid = some v := by
   cases cs
-  simp [alloc] at h
+  simp [ContainerStore.alloc] at h
   rcases h with ⟨rfl, rfl⟩
-  simp [read]
+  simp [ContainerStore.read]
 
 /-- After a successful in-bounds **`write`**, **`read`** at the same index returns the new value. -/
 theorem ContainerStore.read_of_write (cs : ContainerStore) (id : RefId) (v : MoveValue) (cs' : ContainerStore)
     (hlt : id < cs.store.size) (h : cs.write id v = some cs') : cs'.read id = some v := by
   cases cs
-  simp [write, hlt] at h
+  simp [ContainerStore.write, hlt] at h
   cases h
-  simp [read, hlt, Array.getElem_set_self]
-
-end ContainerStore
+  simp [ContainerStore.read, hlt, Array.getElem_set_self]
 
 /-! ## Global resources (L4 scaffolding)
 

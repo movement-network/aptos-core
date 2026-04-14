@@ -294,4 +294,38 @@ def MoveType.defaultValue : MoveType → MoveValue
   | .vector _ => .vector .u8 []
   | .struct_ _ fts => .struct_ (fts.map MoveType.defaultValue)
 
+/-! ## Container store (reference heap)
+
+`ContainerStore` is the pure-functional model of the VM's `Container`
+sharing mechanism (`Rc<RefCell<Vec<ValueImpl>>>`).  Each `RefId` maps to
+a live value that can be read or written through `ReadRef` / `WriteRef`.
+
+Defined here (in `Value.lean`) so that `FuncBody.nativeRef` in `Instr.lean`
+can reference it without a circular import (`State.lean` imports `Instr.lean`).
+
+**Source:** `Container`, `ContainerRef` in
+`third_party/move/move-vm/types/src/values/values_impl.rs` -/
+
+structure ContainerStore where
+  store : Array MoveValue
+  deriving BEq
+
+namespace ContainerStore
+
+def empty : ContainerStore := { store := #[] }
+
+def alloc (cs : ContainerStore) (v : MoveValue) : ContainerStore × RefId :=
+  let id := cs.store.size
+  ({ store := cs.store.push v }, id)
+
+def read (cs : ContainerStore) (id : RefId) : Option MoveValue :=
+  if hlt : id < cs.store.size then some cs.store[id] else none
+
+def write (cs : ContainerStore) (id : RefId) (v : MoveValue) : Option ContainerStore :=
+  if hlt : id < cs.store.size then
+    some { store := cs.store.set id v (by omega) }
+  else none
+
+end ContainerStore
+
 end AptosFormal.Move

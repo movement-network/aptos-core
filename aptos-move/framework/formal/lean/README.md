@@ -13,7 +13,7 @@ beyond a single package.
 | `AptosFormal.Refinement.*` | Proofs that selected bytecode matches `Std.*` specs (e.g. `vector::contains`) |
 | `AptosFormal.DiffTest.*` | Lean side of VM ↔ Lean differential tests (JSON oracles); see [`../difftest/README.md`](../difftest/README.md) |
 | `AptosFormal.Tests.*` | Concrete smoke tests (`native_decide`) on the evaluator |
-| `AptosFormal.Experimental.ConfidentialAsset.Registration.*` | `verify_registration_proof` spec + proofs (source-level crypto story, not bytecode) |
+| `AptosFormal.Experimental.ConfidentialAsset.Registration.*` | `verify_registration_proof`: crypto proofs (L0), operational spec (L1), functional simulation (L1.5), bytecode refinement (L2), `native_decide` difftest proofs. See [`../REGISTRATION_VERIFY_REVIEW.md`](../REGISTRATION_VERIFY_REVIEW.md). |
 
 ### Confidential assets: difftest (L1) vs formal verification (L0–L2+)
 

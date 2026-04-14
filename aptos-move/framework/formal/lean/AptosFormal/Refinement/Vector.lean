@@ -65,10 +65,14 @@ theorem containsFromIdx_lt {xs : List UInt64} {e : UInt64} {i : Nat}
 private abbrev containsVec (xs : List UInt64) : MoveValue :=
   .vector .u64 (xs.map .u64)
 
+private def noLocalRefs5 : Array (Option RefId) := (List.replicate 5 none).toArray
+
 /-- Initial frame for `vector_contains`: matches `eval` (`args.map some ++ replicate 3 none`). -/
 def containsInitFrame (xs : List UInt64) (e : UInt64) : Frame :=
   let args : List MoveValue := [.vector .u64 (xs.map .u64), .u64 e]
-  { code := vectorContainsCode, pc := 0, locals := (args.map some ++ List.replicate 3 none).toArray }
+  { code := vectorContainsCode, pc := 0,
+    locals := (args.map some ++ List.replicate 3 none).toArray,
+    localRefs := noLocalRefs5 }
 
 /-- Container store after `k` failed comparisons: vector at id `0`, then stale `u64` cells. -/
 def containsVmStore (xs : List UInt64) (k : Nat) : ContainerStore where
@@ -84,9 +88,9 @@ def containsLoopFrame (xs : List UInt64) (e : UInt64) (k : Nat) : Frame where
     some (.u64 e),
     some (.immRef 0),
     some (.u64 k.toUInt64),
-    -- Definitional match for `vecLenRef` on `containsVec xs` (`List.length_map` is not `rfl`).
     some (.u64 (List.map MoveValue.u64 xs).length.toUInt64)
   ]
+  localRefs := noLocalRefs5
 
 @[simp] theorem containsLoopFrame_code (xs : List UInt64) (e : UInt64) (k i : Nat) :
     ({ containsLoopFrame xs e k with pc := i}).code = vectorContainsCode := rfl
@@ -150,53 +154,63 @@ private theorem contains_setup_step1 (xs : List UInt64) (e : UInt64) :
         [] [.immRef 0]
         (MachineState.ofContainers ({ store := #[containsVec xs] } : ContainerStore)) =
       ExecResult.ok
-        { code := vectorContainsCode, pc := 2, locals := containsLocalsRef xs e }
+        { code := vectorContainsCode, pc := 2, locals := containsLocalsRef xs e,
+          localRefs := noLocalRefs5 }
         [] []
         (MachineState.ofContainers ({ store := #[containsVec xs] } : ContainerStore)) := rfl
 
 private theorem contains_setup_step2 (xs : List UInt64) (e : UInt64) :
     step stdModuleEnv
-        { code := vectorContainsCode, pc := 2, locals := containsLocalsRef xs e }
+        { code := vectorContainsCode, pc := 2, locals := containsLocalsRef xs e,
+          localRefs := noLocalRefs5 }
         [] []
         (MachineState.ofContainers ({ store := #[containsVec xs] } : ContainerStore)) =
       ExecResult.ok
-        { code := vectorContainsCode, pc := 3, locals := containsLocalsRef xs e }
+        { code := vectorContainsCode, pc := 3, locals := containsLocalsRef xs e,
+          localRefs := noLocalRefs5 }
         [] [.u64 0]
         (MachineState.ofContainers ({ store := #[containsVec xs] } : ContainerStore)) := rfl
 
 private theorem contains_setup_step3 (xs : List UInt64) (e : UInt64) :
     step stdModuleEnv
-        { code := vectorContainsCode, pc := 3, locals := containsLocalsRef xs e }
+        { code := vectorContainsCode, pc := 3, locals := containsLocalsRef xs e,
+          localRefs := noLocalRefs5 }
         [] [.u64 0]
         (MachineState.ofContainers ({ store := #[containsVec xs] } : ContainerStore)) =
       ExecResult.ok
-        { code := vectorContainsCode, pc := 4, locals := containsLocalsILen xs e }
+        { code := vectorContainsCode, pc := 4, locals := containsLocalsILen xs e,
+          localRefs := noLocalRefs5 }
         [] []
         (MachineState.ofContainers ({ store := #[containsVec xs] } : ContainerStore)) := rfl
 
 private theorem contains_setup_step4 (xs : List UInt64) (e : UInt64) :
     step stdModuleEnv
-        { code := vectorContainsCode, pc := 4, locals := containsLocalsILen xs e }
+        { code := vectorContainsCode, pc := 4, locals := containsLocalsILen xs e,
+          localRefs := noLocalRefs5 }
         [] []
         (MachineState.ofContainers ({ store := #[containsVec xs] } : ContainerStore)) =
       ExecResult.ok
-        { code := vectorContainsCode, pc := 5, locals := containsLocalsILen xs e }
+        { code := vectorContainsCode, pc := 5, locals := containsLocalsILen xs e,
+          localRefs := noLocalRefs5 }
         [] [.immRef 0]
         (MachineState.ofContainers ({ store := #[containsVec xs] } : ContainerStore)) := rfl
 
 private theorem contains_setup_step5 (xs : List UInt64) (e : UInt64) :
     step stdModuleEnv
-        { code := vectorContainsCode, pc := 5, locals := containsLocalsILen xs e }
+        { code := vectorContainsCode, pc := 5, locals := containsLocalsILen xs e,
+          localRefs := noLocalRefs5 }
         [] [.immRef 0]
         (MachineState.ofContainers ({ store := #[containsVec xs] } : ContainerStore)) =
       ExecResult.ok
-        { code := vectorContainsCode, pc := 6, locals := containsLocalsILen xs e }
+        { code := vectorContainsCode, pc := 6, locals := containsLocalsILen xs e,
+          localRefs := noLocalRefs5 }
         [] [.u64 (List.map MoveValue.u64 xs).length.toUInt64]
         (MachineState.ofContainers ({ store := #[containsVec xs] } : ContainerStore)) := rfl
 
 private theorem contains_setup_step6 (xs : List UInt64) (e : UInt64) :
     step stdModuleEnv
-        { code := vectorContainsCode, pc := 6, locals := containsLocalsILen xs e }
+        { code := vectorContainsCode, pc := 6, locals := containsLocalsILen xs e,
+          localRefs := noLocalRefs5 }
         [] [.u64 (List.map MoveValue.u64 xs).length.toUInt64]
         (MachineState.ofContainers ({ store := #[containsVec xs] } : ContainerStore)) =
       ExecResult.ok (containsLoopFrame xs e 0) [] [] (containsVmStore xs 0) := rfl
@@ -288,7 +302,8 @@ private def containsExitFrame (xs : List UInt64) (e : UInt64) : Frame :=
       some (.immRef 0),
       some (.u64 uLen),
       some (.u64 uLen)
-    ] }
+    ],
+    localRefs := noLocalRefs5 }
 
 @[simp] theorem containsExitFrame_code (xs : List UInt64) (e : UInt64) (i : Nat) :
     ({ containsExitFrame xs e with pc := i}).code = vectorContainsCode := rfl

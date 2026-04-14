@@ -5512,9 +5512,10 @@ pub(super) fn confidential_asset_balance_after_confidential_transfer_only_cases(
         &alice_dk,
         xfer,
         remaining,
+        vec![],
     );
     assert_kept_success(
-        &run_confidential_transfer(&mut h, &alice, bob_addr, &parts),
+        &run_confidential_transfer(&mut h, &alice, bob_addr, &parts, vec![]),
         "confidential_transfer before balance view",
     );
 
@@ -5576,9 +5577,10 @@ pub(super) fn confidential_asset_balance_after_transfer_and_second_deposit_only_
         &alice_dk,
         xfer,
         remaining_after_xfer,
+        vec![],
     );
     assert_kept_success(
-        &run_confidential_transfer(&mut h, &alice, bob_addr, &parts),
+        &run_confidential_transfer(&mut h, &alice, bob_addr, &parts, vec![]),
         "transfer mid scenario",
     );
 
@@ -5779,6 +5781,7 @@ pub(super) fn transfer_withdraw_rotate_and_auditor_cases() -> Vec<TestCase> {
 
     let xfer_amt = 400u64;
     let mut remaining: u128 = 10_000 - xfer_amt as u128;
+    let xfer_hint = vec![1u8, 2, 3];
     let parts = pack_transfer_simple(
         &mut h,
         chain,
@@ -5787,9 +5790,10 @@ pub(super) fn transfer_withdraw_rotate_and_auditor_cases() -> Vec<TestCase> {
         &alice_dk,
         xfer_amt,
         remaining,
+        xfer_hint.clone(),
     );
     assert_kept_success(
-        &run_confidential_transfer(&mut h, &alice, bob_addr, &parts),
+        &run_confidential_transfer(&mut h, &alice, bob_addr, &parts, xfer_hint),
         "confidential_transfer",
     );
 
@@ -5802,9 +5806,10 @@ pub(super) fn transfer_withdraw_rotate_and_auditor_cases() -> Vec<TestCase> {
         &alice_dk,
         xfer_amt,
         remaining,
+        vec![],
     );
     assert_kept_success(
-        &run_confidential_transfer(&mut h, &alice, bob_addr, &parts2),
+        &run_confidential_transfer(&mut h, &alice, bob_addr, &parts2, vec![]),
         "confidential_transfer (second)",
     );
 
@@ -5821,9 +5826,10 @@ pub(super) fn transfer_withdraw_rotate_and_auditor_cases() -> Vec<TestCase> {
         xfer_amt,
         remaining,
         vec![aud_pk.clone()],
+        vec![],
     );
     assert_kept_success(
-        &run_confidential_transfer(&mut h, &alice, bob_addr, &warm),
+        &run_confidential_transfer(&mut h, &alice, bob_addr, &warm, vec![]),
         "audited transfer",
     );
 
@@ -7286,9 +7292,10 @@ pub(super) fn confidential_transfer_with_voluntary_auditors_only_cases() -> Vec<
             xfer,
             remaining,
             vol_pks,
+            vec![],
         );
         assert_kept_success(
-            &run_confidential_transfer(&mut h, &alice, bob_addr, &parts),
+            &run_confidential_transfer(&mut h, &alice, bob_addr, &parts, vec![]),
             &format!("transfer {num_voluntary} voluntary auditors"),
         );
 
@@ -7306,9 +7313,10 @@ pub(super) fn confidential_transfer_with_voluntary_auditors_only_cases() -> Vec<
             xfer,
             remaining,
             vol_pks2,
+            vec![],
         );
         assert_kept_success(
-            &run_confidential_transfer(&mut h, &alice, bob_addr, &parts2),
+            &run_confidential_transfer(&mut h, &alice, bob_addr, &parts2, vec![]),
             "second transfer (new voluntary auditor set)",
         );
 
@@ -7368,9 +7376,10 @@ pub(super) fn confidential_transfer_asset_auditor_plus_voluntary_auditors_cases(
             xfer,
             remaining,
             auditor_keys,
+            vec![],
         );
         assert_kept_success(
-            &run_confidential_transfer(&mut h, &alice, bob_addr, &parts),
+            &run_confidential_transfer(&mut h, &alice, bob_addr, &parts, vec![]),
             &format!("audited transfer asset auditor + {num_voluntary} voluntary"),
         );
 
@@ -7482,8 +7491,9 @@ pub(super) fn confidential_transfer_rejects_empty_auditors_when_asset_auditor_se
         &alice_dk,
         100,
         1900,
+        vec![],
     );
-    let st = run_confidential_transfer(&mut h, &alice, bob_addr, &parts);
+    let st = run_confidential_transfer(&mut h, &alice, bob_addr, &parts, vec![]);
     assert_kept_failure(&st, "transfer with zero auditors in proof when asset auditor required");
 
     vec![vm_lean_row(
@@ -7529,6 +7539,7 @@ pub(super) fn confidential_transfer_rejects_mismatched_sender_recipient_amount_c
         &alice_dk,
         100,
         7_900,
+        vec![],
     )
     .to_vec();
     let parts_b = pack_transfer_simple(
@@ -7539,12 +7550,13 @@ pub(super) fn confidential_transfer_rejects_mismatched_sender_recipient_amount_c
         &alice_dk,
         200,
         7_800,
+        vec![],
     );
     // `parts_b[2]` encrypts a different transfer cleartext than `parts_a[1]` / `parts_a[2]`.
     parts_a[2] = parts_b[2].clone();
 
     let parts: [Vec<u8>; 8] = std::array::from_fn(|i| parts_a[i].clone());
-    let st = run_confidential_transfer(&mut h, &alice, bob_addr, &parts);
+    let st = run_confidential_transfer(&mut h, &alice, bob_addr, &parts, vec![]);
     assert_kept_failure(
         &st,
         "sender_amount / recipient_amount ciphertext pair should fail balance_c_equals",
@@ -7590,8 +7602,9 @@ pub(super) fn confidential_transfer_rejects_when_recipient_frozen_cases() -> Vec
         &alice_dk,
         100,
         7_900,
+        vec![],
     );
-    let st = run_confidential_transfer(&mut h, &alice, bob_addr, &parts);
+    let st = run_confidential_transfer(&mut h, &alice, bob_addr, &parts, vec![]);
     assert_kept_failure(&st, "confidential_transfer to frozen recipient should abort");
 
     vec![vm_lean_row(
@@ -8098,8 +8111,9 @@ pub(super) fn confidential_transfer_rejects_non_matching_asset_auditor_pubkey_ca
         100,
         1900,
         vec![wrong_pk],
+        vec![],
     );
-    let st = run_confidential_transfer(&mut h, &alice, bob_addr, &parts);
+    let st = run_confidential_transfer(&mut h, &alice, bob_addr, &parts, vec![]);
     assert_kept_failure(&st, "first auditor EK must match asset auditor");
 
     vec![vm_lean_row(

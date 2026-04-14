@@ -17,7 +17,7 @@ module aptos_experimental::formal_goldens_ristretto {
         assert!(ristretto255::point_equals(&result, &h), 0);
     }
 
-    /// `point_mul(H, 0) == identity` — scalar 0 annihilates.
+    // `point_mul(H, 0) == identity` — scalar 0 annihilates.
     #[test]
     fun golden_scalar_mul_zero() {
         let h = ristretto255::hash_to_point_base();
@@ -27,7 +27,7 @@ module aptos_experimental::formal_goldens_ristretto {
         assert!(ristretto255::point_equals(&result, &identity), 0);
     }
 
-    /// `point_add(H, H) == point_mul(H, 2)` — addition is repeated multiplication.
+    // `point_add(H, H) == point_mul(H, 2)` — addition is repeated multiplication.
     #[test]
     fun golden_point_add_equals_double() {
         let h = ristretto255::hash_to_point_base();
@@ -37,7 +37,7 @@ module aptos_experimental::formal_goldens_ristretto {
         assert!(ristretto255::point_equals(&doubled, &sum), 0);
     }
 
-    /// `point_mul(H, a) + point_mul(H, b) == point_mul(H, a+b)` — distributivity.
+    // `point_mul(H, a) + point_mul(H, b) == point_mul(H, a+b)` — distributivity.
     #[test]
     fun golden_scalar_distributivity() {
         let h = ristretto255::hash_to_point_base();
@@ -51,14 +51,14 @@ module aptos_experimental::formal_goldens_ristretto {
         assert!(ristretto255::point_equals(&sum, &direct), 0);
     }
 
-    /// `point_equals(H, H)` — equality is reflexive.
+    // `point_equals(H, H)` — equality is reflexive.
     #[test]
     fun golden_point_equals_reflexive() {
         let h = ristretto255::hash_to_point_base();
         assert!(ristretto255::point_equals(&h, &h), 0);
     }
 
-    /// `point_add(H, identity) == H` — identity element.
+    // `point_add(H, identity) == H` — identity element.
     #[test]
     fun golden_point_add_identity() {
         let h = ristretto255::hash_to_point_base();
@@ -67,7 +67,7 @@ module aptos_experimental::formal_goldens_ristretto {
         assert!(ristretto255::point_equals(&result, &h), 0);
     }
 
-    /// Commutativity: `point_add(A, B) == point_add(B, A)` for distinct points.
+    // Commutativity: `point_add(A, B) == point_add(B, A)` for distinct points.
     #[test]
     fun golden_point_add_commutative() {
         let h = ristretto255::hash_to_point_base();
@@ -77,7 +77,7 @@ module aptos_experimental::formal_goldens_ristretto {
         assert!(ristretto255::point_equals(&ab, &ba), 0);
     }
 
-    /// `point_mul(point_mul(H, a), b) == point_mul(H, a*b)` — associativity of scalar action.
+    // `point_mul(point_mul(H, a), b) == point_mul(H, a*b)` — associativity of scalar action.
     #[test]
     fun golden_scalar_mul_associative() {
         let h = ristretto255::hash_to_point_base();

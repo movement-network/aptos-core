@@ -6,6 +6,12 @@
 # From repo root:
 #   ./scripts/start-localnet-confidential-assets.sh
 #
+# If $REPO_ROOT/.movement/config.yaml is missing (no `movement init` yet), this script creates one
+# automatically after the localnet REST API is up: generates an Ed25519 key and runs
+# `movement init --network custom --rest-url $NODE_URL` so `move publish` can run without a prior
+# manual init. Existing configs are left unchanged if `movement config show-profiles` succeeds for
+# MOVEMENT_PROFILE. Set SKIP_MOVEMENT_CONFIG_INIT=1 to disable auto-init (publish will fail if no config).
+#
 # Ports (not the same service):
 #   • 8080 — fullnode REST API (ledger), what `move run-script --url` uses. Your log line
 #            "REST API endpoint: http://127.0.0.1:8080" is this.
@@ -32,6 +38,10 @@
 #   SKIP_DOCKER_CHECK=1 — skip `docker info` preflight (not recommended with --with-indexer-api)
 #   KEEP_LOCALNET — after success, keep localnet running (default: 1). Set to 0 to always stop on exit.
 #          On failure, localnet is always shut down if this script started it (no orphan stacks).
+#   LOCALNET_ATTACH — when KEEP_LOCALNET=1 and this script started localnet in the background (default: 1),
+#          block at the end on `wait` until the localnet process exits or you press Ctrl+C (which stops
+#          localnet via the EXIT trap). Set to 0 to return to the shell immediately while localnet keeps
+#          running (then stop with: kill "$(cat .movement/localnet.pid)" from REPO_ROOT).
 #   NODE_REST_WAIT_SECS — after the ready server, max time to wait for NODE_URL/v1 (default: 90).
 #   CORE_RESOURCES_ADDRESS — on-chain @core_resources address (default: 0xa550c18). Genesis creates
 #          this account at a fixed address then rotates its auth key to mint.key, so it is NOT the
@@ -52,6 +62,8 @@
 #   MOVEMENT_PROFILE — profile in $REPO_ROOT/.movement/config.yaml used to sign move publish
 #          (default: default). The package is published with --named-addresses
 #          aptos_experimental=<that profile's account>, not Move.toml's 0x7.
+#   SKIP_MOVEMENT_CONFIG_INIT=1 — do not auto-create .movement/config.yaml when missing (requires
+#          an existing usable profile for move publish when SKIP_EXPERIMENTAL_PUBLISH=0).
 #   EXPERIMENTAL_PACKAGE_DIR — AptosExperimental package (default: $REPO_ROOT/aptos-move/framework/aptos-experimental)
 #   SKIP_EXPERIMENTAL_PUBLISH=1 — skip aptos-experimental move publish after the feature-flag script
 #   MOVE_PUBLISH_MAX_GAS — --max-gas for move publish (default: same as MOVE_RUN_SCRIPT_MAX_GAS)
@@ -77,6 +89,7 @@ POLL_INTERVAL_SECS="${POLL_INTERVAL_SECS:-0.5}"
 SKIP_DOCKER_CHECK="${SKIP_DOCKER_CHECK:-0}"
 WAIT_STRATEGY="${WAIT_STRATEGY:-ready}"
 KEEP_LOCALNET="${KEEP_LOCALNET:-1}"
+LOCALNET_ATTACH="${LOCALNET_ATTACH:-1}"
 NODE_REST_WAIT_SECS="${NODE_REST_WAIT_SECS:-90}"
 CORE_RESOURCES_ADDRESS="${CORE_RESOURCES_ADDRESS:-0xa550c18}"
 FAUCET_URL="${FAUCET_URL:-http://127.0.0.1:8081}"
@@ -90,6 +103,7 @@ MOVE_PUBLISH_MAX_GAS="${MOVE_PUBLISH_MAX_GAS:-$MOVE_RUN_SCRIPT_MAX_GAS}"
 MOVEMENT_PROFILE="${MOVEMENT_PROFILE:-default}"
 EXPERIMENTAL_PACKAGE_DIR="${EXPERIMENTAL_PACKAGE_DIR:-$REPO_ROOT/aptos-move/framework/aptos-experimental}"
 SKIP_EXPERIMENTAL_PUBLISH="${SKIP_EXPERIMENTAL_PUBLISH:-0}"
+SKIP_MOVEMENT_CONFIG_INIT="${SKIP_MOVEMENT_CONFIG_INIT:-0}"
 # Set to 1 only after we nohup localnet in this shell (EXIT trap uses this).
 STARTED_LOCALNET_BG=0
 
@@ -264,6 +278,60 @@ wait_for_localnet_ready() {
   exit 1
 }
 
+# Creates $REPO_ROOT/.movement/config.yaml when missing so move publish can sign. movement init
+# contacts NODE_URL; only call after localnet REST is accepting connections.
+ensure_movement_cli_config_for_publish() {
+  if [[ "$SKIP_EXPERIMENTAL_PUBLISH" == "1" ]]; then
+    return 0
+  fi
+  if [[ "$SKIP_MOVEMENT_CONFIG_INIT" == "1" ]]; then
+    return 0
+  fi
+  local cfg="$REPO_ROOT/.movement/config.yaml"
+  if [[ -f "$cfg" ]]; then
+    if (cd "$REPO_ROOT" && "$MOVEMENT" config show-profiles 2>/dev/null) | python3 -c "import json,sys
+raw=sys.stdin.read().strip()
+if not raw:
+    sys.exit(1)
+d=json.loads(raw)
+if not isinstance(d, dict) or d.get('Error'):
+    sys.exit(1)
+if 'Result' not in d or sys.argv[1] not in d['Result']:
+    sys.exit(1)
+sys.exit(0)" "$MOVEMENT_PROFILE" 2>/dev/null
+    then
+      echo "Using existing Movement CLI config at $cfg (profile: $MOVEMENT_PROFILE)."
+      return 0
+    fi
+    echo "error: $cfg exists but 'movement config show-profiles' does not expose profile \"$MOVEMENT_PROFILE\"." >&2
+    echo "      Fix the file, remove it to allow auto-init, or set SKIP_MOVEMENT_CONFIG_INIT=1 and create a profile manually." >&2
+    exit 1
+  fi
+
+  echo "No Movement CLI config at $cfg; creating profile \"$MOVEMENT_PROFILE\" for this localnet (REST=$NODE_URL) ..."
+  mkdir -p "$REPO_ROOT/.movement"
+  local tmpk
+  tmpk=$(mktemp "$REPO_ROOT/.movement/.local-publish-key.XXXXXX")
+  rm -f "${tmpk}.pub"
+  if ! "$MOVEMENT" key generate --output-file "$tmpk" --encoding hex --assume-yes >/dev/null; then
+    rm -f "$tmpk" "${tmpk}.pub"
+    echo "error: movement key generate failed" >&2
+    exit 1
+  fi
+  if ! (cd "$REPO_ROOT" && "$MOVEMENT" init --assume-yes --network custom \
+    --rest-url "$NODE_URL" \
+    --faucet-url "$FAUCET_URL" \
+    --skip-faucet \
+    --private-key-file "$tmpk" --encoding hex \
+    --profile "$MOVEMENT_PROFILE"); then
+    rm -f "$tmpk" "${tmpk}.pub"
+    echo "error: movement init failed (see messages above)" >&2
+    exit 1
+  fi
+  rm -f "$tmpk" "${tmpk}.pub"
+  echo "Wrote $cfg — publish signer is profile \"$MOVEMENT_PROFILE\" (re-use this file for stable module addresses)."
+}
+
 # Address move run-script uses if you only pass --private-key-file (auth key preimage of pubkey).
 mint_key_derived_address() {
   local tmp pubfile addr
@@ -303,13 +371,67 @@ profile_account_hex() {
     echo "error: python3 is required to read movement profile account" >&2
     return 1
   fi
+  local _cfg="$REPO_ROOT/.movement/config.yaml"
+  # show-profiles must run from REPO_ROOT so ConfigSearchMode::CurrentDir finds .movement/config.yaml.
+  # Output is JSON: {\"Result\":{...}} on success, or {\"Error\":\"...\"} on failure. Some Movement builds
+  # may differ; we fall back to parsing config.yaml if JSON has no Result.
   (cd "$REPO_ROOT" && "$MOVEMENT" config show-profiles) | python3 -c "
-import json, sys
+import json, re, sys
+
+def account_from_config_yaml(text, profile):
+    lines = text.splitlines()
+    in_profiles = False
+    in_profile = False
+    indent_profile = '  ' + profile + ':'
+    for line in lines:
+        if line.rstrip() == 'profiles:':
+            in_profiles = True
+            continue
+        if not in_profiles:
+            continue
+        if line.startswith(indent_profile):
+            in_profile = True
+            continue
+        if in_profile:
+            if re.match(r'^  [^ ].*', line) and not line.startswith('    '):
+                break
+            m = re.match(r'^\\s+account:\\s*(0x[0-9a-fA-F]+)\\s*\$', line)
+            if m:
+                return m.group(1)
+    return None
+
 profile = sys.argv[1]
-data = json.load(sys.stdin)
-acc = data['Result'][profile]['account']
+cfg_path = sys.argv[2]
+raw = sys.stdin.read().strip()
+if not raw:
+    print('empty output from movement config show-profiles (run from repo root; is .movement/config.yaml present?)', file=sys.stderr)
+    sys.exit(1)
+try:
+    data = json.loads(raw)
+except json.JSONDecodeError as e:
+    print('movement config show-profiles did not return JSON:', e, file=sys.stderr)
+    print(raw[:1200], file=sys.stderr)
+    sys.exit(1)
+if isinstance(data, dict) and 'Error' in data:
+    print('movement config show-profiles:', data['Error'], file=sys.stderr)
+    sys.exit(1)
+acc = None
+if isinstance(data, dict) and 'Result' in data and profile in data['Result']:
+    acc = data['Result'][profile].get('account')
+if acc is None and cfg_path:
+    try:
+        text = open(cfg_path, encoding='utf-8').read()
+    except OSError as e:
+        print(f'could not read {cfg_path}: {e}', file=sys.stderr)
+        sys.exit(1)
+    acc = account_from_config_yaml(text, profile)
+if acc is None or acc == '':
+    print('Could not resolve profile account for profile=%r (no Result.%s.account in CLI JSON and no account: in %s).' % (profile, profile, cfg_path or 'config'), file=sys.stderr)
+    print('CLI JSON keys: %s' % (list(data.keys()) if isinstance(data, dict) else type(data),), file=sys.stderr)
+    sys.exit(1)
+acc = str(acc)
 sys.stdout.write(acc if acc.startswith('0x') else '0x' + acc)
-" "$MOVEMENT_PROFILE"
+" "$MOVEMENT_PROFILE" "$_cfg"
 }
 
 # Faucet serves GET / → plain text "tap:ok" when the funder is healthy (see aptos-faucet BasicApi).
@@ -383,7 +505,7 @@ publish_experimental_from_profile() {
   fi
   local cfg="$REPO_ROOT/.movement/config.yaml"
   if [[ ! -f "$cfg" ]]; then
-    echo "error: $cfg not found; move publish needs a CLI profile (or set SKIP_EXPERIMENTAL_PUBLISH=1)." >&2
+    echo "error: $cfg not found after init step; move publish needs a CLI profile (or set SKIP_EXPERIMENTAL_PUBLISH=1)." >&2
     exit 1
   fi
   local named_addr
@@ -488,6 +610,8 @@ fi
 
 cd "$REPO_ROOT"
 
+ensure_movement_cli_config_for_publish
+
 fund_mint_related_accounts
 
 echo "Enabling feature flag 87 (BULLETPROOFS_BATCH_NATIVES) ..."
@@ -503,4 +627,31 @@ echo "Enabling feature flag 87 (BULLETPROOFS_BATCH_NATIVES) ..."
 
 publish_experimental_from_profile
 
-echo "Done. REST: $NODE_URL/v1  (ready server for full stack: $READY_URL — use WAIT_STRATEGY=node to ignore it)"
+echo "Done — feature flag and (if enabled) publish finished."
+echo "REST: $NODE_URL/v1  (full-stack ready probe: $READY_URL — set WAIT_STRATEGY=node to wait only on REST)"
+
+# Hold this shell so localnet is not an invisible background process (default). Ctrl+C stops localnet.
+if [[ "$STARTED_LOCALNET_BG" == "1" ]] && [[ "$KEEP_LOCALNET" == "1" ]] && [[ "${LOCALNET_ATTACH:-1}" == "1" ]]; then
+  if [[ -f "$LOCALNET_PID_FILE" ]]; then
+    pid=$(cat "$LOCALNET_PID_FILE" 2>/dev/null || true)
+    if [[ -n "${pid:-}" ]] && kill -0 "$pid" 2>/dev/null; then
+      echo ""
+      echo "━━━━━━━━ Localnet is running — this terminal stays attached ━━━━━━━━"
+      echo "  REST API:     ${NODE_URL}/v1"
+      echo "  Ready check:  $READY_URL"
+      echo "  Process pid:  $pid   (also in $LOCALNET_PID_FILE)"
+      echo "  Live logs:    tail -f \"$LOCALNET_LOG\""
+      echo "  Stop:         Ctrl+C here, or in another shell: kill $pid"
+      echo "  Detach next time (return to prompt while localnet runs): LOCALNET_ATTACH=0"
+      echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+      # Ctrl+C yields non-zero exit; EXIT trap runs shutdown_localnet_bg.
+      wait "$pid" || true
+      shutdown_localnet_bg
+    fi
+  fi
+elif [[ "$STARTED_LOCALNET_BG" == "1" ]] && [[ "$KEEP_LOCALNET" == "1" ]] && [[ "${LOCALNET_ATTACH:-1}" != "1" ]]; then
+  if [[ -f "$LOCALNET_PID_FILE" ]]; then
+    pid=$(cat "$LOCALNET_PID_FILE" 2>/dev/null || true)
+    echo "Localnet left running in the background (pid ${pid:-?}). Stop from repo root: kill \"\$(cat .movement/localnet.pid)\""
+  fi
+fi

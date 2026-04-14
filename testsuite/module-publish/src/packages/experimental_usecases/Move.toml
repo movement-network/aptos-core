@@ -11,3 +11,4 @@ AptosTokenObjects = { local = "../../../../../aptos-move/framework/aptos-token-o
 # testing exchanging of constant address works as well.
 [addresses]
 publisher_address = "0xABCD"
+aptos_experimental = "0x7"

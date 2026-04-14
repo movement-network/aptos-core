@@ -11,6 +11,7 @@
 3. [Cryptographic Primitives](#3-cryptographic-primitives)
 4. [Balance Representation](#4-balance-representation)
 5. [Protocol Operations](#5-protocol-operations)
+   - [`Transferred` event](#transferred-module-event)
 6. [Proof System](#6-proof-system)
 7. [Fiat-Shamir Construction](#7-fiat-shamir-construction)
 8. [Registration Proof](#8-registration-proof)
@@ -24,7 +25,9 @@
 
 Movement Confidential Assets is an on-chain protocol that enables private fungible token transfers on the Movement blockchain. While transaction senders and recipients remain visible, **transfer amounts are hidden** using homomorphic encryption and zero-knowledge proofs.
 
-The protocol builds on the Aptos Confidential Asset framework, which was originally released under the Apache 2.0 open-source license. In November 2025, Aptos Labs changed the license on their `aptos-core` repository to a more restrictive license, and subsequently introduced proprietary changes to their confidential asset module (v1.1) under the new terms. Movement's implementation uses only code that predates the license change, and all production-hardening modifications are clean-room implementations based on published, public-domain cryptography — no post-license-change Aptos code was used or referenced. These modifications include chain ID binding to prevent cross-chain proof replay, SHA3-512 tagged hashing for Fiat-Shamir challenges, and a Schnorr-based registration proof to prevent key registration abuse.
+The protocol builds on the Aptos Confidential Asset framework, which was originally released under the Apache 2.0 open-source license. In November 2025, Aptos Labs changed the license on their `aptos-core` repository to a more restrictive license, and subsequently introduced proprietary changes to their confidential asset module (v1.1) under the new terms. Movement's implementation uses only code that predates the license change, and all production-hardening modifications are clean-room implementations based on published, public-domain cryptography — no post-license-change Aptos code was used or referenced. These modifications include chain ID binding to prevent cross-chain proof replay, SHA3-512 tagged hashing for Fiat-Shamir challenges, a Schnorr-based registration proof to prevent key registration abuse, and **sender auditor hints** for private transfers: an optional opaque byte string (length-capped) that is **hashed into the transfer sigma Fiat–Shamir transcript** so it cannot be altered after the proof is generated, then **emitted** on the on-chain `Transferred` module event.
+
+**What observers still see.** A successful private transfer does not post the amount in cleartext, but it **does** emit `Transferred` with routing metadata, **compressed ciphertexts** for the moved amount and for the sender’s new actual balance and recipient’s new pending balance, a **flattened copy of the transfer sigma `x7s` commitment block** (`ek_volun_auds`; see [§5 `Transferred` event](#transferred-module-event)), the **`sender_auditor_hint`** bytes, and a **`memo`** field (reserved; empty in the current implementation). Indexers and compliance tooling should treat that event as the canonical on-chain record of those public payloads.
 
 ```mermaid
 flowchart LR
@@ -227,12 +230,13 @@ sequenceDiagram
     participant Sender
     participant Chain as Movement Chain
     participant Recipient
-    Sender->>Sender: Compute sigma proof + range proofs
-    Sender->>Chain: transfer(encrypted_amounts, proof)
-    Chain->>Chain: Verify sigma proof (balance relation)
+    Sender->>Sender: Compute sigma proof + range proofs<br/>(Fiat-Shamir binds sender_auditor_hint)
+    Sender->>Chain: confidential_transfer(encrypted_amounts, proof, sender_auditor_hint)
+    Chain->>Chain: Verify sigma proof (balance relation + hint binding)
     Chain->>Chain: Verify range proofs (no overflow)
     Chain->>Chain: Deduct from sender actual balance
     Chain->>Chain: Add to recipient pending balance
+    Chain->>Chain: Emit Transferred(ciphertexts, ek_volun_auds, hint, …)
     Note over Chain: Amount hidden from all observers
     Note over Chain: Auditor can decrypt if configured
 ```
@@ -244,6 +248,26 @@ The transfer proof demonstrates:
 1. Sender's new balance = old balance - transfer amount
 2. Transfer amount encrypted under recipient's key matches sender's committed amount
 3. All new balance chunks are in range $[0, 2^{16})$
+
+**Sender auditor hint (`sender_auditor_hint`).** The sender may attach up to **`MAX_SENDER_AUDITOR_HINT_BYTES` (256)** opaque bytes (e.g. for off-chain auditors, indexers, or compliance references). The implementation **serializes the hint with BCS** and **appends those bytes to the transfer sigma Fiat–Shamir message** (after the commitment points, before the chain-id / sender / contract prefix is prepended and the tagged hash is taken). The same bytes must therefore be supplied when **generating** the proof off-chain and when calling **`confidential_transfer`** on-chain; changing the hint invalidates the proof. After successful verification, the hint is included on the **`Transferred`** module event (field reference below).
+
+### `Transferred` module event
+
+After `confidential_transfer` verifies the `TransferProof`, the module updates confidential balances and emits **`Transferred`**. The payload is a **flat struct** of `address` / `vector<u8>` / compressed-balance types (no cleartext amount). Integrators should not infer field names from legacy abbreviations alone; the list below is authoritative.
+
+| Field | Type (conceptual) | Meaning |
+| ----- | ----------------- | ------- |
+| **`from`** | Account address | Sender confidential account (the `signer` of the transfer). |
+| **`to`** | Account address | Recipient confidential account. |
+| **`asset_type`** | Object address | Fungible-asset **metadata object** address for the token (`object::object_address(&token)`). |
+| **`amount`** | Compressed confidential balance | **Ciphertext** for the amount moved, under the recipient key in **pending-balance** (four 16-bit chunk) layout. |
+| **`ek_volun_auds`** | `vector<u8>` | **Wire serialization of `sigma_proof.xs.x7s`:** for each auditor row in the verified transfer proof, **four** compressed Ristretto points (32 bytes each), concatenated **row-major** (auditor order matches the transfer’s auditor EK list; within each row, chunk indices 0–3). **Length = `128 × n`** bytes where `n` is the number of auditor rows (`n = 0` ⇒ empty vector). These are sigma **commitments** tied to the proof; they do **not** replace optional auditor ciphertexts and are not raw EK bytes. |
+| **`sender_auditor_hint`** | `vector<u8>` | Opaque bytes bound into the transfer sigma Fiat–Shamir hash (BCS) and copied into the event (max **256** bytes). |
+| **`new_sender_available_balance`** | Compressed confidential balance | Sender’s new **actual** (spendable) balance ciphertext after the debit. |
+| **`new_recip_pending_balance`** | Compressed confidential balance | Recipient’s new **pending** balance ciphertext after the credit. |
+| **`memo`** | `vector<u8>` | Reserved; the current implementation emits an **empty** vector. |
+
+**Why `ek_volun_auds` appears on-chain.** The transfer sigma proof already proves soundness; publishing the `x7s` block gives auditors and indexers a **stable, canonical byte string** that matches the verified proof’s auditor-row commitments without re-serializing the entire proof in the event.
 
 ### Withdraw
 
@@ -295,8 +319,8 @@ sequenceDiagram
     Alice->>Movement: rollover()
 
     Note left of Alice: 4. Transfer
-    Alice->>Bob: confidential_transfer(proof)
-    Note over Movement: Amount hidden
+    Alice->>Movement: confidential_transfer(..., proof, sender_auditor_hint)
+    Note over Movement: Amount hidden; Transferred emitted (§5)
 
     Note right of Bob: 5. Rollover
     Bob->>Movement: rollover()
@@ -320,7 +344,7 @@ sequenceDiagram
 | 2    | Bob   | `register(MOVE, ek_B, proof)`             | Public (one-time setup)                |
 | 3    | Alice | `deposit(MOVE, 1000)`                     | Amount visible (entering private pool) |
 | 4    | Alice | `rollover_pending_balance(MOVE)`          | No amount revealed                     |
-| 5    | Alice | `confidential_transfer(MOVE, Bob, proof)` | **Amount hidden**                      |
+| 5    | Alice | `confidential_transfer(MOVE, Bob, …, proof, sender_auditor_hint)` | **Amount hidden**; emits `Transferred` (ciphertexts, `ek_volun_auds`, `sender_auditor_hint`, new balances; see [§5](#transferred-module-event)) |
 | 6    | Bob   | `rollover_pending_balance(MOVE)`          | No amount revealed                     |
 | 7    | Bob   | `normalize(MOVE, ...)`                    | No amount revealed (only if needed)    |
 | 8    | Bob   | `withdraw(MOVE, amount, proof)`           | Amount visible (leaving private pool)  |
@@ -385,6 +409,8 @@ This batching reduces verification to a single MSM, which is significantly faste
 
 *n = number of auditors*
 
+For **transfers**, the verifier’s commitment count includes the per-auditor `x7s` block; the same `x7s` data (flattened) is what appears on-chain as **`ek_volun_auds`** on `Transferred` (§5).
+
 ---
 
 ## 7. Fiat-Shamir Construction
@@ -414,21 +440,25 @@ Each operation uses a distinct domain separation tag (DST):
 
 ### Chain ID and Sender Binding
 
-Every Fiat-Shamir challenge includes the chain ID and sender address as prefix bytes:
+Every Fiat-Shamir challenge includes the chain ID and sender address as prefix bytes (prepended to the full message that already contains curve points, keys, balance encodings, and—**for transfers only**—the BCS encoding of `sender_auditor_hint`):
 
-$$\rho = \text{taggedhash}\left(\text{DST},\ \text{chainid}  \text{sender}  \text{publicparams}  X_1  \cdots  X_n\right)$$
+$$\rho = \text{taggedhash}\left(\text{DST},\ \text{chainid}  \text{sender}  \text{contract}  \text{publicparams}  X_1  \cdots  X_n\right)$$
+
+Here `publicparams` for the **transfer** sigma includes the usual public inputs (bases, sender/recipient/auditor keys, balance encodings, etc.) **followed by** `BCS(sender_auditor_hint)` so the challenge depends on the exact hint bytes the sender intends to publish.
 
 This binding ensures:
 
 - A proof generated for Movement mainnet cannot be replayed on testnet (or vice versa)
 - A proof generated by one sender cannot be replayed by a different sender
 - Proofs are tied to the specific transaction context
+- **(Transfers)** The emitted `sender_auditor_hint` cannot be swapped for another payload without regenerating the proof
 
 ```mermaid
 flowchart LR
     CID["chain_id (1 byte)"] --> MSG
     SENDER["sender address (32 bytes)"] --> MSG
     PARAMS["public parameters"] --> MSG
+    HINT["BCS(sender_auditor_hint) — transfer only"] --> MSG
     COMMITS["commitment points"] --> MSG
     MSG["Challenge Input"] --> TH["tagged_hash(DST, msg)"]
     TH --> RHO["Challenge scalar ρ"]
@@ -493,6 +523,7 @@ $$(k - e \cdot dk^{-1}) \cdot H + e \cdot dk^{-1} \cdot H = k \cdot H = R \quad 
 - Transfer amounts are hidden from all observers (validators, other users)
 - Only the sender, recipient, and optional auditors can decrypt the amount
 - Multiple transfers between the same parties do not leak cumulative information beyond what each party can individually compute
+- The **`Transferred`** event still exposes **ciphertexts**, **sigma `x7s` bytes** (`ek_volun_auds`), and **`sender_auditor_hint`**: privacy is “amount and plaintext hidden,” not “no public cryptographic material” (see §5)
 
 ### Proof Soundness
 
@@ -530,6 +561,7 @@ flowchart TB
 | Key registration abuse | Schnorr ZKPoK required at registration |
 | Front-running          | Pending/actual balance separation      |
 | Chunk overflow         | Normalization + range proofs           |
+| Hint substitution (transfer) | Transfer sigma challenge includes BCS(`sender_auditor_hint`) |
 
 
 ### Decryption Complexity
@@ -583,6 +615,7 @@ flowchart LR
 | **Registration proof**  | `sigma_protocol_registration.move` via generic framework                                         | Inline Schnorr verification in `confidential_proof.move`                         | [Schnorr, 1989](https://link.springer.com/chapter/10.1007/0-387-34805-0_22)                                                                       |
 | **Module location**     | Moved to `aptos-framework`                                                                       | Remains in `aptos-experimental`                                                  | N/A                                                                                                                                               |
 | **Proof types**         | Enum-wrapped with V1 variants                                                                    | Flat struct types                                                                | N/A                                                                                                                                               |
+| **Transferred / auditor hint** | Confidential transfer event includes ciphertexts, optional memo, `sender_auditor_hint`, and sigma commitment bytes | **`Transferred`** documents `from` / `to` / `asset_type`, encrypted **`amount`**, flattened **`ek_volun_auds`** (`x7s`, `128×n` bytes), **`sender_auditor_hint`** (BCS-hashed into transfer sigma; max 256 bytes), post-transfer **`new_sender_available_balance`** / **`new_recip_pending_balance`**, and **`memo`** (empty today). Fiat–Shamir layout is Movement-specific | N/A |
 
 
 ### What Was Inherited (Apache 2.0 Licensed)
@@ -604,6 +637,8 @@ The following changes were made to the inherited pre-license-change codebase. Th
 - **Chain ID binding**: All challenges now include chain_id and sender address (the inherited code had neither)
 - **Registration proof**: New Schnorr ZKPoK requirement for key registration (the inherited code had no registration proof)
 - **DST branding**: Tags changed from `"AptosConfidentialAsset/"` to `"MovementConfidentialAsset/"`
+- **Sender auditor hint**: Optional per-transfer opaque bytes, length-limited, **bound into the transfer sigma challenge** and **emitted** on `Transferred` (integrators must pass the same hint when proving and when submitting `confidential_transfer`)
+- **`Transferred` transparency**: The event carries **compressed ciphertexts** for the transfer amount and updated balances, plus **`ek_volun_auds`** (serialized **`x7s`** sigma commitments, `128 × n` bytes for `n` auditor rows) so indexers and auditors can align on-chain data with the verified proof without restating the full proof in the payload
 
 **Note:** The Bulletproofs range proof DST (`"AptosConfidentialAsset/BulletproofRangeProof"`) is unchanged from the inherited code because range proofs are verified by the pre-existing `ristretto255_bulletproofs` native module, and changing the DST would require matching changes in the native layer.
 
@@ -640,11 +675,13 @@ All cryptographic primitives used are published, public-domain, or open-standard
 ## Appendix A: Protocol Constants
 
 ```
-MAX_TRANSFERS_BEFORE_ROLLOVER  = 65534     (2^16 - 2)
-PENDING_BALANCE_CHUNKS         = 4         (64-bit capacity)
-ACTUAL_BALANCE_CHUNKS          = 8         (128-bit capacity)
-CHUNK_SIZE_BITS                = 16
-BULLETPROOFS_NUM_BITS          = 16
-BULLETPROOFS_DST               = "AptosConfidentialAsset/BulletproofRangeProof"
+MAX_TRANSFERS_BEFORE_ROLLOVER   = 65534     (2^16 - 2)
+MAX_SENDER_AUDITOR_HINT_BYTES   = 256       (max bytes for sender_auditor_hint on transfer)
+EK_VOLUN_AUDS_BYTES_PER_AUDITOR_ROW = 128   (4 compressed Ristretto points × 32 bytes; transfer sigma x7s row)
+PENDING_BALANCE_CHUNKS          = 4         (64-bit capacity)
+ACTUAL_BALANCE_CHUNKS           = 8         (128-bit capacity)
+CHUNK_SIZE_BITS                 = 16
+BULLETPROOFS_NUM_BITS           = 16
+BULLETPROOFS_DST                = "AptosConfidentialAsset/BulletproofRangeProof"
 ```
 

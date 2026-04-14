@@ -1,4 +1,8 @@
-// Helpers for Rust e2e-move-tests: bundle proof generation and serialization for entry payloads.
+//! Helpers for Rust `e2e-move-tests`: bundle `confidential_proof::prove_*` output into BCS/byte vectors for
+//! framework entry payloads. Callers must pass the same `sender_auditor_hint` bytes into packing helpers and into
+//! `confidential_asset::confidential_transfer` so the Fiat–Shamir transcript matches. On-chain `Transferred`
+//! emission (ciphertexts, `ek_volun_auds`, hint, balances) is asserted in Move unit tests (`confidential_asset_tests`),
+//! not in these helpers.
 #[test_only]
 module aptos_experimental::confidential_gas_e2e_helpers {
     use std::vector;
@@ -47,6 +51,7 @@ module aptos_experimental::confidential_gas_e2e_helpers {
         transfer_amount: u64,
         new_balance_amount: u128,
         token: Object<Metadata>,
+        sender_auditor_hint: vector<u8>,
     ): (
         vector<u8>,
         vector<u8>,
@@ -67,6 +72,7 @@ module aptos_experimental::confidential_gas_e2e_helpers {
             new_balance_amount,
             token,
             &no_extra_auditors,
+            sender_auditor_hint,
         )
     }
 
@@ -81,6 +87,7 @@ module aptos_experimental::confidential_gas_e2e_helpers {
         new_balance_amount: u128,
         token: Object<Metadata>,
         auditor_eks: vector<vector<u8>>,
+        sender_auditor_hint: vector<u8>,
     ): (
         vector<u8>,
         vector<u8>,
@@ -113,6 +120,7 @@ module aptos_experimental::confidential_gas_e2e_helpers {
             new_balance_amount,
             token,
             &parsed,
+            sender_auditor_hint,
         )
     }
 
@@ -125,6 +133,7 @@ module aptos_experimental::confidential_gas_e2e_helpers {
         new_balance_amount: u128,
         token: Object<Metadata>,
         auditor_eks: &vector<CompressedPubkey>,
+        sender_auditor_hint: vector<u8>,
     ): (
         vector<u8>,
         vector<u8>,
@@ -156,6 +165,7 @@ module aptos_experimental::confidential_gas_e2e_helpers {
             new_balance_amount,
             &current,
             auditor_eks,
+            sender_auditor_hint,
         );
         let (sigma_proof, zkrp_new_balance, zkrp_transfer_amount) =
             confidential_proof::serialize_transfer_proof(&proof);

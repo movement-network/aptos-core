@@ -1,6 +1,7 @@
 /// The `confidential_proof` module provides the infrastructure for verifying zero-knowledge proofs used in the Confidential Asset protocol.
 /// These proofs ensure correctness for operations such as `confidential_transfer`, `withdraw`, `rotate_encryption_key`, and `normalize`.
 module aptos_experimental::confidential_proof {
+    use std::bcs;
     use std::error;
     use std::option;
     use std::option::Option;
@@ -368,6 +369,8 @@ module aptos_experimental::confidential_proof {
     /// 5. The sender's new balance is normalized, with each chunk in `new_balance` also adhering to the range [0, 2^16).
     ///
     /// If all conditions are satisfied, the proof validates the transfer; otherwise, the function causes an error.
+    ///
+    /// `sender_auditor_hint` is bound into the transfer sigma Fiat–Shamir transcript (same bytes as emitted on-chain).
     public fun verify_transfer_proof(
         chain_id: u8,
         sender: address,
@@ -380,6 +383,7 @@ module aptos_experimental::confidential_proof {
         recipient_amount: &confidential_balance::ConfidentialBalance,
         auditor_eks: &vector<twisted_elgamal::CompressedPubkey>,
         auditor_amounts: &vector<confidential_balance::ConfidentialBalance>,
+        sender_auditor_hint: &vector<u8>,
         proof: &TransferProof)
     {
         verify_transfer_sigma_proof(
@@ -394,6 +398,7 @@ module aptos_experimental::confidential_proof {
             recipient_amount,
             auditor_eks,
             auditor_amounts,
+            sender_auditor_hint,
             &proof.sigma_proof
         );
         verify_new_balance_range_proof(new_balance, &proof.zkrp_new_balance);
@@ -581,6 +586,7 @@ module aptos_experimental::confidential_proof {
         recipient_amount: &confidential_balance::ConfidentialBalance,
         auditor_eks: &vector<twisted_elgamal::CompressedPubkey>,
         auditor_amounts: &vector<confidential_balance::ConfidentialBalance>,
+        sender_auditor_hint: &vector<u8>,
         proof: &TransferSigmaProof)
     {
         let rho = fiat_shamir_transfer_sigma_proof_challenge(
@@ -595,6 +601,7 @@ module aptos_experimental::confidential_proof {
             recipient_amount,
             auditor_eks,
             auditor_amounts,
+            sender_auditor_hint,
             &proof.xs
         );
 
@@ -1007,10 +1014,34 @@ module aptos_experimental::confidential_proof {
     // Friend public functions
     //
 
-    /// Returns the number of auditors encoded in the transfer sigma proof (length of `proof.sigma_proof.xs.x7s`).
-    /// Used by `confidential_asset` when validating `confidential_transfer` inputs (e.g. auditor ciphertext vectors).
+    /// Returns `n`, the number of **auditor rows** encoded in the transfer sigma proof — i.e.
+    /// `proof.sigma_proof.xs.x7s.length()`. Each row holds the four `x7s` curve commitments for one auditor EK.
+    /// `confidential_asset` uses this to cross-check auditor ciphertext vectors on `confidential_transfer`.
     public(friend) fun auditors_count_in_transfer_proof(proof: &TransferProof): u64 {
         proof.sigma_proof.xs.x7s.length()
+    }
+
+    /// Serializes `proof.sigma_proof.xs.x7s` for the `Transferred` event field `ek_volun_auds`: every commitment
+    /// is written as **32 bytes** (`ristretto255::compressed_point_to_bytes`), outer vector = auditors (same order
+    /// as the transfer's auditor EK list), inner vector length is **4** (one compressed point per 16-bit amount
+    /// chunk lane). **Total length = `128 × auditors_count_in_transfer_proof(proof)`** bytes (or `0` when `n = 0`).
+    public(friend) fun transfer_proof_ek_volun_auds_flat_bytes(proof: &TransferProof): vector<u8> {
+        let out = vector[];
+        let rows = &proof.sigma_proof.xs.x7s;
+        let i = 0u64;
+        let n = vector::length(rows);
+        while (i < n) {
+            let row = vector::borrow(rows, i);
+            let j = 0u64;
+            let m = vector::length(row);
+            while (j < m) {
+                let p = *vector::borrow(row, j);
+                out.append(ristretto255::compressed_point_to_bytes(p));
+                j = j + 1;
+            };
+            i = i + 1;
+        };
+        out
     }
 
     //
@@ -1430,6 +1461,7 @@ module aptos_experimental::confidential_proof {
         recipient_amount: &confidential_balance::ConfidentialBalance,
         auditor_eks: &vector<twisted_elgamal::CompressedPubkey>,
         auditor_amounts: &vector<confidential_balance::ConfidentialBalance>,
+        sender_auditor_hint: &vector<u8>,
         proof_xs: &TransferSigmaProofXs): Scalar
     {
         // rho = tagged_hash(DST, chain_id || sender || contract || G || H || P_s || P_r || ...)
@@ -1477,6 +1509,8 @@ module aptos_experimental::confidential_proof {
         proof_xs.x8s.for_each_ref(|x| {
             bytes.append(ristretto255::point_to_bytes(x));
         });
+
+        bytes.append(bcs::to_bytes(sender_auditor_hint));
 
         prepend_domain_context(&mut bytes, chain_id, sender, contract_address);
         new_scalar_from_tagged_hash(FIAT_SHAMIR_TRANSFER_SIGMA_DST, bytes)
@@ -1811,7 +1845,8 @@ module aptos_experimental::confidential_proof {
         amount: u64,
         new_amount: u128,
         current_balance: &confidential_balance::ConfidentialBalance,
-        auditor_eks: &vector<twisted_elgamal::CompressedPubkey>
+        auditor_eks: &vector<twisted_elgamal::CompressedPubkey>,
+        sender_auditor_hint: vector<u8>
     ): (
         TransferProof,
         confidential_balance::ConfidentialBalance,
@@ -1940,6 +1975,7 @@ module aptos_experimental::confidential_proof {
             &recipient_amount,
             auditor_eks,
             &auditor_amounts,
+            &sender_auditor_hint,
             &proof_xs
         );
 

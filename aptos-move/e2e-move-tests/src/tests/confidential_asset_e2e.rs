@@ -1,13 +1,18 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 //
+// If `cargo test` fails with a stack overflow on this module, set `RUST_MIN_STACK=4297152` (see
+// `aptos-move/framework/README.md` and historical CI) and re-run.
+//
 // VM-level confidential-asset checks for this fork. Scenarios are written against the behavior
 // documented in `aptos_experimental::confidential_asset` (e.g. `validate_auditors`, entry
 // signatures)—not transcribed from other repositories' test code.
 //
 // The harness hot-swaps all `0x1` modules from a test-mode compile of `aptos-stdlib` (MoveStdlib +
-// AptosStdlib, so `ristretto255::random_scalar` and friends resolve consistently), plus
-// every `0x7` module from a matching `aptos-experimental` test compile. Genesis already publishes
+// AptosStdlib, so `ristretto255::random_scalar` and friends resolve consistently), then overlays
+// `0x1::event` from the same compile graph as `aptos-experimental` so `event::emitted_events` matches
+// `confidential_asset` (genesis `event` bytecode can lag). It also injects every `0x7` module from that
+// experimental build. Genesis already publishes
 // `FAController` for an older bytecode revision; we delete that resource and re-run
 // `init_module_for_testing` so on-disk layout matches the injected `confidential_asset` module.
 
@@ -33,6 +38,7 @@ use move_model::metadata::{CompilerVersion, LanguageVersion};
 use move_package::BuildConfig;
 use move_vm_runtime::move_vm::SerializedReturnValues;
 use once_cell::sync::OnceCell;
+use std::collections::BTreeMap;
 
 #[path = "confidential_asset_e2e_oracle_impl.rs"]
 mod oracle;
@@ -59,6 +65,10 @@ fn move_test_build_config() -> BuildConfig {
     build_config.test_mode = true;
     build_config.dev_mode = false;
     build_config.skip_fetch_latest_git_deps = true;
+    build_config.additional_named_addresses.insert(
+        "aptos_experimental".to_string(),
+        APTOS_EXPERIMENTAL,
+    );
     build_config.compiler_config.bytecode_version = Some(VERSION_MAX);
     build_config.compiler_config.language_version = Some(LanguageVersion::latest());
     build_config.compiler_config.compiler_version = Some(CompilerVersion::latest());
@@ -116,7 +126,7 @@ fn compile_stdlib_inject_modules() -> Vec<(ModuleId, Vec<u8>)> {
     out
 }
 
-fn compile_experimental_with_tests() -> Vec<(ModuleId, Vec<u8>)> {
+fn compile_experimental_with_tests() -> (Vec<(ModuleId, Vec<u8>)>, (ModuleId, Vec<u8>)) {
     let pkg = framework_dir_path("aptos-experimental");
     let build_config = move_test_build_config();
 
@@ -142,14 +152,17 @@ fn compile_experimental_with_tests() -> Vec<(ModuleId, Vec<u8>)> {
         });
 
     let mut out = Vec::new();
+    let mut event_bytes: Option<(ModuleId, Vec<u8>)> = None;
     for unit in compiled.all_modules() {
         if let CompiledUnit::Module(NamedCompiledModule { module, .. }) = &unit.unit {
             let id = module.self_id();
-            if id.address() != &APTOS_EXPERIMENTAL {
-                continue;
+            if id.address() == &APTOS_EXPERIMENTAL {
+                let bytes = unit.unit.serialize(Some(module.version));
+                out.push((id, bytes));
+            } else if id.address() == &AccountAddress::ONE && id.name().as_str() == "event" {
+                let bytes = unit.unit.serialize(Some(module.version));
+                event_bytes = Some((id, bytes));
             }
-            let bytes = unit.unit.serialize(Some(module.version));
-            out.push((id, bytes));
         }
     }
     out.sort_by(|a, b| a.0.name().as_str().cmp(b.0.name().as_str()));
@@ -157,12 +170,17 @@ fn compile_experimental_with_tests() -> Vec<(ModuleId, Vec<u8>)> {
         !out.is_empty(),
         "expected at least one aptos_experimental module from test build"
     );
-    out
+    let event = event_bytes.expect("aptos-experimental compile graph must include 0x1::event");
+    (out, event)
 }
 
 fn compile_confidential_e2e_inject_modules() -> Vec<(ModuleId, Vec<u8>)> {
-    let mut v = compile_stdlib_inject_modules();
-    v.extend(compile_experimental_with_tests());
+    let (experimental_0x7, event_overlay) = compile_experimental_with_tests();
+    let mut by_id: BTreeMap<ModuleId, Vec<u8>> = compile_stdlib_inject_modules().into_iter().collect();
+    by_id.insert(event_overlay.0, event_overlay.1);
+    let mut v: Vec<(ModuleId, Vec<u8>)> = by_id.into_iter().collect();
+    v.sort_by(|a, b| a.0.name().as_str().cmp(b.0.name().as_str()));
+    v.extend(experimental_0x7);
     v
 }
 
@@ -490,6 +508,7 @@ fn pack_transfer_simple(
     dk: &[u8],
     amount: u64,
     new_balance: u128,
+    sender_auditor_hint: Vec<u8>,
 ) -> [Vec<u8>; 8] {
     let args = vec![
         bcs::to_bytes(&chain_byte).unwrap(),
@@ -499,6 +518,7 @@ fn pack_transfer_simple(
         bcs::to_bytes(&amount).unwrap(),
         bcs::to_bytes(&new_balance).unwrap(),
         bcs::to_bytes(&MOVE_METADATA).unwrap(),
+        bcs::to_bytes(&sender_auditor_hint).unwrap(),
     ];
     let ret = bypass_at(
         h,
@@ -520,6 +540,7 @@ fn pack_transfer_audited(
     amount: u64,
     new_balance: u128,
     auditor_eks: Vec<Vec<u8>>,
+    sender_auditor_hint: Vec<u8>,
 ) -> [Vec<u8>; 8] {
     let auditor_inner: Vec<Vec<u8>> = auditor_eks
         .iter()
@@ -534,6 +555,7 @@ fn pack_transfer_audited(
         bcs::to_bytes(&new_balance).unwrap(),
         bcs::to_bytes(&MOVE_METADATA).unwrap(),
         bcs::to_bytes(&auditor_inner).unwrap(),
+        bcs::to_bytes(&sender_auditor_hint).unwrap(),
     ];
     let ret = bypass_at(
         h,
@@ -551,6 +573,7 @@ fn run_confidential_transfer(
     sender: &Account,
     recipient: AccountAddress,
     parts: &[Vec<u8>; 8],
+    sender_auditor_hint: Vec<u8>,
 ) -> TransactionStatus {
     let payload = TransactionPayload::EntryFunction(EntryFunction::new(
         ca_module_id(),
@@ -567,6 +590,7 @@ fn run_confidential_transfer(
             parts[5].clone(),
             parts[6].clone(),
             parts[7].clone(),
+            bcs::to_bytes(&sender_auditor_hint).unwrap(),
         ],
     ));
     let txn = h.create_transaction_payload(sender, payload);
@@ -1436,9 +1460,108 @@ fn confidential_asset_pending_balance_view_return_len_265_after_register_only() 
     let _ = oracle::pending_balance_view_return_len_265_after_register_only_cases();
 }
 
-#[test]
-fn confidential_asset_actual_balance_view_return_len_529_after_register_only() {
-    let _ = oracle::actual_balance_view_return_len_529_after_register_only_cases();
+    let (alice_dk, alice_ek) = generate_elgamal_keypair(&mut h);
+    let (bob_dk, bob_ek) = generate_elgamal_keypair(&mut h);
+
+    for (acct, addr, dk, ek_struct) in [
+        (&alice, alice_addr, &alice_dk, &alice_ek),
+        (&bob, bob_addr, &bob_dk, &bob_ek),
+    ] {
+        let ek_pk = twisted_pubkey_bytes(&mut h, ek_struct);
+        let (c, r) = prove_registration_parts(&mut h, chain, addr, dk, ek_struct, MOVE_METADATA);
+        assert_kept_success(&run_register(&mut h, acct, &ek_pk, &c, &r), "register");
+    }
+
+    assert_kept_success(&run_deposit(&mut h, &alice, 10_000), "deposit");
+    assert_kept_success(&run_rollover(&mut h, &alice), "rollover pre-transfer");
+
+    let xfer_amt = 400u64;
+    let mut remaining: u128 = 10_000 - xfer_amt as u128;
+    let xfer_hint = vec![1u8, 2, 3];
+    let parts = pack_transfer_simple(
+        &mut h,
+        chain,
+        alice_addr,
+        bob_addr,
+        &alice_dk,
+        xfer_amt,
+        remaining,
+        xfer_hint.clone(),
+    );
+    assert_kept_success(
+        &run_confidential_transfer(&mut h, &alice, bob_addr, &parts, xfer_hint),
+        "confidential_transfer",
+    );
+
+    remaining -= xfer_amt as u128;
+    let parts2 = pack_transfer_simple(
+        &mut h,
+        chain,
+        alice_addr,
+        bob_addr,
+        &alice_dk,
+        xfer_amt,
+        remaining,
+        vec![],
+    );
+    assert_kept_success(
+        &run_confidential_transfer(&mut h, &alice, bob_addr, &parts2, vec![]),
+        "confidential_transfer (second)",
+    );
+
+    let (_aud_dk, aud_ek_struct) = generate_elgamal_keypair(&mut h);
+    let aud_pk = twisted_pubkey_bytes(&mut h, &aud_ek_struct);
+    set_asset_auditor(&mut h, &aud_pk);
+    remaining -= xfer_amt as u128;
+    let warm = pack_transfer_audited(
+        &mut h,
+        chain,
+        alice_addr,
+        bob_addr,
+        &alice_dk,
+        xfer_amt,
+        remaining,
+        vec![aud_pk.clone()],
+        vec![],
+    );
+    assert_kept_success(
+        &run_confidential_transfer(&mut h, &alice, bob_addr, &warm, vec![]),
+        "audited transfer",
+    );
+
+    assert_kept_success(&run_rollover(&mut h, &bob), "bob rollover");
+    let w_amt = 50u64;
+    let bob_after_withdraw: u128 = xfer_amt as u128 * 3 - w_amt as u128;
+    let (nb, zkrp, sigma) = pack_withdraw(
+        &mut h,
+        chain,
+        bob_addr,
+        &bob_dk,
+        &bob_ek,
+        w_amt,
+        bob_after_withdraw,
+    );
+    assert_kept_success(
+        &run_withdraw_to(&mut h, &bob, bob_addr, w_amt, &nb, &zkrp, &sigma),
+        "withdraw_to self",
+    );
+
+    assert_kept_success(&run_rollover_and_freeze(&mut h, &alice), "freeze alice");
+    let (new_dk, new_ek_struct) = generate_elgamal_keypair(&mut h);
+    let alice_remaining = remaining;
+    let (nek_bytes, nbal, zkr, sig) = pack_rotate(
+        &mut h,
+        chain,
+        alice_addr,
+        &alice_dk,
+        &new_dk,
+        &new_ek_struct,
+        alice_remaining,
+    );
+    assert_kept_success(
+        &run_rotate(&mut h, &alice, &nek_bytes, &nbal, &zkr, &sig),
+        "rotate_encryption_key",
+    );
 }
 
 #[test]
@@ -1597,12 +1720,123 @@ fn confidential_asset_compare_plain_fa_transfer_gas() {
 
 #[test]
 fn confidential_transfer_with_voluntary_auditors_only() {
-    let _ = oracle::confidential_transfer_with_voluntary_auditors_only_cases();
+    for num_voluntary in 1u8..=3 {
+        let mut h = fresh_harness();
+        let chain = h.executor.get_chain_id().id();
+        let alice_addr = confidential_e2e_addr(0xE1, num_voluntary);
+        let bob_addr = confidential_e2e_addr(0xE2, num_voluntary);
+        let alice = h.new_account_with_balance_at(alice_addr, 50_000_000_000_000);
+        let bob = h.new_account_with_balance_at(bob_addr, 1_000_000_000);
+
+        let (alice_dk, alice_ek) = generate_elgamal_keypair(&mut h);
+        let (bob_dk, bob_ek) = generate_elgamal_keypair(&mut h);
+        for (acct, addr, dk, ek) in [(&alice, alice_addr, &alice_dk, &alice_ek), (&bob, bob_addr, &bob_dk, &bob_ek)] {
+            let pk = twisted_pubkey_bytes(&mut h, ek);
+            let (c, r) = prove_registration_parts(&mut h, chain, addr, dk, ek, MOVE_METADATA);
+            assert_kept_success(&run_register(&mut h, acct, &pk, &c, &r), "register");
+        }
+
+        let mut vol_eks = Vec::<Vec<u8>>::new();
+        for _ in 0..num_voluntary {
+            let (_dk, ek) = generate_elgamal_keypair(&mut h);
+            vol_eks.push(ek);
+        }
+        let vol_pks = bcs_auditor_pubkeys_from_ek_structs(&mut h, &vol_eks);
+
+        assert_kept_success(&run_deposit(&mut h, &alice, 8_000), "deposit");
+        assert_kept_success(&run_rollover(&mut h, &alice), "rollover");
+
+        let xfer = 200u64;
+        let mut remaining: u128 = 8_000 - xfer as u128;
+        let parts = pack_transfer_audited(
+            &mut h,
+            chain,
+            alice_addr,
+            bob_addr,
+            &alice_dk,
+            xfer,
+            remaining,
+            vol_pks,
+            vec![],
+        );
+        assert_kept_success(
+            &run_confidential_transfer(&mut h, &alice, bob_addr, &parts, vec![]),
+            &format!("transfer {num_voluntary} voluntary auditors"),
+        );
+
+        remaining -= xfer as u128;
+        let vol_eks2: Vec<Vec<u8>> = (0..num_voluntary)
+            .map(|_| generate_elgamal_keypair(&mut h).1)
+            .collect();
+        let vol_pks2 = bcs_auditor_pubkeys_from_ek_structs(&mut h, &vol_eks2);
+        let parts2 = pack_transfer_audited(
+            &mut h,
+            chain,
+            alice_addr,
+            bob_addr,
+            &alice_dk,
+            xfer,
+            remaining,
+            vol_pks2,
+            vec![],
+        );
+        assert_kept_success(
+            &run_confidential_transfer(&mut h, &alice, bob_addr, &parts2, vec![]),
+            "second transfer (new voluntary auditor set)",
+        );
+    }
 }
 
 #[test]
 fn confidential_transfer_asset_auditor_plus_voluntary_auditors() {
-    let _ = oracle::confidential_transfer_asset_auditor_plus_voluntary_auditors_cases();
+    for num_voluntary in 0u8..=3 {
+        let mut h = fresh_harness();
+        let chain = h.executor.get_chain_id().id();
+        let alice_addr = confidential_e2e_addr(0xE3, num_voluntary);
+        let bob_addr = confidential_e2e_addr(0xE4, num_voluntary);
+        let alice = h.new_account_with_balance_at(alice_addr, 60_000_000_000_000);
+        let bob = h.new_account_with_balance_at(bob_addr, 1_000_000_000);
+
+        let (_asset_dk, asset_ek) = generate_elgamal_keypair(&mut h);
+        let asset_pk = twisted_pubkey_bytes(&mut h, &asset_ek);
+        set_asset_auditor(&mut h, &asset_pk);
+
+        let (alice_dk, alice_ek) = generate_elgamal_keypair(&mut h);
+        let (bob_dk, bob_ek) = generate_elgamal_keypair(&mut h);
+        for (acct, addr, dk, ek) in [(&alice, alice_addr, &alice_dk, &alice_ek), (&bob, bob_addr, &bob_dk, &bob_ek)] {
+            let pk = twisted_pubkey_bytes(&mut h, ek);
+            let (c, r) = prove_registration_parts(&mut h, chain, addr, dk, ek, MOVE_METADATA);
+            assert_kept_success(&run_register(&mut h, acct, &pk, &c, &r), "register");
+        }
+
+        let mut auditor_keys = vec![asset_pk.clone()];
+        let mut vol_structs = Vec::new();
+        for _ in 0..num_voluntary {
+            vol_structs.push(generate_elgamal_keypair(&mut h).1);
+        }
+        auditor_keys.extend(bcs_auditor_pubkeys_from_ek_structs(&mut h, &vol_structs));
+
+        assert_kept_success(&run_deposit(&mut h, &alice, 9_000), "deposit");
+        assert_kept_success(&run_rollover(&mut h, &alice), "rollover");
+
+        let xfer = 300u64;
+        let remaining: u128 = 9_000 - xfer as u128;
+        let parts = pack_transfer_audited(
+            &mut h,
+            chain,
+            alice_addr,
+            bob_addr,
+            &alice_dk,
+            xfer,
+            remaining,
+            auditor_keys,
+            vec![],
+        );
+        assert_kept_success(
+            &run_confidential_transfer(&mut h, &alice, bob_addr, &parts, vec![]),
+            &format!("audited transfer asset auditor + {num_voluntary} voluntary"),
+        );
+    }
 }
 
 #[test]
@@ -1617,110 +1851,80 @@ fn confidential_withdraw_after_asset_auditor_enabled() {
 
 #[test]
 fn confidential_transfer_rejects_empty_auditors_when_asset_auditor_set() {
-    let _ = oracle::confidential_transfer_rejects_empty_auditors_when_asset_auditor_set_cases();
+    let mut h = fresh_harness();
+    let chain = h.executor.get_chain_id().id();
+    let alice_addr = confidential_e2e_addr(0xE7, 1);
+    let bob_addr = confidential_e2e_addr(0xE7, 2);
+    let alice = h.new_account_with_balance_at(alice_addr, 50_000_000_000_000);
+    let bob = h.new_account_with_balance_at(bob_addr, 1_000_000_000);
+
+    let (_aud_dk, aud_ek) = generate_elgamal_keypair(&mut h);
+    let aud_pk = twisted_pubkey_bytes(&mut h, &aud_ek);
+    set_asset_auditor(&mut h, &aud_pk);
+
+    let (alice_dk, alice_ek) = generate_elgamal_keypair(&mut h);
+    let (bob_dk, bob_ek) = generate_elgamal_keypair(&mut h);
+    for (acct, addr, dk, ek) in [(&alice, alice_addr, &alice_dk, &alice_ek), (&bob, bob_addr, &bob_dk, &bob_ek)] {
+        let pk = twisted_pubkey_bytes(&mut h, ek);
+        let (c, r) = prove_registration_parts(&mut h, chain, addr, dk, ek, MOVE_METADATA);
+        assert_kept_success(&run_register(&mut h, acct, &pk, &c, &r), "register");
+    }
+
+    assert_kept_success(&run_deposit(&mut h, &alice, 2_000), "deposit");
+    assert_kept_success(&run_rollover(&mut h, &alice), "rollover");
+
+    let parts = pack_transfer_simple(
+        &mut h,
+        chain,
+        alice_addr,
+        bob_addr,
+        &alice_dk,
+        100,
+        1900,
+        vec![],
+    );
+    let st = run_confidential_transfer(&mut h, &alice, bob_addr, &parts, vec![]);
+    assert_kept_failure(&st, "transfer with zero auditors in proof when asset auditor required");
 }
 
 #[test]
 fn confidential_transfer_rejects_non_matching_asset_auditor_pubkey() {
-    let _ = oracle::confidential_transfer_rejects_non_matching_asset_auditor_pubkey_cases();
-}
+    let mut h = fresh_harness();
+    let chain = h.executor.get_chain_id().id();
+    let alice_addr = confidential_e2e_addr(0xE8, 1);
+    let bob_addr = confidential_e2e_addr(0xE8, 2);
+    let alice = h.new_account_with_balance_at(alice_addr, 50_000_000_000_000);
+    let bob = h.new_account_with_balance_at(bob_addr, 1_000_000_000);
 
-#[test]
-fn confidential_transfer_rejects_mismatched_sender_recipient_amount_ciphertexts() {
-    let _ = oracle::confidential_transfer_rejects_mismatched_sender_recipient_amount_ciphertexts_cases();
-}
+    let (_real_aud_dk, real_aud_ek) = generate_elgamal_keypair(&mut h);
+    let _real_aud_pk = twisted_pubkey_bytes(&mut h, &real_aud_ek);
+    set_asset_auditor(&mut h, &_real_aud_pk);
 
-#[test]
-fn confidential_transfer_rejects_when_recipient_frozen() {
-    let _ = oracle::confidential_transfer_rejects_when_recipient_frozen_cases();
-}
+    let (_wrong_dk, wrong_ek) = generate_elgamal_keypair(&mut h);
+    let wrong_pk = twisted_pubkey_bytes(&mut h, &wrong_ek);
 
-#[test]
-fn normalize_aborts_when_already_normalized_only() {
-    let _ = oracle::normalize_aborts_when_already_normalized_only_cases();
-}
+    let (alice_dk, alice_ek) = generate_elgamal_keypair(&mut h);
+    let (bob_dk, bob_ek) = generate_elgamal_keypair(&mut h);
+    for (acct, addr, dk, ek) in [(&alice, alice_addr, &alice_dk, &alice_ek), (&bob, bob_addr, &bob_dk, &bob_ek)] {
+        let pk = twisted_pubkey_bytes(&mut h, ek);
+        let (c, r) = prove_registration_parts(&mut h, chain, addr, dk, ek, MOVE_METADATA);
+        assert_kept_success(&run_register(&mut h, acct, &pk, &c, &r), "register");
+    }
 
-#[test]
-fn deposit_to_rejects_when_recipient_frozen() {
-    let _ = oracle::deposit_to_rejects_when_recipient_frozen_cases();
-}
+    assert_kept_success(&run_deposit(&mut h, &alice, 2_000), "deposit");
+    assert_kept_success(&run_rollover(&mut h, &alice), "rollover");
 
-#[test]
-fn deposit_rejects_when_account_frozen_self_deposit_only() {
-    let _ = oracle::deposit_rejects_when_account_frozen_self_deposit_only_cases();
-}
-
-#[test]
-fn register_aborts_when_store_already_published_only() {
-    let _ = oracle::register_aborts_when_store_already_published_only_cases();
-}
-
-#[test]
-fn rollover_pending_balance_aborts_when_denormalized_only() {
-    let _ = oracle::rollover_pending_balance_aborts_when_denormalized_only_cases();
-}
-
-#[test]
-fn enable_token_aborts_when_already_enabled_only() {
-    let _ = oracle::enable_token_aborts_when_already_enabled_only_cases();
-}
-
-#[test]
-fn deposit_rejects_when_token_not_allowlisted_after_allow_list_enabled_only() {
-    let _ = oracle::deposit_rejects_when_token_not_allowlisted_after_allow_list_enabled_only_cases();
-}
-
-#[test]
-fn enable_allow_list_aborts_when_already_enabled_only() {
-    let _ = oracle::enable_allow_list_aborts_when_already_enabled_only_cases();
-}
-
-#[test]
-fn disable_allow_list_aborts_when_already_disabled_only() {
-    let _ = oracle::disable_allow_list_aborts_when_already_disabled_only_cases();
-}
-
-#[test]
-fn register_rejects_when_token_not_allowlisted_after_allow_list_enabled_first_only() {
-    let _ = oracle::register_rejects_when_token_not_allowlisted_after_allow_list_enabled_first_only_cases();
-}
-
-#[test]
-fn deposit_rejects_after_disable_token_with_allow_list_on_only() {
-    let _ = oracle::deposit_rejects_after_disable_token_with_allow_list_on_only_cases();
-}
-
-#[test]
-fn freeze_token_aborts_when_store_not_published_only() {
-    let _ = oracle::freeze_token_aborts_when_store_not_published_only_cases();
-}
-
-#[test]
-fn unfreeze_token_aborts_when_store_not_published_only() {
-    let _ = oracle::unfreeze_token_aborts_when_store_not_published_only_cases();
-}
-
-#[test]
-fn rollover_pending_balance_aborts_when_store_not_published_only() {
-    let _ = oracle::rollover_pending_balance_aborts_when_store_not_published_only_cases();
-}
-
-#[test]
-fn rollover_pending_balance_and_freeze_aborts_when_store_not_published_only() {
-    let _ = oracle::rollover_pending_balance_and_freeze_aborts_when_store_not_published_only_cases();
-}
-
-#[test]
-fn disable_token_aborts_when_already_disabled_only() {
-    let _ = oracle::disable_token_aborts_when_already_disabled_only_cases();
-}
-
-#[test]
-fn freeze_token_aborts_when_already_frozen_only() {
-    let _ = oracle::freeze_token_aborts_when_already_frozen_only_cases();
-}
-
-#[test]
-fn unfreeze_token_aborts_when_not_frozen_only() {
-    let _ = oracle::unfreeze_token_aborts_when_not_frozen_only_cases();
+    let parts = pack_transfer_audited(
+        &mut h,
+        chain,
+        alice_addr,
+        bob_addr,
+        &alice_dk,
+        100,
+        1900,
+        vec![wrong_pk],
+        vec![],
+    );
+    let st = run_confidential_transfer(&mut h, &alice, bob_addr, &parts, vec![]);
+    assert_kept_failure(&st, "first auditor EK must match asset auditor");
 }

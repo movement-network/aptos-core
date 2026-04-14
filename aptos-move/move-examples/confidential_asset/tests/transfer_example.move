@@ -79,6 +79,7 @@ module confidential_asset_example::transfer_example {
             bob_new_amount,
             &current_balance,
             &auditor_eks,
+            vector[],
         );
 
         let (
@@ -97,7 +98,8 @@ module confidential_asset_example::transfer_example {
             confidential_asset::serialize_auditor_amounts(&auditor_amounts),
             zkrp_new_balance,
             zkrp_transfer_amount,
-            sigma_proof
+            sigma_proof,
+            vector[]
         );
 
         print(&utf8(b"Bob's actual balance is 250"));

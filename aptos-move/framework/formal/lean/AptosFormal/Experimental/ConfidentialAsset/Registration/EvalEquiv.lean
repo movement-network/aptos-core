@@ -48,19 +48,17 @@ After normalization, `simp`'s congruence closes matching branches.
 Remaining abstract branch splits are handled by `split <;> simp`.
 -/
 
-namespace AptosFormal.Experimental.ConfidentialAsset.Registration.EvalEquiv
-
-open AptosFormal.Move
-open AptosFormal.Move.Native.Registration
-open AptosFormal.Move.Programs.Registration
-open AptosFormal.Experimental.ConfidentialAsset.Registration.FunctionalSim
-
 /-! ## MachineState projection
 
 The real bytecode populates the `ContainerStore` via `immBorrowLoc` /
 `mutBorrowLoc` / `nativeRef` calls, so `eval` returns a non-empty
 `MachineState`. The functional sim returns `MachineState.empty`.
-`dropMs` projects away the `MachineState` to enable comparison. -/
+`dropMs` projects away the `MachineState` to enable comparison.
+
+Defined in the `AptosFormal.Move` namespace so that dot notation
+(`r.dropMs`) resolves for `r : ExecResult`. -/
+
+namespace AptosFormal.Move
 
 def ExecResult.dropMs : ExecResult → ExecResult
   | .returned vs _ => .returned vs MachineState.empty
@@ -80,29 +78,42 @@ theorem ExecResult.dropMs_eq_returned_iff (r : ExecResult) (vs : List MoveValue)
     ∃ ms, r = .returned vs ms := by
   constructor
   · intro h; cases r with
-    | returned vs' ms' => simp [dropMs] at h; exact ⟨ms', by cases h; rfl⟩
-    | aborted _ => simp [dropMs] at h
-    | error => simp [dropMs] at h
-    | ok _ _ _ _ => simp [dropMs] at h
-  · rintro ⟨ms, rfl⟩; simp [dropMs]
+    | returned vs' ms' =>
+      simp [ExecResult.dropMs] at h
+      exact ⟨ms', by obtain ⟨rfl, _⟩ := h; rfl⟩
+    | aborted _ => simp [ExecResult.dropMs] at h
+    | error => simp [ExecResult.dropMs] at h
+    | ok _ _ _ _ => simp [ExecResult.dropMs] at h
+  · rintro ⟨ms, rfl⟩; simp [ExecResult.dropMs]
 
 theorem ExecResult.dropMs_eq_aborted_iff (r : ExecResult) (code : UInt64) :
     r.dropMs = .aborted code ↔ r = .aborted code := by
   constructor
   · intro h; cases r with
-    | returned _ _ => simp [dropMs] at h
-    | aborted c => simp [dropMs] at h; exact congrArg ExecResult.aborted h
-    | error => simp [dropMs] at h
-    | ok _ _ _ _ => simp [dropMs] at h
+    | returned _ _ => simp [ExecResult.dropMs] at h
+    | aborted c =>
+      simp [ExecResult.dropMs] at h
+      exact congrArg ExecResult.aborted h
+    | error => simp [ExecResult.dropMs] at h
+    | ok _ _ _ _ => simp [ExecResult.dropMs] at h
   · rintro rfl; rfl
 
 theorem ExecResult.dropMs_ne_error_of_ne_error {r : ExecResult} (h : r ≠ .error) :
     r.dropMs ≠ .error := by
   cases r with
-  | returned _ _ => simp [dropMs]
-  | aborted _ => simp [dropMs]
+  | returned _ _ => simp [ExecResult.dropMs]
+  | aborted _ => simp [ExecResult.dropMs]
   | error => exact absurd rfl h
-  | ok _ _ _ _ => simp [dropMs]
+  | ok _ _ _ _ => simp [ExecResult.dropMs]
+
+end AptosFormal.Move
+
+namespace AptosFormal.Experimental.ConfidentialAsset.Registration.EvalEquiv
+
+open AptosFormal.Move
+open AptosFormal.Move.Native.Registration
+open AptosFormal.Move.Programs.Registration
+open AptosFormal.Experimental.ConfidentialAsset.Registration.FunctionalSim
 
 /-! ## run unfolding -/
 
@@ -192,14 +203,6 @@ theorem run_fuel_ge (env : ModuleEnv) (frame : Frame) (cs : List Frame)
     | aborted _ => rfl
     | error => simp [run, hStep] at hne
 
-theorem eval_fuel_ge_dropMs (env : ModuleEnv) (funcIdx : FuncIndex) (args : List MoveValue)
-    (fuel₁ fuel₂ : Nat) (ms : MachineState) :
-    fuel₁ ≤ fuel₂ →
-    eval env funcIdx args fuel₁ ms ≠ .error →
-    (eval env funcIdx args fuel₂ ms).dropMs = (eval env funcIdx args fuel₁ ms).dropMs := by
-  intro hle hne
-  exact congrArg ExecResult.dropMs (eval_fuel_ge env funcIdx args fuel₁ fuel₂ ms hle hne)
-
 theorem eval_fuel_ge (env : ModuleEnv) (funcIdx : FuncIndex) (args : List MoveValue)
     (fuel₁ fuel₂ : Nat) (ms : MachineState) :
     fuel₁ ≤ fuel₂ →
@@ -216,6 +219,14 @@ theorem eval_fuel_ge (env : ModuleEnv) (funcIdx : FuncIndex) (args : List MoveVa
       simp only [hBody] at hne ⊢
       exact run_fuel_ge _ _ _ _ _ _ _ hle hne
   · simp only [dite_false, hBound] at hne; exact absurd rfl hne
+
+theorem eval_fuel_ge_dropMs (env : ModuleEnv) (funcIdx : FuncIndex) (args : List MoveValue)
+    (fuel₁ fuel₂ : Nat) (ms : MachineState) :
+    fuel₁ ≤ fuel₂ →
+    eval env funcIdx args fuel₁ ms ≠ .error →
+    (eval env funcIdx args fuel₂ ms).dropMs = (eval env funcIdx args fuel₁ ms).dropMs := by
+  intro hle hne
+  exact congrArg ExecResult.dropMs (eval_fuel_ge env funcIdx args fuel₁ fuel₂ ms hle hne)
 
 /-! ## single? fusion lemmas
 

@@ -6,7 +6,7 @@
 #   1. rust-oracle: Rust corpora + VM oracle + CA e2e fragment → merged JSON artifact
 #   2. lean-proofs: Mathlib cache + lake build (all refinement proofs + specs)
 # Then a third job combines them: downloads the JSON artifact and runs `lake exe difftest`.
-name: "Formal — Move–Lean difftest"
+name: "Formal verification"
 on:
   pull_request:
     paths:

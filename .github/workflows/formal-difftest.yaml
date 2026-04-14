@@ -94,7 +94,7 @@ jobs:
       - name: Fetch Mathlib cache (precompiled .olean files)
         run: |
           cd aptos-move/framework/formal/lean
-          lake exe cache get
+          for i in 1 2 3; do lake exe cache get! && break || sleep 10; done
 
       - name: Lean proofs (refinement + specs)
         run: |
@@ -124,7 +124,7 @@ jobs:
       - name: Fetch Mathlib cache
         run: |
           cd aptos-move/framework/formal/lean
-          lake exe cache get
+          for i in 1 2 3; do lake exe cache get! && break || sleep 10; done
 
       - name: Build difftest executable
         run: |

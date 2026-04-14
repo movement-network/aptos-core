@@ -1,6 +1,11 @@
 ---
 # Move VM → JSON oracle → Lean differential smoke (formal framework).
 # Runs on ubuntu-latest; does not use repo-specific k8s runners.
+#
+# Two parallel jobs:
+#   1. rust-oracle: Rust corpora + VM oracle + CA e2e fragment → merged JSON artifact
+#   2. lean-proofs: Mathlib cache + lake build (all refinement proofs + specs)
+# Then a third job combines them: downloads the JSON artifact and runs `lake exe difftest`.
 name: "Formal — Move–Lean difftest"
 on:
   pull_request:
@@ -21,9 +26,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  move-lean-difftest:
+  # ── Job 1: Rust VM oracle + CA e2e → merged JSON ──────────────────────
+  rust-oracle:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
@@ -32,13 +38,18 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@1.86.0
 
+      - name: Cache Cargo registry + build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-formal-${{ hashFiles('Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-formal-
+
       - name: Verify CA formal corpora (hex files, SHA3-512 chains; Rust)
         run: cargo run -p move-lean-difftest -- verify-corpora
-
-      - name: Install Elan (Lean)
-        run: |
-          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y --default-toolchain none
-          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
 
       - name: VM oracle (harness)
         run: cargo run -p move-lean-difftest -- --quiet
@@ -54,12 +65,79 @@ jobs:
             aptos-move/framework/formal/difftest/difftest_oracle.json \
             aptos-move/framework/formal/difftest/difftest_ca_e2e_fragment.json
 
+      - name: Upload merged oracle
+        uses: actions/upload-artifact@v4
+        with:
+          name: difftest-oracle
+          path: aptos-move/framework/formal/difftest/difftest_ci_merged.json
+          retention-days: 1
+
+  # ── Job 2: Lean proofs (refinement + specs) ───────────────────────────
+  lean-proofs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Elan (Lean)
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Cache Lake build
+        uses: actions/cache@v4
+        with:
+          path: aptos-move/framework/formal/lean/.lake
+          key: ${{ runner.os }}-lake-${{ hashFiles('aptos-move/framework/formal/lean/lean-toolchain', 'aptos-move/framework/formal/lean/lakefile.lean', 'aptos-move/framework/formal/lean/lake-manifest.json') }}
+          restore-keys: ${{ runner.os }}-lake-
+
+      - name: Fetch Mathlib cache (precompiled .olean files)
+        run: |
+          cd aptos-move/framework/formal/lean
+          lake exe cache get
+
       - name: Lean proofs (refinement + specs)
         run: |
           cd aptos-move/framework/formal/lean
           lake build
 
-      - name: Lean difftest (merged oracle)
+  # ── Job 3: Lean difftest (needs both Rust oracle + Lean build) ────────
+  lean-difftest:
+    runs-on: ubuntu-latest
+    needs: [rust-oracle, lean-proofs]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Elan (Lean)
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Cache Lake build
+        uses: actions/cache@v4
+        with:
+          path: aptos-move/framework/formal/lean/.lake
+          key: ${{ runner.os }}-lake-${{ hashFiles('aptos-move/framework/formal/lean/lean-toolchain', 'aptos-move/framework/formal/lean/lakefile.lean', 'aptos-move/framework/formal/lean/lake-manifest.json') }}
+          restore-keys: ${{ runner.os }}-lake-
+
+      - name: Fetch Mathlib cache
+        run: |
+          cd aptos-move/framework/formal/lean
+          lake exe cache get
+
+      - name: Build difftest executable
+        run: |
+          cd aptos-move/framework/formal/lean
+          lake build difftest
+
+      - name: Download merged oracle
+        uses: actions/download-artifact@v4
+        with:
+          name: difftest-oracle
+          path: aptos-move/framework/formal/difftest
+
+      - name: Run Lean difftest
         run: |
           cd aptos-move/framework/formal/lean
           lake exe difftest ../difftest/difftest_ci_merged.json

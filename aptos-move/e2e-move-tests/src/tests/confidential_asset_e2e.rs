@@ -34,6 +34,7 @@ use move_core_types::{
     language_storage::{ModuleId, StructTag, TypeTag},
     value::MoveValue,
 };
+use std::str::FromStr;
 use move_model::metadata::{CompilerVersion, LanguageVersion};
 use move_package::BuildConfig;
 use move_vm_runtime::move_vm::SerializedReturnValues;
@@ -394,6 +395,30 @@ fn run_rollover_and_freeze(h: &mut MoveHarness, account: &Account) -> Transactio
     h.run(txn)
 }
 
+fn ca_event_tag(event_name: &str) -> TypeTag {
+    TypeTag::from_str(&format!(
+        "0x{}::confidential_asset::{event_name}",
+        APTOS_EXPERIMENTAL.to_hex()
+    ))
+    .unwrap()
+}
+
+fn count_events(h: &MoveHarness, event_name: &str) -> usize {
+    let tag = ca_event_tag(event_name);
+    h.get_events()
+        .iter()
+        .filter(|e| e.type_tag() == &tag)
+        .count()
+}
+
+fn assert_event_count(h: &MoveHarness, event_name: &str, expected: usize, ctx: &str) {
+    let actual = count_events(h, event_name);
+    assert_eq!(
+        actual, expected,
+        "{ctx}: expected {expected} {event_name} events, got {actual}"
+    );
+}
+
 fn set_asset_auditor(h: &mut MoveHarness, auditor_pubkey_32: &[u8]) {
     let args = vec![
         MoveValue::Signer(AccountAddress::ONE)
@@ -681,12 +706,15 @@ fn confidential_asset_register_deposit_rollover_and_gas() {
         prove_registration_parts(&mut h, chain, alice_addr, &dk, &ek_struct, MOVE_METADATA);
     let st = run_register(&mut h, &alice, &ek_pk, &comm, &resp);
     assert_kept_success(&st, "register");
+    assert_event_count(&h, "Registered", 1, "after register");
 
     let st = run_deposit(&mut h, &alice, 5_000);
     assert_kept_success(&st, "deposit");
+    assert_event_count(&h, "Deposited", 1, "after deposit");
 
     let st = run_rollover(&mut h, &alice);
     assert_kept_success(&st, "rollover");
+    assert_event_count(&h, "RolledOver", 1, "after rollover");
 
     let deposit_payload = TransactionPayload::EntryFunction(EntryFunction::new(
         ca_module_id(),
@@ -721,9 +749,12 @@ fn confidential_asset_transfer_withdraw_rotate_and_auditor() {
         let (c, r) = prove_registration_parts(&mut h, chain, addr, dk, ek_struct, MOVE_METADATA);
         assert_kept_success(&run_register(&mut h, acct, &ek_pk, &c, &r), "register");
     }
+    assert_event_count(&h, "Registered", 2, "after alice+bob register");
 
     assert_kept_success(&run_deposit(&mut h, &alice, 10_000), "deposit");
+    assert_event_count(&h, "Deposited", 1, "after alice deposit");
     assert_kept_success(&run_rollover(&mut h, &alice), "rollover pre-transfer");
+    assert_event_count(&h, "RolledOver", 1, "after alice rollover");
 
     let xfer_amt = 400u64;
     let mut remaining: u128 = 10_000 - xfer_amt as u128;
@@ -742,6 +773,7 @@ fn confidential_asset_transfer_withdraw_rotate_and_auditor() {
         &run_confidential_transfer(&mut h, &alice, bob_addr, &parts, xfer_hint),
         "confidential_transfer",
     );
+    assert_event_count(&h, "Transferred", 1, "after first transfer");
 
     remaining -= xfer_amt as u128;
     let parts2 = pack_transfer_simple(
@@ -762,6 +794,7 @@ fn confidential_asset_transfer_withdraw_rotate_and_auditor() {
     let (_aud_dk, aud_ek_struct) = generate_elgamal_keypair(&mut h);
     let aud_pk = twisted_pubkey_bytes(&mut h, &aud_ek_struct);
     set_asset_auditor(&mut h, &aud_pk);
+    assert_event_count(&h, "AuditorChanged", 1, "after set_auditor");
     remaining -= xfer_amt as u128;
     let warm = pack_transfer_audited(
         &mut h,
@@ -780,6 +813,7 @@ fn confidential_asset_transfer_withdraw_rotate_and_auditor() {
     );
 
     assert_kept_success(&run_rollover(&mut h, &bob), "bob rollover");
+    assert_event_count(&h, "RolledOver", 2, "after bob rollover");
     let w_amt = 50u64;
     let bob_after_withdraw: u128 = xfer_amt as u128 * 3 - w_amt as u128;
     let (nb, zkrp, sigma) = pack_withdraw(
@@ -795,8 +829,11 @@ fn confidential_asset_transfer_withdraw_rotate_and_auditor() {
         &run_withdraw_to(&mut h, &bob, bob_addr, w_amt, &nb, &zkrp, &sigma),
         "withdraw_to self",
     );
+    assert_event_count(&h, "Withdrawn", 1, "after bob withdraw");
 
     assert_kept_success(&run_rollover_and_freeze(&mut h, &alice), "freeze alice");
+    assert_event_count(&h, "RolledOver", 3, "after alice rollover_and_freeze");
+    assert_event_count(&h, "FreezeChanged", 1, "after alice freeze");
     let (new_dk, new_ek_struct) = generate_elgamal_keypair(&mut h);
     let alice_remaining = remaining;
     let (nek_bytes, nbal, zkr, sig) = pack_rotate(
@@ -812,6 +849,7 @@ fn confidential_asset_transfer_withdraw_rotate_and_auditor() {
         &run_rotate(&mut h, &alice, &nek_bytes, &nbal, &zkr, &sig),
         "rotate_encryption_key",
     );
+    assert_event_count(&h, "KeyRotated", 1, "after rotate");
 }
 
 #[test]

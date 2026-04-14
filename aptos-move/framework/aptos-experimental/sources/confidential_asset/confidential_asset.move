@@ -167,6 +167,15 @@ module aptos_experimental::confidential_asset {
     //
 
     #[event]
+    /// Emitted when a new confidential asset store is registered.
+    struct Registered has drop, store {
+        addr: address,
+        /// Fungible asset metadata object address.
+        asset_type: address,
+        ek: twisted_elgamal::CompressedPubkey,
+    }
+
+    #[event]
     /// Emitted when tokens are brought into the protocol.
     struct Deposited has drop, store {
         from: address,
@@ -174,6 +183,8 @@ module aptos_experimental::confidential_asset {
         /// Fungible asset metadata object address.
         asset_type: address,
         amount: u64,
+        /// Recipient's new pending balance after the deposit.
+        new_pending_balance: confidential_balance::CompressedConfidentialBalance,
     }
 
     #[event]
@@ -184,6 +195,8 @@ module aptos_experimental::confidential_asset {
         /// Fungible asset metadata object address.
         asset_type: address,
         amount: u64,
+        /// Sender's new available (actual) balance after the withdrawal.
+        new_available_balance: confidential_balance::CompressedConfidentialBalance,
     }
 
     #[event]
@@ -216,6 +229,59 @@ module aptos_experimental::confidential_asset {
         new_recip_pending_balance: confidential_balance::CompressedConfidentialBalance,
         /// Reserved memo payload for future or off-chain conventions; currently emitted as an empty `vector`.
         memo: vector<u8>,
+    }
+
+    #[event]
+    /// Emitted when the available balance is re-encrypted to normalize chunk bounds.
+    struct Normalized has drop, store {
+        addr: address,
+        asset_type: address,
+        new_available_balance: confidential_balance::CompressedConfidentialBalance,
+    }
+
+    #[event]
+    /// Emitted when the pending balance is rolled over into the available balance.
+    struct RolledOver has drop, store {
+        addr: address,
+        asset_type: address,
+        new_available_balance: confidential_balance::CompressedConfidentialBalance,
+    }
+
+    #[event]
+    /// Emitted when the encryption key is rotated and the balance is re-encrypted.
+    struct KeyRotated has drop, store {
+        addr: address,
+        asset_type: address,
+        new_ek: twisted_elgamal::CompressedPubkey,
+        new_available_balance: confidential_balance::CompressedConfidentialBalance,
+    }
+
+    #[event]
+    /// Emitted when a confidential account's incoming-transfer pause state changes (freeze/unfreeze).
+    struct FreezeChanged has drop, store {
+        addr: address,
+        asset_type: address,
+        frozen: bool,
+    }
+
+    #[event]
+    /// Emitted when the global allow list is enabled or disabled.
+    struct AllowListChanged has drop, store {
+        enabled: bool,
+    }
+
+    #[event]
+    /// Emitted when a token's confidential-transfer permission is toggled.
+    struct TokenAllowChanged has drop, store {
+        asset_type: address,
+        allowed: bool,
+    }
+
+    #[event]
+    /// Emitted when the asset-specific auditor is set or removed.
+    struct AuditorChanged has drop, store {
+        asset_type: address,
+        new_auditor_ek: Option<twisted_elgamal::CompressedPubkey>,
     }
 
     //
@@ -506,6 +572,8 @@ module aptos_experimental::confidential_asset {
         assert!(!fa_controller.allow_list_enabled, error::invalid_state(EALLOW_LIST_ENABLED));
 
         fa_controller.allow_list_enabled = true;
+
+        event::emit(AllowListChanged { enabled: true });
     }
 
     /// Disables the allow list, allowing confidential transfers for all tokens.
@@ -517,6 +585,8 @@ module aptos_experimental::confidential_asset {
         assert!(fa_controller.allow_list_enabled, error::invalid_state(EALLOW_LIST_DISABLED));
 
         fa_controller.allow_list_enabled = false;
+
+        event::emit(AllowListChanged { enabled: false });
     }
 
     /// Enables confidential transfers for the specified token.
@@ -528,6 +598,11 @@ module aptos_experimental::confidential_asset {
         assert!(!fa_config.allowed, error::invalid_state(ETOKEN_ENABLED));
 
         fa_config.allowed = true;
+
+        event::emit(TokenAllowChanged {
+            asset_type: object::object_address(&token),
+            allowed: true,
+        });
     }
 
     /// Disables confidential transfers for the specified token.
@@ -539,6 +614,11 @@ module aptos_experimental::confidential_asset {
         assert!(fa_config.allowed, error::invalid_state(ETOKEN_DISABLED));
 
         fa_config.allowed = false;
+
+        event::emit(TokenAllowChanged {
+            asset_type: object::object_address(&token),
+            allowed: false,
+        });
     }
 
     /// Sets the auditor's public key for the specified token.
@@ -558,6 +638,11 @@ module aptos_experimental::confidential_asset {
             assert!(new_auditor_ek.is_some(), error::invalid_argument(EAUDITOR_EK_DESERIALIZATION_FAILED));
             new_auditor_ek
         };
+
+        event::emit(AuditorChanged {
+            asset_type: object::object_address(&token),
+            new_auditor_ek: fa_config.auditor_ek,
+        });
     }
 
     //
@@ -698,6 +783,12 @@ module aptos_experimental::confidential_asset {
         };
 
         move_to(&get_user_signer(sender, token), ca_store);
+
+        event::emit(Registered {
+            addr: user,
+            asset_type: object::object_address(&token),
+            ek,
+        });
     }
 
     /// Implementation of the `deposit_to` entry function.
@@ -739,6 +830,7 @@ module aptos_experimental::confidential_asset {
             to,
             asset_type: object::object_address(&token),
             amount,
+            new_pending_balance: ca_store.pending_balance,
         });
     }
 
@@ -781,6 +873,7 @@ module aptos_experimental::confidential_asset {
             to,
             asset_type: object::object_address(&token),
             amount,
+            new_available_balance: ca_store.actual_balance,
         });
     }
 
@@ -915,6 +1008,13 @@ module aptos_experimental::confidential_asset {
         // We don't need to update the pending balance here, as it has been asserted to be zero.
         ca_store.actual_balance = confidential_balance::compress_balance(&new_balance);
         ca_store.normalized = true;
+
+        event::emit(KeyRotated {
+            addr: user,
+            asset_type: object::object_address(&token),
+            new_ek,
+            new_available_balance: ca_store.actual_balance,
+        });
     }
 
     /// Implementation of the `normalize` entry function.
@@ -946,6 +1046,12 @@ module aptos_experimental::confidential_asset {
 
         ca_store.actual_balance = confidential_balance::compress_balance(&new_balance);
         ca_store.normalized = true;
+
+        event::emit(Normalized {
+            addr: user,
+            asset_type: object::object_address(&token),
+            new_available_balance: ca_store.actual_balance,
+        });
     }
 
     /// Implementation of the `rollover_pending_balance` entry function.
@@ -970,6 +1076,12 @@ module aptos_experimental::confidential_asset {
         ca_store.pending_counter = 0;
         ca_store.actual_balance = confidential_balance::compress_balance(&actual_balance);
         ca_store.pending_balance = confidential_balance::new_compressed_pending_balance_no_randomness();
+
+        event::emit(RolledOver {
+            addr: user,
+            asset_type: object::object_address(&token),
+            new_available_balance: ca_store.actual_balance,
+        });
     }
 
     /// Implementation of the `freeze_token` entry function.
@@ -986,6 +1098,12 @@ module aptos_experimental::confidential_asset {
         assert!(!ca_store.frozen, error::invalid_state(EALREADY_FROZEN));
 
         ca_store.frozen = true;
+
+        event::emit(FreezeChanged {
+            addr: user,
+            asset_type: object::object_address(&token),
+            frozen: true,
+        });
     }
 
     /// Implementation of the `unfreeze_token` entry function.
@@ -1002,6 +1120,12 @@ module aptos_experimental::confidential_asset {
         assert!(ca_store.frozen, error::invalid_state(ENOT_FROZEN));
 
         ca_store.frozen = false;
+
+        event::emit(FreezeChanged {
+            addr: user,
+            asset_type: object::object_address(&token),
+            frozen: false,
+        });
     }
 
     //
@@ -1304,5 +1428,129 @@ module aptos_experimental::confidential_asset {
         let on_chain_recip_pending = pending_balance(expected_to, token);
         assert!(e.new_sender_available_balance == on_chain_sender, 6);
         assert!(e.new_recip_pending_balance == on_chain_recip_pending, 7);
+    }
+
+    #[test_only]
+    public fun assert_last_registered_event(
+        token: Object<Metadata>,
+        expected_addr: address,
+    ) {
+        let evts = event::emitted_events<Registered>();
+        assert!(evts.length() > 0, 100);
+        let e = &evts[evts.length() - 1];
+        assert!(e.addr == expected_addr, 101);
+        assert!(e.asset_type == object::object_address(&token), 102);
+    }
+
+    #[test_only]
+    public fun assert_last_deposited_event_matches_state(
+        token: Object<Metadata>,
+        expected_to: address,
+        expected_amount: u64,
+    ) acquires ConfidentialAssetStore {
+        let evts = event::emitted_events<Deposited>();
+        assert!(evts.length() > 0, 110);
+        let e = &evts[evts.length() - 1];
+        assert!(e.to == expected_to, 111);
+        assert!(e.asset_type == object::object_address(&token), 112);
+        assert!(e.amount == expected_amount, 113);
+        assert!(e.new_pending_balance == pending_balance(expected_to, token), 114);
+    }
+
+    #[test_only]
+    public fun assert_last_withdrawn_event_matches_state(
+        token: Object<Metadata>,
+        expected_from: address,
+        expected_amount: u64,
+    ) acquires ConfidentialAssetStore {
+        let evts = event::emitted_events<Withdrawn>();
+        assert!(evts.length() > 0, 120);
+        let e = &evts[evts.length() - 1];
+        assert!(e.from == expected_from, 121);
+        assert!(e.asset_type == object::object_address(&token), 122);
+        assert!(e.amount == expected_amount, 123);
+        assert!(e.new_available_balance == actual_balance(expected_from, token), 124);
+    }
+
+    #[test_only]
+    public fun assert_last_normalized_event_matches_state(
+        token: Object<Metadata>,
+        expected_addr: address,
+    ) acquires ConfidentialAssetStore {
+        let evts = event::emitted_events<Normalized>();
+        assert!(evts.length() > 0, 130);
+        let e = &evts[evts.length() - 1];
+        assert!(e.addr == expected_addr, 131);
+        assert!(e.asset_type == object::object_address(&token), 132);
+        assert!(e.new_available_balance == actual_balance(expected_addr, token), 133);
+    }
+
+    #[test_only]
+    public fun assert_last_rolled_over_event_matches_state(
+        token: Object<Metadata>,
+        expected_addr: address,
+    ) acquires ConfidentialAssetStore {
+        let evts = event::emitted_events<RolledOver>();
+        assert!(evts.length() > 0, 140);
+        let e = &evts[evts.length() - 1];
+        assert!(e.addr == expected_addr, 141);
+        assert!(e.asset_type == object::object_address(&token), 142);
+        assert!(e.new_available_balance == actual_balance(expected_addr, token), 143);
+    }
+
+    #[test_only]
+    public fun assert_last_key_rotated_event_matches_state(
+        token: Object<Metadata>,
+        expected_addr: address,
+    ) acquires ConfidentialAssetStore {
+        let evts = event::emitted_events<KeyRotated>();
+        assert!(evts.length() > 0, 150);
+        let e = &evts[evts.length() - 1];
+        assert!(e.addr == expected_addr, 151);
+        assert!(e.asset_type == object::object_address(&token), 152);
+        assert!(e.new_available_balance == actual_balance(expected_addr, token), 153);
+        assert!(e.new_ek == encryption_key(expected_addr, token), 154);
+    }
+
+    #[test_only]
+    public fun assert_last_freeze_changed_event(
+        token: Object<Metadata>,
+        expected_addr: address,
+        expected_frozen: bool,
+    ) {
+        let evts = event::emitted_events<FreezeChanged>();
+        assert!(evts.length() > 0, 160);
+        let e = &evts[evts.length() - 1];
+        assert!(e.addr == expected_addr, 161);
+        assert!(e.asset_type == object::object_address(&token), 162);
+        assert!(e.frozen == expected_frozen, 163);
+    }
+
+    #[test_only]
+    public fun assert_last_allow_list_changed_event(expected_enabled: bool) {
+        let evts = event::emitted_events<AllowListChanged>();
+        assert!(evts.length() > 0, 170);
+        let e = &evts[evts.length() - 1];
+        assert!(e.enabled == expected_enabled, 171);
+    }
+
+    #[test_only]
+    public fun assert_last_token_allow_changed_event(
+        token: Object<Metadata>,
+        expected_allowed: bool,
+    ) {
+        let evts = event::emitted_events<TokenAllowChanged>();
+        assert!(evts.length() > 0, 180);
+        let e = &evts[evts.length() - 1];
+        assert!(e.asset_type == object::object_address(&token), 181);
+        assert!(e.allowed == expected_allowed, 182);
+    }
+
+    #[test_only]
+    public fun assert_last_auditor_changed_event(token: Object<Metadata>) {
+        let evts = event::emitted_events<AuditorChanged>();
+        assert!(evts.length() > 0, 190);
+        let e = &evts[evts.length() - 1];
+        assert!(e.asset_type == object::object_address(&token), 191);
     }
 }

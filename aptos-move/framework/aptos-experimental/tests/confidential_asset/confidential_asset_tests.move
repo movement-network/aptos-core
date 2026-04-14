@@ -723,6 +723,116 @@ module aptos_experimental::confidential_asset_tests {
         confidential_asset = @aptos_experimental,
         aptos_fx = @aptos_framework,
         fa = @0xfa,
+        alice = @0xa1,
+        bob = @0xb0
+    )]
+    fun events_balance_changing_operations(
+        confidential_asset: signer,
+        aptos_fx: signer,
+        fa: signer,
+        alice: signer,
+        bob: signer)
+    {
+        let max_chunk_value = 1 << 16 - 1;
+        let token = set_up_for_confidential_asset_test(
+            &confidential_asset, &aptos_fx, &fa, &alice, &bob, max_chunk_value, max_chunk_value);
+
+        let alice_addr = signer::address_of(&alice);
+        let bob_addr = signer::address_of(&bob);
+
+        let (alice_dk, alice_ek) = generate_twisted_elgamal_keypair();
+        let (_, bob_ek) = generate_twisted_elgamal_keypair();
+
+        // --- register emits Registered ---
+        confidential_asset::register_for_testing(&alice, token, twisted_elgamal::pubkey_to_bytes(&alice_ek));
+        confidential_asset::assert_last_registered_event(token, alice_addr);
+
+        confidential_asset::register_for_testing(&bob, token, twisted_elgamal::pubkey_to_bytes(&bob_ek));
+        confidential_asset::assert_last_registered_event(token, bob_addr);
+
+        // --- deposit emits Deposited with new_pending_balance ---
+        confidential_asset::deposit(&alice, token, 100);
+        confidential_asset::assert_last_deposited_event_matches_state(token, alice_addr, 100);
+
+        confidential_asset::deposit_to(&bob, token, alice_addr, 200);
+        confidential_asset::assert_last_deposited_event_matches_state(token, alice_addr, 200);
+
+        // --- rollover emits RolledOver with new_available_balance ---
+        confidential_asset::rollover_pending_balance(&alice, token);
+        confidential_asset::assert_last_rolled_over_event_matches_state(token, alice_addr);
+
+        // --- normalize emits Normalized with new_available_balance ---
+        assert!(!confidential_asset::is_normalized(alice_addr, token));
+        normalize(&alice, &alice_dk, token, 300);
+        confidential_asset::assert_last_normalized_event_matches_state(token, alice_addr);
+
+        // --- withdraw emits Withdrawn with new_available_balance ---
+        withdraw(&alice, &alice_dk, token, bob_addr, 50, 250);
+        confidential_asset::assert_last_withdrawn_event_matches_state(token, alice_addr, 50);
+
+        // --- freeze / unfreeze emits FreezeChanged ---
+        confidential_asset::rollover_pending_balance_and_freeze(&alice, token);
+        confidential_asset::assert_last_freeze_changed_event(token, alice_addr, true);
+
+        // --- rotate emits KeyRotated with new_ek and new_available_balance ---
+        let (new_alice_dk, new_alice_ek) = generate_twisted_elgamal_keypair();
+        rotate(&alice, &alice_dk, token, &new_alice_dk, &new_alice_ek, 250);
+        confidential_asset::assert_last_key_rotated_event_matches_state(token, alice_addr);
+
+        // --- unfreeze emits FreezeChanged ---
+        confidential_asset::unfreeze_token(&alice, token);
+        confidential_asset::assert_last_freeze_changed_event(token, alice_addr, false);
+    }
+
+    #[test(
+        confidential_asset = @aptos_experimental,
+        aptos_fx = @aptos_framework,
+        fa = @0xfa,
+        alice = @0xa1,
+        bob = @0xb0
+    )]
+    fun events_admin_operations(
+        confidential_asset: signer,
+        aptos_fx: signer,
+        fa: signer,
+        alice: signer,
+        bob: signer)
+    {
+        let token = set_up_for_confidential_asset_test(&confidential_asset, &aptos_fx, &fa, &alice, &bob, 500, 500);
+
+        // --- enable_allow_list emits AllowListChanged ---
+        confidential_asset::enable_allow_list(&aptos_fx);
+        confidential_asset::assert_last_allow_list_changed_event(true);
+
+        // --- enable_token emits TokenAllowChanged ---
+        confidential_asset::enable_token(&aptos_fx, token);
+        confidential_asset::assert_last_token_allow_changed_event(token, true);
+
+        // --- disable_token emits TokenAllowChanged ---
+        confidential_asset::disable_token(&aptos_fx, token);
+        confidential_asset::assert_last_token_allow_changed_event(token, false);
+
+        // --- disable_allow_list emits AllowListChanged ---
+        confidential_asset::disable_allow_list(&aptos_fx);
+        confidential_asset::assert_last_allow_list_changed_event(false);
+
+        // --- set_auditor emits AuditorChanged ---
+        let (_, auditor_ek) = generate_twisted_elgamal_keypair();
+        confidential_asset::set_auditor(
+            &aptos_fx,
+            token,
+            twisted_elgamal::pubkey_to_bytes(&auditor_ek));
+        confidential_asset::assert_last_auditor_changed_event(token);
+
+        // remove auditor
+        confidential_asset::set_auditor(&aptos_fx, token, b"");
+        confidential_asset::assert_last_auditor_changed_event(token);
+    }
+
+    #[test(
+        confidential_asset = @aptos_experimental,
+        aptos_fx = @aptos_framework,
+        fa = @0xfa,
         alice = @0xa1
     )]
     #[expected_failure(abort_code = 0x01000D, location = confidential_asset)]

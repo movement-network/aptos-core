@@ -10,9 +10,17 @@ It enables private transfers by obfuscating token amounts while keeping sender a
 -  [Resource `ConfidentialAssetStore`](#0x7_confidential_asset_ConfidentialAssetStore)
 -  [Resource `FAController`](#0x7_confidential_asset_FAController)
 -  [Resource `FAConfig`](#0x7_confidential_asset_FAConfig)
+-  [Struct `Registered`](#0x7_confidential_asset_Registered)
 -  [Struct `Deposited`](#0x7_confidential_asset_Deposited)
 -  [Struct `Withdrawn`](#0x7_confidential_asset_Withdrawn)
 -  [Struct `Transferred`](#0x7_confidential_asset_Transferred)
+-  [Struct `Normalized`](#0x7_confidential_asset_Normalized)
+-  [Struct `RolledOver`](#0x7_confidential_asset_RolledOver)
+-  [Struct `KeyRotated`](#0x7_confidential_asset_KeyRotated)
+-  [Struct `FreezeChanged`](#0x7_confidential_asset_FreezeChanged)
+-  [Struct `AllowListChanged`](#0x7_confidential_asset_AllowListChanged)
+-  [Struct `TokenAllowChanged`](#0x7_confidential_asset_TokenAllowChanged)
+-  [Struct `AuditorChanged`](#0x7_confidential_asset_AuditorChanged)
 -  [Constants](#@Constants_0)
 -  [Function `init_module`](#0x7_confidential_asset_init_module)
 -  [Function `register`](#0x7_confidential_asset_register)
@@ -243,6 +251,47 @@ Represents the configuration of a token.
 
 </details>
 
+<a id="0x7_confidential_asset_Registered"></a>
+
+## Struct `Registered`
+
+Emitted when a new confidential asset store is registered.
+
+
+<pre><code>#[<a href="../../aptos-framework/doc/event.md#0x1_event">event</a>]
+<b>struct</b> <a href="confidential_asset.md#0x7_confidential_asset_Registered">Registered</a> <b>has</b> drop, store
+</code></pre>
+
+
+
+<details>
+<summary>Fields</summary>
+
+
+<dl>
+<dt>
+<code>addr: <b>address</b></code>
+</dt>
+<dd>
+
+</dd>
+<dt>
+<code>asset_type: <b>address</b></code>
+</dt>
+<dd>
+ Fungible asset metadata object address.
+</dd>
+<dt>
+<code>ek: <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedPubkey">ristretto255_twisted_elgamal::CompressedPubkey</a></code>
+</dt>
+<dd>
+
+</dd>
+</dl>
+
+
+</details>
+
 <a id="0x7_confidential_asset_Deposited"></a>
 
 ## Struct `Deposited`
@@ -284,6 +333,12 @@ Emitted when tokens are brought into the protocol.
 </dt>
 <dd>
 
+</dd>
+<dt>
+<code>new_pending_balance: <a href="confidential_balance.md#0x7_confidential_balance_CompressedConfidentialBalance">confidential_balance::CompressedConfidentialBalance</a></code>
+</dt>
+<dd>
+ Recipient's new pending balance after the deposit.
 </dd>
 </dl>
 
@@ -331,6 +386,12 @@ Emitted when tokens are brought out of the protocol.
 </dt>
 <dd>
 
+</dd>
+<dt>
+<code>new_available_balance: <a href="confidential_balance.md#0x7_confidential_balance_CompressedConfidentialBalance">confidential_balance::CompressedConfidentialBalance</a></code>
+</dt>
+<dd>
+ Sender's new available (actual) balance after the withdrawal.
 </dd>
 </dl>
 
@@ -417,6 +478,275 @@ from the verified proof. See the technical whitepaper (<code>whitepaper.md</code
 </dt>
 <dd>
  Reserved memo payload for future or off-chain conventions; currently emitted as an empty <code><a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a></code>.
+</dd>
+</dl>
+
+
+</details>
+
+<a id="0x7_confidential_asset_Normalized"></a>
+
+## Struct `Normalized`
+
+Emitted when the available balance is re-encrypted to normalize chunk bounds.
+
+
+<pre><code>#[<a href="../../aptos-framework/doc/event.md#0x1_event">event</a>]
+<b>struct</b> <a href="confidential_asset.md#0x7_confidential_asset_Normalized">Normalized</a> <b>has</b> drop, store
+</code></pre>
+
+
+
+<details>
+<summary>Fields</summary>
+
+
+<dl>
+<dt>
+<code>addr: <b>address</b></code>
+</dt>
+<dd>
+
+</dd>
+<dt>
+<code>asset_type: <b>address</b></code>
+</dt>
+<dd>
+
+</dd>
+<dt>
+<code>new_available_balance: <a href="confidential_balance.md#0x7_confidential_balance_CompressedConfidentialBalance">confidential_balance::CompressedConfidentialBalance</a></code>
+</dt>
+<dd>
+
+</dd>
+</dl>
+
+
+</details>
+
+<a id="0x7_confidential_asset_RolledOver"></a>
+
+## Struct `RolledOver`
+
+Emitted when the pending balance is rolled over into the available balance.
+
+
+<pre><code>#[<a href="../../aptos-framework/doc/event.md#0x1_event">event</a>]
+<b>struct</b> <a href="confidential_asset.md#0x7_confidential_asset_RolledOver">RolledOver</a> <b>has</b> drop, store
+</code></pre>
+
+
+
+<details>
+<summary>Fields</summary>
+
+
+<dl>
+<dt>
+<code>addr: <b>address</b></code>
+</dt>
+<dd>
+
+</dd>
+<dt>
+<code>asset_type: <b>address</b></code>
+</dt>
+<dd>
+
+</dd>
+<dt>
+<code>new_available_balance: <a href="confidential_balance.md#0x7_confidential_balance_CompressedConfidentialBalance">confidential_balance::CompressedConfidentialBalance</a></code>
+</dt>
+<dd>
+
+</dd>
+</dl>
+
+
+</details>
+
+<a id="0x7_confidential_asset_KeyRotated"></a>
+
+## Struct `KeyRotated`
+
+Emitted when the encryption key is rotated and the balance is re-encrypted.
+
+
+<pre><code>#[<a href="../../aptos-framework/doc/event.md#0x1_event">event</a>]
+<b>struct</b> <a href="confidential_asset.md#0x7_confidential_asset_KeyRotated">KeyRotated</a> <b>has</b> drop, store
+</code></pre>
+
+
+
+<details>
+<summary>Fields</summary>
+
+
+<dl>
+<dt>
+<code>addr: <b>address</b></code>
+</dt>
+<dd>
+
+</dd>
+<dt>
+<code>asset_type: <b>address</b></code>
+</dt>
+<dd>
+
+</dd>
+<dt>
+<code>new_ek: <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedPubkey">ristretto255_twisted_elgamal::CompressedPubkey</a></code>
+</dt>
+<dd>
+
+</dd>
+<dt>
+<code>new_available_balance: <a href="confidential_balance.md#0x7_confidential_balance_CompressedConfidentialBalance">confidential_balance::CompressedConfidentialBalance</a></code>
+</dt>
+<dd>
+
+</dd>
+</dl>
+
+
+</details>
+
+<a id="0x7_confidential_asset_FreezeChanged"></a>
+
+## Struct `FreezeChanged`
+
+Emitted when a confidential account's incoming-transfer pause state changes (freeze/unfreeze).
+
+
+<pre><code>#[<a href="../../aptos-framework/doc/event.md#0x1_event">event</a>]
+<b>struct</b> <a href="confidential_asset.md#0x7_confidential_asset_FreezeChanged">FreezeChanged</a> <b>has</b> drop, store
+</code></pre>
+
+
+
+<details>
+<summary>Fields</summary>
+
+
+<dl>
+<dt>
+<code>addr: <b>address</b></code>
+</dt>
+<dd>
+
+</dd>
+<dt>
+<code>asset_type: <b>address</b></code>
+</dt>
+<dd>
+
+</dd>
+<dt>
+<code>frozen: bool</code>
+</dt>
+<dd>
+
+</dd>
+</dl>
+
+
+</details>
+
+<a id="0x7_confidential_asset_AllowListChanged"></a>
+
+## Struct `AllowListChanged`
+
+Emitted when the global allow list is enabled or disabled.
+
+
+<pre><code>#[<a href="../../aptos-framework/doc/event.md#0x1_event">event</a>]
+<b>struct</b> <a href="confidential_asset.md#0x7_confidential_asset_AllowListChanged">AllowListChanged</a> <b>has</b> drop, store
+</code></pre>
+
+
+
+<details>
+<summary>Fields</summary>
+
+
+<dl>
+<dt>
+<code>enabled: bool</code>
+</dt>
+<dd>
+
+</dd>
+</dl>
+
+
+</details>
+
+<a id="0x7_confidential_asset_TokenAllowChanged"></a>
+
+## Struct `TokenAllowChanged`
+
+Emitted when a token's confidential-transfer permission is toggled.
+
+
+<pre><code>#[<a href="../../aptos-framework/doc/event.md#0x1_event">event</a>]
+<b>struct</b> <a href="confidential_asset.md#0x7_confidential_asset_TokenAllowChanged">TokenAllowChanged</a> <b>has</b> drop, store
+</code></pre>
+
+
+
+<details>
+<summary>Fields</summary>
+
+
+<dl>
+<dt>
+<code>asset_type: <b>address</b></code>
+</dt>
+<dd>
+
+</dd>
+<dt>
+<code>allowed: bool</code>
+</dt>
+<dd>
+
+</dd>
+</dl>
+
+
+</details>
+
+<a id="0x7_confidential_asset_AuditorChanged"></a>
+
+## Struct `AuditorChanged`
+
+Emitted when the asset-specific auditor is set or removed.
+
+
+<pre><code>#[<a href="../../aptos-framework/doc/event.md#0x1_event">event</a>]
+<b>struct</b> <a href="confidential_asset.md#0x7_confidential_asset_AuditorChanged">AuditorChanged</a> <b>has</b> drop, store
+</code></pre>
+
+
+
+<details>
+<summary>Fields</summary>
+
+
+<dl>
+<dt>
+<code>asset_type: <b>address</b></code>
+</dt>
+<dd>
+
+</dd>
+<dt>
+<code>new_auditor_ek: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_Option">option::Option</a>&lt;<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedPubkey">ristretto255_twisted_elgamal::CompressedPubkey</a>&gt;</code>
+</dt>
+<dd>
+
 </dd>
 </dl>
 
@@ -1269,6 +1599,8 @@ Enables the allow list, restricting confidential transfers to tokens on the allo
     <b>assert</b>!(!fa_controller.allow_list_enabled, <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_state">error::invalid_state</a>(<a href="confidential_asset.md#0x7_confidential_asset_EALLOW_LIST_ENABLED">EALLOW_LIST_ENABLED</a>));
 
     fa_controller.allow_list_enabled = <b>true</b>;
+
+    <a href="../../aptos-framework/doc/event.md#0x1_event_emit">event::emit</a>(<a href="confidential_asset.md#0x7_confidential_asset_AllowListChanged">AllowListChanged</a> { enabled: <b>true</b> });
 }
 </code></pre>
 
@@ -1300,6 +1632,8 @@ Disables the allow list, allowing confidential transfers for all tokens.
     <b>assert</b>!(fa_controller.allow_list_enabled, <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_state">error::invalid_state</a>(<a href="confidential_asset.md#0x7_confidential_asset_EALLOW_LIST_DISABLED">EALLOW_LIST_DISABLED</a>));
 
     fa_controller.allow_list_enabled = <b>false</b>;
+
+    <a href="../../aptos-framework/doc/event.md#0x1_event_emit">event::emit</a>(<a href="confidential_asset.md#0x7_confidential_asset_AllowListChanged">AllowListChanged</a> { enabled: <b>false</b> });
 }
 </code></pre>
 
@@ -1331,6 +1665,11 @@ Enables confidential transfers for the specified token.
     <b>assert</b>!(!fa_config.allowed, <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_state">error::invalid_state</a>(<a href="confidential_asset.md#0x7_confidential_asset_ETOKEN_ENABLED">ETOKEN_ENABLED</a>));
 
     fa_config.allowed = <b>true</b>;
+
+    <a href="../../aptos-framework/doc/event.md#0x1_event_emit">event::emit</a>(<a href="confidential_asset.md#0x7_confidential_asset_TokenAllowChanged">TokenAllowChanged</a> {
+        asset_type: <a href="../../aptos-framework/doc/object.md#0x1_object_object_address">object::object_address</a>(&token),
+        allowed: <b>true</b>,
+    });
 }
 </code></pre>
 
@@ -1362,6 +1701,11 @@ Disables confidential transfers for the specified token.
     <b>assert</b>!(fa_config.allowed, <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_state">error::invalid_state</a>(<a href="confidential_asset.md#0x7_confidential_asset_ETOKEN_DISABLED">ETOKEN_DISABLED</a>));
 
     fa_config.allowed = <b>false</b>;
+
+    <a href="../../aptos-framework/doc/event.md#0x1_event_emit">event::emit</a>(<a href="confidential_asset.md#0x7_confidential_asset_TokenAllowChanged">TokenAllowChanged</a> {
+        asset_type: <a href="../../aptos-framework/doc/object.md#0x1_object_object_address">object::object_address</a>(&token),
+        allowed: <b>false</b>,
+    });
 }
 </code></pre>
 
@@ -1401,6 +1745,11 @@ Sets the auditor's public key for the specified token.
         <b>assert</b>!(new_auditor_ek.is_some(), <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="confidential_asset.md#0x7_confidential_asset_EAUDITOR_EK_DESERIALIZATION_FAILED">EAUDITOR_EK_DESERIALIZATION_FAILED</a>));
         new_auditor_ek
     };
+
+    <a href="../../aptos-framework/doc/event.md#0x1_event_emit">event::emit</a>(<a href="confidential_asset.md#0x7_confidential_asset_AuditorChanged">AuditorChanged</a> {
+        asset_type: <a href="../../aptos-framework/doc/object.md#0x1_object_object_address">object::object_address</a>(&token),
+        new_auditor_ek: fa_config.auditor_ek,
+    });
 }
 </code></pre>
 
@@ -1752,6 +2101,12 @@ Implementation of the <code>register</code> entry function.
     };
 
     <b>move_to</b>(&<a href="confidential_asset.md#0x7_confidential_asset_get_user_signer">get_user_signer</a>(sender, token), ca_store);
+
+    <a href="../../aptos-framework/doc/event.md#0x1_event_emit">event::emit</a>(<a href="confidential_asset.md#0x7_confidential_asset_Registered">Registered</a> {
+        addr: user,
+        asset_type: <a href="../../aptos-framework/doc/object.md#0x1_object_object_address">object::object_address</a>(&token),
+        ek,
+    });
 }
 </code></pre>
 
@@ -1813,6 +2168,7 @@ Implementation of the <code>deposit_to</code> entry function.
         <b>to</b>,
         asset_type: <a href="../../aptos-framework/doc/object.md#0x1_object_object_address">object::object_address</a>(&token),
         amount,
+        new_pending_balance: ca_store.pending_balance,
     });
 }
 </code></pre>
@@ -1875,6 +2231,7 @@ Withdrawals are always allowed, regardless of the token allow status.
         <b>to</b>,
         asset_type: <a href="../../aptos-framework/doc/object.md#0x1_object_object_address">object::object_address</a>(&token),
         amount,
+        new_available_balance: ca_store.actual_balance,
     });
 }
 </code></pre>
@@ -2049,6 +2406,13 @@ Implementation of the <code>rotate_encryption_key</code> entry function.
     // We don't need <b>to</b> <b>update</b> the pending balance here, <b>as</b> it <b>has</b> been asserted <b>to</b> be zero.
     ca_store.actual_balance = <a href="confidential_balance.md#0x7_confidential_balance_compress_balance">confidential_balance::compress_balance</a>(&new_balance);
     ca_store.normalized = <b>true</b>;
+
+    <a href="../../aptos-framework/doc/event.md#0x1_event_emit">event::emit</a>(<a href="confidential_asset.md#0x7_confidential_asset_KeyRotated">KeyRotated</a> {
+        addr: user,
+        asset_type: <a href="../../aptos-framework/doc/object.md#0x1_object_object_address">object::object_address</a>(&token),
+        new_ek,
+        new_available_balance: ca_store.actual_balance,
+    });
 }
 </code></pre>
 
@@ -2100,6 +2464,12 @@ Implementation of the <code>normalize</code> entry function.
 
     ca_store.actual_balance = <a href="confidential_balance.md#0x7_confidential_balance_compress_balance">confidential_balance::compress_balance</a>(&new_balance);
     ca_store.normalized = <b>true</b>;
+
+    <a href="../../aptos-framework/doc/event.md#0x1_event_emit">event::emit</a>(<a href="confidential_asset.md#0x7_confidential_asset_Normalized">Normalized</a> {
+        addr: user,
+        asset_type: <a href="../../aptos-framework/doc/object.md#0x1_object_object_address">object::object_address</a>(&token),
+        new_available_balance: ca_store.actual_balance,
+    });
 }
 </code></pre>
 
@@ -2144,6 +2514,12 @@ Implementation of the <code>rollover_pending_balance</code> entry function.
     ca_store.pending_counter = 0;
     ca_store.actual_balance = <a href="confidential_balance.md#0x7_confidential_balance_compress_balance">confidential_balance::compress_balance</a>(&actual_balance);
     ca_store.pending_balance = <a href="confidential_balance.md#0x7_confidential_balance_new_compressed_pending_balance_no_randomness">confidential_balance::new_compressed_pending_balance_no_randomness</a>();
+
+    <a href="../../aptos-framework/doc/event.md#0x1_event_emit">event::emit</a>(<a href="confidential_asset.md#0x7_confidential_asset_RolledOver">RolledOver</a> {
+        addr: user,
+        asset_type: <a href="../../aptos-framework/doc/object.md#0x1_object_object_address">object::object_address</a>(&token),
+        new_available_balance: ca_store.actual_balance,
+    });
 }
 </code></pre>
 
@@ -2180,6 +2556,12 @@ Implementation of the <code>freeze_token</code> entry function.
     <b>assert</b>!(!ca_store.frozen, <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_state">error::invalid_state</a>(<a href="confidential_asset.md#0x7_confidential_asset_EALREADY_FROZEN">EALREADY_FROZEN</a>));
 
     ca_store.frozen = <b>true</b>;
+
+    <a href="../../aptos-framework/doc/event.md#0x1_event_emit">event::emit</a>(<a href="confidential_asset.md#0x7_confidential_asset_FreezeChanged">FreezeChanged</a> {
+        addr: user,
+        asset_type: <a href="../../aptos-framework/doc/object.md#0x1_object_object_address">object::object_address</a>(&token),
+        frozen: <b>true</b>,
+    });
 }
 </code></pre>
 
@@ -2216,6 +2598,12 @@ Implementation of the <code>unfreeze_token</code> entry function.
     <b>assert</b>!(ca_store.frozen, <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_state">error::invalid_state</a>(<a href="confidential_asset.md#0x7_confidential_asset_ENOT_FROZEN">ENOT_FROZEN</a>));
 
     ca_store.frozen = <b>false</b>;
+
+    <a href="../../aptos-framework/doc/event.md#0x1_event_emit">event::emit</a>(<a href="confidential_asset.md#0x7_confidential_asset_FreezeChanged">FreezeChanged</a> {
+        addr: user,
+        asset_type: <a href="../../aptos-framework/doc/object.md#0x1_object_object_address">object::object_address</a>(&token),
+        frozen: <b>false</b>,
+    });
 }
 </code></pre>
 

@@ -27,6 +27,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install lld linker
+        run: sudo apt-get update && sudo apt-get install -y lld
+
       - uses: dtolnay/rust-toolchain@1.86.0
 
       - name: Verify CA formal corpora (hex files, SHA3-512 chains; Rust)
@@ -51,8 +54,12 @@ jobs:
             aptos-move/framework/formal/difftest/difftest_oracle.json \
             aptos-move/framework/formal/difftest/difftest_ca_e2e_fragment.json
 
+      - name: Lean proofs (refinement + specs)
+        run: |
+          cd aptos-move/framework/formal/lean
+          lake build
+
       - name: Lean difftest (merged oracle)
         run: |
           cd aptos-move/framework/formal/lean
-          lake build difftest
           lake exe difftest ../difftest/difftest_ci_merged.json

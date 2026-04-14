@@ -33,8 +33,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install lld linker
-        run: sudo apt-get update && sudo apt-get install -y lld
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y lld libudev-dev libclang-dev
 
       - uses: dtolnay/rust-toolchain@1.86.0
 

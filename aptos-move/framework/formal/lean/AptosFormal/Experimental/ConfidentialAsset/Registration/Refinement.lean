@@ -684,7 +684,7 @@ theorem eval_success_implies_prop
       .returned [] MachineState.empty := by
     have heq := eval_eq_func nOracle chainId sender contract token ekBa commitBa respBa fuel hfuel
     rw [heval, ExecResult.dropMs_returned] at heq
-    exact heq
+    exact heq.symm
   have hexec := func_success_implies_exec_some nOracle sOracle coh
     chainId sender contract token ekBa commitBa respBa i hi hfunc
   exact (execVerifyRegistrationProof_iff _ i respBa).mp hexec
@@ -731,7 +731,7 @@ theorem eval_abort_implies_not_prop
       .aborted ESIGMA_PROTOCOL_VERIFY_FAILED_ABORT_CODE := by
     have heq := eval_eq_func nOracle chainId sender contract token ekBa commitBa respBa fuel hfuel
     rw [heval, ExecResult.dropMs_aborted] at heq
-    exact heq
+    exact heq.symm
   have hexec := func_abort_implies_exec_none nOracle sOracle coh
     chainId sender contract token ekBa commitBa respBa i hi hfunc
   intro hprop

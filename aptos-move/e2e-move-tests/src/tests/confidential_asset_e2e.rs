@@ -62,6 +62,10 @@ fn move_test_build_config() -> BuildConfig {
     build_config.test_mode = true;
     build_config.dev_mode = false;
     build_config.skip_fetch_latest_git_deps = true;
+    build_config.additional_named_addresses.insert(
+        "aptos_experimental".to_string(),
+        APTOS_EXPERIMENTAL,
+    );
     build_config.compiler_config.bytecode_version = Some(VERSION_MAX);
     build_config.compiler_config.language_version = Some(LanguageVersion::latest());
     build_config.compiler_config.compiler_version = Some(CompilerVersion::latest());

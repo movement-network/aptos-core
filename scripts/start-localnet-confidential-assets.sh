@@ -303,13 +303,67 @@ profile_account_hex() {
     echo "error: python3 is required to read movement profile account" >&2
     return 1
   fi
+  local _cfg="$REPO_ROOT/.movement/config.yaml"
+  # show-profiles must run from REPO_ROOT so ConfigSearchMode::CurrentDir finds .movement/config.yaml.
+  # Output is JSON: {\"Result\":{...}} on success, or {\"Error\":\"...\"} on failure. Some Movement builds
+  # may differ; we fall back to parsing config.yaml if JSON has no Result.
   (cd "$REPO_ROOT" && "$MOVEMENT" config show-profiles) | python3 -c "
-import json, sys
+import json, re, sys
+
+def account_from_config_yaml(text, profile):
+    lines = text.splitlines()
+    in_profiles = False
+    in_profile = False
+    indent_profile = '  ' + profile + ':'
+    for line in lines:
+        if line.rstrip() == 'profiles:':
+            in_profiles = True
+            continue
+        if not in_profiles:
+            continue
+        if line.startswith(indent_profile):
+            in_profile = True
+            continue
+        if in_profile:
+            if re.match(r'^  [^ ].*', line) and not line.startswith('    '):
+                break
+            m = re.match(r'^\\s+account:\\s*(0x[0-9a-fA-F]+)\\s*\$', line)
+            if m:
+                return m.group(1)
+    return None
+
 profile = sys.argv[1]
-data = json.load(sys.stdin)
-acc = data['Result'][profile]['account']
+cfg_path = sys.argv[2]
+raw = sys.stdin.read().strip()
+if not raw:
+    print('empty output from movement config show-profiles (run from repo root; is .movement/config.yaml present?)', file=sys.stderr)
+    sys.exit(1)
+try:
+    data = json.loads(raw)
+except json.JSONDecodeError as e:
+    print('movement config show-profiles did not return JSON:', e, file=sys.stderr)
+    print(raw[:1200], file=sys.stderr)
+    sys.exit(1)
+if isinstance(data, dict) and 'Error' in data:
+    print('movement config show-profiles:', data['Error'], file=sys.stderr)
+    sys.exit(1)
+acc = None
+if isinstance(data, dict) and 'Result' in data and profile in data['Result']:
+    acc = data['Result'][profile].get('account')
+if acc is None and cfg_path:
+    try:
+        text = open(cfg_path, encoding='utf-8').read()
+    except OSError as e:
+        print(f'could not read {cfg_path}: {e}', file=sys.stderr)
+        sys.exit(1)
+    acc = account_from_config_yaml(text, profile)
+if acc is None or acc == '':
+    print('Could not resolve profile account for profile=%r (no Result.%s.account in CLI JSON and no account: in %s).' % (profile, profile, cfg_path or 'config'), file=sys.stderr)
+    print('CLI JSON keys: %s' % (list(data.keys()) if isinstance(data, dict) else type(data),), file=sys.stderr)
+    sys.exit(1)
+acc = str(acc)
 sys.stdout.write(acc if acc.startswith('0x') else '0x' + acc)
-" "$MOVEMENT_PROFILE"
+" "$MOVEMENT_PROFILE" "$_cfg"
 }
 
 # Faucet serves GET / → plain text "tap:ok" when the funder is healthy (see aptos-faucet BasicApi).

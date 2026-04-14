@@ -3,7 +3,8 @@ name = "AptosExperimental"
 version = "1.0.0"
 
 [addresses]
-aptos_experimental = "0x7"
+# Assigned at compile/publish time (e.g. `0x7` for releases/tests, profile account for local publish).
+aptos_experimental = "_"
 
 [dependencies]
 AptosFramework = { local = "../aptos-framework" }

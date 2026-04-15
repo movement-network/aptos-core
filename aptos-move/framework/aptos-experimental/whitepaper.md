@@ -25,9 +25,13 @@
 
 Movement Confidential Assets is an on-chain protocol that enables private fungible token transfers on the Movement blockchain. While transaction senders and recipients remain visible, **transfer amounts are hidden** using homomorphic encryption and zero-knowledge proofs.
 
+<<<<<<< Updated upstream
 The protocol builds on the Aptos Confidential Asset framework, which was originally released under the Apache 2.0 open-source license. In November 2025, Aptos Labs changed the license on their `aptos-core` repository to a more restrictive license, and subsequently introduced proprietary changes to their confidential asset module (v1.1) under the new terms. Movement's implementation uses only code that predates the license change, and all production-hardening modifications are clean-room implementations based on published, public-domain cryptography — no post-license-change Aptos code was used or referenced. These modifications include chain ID binding to prevent cross-chain proof replay, SHA3-512 tagged hashing for Fiat-Shamir challenges, a Schnorr-based registration proof to prevent key registration abuse, and **sender auditor hints** for private transfers: an optional opaque byte string (length-capped) that is **hashed into the transfer sigma Fiat–Shamir transcript** so it cannot be altered after the proof is generated, then **emitted** on the on-chain `Transferred` module event.
 
 **What observers still see.** A successful private transfer does not post the amount in cleartext, but it **does** emit `Transferred` with routing metadata, **compressed ciphertexts** for the moved amount and for the sender’s new actual balance and recipient’s new pending balance, a **flattened copy of the transfer sigma `x7s` commitment block** (`ek_volun_auds`; see [§5 `Transferred` event](#transferred-module-event)), the **`sender_auditor_hint`** bytes, and a **`memo`** field (reserved; empty in the current implementation). Indexers and compliance tooling should treat that event as the canonical on-chain record of those public payloads.
+=======
+The protocol builds on the Aptos Confidential Asset framework, which was originally released under the Apache 2.0 open-source license. In November 2025, Aptos Labs changed the license on their `aptos-core` repository to a more restrictive license, and subsequently introduced proprietary changes to their confidential asset module (v1.1) under the new terms. Movement's implementation uses only code that predates the license change, and all production-hardening modifications are clean-room implementations based on published, public-domain cryptography — no post-license-change Aptos code was used or referenced. These modifications include  update of the domain definition to prevent cross-chain proof replay, SHA3-512 tagged hashing for Fiat-Shamir challenges, and a Schnorr-based registration proof to prevent key registration abuse.
+>>>>>>> Stashed changes
 
 ```mermaid
 flowchart LR
@@ -41,7 +45,7 @@ flowchart LR
     B -- "withdraw(amount, proof)" --> A
     B -- "transfer(proof)" --> B
     style Private fill:#1a1a2e,color:#e0e0e0
-    style Public fill:#16213e,color:#e0e0e0
+    style Public fill:#46516e,color:#e0e0e0
 ```
 
 
@@ -56,22 +60,22 @@ A user's interaction with confidential assets follows this lifecycle:
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Registered: register(ek, registration_proof)
-    Registered --> Funded: deposit(amount)
-    Funded --> Funded: transfer(proof)
-    Funded --> Funded: normalize(proof)
-    Funded --> Funded: deposit(amount)
-    Funded --> Withdrawn: withdraw(amount, proof)
-    Withdrawn --> Funded: deposit(amount)
-    Funded --> Rotating: rollover_and_freeze()
-    Rotating --> Funded: rotate_key(new_ek, proof) + unfreeze()
+    [*] --> Confidential_Asset: register(ek, registration_proof)
+    Confidential_Asset --> Confidential_Asset2: transfer(proof)
+    Public_Asset --> Confidential_Asset: deposit(amount)
+    Confidential_Asset --> Public_Asset: withdraw(amount)
+    Confidential_Asset --> Confidential_Asset: rollover_and_freeze() / normalize(proof) / rotate_key(new_ek, proof) / unfreeze()
 ```
-
-
 
 ### Dual-Balance Architecture
 
-Each account maintains two encrypted balances to prevent front-running attacks:
+Each account maintains two encrypted balances (pending and actual) to prevent front-running attacks:
+- **Pending balance**: receives deposits and incoming transfers. Cannot be spent directly.
+- **Actual balance**: available for spending. Updated by rolling over the pending balance.
+
+A roolover update the actual balance with the pending one.
+
+This separation ensures that incoming transfers cannot interfere with in-progress proofs, since proofs are computed against the actual balance which is stable between rollovers.
 
 ```mermaid
 flowchart TB
@@ -79,18 +83,11 @@ flowchart TB
         PB[Pending Balance<br/>4 chunks, 64-bit]
         AB[Actual Balance<br/>8 chunks, 128-bit]
     end
-    D[Deposit / Incoming Transfer] --> PB
+    D[Incoming] -- Deposit / Incoming Transfer --> PB
     PB -- "rollover" --> AB
     AB -- "withdraw / transfer" --> O[Outgoing]
-    style Account fill:#0f3460,color:#e0e0e0
+    style Account fill:#1a1a2e,color:#e0e0e0
 ```
-
-
-
-- **Pending balance**: receives deposits and incoming transfers. Cannot be spent directly.
-- **Actual balance**: available for spending. Updated by rolling over the pending balance.
-
-This separation ensures that incoming transfers cannot interfere with in-progress proofs, since proofs are computed against the actual balance which is stable between rollovers.
 
 ---
 
@@ -684,4 +681,3 @@ CHUNK_SIZE_BITS                 = 16
 BULLETPROOFS_NUM_BITS           = 16
 BULLETPROOFS_DST                = "AptosConfidentialAsset/BulletproofRangeProof"
 ```
-

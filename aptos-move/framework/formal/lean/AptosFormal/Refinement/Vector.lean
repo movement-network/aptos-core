@@ -112,13 +112,13 @@ private theorem run_succ_ok {env : ModuleEnv} {f f' : Frame} {cs cs' : List Fram
       some (MoveValue.vector MoveType.u64 (List.map MoveValue.u64 xs)) := by
   have h0 : 0 < (MoveValue.vector MoveType.u64 (List.map MoveValue.u64 xs) ::
       List.take k (List.map MoveValue.u64 xs)).toArray.size := by
-    simp [Array.size_toArray, List.length_cons, List.length_take, Nat.zero_lt_succ]
-  simp [ContainerStore.read, if_pos h0, List.getElem_toArray]
+    simp [List.size_toArray, List.length_cons, List.length_take, Nat.zero_lt_succ]
+  simp [ContainerStore.read, List.getElem_toArray]
 
 private theorem contains_vm_store_size (xs : List UInt64) (k : Nat) (hk : k ≤ xs.length) :
     (containsVmStore xs k).store.size = k + 1 := by
-  simp [containsVmStore, Array.size_append, List.size_toArray, List.length_map, List.length_take,
-    Nat.min_eq_left hk, Nat.add_comm]
+  simp [containsVmStore, List.size_toArray, List.length_map, List.length_take,
+    Nat.min_eq_left hk]
 
 private theorem contains_idx_u64_lt_len {xs : List UInt64} {k : Nat} (hk : k < xs.length)
     (hlen : xs.length < UInt64.size) :
@@ -126,7 +126,7 @@ private theorem contains_idx_u64_lt_len {xs : List UInt64} {k : Nat} (hk : k < x
   have hk64 : k < UInt64.size := Nat.lt_trans hk hlen
   have hkN : k.toUInt64.toNat = k := UInt64.toNat_ofNat_of_lt hk64
   have hlN : ((List.map MoveValue.u64 xs).length.toUInt64).toNat = xs.length := by
-    simpa [List.length_map, UInt64.toNat_ofNat_of_lt hlen]
+    simp [List.length_map, UInt64.toNat_ofNat_of_lt hlen]
   rw [UInt64.lt_iff_toNat_lt, hkN, hlN]
   exact hk
 
@@ -260,7 +260,7 @@ private theorem contains_list_take_succ (xs : List UInt64) (k : Nat) (hk : k < x
   | nil => cases hk
   | cons x xs ih =>
     cases k with
-    | zero => simp [List.take, List.map, List.get]
+    | zero => simp [List.map, List.get]
     | succ k =>
       have hk' : k < xs.length := Nat.succ_lt_succ_iff.mp hk
       simp [List.take, List.map, List.get]
@@ -279,8 +279,7 @@ private theorem contains_alloc_store_eq (xs : List UInt64) (k : Nat) (hk : k < x
 private theorem contains_vm_read_succ (xs : List UInt64) (k : Nat) (hk : k < xs.length) :
     (containsVmStore xs (k + 1)).read (k + 1) = some (.u64 (xs.get ⟨k, hk⟩)) := by
   have hmin : min (k + 1) xs.length = k + 1 := Nat.min_eq_left (Nat.succ_le_of_lt hk)
-  simp [containsVmStore, ContainerStore.read, contains_vm_store_size xs (k + 1) (Nat.succ_le_of_lt hk),
-    if_pos (by omega), List.getElem_map, List.getElem_take, hmin, Nat.lt_succ_self]
+  simp [containsVmStore, ContainerStore.read, List.getElem_map, List.getElem_take, hmin]
 
 private theorem contains_alloc_read_cell (xs : List UInt64) (k : Nat) (hk : k < xs.length) :
     (containsAllocStore xs k hk).read (k + 1) = some (.u64 (xs.get ⟨k, hk⟩)) := by
@@ -435,10 +434,9 @@ private theorem contains_iterN6 (xs : List UInt64) (e : UInt64) (k : Nat) (hk : 
     UInt64.toNat_ofNat_of_lt (Nat.lt_trans hk hlen)
   have hkU : k.toUInt64 = UInt64.ofNat k := rfl
   simp [step, containsLoopFrame, containsVmStore, ContainerStore.alloc, vectorContains_code_size,
-    vectorContains_instr_13, contains_vm_store_size xs k (Nat.le_of_lt hk), hkNat,
-    List.getElem_map, Nat.min_eq_left (Nat.le_of_lt hk), hkU, dif_pos hk, contains_read_vec0]
-  simp [containsAllocStore, containsVmStore, ContainerStore.alloc, contains_list_take_succ xs k hk,
-    List.getElem_map, List.toArray_appendList]
+    vectorContains_instr_13, hkNat, List.getElem_map, Nat.min_eq_left (Nat.le_of_lt hk),
+    dif_pos hk, contains_read_vec0]
+  simp [containsAllocStore, containsVmStore, ContainerStore.alloc]
 
 private theorem contains_iterN7 (xs : List UInt64) (e : UInt64) (k : Nat) (hk : k < xs.length)
     (_hlen : xs.length < UInt64.size) (_hneq : (xs.get ⟨k, hk⟩ == e) = false) :
@@ -632,10 +630,9 @@ private theorem contains_foundN6 (xs : List UInt64) (e : UInt64) (k : Nat) (hk :
     UInt64.toNat_ofNat_of_lt (Nat.lt_trans hk hlen)
   have hkU : k.toUInt64 = UInt64.ofNat k := rfl
   simp [step, containsLoopFrame, containsVmStore, ContainerStore.alloc, vectorContains_code_size,
-    vectorContains_instr_13, contains_vm_store_size xs k (Nat.le_of_lt hk), hkNat,
-    List.getElem_map, Nat.min_eq_left (Nat.le_of_lt hk), hkU, dif_pos hk, contains_read_vec0]
-  simp [containsAllocStore, containsVmStore, ContainerStore.alloc, contains_list_take_succ xs k hk,
-    List.getElem_map, List.toArray_appendList]
+    vectorContains_instr_13, hkNat, List.getElem_map, Nat.min_eq_left (Nat.le_of_lt hk),
+    dif_pos hk, contains_read_vec0]
+  simp [containsAllocStore, containsVmStore, ContainerStore.alloc]
 
 private theorem contains_foundN7 (xs : List UInt64) (e : UInt64) (k : Nat) (hk : k < xs.length)
     (_he : (xs.get ⟨k, hk⟩ == e) = true) :
@@ -731,14 +728,14 @@ private theorem contains_return_run.go (xs : List UInt64) (e : UInt64) (k : Nat)
     match hb : (xs.get ⟨k, hklt⟩ == e) with
     | true =>
       have he : (xs.get ⟨k, hklt⟩ == e) = true := hb
-      simp [he]
+      simp
       have hf13 : fuel ≥ 13 := by omega
       rcases Nat.le.dest hf13 with ⟨t, rfl⟩
       rw [contains_run_found xs e k hklt hlen he t]
       simp [returnValues]
     | false =>
       have hneq : (xs.get ⟨k, hklt⟩ == e) = false := hb
-      simp [hneq]
+      simp
       have hf16 : fuel ≥ 16 := by omega
       rcases Nat.le.dest hf16 with ⟨t, rfl⟩
       rw [contains_run_iter xs e k hklt hlen hneq t]

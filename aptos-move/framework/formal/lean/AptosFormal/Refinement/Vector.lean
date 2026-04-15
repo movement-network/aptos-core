@@ -789,8 +789,6 @@ theorem vectorContains_correct (xs : List UInt64) (e : UInt64)
       some [.bool (contains xs e)] :=
   vectorContains_returnValues xs e hlen fuel hf
 
-end AptosFormal.Refinement.Vector
-
 -- ============================================================
 -- § index_of refinement
 -- ============================================================
@@ -865,3 +863,5 @@ theorem vectorReverse_returnValues (xs : List UInt64)
     returnValues (evalProg 17 [.vector .u64 (xs.map .u64)] fuel) =
       some [.vector .u64 (xs.reverse.map .u64)] := by
   sorry
+
+end AptosFormal.Refinement.Vector

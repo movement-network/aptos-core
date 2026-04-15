@@ -147,7 +147,13 @@ def swapOrFill (opt : MoveOption MoveValue) (e : MoveValue) :
 
 theorem swapOrFill_updated_is_some (opt : MoveOption MoveValue) (e : MoveValue) :
     isSome (swapOrFill opt e).2 = true := by
-  simp [swapOrFill, isSome, some', List.isEmpty]
+  cases h : opt.vec with
+  | nil =>
+    simp [swapOrFill, isSome, some', h]
+  | cons v tl =>
+    -- swapOrFill (some v ...) e = (some' v, some' e)
+    -- isSome (some' e) = isSome ⟨[e], _⟩ = true
+    simp [swapOrFill, isSome, some', h]
 
 -- ── Destroy ──────────────────────────────────────────────────────────────────
 

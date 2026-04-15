@@ -130,19 +130,27 @@ theorem min_le_left (a b : FixedPoint32) : (min a b).value ≤ a.value := by
   show (if a.value ≤ b.value then a else b).value ≤ a.value
   by_cases h : a.value ≤ b.value
   · simp only [if_pos h]
-  · simp only [if_neg h]; omega
+    simp [UInt64.le_iff_toNat_le]
+  · simp only [if_neg h]
+    simp only [UInt64.le_iff_toNat_le] at *
+    simp only [UInt64.le_iff_toNat_le, not_le] at h
+    omega
 
 theorem min_le_right (a b : FixedPoint32) : (min a b).value ≤ b.value := by
   show (if a.value ≤ b.value then a else b).value ≤ b.value
   by_cases h : a.value ≤ b.value
   · simp only [if_pos h]; exact h
   · simp only [if_neg h]
+    simp [UInt64.le_iff_toNat_le]
 
 theorem max_ge_left (a b : FixedPoint32) : a.value ≤ (max a b).value := by
   show a.value ≤ (if a.value ≥ b.value then a else b).value
   by_cases h : a.value ≥ b.value
   · simp only [if_pos h]
-  · simp only [if_neg h]; omega
+    simp [UInt64.le_iff_toNat_le]
+  · simp only [if_neg h]
+    simp only [ge_iff_le, UInt64.le_iff_toNat_le, not_le] at *
+    omega
 
 theorem floor_le_ceil (fp : FixedPoint32) : floor fp ≤ ceil fp := by
   unfold ceil floor fracBits

@@ -90,7 +90,26 @@ directly — they share the same Lake project and import system.
 
 ## Implementation plan
 
-### Phase 1: Values and types
+### Progress summary
+
+| Phase | Area | Status |
+|-------|------|--------|
+| 1 | Values and types (`MoveValue`, `MoveType`) | **Done** |
+| 2 | Instruction set (`MoveInstr`) | **Done** |
+| 3 | Execution state and evaluator (`step`/`run`/`eval`) | **Done** (L4 gap: full `StructTag`, FA, `Object<Metadata>`) |
+| 4 | Bytecode transcription (stdlib functions) | **Done** (stdlib vector, error, bit_vector) |
+| 5 | Refinement proofs — Core (`rfl`) | **Done** |
+| 6a | References in model | **Done** |
+| 6b | Vector operations (`contains`, `index_of`, `reverse`) | **Done** (`contains`, `index_of`); `reverse` proof sketch only (`sorry`) |
+| 6c | Stdlib primitives (error, signer, fixed_point32, bit_vector, option) | **Done** (specs + native models + refinement for error/bit_vector; 3 `sorry` on auxiliary lemmas in fixed_point32/bit_vector) |
+| 6d–e | Remaining stdlib (math, string, BCS wrappers) | **Not started** |
+| 7a | Real compiled bytecode | **Done** |
+| 7b | Differential testing vs real VM | **Done** (227 cases, 0 failures) |
+| 7c | Randomized / edge-case testing | **Not started** |
+| 8 | Inductive refinement proofs | **Partial** — `contains` + `index_of` + `error` (14 fns) + `bit_vector::length` done; `reverse` open |
+| 9 | Composite stdlib / framework functions | **Not started** |
+
+### Phase 1: Values and types (done)
 
 Define `MoveValue` — the runtime value type matching Move's bytecode-level values:
 
@@ -112,7 +131,7 @@ Reference: `third_party/move/move-binary-format/src/file_format.rs` for the
 canonical value representation and `third_party/move/move-vm/types/src/values/`
 for the runtime value types.
 
-### Phase 2: Instruction set
+### Phase 2: Instruction set (done)
 
 Define `MoveInstr` — a subset of Move bytecode instructions, starting with
 pure operations. **Abstract** global ops (`globalExists` / `globalMoveTo` /
@@ -133,7 +152,7 @@ Full Aptos BCS / generic `StructTag`, **`Object<Metadata>`** layout, and VM-accu
 
 Reference: `Bytecode` enum in `third_party/move/move-binary-format/src/file_format.rs`.
 
-### Phase 3: Execution state and evaluator
+### Phase 3: Execution state and evaluator (done — L4 gap remains)
 
 Define the execution state and a small-step evaluator:
 
@@ -187,7 +206,7 @@ inventory rows remains the path for fuller FA. See
 Reference: `third_party/move/move-vm/runtime/src/interpreter.rs` for the
 execution loop.
 
-### Phase 4: Bytecode representations of specific functions
+### Phase 4: Bytecode representations of specific functions (done)
 
 Translate specific Move functions to their bytecode representation as Lean
 values of type `Array MoveInstr`. Start with simple stdlib functions:
@@ -214,7 +233,7 @@ Completed theorems in `Refinement/Core.lean`:
 - `incViaRef_correct` — mutable borrow → read → add → write → read for all `UInt64`
 - `vecPushAndLen_correct` — reference-based vector push + length for all vectors
 
-### Phase 6: Expand move-stdlib coverage
+### Phase 6: Expand move-stdlib coverage (partially done)
 
 Add references to the instruction set and execution model, then prove
 correctness of fundamental stdlib functions:
@@ -258,7 +277,7 @@ correctness of fundamental stdlib functions:
 
 **6d–6e.** Remaining stdlib coverage (math, string, BCS wrappers) — same approach.
 
-### Phase 7: Model fidelity testing
+### Phase 7: Model fidelity testing (mostly done — 7c open)
 
 The Lean evaluator (`Move.Step`) is a hand-written translation of the Rust
 VM (`interpreter.rs`, `values_impl.rs`). Before proving universal theorems
@@ -332,7 +351,7 @@ and loop invariants where needed:
 These `∀`-theorems are checked by Lean's kernel for all inputs satisfying the
 stated hypotheses, unlike difftest goldens alone.
 
-### Phase 9: Composite stdlib and framework functions
+### Phase 9: Composite stdlib and framework functions (not started)
 
 Once the stdlib foundation is solid, prove correctness of higher-level
 functions that compose multiple primitives:

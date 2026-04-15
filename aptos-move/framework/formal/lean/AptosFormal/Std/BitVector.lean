@@ -1,5 +1,5 @@
 import AptosFormal.Move.Value
-import Mathlib.Tactic.Omega
+-- omega is a Lean 4 builtin tactic; no import needed
 
 /-!
 # Lean specification for `std::bit_vector`

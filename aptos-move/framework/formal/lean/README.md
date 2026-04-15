@@ -11,6 +11,15 @@ beyond a single package.
 | `AptosFormal.Std.MoveStdlibGoldens` | Byte-level golden tests for hash/BCS/vector |
 | `AptosFormal.Move.*` | Move bytecode interpreter (`Step`, `Programs`, natives → specs); roadmap: [`AptosFormal/Move/README.md`](AptosFormal/Move/README.md) |
 | `AptosFormal.Refinement.*` | Proofs that selected bytecode matches `Std.*` specs (e.g. `vector::contains`) |
+| `AptosFormal.Std.Error` | Lean spec for `std::error` — `canonical` + 13 category wrappers; all `@[simp]` lemmas |
+| `AptosFormal.Std.FixedPoint32` | Lean spec for `std::fixed_point32` — `multiply_u64`, `divide_u64`, `create_from_rational`, `floor`/`ceil`/`round` (overflow-safe via `Nat`) |
+| `AptosFormal.Std.BitVector` | Lean spec for `std::bit_vector` — `new`, `set`, `unset`, `is_index_set`, `shift_left`; `shift_left_zero` proved |
+| `AptosFormal.Std.Option` | Lean spec for `std::option` — all functions including `swap_or_fill` (correct displaced-value semantics) |
+| `AptosFormal.Std.Signer` | Lean spec for `std::signer` — native `borrow_address` / `address_of` |
+| `AptosFormal.Move.Programs.StdPrimitives` | Bytecode programs for `std::error` (canonical + 13 wrappers) and `bit_vector::length` |
+| `AptosFormal.Move.Native.StdPrimitives` | Native bindings for `std::signer`, `std::fixed_point32`, `std::bit_vector`, `std::option` |
+| `AptosFormal.Refinement.StdPrimitives` | `rfl`-proved refinement theorems: bytecode ↔ Lean spec for all error functions and `bit_vector::length` |
+| `AptosFormal.Tests.StdPrimitives` | `native_decide` smoke tests for all five stdlib modules |
 | `AptosFormal.DiffTest.*` | Lean side of VM ↔ Lean differential tests (JSON oracles); see [`../difftest/README.md`](../difftest/README.md) |
 | `AptosFormal.Tests.*` | Concrete smoke tests (`native_decide`) on the evaluator |
 | `AptosFormal.Experimental.ConfidentialAsset.Registration.*` | `verify_registration_proof`: crypto proofs (L0), operational spec (L1), functional simulation (L1.5), bytecode refinement (L2), `native_decide` difftest proofs. See [`../REGISTRATION_VERIFY_REVIEW.md`](../REGISTRATION_VERIFY_REVIEW.md). |
@@ -63,7 +72,10 @@ cd aptos-move/framework/formal/lean
 grep -r "sorry" AptosFormal/ --include="*.lean"
 ```
 
-This should return **no matches**. (The word "sorry" may appear in comments explaining what
+This should return **no matches** for the core stdlib specs (`Std.*`, `Move.Programs.StdPrimitives`, `Refinement.StdPrimitives`).
+
+> **Note:** `Refinement/Vector.lean` and `Experimental/ConfidentialAsset/` contain flagged `sorry`s
+> on inductive loop steps and abstract bytecode stepping respectively — see inline comments for status. (The word "sorry" may appear in comments explaining what
 *could* be sorry'd; `grep` for `sorry` outside comments if you want to be precise, or run
 `lake env printPaths` and inspect the `.olean` files for `sorryAx` usage.)
 

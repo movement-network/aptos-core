@@ -125,9 +125,8 @@ private theorem contains_idx_u64_lt_len {xs : List UInt64} {k : Nat} (hk : k < x
     k.toUInt64 < (List.map MoveValue.u64 xs).length.toUInt64 := by
   have hk64 : k < UInt64.size := Nat.lt_trans hk hlen
   have hkN : k.toUInt64.toNat = k := UInt64.toNat_ofNat_of_lt hk64
-  have hlN : ((List.map MoveValue.u64 xs).length.toUInt64).toNat = xs.length := by
-    simp [List.length_map]
-    exact UInt64.toNat_ofNat_of_lt hlen
+  have hlN : ((List.map MoveValue.u64 xs).length.toUInt64).toNat = xs.length :=
+    by simp only [List.length_map]; exact UInt64.toNat_ofNat_of_lt hlen
   rw [UInt64.lt_iff_toNat_lt, hkN, hlN]
   exact hk
 

@@ -64,7 +64,8 @@ theorem ELENGTH        : canonical OUT_OF_RANGE 1 = 0x20001 := rfl
 -- Monotonicity: same category, different reasons
 theorem canonical_inj_reason {cat r1 r2 : UInt64} (h : canonical cat r1 = canonical cat r2) :
     r1 = r2 := by
-  simp [canonical] at h
-  exact UInt64.add_left_cancel h
+  simp only [canonical] at h
+  -- (cat <<< 16) + r1 = (cat <<< 16) + r2  →  r1 = r2
+  omega
 
 end AptosFormal.Std.Error

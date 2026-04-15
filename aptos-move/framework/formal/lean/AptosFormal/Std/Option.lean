@@ -30,8 +30,8 @@ structure MoveOption (α : Type) where
   inv : vec.length ≤ 1
 deriving Repr
 
-def none' : MoveOption MoveValue := ⟨[], by decide⟩
-def some' (v : MoveValue) : MoveOption MoveValue := ⟨[v], by decide⟩
+def none' : MoveOption MoveValue := ⟨[], Nat.zero_le _⟩
+def some' (v : MoveValue) : MoveOption MoveValue := ⟨[v], Nat.le_refl _⟩
 
 -- ── Predicates ───────────────────────────────────────────────────────────────
 
@@ -147,8 +147,7 @@ def swapOrFill (opt : MoveOption MoveValue) (e : MoveValue) :
 
 theorem swapOrFill_updated_is_some (opt : MoveOption MoveValue) (e : MoveValue) :
     isSome (swapOrFill opt e).2 = true := by
-  simp [swapOrFill, isSome, some']
-  cases opt.vec <;> rfl
+  simp [swapOrFill, isSome, some', List.isEmpty]
 
 -- ── Destroy ──────────────────────────────────────────────────────────────────
 

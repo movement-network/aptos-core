@@ -1,6 +1,7 @@
 import AptosFormal.Move.Native
 import AptosFormal.Move.Step
 import AptosFormal.AptosStd.Hash.Sha3_512
+import AptosFormal.AptosStd.Hash.Sha2_512
 import AptosFormal.Experimental.ConfidentialAsset.Registration.TranscriptAlignment
 import AptosFormal.Move.Programs.RegistrationDifftestOracle
 
@@ -24,7 +25,7 @@ Index **171** is **`bool(true)`** for **`test_registration_proof_framework_deter
 (VM: production **`prove_registration_deterministic_for_difftest`** + **`verify_registration_proof_for_difftest`** on the `registration_roundtrip_vm` fixture; Lean **`caRegistrationHelpersRoundtripNative`** — same **`Operational.execVerifyRegistrationProof`** table oracle as index **35**).
 Index **172** returns the **second** formal FS golden **`vector<u8>`** (**`ldConst` 46** + `ret`; `TranscriptAlignment.expectedRegistrationFsMsg2`).
 Index **173** is **`bool(true)`** for **`test_registration_fs_message_framework_second_scenario_matches_helpers_golden`** (Lean **`ldTrue`** stub).
-Indices **174** / **175**: **64**-byte registration **`tagged_hash`** digests on FS golden **1** / **2** (**`ldConst` 47** / **48** + `ret`; corpora **`registration_tagged_hash_golden_{1,2}.hex`**).
+Indices **174** / **175**: **64**-byte registration **SHA2-512** digests on FS golden **1** / **2** (**`ldConst` 47** / **48** + `ret`; corpora **`registration_sha2_512_golden_{1,2}.hex`**).
 Index **53** is **`ciphertext_add_assign`** smoke (`test_elg_ciphertext_add_assign_matches_add`).
 Index **54** is **`ciphertext_sub_assign`** smoke (`test_elg_ciphertext_sub_assign_matches_sub`).
 Indices **55–101**: extra balance + ElGamal bool smoke (see `Runner.lean` names). Index **102**: CA e2e **`bool(false)`** witness. Index **103**: CA e2e **`u64(77)`** witness (`confidential_asset_balance` after a single `deposit` of 77 in the merged oracle). Index **104**: **`u64(165)`** (two self-deposits 100+65). Index **105**: **`u64(667)`** (deposit 1000, withdraw 333). Index **106**: **`u64(5678)`** (`deposit_to` only). Index **107**: **`u64(12345)`** (deposit 12345, transfer 4321 to Bob — pool unchanged). Index **108**: **`u64(7000)`** (5000 + 2000 after mid transfer). Index **109**: **`u64(7777)`** (two `deposit_to` to same recipient).
@@ -65,6 +66,7 @@ namespace AptosFormal.Move.Programs.Confidential
 open AptosFormal.Move
 open AptosFormal.Move.Native
 open AptosFormal.AptosStd.Hash.Sha3_512
+open AptosFormal.AptosStd.Hash.Sha2_512
 open RegistrationVerify
 open RegistrationTranscriptAlignment
 open AptosFormal.Move.Programs.RegistrationDifftestOracle
@@ -1746,11 +1748,11 @@ def caSerializeAuditorAmountsActualZeroThenU64OnePendingDesc : FuncDesc :=
 def caSerializeAuditorAmountsU64OnePendingThenActualZeroDesc : FuncDesc :=
   { numParams := 0, numReturns := 1, body := .bytecode #[.ldConst 19, .ret] 0 }
 
-/-- **161**-byte FS `msg` for `goldenRegistrationInputs` — same as `TranscriptAlignment.expectedRegistrationFsMsgMoveGolden` (const pool **0**; harness index **38**). -/
+/-- **199**-byte FS `msg` for `goldenRegistrationInputs` — same as `TranscriptAlignment.expectedRegistrationFsMsgMoveGolden` (const pool **0**; harness index **38**). -/
 def registrationFsMsgGoldenMoveBytes : List UInt8 :=
   expectedRegistrationFsMsgMoveGolden.toList
 
-/-- **161**-byte FS `msg` for `goldenRegistrationInputs2` — `TranscriptAlignment.expectedRegistrationFsMsg2` (const pool **46**; harness index **172**). -/
+/-- **199**-byte FS `msg` for `goldenRegistrationInputs2` — `TranscriptAlignment.expectedRegistrationFsMsg2` (const pool **46**; harness index **172**). -/
 def registrationFsMsgGolden2MoveBytes : List UInt8 :=
   expectedRegistrationFsMsg2.toList
 
@@ -1763,11 +1765,11 @@ def caRegistrationFsMsgGoldenDesc : FuncDesc :=
 def caRegistrationFsMsgGolden2Desc : FuncDesc :=
   { numParams := 0, numReturns := 1, body := .bytecode #[.ldConst 46, .ret] 0 }
 
-/-- **64**-byte tagged SHA3-512 on FS golden **1** — `TranscriptAlignment.expectedTaggedHashGolden` (const pool **47**; harness **174**). -/
+/-- **64**-byte SHA2-512 on FS golden **1** — `TranscriptAlignment.expectedTaggedHashGolden` (const pool **47**; harness **174**). -/
 def registrationTaggedHashGolden1MoveBytes : List UInt8 :=
   expectedTaggedHashGolden.toList
 
-/-- **64**-byte tagged SHA3-512 on FS golden **2** — `TranscriptAlignment.expectedTaggedHashGolden2` (const pool **48**; harness **175**). -/
+/-- **64**-byte SHA2-512 on FS golden **2** — `TranscriptAlignment.expectedTaggedHashGolden2` (const pool **48**; harness **175**). -/
 def registrationTaggedHashGolden2MoveBytes : List UInt8 :=
   expectedTaggedHashGolden2.toList
 
@@ -1779,13 +1781,13 @@ theorem registrationTaggedHashGolden2MoveBytes_eq_expectedTaggedHashGolden2_toLi
 
 theorem registrationTaggedHashGolden1MoveBytes_eq_taggedHash_golden_msg_toList :
     registrationTaggedHashGolden1MoveBytes =
-      (taggedHash fiatShamirRegistrationDst expectedRegistrationFsMsgMoveGolden).toList := by
+      (sha2_512 expectedRegistrationFsMsgMoveGolden).toList := by
   rw [registrationTaggedHashGolden1MoveBytes_eq_expectedTaggedHashGolden_toList,
     ← tagged_hash_golden_msg_toList_eq_expected_toList]
 
 theorem registrationTaggedHashGolden2MoveBytes_eq_taggedHash_golden2_msg_toList :
     registrationTaggedHashGolden2MoveBytes =
-      (taggedHash fiatShamirRegistrationDst expectedRegistrationFsMsg2).toList := by
+      (sha2_512 expectedRegistrationFsMsg2).toList := by
   rw [registrationTaggedHashGolden2MoveBytes_eq_expectedTaggedHashGolden2_toList,
     ← tagged_hash_golden2_msg_toList_eq_expected_toList]
 
@@ -2406,8 +2408,8 @@ def confidentialModuleEnv : ModuleEnv :=
       caRegistrationHelpersRoundtripDesc, -- 171 production prove+verify on **35** fixture — same Lean native as **35**
       caRegistrationFsMsgGolden2Desc, -- 172 second FS golden `vector<u8>` (`TranscriptAlignment.expectedRegistrationFsMsg2`)
       caBoolConstViewDesc true, -- 173 second FS framework == helpers golden (`ldTrue`)
-      caRegistrationTaggedHashGolden1Desc, -- 174 tagged SHA3-512 on FS golden 1 (`registration_tagged_hash_golden_1.hex`)
-      caRegistrationTaggedHashGolden2Desc, -- 175 tagged SHA3-512 on FS golden 2 (`registration_tagged_hash_golden_2.hex`)
+      caRegistrationTaggedHashGolden1Desc, -- 174 SHA2-512 on FS golden 1 (`registration_sha2_512_golden_1.hex`)
+      caRegistrationTaggedHashGolden2Desc, -- 175 SHA2-512 on FS golden 2 (`registration_sha2_512_golden_2.hex`)
       caE2eAbort196617Desc, -- 176 `rotate_encryption_key` pending≠0 VM abort (`ENOT_ZERO_BALANCE` / code **196617**)
       caConstU64ViewDesc (UInt64.ofNat 8881), -- 177 e2e `confidential_asset_balance` pool pin after freeze+rotate+unfreeze path (**8881**)
       caConstU64ViewDesc (UInt64.ofNat 10003), -- 178 e2e pool **10003** (rolled **6001** + post-unfreeze **4002**)

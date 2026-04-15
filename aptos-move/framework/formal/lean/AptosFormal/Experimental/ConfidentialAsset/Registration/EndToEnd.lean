@@ -36,7 +36,7 @@ Ties together every Lean module in the registration proof stack:
 - `golden_registration_completeness` / `golden2_registration_completeness` — honest prover acceptance at each golden.
 - `registration_challenge_deterministic` — Fiat–Shamir challenge is unique.
 - `FiatShamirSymbolic.fiatShamirVerify_iff_registrationSchnorrEq_module` — **`fiatShamirVerify`** ↔ abstract **`registrationSchnorrEq`** with module **`smul` / `add`**.
-- `FiatShamirSymbolic.registrationSchnorrEq_of_fiatShamirProve_output` — honest **`fiatShamirProve`** satisfies **`registrationSchnorrEq`** at **`taggedHash fsMsg`**.
+- `FiatShamirSymbolic.registrationSchnorrEq_of_fiatShamirProve_output` — honest **`fiatShamirProve`** satisfies **`registrationSchnorrEq`** at **`hashFn fsMsg`**.
 - `SchnorrCompleteness.registrationVerifySpec_of_fiatShamirProve_when_fsMsg_eq_registrationFiatShamirMsg` — same honest transcript satisfies **`registrationVerifySpec`** when **`fsMsg`** matches the verifier’s **`registrationFiatShamirMsg i`**.
 - `Operational.execVerifyRegistrationProof_eq_none_of_pointEqBool_false_of_parsed` — parsed path with **`pointEqBool = false`** ⇒ **`execVerifyRegistrationProof = none`**.
 

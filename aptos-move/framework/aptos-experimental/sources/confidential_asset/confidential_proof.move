@@ -6,7 +6,6 @@ module aptos_experimental::confidential_proof {
     use std::option;
     use std::option::Option;
     use std::vector;
-    use aptos_std::aptos_hash;
     use aptos_std::ristretto255::{Self, CompressedRistretto, Scalar};
     use aptos_std::ristretto255_bulletproofs::{Self as bulletproofs, RangeProof};
 
@@ -221,14 +220,14 @@ module aptos_experimental::confidential_proof {
         assert!(option::is_some(&s), error::invalid_argument(ESIGMA_PROTOCOL_VERIFY_FAILED));
         let s = option::extract(&mut s);
 
-        // Recompute Fiat-Shamir challenge: e = tagged_hash("Registration", chain_id || sender || contract || token || ek || R)
-        let msg = vector::singleton(chain_id);
+        let msg = FIAT_SHAMIR_REGISTRATION_SIGMA_DST;
+        msg.push_back(chain_id);
         msg.append(std::bcs::to_bytes(&sender));
         msg.append(std::bcs::to_bytes(&contract_address));
         msg.append(std::bcs::to_bytes(&token_address));
         msg.append(twisted_elgamal::pubkey_to_bytes(ek));
         msg.append(ristretto255::compressed_point_to_bytes(r_compressed));
-        let e = new_scalar_from_tagged_hash(FIAT_SHAMIR_REGISTRATION_SIGMA_DST, msg);
+        let e = ristretto255::new_scalar_from_sha2_512(msg);
 
         // Verify: s * H + e * ek == R
         let h = ristretto255::hash_to_point_base();
@@ -246,8 +245,8 @@ module aptos_experimental::confidential_proof {
         );
     }
 
-    /// Byte-for-byte the Fiat–Shamir prefix `msg` built in `verify_registration_proof` before
-    /// `new_scalar_from_tagged_hash(FIAT_SHAMIR_REGISTRATION_SIGMA_DST, msg)`.
+    /// Byte-for-byte the Fiat–Shamir input `msg` built in `verify_registration_proof` before
+    /// `ristretto255::new_scalar_from_sha2_512(msg)` (DST is the prefix of `msg`).
     ///
     /// Exposed as a normal `public` entry (not `#[test_only]`) so off-chain tooling and
     /// `move-lean-difftest` harnesses can pin the transcript without duplicating concatenation logic.
@@ -259,7 +258,8 @@ module aptos_experimental::confidential_proof {
         ek: &twisted_elgamal::CompressedPubkey,
         commitment_bytes: vector<u8>,
     ): vector<u8> {
-        let msg = vector::singleton(chain_id);
+        let msg = FIAT_SHAMIR_REGISTRATION_SIGMA_DST;
+        msg.push_back(chain_id);
         msg.append(std::bcs::to_bytes(&sender));
         msg.append(std::bcs::to_bytes(&contract_address));
         msg.append(std::bcs::to_bytes(&token_address));
@@ -285,13 +285,14 @@ module aptos_experimental::confidential_proof {
         let r = ristretto255::point_mul(&h, k);
         let r_compressed = ristretto255::point_compress(&r);
 
-        let msg = vector::singleton(chain_id);
+        let msg = FIAT_SHAMIR_REGISTRATION_SIGMA_DST;
+        msg.push_back(chain_id);
         msg.append(std::bcs::to_bytes(&sender));
         msg.append(std::bcs::to_bytes(&contract_address));
         msg.append(std::bcs::to_bytes(&token_address));
         msg.append(twisted_elgamal::pubkey_to_bytes(ek));
         msg.append(ristretto255::compressed_point_to_bytes(r_compressed));
-        let e = new_scalar_from_tagged_hash(FIAT_SHAMIR_REGISTRATION_SIGMA_DST, msg);
+        let e = ristretto255::new_scalar_from_sha2_512(msg);
 
         let dk_inv = ristretto255::scalar_invert(dk).extract();
         let s = ristretto255::scalar_sub(k, &ristretto255::scalar_mul(&e, &dk_inv));
@@ -1360,39 +1361,6 @@ module aptos_experimental::confidential_proof {
         BULLETPROOFS_NUM_BITS
     }
 
-    //
-    // Tagged hashing helpers for Fiat-Shamir challenge derivation.
-    // Uses SHA3-512 with BIP-340-style tagged hashing for domain separation.
-    // This is distinct from Aptos's approach (SHA2-512 with raw prefix concatenation).
-    //
-
-    /// BIP-340-style tagged hash using SHA3-512:
-    ///   tagged_hash(tag, msg) = SHA3-512(SHA3-512(tag) || SHA3-512(tag) || msg)
-    fun tagged_hash(tag: vector<u8>, msg: vector<u8>): vector<u8> {
-        let tag_hash = aptos_hash::sha3_512(tag);
-        let input = tag_hash;
-        input.append(tag_hash);
-        input.append(msg);
-        aptos_hash::sha3_512(input)
-    }
-
-    /// Derives a scalar from a tagged hash, using ristretto255::new_scalar_uniform_from_64_bytes
-    /// to reduce the 64-byte SHA3-512 output modulo the curve order l.
-    fun new_scalar_from_tagged_hash(tag: vector<u8>, msg: vector<u8>): Scalar {
-        let hash = tagged_hash(tag, msg);
-        let sc_opt = ristretto255::new_scalar_uniform_from_64_bytes(hash);
-        assert!(option::is_some(&sc_opt), error::invalid_argument(ESIGMA_PROTOCOL_VERIFY_FAILED));
-        option::extract(&mut sc_opt)
-    }
-
-    /// Derives a scalar from a plain SHA3-512 hash (used for MSM gamma scalars).
-    fun new_scalar_from_sha3_512(bytes: vector<u8>): Scalar {
-        let hash = aptos_hash::sha3_512(bytes);
-        let sc_opt = ristretto255::new_scalar_uniform_from_64_bytes(hash);
-        assert!(option::is_some(&sc_opt), error::invalid_argument(ESIGMA_PROTOCOL_VERIFY_FAILED));
-        option::extract(&mut sc_opt)
-    }
-
     /// Prepends `chain_id` (single byte), `sender`, and `contract_address` (BCS) to a Fiat-Shamir message buffer.
     fun prepend_domain_context(
         bytes: &mut vector<u8>,
@@ -1423,7 +1391,7 @@ module aptos_experimental::confidential_proof {
         current_balance: &confidential_balance::ConfidentialBalance,
         proof_xs: &WithdrawalSigmaProofXs): Scalar
     {
-        // rho = tagged_hash(DST, chain_id || sender || contract || G || H || P || v_{1..4} || (C_cur, D_cur)_{1..8} || X_{1..18})
+        // rho = SHA2-512(DST || chain_id || sender || contract || G || H || P || v_{1..4} || (C_cur, D_cur)_{1..8} || X_{1..18})
         let bytes = vector[];
 
         bytes.append(ristretto255::compressed_point_to_bytes(ristretto255::basepoint_compressed()));
@@ -1445,7 +1413,9 @@ module aptos_experimental::confidential_proof {
         });
 
         prepend_domain_context(&mut bytes, chain_id, sender, contract_address);
-        new_scalar_from_tagged_hash(FIAT_SHAMIR_WITHDRAWAL_SIGMA_DST, bytes)
+        let msg = FIAT_SHAMIR_WITHDRAWAL_SIGMA_DST;
+        msg.append(bytes);
+        ristretto255::new_scalar_from_sha2_512(msg)
     }
 
     /// Derives the Fiat-Shamir challenge for the `TransferSigmaProof`.
@@ -1464,7 +1434,7 @@ module aptos_experimental::confidential_proof {
         sender_auditor_hint: &vector<u8>,
         proof_xs: &TransferSigmaProofXs): Scalar
     {
-        // rho = tagged_hash(DST, chain_id || sender || contract || G || H || P_s || P_r || ...)
+        // rho = SHA2-512(DST || chain_id || sender || contract || G || H || P_s || P_r || ...)
         let bytes = vector[];
 
         bytes.append(ristretto255::compressed_point_to_bytes(ristretto255::basepoint_compressed()));
@@ -1513,7 +1483,9 @@ module aptos_experimental::confidential_proof {
         bytes.append(bcs::to_bytes(sender_auditor_hint));
 
         prepend_domain_context(&mut bytes, chain_id, sender, contract_address);
-        new_scalar_from_tagged_hash(FIAT_SHAMIR_TRANSFER_SIGMA_DST, bytes)
+        let msg = FIAT_SHAMIR_TRANSFER_SIGMA_DST;
+        msg.append(bytes);
+        ristretto255::new_scalar_from_sha2_512(msg)
     }
 
     /// Derives the Fiat-Shamir challenge for the `NormalizationSigmaProof`.
@@ -1526,7 +1498,7 @@ module aptos_experimental::confidential_proof {
         new_balance: &confidential_balance::ConfidentialBalance,
         proof_xs: &NormalizationSigmaProofXs): Scalar
     {
-        // rho = tagged_hash(DST, chain_id || sender || contract || G || H || P || ...)
+        // rho = SHA2-512(DST || chain_id || sender || contract || G || H || P || ...)
         let bytes = vector[];
 
         bytes.append(ristretto255::compressed_point_to_bytes(ristretto255::basepoint_compressed()));
@@ -1546,7 +1518,9 @@ module aptos_experimental::confidential_proof {
         });
 
         prepend_domain_context(&mut bytes, chain_id, sender, contract_address);
-        new_scalar_from_tagged_hash(FIAT_SHAMIR_NORMALIZATION_SIGMA_DST, bytes)
+        let msg = FIAT_SHAMIR_NORMALIZATION_SIGMA_DST;
+        msg.append(bytes);
+        ristretto255::new_scalar_from_sha2_512(msg)
     }
 
     /// Derives the Fiat-Shamir challenge for the `RotationSigmaProof`.
@@ -1560,7 +1534,7 @@ module aptos_experimental::confidential_proof {
         new_balance: &confidential_balance::ConfidentialBalance,
         proof_xs: &RotationSigmaProofXs): Scalar
     {
-        // rho = tagged_hash(DST, chain_id || sender || contract || G || H || P_cur || P_new || ...)
+        // rho = SHA2-512(DST || chain_id || sender || contract || G || H || P_cur || P_new || ...)
         let bytes = vector[];
 
         bytes.append(ristretto255::compressed_point_to_bytes(ristretto255::basepoint_compressed()));
@@ -1582,7 +1556,9 @@ module aptos_experimental::confidential_proof {
         });
 
         prepend_domain_context(&mut bytes, chain_id, sender, contract_address);
-        new_scalar_from_tagged_hash(FIAT_SHAMIR_ROTATION_SIGMA_DST, bytes)
+        let msg = FIAT_SHAMIR_ROTATION_SIGMA_DST;
+        msg.append(bytes);
+        ristretto255::new_scalar_from_sha2_512(msg)
     }
 
     //
@@ -1593,13 +1569,13 @@ module aptos_experimental::confidential_proof {
     /// Returns the scalar multipliers for the `WithdrawalSigmaProof`.
     fun msm_withdrawal_gammas(rho: &Scalar): WithdrawalSigmaProofGammas {
         WithdrawalSigmaProofGammas {
-            g1: new_scalar_from_sha3_512(msm_gamma_1(rho, 1)),
-            g2: new_scalar_from_sha3_512(msm_gamma_1(rho, 2)),
+            g1: ristretto255::new_scalar_from_sha2_512(msm_gamma_1(rho, 1)),
+            g2: ristretto255::new_scalar_from_sha2_512(msm_gamma_1(rho, 2)),
             g3s: vector::range(0, 8).map(|i| {
-                new_scalar_from_sha3_512(msm_gamma_2(rho, 3, (i as u8)))
+                ristretto255::new_scalar_from_sha2_512(msm_gamma_2(rho, 3, (i as u8)))
             }),
             g4s: vector::range(0, 8).map(|i| {
-                new_scalar_from_sha3_512(msm_gamma_2(rho, 4, (i as u8)))
+                ristretto255::new_scalar_from_sha2_512(msm_gamma_2(rho, 4, (i as u8)))
             }),
         }
     }
@@ -1607,27 +1583,27 @@ module aptos_experimental::confidential_proof {
     /// Returns the scalar multipliers for the `TransferSigmaProof`.
     fun msm_transfer_gammas(rho: &Scalar, auditors_count: u64): TransferSigmaProofGammas {
         TransferSigmaProofGammas {
-            g1: new_scalar_from_sha3_512(msm_gamma_1(rho, 1)),
+            g1: ristretto255::new_scalar_from_sha2_512(msm_gamma_1(rho, 1)),
             g2s: vector::range(0, 8).map(|i| {
-                new_scalar_from_sha3_512(msm_gamma_2(rho, 2, (i as u8)))
+                ristretto255::new_scalar_from_sha2_512(msm_gamma_2(rho, 2, (i as u8)))
             }),
             g3s: vector::range(0, 4).map(|i| {
-                new_scalar_from_sha3_512(msm_gamma_2(rho, 3, (i as u8)))
+                ristretto255::new_scalar_from_sha2_512(msm_gamma_2(rho, 3, (i as u8)))
             }),
             g4s: vector::range(0, 4).map(|i| {
-                new_scalar_from_sha3_512(msm_gamma_2(rho, 4, (i as u8)))
+                ristretto255::new_scalar_from_sha2_512(msm_gamma_2(rho, 4, (i as u8)))
             }),
-            g5: new_scalar_from_sha3_512(msm_gamma_1(rho, 5)),
+            g5: ristretto255::new_scalar_from_sha2_512(msm_gamma_1(rho, 5)),
             g6s: vector::range(0, 8).map(|i| {
-                new_scalar_from_sha3_512(msm_gamma_2(rho, 6, (i as u8)))
+                ristretto255::new_scalar_from_sha2_512(msm_gamma_2(rho, 6, (i as u8)))
             }),
             g7s: vector::range(0, auditors_count).map(|i| {
                 vector::range(0, 4).map(|j| {
-                    new_scalar_from_sha3_512(msm_gamma_2(rho, (i + 7 as u8), (j as u8)))
+                    ristretto255::new_scalar_from_sha2_512(msm_gamma_2(rho, (i + 7 as u8), (j as u8)))
                 })
             }),
             g8s: vector::range(0, 4).map(|i| {
-                new_scalar_from_sha3_512(msm_gamma_2(rho, 8, (i as u8)))
+                ristretto255::new_scalar_from_sha2_512(msm_gamma_2(rho, 8, (i as u8)))
             }),
         }
     }
@@ -1635,13 +1611,13 @@ module aptos_experimental::confidential_proof {
     /// Returns the scalar multipliers for the `NormalizationSigmaProof`.
     fun msm_normalization_gammas(rho: &Scalar): NormalizationSigmaProofGammas {
         NormalizationSigmaProofGammas {
-            g1: new_scalar_from_sha3_512(msm_gamma_1(rho, 1)),
-            g2: new_scalar_from_sha3_512(msm_gamma_1(rho, 2)),
+            g1: ristretto255::new_scalar_from_sha2_512(msm_gamma_1(rho, 1)),
+            g2: ristretto255::new_scalar_from_sha2_512(msm_gamma_1(rho, 2)),
             g3s: vector::range(0, 8).map(|i| {
-                new_scalar_from_sha3_512(msm_gamma_2(rho, 3, (i as u8)))
+                ristretto255::new_scalar_from_sha2_512(msm_gamma_2(rho, 3, (i as u8)))
             }),
             g4s: vector::range(0, 8).map(|i| {
-                new_scalar_from_sha3_512(msm_gamma_2(rho, 4, (i as u8)))
+                ristretto255::new_scalar_from_sha2_512(msm_gamma_2(rho, 4, (i as u8)))
             }),
         }
     }
@@ -1649,14 +1625,14 @@ module aptos_experimental::confidential_proof {
     /// Returns the scalar multipliers for the `RotationSigmaProof`.
     fun msm_rotation_gammas(rho: &Scalar): RotationSigmaProofGammas {
         RotationSigmaProofGammas {
-            g1: new_scalar_from_sha3_512(msm_gamma_1(rho, 1)),
-            g2: new_scalar_from_sha3_512(msm_gamma_1(rho, 2)),
-            g3: new_scalar_from_sha3_512(msm_gamma_1(rho, 3)),
+            g1: ristretto255::new_scalar_from_sha2_512(msm_gamma_1(rho, 1)),
+            g2: ristretto255::new_scalar_from_sha2_512(msm_gamma_1(rho, 2)),
+            g3: ristretto255::new_scalar_from_sha2_512(msm_gamma_1(rho, 3)),
             g4s: vector::range(0, 8).map(|i| {
-                new_scalar_from_sha3_512(msm_gamma_2(rho, 4, (i as u8)))
+                ristretto255::new_scalar_from_sha2_512(msm_gamma_2(rho, 4, (i as u8)))
             }),
             g5s: vector::range(0, 8).map(|i| {
-                new_scalar_from_sha3_512(msm_gamma_2(rho, 5, (i as u8)))
+                ristretto255::new_scalar_from_sha2_512(msm_gamma_2(rho, 5, (i as u8)))
             }),
         }
     }

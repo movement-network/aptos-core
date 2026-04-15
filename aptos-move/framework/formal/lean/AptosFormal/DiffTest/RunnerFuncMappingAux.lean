@@ -658,10 +658,6 @@ private def funcNameToMappingPart5 (base : String) : Option FuncMapping :=
       some { funcIdx := 172, useConfidentialEnv := true, useRealEnv := false }
   | "test_registration_fs_message_framework_second_scenario_matches_helpers_golden" =>
       some { funcIdx := 173, useConfidentialEnv := true, useRealEnv := false }
-  | "test_registration_tagged_hash_golden_move_first" =>
-      some { funcIdx := 174, useConfidentialEnv := true, useRealEnv := false }
-  | "test_registration_tagged_hash_golden_move_second" =>
-      some { funcIdx := 175, useConfidentialEnv := true, useRealEnv := false }
   | "test_registration_bytecode_eval_roundtrip" =>
       some { funcIdx := 194, useConfidentialEnv := true, useRealEnv := false }
   | _                  => none

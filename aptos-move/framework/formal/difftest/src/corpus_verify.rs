@@ -1,11 +1,11 @@
-//! Static **hex corpora** checks for `corpora/confidential_assets/` (registration FS, tagged SHA3-512,
+//! Static **hex corpora** checks for `corpora/confidential_assets/` (registration FS, SHA2-512,
 //! Bulletproofs DST, sigma layout blobs, auditor serializer VM pins).
 //!
 //! Authoritative **byte-level** checks for those goldens (VM + Lean remain the semantic ground truth
 //! for `lake exe difftest`).
 
 use anyhow::{Context, Result};
-use sha3::{Digest, Sha3_512};
+use sha2::Digest as _;
 use std::path::{Path, PathBuf};
 
 const FIAT_SHAMIR_REGISTRATION_DST: &[u8] = b"MovementConfidentialAsset/Registration";
@@ -15,20 +15,16 @@ const RISTRETTO_A_POINT: [u8; 32] = [
     0xc5, 0x70, 0x19, 0xc6, 0xc5, 0x9c, 0x42, 0xcb, 0x70, 0xee, 0x3d, 0x19, 0xaa, 0x99, 0x6f, 0x75,
 ];
 
-fn sha3_512(data: &[u8]) -> [u8; 64] {
-    let mut h = Sha3_512::new();
+fn sha2_512(data: &[u8]) -> [u8; 64] {
+    let mut h = sha2::Sha512::new();
     h.update(data);
     h.finalize().into()
 }
 
-/// Matches Move `tagged_hash` / Lean `taggedHash`: `sha3_512( sha3_512(dst)||sha3_512(dst)||msg )`.
-fn tagged_hash_sha3_512(dst: &[u8], msg: &[u8]) -> [u8; 64] {
-    let th = sha3_512(dst);
-    let mut input = Vec::with_capacity(64 + 64 + msg.len());
-    input.extend_from_slice(&th);
-    input.extend_from_slice(&th);
-    input.extend_from_slice(msg);
-    sha3_512(&input)
+fn sha3_512(data: &[u8]) -> [u8; 64] {
+    let mut h = sha3::Sha3_512::new();
+    h.update(data);
+    h.finalize().into()
 }
 
 fn deserialize_sigma_wire(ns: usize, np: usize) -> Vec<u8> {
@@ -61,11 +57,12 @@ pub fn verify_corpora_in_dir(corpora_dir: &Path) -> Result<()> {
         dst_file.len()
     );
 
+    // FS golden messages now include the 38-byte DST prefix: 38 + 1 + 32 + 32 + 32 + 32 + 32 = 199
     for (hex_name, expected_len) in [
-        ("registration_fs_msg_move_golden_1.hex", 161usize),
-        ("registration_fs_msg_move_golden_2.hex", 161),
-        ("registration_tagged_hash_golden_1.hex", 64),
-        ("registration_tagged_hash_golden_2.hex", 64),
+        ("registration_fs_msg_move_golden_1.hex", 199usize),
+        ("registration_fs_msg_move_golden_2.hex", 199),
+        ("registration_sha2_512_golden_1.hex", 64),
+        ("registration_sha2_512_golden_2.hex", 64),
     ] {
         let data = read_hex_file(corpora_dir, hex_name)?;
         anyhow::ensure!(
@@ -78,22 +75,22 @@ pub fn verify_corpora_in_dir(corpora_dir: &Path) -> Result<()> {
     }
 
     let msg = read_hex_file(corpora_dir, "registration_fs_msg_move_golden_1.hex")?;
-    let tagged_file = read_hex_file(corpora_dir, "registration_tagged_hash_golden_1.hex")?;
-    let tagged_calc = tagged_hash_sha3_512(FIAT_SHAMIR_REGISTRATION_DST, &msg);
+    let hash_file = read_hex_file(corpora_dir, "registration_sha2_512_golden_1.hex")?;
+    let hash_calc = sha2_512(&msg);
     anyhow::ensure!(
-        tagged_file.as_slice() == tagged_calc.as_slice(),
-        "tagged hash mismatch vs registration_tagged_hash_golden_1.hex"
+        hash_file.as_slice() == hash_calc.as_slice(),
+        "SHA2-512 mismatch vs registration_sha2_512_golden_1.hex"
     );
-    eprintln!("OK tagged SHA3-512(dst, msg) matches registration_tagged_hash_golden_1.hex");
+    eprintln!("OK SHA2-512(msg) matches registration_sha2_512_golden_1.hex");
 
     let msg2 = read_hex_file(corpora_dir, "registration_fs_msg_move_golden_2.hex")?;
-    let tagged2_file = read_hex_file(corpora_dir, "registration_tagged_hash_golden_2.hex")?;
-    let tagged2_calc = tagged_hash_sha3_512(FIAT_SHAMIR_REGISTRATION_DST, &msg2);
+    let hash2_file = read_hex_file(corpora_dir, "registration_sha2_512_golden_2.hex")?;
+    let hash2_calc = sha2_512(&msg2);
     anyhow::ensure!(
-        tagged2_file.as_slice() == tagged2_calc.as_slice(),
-        "tagged hash mismatch vs registration_tagged_hash_golden_2.hex"
+        hash2_file.as_slice() == hash2_calc.as_slice(),
+        "SHA2-512 mismatch vs registration_sha2_512_golden_2.hex"
     );
-    eprintln!("OK tagged SHA3-512(dst, msg2) matches registration_tagged_hash_golden_2.hex");
+    eprintln!("OK SHA2-512(msg2) matches registration_sha2_512_golden_2.hex");
 
     let bp_dst = read_hex_file(corpora_dir, "bulletproofs_dst.hex")?;
     anyhow::ensure!(

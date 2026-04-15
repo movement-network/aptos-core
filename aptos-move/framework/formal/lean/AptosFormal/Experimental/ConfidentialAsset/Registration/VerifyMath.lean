@@ -20,11 +20,11 @@ Tagged-hash **64**-byte digests on FS goldens: **`TranscriptAlignment`** (`expec
 
 import AptosFormal.Experimental.ConfidentialAsset.Registration.Formal
 import AptosFormal.AptosStd.Crypto.Ristretto255
-import AptosFormal.AptosStd.Hash.Sha3_512
+import AptosFormal.AptosStd.Hash.Sha2_512
 
 open AptosFormal.Experimental.ConfidentialAsset.Registration.Formal
 open AptosFormal.AptosStd.Crypto.Ristretto255
-open AptosFormal.AptosStd.Hash.Sha3_512
+open AptosFormal.AptosStd.Hash.Sha2_512
 
 namespace RegistrationVerify
 
@@ -106,16 +106,16 @@ theorem verifyRegistrationProofProp_eq {Point : Type} (C : CryptoOracle Point)
         (C.pointAdd (C.pointMul C.hashToPointBase s) (C.pointMul ek e)) rhs := by
   simp [verifyRegistrationProofProp, hs, hr, hek, hR, hek2, he]
 
-/-- Move `new_scalar_from_tagged_hash(FIAT_SHAMIR_REGISTRATION_SIGMA_DST, msg)` on **64**-byte tagged SHA3-512 bytes.
+/-- Move `ristretto255::new_scalar_from_sha2_512(msg)` on the **DST || payload** input — **64**-byte SHA2-512 digest.
 
 Transcript / golden alignment: **`RegistrationTranscriptAlignment`** (`tagged_hash_golden*_msg_matches`,
 `registrationChallengeScalarMove_eq_on_golden{1,2}_inputs`). -/
 def registrationChallengeScalarMove (msg : ByteArray) : Option RistrettoScalar :=
-  scalarUniformFrom64Bytes (taggedHash fiatShamirRegistrationDst msg)
+  scalarUniformFrom64Bytes (sha2_512 msg)
 
 theorem registrationChallengeScalarMove_eq_uniform_tagged (msg : ByteArray) :
     registrationChallengeScalarMove msg =
-      scalarUniformFrom64Bytes (taggedHash fiatShamirRegistrationDst msg) :=
+      scalarUniformFrom64Bytes (sha2_512 msg) :=
   rfl
 
 theorem verifyRegistrationProofProp_challenge_congr {Point : Type}

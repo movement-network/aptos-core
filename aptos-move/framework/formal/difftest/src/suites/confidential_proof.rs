@@ -31,7 +31,7 @@
 //! — checked by `move-lean-difftest verify-corpora` vs Lean `deserializeSigma*Bytes_length`.
 //! **Sigma wire length** rows compare VM `vector::length` to **1152** / **1216** / **1792** / **1920** / **2048** / **2176** / **2304** / **2432** / **2560** / **2688** / **2816** / **2944** / **3072** / **3200** / **3328** / **3456** / **3584** / **3712** / **3840** / **3968** / **4096** / **4224** (extended transfer);
 //! Lean **128–130** / **131** / **133** / **135** / **137** / **139** / **141** / **143** / **145** / **147** / **149** / **151** / **153** / **155** / **157** / **159** / **161** / **163** / **165** / **167**: real `Step` (`ldConst` corpora-matching bytes + `vecLen` + `eq`); **132** / **134** / **136** / **138** / **140** / **142** / **144** / **146** / **148** / **150** / **152** / **154** / **156** / **158** / **160** / **162** / **164** / **166** / **168** match VM extended-transfer `Some` with the same bytecode as **131** / **133** / **135** / **137** / **139** / **141** / **143** / **145** / **147** / **149** / **151** / **153** / **155** / **157** / **159** / **161** / **163** / **165** / **167**.
-//! **`test_registration_tagged_hash_golden_move_{first,second}`:** VM **64**-byte `vector<u8>` (corpora **`registration_tagged_hash_golden_{1,2}.hex`**); Lean **174** / **175** (`ldConst` **47** / **48** + `ret`).
+//! Registration FS challenges now use `ristretto255::new_scalar_from_sha2_512(DST || msg)` (no tagged hash).
 
 use anyhow::Result;
 use move_vm_test_utils::InMemoryStorage;
@@ -753,15 +753,6 @@ module 0x1::difftest_confidential_proof {
         actual == expected
     }
 
-    /// Tagged SHA3-512 on the first formal FS golden `msg` (hex corpus `registration_tagged_hash_golden_1.hex`).
-    public fun test_registration_tagged_hash_golden_move_first(): vector<u8> {
-        difftest_registration_helpers::registration_tagged_hash_golden_move_first()
-    }
-
-    /// Tagged SHA3-512 on the second formal FS golden `msg` (`registration_tagged_hash_golden_2.hex`).
-    public fun test_registration_tagged_hash_golden_move_second(): vector<u8> {
-        difftest_registration_helpers::registration_tagged_hash_golden_move_second()
-    }
 }
 "#;
 
@@ -1011,14 +1002,6 @@ impl DiffTestSuite for ConfidentialProofSuite {
             (
                 "test_registration_fs_message_framework_second_scenario_matches_helpers_golden",
                 "reg_fs_fw_eq_helpers_2",
-            ),
-            (
-                "test_registration_tagged_hash_golden_move_first",
-                "reg_tagged_hash_golden_1",
-            ),
-            (
-                "test_registration_tagged_hash_golden_move_second",
-                "reg_tagged_hash_golden_2",
             ),
         ] {
             let result = run_test_case(storage, STD_ADDR, MODULE_NAME, function, &[])?;

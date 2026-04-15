@@ -141,7 +141,7 @@ structure OracleCoherence (nOracle : RegistrationNativeOracle)
       ∀ (msgMv : MoveValue),
         msgMv = .vector .u8 (msg.toList.map .u8) →
         ∃ eMv,
-          single? (newScalarFromTaggedHash [fiatShamirRegistrationDstValue, msgMv]) = some eMv ∧
+          single? (newScalarFromSha2_512 [msgMv]) = some eMv ∧
           ScalarRepr e eMv
 
   -- Reverse: native → spec (for the bytecode-success ⇒ spec-success direction)
@@ -181,7 +181,7 @@ structure OracleCoherence (nOracle : RegistrationNativeOracle)
   challengeScalar_rev :
     ∀ (msgMv eMv : MoveValue) (msg : ByteArray),
       msgMv = .vector .u8 (msg.toList.map .u8) →
-      single? (newScalarFromTaggedHash [fiatShamirRegistrationDstValue, msgMv]) = some eMv →
+      single? (newScalarFromSha2_512 [msgMv]) = some eMv →
       ∃ (e : RistrettoScalar),
         registrationChallengeScalarMove msg = some e ∧ ScalarRepr e eMv
 
@@ -252,7 +252,7 @@ theorem func_success_extracts
       single? (optionExtract [sOpt]) = some sMv ∧
       buildFSMessageMv o chainId sender contract token
         (.struct_ [.vector .u8 (ekBa.toList.map .u8)]) rMv = some msgMv ∧
-      single? (newScalarFromTaggedHash [fiatShamirRegistrationDstValue, msgMv]) = some eMv ∧
+      single? (newScalarFromSha2_512 [msgMv]) = some eMv ∧
       single? (o.hashToPointBase []) = some hMv ∧
       single? (o.pubkeyToPoint [.struct_ [.vector .u8 (ekBa.toList.map .u8)]]) = some ekPtMv ∧
       single? (o.pointMul [hMv, sMv]) = some hsMv ∧
@@ -338,7 +338,7 @@ theorem func_abort_classification
       single? (optionExtract [sOpt]) = some sMv ∧
       buildFSMessageMv o chainId sender contract token
         (.struct_ [.vector .u8 (ekBa.toList.map .u8)]) rMv = some msgMv ∧
-      single? (newScalarFromTaggedHash [fiatShamirRegistrationDstValue, msgMv]) = some eMv ∧
+      single? (newScalarFromSha2_512 [msgMv]) = some eMv ∧
       single? (o.hashToPointBase []) = some hMv ∧
       single? (o.pubkeyToPoint [.struct_ [.vector .u8 (ekBa.toList.map .u8)]]) = some ekPtMv ∧
       single? (o.pointMul [hMv, sMv]) = some hsMv ∧
@@ -480,7 +480,7 @@ theorem func_success_implies_exec_some
   have hMsgList := buildFSMessageMv_list_gen nOracle chainId sender contract token
     ekBa commitBa _ rMv hPTB hCPTB
   have hMsgEq : msgMv = .vector .u8 (
-      [.u8 chainId] ++ sender.toList.map .u8 ++ contract.toList.map .u8 ++
+      fiatShamirDstMvU8s ++ [.u8 chainId] ++ sender.toList.map .u8 ++ contract.toList.map .u8 ++
       token.toList.map .u8 ++ ekBa.toList.map .u8 ++ commitBa.toList.map .u8) :=
     Option.some.inj (hMsgList ▸ hMsg).symm
   have hMsgRepr : msgMv = .vector .u8 ((registrationFiatShamirMsg i).toList.map .u8) := by
@@ -488,7 +488,8 @@ theorem func_success_implies_exec_some
     obtain ⟨h1, h2, h3, h4, h5, h6⟩ := hi
     subst h1; subst h2; subst h3; subst h4; subst h5; subst h6
     simp only [List.map_append, List.map_cons, List.map_nil,
-      ByteArray.toList_append, ByteArray.toList_mk_singleton]
+      ByteArray.toList_append, ByteArray.toList_mk_singleton,
+      fiatShamirDstMvU8s_eq_registrationDstBytes_toList_map]
   obtain ⟨e_typed, he_typed, he_repr⟩ := coh.challengeScalar_rev msgMv eMv
     (registrationFiatShamirMsg i) hMsgRepr hTag
   -- Step 4: Thread PointRepr/ScalarRepr through pointMul, pointAdd
@@ -591,7 +592,7 @@ theorem func_abort_implies_exec_none
     have hMsgList := buildFSMessageMv_list_gen nOracle chainId sender contract token
       ekBa commitBa _ rMv hPTB hCPTB
     have hMsgEq : msgMv = .vector .u8 (
-        [.u8 chainId] ++ sender.toList.map .u8 ++ contract.toList.map .u8 ++
+        fiatShamirDstMvU8s ++ [.u8 chainId] ++ sender.toList.map .u8 ++ contract.toList.map .u8 ++
         token.toList.map .u8 ++ ekBa.toList.map .u8 ++ commitBa.toList.map .u8) :=
       Option.some.inj (hMsgList ▸ hMsg).symm
     have hMsgRepr : msgMv = .vector .u8 ((registrationFiatShamirMsg i).toList.map .u8) := by
@@ -599,7 +600,8 @@ theorem func_abort_implies_exec_none
       obtain ⟨h1, h2, h3, h4, h5, h6⟩ := hi
       subst h1; subst h2; subst h3; subst h4; subst h5; subst h6
       simp only [List.map_append, List.map_cons, List.map_nil,
-        ByteArray.toList_append, ByteArray.toList_mk_singleton]
+        ByteArray.toList_append, ByteArray.toList_mk_singleton,
+        fiatShamirDstMvU8s_eq_registrationDstBytes_toList_map]
     obtain ⟨e_typed, he_typed, he_repr⟩ := coh.challengeScalar_rev msgMv eMv
       (registrationFiatShamirMsg i) hMsgRepr hTag
     -- Thread PointRepr/ScalarRepr through pointMul, pointAdd

@@ -1,5 +1,6 @@
 import AptosFormal.Move.Step
 import AptosFormal.Move.Programs.Registration
+import AptosFormal.Experimental.ConfidentialAsset.Registration.Formal
 
 /-!
 # Functional simulation of `verify_registration_proof` bytecode
@@ -33,6 +34,7 @@ namespace AptosFormal.Experimental.ConfidentialAsset.Registration.FunctionalSim
 open AptosFormal.Move
 open AptosFormal.Move.Native.Registration
 open AptosFormal.Move.Programs.Registration
+open AptosFormal.Experimental.ConfidentialAsset.Registration.Formal
 
 /-! ## Helper: extract single value from a native return -/
 
@@ -42,22 +44,25 @@ def single? : Option (List MoveValue) → Option MoveValue
 
 /-! ## Fiat-Shamir message construction
 
-Mirrors the bytecode's message build (instrs 22–39):
+Mirrors the bytecode's message build (instrs 18–42):
 ```
-  msg = singleton(chain_id)
+  msg = DST                                   -- ldConst
+     ++ push_back(chain_id)
      ++ bcs::to_bytes(sender)
      ++ bcs::to_bytes(contract)
      ++ bcs::to_bytes(token)
      ++ pubkey_to_bytes(ek)
      ++ compressed_point_to_bytes(R)
-``` -/
+```
+The DST is now the prefix of the hash input (SHA2-512, not tagged SHA3-512). -/
 
 def buildFSMessageMv (o : RegistrationNativeOracle)
     (chainId : UInt8) (sender contract token : ByteArray)
     (ek rCompressed : MoveValue) : Option MoveValue := do
-  let chain ← single? (vectorSingletonU8 [.u8 chainId])
+  let dstVec := fiatShamirRegistrationDstValue
+  let m0 ← single? (vectorAppendU8 [dstVec, .vector .u8 [.u8 chainId]])
   let sBytes ← single? (bcsToBytes_address [.address sender])
-  let m1 ← single? (vectorAppendU8 [chain, sBytes])
+  let m1 ← single? (vectorAppendU8 [m0, sBytes])
   let cBytes ← single? (bcsToBytes_address [.address contract])
   let m2 ← single? (vectorAppendU8 [m1, cBytes])
   let tBytes ← single? (bcsToBytes_address [.address token])
@@ -114,7 +119,7 @@ where
       (ek rCompressed s : MoveValue) : ExecResult :=
     match buildFSMessageMv o chainId sender contract token ek rCompressed with
     | some msgVal =>
-      match single? (newScalarFromTaggedHash [fiatShamirRegistrationDstValue, msgVal]) with
+      match single? (newScalarFromSha2_512 [msgVal]) with
       | some e =>
         match single? (o.hashToPointBase []) with
         | some h =>
@@ -152,8 +157,19 @@ This is verified concretely by `native_decide` in `BytecodeDifftestEval.lean`
 (`buildFSMessageMv_golden_matches_spec`). The abstract version below is stated
 for future proof. -/
 
+/-- The DST bytes as a `List MoveValue` (inner contents of `fiatShamirRegistrationDstValue`). -/
+def fiatShamirDstMvU8s : List MoveValue :=
+  [77, 111, 118, 101, 109, 101, 110, 116, 67, 111, 110, 102, 105, 100, 101, 110, 116, 105, 97, 108,
+   65, 115, 115, 101, 116, 47, 82, 101, 103, 105, 115, 116, 114, 97, 116, 105, 111, 110
+  ].map MoveValue.u8
+
+/-- `ByteArray.toList` is `@[irreducible]` in Lean 4.24, so we axiomatize this
+    concrete equality (same pattern as `ByteArray.toList_append` below). -/
+axiom fiatShamirDstMvU8s_eq_registrationDstBytes_toList_map :
+    fiatShamirDstMvU8s = registrationDstBytes.toList.map MoveValue.u8
+
 /-- Generalized form: works with any `ekMv` and `rMv` that satisfy the oracle
-    byte-extraction hypotheses. -/
+    byte-extraction hypotheses. The message now includes the 38-byte DST prefix. -/
 theorem buildFSMessageMv_list_gen
     (o : RegistrationNativeOracle)
     (chainId : UInt8) (sender contract token : ByteArray)
@@ -162,10 +178,10 @@ theorem buildFSMessageMv_list_gen
     (hR : o.compressedPointToBytes [rMv] = some [.vector .u8 (commitBa.toList.map .u8)]) :
     buildFSMessageMv o chainId sender contract token ekMv rMv =
     some (.vector .u8 (
-      [.u8 chainId] ++ sender.toList.map .u8 ++ contract.toList.map .u8 ++
+      fiatShamirDstMvU8s ++ [.u8 chainId] ++ sender.toList.map .u8 ++ contract.toList.map .u8 ++
       token.toList.map .u8 ++ ekBa.toList.map .u8 ++ commitBa.toList.map .u8)) := by
-  simp only [buildFSMessageMv, single?, vectorSingletonU8, bcsToBytes_address,
-    vectorAppendU8, hEk, hR, bind, Option.bind]
+  simp only [buildFSMessageMv, single?, bcsToBytes_address,
+    vectorAppendU8, hEk, hR, bind, Option.bind, fiatShamirRegistrationDstValue, fiatShamirDstMvU8s]
 
 theorem buildFSMessageMv_list
     (o : RegistrationNativeOracle)
@@ -179,7 +195,7 @@ theorem buildFSMessageMv_list
       (.struct_ [.vector .u8 (ekBa.toList.map .u8)])
       (.struct_ [.vector .u8 (commitBa.toList.map .u8)]) =
     some (.vector .u8 (
-      [.u8 chainId] ++ sender.toList.map .u8 ++ contract.toList.map .u8 ++
+      fiatShamirDstMvU8s ++ [.u8 chainId] ++ sender.toList.map .u8 ++ contract.toList.map .u8 ++
       token.toList.map .u8 ++ ekBa.toList.map .u8 ++ commitBa.toList.map .u8)) :=
   buildFSMessageMv_list_gen o chainId sender contract token ekBa commitBa _ _ hEk hR
 

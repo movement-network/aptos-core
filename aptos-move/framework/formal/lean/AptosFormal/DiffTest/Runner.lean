@@ -49,8 +49,7 @@ Index assignments in `realModuleEnv`:
 - 171: production registration deterministic prove + `verify_registration_proof_for_difftest` (`test_registration_proof_framework_deterministic_verify_roundtrip`; Lean same native as **35**)
 - 172: second registration FS golden `vector<u8>` (`test_registration_fs_message_golden_move_second`; `ldConst` 46 + `ret`)
 - 173: second registration FS framework vs helpers golden (`test_registration_fs_message_framework_second_scenario_matches_helpers_golden`; Lean `ldTrue` stub)
-- 174: first registration tagged-hash **`vector<u8>`** (`test_registration_tagged_hash_golden_move_first`; **`ldConst` 47** + `ret`)
-- 175: second registration tagged-hash **`vector<u8>`** (`test_registration_tagged_hash_golden_move_second`; **`ldConst` 48** + `ret`)
+- 174–175: (removed — tagged-hash tests obsoleted by SHA3→SHA2 migration)
 - 53: `test_elg_ciphertext_add_assign_matches_add` (ElGamal `ciphertext_add_assign` vs `ciphertext_add`)
 - 54: `test_elg_ciphertext_sub_assign_matches_sub` (ElGamal `ciphertext_sub_assign` vs `ciphertext_sub`)
 - 55–57, 59–60: extra `confidential_balance` smoke (`actual` roundtrip / `u64` zero / wrong-len `Option` / `balance_c` / add-actual)
@@ -128,8 +127,7 @@ Index assignments in `realModuleEnv`:
 - 171: production registration deterministic prove + **`verify_registration_proof_for_difftest`** (`test_registration_proof_framework_deterministic_verify_roundtrip`; Lean **`caRegistrationHelpersRoundtripNative`**, same as **35**)
 - 172: second registration FS golden **`vector<u8>`** (`test_registration_fs_message_golden_move_second`; **`ldConst` 46** + `ret`)
 - 173: second registration FS **`registration_fs_message_for_test`** equals helpers golden (`test_registration_fs_message_framework_second_scenario_matches_helpers_golden`; Lean `ldTrue` stub)
-- 174: first registration **`tagged_hash`** on FS golden **1** — **`vector<u8>`** (**64** B; `test_registration_tagged_hash_golden_move_first`; **`ldConst` 47** + `ret`)
-- 175: second registration **`tagged_hash`** on FS golden **2** — **`vector<u8>`** (**64** B; `test_registration_tagged_hash_golden_move_second`; **`ldConst` 48** + `ret`)
+- 174–175: (removed — tagged-hash tests obsoleted by SHA3→SHA2 migration)
 -/
 
 /-- Oracle row routing: name → evaluator env + function index.

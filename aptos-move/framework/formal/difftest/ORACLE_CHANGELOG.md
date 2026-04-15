@@ -12,7 +12,7 @@ The Lean runner (`AptosFormal.DiffTest.JsonParser`) and the Rust harness (`schem
 |--------:|------|---------|
 | **1** | 2026-04-10 | Introduced `schema_version` (number) at suite root. Fields unchanged from prior informal format: `generator`, `module`, `test_cases` with `function`, `args`, `result` (`status` + `values` or `abort_code`). Older files without `schema_version` are accepted by Lean as `schemaVersion := none`. |
 
-**Tooling (not a schema bump):** `cargo run -p move-lean-difftest -- verify-corpora` — authoritative Rust **hex corpus** checks for confidential-assets goldens (registration DST, FS `msg` lengths, tagged SHA3-512 chain, Bulletproofs DST + digest, `deserialize_sigma_*.hex`, `serialize_auditor_*.hex`). CI and **`difftest.sh` \[0\]** use this command.
+**Tooling (not a schema bump):** `cargo run -p move-lean-difftest -- verify-corpora` — authoritative Rust **hex corpus** checks for confidential-assets goldens (registration DST, FS `msg` lengths, SHA2-512 digest chain, Bulletproofs DST + SHA3-512 digest, `deserialize_sigma_*.hex`, `serialize_auditor_*.hex`). CI and **`difftest.sh` \[0\]** use this command.
 
 **Compatible extension (still schema version 1):** optional per-case boolean **`skip_lean`**. When `true`, the Lean runner skips that row (VM-only oracle); omitted or `false` keeps VM↔Lean checks. Rust omits the field when `false` on serialize.
 
@@ -28,9 +28,9 @@ The Lean runner (`AptosFormal.DiffTest.JsonParser`) and the Rust harness (`schem
 
 **Compatible extension (still schema version 1):** `confidential_proof` harness row **`test_registration_proof_framework_deterministic_verify_roundtrip [reg_proof_fw_rt]`** — VM **`bool(true)`** (production deterministic prove + **`verify_registration_proof_for_difftest`** on the **`registration_roundtrip_vm`** fixture); Lean **171** (**`caRegistrationHelpersRoundtripNative`**, same as **35**).
 
-**Compatible extension (still schema version 1):** `confidential_proof` harness rows **`test_registration_fs_message_golden_move_second [reg_fs_golden_2]`** (VM **161**-byte `vector<u8>`; Lean **172**, **`ldConst` 46** + `ret`) and **`test_registration_fs_message_framework_second_scenario_matches_helpers_golden [reg_fs_fw_eq_helpers_2]`** — VM **`bool(true)`**; Lean **173** (`ldTrue` stub).
+**Compatible extension (still schema version 1):** `confidential_proof` harness rows **`test_registration_fs_message_golden_move_second [reg_fs_golden_2]`** (VM **199**-byte `vector<u8>`; Lean **172**, **`ldConst` 46** + `ret`) and **`test_registration_fs_message_framework_second_scenario_matches_helpers_golden [reg_fs_fw_eq_helpers_2]`** — VM **`bool(true)`**; Lean **173** (`ldTrue` stub).
 
-**Compatible extension (still schema version 1):** `confidential_proof` harness rows **`test_registration_tagged_hash_golden_move_first [reg_tagged_hash_golden_1]`** / **`test_registration_tagged_hash_golden_move_second [reg_tagged_hash_golden_2]`** — VM **64**-byte **`vector<u8>`** (same bytes as **`registration_tagged_hash_golden_{1,2}.hex`**); Lean **174** / **175** (`ldConst` **47** / **48** + `ret`).
+**Compatible extension (still schema version 1):** `confidential_proof` harness rows **`test_registration_sha2_512_golden_move_first [reg_sha2_512_golden_1]`** / **`test_registration_sha2_512_golden_move_second [reg_sha2_512_golden_2]`** — VM **64**-byte **`vector<u8>`** (same bytes as **`registration_sha2_512_golden_{1,2}.hex`**); Lean **174** / **175** (`ldConst` **47** / **48** + `ret`).
 
 **Compatible extension (still schema version 1):** four `confidential_proof` harness rows — **`test_deserialize_{withdrawal,normalization,rotation,transfer}_layout_ok_is_some`** — VM `bool(true)` on fixed sigma-byte layouts; Lean **110–113** use the same **`ldConst` + `vecLen` + `eq`** bytecode as **128–130** (replacing prior **`ldTrue`** stubs; schema unchanged). Machine-checked: **`confidentialLayoutSomeRowsLeanEval_bool_true`** / **`confidentialLayoutSomeRow*_*_eval_eq_*`** in `Programs/Confidential.lean`.
 

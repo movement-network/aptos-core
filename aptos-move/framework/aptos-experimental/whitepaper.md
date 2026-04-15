@@ -25,7 +25,7 @@
 
 Movement Confidential Assets is an on-chain protocol that enables private fungible token transfers on the Movement blockchain. While transaction senders and recipients remain visible, **transfer amounts are hidden** using homomorphic encryption and zero-knowledge proofs.
 
-The protocol builds on the Aptos Confidential Asset framework, which was originally released under the Apache 2.0 open-source license. In November 2025, Aptos Labs changed the license on their `aptos-core` repository to a more restrictive license, and subsequently introduced proprietary changes to their confidential asset module (v1.1) under the new terms. Movement's implementation uses only code that predates the license change, and all production-hardening modifications are clean-room implementations based on published, public-domain cryptography — no post-license-change Aptos code was used or referenced. These modifications include chain ID binding to prevent cross-chain proof replay, SHA3-512 tagged hashing for Fiat-Shamir challenges, a Schnorr-based registration proof to prevent key registration abuse, and **sender auditor hints** for private transfers: an optional opaque byte string (length-capped) that is **hashed into the transfer sigma Fiat–Shamir transcript** so it cannot be altered after the proof is generated, then **emitted** on the on-chain `Transferred` module event.
+The protocol builds on the Aptos Confidential Asset framework, which was originally released under the Apache 2.0 open-source license. In November 2025, Aptos Labs changed the license on their `aptos-core` repository to a more restrictive license, and subsequently introduced proprietary changes to their confidential asset module (v1.1) under the new terms. Movement's implementation uses only code that predates the license change, and all production-hardening modifications are clean-room implementations based on published, public-domain cryptography — no post-license-change Aptos code was used or referenced. These modifications include chain ID binding to prevent cross-chain proof replay, domain-separated SHA2-512 hashing for Fiat-Shamir challenges, a Schnorr-based registration proof to prevent key registration abuse, and **sender auditor hints** for private transfers: an optional opaque byte string (length-capped) that is **hashed into the transfer sigma Fiat–Shamir transcript** so it cannot be altered after the proof is generated, then **emitted** on the on-chain `Transferred` module event.
 
 **What observers still see.** A successful private transfer does not post the amount in cleartext, but it **does** emit `Transferred` with routing metadata, **compressed ciphertexts** for the moved amount and for the sender’s new actual balance and recipient’s new pending balance, a **flattened copy of the transfer sigma `x7s` commitment block** (`ek_volun_auds`; see [§5 `Transferred` event](#transferred-module-event)), the **`sender_auditor_hint`** bytes, and a **`memo`** field (reserved; empty in the current implementation). Indexers and compliance tooling should treat that event as the canonical on-chain record of those public payloads.
 
@@ -249,7 +249,7 @@ The transfer proof demonstrates:
 2. Transfer amount encrypted under recipient's key matches sender's committed amount
 3. All new balance chunks are in range $[0, 2^{16})$
 
-**Sender auditor hint (`sender_auditor_hint`).** The sender may attach up to **`MAX_SENDER_AUDITOR_HINT_BYTES` (256)** opaque bytes (e.g. for off-chain auditors, indexers, or compliance references). The implementation **serializes the hint with BCS** and **appends those bytes to the transfer sigma Fiat–Shamir message** (after the commitment points, before the chain-id / sender / contract prefix is prepended and the tagged hash is taken). The same bytes must therefore be supplied when **generating** the proof off-chain and when calling **`confidential_transfer`** on-chain; changing the hint invalidates the proof. After successful verification, the hint is included on the **`Transferred`** module event (field reference below).
+**Sender auditor hint (`sender_auditor_hint`).** The sender may attach up to **`MAX_SENDER_AUDITOR_HINT_BYTES` (256)** opaque bytes (e.g. for off-chain auditors, indexers, or compliance references). The implementation **serializes the hint with BCS** and **appends those bytes to the transfer sigma Fiat–Shamir message** (after the commitment points, before the DST / chain-id / sender / contract prefix is prepended and the SHA2-512 hash is taken). The same bytes must therefore be supplied when **generating** the proof off-chain and when calling **`confidential_transfer`** on-chain; changing the hint invalidates the proof. After successful verification, the hint is included on the **`Transferred`** module event (field reference below).
 
 ### `Transferred` module event
 
@@ -389,7 +389,7 @@ $$\sum_i \gamma_i \cdot X_i = \text{MSM}\left(P_j, s_j\right)$$
 where:
 
 - $X_i$ are commitment points from the proof
-- $\gamma_i$ are derived from the challenge $\rho$ via SHA3-512
+- $\gamma_i$ are derived from the challenge $\rho$ via SHA2-512
 - $P_j$ are public points (bases, balance components, encryption keys)
 - $s_j$ are computed scalars combining response scalars, challenges, and public values
 
@@ -415,13 +415,13 @@ For **transfers**, the verifier’s commitment count includes the per-auditor `x
 
 ## 7. Fiat-Shamir Construction
 
-### Tagged Hashing
+### Domain-Separated SHA2-512 Hashing
 
-The protocol uses BIP-340-style tagged hashing [Wuille et al., 2020](https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki) with SHA3-512 [NIST FIPS 202](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.202.pdf):
+The protocol derives Fiat-Shamir challenges using SHA2-512 with a domain separation tag (DST) prefix:
 
-$$\text{taggedhash}(\text{tag}, \text{msg}) = \text{SHA3-512}\left(\text{SHA3-512}(\text{tag})  \text{SHA3-512}(\text{tag})  \text{msg}\right)$$
+$$\text{challenge}(\text{DST}, \text{msg}) = \text{scalar\_from\_sha2\_512}\left(\text{DST}  \text{msg}\right)$$
 
-The double tag hash prefix is precomputable and provides collision resistance between different protocol contexts.
+where `scalar_from_sha2_512` computes `SHA2-512(input)` and reduces the resulting 64-byte digest to a Ristretto255 scalar via `new_scalar_uniform_from_64_bytes`. The DST prefix provides collision resistance between different protocol contexts.
 
 ### Domain Separation
 
@@ -442,7 +442,7 @@ Each operation uses a distinct domain separation tag (DST):
 
 Every Fiat-Shamir challenge includes the chain ID and sender address as prefix bytes (prepended to the full message that already contains curve points, keys, balance encodings, and—**for transfers only**—the BCS encoding of `sender_auditor_hint`):
 
-$$\rho = \text{taggedhash}\left(\text{DST},\ \text{chainid}  \text{sender}  \text{contract}  \text{publicparams}  X_1  \cdots  X_n\right)$$
+$$\rho = \text{scalar\_from\_sha2\_512}\left(\text{DST}  \text{chainid}  \text{sender}  \text{contract}  \text{publicparams}  X_1  \cdots  X_n\right)$$
 
 Here `publicparams` for the **transfer** sigma includes the usual public inputs (bases, sender/recipient/auditor keys, balance encodings, etc.) **followed by** `BCS(sender_auditor_hint)` so the challenge depends on the exact hint bytes the sender intends to publish.
 
@@ -460,17 +460,17 @@ flowchart LR
     PARAMS["public parameters"] --> MSG
     HINT["BCS(sender_auditor_hint) — transfer only"] --> MSG
     COMMITS["commitment points"] --> MSG
-    MSG["Challenge Input"] --> TH["tagged_hash(DST, msg)"]
-    TH --> RHO["Challenge scalar ρ"]
+    MSG["Challenge Input"] --> SHA["SHA2-512(DST ‖ msg)"]
+    SHA --> RHO["Challenge scalar ρ"]
 ```
 
 
 
 ### Gamma Scalar Derivation
 
-For MSM batching, additional scalars $\gamma_i$ are derived from the challenge via SHA3-512:
+For MSM batching, additional scalars $\gamma_i$ are derived from the challenge via SHA2-512:
 
-$$\gamma_i = \text{SHA3-512}(\rho  i)$$
+$$\gamma_i = \text{SHA2-512}(\rho  i)$$
 
 converted to a scalar via `new_scalar_uniform_from_64_bytes`.
 
@@ -491,7 +491,7 @@ flowchart TB
     subgraph "Prover (off-chain)"
         K["k ← random scalar"]
         R["R = k · H"]
-        E["e = tagged_hash('Registration', chain_id ‖ sender ‖ token ‖ ek ‖ R)"]
+        E["e = SHA2-512('Registration' DST ‖ chain_id ‖ sender ‖ token ‖ ek ‖ R)"]
         S["s = k - e · dk⁻¹"]
         K --> R --> E --> S
     end
@@ -593,10 +593,10 @@ flowchart LR
         A5["Enum-wrapped proof types (V1)"]
     end
     subgraph Movement["Movement (This Implementation)"]
-        M1["SHA3-512 + BIP-340 tagged hash"]
+        M1["SHA2-512 + DST prefix"]
         M2["Explicit MSM per proof type<br/>no abstraction layer"]
         M3["Prefix-based domain context"]
-        M4["Single-level tagged hash"]
+        M4["Single-level SHA2-512"]
         M5["Flat struct proof types"]
     end
     style Aptos fill:#4a0000,color:#e0e0e0
@@ -608,9 +608,9 @@ flowchart LR
 
 | Component               | Aptos v1.1 (Proprietary)                                                                         | Movement                                                                         | Public Basis                                                                                                                                      |
 | ----------------------- | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Hash function**       | SHA2-512                                                                                         | SHA3-512                                                                         | [NIST FIPS 202](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.202.pdf)                                                                         |
-| **Domain separation**   | `DomainSeparator` enum with chain_id, contract address, protocol_id, session_id — BCS-serialized | BIP-340 tagged hash with chain_id + sender address prefix                        | [BIP-340](https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki)                                                                         |
-| **Challenge structure** | Two-level: seed then derived challenges                                                          | Single-level tagged hash: `SHA3-512(tag_hash || tag_hash || msg)`                | [Fiat & Shamir, 1986](https://link.springer.com/chapter/10.1007/3-540-47721-7_12)                                                                 |
+| **Hash function**       | SHA2-512                                                                                         | SHA2-512                                                                         | [NIST FIPS 180-4](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf)                                                                     |
+| **Domain separation**   | `DomainSeparator` enum with chain_id, contract address, protocol_id, session_id — BCS-serialized | DST prefix with chain_id + sender address prefix                                 | [Fiat & Shamir, 1986](https://link.springer.com/chapter/10.1007/3-540-47721-7_12)                                                                 |
+| **Challenge structure** | Two-level: seed then derived challenges                                                          | Single-level: `SHA2-512(DST \|\| chain_id \|\| sender \|\| ... \|\| msg)`       | [Fiat & Shamir, 1986](https://link.springer.com/chapter/10.1007/3-540-47721-7_12)                                                                 |
 | **Sigma framework**     | Generic modules: `sigma_protocol.move`, `sigma_protocol_homomorphism.move`, etc.                 | Explicit MSM verification per proof type — no abstraction layer, easier to audit | [Schnorr, 1991](https://link.springer.com/article/10.1007/BF00196725); [Cramer, 1996](https://link.springer.com/chapter/10.1007/3-540-68339-9_19) |
 | **Registration proof**  | `sigma_protocol_registration.move` via generic framework                                         | Inline Schnorr verification in `confidential_proof.move`                         | [Schnorr, 1989](https://link.springer.com/chapter/10.1007/0-387-34805-0_22)                                                                       |
 | **Module location**     | Moved to `aptos-framework`                                                                       | Remains in `aptos-experimental`                                                  | N/A                                                                                                                                               |
@@ -632,8 +632,7 @@ The following components predate Aptos's November 2025 license change and are us
 
 The following changes were made to the inherited pre-license-change codebase. The original Aptos code did not include chain ID binding or a registration proof; Aptos added these independently in their proprietary v1.1 update. Movement's implementations are structurally different clean-room designs.
 
-- **Hash function**: SHA2-512 replaced with SHA3-512 throughout Fiat-Shamir
-- **Tagged hashing**: BIP-340 double-tag construction added
+- **Hash function**: SHA2-512 with DST prefix for all Fiat-Shamir challenges (same hash family as Aptos, but different domain separation structure)
 - **Chain ID binding**: All challenges now include chain_id and sender address (the inherited code had neither)
 - **Registration proof**: New Schnorr ZKPoK requirement for key registration (the inherited code had no registration proof)
 - **DST branding**: Tags changed from `"AptosConfidentialAsset/"` to `"MovementConfidentialAsset/"`
@@ -651,8 +650,7 @@ All cryptographic primitives used are published, public-domain, or open-standard
 
 | Primitive                      | Reference                                                                                                                                                                                                                                                      | Status                              |
 | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
-| **SHA3-512**                   | [NIST FIPS 202](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.202.pdf), "SHA-3 Standard: Permutation-Based Hash and Extendable-Output Functions", August 2015                                                                                               | NIST standard, royalty-free         |
-| **BIP-340 tagged hashing**     | [Wuille, Nick, Towns, "Schnorr Signatures for secp256k1", BIP-340, January 2020](https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki)                                                                                                               | Open standard (Bitcoin)             |
+| **SHA2-512**                   | [NIST FIPS 180-4](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf), "Secure Hash Standard (SHS)", August 2015                                                                                                                                       | NIST standard, royalty-free         |
 | **Schnorr proof of knowledge** | [Schnorr, "Efficient Signature Generation by Smart Cards", J. Cryptology 4(3):161-174, 1991](https://link.springer.com/article/10.1007/BF00196725)                                                                                                             | Public domain (patent expired 2008) |
 | **Fiat-Shamir transform**      | [Fiat & Shamir, "How to Prove Yourself: Practical Solutions to Identification and Signature Problems", CRYPTO 1986](https://link.springer.com/chapter/10.1007/3-540-47721-7_12)                                                                                | Public domain                       |
 | **Ristretto255**               | [RFC 9496, "The ristretto255 and decaf448 Groups", December 2023](https://www.rfc-editor.org/rfc/rfc9496)                                                                                                                                                      | Open standard (IRTF)                |
@@ -665,10 +663,10 @@ All cryptographic primitives used are published, public-domain, or open-standard
 ### Non-Infringement Statement
 
 1. **No sigma protocol framework adopted.** Aptos v1.1 introduced 10+ new Move modules (`sigma_protocol*.move`) implementing a generic homomorphism-based prover/verifier. Movement does not use any of these modules. Verification logic remains in `confidential_proof.move` using direct MSM equations.
-2. **Different hash function and construction.** Movement uses SHA3-512 (NIST FIPS 202) with BIP-340 tagged hashing. Aptos uses SHA2-512 with BCS-serialized input structs and a two-level derivation. These are structurally different constructions.
+2. **Different domain separation construction.** Movement uses SHA2-512 with a DST-prefix construction for Fiat-Shamir challenges. Aptos uses SHA2-512 with BCS-serialized `DomainSeparator` input structs and a two-level derivation. The domain separation structures are different.
 3. **Pre-existing code base.** The proof verification structure (MSM equations, gamma batching, deserialization) predates Aptos's November 2025 license change. Movement's modifications add chain ID parameters and switch the hash function; they do not adopt any v1.1 architectural patterns.
 4. **Registration proof is standard Schnorr.** The discrete-log proof of knowledge ($s \cdot H + e \cdot ek = R$) is a textbook Schnorr protocol (1989/1991), not derived from Aptos's `sigma_protocol_registration.move`.
-5. **The `aptos_hash::sha3_512()` native function and `ristretto255::new_scalar_uniform_from_64_bytes()` are pre-existing framework primitives** available under the original Apache 2.0 license.
+5. **The `ristretto255::new_scalar_from_sha2_512()` and `ristretto255::new_scalar_uniform_from_64_bytes()` are pre-existing framework primitives** available under the original Apache 2.0 license.
 
 ---
 

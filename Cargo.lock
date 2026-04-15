@@ -12160,6 +12160,7 @@ dependencies = [
  "move-vm-types",
  "serde",
  "serde_json",
+ "sha2 0.9.9",
  "sha3 0.9.1",
  "tempfile",
 ]

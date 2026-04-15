@@ -16,7 +16,8 @@
 
 | Surface | Move | Lean / difftest | Status |
 |---------|------|-----------------|--------|
-| SHA3-512 | `sha3_512_internal` → `sha3_512` | `AptosFormal.AptosStd.Hash.Sha3_512` | **Lean spec** + **Oracle** (BP DST digest, tagged registration hash, …) |
+| SHA3-512 | `sha3_512_internal` → `sha3_512` | `AptosFormal.AptosStd.Hash.Sha3_512` | **Lean spec** + **Oracle** (BP DST digest, …) |
+| SHA2-512 (Fiat-Shamir) | `ristretto255::new_scalar_from_sha2_512` | `AptosFormal.AptosStd.Hash.Sha2_512` | **Lean spec** + **Oracle** (registration FS challenge, …) |
 
 ---
 
@@ -38,7 +39,7 @@ Move: `ristretto255_bulletproofs.move` — `verify_range_proof_internal`, `verif
 
 | Surface | Lean / difftest | Status |
 |---------|-----------------|--------|
-| Range proof verify / prove | DST string + SHA3-512 digest in oracle; **not** full BP verify in Lean `eval` | **Oracle** + **Open** for bit-for-bit BP in Lean |
+| Range proof verify / prove | DST string + SHA3-512 digest in oracle (BP-specific; FS challenges use SHA2-512); **not** full BP verify in Lean `eval` | **Oracle** + **Open** for bit-for-bit BP in Lean |
 
 **Corpus (checked by `cargo run -p move-lean-difftest -- verify-corpora`):**
 

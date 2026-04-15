@@ -5,7 +5,7 @@ beyond a single package.
 
 | Prefix | Role |
 | ------ | ---- |
-| `AptosFormal.Std.Hash.*` | SHA3-512 tagged hash vs `aptos_std::aptos_hash` |
+| `AptosFormal.Std.Hash.*` | SHA3-512/256 vs `aptos_std::aptos_hash`; SHA2-512 for Fiat-Shamir challenges |
 | `AptosFormal.AptosStd.Crypto.*` | Ristretto scalar / wire types vs `aptos_std::ristretto255` |
 | `AptosFormal.Std.Bcs.*` | BCS primitives |
 | `AptosFormal.Std.MoveStdlibGoldens` | Byte-level golden tests for hash/BCS/vector |
@@ -141,7 +141,7 @@ movement move test --package-dir aptos-move/framework/aptos-experimental --filte
 
 ## Checking Move / Lean golden consistency
 
-Golden byte constants (SHA3 digests, BCS addresses, FS transcript messages) are duplicated
+Golden byte constants (SHA2/SHA3 digests, BCS addresses, FS transcript messages) are duplicated
 between Move test files and Lean source. A consistency check script verifies they haven't drifted:
 
 ```bash

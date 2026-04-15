@@ -13,7 +13,7 @@
 | ID | Severity | Topic |
 |----|----------|--------|
 | **M1** | Informational (API / semantics) | `deserialize_*` returns `Some` without validating Bulletproofs wire bytes |
-| **M2** | Documentation (resolved) | `new_scalar_from_tagged_hash` / `new_scalar_from_sha3_512` now **`assert!` + `extract`** (`confidential_proof.move`) |
+| **M2** | Documentation (resolved) | `new_scalar_from_sha2_512` (FS challenges) now **`assert!` + `extract`** (`confidential_proof.move`) |
 | **M3** | Informational (precondition) | `#[test_only]` / harness provers use `scalar_invert(..).extract()` — aborts if scalar is non-invertible |
 | **M4** | Informational (harness) | `confidential_gas_e2e_helpers` parses auditor pubkeys with `.extract()` — malformed test inputs abort |
 | **M5** | Informational (abort semantics / UX) | Production **`entry`** paths (e.g. `confidential_transfer`) chain `option::extract()` on balance / auditor / proof deserializers — **malformed client payloads abort** the transaction (safe rejection), not silent state corruption |
@@ -53,9 +53,9 @@ Difftest documents Lean witness limits for VM↔Lean on `deserialize_*`; hex cor
 
 ---
 
-## M2 — `new_scalar_from_tagged_hash` / `new_scalar_from_sha3_512` (`option::extract`) — **addressed**
+## M2 — `new_scalar_from_sha2_512` (`option::extract`) — **addressed**
 
-**Location:** `confidential_proof.move` — `new_scalar_from_tagged_hash`, `new_scalar_from_sha3_512`.
+**Location:** `confidential_proof.move` — `new_scalar_from_sha2_512` (Fiat-Shamir challenge derivation).
 
 **Observation (historical)**
 
@@ -67,7 +67,7 @@ Both paths now **`assert!(option::is_some(&sc_opt), error::invalid_argument(ESIG
 
 **Analysis (unchanged)**
 
-`ristretto255::new_scalar_uniform_from_64_bytes` returns `some` **iff** the input vector has length **64** (`ristretto255.move`). `tagged_hash` and `aptos_hash::sha3_512` outputs are **64 bytes** on these paths, so `none` remains **unreachable** under current implementations.
+`ristretto255::new_scalar_uniform_from_64_bytes` returns `some` **iff** the input vector has length **64** (`ristretto255.move`). `ristretto255::new_scalar_from_sha2_512` internally produces a **64-byte** SHA2-512 digest, so `none` remains **unreachable** under current implementations.
 
 ---
 

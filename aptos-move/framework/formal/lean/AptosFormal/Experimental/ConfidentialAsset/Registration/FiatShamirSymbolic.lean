@@ -20,12 +20,12 @@ under a symbolic (abstract function) hash model.
 | `fiatShamir_nizk_simulate_accepts` | Simulator produces valid proofs without witness |
 | `programmedOracle_apply` | `programmedOracle e fsMsg = e` (definitional; used in `fiatShamir_nizk_simulate_accepts`) |
 | `fiatShamirVerify_iff_registrationSchnorrEq_module` | **`fiatShamirVerify`** ↔ **`registrationSchnorrEq`** with module **`smul` / `add`** |
-| `registrationSchnorrEq_of_fiatShamirProve_output` | Honest **`fiatShamirProve`** output satisfies **`registrationSchnorrEq`** at **`taggedHash fsMsg`** |
+| `registrationSchnorrEq_of_fiatShamirProve_output` | Honest **`fiatShamirProve`** output satisfies **`registrationSchnorrEq`** at **`hashFn fsMsg`** |
 
 ## What this captures
 
 The Fiat–Shamir transform replaces the verifier's random challenge with
-`e := taggedHash(fsMsg)`.  We model `taggedHash` as an abstract function
+`e := hashFn(fsMsg)`.  We model `hashFn` as an abstract function
 `ByteArray → RistrettoScalar` and prove:
 
 - **Forking reduction**: if an adversary's proof passes under *two different*
@@ -49,7 +49,7 @@ and is out of scope.
 on the RHS of `registration_verification_iff_schnorr` in `EndToEnd.lean`.  The
 symbolic security theorems here apply to `verifyRegistrationProofProp` via that
 bridge: every `verifyRegistrationProofProp` instance that passes also satisfies
-`fiatShamirVerify` (with `e = taggedHash(fsMsg)`, `H = hashToPointBase`).
+`fiatShamirVerify` (with `e = hashFn(fsMsg)`, `H = hashToPointBase`).
 -/
 
 import AptosFormal.Experimental.ConfidentialAsset.Registration.CryptoSecurity
@@ -63,30 +63,30 @@ namespace AptosFormal.Experimental.ConfidentialAsset.Registration.FiatShamirSymb
 
 /-! ## Definitions -/
 
-/-- Fiat–Shamir NIZK verification: challenge derived from `taggedHash(fsMsg)`. -/
+/-- Fiat–Shamir NIZK verification: challenge derived from `hashFn(fsMsg)`. -/
 def fiatShamirVerify {Point : Type} [AddCommGroup Point] [Module RistrettoScalar Point]
-    (taggedHash : ByteArray → RistrettoScalar)
+    (hashFn : ByteArray → RistrettoScalar)
     (H ek R : Point) (s : RistrettoScalar) (fsMsg : ByteArray) : Prop :=
-  s • H + (taggedHash fsMsg) • ek = R
+  s • H + (hashFn fsMsg) • ek = R
 
 /--
 Fiat–Shamir honest prover: returns `(R, s)` where `R = k • H` and
-`s = k − e · dk_inv` with `e = taggedHash(fsMsg)`.
+`s = k − e · dk_inv` with `e = hashFn(fsMsg)`.
 -/
 def fiatShamirProve {Point : Type} [AddCommGroup Point] [Module RistrettoScalar Point]
-    (taggedHash : ByteArray → RistrettoScalar)
+    (hashFn : ByteArray → RistrettoScalar)
     (H : Point) (dk_inv k : RistrettoScalar)
     (fsMsg : ByteArray) : Point × RistrettoScalar :=
-  (k • H, k - taggedHash fsMsg * dk_inv)
+  (k • H, k - hashFn fsMsg * dk_inv)
 
 theorem fiatShamirProve_fst_eq {Point : Type} [AddCommGroup Point] [Module RistrettoScalar Point]
-    (taggedHash : ByteArray → RistrettoScalar) (H : Point) (dk_inv k : RistrettoScalar) (fsMsg : ByteArray) :
-    (fiatShamirProve taggedHash H dk_inv k fsMsg).1 = k • H :=
+    (hashFn : ByteArray → RistrettoScalar) (H : Point) (dk_inv k : RistrettoScalar) (fsMsg : ByteArray) :
+    (fiatShamirProve hashFn H dk_inv k fsMsg).1 = k • H :=
   rfl
 
 theorem fiatShamirProve_snd_eq {Point : Type} [AddCommGroup Point] [Module RistrettoScalar Point]
-    (taggedHash : ByteArray → RistrettoScalar) (H : Point) (dk_inv k : RistrettoScalar) (fsMsg : ByteArray) :
-    (fiatShamirProve taggedHash H dk_inv k fsMsg).2 = k - taggedHash fsMsg * dk_inv :=
+    (hashFn : ByteArray → RistrettoScalar) (H : Point) (dk_inv k : RistrettoScalar) (fsMsg : ByteArray) :
+    (fiatShamirProve hashFn H dk_inv k fsMsg).2 = k - hashFn fsMsg * dk_inv :=
   rfl
 
 /-! ## Bridge to `Registration.Formal` (Schnorr equation shape) -/
@@ -97,13 +97,13 @@ variable {Point : Type} [AddCommGroup Point] [Module RistrettoScalar Point]
 
 /--
 **`fiatShamirVerify`** is definitionally the same predicate as **`registrationSchnorrEq`** when scalar
-action is **`•`** and addition is **`+`**, with challenge **`taggedHash fsMsg`** (the registration
+action is **`•`** and addition is **`+`**, with challenge **`hashFn fsMsg`** (the registration
 spec’s abstract Schnorr shape from `Formal.lean`).
 -/
 theorem fiatShamirVerify_iff_registrationSchnorrEq_module
-    (taggedHash : ByteArray → RistrettoScalar) (H ek R : Point) (s : RistrettoScalar) (fsMsg : ByteArray) :
-    fiatShamirVerify taggedHash H ek R s fsMsg ↔
-      registrationSchnorrEq (fun s' p => s' • p) (· + ·) H ek R s (taggedHash fsMsg) := by
+    (hashFn : ByteArray → RistrettoScalar) (H ek R : Point) (s : RistrettoScalar) (fsMsg : ByteArray) :
+    fiatShamirVerify hashFn H ek R s fsMsg ↔
+      registrationSchnorrEq (fun s' p => s' • p) (· + ·) H ek R s (hashFn fsMsg) := by
   simp [fiatShamirVerify, registrationSchnorrEq]
 
 end FormalBridge
@@ -134,30 +134,30 @@ rewound with a reprogrammed oracle to produce exactly this two-world
 scenario; here we prove the algebraic consequence.
 -/
 theorem fiatShamir_forking_extraction
-    (taggedHash₁ taggedHash₂ : ByteArray → RistrettoScalar)
+    (hashFn₁ hashFn₂ : ByteArray → RistrettoScalar)
     (H ek R : Point) (s₁ s₂ : RistrettoScalar) (fsMsg : ByteArray)
-    (hne : taggedHash₁ fsMsg ≠ taggedHash₂ fsMsg) (hek : ek ≠ 0)
-    (h₁ : fiatShamirVerify taggedHash₁ H ek R s₁ fsMsg)
-    (h₂ : fiatShamirVerify taggedHash₂ H ek R s₂ fsMsg) :
+    (hne : hashFn₁ fsMsg ≠ hashFn₂ fsMsg) (hek : ek ≠ 0)
+    (h₁ : fiatShamirVerify hashFn₁ H ek R s₁ fsMsg)
+    (h₂ : fiatShamirVerify hashFn₂ H ek R s₂ fsMsg) :
     ∃ dk : RistrettoScalar, H = dk • ek :=
   registrationSchnorr_special_soundness H ek R s₁ s₂
-    (taggedHash₁ fsMsg) (taggedHash₂ fsMsg) hne hek h₁ h₂
+    (hashFn₁ fsMsg) (hashFn₂ fsMsg) hne hek h₁ h₂
 
 /--
 **Forking reduction** (explicit extraction formula).
 
 The extracted witness is `dk = (s₁ − s₂)⁻¹ · (e₂ − e₁)` where
-`eᵢ = taggedHashᵢ(fsMsg)`.
+`eᵢ = hashFnᵢ(fsMsg)`.
 -/
 theorem fiatShamir_forking_explicit
-    (taggedHash₁ taggedHash₂ : ByteArray → RistrettoScalar)
+    (hashFn₁ hashFn₂ : ByteArray → RistrettoScalar)
     (H ek R : Point) (s₁ s₂ : RistrettoScalar) (fsMsg : ByteArray)
-    (hne : taggedHash₁ fsMsg ≠ taggedHash₂ fsMsg) (hek : ek ≠ 0)
-    (h₁ : fiatShamirVerify taggedHash₁ H ek R s₁ fsMsg)
-    (h₂ : fiatShamirVerify taggedHash₂ H ek R s₂ fsMsg) :
-    H = ((s₁ - s₂)⁻¹ * ((taggedHash₂ fsMsg) - (taggedHash₁ fsMsg))) • ek :=
+    (hne : hashFn₁ fsMsg ≠ hashFn₂ fsMsg) (hek : ek ≠ 0)
+    (h₁ : fiatShamirVerify hashFn₁ H ek R s₁ fsMsg)
+    (h₂ : fiatShamirVerify hashFn₂ H ek R s₂ fsMsg) :
+    H = ((s₁ - s₂)⁻¹ * ((hashFn₂ fsMsg) - (hashFn₁ fsMsg))) • ek :=
   registrationSchnorr_witness_extraction H ek R s₁ s₂
-    (taggedHash₁ fsMsg) (taggedHash₂ fsMsg) hne hek h₁ h₂
+    (hashFn₁ fsMsg) (hashFn₂ fsMsg) hne hek h₁ h₂
 
 end Forking
 
@@ -170,17 +170,17 @@ variable {Point : Type} [AddCommGroup Point] [Module RistrettoScalar Point]
 /--
 **Challenge binding**: for a fixed hash function and fixed FS message, two
 valid proofs targeting the same commitment `R` must satisfy `s₁ • H = s₂ • H`
-(since both use the identical deterministic challenge `e = taggedHash(fsMsg)`).
+(since both use the identical deterministic challenge `e = hashFn(fsMsg)`).
 
 A single-oracle adversary therefore cannot produce the two-world forking
 scenario.  This is why the ROM — which allows oracle reprogramming between
 the two worlds — is needed for the full knowledge-soundness argument.
 -/
 theorem fiatShamir_challenge_binding
-    (taggedHash : ByteArray → RistrettoScalar)
+    (hashFn : ByteArray → RistrettoScalar)
     (H ek R : Point) (s₁ s₂ : RistrettoScalar) (fsMsg : ByteArray)
-    (h₁ : fiatShamirVerify taggedHash H ek R s₁ fsMsg)
-    (h₂ : fiatShamirVerify taggedHash H ek R s₂ fsMsg) :
+    (h₁ : fiatShamirVerify hashFn H ek R s₁ fsMsg)
+    (h₂ : fiatShamirVerify hashFn H ek R s₂ fsMsg) :
     s₁ • H = s₂ • H := by
   simp only [fiatShamirVerify] at h₁ h₂
   exact add_right_cancel (h₁.trans h₂.symm)
@@ -197,44 +197,44 @@ variable {Point : Type} [AddCommGroup Point] [Module RistrettoScalar Point]
 **NIZK completeness**: the honest Fiat–Shamir prover (who knows `dk_inv`
 with `ek = dk_inv • H`) always produces a valid proof.
 
-The proof output is `R = k • H`, `s = k − taggedHash(fsMsg) · dk_inv` —
+The proof output is `R = k • H`, `s = k − hashFn(fsMsg) · dk_inv` —
 exactly the output of `fiatShamirProve`.
 -/
 theorem fiatShamir_completeness
-    (taggedHash : ByteArray → RistrettoScalar)
+    (hashFn : ByteArray → RistrettoScalar)
     (H : Point) (dk_inv k : RistrettoScalar)
     (ek : Point) (hek : ek = dk_inv • H)
     (fsMsg : ByteArray) :
-    fiatShamirVerify taggedHash H ek (k • H) (k - taggedHash fsMsg * dk_inv) fsMsg := by
+    fiatShamirVerify hashFn H ek (k • H) (k - hashFn fsMsg * dk_inv) fsMsg := by
   simp only [fiatShamirVerify]
-  rw [hek, sub_smul, ← smul_smul (taggedHash fsMsg) dk_inv H, sub_add_cancel]
+  rw [hek, sub_smul, ← smul_smul (hashFn fsMsg) dk_inv H, sub_add_cancel]
 
 /-- Same as **`fiatShamir_completeness`**, packaged as verification on **`fiatShamirProve`**’s pair. -/
 theorem fiatShamir_completeness_on_fiatShamirProve
-    (taggedHash : ByteArray → RistrettoScalar)
+    (hashFn : ByteArray → RistrettoScalar)
     (H : Point) (dk_inv k : RistrettoScalar)
     (ek : Point) (hek : ek = dk_inv • H)
     (fsMsg : ByteArray) :
-    fiatShamirVerify taggedHash H ek (fiatShamirProve taggedHash H dk_inv k fsMsg).1
-      (fiatShamirProve taggedHash H dk_inv k fsMsg).2 fsMsg := by
-  rw [fiatShamirProve_fst_eq taggedHash H dk_inv k fsMsg,
-    fiatShamirProve_snd_eq taggedHash H dk_inv k fsMsg]
-  exact fiatShamir_completeness taggedHash H dk_inv k ek hek fsMsg
+    fiatShamirVerify hashFn H ek (fiatShamirProve hashFn H dk_inv k fsMsg).1
+      (fiatShamirProve hashFn H dk_inv k fsMsg).2 fsMsg := by
+  rw [fiatShamirProve_fst_eq hashFn H dk_inv k fsMsg,
+    fiatShamirProve_snd_eq hashFn H dk_inv k fsMsg]
+  exact fiatShamir_completeness hashFn H dk_inv k ek hek fsMsg
 
 /--
 The honest **`fiatShamirProve`** transcript satisfies the abstract **`registrationSchnorrEq`** from
 `Formal.lean` (same content as **`fiatShamir_completeness_on_fiatShamirProve`** via **`fiatShamirVerify_iff_*`**).
 -/
 theorem registrationSchnorrEq_of_fiatShamirProve_output
-    (taggedHash : ByteArray → RistrettoScalar)
+    (hashFn : ByteArray → RistrettoScalar)
     (H : Point) (dk_inv k : RistrettoScalar)
     (ek : Point) (hek : ek = dk_inv • H)
     (fsMsg : ByteArray) :
     registrationSchnorrEq (fun s' p => s' • p) (· + ·) H ek (k • H)
-      (fiatShamirProve taggedHash H dk_inv k fsMsg).2 (taggedHash fsMsg) :=
-  (fiatShamirVerify_iff_registrationSchnorrEq_module taggedHash H ek (k • H)
-        (fiatShamirProve taggedHash H dk_inv k fsMsg).2 fsMsg).mp
-    (fiatShamir_completeness_on_fiatShamirProve taggedHash H dk_inv k ek hek fsMsg)
+      (fiatShamirProve hashFn H dk_inv k fsMsg).2 (hashFn fsMsg) :=
+  (fiatShamirVerify_iff_registrationSchnorrEq_module hashFn H ek (k • H)
+        (fiatShamirProve hashFn H dk_inv k fsMsg).2 fsMsg).mp
+    (fiatShamir_completeness_on_fiatShamirProve hashFn H dk_inv k ek hek fsMsg)
 
 end Completeness
 

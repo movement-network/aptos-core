@@ -8,7 +8,6 @@
 module 0x1::difftest_registration_helpers {
     use std::error;
     use std::vector;
-    use aptos_std::aptos_hash;
     use aptos_std::ristretto255::{Self, Scalar};
     use aptos_experimental::ristretto255_twisted_elgamal as twisted_elgamal;
 
@@ -18,7 +17,8 @@ module 0x1::difftest_registration_helpers {
     /// **formal golden** inputs (`chain_id=9`, `@0x1`/`@0x2`/`@0x3`, ek=R=basepoint) — see
     /// `formal_goldens_registration.move` and Lean `TranscriptAlignment.lean`.
     public fun registration_fs_message_golden_move(): vector<u8> {
-        let msg = vector::singleton(9u8);
+        let msg = FIAT_SHAMIR_REGISTRATION_SIGMA_DST;
+        msg.push_back(9u8);
         msg.append(std::bcs::to_bytes(&@0x1));
         msg.append(std::bcs::to_bytes(&@0x2));
         msg.append(std::bcs::to_bytes(&@0x3));
@@ -34,7 +34,8 @@ module 0x1::difftest_registration_helpers {
     /// `formal_goldens_registration.move` (`golden_registration_fs_message_second_scenario`) and
     /// Lean `TranscriptAlignment.expectedRegistrationFsMsg2`.
     public fun registration_fs_message_golden_move_second_scenario(): vector<u8> {
-        let msg = vector::singleton(42u8);
+        let msg = FIAT_SHAMIR_REGISTRATION_SIGMA_DST;
+        msg.push_back(42u8);
         msg.append(std::bcs::to_bytes(&@0x10));
         msg.append(std::bcs::to_bytes(&@0x20));
         msg.append(std::bcs::to_bytes(&@0x30));
@@ -46,28 +47,8 @@ module 0x1::difftest_registration_helpers {
         msg
     }
 
-    /// 64-byte `tagged_hash(FIAT_SHAMIR_REGISTRATION_SIGMA_DST, golden1_msg)` — corpus `registration_tagged_hash_golden_1.hex`.
-    public fun registration_tagged_hash_golden_move_first(): vector<u8> {
-        tagged_hash(FIAT_SHAMIR_REGISTRATION_SIGMA_DST, registration_fs_message_golden_move())
-    }
-
-    /// Same for the second golden FS `msg` — corpus `registration_tagged_hash_golden_2.hex`.
-    public fun registration_tagged_hash_golden_move_second(): vector<u8> {
-        tagged_hash(FIAT_SHAMIR_REGISTRATION_SIGMA_DST, registration_fs_message_golden_move_second_scenario())
-    }
-
-    fun tagged_hash(tag: vector<u8>, msg: vector<u8>): vector<u8> {
-        let tag_hash = aptos_hash::sha3_512(tag);
-        let input = tag_hash;
-        input.append(tag_hash);
-        input.append(msg);
-        aptos_hash::sha3_512(input)
-    }
-
-    fun new_scalar_from_tagged_hash(tag: vector<u8>, msg: vector<u8>): Scalar {
-        let hash = tagged_hash(tag, msg);
-        std::option::extract(&mut ristretto255::new_scalar_uniform_from_64_bytes(hash))
-    }
+    /// The golden FS messages already include the DST prefix and are the full input to
+    /// `ristretto255::new_scalar_from_sha2_512`. No separate tagged-hash functions needed.
 
     /// Same relation as `ristretto255_twisted_elgamal::pubkey_from_secret_key` (test-only in framework).
     /// Exposed for deterministic registration fixtures shared with `difftest_confidential_proof`.
@@ -97,13 +78,14 @@ module 0x1::difftest_registration_helpers {
         let r = ristretto255::point_mul(&h, k);
         let r_compressed = ristretto255::point_compress(&r);
 
-        let msg = vector::singleton(chain_id);
+        let msg = FIAT_SHAMIR_REGISTRATION_SIGMA_DST;
+        msg.push_back(chain_id);
         msg.append(std::bcs::to_bytes(&sender));
         msg.append(std::bcs::to_bytes(&contract_address));
         msg.append(std::bcs::to_bytes(&token_address));
         msg.append(twisted_elgamal::pubkey_to_bytes(ek));
         msg.append(ristretto255::compressed_point_to_bytes(r_compressed));
-        let e = new_scalar_from_tagged_hash(FIAT_SHAMIR_REGISTRATION_SIGMA_DST, msg);
+        let e = ristretto255::new_scalar_from_sha2_512(msg);
 
         let dk_inv_opt = ristretto255::scalar_invert(dk);
         assert!(std::option::is_some(&dk_inv_opt), error::invalid_argument(1));
@@ -132,13 +114,14 @@ module 0x1::difftest_registration_helpers {
         assert!(std::option::is_some(&s_opt), error::invalid_argument(1));
         let s = std::option::destroy_some(s_opt);
 
-        let msg = vector::singleton(chain_id);
+        let msg = FIAT_SHAMIR_REGISTRATION_SIGMA_DST;
+        msg.push_back(chain_id);
         msg.append(std::bcs::to_bytes(&sender));
         msg.append(std::bcs::to_bytes(&contract_address));
         msg.append(std::bcs::to_bytes(&token_address));
         msg.append(twisted_elgamal::pubkey_to_bytes(ek));
         msg.append(ristretto255::compressed_point_to_bytes(r_compressed));
-        let e = new_scalar_from_tagged_hash(FIAT_SHAMIR_REGISTRATION_SIGMA_DST, msg);
+        let e = ristretto255::new_scalar_from_sha2_512(msg);
 
         let h = ristretto255::hash_to_point_base();
         let ek_point = twisted_elgamal::pubkey_to_point(ek);

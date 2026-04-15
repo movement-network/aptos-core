@@ -1,20 +1,20 @@
 import AptosFormal.Move.State
 import AptosFormal.Move.Native
 import AptosFormal.AptosStd.Crypto.Ristretto255
-import AptosFormal.AptosStd.Hash.Sha3_512
+import AptosFormal.AptosStd.Hash.Sha2_512
 
 /-!
 # Native function bindings for `verify_registration_proof`
 
 Extends the standard native table with the **minimal** set of Ristretto255,
-SHA3-512, and BCS operations needed to `eval` a transcribed
+SHA2-512, and BCS operations needed to `eval` a transcribed
 `verify_registration_proof` bytecode body.
 
 **Crypto operations** (point arithmetic, decompression, equality) are
 inherently abstract — we parameterize them via `RegistrationNativeOracle`,
 which aligns with `CryptoOracleWithBoolEq` from `Operational.lean`.
 
-**Hash operations** use the executable Lean SHA3-512 from `AptosStd.Hash.Sha3_512`.
+**Hash operations** use the executable Lean SHA2-512 from `AptosStd.Hash.Sha2_512`.
 -/
 
 namespace AptosFormal.Move.Native.Registration
@@ -22,7 +22,7 @@ namespace AptosFormal.Move.Native.Registration
 open AptosFormal.Move
 open AptosFormal.Move.Native
 open AptosFormal.AptosStd.Crypto.Ristretto255
-open AptosFormal.AptosStd.Hash.Sha3_512
+open AptosFormal.AptosStd.Hash.Sha2_512
 
 /-! ## Oracle for abstract point operations
 
@@ -129,45 +129,28 @@ def wrapOracleImmRef2 (oracle : List MoveValue → Option (List MoveValue))
 
 /-! ## Executable natives (non-oracle) -/
 
-/-- `aptos_hash::sha3_512` on `vector<u8>` input. -/
-def sha3_512_native : List MoveValue → Option (List MoveValue)
+private def u8ElemsToByteArray (elems : List MoveValue) : Option ByteArray :=
+  let rec go (acc : Array UInt8) : List MoveValue → Option ByteArray
+    | [] => some (ByteArray.mk acc)
+    | .u8 b :: rest => go (acc.push b) rest
+    | _ :: _ => none
+  go #[] elems
+
+private def bytesToMoveVec (bs : ByteArray) : MoveValue :=
+  .vector .u8 (bs.toList.map .u8)
+
+/-- `ristretto255::new_scalar_from_sha2_512(input)`: SHA2-512 → scalar.
+    Takes one `vector<u8>` argument, returns a `Scalar` struct.
+    The 64-byte digest is reduced mod ℓ (the curve order). -/
+def newScalarFromSha2_512 : List MoveValue → Option (List MoveValue)
   | [.vector .u8 elems] =>
-    match u8ElemsToByteArrayAux #[] elems with
+    match u8ElemsToByteArray elems with
     | some ba =>
-      let digest := sha3_512 ba
-      some [bytesToMoveVec digest]
+      let digest := sha2_512 ba
+      let scalarBytes := digest.toList.map MoveValue.u8
+      some [.struct_ [.vector .u8 scalarBytes]]
     | none => none
   | _ => none
-where
-  u8ElemsToByteArrayAux (acc : Array UInt8) : List MoveValue → Option ByteArray
-    | [] => some (ByteArray.mk acc)
-    | .u8 b :: rest => u8ElemsToByteArrayAux (acc.push b) rest
-    | _ :: _ => none
-  bytesToMoveVec (bs : ByteArray) : MoveValue :=
-    .vector .u8 (bs.toList.map .u8)
-
-/-- `new_scalar_from_tagged_hash(dst, msg)`: BIP-340-style tagged SHA3-512 → scalar.
-    Takes two `vector<u8>` arguments, returns a Scalar value directly
-    (the Move function always succeeds: uniform 512-bit → mod ℓ reduction). -/
-def newScalarFromTaggedHash : List MoveValue → Option (List MoveValue)
-  | [dstVal, msgVal] =>
-    match dstVal, msgVal with
-    | .vector .u8 dstElems, .vector .u8 msgElems =>
-      match u8ElemsToByteArray dstElems, u8ElemsToByteArray msgElems with
-      | some dstBa, some msgBa =>
-        let digest := taggedHash dstBa msgBa
-        let scalarBytes := digest.toList.map MoveValue.u8
-        some [.struct_ [.vector .u8 scalarBytes]]
-      | _, _ => none
-    | _, _ => none
-  | _ => none
-where
-  u8ElemsToByteArray (elems : List MoveValue) : Option ByteArray :=
-    let rec go (acc : Array UInt8) : List MoveValue → Option ByteArray
-      | [] => some (ByteArray.mk acc)
-      | .u8 b :: rest => go (acc.push b) rest
-      | _ :: _ => none
-    go #[] elems
 
 /-- `option::is_some<T>(opt) → bool` on struct-encoded Option (field 0 = bool tag). -/
 def optionIsSome : List MoveValue → Option (List MoveValue)
@@ -183,6 +166,17 @@ def optionExtract : List MoveValue → Option (List MoveValue)
 def vectorSingletonU8 : List MoveValue → Option (List MoveValue)
   | [.u8 b] => some [.vector .u8 [.u8 b]]
   | _ => none
+
+/-- `vector::push_back<u8>(&mut vector<u8>, u8)` — appends single byte through ref. -/
+def vectorPushBackU8Ref : ContainerStore → List MoveValue → Option (List MoveValue × ContainerStore)
+  | cs, [.mutRef id, .u8 b] =>
+    match cs.read id with
+    | some (.vector .u8 existing) =>
+      match cs.write id (.vector .u8 (existing ++ [.u8 b])) with
+      | some cs' => some ([], cs')
+      | none => none
+    | _ => none
+  | _, _ => none
 
 /-- `vector::append<u8>(v1, v2)` — consumes both, returns concatenated vector. -/
 def vectorAppendU8 : List MoveValue → Option (List MoveValue)
@@ -205,11 +199,8 @@ def errorInvalidArgument : List MoveValue → Option (List MoveValue)
 
 /-! ## Function descriptors (value-semantics, kept for backward compat) -/
 
-def sha3_512Desc : FuncDesc :=
-  { numParams := 1, numReturns := 1, body := .native sha3_512_native }
-
-def newScalarFromTaggedHashDesc : FuncDesc :=
-  { numParams := 2, numReturns := 1, body := .native newScalarFromTaggedHash }
+def newScalarFromSha2_512Desc : FuncDesc :=
+  { numParams := 1, numReturns := 1, body := .native newScalarFromSha2_512 }
 
 def optionIsSomeDesc : FuncDesc :=
   { numParams := 1, numReturns := 1, body := .native optionIsSome }
@@ -239,6 +230,9 @@ def optionExtractRefDesc : FuncDesc :=
 
 def vectorAppendU8RefDesc : FuncDesc :=
   { numParams := 2, numReturns := 0, body := .nativeRef vectorAppendU8Ref }
+
+def vectorPushBackU8RefDesc : FuncDesc :=
+  { numParams := 2, numReturns := 0, body := .nativeRef vectorPushBackU8Ref }
 
 def bcsToBytesAddressRefDesc : FuncDesc :=
   { numParams := 1, numReturns := 1, body := .nativeRef bcsToBytesAddressRef }
@@ -270,12 +264,12 @@ Function index table for the **actual** 83-instruction bytecode:
 | 1     | `option::is_some<T>(&Option<T>)` | nativeRef |
 | 2     | `option::extract<T>(&mut Option<T>)` | nativeRef |
 | 3     | `ristretto255::new_scalar_from_bytes(vector<u8>)` | native (oracle) |
-| 4     | `vector::singleton<u8>(u8)` | native |
+| 4     | `vector::push_back<u8>(&mut vector<u8>, u8)` | nativeRef |
 | 5     | `bcs::to_bytes<address>(&address)` | nativeRef |
 | 6     | `vector::append<u8>(&mut vector<u8>, vector<u8>)` | nativeRef |
 | 7     | `pubkey_to_bytes(&CompressedPubkey)` | nativeRef (oracle) |
 | 8     | `compressed_point_to_bytes(CompressedRistretto)` | native (oracle) |
-| 9     | `new_scalar_from_tagged_hash(vector<u8>, vector<u8>)` | native |
+| 9     | `ristretto255::new_scalar_from_sha2_512(vector<u8>)` | native |
 | 10    | `hash_to_point_base()` | native (oracle) |
 | 11    | `pubkey_to_point(&CompressedPubkey)` | nativeRef (oracle) |
 | 12    | `point_mul(&RistrettoPoint, &Scalar)` | nativeRef (oracle) |
@@ -283,7 +277,7 @@ Function index table for the **actual** 83-instruction bytecode:
 | 14    | `point_decompress(&CompressedRistretto)` | nativeRef (oracle) |
 | 15    | `point_equals(&RistrettoPoint, &RistrettoPoint)` | nativeRef (oracle) |
 | 16    | `error::invalid_argument(u64)` | native |
-| 17    | `verify_registration_proof` (bytecode) | bytecode (83 instrs, 19 locals) |
+| 17    | `verify_registration_proof` (bytecode) | bytecode (84 instrs, 19 locals) |
 -/
 
 /-- `error::invalid_argument(ESIGMA_PROTOCOL_VERIFY_FAILED)` = `(1 << 16) | 1` = `0x10001` = `65537`. -/

@@ -305,24 +305,12 @@ theorem registration_fs_framework_second_scenario_matches_helpers_golden_eval_eq
     evalCA 173 [] 20 == .returned [.bool true] MachineState.empty := by
   native_decide
 
-/-! ## Registration tagged SHA3-512 on FS golden `msg` (**174** / **175**)
+/-! ## Registration tagged hash tests removed
 
-Harnesses **`test_registration_tagged_hash_golden_move_{first,second}`** — **`ldConst` 47** / **48** + **`ret`**
-(const pool matches **`TranscriptAlignment.expectedTaggedHashGolden{,2}`** / hex corpora).
+The tagged SHA3-512 hash golden tests (`test_registration_tagged_hash_golden_move_{first,second}`)
+were removed as part of the SHA3→SHA2-512 migration. The registration FS challenges now use
+`ristretto255::new_scalar_from_sha2_512(DST || msg)` and no longer expose a standalone tagged hash.
 -/
-
-theorem registration_tagged_hash_golden_move_first_eval_eq_vector :
-    evalCA 174 [] 15 == .returned [mvU8Wire registrationTaggedHashGolden1MoveBytes] MachineState.empty := by
-  native_decide
-
-theorem registration_tagged_hash_golden_move_second_eval_eq_vector :
-    evalCA 175 [] 15 == .returned [mvU8Wire registrationTaggedHashGolden2MoveBytes] MachineState.empty := by
-  native_decide
-
-theorem confidential_registration_tagged_hash_goldens_eval_bundle :
-    (evalCA 174 [] 15 == .returned [mvU8Wire registrationTaggedHashGolden1MoveBytes] MachineState.empty) &&
-    (evalCA 175 [] 15 == .returned [mvU8Wire registrationTaggedHashGolden2MoveBytes] MachineState.empty) = true := by
-  native_decide
 
 /-! ## Registration Schnorr verify: helpers (**35**) vs production framework (**171**)
 

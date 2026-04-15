@@ -15,7 +15,7 @@ globals policy** for the Lean column: [`../../../difftest/STUB_POLICY.md`](../..
 AptosFormal/
 ├── Std/                  specs: what stdlib functions should compute
 │   ├── Bcs/                  BCS serialization (u8, u64, u128, bool, vector)
-│   ├── Hash/                 SHA3-256, SHA3-512, Keccak-f[1600]
+│   ├── Hash/                 SHA3-256, SHA3-512, SHA2-512, Keccak-f[1600]
 │   ├── Crypto/               Ristretto255 scalar field, compressed points
 │   └── MoveStdlibGoldens    byte-level golden checks
 │

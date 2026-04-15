@@ -26,6 +26,7 @@ lean_lib «AptosFormal» where
     `AptosFormal.Std.Hash.Keccak,
     `AptosFormal.Std.Hash.Sha3_256,
     `AptosFormal.AptosStd.Hash.Sha3_512,
+    `AptosFormal.AptosStd.Hash.Sha2_512,
     `AptosFormal.Std.Bcs.Primitives,
     `AptosFormal.Std.MoveStdlibGoldens,
     `AptosFormal.AptosStd.Crypto.Ristretto255,

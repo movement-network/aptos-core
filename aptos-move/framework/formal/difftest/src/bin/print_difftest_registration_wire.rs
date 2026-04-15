@@ -6,7 +6,7 @@
 
 use curve25519_dalek_ng::ristretto::{CompressedRistretto, RistrettoPoint};
 use curve25519_dalek_ng::scalar::Scalar;
-use sha3::{Digest, Sha3_512};
+use sha2::{Digest, Sha512};
 
 /// `ristretto255::HASH_BASE_POINT` in `aptos-move/framework/aptos-stdlib/sources/cryptography/ristretto255.move`.
 const HASH_BASE_POINT: [u8; 32] = [
@@ -20,29 +20,15 @@ fn h_point() -> RistrettoPoint {
         .expect("HASH_BASE_POINT decompress")
 }
 
-fn sha3_512(data: &[u8]) -> [u8; 64] {
-    let mut h = Sha3_512::new();
+fn sha2_512(data: &[u8]) -> [u8; 64] {
+    let mut h = Sha512::new();
     h.update(data);
     h.finalize().into()
 }
 
-/// Matches `difftest_registration_helpers::tagged_hash`.
-fn tagged_hash(tag: &[u8], msg: &[u8]) -> [u8; 64] {
-    let tag_hash = sha3_512(tag);
-    let mut input = Vec::with_capacity(tag_hash.len() * 2 + msg.len());
-    input.extend_from_slice(&tag_hash);
-    input.extend_from_slice(&tag_hash);
-    input.extend_from_slice(msg);
-    sha3_512(&input)
-}
-
-fn new_scalar_uniform_from_64_bytes(b: &[u8; 64]) -> Scalar {
-    Scalar::from_bytes_mod_order_wide(b)
-}
-
-fn new_scalar_from_tagged_hash(tag: &[u8], msg: &[u8]) -> Scalar {
-    let h = tagged_hash(tag, msg);
-    new_scalar_uniform_from_64_bytes(&h)
+fn new_scalar_from_sha2_512(input: &[u8]) -> Scalar {
+    let h = sha2_512(input);
+    Scalar::from_bytes_mod_order_wide(&h)
 }
 
 /// `FIAT_SHAMIR_REGISTRATION_SIGMA_DST` in `difftest_registration_helpers.move`.
@@ -63,8 +49,9 @@ fn main() {
     let r_compressed = r_pt.compress();
     let commitment_bytes = r_compressed.to_bytes();
 
-    // FS message (same order as Move prove_deterministic / verify_like_confidential_proof)
+    // FS message: DST || chain_id || sender || contract || token || ek || R
     let mut msg = Vec::new();
+    msg.extend_from_slice(FS_DST);
     msg.push(9u8);
     msg.extend_from_slice(&addr_bcs(1));
     msg.extend_from_slice(&addr_bcs(2));
@@ -72,7 +59,7 @@ fn main() {
     msg.extend_from_slice(&ek_bytes);
     msg.extend_from_slice(&commitment_bytes);
 
-    let e = new_scalar_from_tagged_hash(FS_DST, &msg);
+    let e = new_scalar_from_sha2_512(&msg);
     let s = k - e * dk_inv;
 
     let response_bytes = s.to_bytes();

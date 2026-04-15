@@ -9,23 +9,19 @@ Value semantics: `fp.value` represents the rational `fp.value / 2^32`.
 **Source:** `aptos-move/framework/move-stdlib/sources/fixed_point32.move`
 
 ## Overflow notes
-- `ceil` and `round` must compare the raw `UInt64` value rather than
-  shifting `floor` back up (which can overflow for large values).
-  The fractional bits are simply the low-32 bits of `fp.value`.
-- All u128 intermediate arithmetic uses `Nat` casts via `.toNat` to stay
-  within Lean's natural-number tower, converting back with `UInt64.ofNat?`.
+- `ceil` and `round` use `fracBits` (low-32-bit mask) rather than
+  reconstructing by shifting `floor` up (which overflows for large values).
+- All u128 intermediate arithmetic uses `Nat` casts via `.toNat`.
 -/
 
 namespace AptosFormal.Std.FixedPoint32
 
--- ── Error codes (category × 2^16 + reason, matching std::error) ─────────────
 def EDENOMINATOR        : UInt64 := 0x10001
 def EDIVISION           : UInt64 := 0x20002
 def EMULTIPLICATION     : UInt64 := 0x20003
 def EDIVISION_BY_ZERO   : UInt64 := 0x10004
 def ERATIO_OUT_OF_RANGE : UInt64 := 0x20005
 
--- MAX_U64 as UInt128 for overflow checks
 def MAX_U64_NAT : Nat := 2^64 - 1
 
 structure FixedPoint32 where
@@ -44,37 +40,28 @@ def get_raw_value (fp : FixedPoint32) : UInt64 := fp.value
 @[simp] theorem get_raw_create (v : UInt64) :
     get_raw_value (create_from_raw_value v) = v := rfl
 
-/-- `create_from_rational(num, den)`:
-    computes `num / den` as a FixedPoint32 (i.e. result = (num * 2^32) / den,
-    stored as the u64 `result`). Uses Nat to avoid u128 overflow. -/
 def create_from_rational (num den : UInt64) : Except UInt64 FixedPoint32 :=
   if den = 0 then .error EDENOMINATOR
   else
-    -- Scale: (num * 2^64) / (den * 2^32) = (num * 2^32) / den
     let scaled := num.toNat * 2^32
     let q      := scaled / den.toNat
-    -- Reject if quotient is 0 but numerator was nonzero (underflow)
     if q = 0 && num ≠ 0 then .error ERATIO_OUT_OF_RANGE
-    -- Reject if quotient overflows u64
     else if q > MAX_U64_NAT then .error ERATIO_OUT_OF_RANGE
     else .ok ⟨q.toUInt64⟩
 
-/-- `create_from_u64(val)`: convert integer to FixedPoint32 (multiply by 2^32). -/
 def create_from_u64 (val : UInt64) : Except UInt64 FixedPoint32 :=
   let scaled := val.toNat * 2^32
   if scaled > MAX_U64_NAT then .error ERATIO_OUT_OF_RANGE
   else .ok ⟨scaled.toUInt64⟩
 
--- ── Arithmetic ───────────────────────────────────────────────────────────────
+-- ── Arithmetic ────────────────────────────────────────────────────────────────
 
-/-- `multiply_u64(val, mult)`: val × mult (result is a plain u64). -/
 def multiply_u64 (val : UInt64) (mult : FixedPoint32) : Except UInt64 UInt64 :=
   let prod   := val.toNat * mult.value.toNat
-  let result := prod / 2^32       -- right-shift by 32 to remove the implicit scale
+  let result := prod / 2^32
   if result > MAX_U64_NAT then .error EMULTIPLICATION
   else .ok result.toUInt64
 
-/-- `divide_u64(val, divisor)`: val ÷ divisor (both at FixedPoint32 scale). -/
 def divide_u64 (val : UInt64) (divisor : FixedPoint32) : Except UInt64 UInt64 :=
   if divisor.value = 0 then .error EDIVISION_BY_ZERO
   else
@@ -83,7 +70,7 @@ def divide_u64 (val : UInt64) (divisor : FixedPoint32) : Except UInt64 UInt64 :=
     if q > MAX_U64_NAT then .error EDIVISION
     else .ok q.toUInt64
 
--- ── Simple accessors ─────────────────────────────────────────────────────────
+-- ── Simple accessors ──────────────────────────────────────────────────────────
 
 def is_zero (fp : FixedPoint32) : Bool := fp.value = 0
 
@@ -92,37 +79,27 @@ def is_zero (fp : FixedPoint32) : Bool := fp.value = 0
 def min (a b : FixedPoint32) : FixedPoint32 := if a.value ≤ b.value then a else b
 def max (a b : FixedPoint32) : FixedPoint32 := if a.value ≥ b.value then a else b
 
--- ── Rounding ─────────────────────────────────────────────────────────────────
+-- ── Rounding ──────────────────────────────────────────────────────────────────
 
-/-- Integer part: high 32 bits of `fp.value`. -/
 def floor (fp : FixedPoint32) : UInt64 := fp.value >>> 32
 
-@[simp] theorem floor_raw (fp : FixedPoint32) :
-    floor fp = fp.value >>> 32 := rfl
+@[simp] theorem floor_raw (fp : FixedPoint32) : floor fp = fp.value >>> 32 := rfl
 
-/-- The fractional bits are the low 32 bits of `fp.value`.
-    No overflow: we never reconstruct by shifting `floor` back up. -/
-def fracBits (fp : FixedPoint32) : UInt64 :=
-  fp.value &&& 0xFFFFFFFF  -- mask low 32 bits
+/-- Low 32 bits: avoids reconstructing `floor <<< 32` which can overflow. -/
+def fracBits (fp : FixedPoint32) : UInt64 := fp.value &&& 0xFFFFFFFF
 
-/-- `ceil`: smallest integer ≥ fp. -/
 def ceil (fp : FixedPoint32) : UInt64 :=
   let f := floor fp
-  -- If there are any fractional bits, add 1
   if fracBits fp = 0 then f
-  else
-    -- Guard against overflow at the maximum representable value
-    if f = 0xFFFFFFFFFFFFFFFF then f   -- saturate (unreachable in valid range)
-    else f + 1
+  else if f = 0xFFFFFFFFFFFFFFFF then f  -- saturate (unreachable in valid range)
+  else f + 1
 
-/-- `round`: nearest integer, rounding half up. -/
 def round (fp : FixedPoint32) : UInt64 :=
   let f    := floor fp
   let frac := fracBits fp
-  -- 2^31 is the midpoint of the fractional range [0, 2^32)
   if frac < 0x80000000 then f else ceil fp
 
--- ── Basic theorems ───────────────────────────────────────────────────────────
+-- ── Theorems ──────────────────────────────────────────────────────────────────
 
 @[simp] theorem multiply_u64_zero (mult : FixedPoint32) :
     multiply_u64 0 mult = .ok 0 := by
@@ -136,10 +113,22 @@ def round (fp : FixedPoint32) : UInt64 :=
     create_from_u64 0 = .ok ⟨0⟩ := by
   simp [create_from_u64, MAX_U64_NAT]
 
-@[simp] theorem floor_integer (n : UInt64) (h : n.toNat < 2^32) :
-    floor (create_from_u64 n |>.toOption.getD ⟨0⟩) = n := by
-  simp [create_from_u64, MAX_U64_NAT, floor]
-  sorry  -- requires UInt64 bitshift arithmetic; flagged for later
+/-- For small integers (< 2^32), create_from_u64 then floor is identity. -/
+theorem floor_integer (n : UInt64) (h : n.toNat < 2^32) :
+    (create_from_u64 n).toOption.getD ⟨0⟩ |>.value >>> 32 = n := by
+  simp only [create_from_u64, MAX_U64_NAT]
+  split_ifs with hov
+  · -- overflow case: n.toNat * 2^32 > 2^64 - 1
+    -- but h : n.toNat < 2^32 means n.toNat * 2^32 < 2^64, contradiction
+    exfalso; omega
+  · -- n.toNat * 2^32 fits in UInt64
+    simp only [Option.toOption, Except.toOption, Option.getD]
+    -- value = (n.toNat * 2^32).toUInt64; shifting right by 32 recovers n
+    have hfit : n.toNat * 2^32 ≤ MAX_U64_NAT := by simp [MAX_U64_NAT]; omega
+    have : ((n.toNat * 2^32).toUInt64 : UInt64).toNat = n.toNat * 2^32 := by
+      apply UInt64.toNat_ofNat_of_lt; simp [MAX_U64_NAT] at hfit ⊢; omega
+    simp [UInt64.shiftRight_eq, this, Nat.mul_div_cancel_left _ (by norm_num : 0 < 2^32)]
+    rfl
 
 @[simp] theorem is_zero_iff (fp : FixedPoint32) : is_zero fp = true ↔ fp.value = 0 := by
   simp [is_zero]

@@ -1,0 +1,10 @@
+{
+  "name": "deserialize_sigma_transfer_26_scalars_30_points_plus_seven_auditor_quads",
+  "length_bytes": 2688,
+  "encoding": "hex",
+  "bytes_file": "deserialize_sigma_transfer_26_scalars_30_points_plus_seven_auditor_quads.hex",
+  "move_anchor": "0x1::difftest_confidential_proof::layout_sigma_transfer_seven_auditor_quads_extension",
+  "lean_def": "AptosFormal.Move.Programs.Confidential.deserializeSigmaTransfer26Scalars30PointsPlusSevenAuditorQuadsBytes",
+  "lean_theorem": "AptosFormal.Move.Programs.Confidential.deserializeSigmaTransfer26Scalars30PointsPlusSevenAuditorQuadsBytes_length",
+  "notes": "Base + **28×A_POINT** (**896** B); `auditor_xs = 896`; seven auditor blocks of four **X** points."
+}

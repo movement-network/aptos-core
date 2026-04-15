@@ -1,0 +1,9 @@
+{
+  "name": "serialize_auditor_eks_five_a_points",
+  "length_bytes": 160,
+  "encoding": "hex",
+  "bytes_file": "serialize_auditor_eks_five_a_points.hex",
+  "move_anchor": "0x1::difftest_confidential_asset_layer::test_serialize_auditor_eks_five_a_points_framework → 5× same **A_POINT** `CompressedPubkey`",
+  "lean_def": "AptosFormal.Move.Programs.Confidential.serializeAuditorEksFiveApointWireBytes",
+  "lean_theorem": "AptosFormal.Move.Programs.Confidential.serializeAuditorEksFiveApointWireBytes_length"
+}

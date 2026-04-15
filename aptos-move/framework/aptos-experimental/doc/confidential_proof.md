@@ -29,6 +29,9 @@ These proofs ensure correctness for operations such as <code>confidential_transf
 -  [Struct `RotationSigmaProof`](#0x7_confidential_proof_RotationSigmaProof)
 -  [Constants](#@Constants_0)
 -  [Function `verify_registration_proof`](#0x7_confidential_proof_verify_registration_proof)
+-  [Function `registration_fs_message_for_test`](#0x7_confidential_proof_registration_fs_message_for_test)
+-  [Function `prove_registration_deterministic_for_difftest`](#0x7_confidential_proof_prove_registration_deterministic_for_difftest)
+-  [Function `verify_registration_proof_for_difftest`](#0x7_confidential_proof_verify_registration_proof_for_difftest)
 -  [Function `verify_withdrawal_proof`](#0x7_confidential_proof_verify_withdrawal_proof)
 -  [Function `verify_transfer_proof`](#0x7_confidential_proof_verify_transfer_proof)
 -  [Function `verify_normalization_proof`](#0x7_confidential_proof_verify_normalization_proof)
@@ -53,6 +56,7 @@ These proofs ensure correctness for operations such as <code>confidential_transf
 -  [Function `get_fiat_shamir_transfer_sigma_dst`](#0x7_confidential_proof_get_fiat_shamir_transfer_sigma_dst)
 -  [Function `get_fiat_shamir_normalization_sigma_dst`](#0x7_confidential_proof_get_fiat_shamir_normalization_sigma_dst)
 -  [Function `get_fiat_shamir_rotation_sigma_dst`](#0x7_confidential_proof_get_fiat_shamir_rotation_sigma_dst)
+-  [Function `get_fiat_shamir_registration_sigma_dst`](#0x7_confidential_proof_get_fiat_shamir_registration_sigma_dst)
 -  [Function `get_bulletproofs_dst`](#0x7_confidential_proof_get_bulletproofs_dst)
 -  [Function `get_bulletproofs_num_bits`](#0x7_confidential_proof_get_bulletproofs_num_bits)
 -  [Function `tagged_hash`](#0x7_confidential_proof_tagged_hash)
@@ -1125,6 +1129,144 @@ The proof is a Schnorr proof: verifier checks s * H + e * ek == R.
     <b>assert</b>!(
         <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_equals">ristretto255::point_equals</a>(&lhs, &rhs),
         <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="confidential_proof.md#0x7_confidential_proof_ESIGMA_PROTOCOL_VERIFY_FAILED">ESIGMA_PROTOCOL_VERIFY_FAILED</a>)
+    );
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x7_confidential_proof_registration_fs_message_for_test"></a>
+
+## Function `registration_fs_message_for_test`
+
+Byte-for-byte the Fiat–Shamir prefix <code>msg</code> built in <code>verify_registration_proof</code> before
+<code><a href="confidential_proof.md#0x7_confidential_proof_new_scalar_from_tagged_hash">new_scalar_from_tagged_hash</a>(<a href="confidential_proof.md#0x7_confidential_proof_FIAT_SHAMIR_REGISTRATION_SIGMA_DST">FIAT_SHAMIR_REGISTRATION_SIGMA_DST</a>, msg)</code>.
+
+Exposed as a normal <code><b>public</b></code> entry (not <code>#[test_only]</code>) so off-chain tooling and
+<code><b>move</b>-lean-difftest</code> harnesses can pin the transcript without duplicating concatenation logic.
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_proof.md#0x7_confidential_proof_registration_fs_message_for_test">registration_fs_message_for_test</a>(<a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a>: u8, sender: <b>address</b>, contract_address: <b>address</b>, token_address: <b>address</b>, ek: &<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedPubkey">ristretto255_twisted_elgamal::CompressedPubkey</a>, commitment_bytes: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_proof.md#0x7_confidential_proof_registration_fs_message_for_test">registration_fs_message_for_test</a>(
+    <a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a>: u8,
+    sender: <b>address</b>,
+    contract_address: <b>address</b>,
+    token_address: <b>address</b>,
+    ek: &twisted_elgamal::CompressedPubkey,
+    commitment_bytes: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
+): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt; {
+    <b>let</b> msg = <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector_singleton">vector::singleton</a>(<a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a>);
+    msg.append(std::bcs::to_bytes(&sender));
+    msg.append(std::bcs::to_bytes(&contract_address));
+    msg.append(std::bcs::to_bytes(&token_address));
+    msg.append(twisted_elgamal::pubkey_to_bytes(ek));
+    msg.append(commitment_bytes);
+    msg
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x7_confidential_proof_prove_registration_deterministic_for_difftest"></a>
+
+## Function `prove_registration_deterministic_for_difftest`
+
+Deterministic registration Schnorr commitment/response using caller-supplied nonce <code>k</code>
+(same transcript + algebra as <code>prove_registration</code>, but without <code>random_scalar()</code>).
+
+Intended for <code><b>move</b>-lean-difftest</code> and off-chain parity checks against <code>verify_registration_proof</code>.
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_proof.md#0x7_confidential_proof_prove_registration_deterministic_for_difftest">prove_registration_deterministic_for_difftest</a>(<a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a>: u8, sender: <b>address</b>, contract_address: <b>address</b>, dk: &<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_Scalar">ristretto255::Scalar</a>, ek: &<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedPubkey">ristretto255_twisted_elgamal::CompressedPubkey</a>, token_address: <b>address</b>, k: &<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_Scalar">ristretto255::Scalar</a>): (<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;)
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_proof.md#0x7_confidential_proof_prove_registration_deterministic_for_difftest">prove_registration_deterministic_for_difftest</a>(
+    <a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a>: u8,
+    sender: <b>address</b>,
+    contract_address: <b>address</b>,
+    dk: &Scalar,
+    ek: &twisted_elgamal::CompressedPubkey,
+    token_address: <b>address</b>,
+    k: &Scalar,
+): (<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;) {
+    <b>let</b> h = <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_hash_to_point_base">ristretto255::hash_to_point_base</a>();
+    <b>let</b> r = <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_mul">ristretto255::point_mul</a>(&h, k);
+    <b>let</b> r_compressed = <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_compress">ristretto255::point_compress</a>(&r);
+
+    <b>let</b> msg = <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector_singleton">vector::singleton</a>(<a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a>);
+    msg.append(std::bcs::to_bytes(&sender));
+    msg.append(std::bcs::to_bytes(&contract_address));
+    msg.append(std::bcs::to_bytes(&token_address));
+    msg.append(twisted_elgamal::pubkey_to_bytes(ek));
+    msg.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_compressed_point_to_bytes">ristretto255::compressed_point_to_bytes</a>(r_compressed));
+    <b>let</b> e = <a href="confidential_proof.md#0x7_confidential_proof_new_scalar_from_tagged_hash">new_scalar_from_tagged_hash</a>(<a href="confidential_proof.md#0x7_confidential_proof_FIAT_SHAMIR_REGISTRATION_SIGMA_DST">FIAT_SHAMIR_REGISTRATION_SIGMA_DST</a>, msg);
+
+    <b>let</b> dk_inv = <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_scalar_invert">ristretto255::scalar_invert</a>(dk).extract();
+    <b>let</b> s = <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_scalar_sub">ristretto255::scalar_sub</a>(k, &<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_scalar_mul">ristretto255::scalar_mul</a>(&e, &dk_inv));
+
+    <b>let</b> commitment_bytes = <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_compressed_point_to_bytes">ristretto255::compressed_point_to_bytes</a>(r_compressed);
+    <b>let</b> response_bytes = <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_scalar_to_bytes">ristretto255::scalar_to_bytes</a>(&s);
+
+    (commitment_bytes, response_bytes)
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x7_confidential_proof_verify_registration_proof_for_difftest"></a>
+
+## Function `verify_registration_proof_for_difftest`
+
+Public wrapper around [<code>verify_registration_proof</code>] for harnesses that are not <code><b>friend</b></code>
+of <code><a href="confidential_proof.md#0x7_confidential_proof">confidential_proof</a></code> (e.g. <code>0x1::difftest_confidential_proof</code> in <code><b>move</b>-lean-difftest</code>).
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_proof.md#0x7_confidential_proof_verify_registration_proof_for_difftest">verify_registration_proof_for_difftest</a>(<a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a>: u8, sender: <b>address</b>, contract_address: <b>address</b>, ek: &<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedPubkey">ristretto255_twisted_elgamal::CompressedPubkey</a>, token_address: <b>address</b>, commitment_bytes: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, response_bytes: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;)
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_proof.md#0x7_confidential_proof_verify_registration_proof_for_difftest">verify_registration_proof_for_difftest</a>(
+    <a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a>: u8,
+    sender: <b>address</b>,
+    contract_address: <b>address</b>,
+    ek: &twisted_elgamal::CompressedPubkey,
+    token_address: <b>address</b>,
+    commitment_bytes: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
+    response_bytes: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
+) {
+    <a href="confidential_proof.md#0x7_confidential_proof_verify_registration_proof">verify_registration_proof</a>(
+        <a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a>,
+        sender,
+        contract_address,
+        ek,
+        token_address,
+        commitment_bytes,
+        response_bytes,
     );
 }
 </code></pre>
@@ -2611,6 +2753,32 @@ Returns the Fiat Shamir DST for the <code><a href="confidential_proof.md#0x7_con
 
 </details>
 
+<a id="0x7_confidential_proof_get_fiat_shamir_registration_sigma_dst"></a>
+
+## Function `get_fiat_shamir_registration_sigma_dst`
+
+Returns the Fiat Shamir DST for registration sigma (<code>verify_registration_proof</code>).
+
+
+<pre><code>#[view]
+<b>public</b> <b>fun</b> <a href="confidential_proof.md#0x7_confidential_proof_get_fiat_shamir_registration_sigma_dst">get_fiat_shamir_registration_sigma_dst</a>(): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_proof.md#0x7_confidential_proof_get_fiat_shamir_registration_sigma_dst">get_fiat_shamir_registration_sigma_dst</a>(): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt; {
+    <a href="confidential_proof.md#0x7_confidential_proof_FIAT_SHAMIR_REGISTRATION_SIGMA_DST">FIAT_SHAMIR_REGISTRATION_SIGMA_DST</a>
+}
+</code></pre>
+
+
+
+</details>
+
 <a id="0x7_confidential_proof_get_bulletproofs_dst"></a>
 
 ## Function `get_bulletproofs_dst`
@@ -2712,7 +2880,9 @@ to reduce the 64-byte SHA3-512 output modulo the curve order l.
 
 <pre><code><b>fun</b> <a href="confidential_proof.md#0x7_confidential_proof_new_scalar_from_tagged_hash">new_scalar_from_tagged_hash</a>(tag: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, msg: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): Scalar {
     <b>let</b> <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/hash.md#0x1_hash">hash</a> = <a href="confidential_proof.md#0x7_confidential_proof_tagged_hash">tagged_hash</a>(tag, msg);
-    std::option::extract(&<b>mut</b> <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_new_scalar_uniform_from_64_bytes">ristretto255::new_scalar_uniform_from_64_bytes</a>(<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/hash.md#0x1_hash">hash</a>))
+    <b>let</b> sc_opt = <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_new_scalar_uniform_from_64_bytes">ristretto255::new_scalar_uniform_from_64_bytes</a>(<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/hash.md#0x1_hash">hash</a>);
+    <b>assert</b>!(<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_is_some">option::is_some</a>(&sc_opt), <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="confidential_proof.md#0x7_confidential_proof_ESIGMA_PROTOCOL_VERIFY_FAILED">ESIGMA_PROTOCOL_VERIFY_FAILED</a>));
+    <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_extract">option::extract</a>(&<b>mut</b> sc_opt)
 }
 </code></pre>
 
@@ -2738,7 +2908,9 @@ Derives a scalar from a plain SHA3-512 hash (used for MSM gamma scalars).
 
 <pre><code><b>fun</b> <a href="confidential_proof.md#0x7_confidential_proof_new_scalar_from_sha3_512">new_scalar_from_sha3_512</a>(bytes: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): Scalar {
     <b>let</b> <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/hash.md#0x1_hash">hash</a> = <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/hash.md#0x1_aptos_hash_sha3_512">aptos_hash::sha3_512</a>(bytes);
-    std::option::extract(&<b>mut</b> <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_new_scalar_uniform_from_64_bytes">ristretto255::new_scalar_uniform_from_64_bytes</a>(<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/hash.md#0x1_hash">hash</a>))
+    <b>let</b> sc_opt = <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_new_scalar_uniform_from_64_bytes">ristretto255::new_scalar_uniform_from_64_bytes</a>(<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/hash.md#0x1_hash">hash</a>);
+    <b>assert</b>!(<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_is_some">option::is_some</a>(&sc_opt), <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="confidential_proof.md#0x7_confidential_proof_ESIGMA_PROTOCOL_VERIFY_FAILED">ESIGMA_PROTOCOL_VERIFY_FAILED</a>));
+    <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_extract">option::extract</a>(&<b>mut</b> sc_opt)
 }
 </code></pre>
 

@@ -34,12 +34,14 @@ use move_core_types::{
     language_storage::{ModuleId, StructTag, TypeTag},
     value::MoveValue,
 };
-use std::str::FromStr;
 use move_model::metadata::{CompilerVersion, LanguageVersion};
 use move_package::BuildConfig;
 use move_vm_runtime::move_vm::SerializedReturnValues;
 use once_cell::sync::OnceCell;
 use std::collections::BTreeMap;
+
+#[path = "confidential_asset_e2e_oracle_impl.rs"]
+mod oracle;
 
 const APTOS_EXPERIMENTAL: AccountAddress = AccountAddress::new({
     let mut b = [0u8; AccountAddress::LENGTH];
@@ -233,6 +235,28 @@ fn confidential_e2e_addr(tag: u8, idx: u8) -> AccountAddress {
     AccountAddress::new(b)
 }
 
+/// Args for **`confidential_asset::enable_token`** via **`try_exec_function_bypass_at`** (framework signer + metadata).
+pub(super) fn confidential_asset_enable_token_bypass_args() -> Vec<Vec<u8>> {
+    vec![
+        MoveValue::Signer(AccountAddress::ONE)
+            .simple_serialize()
+            .expect("signer arg"),
+        bcs::to_bytes(&MOVE_METADATA).expect("metadata arg"),
+    ]
+}
+
+/// Args for **`enable_allow_list`** / **`disable_allow_list`** (framework signer only).
+pub(super) fn confidential_asset_allow_list_governance_bypass_args() -> Vec<Vec<u8>> {
+    vec![MoveValue::Signer(AccountAddress::ONE)
+        .simple_serialize()
+        .expect("signer arg")]
+}
+
+/// Args for **`disable_token`** / **`enable_token`** (framework signer + metadata object).
+pub(super) fn confidential_asset_token_toggle_bypass_args() -> Vec<Vec<u8>> {
+    confidential_asset_enable_token_bypass_args()
+}
+
 fn bcs_auditor_pubkeys_from_ek_structs(h: &mut MoveHarness, ek_structs: &[Vec<u8>]) -> Vec<Vec<u8>> {
     ek_structs
         .iter()
@@ -373,6 +397,26 @@ fn run_deposit(h: &mut MoveHarness, account: &Account, amount: u64) -> Transacti
     h.run(txn)
 }
 
+fn run_deposit_to(
+    h: &mut MoveHarness,
+    sender: &Account,
+    to: AccountAddress,
+    amount: u64,
+) -> TransactionStatus {
+    let payload = TransactionPayload::EntryFunction(EntryFunction::new(
+        ca_module_id(),
+        Identifier::new("deposit_to").unwrap(),
+        vec![],
+        vec![
+            bcs::to_bytes(&MOVE_METADATA).unwrap(),
+            bcs::to_bytes(&to).unwrap(),
+            bcs::to_bytes(&amount).unwrap(),
+        ],
+    ));
+    let txn = h.create_transaction_payload(sender, payload);
+    h.run(txn)
+}
+
 fn run_rollover(h: &mut MoveHarness, account: &Account) -> TransactionStatus {
     let payload = TransactionPayload::EntryFunction(EntryFunction::new(
         ca_module_id(),
@@ -395,28 +439,48 @@ fn run_rollover_and_freeze(h: &mut MoveHarness, account: &Account) -> Transactio
     h.run(txn)
 }
 
-fn ca_event_tag(event_name: &str) -> TypeTag {
-    TypeTag::from_str(&format!(
-        "0x{}::confidential_asset::{event_name}",
-        APTOS_EXPERIMENTAL.to_hex()
-    ))
-    .unwrap()
+fn run_freeze_token(h: &mut MoveHarness, account: &Account) -> TransactionStatus {
+    let payload = TransactionPayload::EntryFunction(EntryFunction::new(
+        ca_module_id(),
+        Identifier::new("freeze_token").unwrap(),
+        vec![],
+        vec![bcs::to_bytes(&MOVE_METADATA).unwrap()],
+    ));
+    let txn = h.create_transaction_payload(account, payload);
+    h.run(txn)
 }
 
-fn count_events(h: &MoveHarness, event_name: &str) -> usize {
-    let tag = ca_event_tag(event_name);
-    h.get_events()
-        .iter()
-        .filter(|e| e.type_tag() == &tag)
-        .count()
+fn run_unfreeze_token(h: &mut MoveHarness, account: &Account) -> TransactionStatus {
+    let payload = TransactionPayload::EntryFunction(EntryFunction::new(
+        ca_module_id(),
+        Identifier::new("unfreeze_token").unwrap(),
+        vec![],
+        vec![bcs::to_bytes(&MOVE_METADATA).unwrap()],
+    ));
+    let txn = h.create_transaction_payload(account, payload);
+    h.run(txn)
 }
 
-fn assert_event_count(h: &MoveHarness, event_name: &str, expected: usize, ctx: &str) {
-    let actual = count_events(h, event_name);
-    assert_eq!(
-        actual, expected,
-        "{ctx}: expected {expected} {event_name} events, got {actual}"
-    );
+fn run_normalize(
+    h: &mut MoveHarness,
+    account: &Account,
+    new_bal: &[u8],
+    zkrp: &[u8],
+    sigma: &[u8],
+) -> TransactionStatus {
+    let payload = TransactionPayload::EntryFunction(EntryFunction::new(
+        ca_module_id(),
+        Identifier::new("normalize").unwrap(),
+        vec![],
+        vec![
+            bcs::to_bytes(&MOVE_METADATA).unwrap(),
+            new_bal.to_vec(),
+            zkrp.to_vec(),
+            sigma.to_vec(),
+        ],
+    ));
+    let txn = h.create_transaction_payload(account, payload);
+    h.run(txn)
 }
 
 fn set_asset_auditor(h: &mut MoveHarness, auditor_pubkey_32: &[u8]) {
@@ -592,6 +656,59 @@ fn run_withdraw_to(
     h.run(txn)
 }
 
+fn run_withdraw(
+    h: &mut MoveHarness,
+    sender: &Account,
+    amount: u64,
+    new_bal: &[u8],
+    zkrp: &[u8],
+    sigma: &[u8],
+) -> TransactionStatus {
+    let payload = TransactionPayload::EntryFunction(EntryFunction::new(
+        ca_module_id(),
+        Identifier::new("withdraw").unwrap(),
+        vec![],
+        vec![
+            bcs::to_bytes(&MOVE_METADATA).unwrap(),
+            bcs::to_bytes(&amount).unwrap(),
+            new_bal.to_vec(),
+            zkrp.to_vec(),
+            sigma.to_vec(),
+        ],
+    ));
+    let txn = h.create_transaction_payload(sender, payload);
+    h.run(txn)
+}
+
+fn pack_normalize(
+    h: &mut MoveHarness,
+    chain_byte: u8,
+    sender: AccountAddress,
+    dk: &[u8],
+    amount: u128,
+) -> (Vec<u8>, Vec<u8>, Vec<u8>) {
+    let args = vec![
+        bcs::to_bytes(&chain_byte).unwrap(),
+        bcs::to_bytes(&sender).unwrap(),
+        dk.to_vec(),
+        bcs::to_bytes(&amount).unwrap(),
+        bcs::to_bytes(&MOVE_METADATA).unwrap(),
+    ];
+    let ret = bypass_at(
+        h,
+        "confidential_gas_e2e_helpers",
+        "pack_normalization_proof",
+        vec![],
+        args,
+    );
+    assert_eq!(ret.return_values.len(), 3);
+    (
+        ret.return_values[0].0.clone(),
+        ret.return_values[1].0.clone(),
+        ret.return_values[2].0.clone(),
+    )
+}
+
 fn pack_rotate(
     h: &mut MoveHarness,
     chain_byte: u8,
@@ -650,6 +767,30 @@ fn run_rotate(
     h.run(txn)
 }
 
+fn run_rotate_and_unfreeze(
+    h: &mut MoveHarness,
+    sender: &Account,
+    new_ek: &[u8],
+    new_bal: &[u8],
+    zkrp: &[u8],
+    sigma: &[u8],
+) -> TransactionStatus {
+    let payload = TransactionPayload::EntryFunction(EntryFunction::new(
+        ca_module_id(),
+        Identifier::new("rotate_encryption_key_and_unfreeze").unwrap(),
+        vec![],
+        vec![
+            bcs::to_bytes(&MOVE_METADATA).unwrap(),
+            new_ek.to_vec(),
+            new_bal.to_vec(),
+            zkrp.to_vec(),
+            sigma.to_vec(),
+        ],
+    ));
+    let txn = h.create_transaction_payload(sender, payload);
+    h.run(txn)
+}
+
 fn baseline_fa_transfer_gas(h: &mut MoveHarness, from: &Account, to: AccountAddress, amount: u64) -> u64 {
     let payload = TransactionPayload::EntryFunction(EntryFunction::new(
         ModuleId::new(AccountAddress::ONE, Identifier::new("primary_fungible_store").unwrap()),
@@ -695,204 +836,780 @@ fn fresh_harness() -> MoveHarness {
 
 #[test]
 fn confidential_asset_register_deposit_rollover_and_gas() {
-    let mut h = fresh_harness();
-    let chain = h.executor.get_chain_id().id();
-    let alice_addr = AccountAddress::from_hex_literal("0xa11e").unwrap();
-    let alice = h.new_account_with_balance_at(alice_addr, 50_000_000_000_000);
+    let _ = oracle::register_deposit_rollover_and_gas_cases();
+}
 
-    let (dk, ek_struct) = generate_elgamal_keypair(&mut h);
-    let ek_pk = twisted_pubkey_bytes(&mut h, &ek_struct);
-    let (comm, resp) =
-        prove_registration_parts(&mut h, chain, alice_addr, &dk, &ek_struct, MOVE_METADATA);
-    let st = run_register(&mut h, &alice, &ek_pk, &comm, &resp);
-    assert_kept_success(&st, "register");
-    assert_event_count(&h, "Registered", 1, "after register");
+#[test]
+fn confidential_asset_rollover_and_freeze_only() {
+    let _ = oracle::rollover_and_freeze_only_cases();
+}
 
-    let st = run_deposit(&mut h, &alice, 5_000);
-    assert_kept_success(&st, "deposit");
-    assert_event_count(&h, "Deposited", 1, "after deposit");
+#[test]
+fn confidential_asset_rotate_encryption_key_and_unfreeze_only() {
+    let _ = oracle::rotate_encryption_key_and_unfreeze_only_cases();
+}
 
-    let st = run_rollover(&mut h, &alice);
-    assert_kept_success(&st, "rollover");
-    assert_event_count(&h, "RolledOver", 1, "after rollover");
+#[test]
+fn confidential_asset_verify_actual_balance_matches_after_deposit_rollover_freeze_and_rotate_encryption_key_and_unfreeze_only(
+) {
+    let _ = oracle::verify_actual_balance_matches_after_deposit_rollover_freeze_and_rotate_encryption_key_and_unfreeze_only_cases(
+    );
+}
 
-    let deposit_payload = TransactionPayload::EntryFunction(EntryFunction::new(
-        ca_module_id(),
-        Identifier::new("deposit").unwrap(),
-        vec![],
-        vec![
-            bcs::to_bytes(&MOVE_METADATA).unwrap(),
-            bcs::to_bytes(&1_000u64).unwrap(),
-        ],
-    ));
-    let _ = profile_gas(&mut h, &alice, deposit_payload, "deposit (profile)");
+#[test]
+fn confidential_asset_verify_pending_balance_zero_after_deposit_rollover_freeze_and_rotate_encryption_key_and_unfreeze_only(
+) {
+    let _ = oracle::verify_pending_balance_zero_after_deposit_rollover_freeze_and_rotate_encryption_key_and_unfreeze_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_is_frozen_false_after_deposit_rollover_freeze_and_rotate_encryption_key_and_unfreeze_only() {
+    let _ = oracle::is_frozen_false_after_deposit_rollover_freeze_and_rotate_encryption_key_and_unfreeze_only_cases();
+}
+
+#[test]
+fn confidential_asset_encryption_key_view_matches_new_ek_after_deposit_rollover_freeze_and_rotate_encryption_key_and_unfreeze_only(
+) {
+    let _ = oracle::encryption_key_view_matches_new_ek_after_deposit_rollover_freeze_and_rotate_encryption_key_and_unfreeze_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_verify_actual_balance_rejects_stale_dk_after_deposit_rollover_freeze_and_rotate_encryption_key_and_unfreeze_only(
+) {
+    let _ = oracle::verify_actual_balance_rejects_stale_dk_after_deposit_rollover_freeze_and_rotate_encryption_key_and_unfreeze_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_verify_pending_balance_rejects_nonzero_with_new_dk_after_deposit_rollover_freeze_and_rotate_encryption_key_and_unfreeze_only(
+) {
+    let _ = oracle::verify_pending_balance_rejects_nonzero_with_new_dk_after_deposit_rollover_freeze_and_rotate_encryption_key_and_unfreeze_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_verify_actual_balance_rejects_wrong_amount_after_deposit_rollover_freeze_and_rotate_encryption_key_and_unfreeze_only(
+) {
+    let _ = oracle::verify_actual_balance_rejects_wrong_amount_after_deposit_rollover_freeze_and_rotate_encryption_key_and_unfreeze_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_verify_actual_balance_rejects_amount_plus_one_after_deposit_rollover_freeze_and_rotate_encryption_key_and_unfreeze_only(
+) {
+    let _ = oracle::verify_actual_balance_rejects_amount_plus_one_after_deposit_rollover_freeze_and_rotate_encryption_key_and_unfreeze_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_is_normalized_true_after_deposit_rollover_freeze_and_rotate_encryption_key_and_unfreeze_only(
+) {
+    let _ = oracle::is_normalized_true_after_deposit_rollover_freeze_and_rotate_encryption_key_and_unfreeze_only_cases();
+}
+
+#[test]
+fn confidential_asset_verify_pending_balance_matches_second_deposit_after_rotate_encryption_key_and_unfreeze_only(
+) {
+    let _ = oracle::verify_pending_balance_matches_second_deposit_after_rotate_encryption_key_and_unfreeze_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_verify_actual_balance_matches_first_deposit_after_second_deposit_post_rotate_encryption_key_and_unfreeze_only(
+) {
+    let _ = oracle::verify_actual_balance_matches_first_deposit_after_second_deposit_post_rotate_encryption_key_and_unfreeze_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_verify_pending_balance_rejects_zero_after_second_deposit_post_rotate_encryption_key_and_unfreeze_only(
+) {
+    let _ = oracle::verify_pending_balance_rejects_zero_after_second_deposit_post_rotate_encryption_key_and_unfreeze_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_verify_actual_balance_rejects_zero_after_rotate_encryption_key_and_unfreeze_when_actual_nonzero_only(
+) {
+    let _ = oracle::verify_actual_balance_rejects_zero_after_rotate_encryption_key_and_unfreeze_when_actual_nonzero_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_balance_after_deposit_rollover_freeze_and_rotate_encryption_key_and_unfreeze_only() {
+    let _ = oracle::confidential_asset_balance_after_deposit_rollover_freeze_and_rotate_encryption_key_and_unfreeze_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_pending_balance_view_return_len_265_after_deposit_rollover_freeze_and_rotate_encryption_key_and_unfreeze_only(
+) {
+    let _ = oracle::pending_balance_view_return_len_265_after_deposit_rollover_freeze_and_rotate_encryption_key_and_unfreeze_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_actual_balance_view_return_len_529_after_deposit_rollover_freeze_and_rotate_encryption_key_and_unfreeze_only(
+) {
+    let _ = oracle::actual_balance_view_return_len_529_after_deposit_rollover_freeze_and_rotate_encryption_key_and_unfreeze_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_has_confidential_asset_store_true_after_deposit_rollover_freeze_and_rotate_encryption_key_and_unfreeze_only(
+) {
+    let _ = oracle::has_confidential_asset_store_true_after_deposit_rollover_freeze_and_rotate_encryption_key_and_unfreeze_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_verify_pending_balance_rejects_stale_first_deposit_after_second_deposit_post_rotate_encryption_key_and_unfreeze_only(
+) {
+    let _ = oracle::verify_pending_balance_rejects_stale_first_deposit_after_second_deposit_post_rotate_encryption_key_and_unfreeze_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_balance_matches_10003_after_post_unfreeze_deposit_post_rotate_encryption_key_and_unfreeze_only(
+) {
+    let _ = oracle::confidential_asset_balance_matches_10003_after_post_unfreeze_deposit_post_rotate_encryption_key_and_unfreeze_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_is_token_allowed_true_after_deposit_rollover_freeze_and_rotate_encryption_key_and_unfreeze_only(
+) {
+    let _ = oracle::is_token_allowed_true_after_deposit_rollover_freeze_and_rotate_encryption_key_and_unfreeze_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_get_auditor_returns_none_after_deposit_rollover_freeze_and_rotate_encryption_key_and_unfreeze_only(
+) {
+    let _ = oracle::get_auditor_returns_none_after_deposit_rollover_freeze_and_rotate_encryption_key_and_unfreeze_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_verify_pending_balance_matches_sum_after_two_post_unfreeze_deposits_post_rotate_encryption_key_and_unfreeze_only(
+) {
+    let _ = oracle::verify_pending_balance_matches_sum_after_two_post_unfreeze_deposits_post_rotate_encryption_key_and_unfreeze_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_is_allow_list_enabled_false_after_deposit_rollover_freeze_and_rotate_encryption_key_and_unfreeze_only(
+) {
+    let _ = oracle::is_allow_list_enabled_false_after_deposit_rollover_freeze_and_rotate_encryption_key_and_unfreeze_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_verify_pending_balance_rejects_wrong_sum_after_two_post_unfreeze_deposits_post_rotate_encryption_key_and_unfreeze_only(
+) {
+    let _ = oracle::verify_pending_balance_rejects_wrong_sum_after_two_post_unfreeze_deposits_post_rotate_encryption_key_and_unfreeze_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_verify_actual_balance_rejects_wrong_amount_after_two_post_unfreeze_deposits_post_rotate_encryption_key_and_unfreeze_only(
+) {
+    let _ = oracle::verify_actual_balance_rejects_wrong_amount_after_two_post_unfreeze_deposits_post_rotate_encryption_key_and_unfreeze_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_balance_matches_8901_after_two_post_unfreeze_deposits_post_rotate_encryption_key_and_unfreeze_only(
+) {
+    let _ = oracle::confidential_asset_balance_matches_8901_after_two_post_unfreeze_deposits_post_rotate_encryption_key_and_unfreeze_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_verify_pending_balance_rejects_sum_plus_one_after_two_post_unfreeze_deposits_post_rotate_encryption_key_and_unfreeze_only(
+) {
+    let _ = oracle::verify_pending_balance_rejects_sum_plus_one_after_two_post_unfreeze_deposits_post_rotate_encryption_key_and_unfreeze_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_verify_actual_balance_rejects_amount_plus_one_after_two_post_unfreeze_deposits_post_rotate_encryption_key_and_unfreeze_only(
+) {
+    let _ = oracle::verify_actual_balance_rejects_amount_plus_one_after_two_post_unfreeze_deposits_post_rotate_encryption_key_and_unfreeze_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_encryption_key_view_matches_new_ek_after_two_post_unfreeze_deposits_post_rotate_encryption_key_and_unfreeze_only(
+) {
+    let _ = oracle::encryption_key_view_matches_new_ek_after_two_post_unfreeze_deposits_post_rotate_encryption_key_and_unfreeze_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_is_frozen_false_after_two_post_unfreeze_deposits_post_rotate_encryption_key_and_unfreeze_only(
+) {
+    let _ = oracle::is_frozen_false_after_two_post_unfreeze_deposits_post_rotate_encryption_key_and_unfreeze_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_balance_matches_6601_after_three_post_unfreeze_deposits_post_rotate_encryption_key_and_unfreeze_only(
+) {
+    let _ = oracle::confidential_asset_balance_matches_6601_after_three_post_unfreeze_deposits_post_rotate_encryption_key_and_unfreeze_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_is_normalized_true_after_three_post_unfreeze_deposits_post_rotate_encryption_key_and_unfreeze_only(
+) {
+    let _ = oracle::is_normalized_true_after_three_post_unfreeze_deposits_post_rotate_encryption_key_and_unfreeze_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_has_confidential_asset_store_true_after_three_post_unfreeze_deposits_post_rotate_encryption_key_and_unfreeze_only(
+) {
+    let _ = oracle::has_confidential_asset_store_true_after_three_post_unfreeze_deposits_post_rotate_encryption_key_and_unfreeze_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_verify_pending_balance_matches_sum_after_three_post_unfreeze_deposits_post_rotate_encryption_key_and_unfreeze_only(
+) {
+    let _ = oracle::verify_pending_balance_matches_sum_after_three_post_unfreeze_deposits_post_rotate_encryption_key_and_unfreeze_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_verify_pending_balance_rejects_zero_after_three_post_unfreeze_deposits_post_rotate_encryption_key_and_unfreeze_only(
+) {
+    let _ = oracle::verify_pending_balance_rejects_zero_after_three_post_unfreeze_deposits_post_rotate_encryption_key_and_unfreeze_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_verify_actual_balance_rejects_zero_after_three_post_unfreeze_deposits_post_rotate_encryption_key_and_unfreeze_when_actual_nonzero_only(
+) {
+    let _ = oracle::verify_actual_balance_rejects_zero_after_three_post_unfreeze_deposits_post_rotate_encryption_key_and_unfreeze_when_actual_nonzero_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_balance_matches_7111_after_four_post_unfreeze_deposits_post_rotate_encryption_key_and_unfreeze_only(
+) {
+    let _ = oracle::confidential_asset_balance_matches_7111_after_four_post_unfreeze_deposits_post_rotate_encryption_key_and_unfreeze_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_rotate_encryption_key_aborts_when_pending_nonzero_after_deposit_rollover_and_second_deposit_only(
+) {
+    let _ = oracle::rotate_encryption_key_aborts_when_pending_nonzero_after_deposit_rollover_and_second_deposit_only_cases();
+}
+
+#[test]
+fn confidential_asset_rotate_encryption_key_after_freeze_only() {
+    let _ = oracle::rotate_encryption_key_after_freeze_only_cases();
+}
+
+#[test]
+fn confidential_asset_freeze_then_unfreeze_only() {
+    let _ = oracle::freeze_then_unfreeze_only_cases();
+}
+
+#[test]
+fn confidential_asset_rollover_then_normalize_only() {
+    let _ = oracle::rollover_then_normalize_only_cases();
+}
+
+#[test]
+fn confidential_asset_is_normalized_false_after_rollover_only() {
+    let _ = oracle::is_normalized_false_after_rollover_only_cases();
+}
+
+#[test]
+fn confidential_asset_is_frozen_true_after_freeze_token_only() {
+    let _ = oracle::is_frozen_true_after_freeze_token_only_cases();
+}
+
+#[test]
+fn confidential_asset_has_confidential_asset_store_false_before_register_only() {
+    let _ = oracle::has_confidential_asset_store_false_before_register_only_cases();
+}
+
+#[test]
+fn confidential_asset_encryption_key_view_matches_registered_ek_only() {
+    let _ = oracle::encryption_key_view_matches_registered_ek_only_cases();
+}
+
+#[test]
+fn confidential_asset_encryption_key_view_matches_new_ek_after_deposit_rollover_and_rotate_only() {
+    let _ = oracle::encryption_key_view_matches_new_ek_after_deposit_rollover_and_rotate_only_cases();
+}
+
+#[test]
+fn confidential_asset_verify_actual_balance_matches_after_deposit_rollover_and_rotate_only() {
+    let _ = oracle::verify_actual_balance_matches_after_deposit_rollover_and_rotate_only_cases();
+}
+
+#[test]
+fn confidential_asset_verify_actual_balance_rejects_stale_dk_after_deposit_rollover_and_rotate_only() {
+    let _ = oracle::verify_actual_balance_rejects_stale_dk_after_deposit_rollover_and_rotate_only_cases();
+}
+
+#[test]
+fn confidential_asset_verify_pending_balance_zero_after_deposit_rollover_and_rotate_only() {
+    let _ = oracle::verify_pending_balance_zero_after_deposit_rollover_and_rotate_only_cases();
+}
+
+#[test]
+fn confidential_asset_verify_pending_balance_rejects_nonzero_with_stale_dk_after_deposit_rollover_and_rotate_only(
+) {
+    let _ = oracle::verify_pending_balance_rejects_nonzero_with_stale_dk_after_deposit_rollover_and_rotate_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_verify_pending_balance_rejects_nonzero_with_new_dk_after_deposit_rollover_and_rotate_only() {
+    let _ = oracle::verify_pending_balance_rejects_nonzero_with_new_dk_after_deposit_rollover_and_rotate_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_verify_actual_balance_rejects_wrong_amount_after_deposit_rollover_and_rotate_only() {
+    let _ = oracle::verify_actual_balance_rejects_wrong_amount_after_deposit_rollover_and_rotate_only_cases();
+}
+
+#[test]
+fn confidential_asset_verify_pending_balance_rejects_stale_deposit_amount_after_deposit_rollover_and_rotate_only() {
+    let _ = oracle::verify_pending_balance_rejects_stale_deposit_amount_after_deposit_rollover_and_rotate_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_verify_actual_balance_rejects_zero_after_deposit_rollover_and_rotate_when_actual_nonzero_only(
+) {
+    let _ = oracle::verify_actual_balance_rejects_zero_after_deposit_rollover_and_rotate_when_actual_nonzero_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_verify_pending_balance_rejects_wrong_amount_after_deposit_rollover_and_rotate_only() {
+    let _ = oracle::verify_pending_balance_rejects_wrong_amount_after_deposit_rollover_and_rotate_only_cases();
+}
+
+#[test]
+fn confidential_asset_verify_actual_balance_rejects_amount_plus_one_after_deposit_rollover_and_rotate_only() {
+    let _ = oracle::verify_actual_balance_rejects_amount_plus_one_after_deposit_rollover_and_rotate_only_cases();
+}
+
+#[test]
+fn confidential_asset_verify_actual_balance_matches_after_deposit_rollover_withdraw_and_rotate_only() {
+    let _ = oracle::verify_actual_balance_matches_after_deposit_rollover_withdraw_and_rotate_only_cases();
+}
+
+#[test]
+fn confidential_asset_verify_actual_balance_rejects_stale_dk_after_deposit_rollover_withdraw_and_rotate_only() {
+    let _ = oracle::verify_actual_balance_rejects_stale_dk_after_deposit_rollover_withdraw_and_rotate_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_verify_actual_balance_matches_sum_after_two_deposits_rollover_and_rotate_only() {
+    let _ = oracle::verify_actual_balance_matches_sum_after_two_deposits_rollover_and_rotate_only_cases();
+}
+
+#[test]
+fn confidential_asset_verify_pending_balance_rejects_stale_sum_after_two_deposits_rollover_and_rotate_only() {
+    let _ = oracle::verify_pending_balance_rejects_stale_sum_after_two_deposits_rollover_and_rotate_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_verify_pending_balance_zero_after_deposit_rollover_withdraw_and_rotate_only() {
+    let _ = oracle::verify_pending_balance_zero_after_deposit_rollover_withdraw_and_rotate_only_cases();
+}
+
+#[test]
+fn confidential_asset_verify_actual_balance_rejects_wrong_amount_after_deposit_rollover_withdraw_and_rotate_only(
+) {
+    let _ = oracle::verify_actual_balance_rejects_wrong_amount_after_deposit_rollover_withdraw_and_rotate_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_verify_actual_balance_matches_after_deposit_rollover_normalize_and_rotate_only() {
+    let _ = oracle::verify_actual_balance_matches_after_deposit_rollover_normalize_and_rotate_only_cases();
+}
+
+#[test]
+fn confidential_asset_encryption_key_view_matches_new_ek_after_deposit_rollover_normalize_and_rotate_only() {
+    let _ = oracle::encryption_key_view_matches_new_ek_after_deposit_rollover_normalize_and_rotate_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_verify_pending_balance_zero_after_deposit_rollover_normalize_and_rotate_only() {
+    let _ = oracle::verify_pending_balance_zero_after_deposit_rollover_normalize_and_rotate_only_cases();
+}
+
+#[test]
+fn confidential_asset_verify_actual_balance_rejects_stale_dk_after_deposit_rollover_normalize_and_rotate_only() {
+    let _ = oracle::verify_actual_balance_rejects_stale_dk_after_deposit_rollover_normalize_and_rotate_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_verify_pending_balance_rejects_nonzero_with_new_dk_after_deposit_rollover_normalize_and_rotate_only(
+) {
+    let _ = oracle::verify_pending_balance_rejects_nonzero_with_new_dk_after_deposit_rollover_normalize_and_rotate_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_verify_actual_balance_rejects_wrong_amount_after_deposit_rollover_normalize_and_rotate_only(
+) {
+    let _ = oracle::verify_actual_balance_rejects_wrong_amount_after_deposit_rollover_normalize_and_rotate_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_verify_actual_balance_matches_after_deposit_rollover_and_freeze_and_rotate_only() {
+    let _ = oracle::verify_actual_balance_matches_after_deposit_rollover_and_freeze_and_rotate_only_cases();
+}
+
+#[test]
+fn confidential_asset_encryption_key_view_matches_new_ek_after_deposit_rollover_and_freeze_and_rotate_only() {
+    let _ = oracle::encryption_key_view_matches_new_ek_after_deposit_rollover_and_freeze_and_rotate_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_verify_pending_balance_zero_after_deposit_rollover_and_freeze_and_rotate_only() {
+    let _ = oracle::verify_pending_balance_zero_after_deposit_rollover_and_freeze_and_rotate_only_cases();
+}
+
+#[test]
+fn confidential_asset_verify_actual_balance_rejects_stale_dk_after_deposit_rollover_and_freeze_and_rotate_only() {
+    let _ = oracle::verify_actual_balance_rejects_stale_dk_after_deposit_rollover_and_freeze_and_rotate_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_verify_pending_balance_rejects_nonzero_with_new_dk_after_deposit_rollover_and_freeze_and_rotate_only(
+) {
+    let _ = oracle::verify_pending_balance_rejects_nonzero_with_new_dk_after_deposit_rollover_and_freeze_and_rotate_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_is_frozen_true_after_deposit_rollover_and_freeze_and_rotate_only() {
+    let _ = oracle::is_frozen_true_after_deposit_rollover_and_freeze_and_rotate_only_cases();
+}
+
+#[test]
+fn confidential_asset_verify_actual_balance_rejects_wrong_amount_after_deposit_rollover_and_freeze_and_rotate_only(
+) {
+    let _ = oracle::verify_actual_balance_rejects_wrong_amount_after_deposit_rollover_and_freeze_and_rotate_only_cases(
+    );
+}
+
+#[test]
+fn confidential_asset_has_confidential_asset_store_true_after_register_only() {
+    let _ = oracle::has_confidential_asset_store_true_after_register_only_cases();
+}
+
+#[test]
+fn confidential_asset_is_token_allowed_true_for_metadata_only() {
+    let _ = oracle::is_token_allowed_true_for_metadata_only_cases();
+}
+
+#[test]
+fn confidential_asset_is_allow_list_enabled_false_in_tests_only() {
+    let _ = oracle::is_allow_list_enabled_false_in_tests_only_cases();
+}
+
+#[test]
+fn confidential_asset_get_auditor_returns_none_for_move_metadata_no_fa_config_only() {
+    let _ = oracle::get_auditor_returns_none_for_move_metadata_no_fa_config_only_cases();
+}
+
+#[test]
+fn confidential_asset_is_normalized_true_after_register_only() {
+    let _ = oracle::is_normalized_true_after_register_only_cases();
+}
+
+#[test]
+fn confidential_asset_is_frozen_false_after_unfreeze_only() {
+    let _ = oracle::is_frozen_false_after_unfreeze_only_cases();
+}
+
+#[test]
+fn confidential_asset_is_frozen_false_after_register_only() {
+    let _ = oracle::is_frozen_false_after_register_only_cases();
+}
+
+#[test]
+fn confidential_asset_has_confidential_asset_store_false_for_peer_not_registered() {
+    let _ = oracle::has_confidential_asset_store_false_for_peer_not_registered_cases();
+}
+
+#[test]
+fn confidential_asset_is_frozen_true_after_rollover_and_freeze_only() {
+    let _ = oracle::is_frozen_true_after_rollover_and_freeze_only_cases();
+}
+
+#[test]
+fn confidential_asset_is_normalized_true_after_normalize_only() {
+    let _ = oracle::is_normalized_true_after_normalize_only_cases();
+}
+
+#[test]
+fn confidential_asset_verify_actual_balance_matches_after_deposit_rollover_and_normalize_only() {
+    let _ = oracle::verify_actual_balance_matches_after_deposit_rollover_and_normalize_only_cases();
+}
+
+#[test]
+fn confidential_asset_verify_pending_balance_zero_after_deposit_rollover_and_normalize_only() {
+    let _ = oracle::verify_pending_balance_zero_after_deposit_rollover_and_normalize_only_cases();
+}
+
+#[test]
+fn confidential_asset_verify_actual_balance_rejects_wrong_amount_after_deposit_rollover_and_normalize_only() {
+    let _ = oracle::verify_actual_balance_rejects_wrong_amount_after_deposit_rollover_and_normalize_only_cases();
+}
+
+#[test]
+fn confidential_asset_verify_actual_balance_rejects_amount_plus_one_after_deposit_rollover_and_normalize_only(
+) {
+    let _ = oracle::verify_actual_balance_rejects_amount_plus_one_after_deposit_rollover_and_normalize_only_cases();
+}
+
+#[test]
+fn confidential_asset_verify_actual_balance_rejects_zero_after_deposit_rollover_and_normalize_when_actual_nonzero(
+) {
+    let _ = oracle::verify_actual_balance_rejects_zero_after_deposit_rollover_and_normalize_when_actual_nonzero_cases();
+}
+
+#[test]
+fn confidential_asset_verify_pending_balance_rejects_nonzero_after_deposit_rollover_and_normalize_only() {
+    let _ = oracle::verify_pending_balance_rejects_nonzero_after_deposit_rollover_and_normalize_only_cases();
+}
+
+#[test]
+fn confidential_asset_verify_pending_balance_rejects_stale_deposit_amount_after_deposit_rollover_and_normalize_only(
+) {
+    let _ = oracle::verify_pending_balance_rejects_stale_deposit_amount_after_deposit_rollover_and_normalize_only_cases();
+}
+
+#[test]
+fn confidential_asset_balance_matches_single_deposit_only() {
+    let _ = oracle::confidential_asset_balance_matches_single_deposit_only_cases();
+}
+
+#[test]
+fn confidential_asset_balance_after_two_deposits_only() {
+    let _ = oracle::confidential_asset_balance_after_two_deposits_only_cases();
+}
+
+#[test]
+fn confidential_asset_balance_after_deposit_and_withdraw_only() {
+    let _ = oracle::confidential_asset_balance_after_deposit_and_withdraw_only_cases();
+}
+
+#[test]
+fn confidential_asset_balance_after_deposit_to_only() {
+    let _ = oracle::confidential_asset_balance_after_deposit_to_only_cases();
+}
+
+#[test]
+fn confidential_asset_balance_after_confidential_transfer_only() {
+    let _ = oracle::confidential_asset_balance_after_confidential_transfer_only_cases();
+}
+
+#[test]
+fn confidential_asset_balance_after_transfer_and_second_deposit_only() {
+    let _ = oracle::confidential_asset_balance_after_transfer_and_second_deposit_only_cases();
+}
+
+#[test]
+fn confidential_asset_balance_after_two_deposit_to_only() {
+    let _ = oracle::confidential_asset_balance_after_two_deposit_to_only_cases();
+}
+
+#[test]
+fn confidential_asset_deposit_to_cross_party_only() {
+    let _ = oracle::deposit_to_cross_party_only_cases();
+}
+
+#[test]
+fn confidential_asset_withdraw_entry_self_only() {
+    let _ = oracle::withdraw_entry_self_only_cases();
 }
 
 #[test]
 fn confidential_asset_transfer_withdraw_rotate_and_auditor() {
-    let mut h = fresh_harness();
-    let chain = h.executor.get_chain_id().id();
+    let _ = oracle::transfer_withdraw_rotate_and_auditor_cases();
+}
 
-    let alice_addr = AccountAddress::from_hex_literal("0xa1a1").unwrap();
-    let bob_addr = AccountAddress::from_hex_literal("0xb0b0").unwrap();
-    let alice = h.new_account_with_balance_at(alice_addr, 80_000_000_000_000);
-    let bob = h.new_account_with_balance_at(bob_addr, 80_000_000_000_000);
-
-    let (alice_dk, alice_ek) = generate_elgamal_keypair(&mut h);
-    let (bob_dk, bob_ek) = generate_elgamal_keypair(&mut h);
-
-    for (acct, addr, dk, ek_struct) in [
-        (&alice, alice_addr, &alice_dk, &alice_ek),
-        (&bob, bob_addr, &bob_dk, &bob_ek),
-    ] {
-        let ek_pk = twisted_pubkey_bytes(&mut h, ek_struct);
-        let (c, r) = prove_registration_parts(&mut h, chain, addr, dk, ek_struct, MOVE_METADATA);
-        assert_kept_success(&run_register(&mut h, acct, &ek_pk, &c, &r), "register");
-    }
-    assert_event_count(&h, "Registered", 2, "after alice+bob register");
-
-    assert_kept_success(&run_deposit(&mut h, &alice, 10_000), "deposit");
-    assert_event_count(&h, "Deposited", 1, "after alice deposit");
-    assert_kept_success(&run_rollover(&mut h, &alice), "rollover pre-transfer");
-    assert_event_count(&h, "RolledOver", 1, "after alice rollover");
-
-    let xfer_amt = 400u64;
-    let mut remaining: u128 = 10_000 - xfer_amt as u128;
-    let xfer_hint = vec![1u8, 2, 3];
-    let parts = pack_transfer_simple(
-        &mut h,
-        chain,
-        alice_addr,
-        bob_addr,
-        &alice_dk,
-        xfer_amt,
-        remaining,
-        xfer_hint.clone(),
-    );
-    assert_kept_success(
-        &run_confidential_transfer(&mut h, &alice, bob_addr, &parts, xfer_hint),
-        "confidential_transfer",
-    );
-    assert_event_count(&h, "Transferred", 1, "after first transfer");
-
-    remaining -= xfer_amt as u128;
-    let parts2 = pack_transfer_simple(
-        &mut h,
-        chain,
-        alice_addr,
-        bob_addr,
-        &alice_dk,
-        xfer_amt,
-        remaining,
-        vec![],
-    );
-    assert_kept_success(
-        &run_confidential_transfer(&mut h, &alice, bob_addr, &parts2, vec![]),
-        "confidential_transfer (second)",
-    );
-
-    let (_aud_dk, aud_ek_struct) = generate_elgamal_keypair(&mut h);
-    let aud_pk = twisted_pubkey_bytes(&mut h, &aud_ek_struct);
-    set_asset_auditor(&mut h, &aud_pk);
-    assert_event_count(&h, "AuditorChanged", 1, "after set_auditor");
-    remaining -= xfer_amt as u128;
-    let warm = pack_transfer_audited(
-        &mut h,
-        chain,
-        alice_addr,
-        bob_addr,
-        &alice_dk,
-        xfer_amt,
-        remaining,
-        vec![aud_pk.clone()],
-        vec![],
-    );
-    assert_kept_success(
-        &run_confidential_transfer(&mut h, &alice, bob_addr, &warm, vec![]),
-        "audited transfer",
-    );
-
-    assert_kept_success(&run_rollover(&mut h, &bob), "bob rollover");
-    assert_event_count(&h, "RolledOver", 2, "after bob rollover");
-    let w_amt = 50u64;
-    let bob_after_withdraw: u128 = xfer_amt as u128 * 3 - w_amt as u128;
-    let (nb, zkrp, sigma) = pack_withdraw(
-        &mut h,
-        chain,
-        bob_addr,
-        &bob_dk,
-        &bob_ek,
-        w_amt,
-        bob_after_withdraw,
-    );
-    assert_kept_success(
-        &run_withdraw_to(&mut h, &bob, bob_addr, w_amt, &nb, &zkrp, &sigma),
-        "withdraw_to self",
-    );
-    assert_event_count(&h, "Withdrawn", 1, "after bob withdraw");
-
-    assert_kept_success(&run_rollover_and_freeze(&mut h, &alice), "freeze alice");
-    assert_event_count(&h, "RolledOver", 3, "after alice rollover_and_freeze");
-    assert_event_count(&h, "FreezeChanged", 1, "after alice freeze");
-    let (new_dk, new_ek_struct) = generate_elgamal_keypair(&mut h);
-    let alice_remaining = remaining;
-    let (nek_bytes, nbal, zkr, sig) = pack_rotate(
-        &mut h,
-        chain,
-        alice_addr,
-        &alice_dk,
-        &new_dk,
-        &new_ek_struct,
-        alice_remaining,
-    );
-    assert_kept_success(
-        &run_rotate(&mut h, &alice, &nek_bytes, &nbal, &zkr, &sig),
-        "rotate_encryption_key",
-    );
-    assert_event_count(&h, "KeyRotated", 1, "after rotate");
+#[test]
+fn confidential_asset_pending_balance_view_return_len_265_after_register_only() {
+    let _ = oracle::pending_balance_view_return_len_265_after_register_only_cases();
 }
 
 #[test]
 fn confidential_asset_pending_balance_view_matches_deposit() {
-    let mut h = fresh_harness();
-    let chain = h.executor.get_chain_id().id();
-    let u = AccountAddress::from_hex_literal("0xce11").unwrap();
-    let account = h.new_account_with_balance_at(u, 40_000_000_000_000);
-    let (dk, ek_struct) = generate_elgamal_keypair(&mut h);
-    let ek_pk = twisted_pubkey_bytes(&mut h, &ek_struct);
-    let (c, r) = prove_registration_parts(&mut h, chain, u, &dk, &ek_struct, MOVE_METADATA);
-    assert_kept_success(&run_register(&mut h, &account, &ek_pk, &c, &r), "register");
+    let _ = oracle::pending_balance_view_matches_deposit_cases();
+}
 
-    let deposit_amt: u64 = 777;
-    assert_kept_success(&run_deposit(&mut h, &account, deposit_amt), "deposit");
+#[test]
+fn confidential_asset_verify_pending_balance_zero_after_register_only() {
+    let _ = oracle::verify_pending_balance_zero_after_register_only_cases();
+}
 
-    let args = vec![
-        bcs::to_bytes(&u).unwrap(),
-        bcs::to_bytes(&MOVE_METADATA).unwrap(),
-        dk.clone(),
-        bcs::to_bytes(&deposit_amt).unwrap(),
-    ];
-    let ret = bypass_at(
-        &mut h,
-        "confidential_asset",
-        "verify_pending_balance",
-        vec![],
-        args,
-    );
-    assert_eq!(ret.return_values.len(), 1);
-    let ok: bool = bcs::from_bytes(&ret.return_values[0].0).expect("bool return");
-    assert!(ok, "pending balance should decrypt to deposited amount");
+#[test]
+fn confidential_asset_verify_pending_balance_rejects_nonzero_after_register_only() {
+    let _ = oracle::verify_pending_balance_rejects_nonzero_after_register_only_cases();
+}
+
+#[test]
+fn confidential_asset_verify_actual_balance_zero_after_register_only() {
+    let _ = oracle::verify_actual_balance_zero_after_register_only_cases();
+}
+
+#[test]
+fn confidential_asset_verify_actual_balance_rejects_nonzero_after_register_only() {
+    let _ = oracle::verify_actual_balance_rejects_nonzero_after_register_only_cases();
+}
+
+#[test]
+fn confidential_asset_verify_actual_balance_matches_after_deposit_and_rollover_only() {
+    let _ = oracle::verify_actual_balance_matches_after_deposit_and_rollover_only_cases();
+}
+
+#[test]
+fn confidential_asset_verify_actual_balance_matches_sum_after_two_deposits_and_rollover_only() {
+    let _ = oracle::verify_actual_balance_matches_sum_after_two_deposits_and_rollover_only_cases();
+}
+
+#[test]
+fn confidential_asset_verify_actual_balance_matches_after_deposit_rollover_and_withdraw_only() {
+    let _ = oracle::verify_actual_balance_matches_after_deposit_rollover_and_withdraw_only_cases();
+}
+
+#[test]
+fn confidential_asset_verify_actual_balance_rejects_wrong_amount_after_deposit_rollover_and_withdraw_only() {
+    let _ = oracle::verify_actual_balance_rejects_wrong_amount_after_deposit_rollover_and_withdraw_only_cases();
+}
+
+#[test]
+fn confidential_asset_verify_pending_balance_zero_after_deposit_rollover_and_withdraw_only() {
+    let _ = oracle::verify_pending_balance_zero_after_deposit_rollover_and_withdraw_only_cases();
+}
+
+#[test]
+fn confidential_asset_verify_actual_balance_rejects_wrong_sum_after_two_deposits_and_rollover_only() {
+    let _ = oracle::verify_actual_balance_rejects_wrong_sum_after_two_deposits_and_rollover_only_cases();
+}
+
+#[test]
+fn confidential_asset_verify_pending_balance_zero_after_deposit_and_rollover_only() {
+    let _ = oracle::verify_pending_balance_zero_after_deposit_and_rollover_only_cases();
+}
+
+#[test]
+fn confidential_asset_verify_pending_balance_matches_after_deposit_only_no_rollover() {
+    let _ = oracle::verify_pending_balance_matches_after_deposit_only_no_rollover_cases();
+}
+
+#[test]
+fn confidential_asset_verify_pending_balance_matches_sum_after_two_deposits_no_rollover() {
+    let _ = oracle::verify_pending_balance_matches_sum_after_two_deposits_no_rollover_cases();
+}
+
+#[test]
+fn confidential_asset_verify_pending_balance_rejects_wrong_sum_after_two_deposits_no_rollover() {
+    let _ = oracle::verify_pending_balance_rejects_wrong_sum_after_two_deposits_no_rollover_cases();
+}
+
+#[test]
+fn confidential_asset_verify_pending_balance_rejects_zero_after_two_deposits_no_rollover() {
+    let _ = oracle::verify_pending_balance_rejects_zero_after_two_deposits_no_rollover_cases();
+}
+
+#[test]
+fn confidential_asset_verify_pending_balance_rejects_zero_after_deposit_only_no_rollover() {
+    let _ = oracle::verify_pending_balance_rejects_zero_after_deposit_only_no_rollover_cases();
+}
+
+#[test]
+fn confidential_asset_verify_pending_balance_rejects_wrong_amount_after_deposit_only_no_rollover() {
+    let _ = oracle::verify_pending_balance_rejects_wrong_amount_after_deposit_only_no_rollover_cases();
+}
+
+#[test]
+fn confidential_asset_verify_actual_balance_zero_after_deposit_only_no_rollover() {
+    let _ = oracle::verify_actual_balance_zero_after_deposit_only_no_rollover_cases();
+}
+
+#[test]
+fn confidential_asset_verify_actual_balance_rejects_nonzero_after_deposit_only_no_rollover() {
+    let _ = oracle::verify_actual_balance_rejects_nonzero_after_deposit_only_no_rollover_cases();
+}
+
+#[test]
+fn confidential_asset_verify_actual_balance_rejects_nonzero_sum_after_two_deposits_no_rollover() {
+    let _ = oracle::verify_actual_balance_rejects_nonzero_sum_after_two_deposits_no_rollover_cases();
+}
+
+#[test]
+fn confidential_asset_verify_actual_balance_rejects_wrong_sum_after_two_deposits_no_rollover() {
+    let _ = oracle::verify_actual_balance_rejects_wrong_sum_after_two_deposits_no_rollover_cases();
+}
+
+#[test]
+fn confidential_asset_verify_actual_balance_rejects_sum_plus_one_after_two_deposits_no_rollover() {
+    let _ = oracle::verify_actual_balance_rejects_sum_plus_one_after_two_deposits_no_rollover_cases();
+}
+
+#[test]
+fn confidential_asset_verify_actual_balance_rejects_wrong_amount_after_deposit_and_rollover_only() {
+    let _ = oracle::verify_actual_balance_rejects_wrong_amount_after_deposit_and_rollover_only_cases();
+}
+
+#[test]
+fn confidential_asset_verify_actual_balance_rejects_zero_after_deposit_and_rollover_when_actual_nonzero(
+) {
+    let _ = oracle::verify_actual_balance_rejects_zero_after_deposit_and_rollover_when_actual_nonzero_cases();
+}
+
+#[test]
+fn confidential_asset_verify_pending_balance_rejects_nonzero_after_deposit_and_rollover_only() {
+    let _ = oracle::verify_pending_balance_rejects_nonzero_after_deposit_and_rollover_only_cases();
+}
+
+#[test]
+fn confidential_asset_verify_pending_balance_rejects_stale_deposit_amount_after_deposit_and_rollover_only(
+) {
+    let _ = oracle::verify_pending_balance_rejects_stale_deposit_amount_after_deposit_and_rollover_only_cases();
+}
+
+#[test]
+fn confidential_asset_verify_pending_balance_rejects_stale_sum_after_two_deposits_and_rollover_only() {
+    let _ = oracle::verify_pending_balance_rejects_stale_sum_after_two_deposits_and_rollover_only_cases();
+}
+
+#[test]
+fn confidential_asset_verify_pending_balance_rejects_wrong_amount_after_two_deposits_and_rollover_only() {
+    let _ = oracle::verify_pending_balance_rejects_wrong_amount_after_two_deposits_and_rollover_only_cases();
 }
 
 #[test]
 fn confidential_asset_compare_plain_fa_transfer_gas() {
-    let mut h = fresh_harness();
-    let a = AccountAddress::from_hex_literal("0xf1fa").unwrap();
-    let b = AccountAddress::from_hex_literal("0xf2fa").unwrap();
-    let alice = h.new_account_with_balance_at(a, 20_000_000_000_000);
-    let _bob = h.new_account_with_balance_at(b, 1_000_000_000);
-    let g = baseline_fa_transfer_gas(&mut h, &alice, b, 100);
-    assert!(g > 0, "plain FA transfer should charge gas (got {g})");
+    let _ = oracle::compare_plain_fa_transfer_gas_cases();
 }
 
 // --- Comprehensive scenarios (auditors, withdrawals, validation errors) ---
@@ -1020,63 +1737,12 @@ fn confidential_transfer_asset_auditor_plus_voluntary_auditors() {
 
 #[test]
 fn confidential_withdraw_without_asset_auditor() {
-    let mut h = fresh_harness();
-    let chain = h.executor.get_chain_id().id();
-    let u = confidential_e2e_addr(0xE5, 1);
-    let account = h.new_account_with_balance_at(u, 40_000_000_000_000);
-    let (dk, ek) = generate_elgamal_keypair(&mut h);
-    let pk = twisted_pubkey_bytes(&mut h, &ek);
-    let (c, r) = prove_registration_parts(&mut h, chain, u, &dk, &ek, MOVE_METADATA);
-    assert_kept_success(&run_register(&mut h, &account, &pk, &c, &r), "register");
-
-    let deposit_amt: u64 = 4_000;
-    assert_kept_success(&run_deposit(&mut h, &account, deposit_amt), "deposit");
-    assert_kept_success(&run_rollover(&mut h, &account), "rollover");
-
-    let w1 = 111u64;
-    let after1: u128 = deposit_amt as u128 - w1 as u128;
-    let (nb1, z1, s1) = pack_withdraw(&mut h, chain, u, &dk, &ek, w1, after1);
-    assert_kept_success(
-        &run_withdraw_to(&mut h, &account, u, w1, &nb1, &z1, &s1),
-        "withdraw 1",
-    );
-
-    let w2 = 222u64;
-    let after2 = after1 - w2 as u128;
-    let (nb2, z2, s2) = pack_withdraw(&mut h, chain, u, &dk, &ek, w2, after2);
-    assert_kept_success(
-        &run_withdraw_to(&mut h, &account, u, w2, &nb2, &z2, &s2),
-        "withdraw 2",
-    );
+    let _ = oracle::confidential_withdraw_without_asset_auditor_cases();
 }
 
 #[test]
 fn confidential_withdraw_after_asset_auditor_enabled() {
-    let mut h = fresh_harness();
-    let chain = h.executor.get_chain_id().id();
-    let u = confidential_e2e_addr(0xE6, 1);
-    let account = h.new_account_with_balance_at(u, 40_000_000_000_000);
-
-    let (_aud_dk, aud_ek) = generate_elgamal_keypair(&mut h);
-    let aud_pk = twisted_pubkey_bytes(&mut h, &aud_ek);
-    set_asset_auditor(&mut h, &aud_pk);
-
-    let (dk, ek) = generate_elgamal_keypair(&mut h);
-    let pk = twisted_pubkey_bytes(&mut h, &ek);
-    let (c, r) = prove_registration_parts(&mut h, chain, u, &dk, &ek, MOVE_METADATA);
-    assert_kept_success(&run_register(&mut h, &account, &pk, &c, &r), "register");
-
-    let deposit_amt: u64 = 3_000;
-    assert_kept_success(&run_deposit(&mut h, &account, deposit_amt), "deposit");
-    assert_kept_success(&run_rollover(&mut h, &account), "rollover");
-
-    let w = 400u64;
-    let after: u128 = deposit_amt as u128 - w as u128;
-    let (nb, z, s) = pack_withdraw(&mut h, chain, u, &dk, &ek, w, after);
-    assert_kept_success(
-        &run_withdraw_to(&mut h, &account, u, w, &nb, &z, &s),
-        "withdraw with asset auditor configured (withdraw path ignores auditor list)",
-    );
+    let _ = oracle::confidential_withdraw_after_asset_auditor_enabled_cases();
 }
 
 #[test]

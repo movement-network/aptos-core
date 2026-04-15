@@ -7,7 +7,8 @@ Machine-checked proofs of:
 - **Special soundness** (§6.4a): two accepting transcripts with distinct challenges
   yield the witness `dk` with an explicit extraction formula.
 - **HVZK simulator** (§6.4b): a simulator producing accepting transcripts without
-  the witness, establishing honest-verifier zero-knowledge.
+  the witness, establishing honest-verifier zero-knowledge (`registrationSchnorr_simulate_*`,
+  `registrationSchnorr_simulate_lhs_and_schnorr_eq_bundle`).
 - **Fiat–Shamir symbolic model** (§6.4c): see `FiatShamirSymbolic.lean` for the
   machine-checked algebraic core (forking reduction, challenge binding, NIZK
   completeness, NIZK simulation).  The probabilistic ROM argument is not formalized.
@@ -18,12 +19,12 @@ sound and zero-knowledge proof of knowledge for `H = dk · ek`.
 -/
 
 import AptosFormal.Experimental.ConfidentialAsset.Registration.Formal
-import AptosFormal.Std.Crypto.Ristretto255
+import AptosFormal.AptosStd.Crypto.Ristretto255
 import Mathlib.Algebra.Module.Basic
 import Mathlib.Tactic.FieldSimp
 
 open AptosFormal.Experimental.ConfidentialAsset.Registration.Formal
-open AptosFormal.Std.Crypto.Ristretto255
+open AptosFormal.AptosStd.Crypto.Ristretto255
 
 namespace AptosFormal.Experimental.ConfidentialAsset.Registration.CryptoSecurity
 
@@ -113,6 +114,23 @@ theorem registrationSchnorr_simulate_accepts (H ek : Point) (e s : RistrettoScal
     registrationSchnorrEq (fun s' p => s' • p) (· + ·) H ek
       (registrationSchnorr_simulate H ek e s) s e := rfl
 
+/-- LHS of the Schnorr equation equals the simulator commitment (definitional). -/
+theorem registrationSchnorr_simulate_lhs_eq (H ek : Point) (e s : RistrettoScalar) :
+    s • H + e • ek = registrationSchnorr_simulate H ek e s :=
+  rfl
+
+/-- Package **`simulate_accepts`** as the Schnorr equation on the simulated commitment **as a point**. -/
+theorem registrationSchnorr_simulate_satisfies_schnorr_eq (H ek : Point) (e s : RistrettoScalar) :
+    registrationSchnorrEq (fun s' p => s' • p) (· + ·) H ek (registrationSchnorr_simulate H ek e s) s e :=
+  registrationSchnorr_simulate_accepts H ek e s
+
+/-- Single-step bundle: simulator commitment equals **`s•H+e•ek`** and satisfies **`registrationSchnorrEq`**. -/
+theorem registrationSchnorr_simulate_lhs_and_schnorr_eq_bundle (H ek : Point) (e s : RistrettoScalar) :
+    (s • H + e • ek = registrationSchnorr_simulate H ek e s) ∧
+    registrationSchnorrEq (fun s' p => s' • p) (· + ·) H ek (registrationSchnorr_simulate H ek e s) s e :=
+  And.intro (registrationSchnorr_simulate_lhs_eq H ek e s)
+    (registrationSchnorr_simulate_satisfies_schnorr_eq H ek e s)
+
 end HVZK
 
 /-!
@@ -127,6 +145,8 @@ argument is machine-checked in `FiatShamirSymbolic.lean`:
 - `fiatShamir_challenge_binding` — a single hash function cannot produce two
   challenges for the same commitment, so oracle reprogramming is necessary.
 - `fiatShamir_completeness` — the honest NIZK prover always passes.
+- `fiatShamirVerify_iff_registrationSchnorrEq_module` — **`fiatShamirVerify`** ↔ **`registrationSchnorrEq`** with **`•` / `+`**.
+- `registrationSchnorrEq_of_fiatShamirProve_output` — honest **`fiatShamirProve`** transcript satisfies **`registrationSchnorrEq`**.
 - `fiatShamir_nizk_simulate_accepts` — a simulator with oracle-programming
   ability produces valid proofs without the witness (NIZK zero-knowledge).
 

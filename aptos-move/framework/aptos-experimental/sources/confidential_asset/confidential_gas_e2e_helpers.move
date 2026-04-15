@@ -214,4 +214,30 @@ module aptos_experimental::confidential_gas_e2e_helpers {
             sigma_proof,
         )
     }
+
+    /// `(new_balance_bytes, zkrp_new_balance, sigma_proof)` for `normalize` after `rollover_pending_balance`
+    /// left the store denormalized (`amount` is the cleartext total to normalize to).
+    public fun pack_normalization_proof(
+        chain_id: u8,
+        sender: address,
+        dk: &Scalar,
+        amount: u128,
+        token: Object<Metadata>,
+    ): (vector<u8>, vector<u8>, vector<u8>) {
+        let ek = confidential_asset::encryption_key(sender, token);
+        let compressed = confidential_asset::actual_balance(sender, token);
+        let current = confidential_balance::decompress_balance(&compressed);
+        let (proof, new_balance) = confidential_proof::prove_normalization(
+            chain_id,
+            sender,
+            @aptos_experimental,
+            dk,
+            &ek,
+            amount,
+            &current,
+        );
+        let new_balance_bytes = confidential_balance::balance_to_bytes(&new_balance);
+        let (sigma_proof, zkrp_new_balance) = confidential_proof::serialize_normalization_proof(&proof);
+        (new_balance_bytes, zkrp_new_balance, sigma_proof)
+    }
 }

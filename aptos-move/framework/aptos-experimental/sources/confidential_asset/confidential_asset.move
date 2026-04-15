@@ -425,7 +425,7 @@ module aptos_experimental::confidential_asset {
     /// The sender encrypts the transferred amount with the recipient's encryption key and the function updates the
     /// recipient's confidential balance homomorphically.
     /// Additionally, the sender encrypts the transferred amount with the auditors' EKs, allowing auditors to decrypt
-    /// the it on their side.
+    /// it on their side.
     /// The sender provides their new normalized confidential balance, encrypted with fresh randomness to preserve privacy.
     /// Warning: If the auditor feature is enabled, the sender must include the auditor as the first element in the
     /// `auditor_eks` vector.
@@ -1302,7 +1302,7 @@ module aptos_experimental::confidential_asset {
     }
 
     /// Converts coins to missing FA.
-    /// Returns `Some(Object<Metadata>)` if user has a suffucient amount of FA to proceed, otherwise `None`.
+    /// Returns `Some(Object<Metadata>)` if user has a sufficient amount of FA to proceed, otherwise `None`.
     fun ensure_sufficient_fa<CoinType>(sender: &signer, amount: u64): Option<Object<Metadata>> {
         let user = signer::address_of(sender);
         let fa = coin::paired_metadata<CoinType>();
@@ -1375,7 +1375,8 @@ module aptos_experimental::confidential_asset {
         confidential_balance::verify_actual_balance(&actual_balance, user_dk, amount)
     }
 
-    #[test_only]
+    /// Pure serialization helpers (no `borrow_global`). Public so `move-lean-difftest` and other
+    /// tooling can exercise the same entrypoints as tests without `#[test_only]` harness modules.
     public fun serialize_auditor_eks(auditor_eks: &vector<twisted_elgamal::CompressedPubkey>): vector<u8> {
         let auditor_eks_bytes = vector[];
 
@@ -1386,7 +1387,6 @@ module aptos_experimental::confidential_asset {
         auditor_eks_bytes
     }
 
-    #[test_only]
     public fun serialize_auditor_amounts(
         auditor_amounts: &vector<confidential_balance::ConfidentialBalance>
     ): vector<u8> {

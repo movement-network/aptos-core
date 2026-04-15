@@ -6,12 +6,25 @@ beyond a single package.
 | Prefix | Role |
 | ------ | ---- |
 | `AptosFormal.Std.Hash.*` | SHA3-512 tagged hash vs `aptos_std::aptos_hash` |
-| `AptosFormal.Std.Crypto.*` | Ristretto scalar / wire types vs `aptos_std::ristretto255` |
+| `AptosFormal.AptosStd.Crypto.*` | Ristretto scalar / wire types vs `aptos_std::ristretto255` |
 | `AptosFormal.Std.Bcs.*` | BCS primitives |
 | `AptosFormal.Std.MoveStdlibGoldens` | Byte-level golden tests for hash/BCS/vector |
-| `AptosFormal.Experimental.ConfidentialAsset.Registration.*` | `verify_registration_proof` spec + proofs |
+| `AptosFormal.Move.*` | Move bytecode interpreter (`Step`, `Programs`, natives → specs); roadmap: [`AptosFormal/Move/README.md`](AptosFormal/Move/README.md) |
+| `AptosFormal.Refinement.*` | Proofs that selected bytecode matches `Std.*` specs (e.g. `vector::contains`) |
+| `AptosFormal.DiffTest.*` | Lean side of VM ↔ Lean differential tests (JSON oracles); see [`../difftest/README.md`](../difftest/README.md) |
+| `AptosFormal.Tests.*` | Concrete smoke tests (`native_decide`) on the evaluator |
+| `AptosFormal.Experimental.ConfidentialAsset.Registration.*` | `verify_registration_proof`: crypto proofs (L0), operational spec (L1), functional simulation (L1.5), bytecode refinement (L2), `native_decide` difftest proofs. See [`../REGISTRATION_VERIFY_REVIEW.md`](../REGISTRATION_VERIFY_REVIEW.md). |
 
-Auditor-oriented narrative: [`../REGISTRATION_VERIFY_REVIEW.md`](../REGISTRATION_VERIFY_REVIEW.md).
+### Confidential assets: difftest (L1) vs formal verification (L0–L2+)
+
+- **Difftest (alignment, not a proof):** real Move VM JSON oracles vs Lean `eval` on the same cases. CA adds a **transactional** fragment from `e2e-move-tests` merged in CI; many rows use **witness** bytecode in Lean (`RunnerFuncMappingAux` / `Programs.Confidential`), not a full FA + storage replay. **Roadmap / Option B (globals):** [`../CONFIDENTIAL_ASSETS_DIFFERENTIAL_TESTING_PLAN.md`](../CONFIDENTIAL_ASSETS_DIFFERENTIAL_TESTING_PLAN.md). **Inventory log:** [`../difftest/inventory/confidential_assets.md`](../difftest/inventory/confidential_assets.md). **Local CI-shaped run:** `DIFTEST_MERGE_CA_E2E=1 ./aptos-move/framework/formal/difftest.sh` (from repo root; see [`../difftest/README.md`](../difftest/README.md) § “CI parity”).
+- **Formal verification:** registration **crypto / transcript** story in `AptosFormal.Experimental.ConfidentialAsset.Registration.*` (L0-heavy); bytecode **refinement** and constant views in `AptosFormal.Refinement.Confidential` + `Move.State` / `Move.Step` scaffolding toward L2–L4. **Program bar (A)/(B)/(C) and levels L0–L5:** [`../CONFIDENTIAL_ASSETS_FORMAL_VERIFICATION_PLAN.md`](../CONFIDENTIAL_ASSETS_FORMAL_VERIFICATION_PLAN.md).
+
+**Auditor-oriented narrative** (Confidential Asset registration / **`verify_registration_proof` only**):
+[`../REGISTRATION_VERIFY_REVIEW.md`](../REGISTRATION_VERIFY_REVIEW.md).
+
+**CA Move audit notes** (API semantics / `#[test_only]` prover preconditions — formal-track review):
+[`../CONFIDENTIAL_ASSETS_MOVE_AUDIT_NOTES.md`](../CONFIDENTIAL_ASSETS_MOVE_AUDIT_NOTES.md).
 
 ## Prerequisites
 
@@ -102,24 +115,29 @@ If you see `sorryAx` in the output, something is wrong — a proof has been bypa
 ## Companion Move golden tests
 
 These Move test files provide empirical evidence for assumptions that Lean cannot check
-(native crypto operations, BCS encoding). Run them from the repo root:
+(native crypto operations, BCS encoding). Run them from the repo root using the **Movement**
+CLI (`movement move test`, …), not the Aptos CLI.
 
 | Test file | What it checks | Run command |
 | --------- | -------------- | ----------- |
-| `move-stdlib/tests/formal_goldens_bcs.move` | BCS encoding of primitives | `aptos move test --package-dir aptos-move/framework/move-stdlib` |
+| `move-stdlib/tests/formal_goldens_bcs.move` | BCS encoding of primitives | `movement move test --package-dir aptos-move/framework/move-stdlib` |
 | `move-stdlib/tests/formal_goldens_hash.move` | SHA3-256/512 + keccak golden bytes | same as above |
 | `move-stdlib/tests/formal_goldens_vector.move` | Vector operations | same as above |
 | `move-stdlib/tests/formal_goldens_bcs_address.move` | BCS address → 32 raw bytes (§6.3) | same as above |
-| `aptos-experimental/tests/confidential_asset/formal_goldens_registration.move` | Fiat-Shamir transcript bytes | `aptos move test --package-dir aptos-move/framework/aptos-experimental` |
+| `aptos-experimental/tests/confidential_asset/formal_goldens_registration.move` | Fiat-Shamir transcript bytes | `movement move test --package-dir aptos-move/framework/aptos-experimental` |
 | `aptos-experimental/tests/confidential_asset/formal_goldens_ristretto.move` | Ristretto group-law properties (§6.2) | same as above |
 | `aptos-experimental/tests/confidential_asset/formal_goldens_verification_equation.move` | Full verification equation: honest proof passes, corrupted/wrong-dk rejected (§6.1) | same as above |
 
 Run all formal golden tests at once:
 
 ```bash
-aptos move test --package-dir aptos-move/framework/move-stdlib --filter formal_goldens
-aptos move test --package-dir aptos-move/framework/aptos-experimental --filter formal_goldens
+movement move test --package-dir aptos-move/framework/move-stdlib --filter formal_goldens
+movement move test --package-dir aptos-move/framework/aptos-experimental --filter formal_goldens
 ```
+
+## Differential tests (Lean evaluator vs real Move VM)
+
+**One command** (from repo root): `./aptos-move/framework/formal/difftest.sh` — runs the Rust oracle (all suites), then Lean, using **`difftest/difftest_oracle.json`**. Per-suite runs and CLI flags: **[`../difftest/README.md`](../difftest/README.md)**.
 
 ## Checking Move / Lean golden consistency
 

@@ -1390,47 +1390,68 @@ private theorem indexOf_iterN13 (xs : List UInt64) (e : UInt64) (k : Nat) (hk : 
   have : k.toUInt64 + 1 = k.succ.toUInt64 := contains_uint64_succ k
   simp [step, indexOfLoopFrame, vectorIndexOf_code_size, this]
 
+-- pc 21: stLoc 3 (i += 1, store into local 3)
 private theorem indexOf_iterN14 (xs : List UInt64) (e : UInt64) (k : Nat) (hk : k < xs.length) :
     step stdModuleEnv ({ indexOfLoopFrame xs e k with pc := 21 }) [] [.u64 (k + 1).toUInt64]
-        (indexOfAllocStore xs k hk) =
+        (MachineState.ofContainers (indexOfAllocStore xs k hk)) =
+      ExecResult.ok
+        { code := vectorIndexOfCode, pc := 22,
+          locals := #[some (.vector .u64 (xs.map .u64)), some (.u64 e),
+                      some (.immRef 0), some (.u64 (k + 1).toUInt64), some (.u64 xs.length.toUInt64)],
+          localRefs := noLocalRefs5 }
+        [] []
+        (MachineState.ofContainers (indexOfAllocStore xs k hk)) := rfl
+
+-- pc 22: branch 7 (unconditional jump back to loop head)
+private theorem indexOf_iterN15 (xs : List UInt64) (e : UInt64) (k : Nat) (hk : k < xs.length) :
+    step stdModuleEnv
+        { code := vectorIndexOfCode, pc := 22,
+          locals := #[some (.vector .u64 (xs.map .u64)), some (.u64 e),
+                      some (.immRef 0), some (.u64 (k + 1).toUInt64), some (.u64 xs.length.toUInt64)],
+          localRefs := noLocalRefs5 }
+        [] []
+        (MachineState.ofContainers (indexOfAllocStore xs k hk)) =
       ExecResult.ok (indexOfLoopFrame xs e (k + 1)) [] [] (indexOfVmStore xs (k + 1)) := by
-  simp only [indexOfLoopFrame, indexOf_alloc_store_eq]
+  simp only [step, indexOfLoopFrame, vectorIndexOf_code_size, indexOf_alloc_store_eq,
+             show (22 : Nat) < 29 from by decide]
   rfl
 
 private theorem indexOf_run_iter (xs : List UInt64) (e : UInt64) (k : Nat) (hk : k < xs.length)
     (hlen : xs.length < UInt64.size) (hneq : (xs.get ⟨k, hk⟩ == e) = false) (t : Nat) :
-    run stdModuleEnv (indexOfLoopFrame xs e k) [] [] (indexOfVmStore xs k) (16 + t) =
+    run stdModuleEnv (indexOfLoopFrame xs e k) [] [] (indexOfVmStore xs k) (17 + t) =
       run stdModuleEnv (indexOfLoopFrame xs e (k + 1)) [] [] (indexOfVmStore xs (k + 1)) t := by
-  rw [show 16 + t = Nat.succ (15 + t) by omega]
+  rw [show 17 + t = Nat.succ (16 + t) by omega]
   rw [run_succ_ok _ (indexOf_iterN0 xs e k hk hlen hneq)]
-  rw [show 15 + t = Nat.succ (14 + t) by omega]
+  rw [show 16 + t = Nat.succ (15 + t) by omega]
   rw [run_succ_ok _ (indexOf_iterN1 xs e k)]
-  rw [show 14 + t = Nat.succ (13 + t) by omega]
+  rw [show 15 + t = Nat.succ (14 + t) by omega]
   rw [run_succ_ok _ (indexOf_iterN2 xs e k hk hlen)]
-  rw [show 13 + t = Nat.succ (12 + t) by omega]
+  rw [show 14 + t = Nat.succ (13 + t) by omega]
   rw [run_succ_ok _ (indexOf_iterN3 xs e k)]
-  rw [show 12 + t = Nat.succ (11 + t) by omega]
+  rw [show 13 + t = Nat.succ (12 + t) by omega]
   rw [run_succ_ok _ (indexOf_iterN4 xs e k)]
-  rw [show 11 + t = Nat.succ (10 + t) by omega]
+  rw [show 12 + t = Nat.succ (11 + t) by omega]
   rw [run_succ_ok _ (indexOf_iterN5 xs e k)]
-  rw [show 10 + t = Nat.succ (9 + t) by omega]
+  rw [show 11 + t = Nat.succ (10 + t) by omega]
   rw [run_succ_ok _ (indexOf_iterN6 xs e k hk hlen)]
-  rw [show 9 + t = Nat.succ (8 + t) by omega]
+  rw [show 10 + t = Nat.succ (9 + t) by omega]
   rw [run_succ_ok _ (indexOf_iterN7 xs e k hk hneq)]
-  rw [show 8 + t = Nat.succ (7 + t) by omega]
+  rw [show 9 + t = Nat.succ (8 + t) by omega]
   rw [run_succ_ok _ (indexOf_iterN8 xs e k hk hneq)]
-  rw [show 7 + t = Nat.succ (6 + t) by omega]
+  rw [show 8 + t = Nat.succ (7 + t) by omega]
   rw [run_succ_ok _ (indexOf_iterN9 xs e k hk hneq)]
-  rw [show 6 + t = Nat.succ (5 + t) by omega]
+  rw [show 7 + t = Nat.succ (6 + t) by omega]
   rw [run_succ_ok _ (indexOf_iterN10 xs e k hk hneq)]
-  rw [show 5 + t = Nat.succ (4 + t) by omega]
+  rw [show 6 + t = Nat.succ (5 + t) by omega]
   rw [run_succ_ok _ (indexOf_iterN11 xs e k hk)]
-  rw [show 4 + t = Nat.succ (3 + t) by omega]
+  rw [show 5 + t = Nat.succ (4 + t) by omega]
   rw [run_succ_ok _ (indexOf_iterN12 xs e k hk)]
-  rw [show 3 + t = Nat.succ (2 + t) by omega]
+  rw [show 4 + t = Nat.succ (3 + t) by omega]
   rw [run_succ_ok _ (indexOf_iterN13 xs e k hk hlen)]
-  rw [show 2 + t = Nat.succ (1 + t) by omega]
+  rw [show 3 + t = Nat.succ (2 + t) by omega]
   rw [run_succ_ok _ (indexOf_iterN14 xs e k hk)]
+  rw [show 2 + t = Nat.succ (1 + t) by omega]
+  rw [run_succ_ok _ (indexOf_iterN15 xs e k hk)]
 
 -- ── Spec helper: indexOf suffix ─────────────────────────────────────────────
 
@@ -1448,9 +1469,16 @@ private def indexOfFromK (xs : List UInt64) (e : UInt64) (k : Nat) : Bool × Nat
   | (true, j) => (true, j)
   | (false, _) => (false, 0)
 
-private theorem indexOfFromK_zero (xs : List UInt64) (e : UInt64) :
-    indexOfFromK xs e 0 = indexOf xs e := by
+private theorem indexOfFromK_zero_true (xs : List UInt64) (e : UInt64) (j : Nat)
+    (h : indexOf xs e = (true, j)) :
+    indexOfFromK xs e 0 = (true, j) := by
+  simp [indexOfFromK, indexOf, List.drop, h]
+
+private theorem indexOfFromK_zero_false (xs : List UInt64) (e : UInt64)
+    (h : indexOf xs e = (false, 0)) :
+    indexOfFromK xs e 0 = (false, 0) := by
   simp [indexOfFromK, indexOf, List.drop]
+  rw [show indexOf.go xs e 0 = indexOf xs e from rfl, h]
 
 private theorem indexOfFromK_len (xs : List UInt64) (e : UInt64) :
     indexOfFromK xs e xs.length = (false, 0) := by
@@ -1480,7 +1508,7 @@ private theorem indexOfFromK_not_found_step (xs : List UInt64) (e : UInt64) (k :
 
 private theorem indexOf_return_run.go (xs : List UInt64) (e : UInt64) (k : Nat) (fuel : Nat)
     (hk : k ≤ xs.length) (hlen : xs.length < UInt64.size)
-    (hf : fuel ≥ 7 + 16 * (xs.length - k)) :
+    (hf : fuel ≥ 7 + 17 * (xs.length - k)) :
     returnValues
         (run stdModuleEnv (indexOfLoopFrame xs e k) [] [] (indexOfVmStore xs k) fuel) =
       some [.bool (indexOfFromK xs e k).1, .u64 (indexOfFromK xs e k).2.toUInt64] := by
@@ -1495,11 +1523,11 @@ private theorem indexOf_return_run.go (xs : List UInt64) (e : UInt64) (k : Nat) 
       rfl
     | false =>
       have hneq : (xs.get ⟨k, hklt⟩ == e) = false := hb
-      have hf16 : fuel ≥ 16 := by omega
-      rcases Nat.le.dest hf16 with ⟨t, rfl⟩
+      have hf17 : fuel ≥ 17 := by omega
+      rcases Nat.le.dest hf17 with ⟨t, rfl⟩
       rw [indexOf_run_iter xs e k hklt hlen hneq t]
       have hk' : k + 1 ≤ xs.length := Nat.succ_le_of_lt hklt
-      have hf' : t ≥ 7 + 16 * (xs.length - (k + 1)) := by omega
+      have hf' : t ≥ 7 + 17 * (xs.length - (k + 1)) := by omega
       rw [indexOfFromK_not_found_step xs e k hklt hneq]
       simpa [Nat.succ_sub_succ, Nat.sub_zero] using
         indexOf_return_run.go xs e (k + 1) t hk' hlen hf'
@@ -1518,13 +1546,12 @@ theorem vectorIndexOf_returnValues_notFound (xs : List UInt64) (e : UInt64)
     (hnotFound : ∀ i (hi : i < xs.length), (xs.get ⟨i, hi⟩ == e) = false) :
     returnValues (evalProg 19 [.vector .u64 (xs.map .u64), .u64 e] (containsFuel xs.length)) =
       some [.bool false, .u64 0] := by
-  have hf7 : 7 ≤ containsFuel xs.length := by dsimp [containsFuel]; omega
-  rcases Nat.le.dest hf7 with ⟨rest, rfl⟩
+  have hf7 : 7 ≤ containsFuel xs.length := by unfold containsFuel; omega
+  -- rewrite the fuel in the goal from containsFuel to 7 + rest
+  conv_lhs => rw [show containsFuel xs.length = 7 + (containsFuel xs.length - 7) by omega]
   rw [indexOf_evalProg_after_setup]
-  have hf' : rest ≥ 7 + 16 * xs.length := by dsimp [containsFuel]; omega
-  have hrun := indexOf_return_run.go xs e 0 rest (by omega) hlen (by simpa using hf')
-  rw [← indexOfFromK_zero] at hrun
-  rw [hrun]
+  have hf' : containsFuel xs.length - 7 ≥ 7 + 17 * xs.length := by unfold containsFuel; omega
+  have hrun := indexOf_return_run.go xs e 0 (containsFuel xs.length - 7) (by omega) hlen (by simpa using hf')
   -- indexOf xs e = (false, 0) since all elements fail the check
   have hfail : indexOf xs e = (false, 0) := by
     induction xs with
@@ -1550,8 +1577,9 @@ theorem vectorIndexOf_returnValues_notFound (xs : List UInt64) (e : UInt64)
           intro i hi
           exact hne (i + 1) (by simpa using hi)
       simp [ih' 1 (fun i hi => hnotFound i hi)]
-  simp only [hfail, indexOfFromK, indexOf]
-  rfl
+  rw [hrun]
+  have := indexOfFromK_zero_false xs e hfail
+  simp [this]
 
 theorem vectorIndexOf_returnValues_found (xs : List UInt64) (e : UInt64) (k : Nat)
     (hk : k < xs.length) (hlen : xs.length < UInt64.size)
@@ -1559,13 +1587,12 @@ theorem vectorIndexOf_returnValues_found (xs : List UInt64) (e : UInt64) (k : Na
     (hnotBefore : ∀ i (hi : i < k), (xs.get ⟨i, Nat.lt_trans hi hk⟩ == e) = false) :
     returnValues (evalProg 19 [.vector .u64 (xs.map .u64), .u64 e] (containsFuel xs.length)) =
       some [.bool true, .u64 k.toUInt64] := by
-  have hf7 : 7 ≤ containsFuel xs.length := by dsimp [containsFuel]; omega
-  rcases Nat.le.dest hf7 with ⟨rest, rfl⟩
+  have hf7 : 7 ≤ containsFuel xs.length := by unfold containsFuel; omega
+  -- rewrite the fuel in the goal from containsFuel to 7 + rest
+  conv_lhs => rw [show containsFuel xs.length = 7 + (containsFuel xs.length - 7) by omega]
   rw [indexOf_evalProg_after_setup]
-  have hf' : rest ≥ 7 + 16 * xs.length := by dsimp [containsFuel]; omega
-  have hrun := indexOf_return_run.go xs e 0 rest (by omega) hlen (by simpa using hf')
-  rw [← indexOfFromK_zero] at hrun
-  rw [hrun]
+  have hf' : containsFuel xs.length - 7 ≥ 7 + 17 * xs.length := by unfold containsFuel; omega
+  have hrun := indexOf_return_run.go xs e 0 (containsFuel xs.length - 7) (by omega) hlen (by simpa using hf')
   -- indexOf xs e = (true, k)
   have hio : indexOf xs e = (true, k) := by
     induction xs generalizing k with
@@ -1587,8 +1614,9 @@ theorem vectorIndexOf_returnValues_found (xs : List UInt64) (e : UInt64) (k : Na
         have hfound' : (xs.get ⟨k, hk'⟩ == e) = true := by
           simpa [List.get] using hfound
         exact ih hk' hfound' hnotBefore'
-  simp only [hio, indexOfFromK, indexOf]
-  rfl
+  rw [hrun]
+  have := indexOfFromK_zero_true xs e k hio
+  simp [this]
 
 -- ============================================================
 -- § reverse refinement

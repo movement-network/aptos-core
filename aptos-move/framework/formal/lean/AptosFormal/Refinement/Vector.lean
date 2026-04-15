@@ -126,7 +126,8 @@ private theorem contains_idx_u64_lt_len {xs : List UInt64} {k : Nat} (hk : k < x
   have hk64 : k < UInt64.size := Nat.lt_trans hk hlen
   have hkN : k.toUInt64.toNat = k := UInt64.toNat_ofNat_of_lt hk64
   have hlN : ((List.map MoveValue.u64 xs).length.toUInt64).toNat = xs.length := by
-    simp [List.length_map, UInt64.toNat_ofNat_of_lt hlen]
+    simp [List.length_map]
+    exact UInt64.toNat_ofNat_of_lt hlen
   rw [UInt64.lt_iff_toNat_lt, hkN, hlN]
   exact hk
 
@@ -263,7 +264,7 @@ private theorem contains_list_take_succ (xs : List UInt64) (k : Nat) (hk : k < x
     | zero => simp [List.map, List.get]
     | succ k =>
       have hk' : k < xs.length := Nat.succ_lt_succ_iff.mp hk
-      simp [List.take, List.map, List.get]
+      simp [List.map, List.get]
       exact ih k hk'
 
 private theorem contains_vm_store_succ (xs : List UInt64) (k : Nat) (hk : k < xs.length) :
@@ -370,7 +371,7 @@ private theorem contains_run_exit (xs : List UInt64) (e : UInt64) (t : Nat) :
   rw [show 2 + t = Nat.succ (1 + t) by omega]
   rw [run_succ_ok _ (contains_exit_step4 xs e)]
   rw [show 1 + t = Nat.succ t by omega]
-  simpa [run, contains_exit_step5 xs e]
+  simp [run, contains_exit_step5 xs e]
 
 /-! ## Iteration (`k < len`, element not found): 16 `ok` steps back to header -/
 

@@ -65,7 +65,8 @@ theorem ELENGTH        : canonical OUT_OF_RANGE 1 = 0x20001 := rfl
 theorem canonical_inj_reason {cat r1 r2 : UInt64} (h : canonical cat r1 = canonical cat r2) :
     r1 = r2 := by
   simp only [canonical] at h
-  -- (cat <<< 16) + r1 = (cat <<< 16) + r2  →  r1 = r2
-  omega
+  -- (cat <<< 16) + r1 = (cat <<< 16) + r2 in UInt64; cancel left summand
+  have := @add_left_cancel UInt64 _ _ _ _ h
+  exact this
 
 end AptosFormal.Std.Error

@@ -115,34 +115,37 @@ def round (fp : FixedPoint32) : UInt64 :=
 
 /-- For small integers (< 2^32), create_from_u64 then floor is identity. -/
 theorem floor_integer (n : UInt64) (h : n.toNat < 2^32) :
-    (create_from_u64 n).toOption.getD ⟨0⟩ |>.value >>> 32 = n := by
+    ((create_from_u64 n).toOption.getD ⟨0⟩ |>.value >>> 32) = n := by
   simp only [create_from_u64, MAX_U64_NAT]
   split_ifs with hov
-  · -- overflow case: n.toNat * 2^32 > 2^64 - 1
-    -- but h : n.toNat < 2^32 means n.toNat * 2^32 < 2^64, contradiction
-    exfalso; omega
-  · -- n.toNat * 2^32 fits in UInt64
-    simp only [Option.toOption, Except.toOption, Option.getD]
-    -- value = (n.toNat * 2^32).toUInt64; shifting right by 32 recovers n
+  · exfalso; omega
+  · simp only [Except.toOption, Option.getD]
     have hfit : n.toNat * 2^32 ≤ MAX_U64_NAT := by simp [MAX_U64_NAT]; omega
-    have : ((n.toNat * 2^32).toUInt64 : UInt64).toNat = n.toNat * 2^32 := by
-      apply UInt64.toNat_ofNat_of_lt; simp [MAX_U64_NAT] at hfit ⊢; omega
-    simp [UInt64.shiftRight_eq, this, Nat.mul_div_cancel_left _ (by norm_num : 0 < 2^32)]
-    rfl
+    apply UInt64.toNat_inj.mp
+    rw [UInt64.toNat_shiftRight]
+    simp only [UInt64.toNat_ofNat, MAX_U64_NAT]
+    omega
 
 @[simp] theorem is_zero_iff (fp : FixedPoint32) : is_zero fp = true ↔ fp.value = 0 := by
   simp [is_zero]
 
 theorem min_le_left (a b : FixedPoint32) : (min a b).value ≤ a.value := by
-  simp [min]; split_ifs with h <;> [exact h; exact Nat.le_refl _]
+  simp only [min]
+  split_ifs with h
+  · exact le_refl _
+  · exact le_of_lt (lt_of_not_le h)
 
 theorem min_le_right (a b : FixedPoint32) : (min a b).value ≤ b.value := by
-  simp [min]; split_ifs with h
+  simp only [min]
+  split_ifs with h
   · exact h
-  · exact Nat.le_of_not_le h
+  · exact le_refl _
 
 theorem max_ge_left (a b : FixedPoint32) : a.value ≤ (max a b).value := by
-  simp [max]; split_ifs with h <;> [exact h; exact Nat.le_refl _]
+  simp only [max]
+  split_ifs with h
+  · exact le_refl _
+  · exact le_of_lt (lt_of_not_le h)
 
 theorem floor_le_ceil (fp : FixedPoint32) : floor fp ≤ ceil fp := by
   simp [floor, ceil, fracBits]

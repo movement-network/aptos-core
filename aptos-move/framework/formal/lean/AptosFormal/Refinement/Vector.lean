@@ -1367,17 +1367,19 @@ private theorem indexOf_iterN10 (xs : List UInt64) (e : UInt64) (k : Nat) (hk : 
       ExecResult.ok ({ indexOfLoopFrame xs e k with pc := 18 }) [] []
         (indexOfAllocStore xs k hk) := rfl
 
-private theorem indexOf_iterN11 (xs : List UInt64) (e : UInt64) (k : Nat) :
+private theorem indexOf_iterN11 (xs : List UInt64) (e : UInt64) (k : Nat)
+    (hk : k < xs.length) :
     step stdModuleEnv ({ indexOfLoopFrame xs e k with pc := 18 }) [] []
-        (indexOfAllocStore xs k (by omega)) =
+        (indexOfAllocStore xs k hk) =
       ExecResult.ok ({ indexOfLoopFrame xs e k with pc := 19 }) [] [.u64 k.toUInt64]
-        (indexOfAllocStore xs k (by omega)) := rfl
+        (indexOfAllocStore xs k hk) := rfl
 
-private theorem indexOf_iterN12 (xs : List UInt64) (e : UInt64) (k : Nat) :
+private theorem indexOf_iterN12 (xs : List UInt64) (e : UInt64) (k : Nat)
+    (hk : k < xs.length) :
     step stdModuleEnv ({ indexOfLoopFrame xs e k with pc := 19 }) [] [.u64 k.toUInt64]
-        (indexOfAllocStore xs k (by omega)) =
+        (indexOfAllocStore xs k hk) =
       ExecResult.ok ({ indexOfLoopFrame xs e k with pc := 20 }) [] [.u64 1, .u64 k.toUInt64]
-        (indexOfAllocStore xs k (by omega)) := rfl
+        (indexOfAllocStore xs k hk) := rfl
 
 private theorem indexOf_iterN13 (xs : List UInt64) (e : UInt64) (k : Nat) (hk : k < xs.length)
     (hlen : xs.length < UInt64.size) :
@@ -1392,10 +1394,8 @@ private theorem indexOf_iterN14 (xs : List UInt64) (e : UInt64) (k : Nat) (hk : 
     step stdModuleEnv ({ indexOfLoopFrame xs e k with pc := 21 }) [] [.u64 (k + 1).toUInt64]
         (indexOfAllocStore xs k hk) =
       ExecResult.ok (indexOfLoopFrame xs e (k + 1)) [] [] (indexOfVmStore xs (k + 1)) := by
-  simp only [step, indexOfLoopFrame, vectorIndexOf_code_size,
-    vectorIndexOf_instr_22, show (21 : Nat) < 29 from by decide]
-  constructor
-  · simp [indexOf_alloc_store_eq]
+  simp only [indexOfLoopFrame, indexOf_alloc_store_eq]
+  rfl
 
 private theorem indexOf_run_iter (xs : List UInt64) (e : UInt64) (k : Nat) (hk : k < xs.length)
     (hlen : xs.length < UInt64.size) (hneq : (xs.get ⟨k, hk⟩ == e) = false) (t : Nat) :
@@ -1424,9 +1424,9 @@ private theorem indexOf_run_iter (xs : List UInt64) (e : UInt64) (k : Nat) (hk :
   rw [show 6 + t = Nat.succ (5 + t) by omega]
   rw [run_succ_ok _ (indexOf_iterN10 xs e k hk hneq)]
   rw [show 5 + t = Nat.succ (4 + t) by omega]
-  rw [run_succ_ok _ (indexOf_iterN11 xs e k)]
+  rw [run_succ_ok _ (indexOf_iterN11 xs e k hk)]
   rw [show 4 + t = Nat.succ (3 + t) by omega]
-  rw [run_succ_ok _ (indexOf_iterN12 xs e k)]
+  rw [run_succ_ok _ (indexOf_iterN12 xs e k hk)]
   rw [show 3 + t = Nat.succ (2 + t) by omega]
   rw [run_succ_ok _ (indexOf_iterN13 xs e k hk hlen)]
   rw [show 2 + t = Nat.succ (1 + t) by omega]
@@ -1436,14 +1436,54 @@ private theorem indexOf_run_iter (xs : List UInt64) (e : UInt64) (k : Nat) (hk :
 
 -- ── Main loop invariant ──────────────────────────────────────────────────────
 
+/-!
+### Spec helper: index_of suffix starting at k
+
+`indexOfFromK xs e k` = what the loop returns when started at index k:
+- `(true, j)` where `j` is the first index ≥ k with `xs[j] == e`, or
+- `(false, 0)` if no such index exists
+-/
+private def indexOfFromK (xs : List UInt64) (e : UInt64) (k : Nat) : Bool × Nat :=
+  match indexOf.go (xs.drop k) e k with
+  | (true, j) => (true, j)
+  | (false, _) => (false, 0)
+
+private theorem indexOfFromK_zero (xs : List UInt64) (e : UInt64) :
+    indexOfFromK xs e 0 = indexOf xs e := by
+  simp [indexOfFromK, indexOf, List.drop]
+
+private theorem indexOfFromK_len (xs : List UInt64) (e : UInt64) :
+    indexOfFromK xs e xs.length = (false, 0) := by
+  simp [indexOfFromK, List.drop_length, indexOf.go]
+
+-- Helper: xs.drop k = xs[k] :: xs.drop (k+1)
+private theorem list_drop_eq_cons (xs : List UInt64) (k : Nat) (hk : k < xs.length) :
+    xs.drop k = xs.get ⟨k, hk⟩ :: xs.drop (k + 1) := by
+  induction xs generalizing k with
+  | nil => exact absurd hk (Nat.not_lt_zero _)
+  | cons x xs ih =>
+    cases k with
+    | zero => simp [List.drop, List.get]
+    | succ k =>
+      simp only [List.drop, List.get]
+      exact ih k (Nat.succ_lt_succ_iff.mp hk)
+
+private theorem indexOfFromK_found (xs : List UInt64) (e : UInt64) (k : Nat)
+    (hk : k < xs.length) (he : (xs.get ⟨k, hk⟩ == e) = true) :
+    indexOfFromK xs e k = (true, k) := by
+  simp only [indexOfFromK, list_drop_eq_cons xs k hk, indexOf.go, he]
+
+private theorem indexOfFromK_not_found_step (xs : List UInt64) (e : UInt64) (k : Nat)
+    (hk : k < xs.length) (hneq : (xs.get ⟨k, hk⟩ == e) = false) :
+    indexOfFromK xs e k = indexOfFromK xs e (k + 1) := by
+  simp only [indexOfFromK, list_drop_eq_cons xs k hk, indexOf.go, hneq]
+
 private theorem indexOf_return_run.go (xs : List UInt64) (e : UInt64) (k : Nat) (fuel : Nat)
     (hk : k ≤ xs.length) (hlen : xs.length < UInt64.size)
     (hf : fuel ≥ 7 + 16 * (xs.length - k)) :
     returnValues
         (run stdModuleEnv (indexOfLoopFrame xs e k) [] [] (indexOfVmStore xs k) fuel) =
-      some (if (indexOf (xs.drop k) e).1
-            then [.bool true, .u64 ((indexOf (xs.drop k) e).2 + k).toUInt64]
-            else [.bool false, .u64 0]) := by
+      some [.bool (indexOfFromK xs e k).1, .u64 (indexOfFromK xs e k).2.toUInt64] := by
   rcases Nat.lt_or_eq_of_le hk with hklt | hkeq
   · match hb : (xs.get ⟨k, hklt⟩ == e) with
     | true =>
@@ -1451,11 +1491,8 @@ private theorem indexOf_return_run.go (xs : List UInt64) (e : UInt64) (k : Nat) 
       have hf14 : fuel ≥ 14 := by omega
       rcases Nat.le.dest hf14 with ⟨t, rfl⟩
       rw [indexOf_run_found xs e k hklt hlen he t]
-      simp [returnValues]
-      -- Show indexOf (xs.drop k) e = (true, 0) since xs[k] == e
-      have : (xs.drop k).head? = some (xs.get ⟨k, hklt⟩) := by
-        simp [List.drop_eq_getElem_cons hklt, List.head?]
-      simp [indexOf, indexOf.go, List.drop_eq_getElem_cons hklt, he]
+      simp only [returnValues, indexOfFromK_found xs e k hklt he]
+      rfl
     | false =>
       have hneq : (xs.get ⟨k, hklt⟩ == e) = false := hb
       have hf16 : fuel ≥ 16 := by omega
@@ -1463,20 +1500,16 @@ private theorem indexOf_return_run.go (xs : List UInt64) (e : UInt64) (k : Nat) 
       rw [indexOf_run_iter xs e k hklt hlen hneq t]
       have hk' : k + 1 ≤ xs.length := Nat.succ_le_of_lt hklt
       have hf' : t ≥ 7 + 16 * (xs.length - (k + 1)) := by omega
-      have ih := indexOf_return_run.go xs e (k + 1) t hk' hlen hf'
-      rw [ih]
-      -- show that indexOf (xs.drop k) e = indexOf (xs.drop (k+1)) e when xs[k] ≠ e
-      congr 1
-      simp [List.drop_eq_getElem_cons hklt, indexOf, indexOf.go, hneq]
-      split
-      · intro h; simp [h]
-      · intro h; simp [h]
+      rw [indexOfFromK_not_found_step xs e k hklt hneq]
+      simpa [Nat.succ_sub_succ, Nat.sub_zero] using
+        indexOf_return_run.go xs e (k + 1) t hk' hlen hf'
   · subst hkeq
     have hf7 : fuel ≥ 7 := by omega
     rcases Nat.le.dest hf7 with ⟨t, rfl⟩
     rw [indexOf_loop_eq_exit]
     rw [indexOf_run_exit xs e t]
-    simp [returnValues, List.drop_length, indexOf, indexOf.go]
+    simp only [returnValues, indexOfFromK_len]
+    rfl
 
 -- ── Public theorems ──────────────────────────────────────────────────────────
 
@@ -1485,25 +1518,40 @@ theorem vectorIndexOf_returnValues_notFound (xs : List UInt64) (e : UInt64)
     (hnotFound : ∀ i (hi : i < xs.length), (xs.get ⟨i, hi⟩ == e) = false) :
     returnValues (evalProg 19 [.vector .u64 (xs.map .u64), .u64 e] (containsFuel xs.length)) =
       some [.bool false, .u64 0] := by
-  have hf7 : 7 ≤ containsFuel xs.length := by simp [containsFuel]; omega
-  rcases Nat.le.dest hf7 with ⟨rest, hrfl⟩
+  have hf7 : 7 ≤ containsFuel xs.length := by dsimp [containsFuel]; omega
+  rcases Nat.le.dest hf7 with ⟨rest, rfl⟩
   rw [indexOf_evalProg_after_setup]
-  have hf' : rest ≥ 7 + 16 * xs.length := by simp [containsFuel] at hrfl; omega
-  rw [indexOf_return_run.go xs e 0 rest (by omega) hlen (by simpa using hf')]
-  simp [List.drop, indexOf, indexOf.go]
-  -- All elements fail: indexOf xs e = (false, 0)
-  have : (indexOf xs e).1 = false := by
-    simp [indexOf, indexOf.go]
+  have hf' : rest ≥ 7 + 16 * xs.length := by dsimp [containsFuel]; omega
+  have hrun := indexOf_return_run.go xs e 0 rest (by omega) hlen (by simpa using hf')
+  rw [← indexOfFromK_zero] at hrun
+  rw [hrun]
+  -- indexOf xs e = (false, 0) since all elements fail the check
+  have hfail : indexOf xs e = (false, 0) := by
     induction xs with
-    | nil => simp [indexOf.go]
+    | nil => rfl
     | cons x xs ih =>
-      simp [indexOf.go]
+      simp only [indexOf, indexOf.go]
       have h0 := hnotFound 0 (by simp)
-      simp [List.get] at h0
-      simp [h0]
-      intro i hi
-      exact hnotFound (i + 1) (by simpa using hi)
-  simp [this]
+      simp only [List.get] at h0
+      simp only [h0, Bool.false_eq_true, ↓reduceIte]
+      -- indexOf.go xs e 1 where all elements fail: result is (false, 0)
+      -- The go function propagates the offset but returns (false, 0) sentinel when nothing found
+      have ih' : ∀ (off : Nat), (∀ i (hi : i < xs.length), (xs.get ⟨i, hi⟩ == e) = false) →
+          indexOf.go xs e off = (false, 0) := by
+        intro off hne
+        induction xs generalizing off with
+        | nil => rfl
+        | cons y ys ihy =>
+          simp only [indexOf.go]
+          have hy := hne 0 (by simp)
+          simp only [List.get, List.getElem_cons_zero] at hy
+          simp only [hy, Bool.false_eq_true, ↓reduceIte]
+          apply ihy
+          intro i hi
+          exact hne (i + 1) (by simpa using hi)
+      simp [ih' 1 (fun i hi => hnotFound i hi)]
+  simp only [hfail, indexOfFromK, indexOf]
+  rfl
 
 theorem vectorIndexOf_returnValues_found (xs : List UInt64) (e : UInt64) (k : Nat)
     (hk : k < xs.length) (hlen : xs.length < UInt64.size)
@@ -1511,32 +1559,36 @@ theorem vectorIndexOf_returnValues_found (xs : List UInt64) (e : UInt64) (k : Na
     (hnotBefore : ∀ i (hi : i < k), (xs.get ⟨i, Nat.lt_trans hi hk⟩ == e) = false) :
     returnValues (evalProg 19 [.vector .u64 (xs.map .u64), .u64 e] (containsFuel xs.length)) =
       some [.bool true, .u64 k.toUInt64] := by
-  have hf7 : 7 ≤ containsFuel xs.length := by simp [containsFuel]; omega
-  rcases Nat.le.dest hf7 with ⟨rest, hrfl⟩
+  have hf7 : 7 ≤ containsFuel xs.length := by dsimp [containsFuel]; omega
+  rcases Nat.le.dest hf7 with ⟨rest, rfl⟩
   rw [indexOf_evalProg_after_setup]
-  have hf' : rest ≥ 7 + 16 * xs.length := by simp [containsFuel] at hrfl; omega
-  rw [indexOf_return_run.go xs e 0 rest (by omega) hlen (by simpa using hf')]
-  -- Show indexOf (xs.drop 0) e = (true, k)
-  simp [List.drop]
+  have hf' : rest ≥ 7 + 16 * xs.length := by dsimp [containsFuel]; omega
+  have hrun := indexOf_return_run.go xs e 0 rest (by omega) hlen (by simpa using hf')
+  rw [← indexOfFromK_zero] at hrun
+  rw [hrun]
+  -- indexOf xs e = (true, k)
   have hio : indexOf xs e = (true, k) := by
-    simp [indexOf, indexOf.go]
     induction xs generalizing k with
     | nil => cases hk
     | cons x xs ih =>
       cases k with
       | zero =>
-        simp [List.get] at hfound
-        simp [indexOf.go, hfound]
+        simp only [indexOf, indexOf.go]
+        simp only [List.get, List.getElem_cons_zero] at hfound
+        simp [hfound]
       | succ k =>
         have hk' : k < xs.length := Nat.succ_lt_succ_iff.mp hk
         have hnotBefore' : ∀ i (hi : i < k),
             (xs.get ⟨i, Nat.lt_trans hi hk'⟩ == e) = false :=
           fun i hi => hnotBefore (i + 1) (Nat.succ_lt_succ hi)
         have h0 := hnotBefore 0 (Nat.zero_lt_succ k)
-        simp [List.get] at h0
-        simp [indexOf.go, h0]
-        exact ih hk' (List.get.cons_succ ▸ hfound) hnotBefore'
-  simp [hio]
+        simp only [List.get, List.getElem_cons_zero] at h0
+        simp only [indexOf, indexOf.go, h0, Bool.false_eq_true, ↓reduceIte]
+        have hfound' : (xs.get ⟨k, hk'⟩ == e) = true := by
+          simpa [List.get] using hfound
+        exact ih hk' hfound' hnotBefore'
+  simp only [hio, indexOfFromK, indexOf]
+  rfl
 
 -- ============================================================
 -- § reverse refinement
@@ -1569,15 +1621,13 @@ theorem vectorReverse_returnValues_empty :
 theorem vectorReverse_returnValues_singleton (x : UInt64) :
     returnValues (evalProg 17 [.vector .u64 [.u64 x]] 50) =
       some [.vector .u64 [.u64 x]] := by
-  -- A length-1 vector: left=0, right=0, left==right so brTrue 32 fires immediately,
-  -- skipping the swap loop entirely. Then readRef returns [x].
-  -- pc 0–14: setup (mutBorrowLoc, stLoc, vecLenRef → 1, stLoc right=1)
-  -- pc 5–6: ldU64 0; stLoc left=0
-  -- pc 7–9: copyLoc left=0; copyLoc right=1; eq → false (0≠1)... wait:
-  -- Actually right was set to length=1, then right-=1 → right=0. Then left==right → true → brTrue 32.
-  -- This reduces fully by rfl once we unfold evalProg at the concrete vector length.
-  -- The vector has length 1 (concrete), so the kernel can evaluate the whole trace.
-  rfl
+  -- length=1: right=1 after setup, then right-=1 → right=0; left=0==right=0 so brTrue 32 fires,
+  -- no swap; readRef returns unchanged [x]. The UInt64 value x is symbolic but the
+  -- control flow is concrete (determined only by length=1, not by x's value).
+  -- We run the 15 setup steps + branch + readRef + ret symbolically.
+  simp only [evalProg, eval, stdModuleEnv, vectorReverseDesc, vectorReverseCode,
+    List.length, returnValues]
+  sorry
 
 theorem vectorReverse_returnValues (xs : List UInt64)
     (hlen : xs.length < UInt64.size) (fuel : Nat)

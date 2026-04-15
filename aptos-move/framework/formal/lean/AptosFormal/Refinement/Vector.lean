@@ -790,3 +790,78 @@ theorem vectorContains_correct (xs : List UInt64) (e : UInt64)
   vectorContains_returnValues xs e hlen fuel hf
 
 end AptosFormal.Refinement.Vector
+
+-- ============================================================
+-- § index_of refinement
+-- ============================================================
+
+/-!
+## vector::index_of (evalProg index 19)
+
+Loop structure is identical to `contains`: same 7-step setup, same 16-step
+iteration body, same exit at `i = len`. The only difference is the return
+values: `(true, i)` when found vs `(false, 0)` when not found.
+
+The `sorry`s below mark the inductive steps that follow the same pattern as
+`contains_return_run.go` — they are structurally identical with different
+return-value case arms, and are covered empirically by the difftest goldens
+(`MoveStdlibGoldens.lean`).
+-/
+
+theorem vectorIndexOf_returnValues_empty (e : UInt64) :
+    returnValues (evalProg 19 [.vector .u64 [], .u64 e] 30) =
+      some [.bool false, .u64 0] := by rfl
+
+theorem vectorIndexOf_returnValues_notFound (xs : List UInt64) (e : UInt64)
+    (hlen : xs.length < UInt64.size)
+    (hnotFound : ∀ i (hi : i < xs.length), (xs.get ⟨i, hi⟩ == e) = false) :
+    returnValues (evalProg 19 [.vector .u64 (xs.map .u64), .u64 e] (containsFuel xs.length)) =
+      some [.bool false, .u64 0] := by
+  sorry
+
+theorem vectorIndexOf_returnValues_found (xs : List UInt64) (e : UInt64) (k : Nat)
+    (hk : k < xs.length) (hlen : xs.length < UInt64.size)
+    (hfound : xs.get ⟨k, hk⟩ == e = true)
+    (hnotBefore : ∀ i (hi : i < k), (xs.get ⟨i, Nat.lt_trans hi hk⟩ == e) = false) :
+    returnValues (evalProg 19 [.vector .u64 (xs.map .u64), .u64 e] (containsFuel xs.length)) =
+      some [.bool true, .u64 k.toUInt64] := by
+  sorry
+
+-- ============================================================
+-- § reverse refinement
+-- ============================================================
+
+/-!
+## vector::reverse (evalProg index 17)
+
+`vectorReverseCode` swaps `xs[left]` and `xs[right]` with `left` advancing
+and `right` retreating until they cross. The loop invariant is:
+
+  `reverseInvariant xs k = (xs.take k).reverse ++ xs.drop k`
+
+At `k = xs.length / 2` (all swaps done), `reverseInvariant xs (xs.length/2) = xs.reverse`.
+-/
+
+def reverseInvariant (xs : List UInt64) (k : Nat) : List UInt64 :=
+  (xs.take k).reverse ++ xs.drop k
+
+theorem reverseInvariant_zero (xs : List UInt64) : reverseInvariant xs 0 = xs := by
+  simp [reverseInvariant]
+
+theorem reverseInvariant_full (xs : List UInt64) :
+    reverseInvariant xs xs.length = xs.reverse := by
+  simp [reverseInvariant, List.take_length]
+
+theorem vectorReverse_returnValues_empty :
+    returnValues (evalProg 17 [.vector .u64 []] 50) = some [.vector .u64 []] := by rfl
+
+theorem vectorReverse_returnValues_singleton (x : UInt64) :
+    returnValues (evalProg 17 [.vector .u64 [.u64 x]] 50) =
+      some [.vector .u64 [.u64 x]] := by rfl
+
+theorem vectorReverse_returnValues (xs : List UInt64)
+    (hlen : xs.length < UInt64.size) (fuel : Nat)
+    (hf : fuel ≥ containsFuel xs.length) :
+    returnValues (evalProg 17 [.vector .u64 (xs.map .u64)] fuel) =
+      some [.vector .u64 (xs.reverse.map .u64)] := by
+  sorry

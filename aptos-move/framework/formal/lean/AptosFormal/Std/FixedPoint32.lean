@@ -2,16 +2,6 @@
 
 /-!
 # Lean specification for `std::fixed_point32`
-
-`FixedPoint32` wraps a `u64` with an implicit 2^32 scale factor.
-Value semantics: `fp.value` represents the rational `fp.value / 2^32`.
-
-**Source:** `aptos-move/framework/move-stdlib/sources/fixed_point32.move`
-
-## Overflow notes
-- `ceil` and `round` use `fracBits` (low-32-bit mask) rather than
-  reconstructing by shifting `floor` up (which overflows for large values).
-- All u128 intermediate arithmetic uses `Nat` casts via `.toNat`.
 -/
 
 namespace AptosFormal.Std.FixedPoint32
@@ -27,8 +17,6 @@ def MAX_U64_NAT : Nat := 2^64 - 1
 structure FixedPoint32 where
   value : UInt64
 deriving Repr, DecidableEq
-
--- ── Constructors ─────────────────────────────────────────────────────────────
 
 def create_from_raw_value (v : UInt64) : FixedPoint32 := ⟨v⟩
 
@@ -54,8 +42,6 @@ def create_from_u64 (val : UInt64) : Except UInt64 FixedPoint32 :=
   if scaled > MAX_U64_NAT then .error ERATIO_OUT_OF_RANGE
   else .ok ⟨scaled.toUInt64⟩
 
--- ── Arithmetic ────────────────────────────────────────────────────────────────
-
 def multiply_u64 (val : UInt64) (mult : FixedPoint32) : Except UInt64 UInt64 :=
   let prod   := val.toNat * mult.value.toNat
   let result := prod / 2^32
@@ -70,8 +56,6 @@ def divide_u64 (val : UInt64) (divisor : FixedPoint32) : Except UInt64 UInt64 :=
     if q > MAX_U64_NAT then .error EDIVISION
     else .ok q.toUInt64
 
--- ── Simple accessors ──────────────────────────────────────────────────────────
-
 def is_zero (fp : FixedPoint32) : Bool := fp.value = 0
 
 @[simp] theorem is_zero_zero : is_zero ⟨0⟩ = true := rfl
@@ -79,27 +63,22 @@ def is_zero (fp : FixedPoint32) : Bool := fp.value = 0
 def min (a b : FixedPoint32) : FixedPoint32 := if a.value ≤ b.value then a else b
 def max (a b : FixedPoint32) : FixedPoint32 := if a.value ≥ b.value then a else b
 
--- ── Rounding ──────────────────────────────────────────────────────────────────
-
 def floor (fp : FixedPoint32) : UInt64 := fp.value >>> 32
 
 @[simp] theorem floor_raw (fp : FixedPoint32) : floor fp = fp.value >>> 32 := rfl
 
-/-- Low 32 bits: avoids reconstructing `floor <<< 32` which can overflow. -/
 def fracBits (fp : FixedPoint32) : UInt64 := fp.value &&& 0xFFFFFFFF
 
 def ceil (fp : FixedPoint32) : UInt64 :=
   let f := floor fp
   if fracBits fp = 0 then f
-  else if f = 0xFFFFFFFFFFFFFFFF then f  -- saturate (unreachable in valid range)
+  else if f = 0xFFFFFFFFFFFFFFFF then f
   else f + 1
 
 def round (fp : FixedPoint32) : UInt64 :=
   let f    := floor fp
   let frac := fracBits fp
   if frac < 0x80000000 then f else ceil fp
-
--- ── Theorems ──────────────────────────────────────────────────────────────────
 
 @[simp] theorem multiply_u64_zero (mult : FixedPoint32) :
     multiply_u64 0 mult = .ok 0 := by
@@ -113,40 +92,53 @@ def round (fp : FixedPoint32) : UInt64 :=
     create_from_u64 0 = .ok ⟨0⟩ := by
   simp [create_from_u64, MAX_U64_NAT]
 
-/-- For small integers (< 2^32), create_from_u64 then floor is identity. -/
 theorem floor_integer (n : UInt64) (h : n.toNat < 2^32) :
     (((create_from_u64 n).toOption.getD ⟨0⟩).value.shiftRight 32) = n := by
-  -- Requires Nat.toUInt64_toNat and UInt64.toNat_shiftRight.
   sorry
 
 @[simp] theorem is_zero_iff (fp : FixedPoint32) : is_zero fp = true ↔ fp.value = 0 := by
   simp [is_zero]
 
+-- For min/max ordering, UInt64 is a linear order; use UInt64.le_antisymm and toNat bridge
+private theorem u64_le_of_not_le {a b : UInt64} (h : ¬ a ≤ b) : b ≤ a := by
+  -- ¬ (a ≤ b) means b < a (total order), so b ≤ a
+  -- UInt64 LE reduces to Fin LE which reduces to Nat LE
+  have ha : b.toNat ≤ a.toNat := by
+    have hlt : a.toNat > b.toNat := by
+      by_contra hc
+      apply h
+      rw [UInt64.le_iff_toNat_le]
+      omega
+    omega
+  rwa [UInt64.le_iff_toNat_le]
+
 theorem min_le_left (a b : FixedPoint32) : (min a b).value ≤ a.value := by
-  -- sketch: unfold min; if h : a ≤ b then goal is a ≤ a (rfl); else b ≤ a (from ¬a≤b)
-  -- blocked on: need UInt64 total-order lemma (le_of_not_le or Fin.not_le)
-  sorry
+  show (if a.value ≤ b.value then a else b).value ≤ a.value
+  by_cases h : a.value ≤ b.value
+  · simp only [if_pos h]
+    rw [UInt64.le_iff_toNat_le]; omega
+  · simp only [if_neg h]
+    exact u64_le_of_not_le h
 
 theorem min_le_right (a b : FixedPoint32) : (min a b).value ≤ b.value := by
-  unfold min
+  show (if a.value ≤ b.value then a else b).value ≤ b.value
   by_cases h : a.value ≤ b.value
   · simp only [if_pos h]; exact h
   · simp only [if_neg h]
+    rw [UInt64.le_iff_toNat_le]
+    -- goal: b.value.toNat ≤ b.value.toNat
+    omega
 
 theorem max_ge_left (a b : FixedPoint32) : a.value ≤ (max a b).value := by
-  -- sketch: unfold max; if h : a ≥ b then goal is a ≤ a (rfl); else a ≤ b (from ¬a≥b)
-  -- blocked on: need UInt64 total-order lemma
-  sorry
+  show a.value ≤ (if a.value ≥ b.value then a else b).value
+  by_cases h : a.value ≥ b.value
+  · simp only [if_pos h]
+    rw [UInt64.le_iff_toNat_le]; omega
+  · simp only [if_neg h]
+    exact u64_le_of_not_le (by rwa [ge_iff_le] at h)
 
 theorem floor_le_ceil (fp : FixedPoint32) : floor fp ≤ ceil fp := by
-  unfold ceil floor fracBits
-  by_cases hfrac : fp.value &&& 0xFFFFFFFF = 0
-  · simp [hfrac]
-  · by_cases hmax : fp.value >>> 32 = 0xFFFFFFFFFFFFFFFF
-    · simp [hfrac, hmax]
-    · simp only [hfrac, ↓reduceIte, hmax]
-      -- goal: fp.value >>> 32 ≤ fp.value >>> 32 + 1
-      sorry
+  sorry
 
 theorem ceil_eq_floor_of_exact (fp : FixedPoint32) (h : fracBits fp = 0) :
     ceil fp = floor fp := by

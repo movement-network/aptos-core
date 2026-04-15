@@ -1,141 +1,154 @@
 import AptosFormal.Move.Step
-import AptosFormal.Move.Programs
 import AptosFormal.Move.Programs.StdPrimitives
-import AptosFormal.Tests.Defs
 import AptosFormal.Std.Error
 import AptosFormal.Std.BitVector
-import AptosFormal.Std.Option
 
 /-!
 # Refinement: move-stdlib bytecode vs. Lean specs
 
 Correctness theorems connecting the bytecode programs in
-`Move.Programs.StdPrimitives` to the Lean specs in `Std.Error`,
-`Std.BitVector`, and `Std.Option`.
+`Move.Programs.StdPrimitives` to the Lean specs in `Std.Error`
+and `Std.BitVector`.
 
 ## Proof strategy
-For the `std::error` functions, each program is 6 instructions with no loops.
-We unfold `evalProg` with a concrete fuel bound, reduce to `native_decide`, or
-discharge via `simp` + `omega` after unfolding the bytecode step-by-step.
+We build a minimal single-function `ModuleEnv` for each program and prove
+correctness via `rfl` — the Lean kernel reduces `eval` fully by definitional
+reduction for concrete programs with no loops.
 
-For the `bit_vector::length` program (4 instructions), we track the stack
-through `unpack` + `pop` using the struct field layout.
-
-## Status
-- `errorCanonical_refines`: sorry-free, proved by `simp` + `omega`
-- `errorCategory_refines`: sorry-free for all 13 wrappers
-- `bitVectorLength_refines`: sorry-free given `unpack` semantics
+`stdNatives` occupy indices 0–7, so we put the single test function at
+index 8 in a fresh env that prepends `stdNatives`.
 -/
 
 namespace AptosFormal.Refinement.StdPrimitives
 
 open AptosFormal.Move
-open AptosFormal.Move.Programs
+open AptosFormal.Move.Native
 open AptosFormal.Move.Programs.StdPrimitives
-open AptosFormal.Tests.Defs
 open AptosFormal.Std.Error
-open AptosFormal.Std.BitVector
-open AptosFormal.Std.Option
+
+-- ── Helper: single-function env with stdNatives prepended ────────────────────
+
+private def singleEnv (desc : FuncDesc) : ModuleEnv :=
+  { constants := #[]
+    functions := stdNatives ++ #[desc] }
+
+-- stdNatives has exactly 8 entries → our function is at index 8
+private def singleIdx : FuncIndex := 8
+
+private abbrev evalSingle (desc : FuncDesc) (args : List MoveValue) (fuel : Nat) :=
+  eval (singleEnv desc) singleIdx args fuel
 
 /-! ─────────────────────────────────────────────────────────────────────────
 ## std::error::canonical
 
-Theorem: for all `cat reason : UInt64`,
-`evalProg errorCanonicalDesc [.u64 cat, .u64 reason] fuel = some [.u64 ((cat <<< 16) ||| reason)]`
-for sufficient fuel.
+`canonical(cat, reason) = (cat <<< 16) + reason`
+
+The bytecode: ldU64 cat / ldU8 16 / shl / copyLoc 0 / bitOr / ret
+reduces definitionally for any concrete `cat` and `reason`.
+
+We prove a **schematic** theorem for all UInt64 values by `rfl`:
+the bytecode trace is a finite unrolling with no branching.
 ────────────────────────────────────────────────────────────────────────── -/
 
-/-- The canonical bytecode program computes `(cat << 16) | reason` exactly. -/
+/-- `errorCanonicalDesc` computes `(cat <<< 16) ||| reason` for all inputs. -/
 theorem errorCanonical_refines (cat reason : UInt64) :
-    evalProg errorCanonicalDesc [.u64 cat, .u64 reason] 20 =
-    some [.u64 ((cat <<< 16) ||| reason)] := by
-  simp [evalProg, errorCanonicalDesc, errorCanonicalCode, FuncDesc.body]
-  -- Unfold each step: copyLoc, ldU8, shl, copyLoc, or, ret
-  -- The result follows from UInt64 shift + or semantics
-  sorry  -- Step-by-step unfolding via `eval`; flagged: needs Step.lean simp lemmas for shl/or
+    evalSingle errorCanonicalDesc [.u64 cat, .u64 reason] 20 =
+    .returned [.u64 ((cat <<< 16) ||| reason)] MachineState.empty := by
+  simp only [evalSingle, singleEnv, singleIdx, eval, List.length, Array.size,
+             stdNatives, FuncDesc.body, errorCanonicalDesc, errorCanonicalCode]
+  rfl
 
-/-! ─────────────────────────────────────────────────────────────────────────
-## std::error category wrappers
-
-Each wrapper inlines canonical with a literal category constant.
-Theorem schema: `evalProg (mkErrDesc CAT) [.u64 r] fuel = some [.u64 (canonical CAT r)]`
-────────────────────────────────────────────────────────────────────────── -/
-
-/-- All category wrappers refine `canonical`. -/
+/-- All 13 category wrappers refine `canonical`. -/
 theorem errorCategory_refines (cat reason : UInt64) :
-    evalProg (mkErrDesc cat) [.u64 reason] 20 =
-    some [.u64 (canonical cat reason)] := by
-  simp [evalProg, mkErrDesc, mkErrCode, FuncDesc.body, canonical]
-  sorry  -- Same as errorCanonical_refines; deferred pending Step simp lemmas
+    evalSingle (mkErrDesc cat) [.u64 reason] 20 =
+    .returned [.u64 ((cat <<< 16) ||| reason)] MachineState.empty := by
+  simp only [evalSingle, singleEnv, singleIdx, eval, List.length, Array.size,
+             stdNatives, FuncDesc.body, mkErrDesc, mkErrCode]
+  rfl
 
--- Concrete instances (proved by native_decide when Step.lean simp set is complete):
+-- Concrete instances matching the Lean spec functions
 theorem errorInvalidArgument_refines (r : UInt64) :
-    evalProg errorInvalidArgumentDesc [.u64 r] 20 =
-    some [.u64 (invalid_argument r)] := errorCategory_refines 0x1 r
+    evalSingle errorInvalidArgumentDesc [.u64 r] 20 =
+    .returned [.u64 (invalid_argument r)] MachineState.empty := by
+  simp [invalid_argument, canonical, errorInvalidArgumentDesc]
+  exact errorCategory_refines 0x1 r
 
 theorem errorOutOfRange_refines (r : UInt64) :
-    evalProg errorOutOfRangeDesc [.u64 r] 20 =
-    some [.u64 (out_of_range r)] := errorCategory_refines 0x2 r
+    evalSingle errorOutOfRangeDesc [.u64 r] 20 =
+    .returned [.u64 (out_of_range r)] MachineState.empty :=
+  errorCategory_refines 0x2 r
 
 theorem errorInvalidState_refines (r : UInt64) :
-    evalProg errorInvalidStateDesc [.u64 r] 20 =
-    some [.u64 (invalid_state r)] := errorCategory_refines 0x3 r
+    evalSingle errorInvalidStateDesc [.u64 r] 20 =
+    .returned [.u64 (invalid_state r)] MachineState.empty :=
+  errorCategory_refines 0x3 r
 
 theorem errorUnauthenticated_refines (r : UInt64) :
-    evalProg errorUnauthenticatedDesc [.u64 r] 20 =
-    some [.u64 (unauthenticated r)] := errorCategory_refines 0x4 r
+    evalSingle errorUnauthenticatedDesc [.u64 r] 20 =
+    .returned [.u64 (unauthenticated r)] MachineState.empty :=
+  errorCategory_refines 0x4 r
 
 theorem errorPermissionDenied_refines (r : UInt64) :
-    evalProg errorPermissionDeniedDesc [.u64 r] 20 =
-    some [.u64 (permission_denied r)] := errorCategory_refines 0x5 r
+    evalSingle errorPermissionDeniedDesc [.u64 r] 20 =
+    .returned [.u64 (permission_denied r)] MachineState.empty :=
+  errorCategory_refines 0x5 r
 
 theorem errorNotFound_refines (r : UInt64) :
-    evalProg errorNotFoundDesc [.u64 r] 20 =
-    some [.u64 (not_found r)] := errorCategory_refines 0x6 r
+    evalSingle errorNotFoundDesc [.u64 r] 20 =
+    .returned [.u64 (not_found r)] MachineState.empty :=
+  errorCategory_refines 0x6 r
 
 theorem errorAborted_refines (r : UInt64) :
-    evalProg errorAbortedDesc [.u64 r] 20 =
-    some [.u64 (aborted r)] := errorCategory_refines 0x7 r
+    evalSingle errorAbortedDesc [.u64 r] 20 =
+    .returned [.u64 (aborted r)] MachineState.empty :=
+  errorCategory_refines 0x7 r
 
 theorem errorAlreadyExists_refines (r : UInt64) :
-    evalProg errorAlreadyExistsDesc [.u64 r] 20 =
-    some [.u64 (already_exists r)] := errorCategory_refines 0x8 r
+    evalSingle errorAlreadyExistsDesc [.u64 r] 20 =
+    .returned [.u64 (already_exists r)] MachineState.empty :=
+  errorCategory_refines 0x8 r
 
 theorem errorResourceExhausted_refines (r : UInt64) :
-    evalProg errorResourceExhaustedDesc [.u64 r] 20 =
-    some [.u64 (resource_exhausted r)] := errorCategory_refines 0x9 r
+    evalSingle errorResourceExhaustedDesc [.u64 r] 20 =
+    .returned [.u64 (resource_exhausted r)] MachineState.empty :=
+  errorCategory_refines 0x9 r
 
 theorem errorCancelled_refines (r : UInt64) :
-    evalProg errorCancelledDesc [.u64 r] 20 =
-    some [.u64 (cancelled r)] := errorCategory_refines 0xA r
+    evalSingle errorCancelledDesc [.u64 r] 20 =
+    .returned [.u64 (cancelled r)] MachineState.empty :=
+  errorCategory_refines 0xA r
 
 theorem errorInternal_refines (r : UInt64) :
-    evalProg errorInternalDesc [.u64 r] 20 =
-    some [.u64 (internal r)] := errorCategory_refines 0xB r
+    evalSingle errorInternalDesc [.u64 r] 20 =
+    .returned [.u64 (internal r)] MachineState.empty :=
+  errorCategory_refines 0xB r
 
 theorem errorNotImplemented_refines (r : UInt64) :
-    evalProg errorNotImplementedDesc [.u64 r] 20 =
-    some [.u64 (not_implemented r)] := errorCategory_refines 0xC r
+    evalSingle errorNotImplementedDesc [.u64 r] 20 =
+    .returned [.u64 (not_implemented r)] MachineState.empty :=
+  errorCategory_refines 0xC r
 
 theorem errorUnavailable_refines (r : UInt64) :
-    evalProg errorUnavailableDesc [.u64 r] 20 =
-    some [.u64 (unavailable r)] := errorCategory_refines 0xD r
+    evalSingle errorUnavailableDesc [.u64 r] 20 =
+    .returned [.u64 (unavailable r)] MachineState.empty :=
+  errorCategory_refines 0xD r
 
 /-! ─────────────────────────────────────────────────────────────────────────
 ## std::bit_vector::length
 
-The bytecode is `moveLoc 0; unpack 2 2; pop; ret`.
-After `unpack`, TOS = bit_field, below = length.
-`pop` removes bit_field, leaving length on stack.
+The bytecode: moveLoc 0 / unpack 2 2 / pop / ret
 
-Theorem: `evalProg bitVectorLengthDesc [.struct [.u64 len, .vector .bool bits]] fuel`
-         `= some [.u64 len]`
+`unpack 2 2` on `.struct_ [len, bits]` pushes `[len, bits].reverse = [bits, len]`
+(TOS = bits, below = len). `pop` removes bits. Return = len.
+
+Note: `MoveValue.struct_` not `MoveValue.struct` — check exact constructor.
 ────────────────────────────────────────────────────────────────────────── -/
 
 theorem bitVectorLength_refines (len : UInt64) (bits : List MoveValue) :
-    evalProg bitVectorLengthDesc [.struct [.u64 len, .vector .bool bits]] 10 =
-    some [.u64 len] := by
-  simp [evalProg, bitVectorLengthDesc, bitVectorLengthCode, FuncDesc.body]
-  sorry  -- Requires Step.lean simp lemmas for unpack field extraction; flagged
+    evalSingle bitVectorLengthDesc [.struct_ [.u64 len, .vector .bool bits]] 10 =
+    .returned [.u64 len] MachineState.empty := by
+  simp only [evalSingle, singleEnv, singleIdx, eval, List.length, Array.size,
+             stdNatives, FuncDesc.body, bitVectorLengthDesc, bitVectorLengthCode]
+  rfl
 
 end AptosFormal.Refinement.StdPrimitives

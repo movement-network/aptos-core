@@ -115,15 +115,13 @@ def round (fp : FixedPoint32) : UInt64 :=
 
 /-- For small integers (< 2^32), create_from_u64 then floor is identity. -/
 theorem floor_integer (n : UInt64) (h : n.toNat < 2^32) :
-    ((create_from_u64 n).toOption.getD ⟨0⟩ |>.value >>> 32) = n := by
+    (((create_from_u64 n).toOption.getD ⟨0⟩).value.shiftRight 32) = n := by
   simp only [create_from_u64, MAX_U64_NAT]
   split_ifs with hov
   · exfalso; omega
   · simp only [Except.toOption, Option.getD]
-    have hfit : n.toNat * 2^32 ≤ MAX_U64_NAT := by simp [MAX_U64_NAT]; omega
     apply UInt64.toNat_inj.mp
-    rw [UInt64.toNat_shiftRight]
-    simp only [UInt64.toNat_ofNat, MAX_U64_NAT]
+    simp only [UInt64.toNat_shiftRight, UInt64.toNat_ofNat, Nat.mod_def, MAX_U64_NAT]
     omega
 
 @[simp] theorem is_zero_iff (fp : FixedPoint32) : is_zero fp = true ↔ fp.value = 0 := by
@@ -133,7 +131,7 @@ theorem min_le_left (a b : FixedPoint32) : (min a b).value ≤ a.value := by
   simp only [min]
   split_ifs with h
   · exact le_refl _
-  · exact le_of_lt (lt_of_not_le h)
+  · exact le_of_not_le h |>.le
 
 theorem min_le_right (a b : FixedPoint32) : (min a b).value ≤ b.value := by
   simp only [min]
@@ -145,11 +143,11 @@ theorem max_ge_left (a b : FixedPoint32) : a.value ≤ (max a b).value := by
   simp only [max]
   split_ifs with h
   · exact le_refl _
-  · exact le_of_lt (lt_of_not_le h)
+  · exact le_of_not_le h |>.le
 
 theorem floor_le_ceil (fp : FixedPoint32) : floor fp ≤ ceil fp := by
-  simp [floor, ceil, fracBits]
-  split_ifs <;> omega
+  simp only [floor, ceil, fracBits]
+  split_ifs <;> simp_all <;> omega
 
 theorem ceil_eq_floor_of_exact (fp : FixedPoint32) (h : fracBits fp = 0) :
     ceil fp = floor fp := by

@@ -15,6 +15,7 @@
 //!      then the multisig executes.
 
 use crate::{assert_success, MoveHarness};
+use aptos_language_e2e_tests::account::Account;
 use aptos_types::{
     account_address::{create_resource_address, AccountAddress},
     transaction::{
@@ -25,6 +26,7 @@ use move_core_types::{
     ident_str,
     language_storage::{ModuleId, CORE_CODE_ADDRESS},
 };
+use sha3::{Digest, Keccak256};
 
 // ──────────────────────────────────────────────────────────────
 // Helpers
@@ -76,6 +78,55 @@ fn make_noop_entry_function() -> EntryFunction {
     )
 }
 
+fn salt32(label: &[u8]) -> Vec<u8> {
+    let mut hasher = Keccak256::new();
+    hasher.update(label);
+    hasher.finalize().to_vec()
+}
+
+fn timelock_hash(payload_bytes: &[u8], salt: &[u8]) -> Vec<u8> {
+    let mut hasher = Keccak256::new();
+    hasher.update(payload_bytes);
+    hasher.update(salt);
+    hasher.finalize().to_vec()
+}
+
+fn propose_timelock_transaction(
+    h: &mut MoveHarness,
+    creator: &Account,
+    timelock_addr: AccountAddress,
+    payload: Option<Vec<u8>>,
+    hash: Option<Vec<u8>>,
+    delay: u64,
+    salt: Vec<u8>,
+) -> TransactionStatus {
+    match (payload, hash) {
+        (Some(payload), None) => h.run_entry_function(
+            creator,
+            str::parse("0x1::timelock::create_transaction").unwrap(),
+            vec![],
+            vec![
+                bcs::to_bytes(&timelock_addr).unwrap(),
+                bcs::to_bytes(&payload).unwrap(),
+                bcs::to_bytes(&delay).unwrap(),
+                bcs::to_bytes(&salt).unwrap(),
+            ],
+        ),
+        (None, Some(hash)) => h.run_entry_function(
+            creator,
+            str::parse("0x1::timelock::create_transaction_with_hash").unwrap(),
+            vec![],
+            vec![
+                bcs::to_bytes(&timelock_addr).unwrap(),
+                bcs::to_bytes(&hash).unwrap(),
+                bcs::to_bytes(&delay).unwrap(),
+                bcs::to_bytes(&salt).unwrap(),
+            ],
+        ),
+        _ => panic!("timelock proposal must provide exactly one of payload or hash"),
+    }
+}
+
 // ──────────────────────────────────────────────────────────────
 // Test 1 — basic timelock transaction executes on-chain
 // ──────────────────────────────────────────────────────────────
@@ -113,18 +164,16 @@ fn test_timelock_transaction_execute() {
     let entry_fn = make_noop_entry_function();
     let payload_bytes =
         bcs::to_bytes(&TimelockTransactionPayload::EntryFunction(entry_fn.clone())).unwrap();
-    let salt = b"test_salt_1".to_vec();
+    let salt = salt32(b"test_salt_1");
 
-    let status = h.run_entry_function(
+    let status = propose_timelock_transaction(
+        &mut h,
         &creator,
-        str::parse("0x1::timelock::create_transaction").unwrap(),
-        vec![],
-        vec![
-            bcs::to_bytes(&timelock_addr).unwrap(),
-            bcs::to_bytes(&payload_bytes).unwrap(),
-            bcs::to_bytes(&DELAY).unwrap(),
-            bcs::to_bytes(&salt).unwrap(),
-        ],
+        timelock_addr,
+        Some(payload_bytes),
+        None,
+        DELAY,
+        salt.clone(),
     );
     assert_success!(status);
 
@@ -140,6 +189,48 @@ fn test_timelock_transaction_execute() {
         salt,
         Some(TimelockTransactionPayload::EntryFunction(entry_fn)),
     );
+    assert_success!(status);
+}
+
+#[test]
+fn test_timelock_transaction_execute_hash_only() {
+    let mut h = MoveHarness::new();
+    let creator = h.new_account_at(AccountAddress::from_hex_literal("0xCAFF").unwrap());
+    let timelock_addr = timelock_account_address(*creator.address(), 10);
+    const DELAY: u64 = 3700;
+
+    assert_success!(h.run_entry_function(
+        &creator,
+        str::parse("0x1::timelock::create").unwrap(),
+        vec![],
+        vec![
+            bcs::to_bytes::<Vec<AccountAddress>>(&vec![]).unwrap(),
+            bcs::to_bytes::<Vec<AccountAddress>>(&vec![]).unwrap(),
+            bcs::to_bytes(&DELAY).unwrap(),
+        ],
+    ));
+
+    let entry_fn = make_noop_entry_function();
+    let payload = TimelockTransactionPayload::EntryFunction(entry_fn.clone());
+    let payload_bytes = bcs::to_bytes(&payload).unwrap();
+    let salt = salt32(b"test_salt_hash_only");
+    let hash = timelock_hash(&payload_bytes, &salt);
+
+    let status = propose_timelock_transaction(
+        &mut h,
+        &creator,
+        timelock_addr,
+        None,
+        Some(hash),
+        DELAY,
+        salt.clone(),
+    );
+    assert_success!(status);
+
+    h.fast_forward(DELAY + 1);
+    h.executor.new_block();
+
+    let status = h.run_timelock(&creator, timelock_addr, salt, Some(payload));
     assert_success!(status);
 }
 
@@ -168,18 +259,16 @@ fn test_timelock_transaction_fails_before_delay() {
     let entry_fn = make_noop_entry_function();
     let payload_bytes =
         bcs::to_bytes(&TimelockTransactionPayload::EntryFunction(entry_fn.clone())).unwrap();
-    let salt = b"early_salt".to_vec();
+    let salt = salt32(b"early_salt");
 
-    assert_success!(h.run_entry_function(
+    assert_success!(propose_timelock_transaction(
+        &mut h,
         &creator,
-        str::parse("0x1::timelock::create_transaction").unwrap(),
-        vec![],
-        vec![
-            bcs::to_bytes(&timelock_addr).unwrap(),
-            bcs::to_bytes(&payload_bytes).unwrap(),
-            bcs::to_bytes(&DELAY).unwrap(),
-            bcs::to_bytes(&salt).unwrap(),
-        ],
+        timelock_addr,
+        Some(payload_bytes),
+        None,
+        DELAY,
+        salt.clone(),
     ));
 
     // Do NOT advance time – the prologue should abort with ETIMELOCK_NOT_EXPIRED.
@@ -225,18 +314,16 @@ fn test_timelock_transaction_unauthorized_executor() {
     let entry_fn = make_noop_entry_function();
     let payload_bytes =
         bcs::to_bytes(&TimelockTransactionPayload::EntryFunction(entry_fn.clone())).unwrap();
-    let salt = b"auth_salt".to_vec();
+    let salt = salt32(b"auth_salt");
 
-    assert_success!(h.run_entry_function(
+    assert_success!(propose_timelock_transaction(
+        &mut h,
         &creator,
-        str::parse("0x1::timelock::create_transaction").unwrap(),
-        vec![],
-        vec![
-            bcs::to_bytes(&timelock_addr).unwrap(),
-            bcs::to_bytes(&payload_bytes).unwrap(),
-            bcs::to_bytes(&DELAY).unwrap(),
-            bcs::to_bytes(&salt).unwrap(),
-        ],
+        timelock_addr,
+        Some(payload_bytes),
+        None,
+        DELAY,
+        salt.clone(),
     ));
 
     h.fast_forward(DELAY + 1);
@@ -309,7 +396,7 @@ fn test_multisig_proposes_timelock_transaction() {
     let inner_payload_bytes =
         bcs::to_bytes(&TimelockTransactionPayload::EntryFunction(inner_entry_fn.clone()))
             .unwrap();
-    let timelock_salt = b"multisig_via_timelock".to_vec();
+    let timelock_salt = salt32(b"multisig_via_timelock");
 
     let multisig_inner_entry_fn = EntryFunction::new(
         ModuleId::new(CORE_CODE_ADDRESS, ident_str!("timelock").to_owned()),
@@ -430,22 +517,20 @@ fn test_timelock_proposes_multisig_transaction() {
             bcs::to_bytes(&bcs::to_bytes(&multisig_proposal_payload).unwrap()).unwrap(),
         ],
     );
-    let timelock_salt = b"timelock_to_multisig".to_vec();
+    let timelock_salt = salt32(b"timelock_to_multisig");
 
     let timelock_payload =
         TimelockTransactionPayload::EntryFunction(timelock_inner_entry_fn.clone());
     let payload_bytes = bcs::to_bytes(&timelock_payload).unwrap();
 
-    assert_success!(h.run_entry_function(
+    assert_success!(propose_timelock_transaction(
+        &mut h,
         &alice,
-        str::parse("0x1::timelock::create_transaction").unwrap(),
-        vec![],
-        vec![
-            bcs::to_bytes(&timelock_addr).unwrap(),
-            bcs::to_bytes(&payload_bytes).unwrap(),
-            bcs::to_bytes(&DELAY).unwrap(),
-            bcs::to_bytes(&timelock_salt).unwrap(),
-        ],
+        timelock_addr,
+        Some(payload_bytes),
+        None,
+        DELAY,
+        timelock_salt.clone(),
     ));
 
     // ── Step 5: advance time and execute the timelock transaction ────────────
@@ -484,13 +569,37 @@ fn test_timelock_proposes_multisig_transaction() {
 // Returns true only when time has elapsed AND executed = false.
 // ──────────────────────────────────────────────────────────────
 
-fn can_be_executed(h: &mut MoveHarness, timelock_addr: AccountAddress, salt: &[u8]) -> bool {
+fn can_be_executed(h: &mut MoveHarness, timelock_addr: AccountAddress, hash: &[u8]) -> bool {
     let result = h.execute_view_function(
         str::parse("0x1::timelock::can_be_executed").unwrap(),
         vec![],
         vec![
             bcs::to_bytes(&timelock_addr).unwrap(),
-            bcs::to_bytes(&salt.to_vec()).unwrap(),
+            bcs::to_bytes(&hash.to_vec()).unwrap(),
+        ],
+    );
+    bcs::from_bytes::<bool>(&result.values.unwrap()[0]).unwrap()
+}
+
+fn is_creator_view(h: &mut MoveHarness, addr: AccountAddress, timelock_addr: AccountAddress) -> bool {
+    let result = h.execute_view_function(
+        str::parse("0x1::timelock::is_creator").unwrap(),
+        vec![],
+        vec![
+            bcs::to_bytes(&addr).unwrap(),
+            bcs::to_bytes(&timelock_addr).unwrap(),
+        ],
+    );
+    bcs::from_bytes::<bool>(&result.values.unwrap()[0]).unwrap()
+}
+
+fn is_executor_view(h: &mut MoveHarness, addr: AccountAddress, timelock_addr: AccountAddress) -> bool {
+    let result = h.execute_view_function(
+        str::parse("0x1::timelock::is_executor").unwrap(),
+        vec![],
+        vec![
+            bcs::to_bytes(&addr).unwrap(),
+            bcs::to_bytes(&timelock_addr).unwrap(),
         ],
     );
     bcs::from_bytes::<bool>(&result.values.unwrap()[0]).unwrap()
@@ -535,19 +644,18 @@ fn test_executed_false_while_delay_not_elapsed() {
     let entry_fn = make_noop_entry_function();
     let payload_bytes =
         bcs::to_bytes(&TimelockTransactionPayload::EntryFunction(entry_fn.clone())).unwrap();
-    let salt = b"delay_check_salt".to_vec();
+    let salt = salt32(b"delay_check_salt");
+    let hash = timelock_hash(&payload_bytes, &salt);
 
     // Propose transaction.
-    assert_success!(h.run_entry_function(
+    assert_success!(propose_timelock_transaction(
+        &mut h,
         &creator,
-        str::parse("0x1::timelock::create_transaction").unwrap(),
-        vec![],
-        vec![
-            bcs::to_bytes(&timelock_addr).unwrap(),
-            bcs::to_bytes(&payload_bytes).unwrap(),
-            bcs::to_bytes(&DELAY).unwrap(),
-            bcs::to_bytes(&salt).unwrap(),
-        ],
+        timelock_addr,
+        Some(payload_bytes),
+        None,
+        DELAY,
+        salt.clone(),
     ));
 
     // ── Attempt 1: too early — prologue must reject ───────────────────────────
@@ -566,7 +674,7 @@ fn test_executed_false_while_delay_not_elapsed() {
     // The transaction must still be pending — not consumed by the failed attempt.
     // can_be_executed returns false because time hasn't passed yet (not because executed=true).
     assert!(
-        !can_be_executed(&mut h, timelock_addr, &salt),
+        !can_be_executed(&mut h, timelock_addr, &hash),
         "can_be_executed should be false (delay not elapsed)",
     );
 
@@ -576,7 +684,7 @@ fn test_executed_false_while_delay_not_elapsed() {
 
     // Now `can_be_executed` must return true: time has passed and executed is still false.
     assert!(
-        can_be_executed(&mut h, timelock_addr, &salt),
+        can_be_executed(&mut h, timelock_addr, &hash),
         "can_be_executed should be true after delay with executed=false",
     );
 
@@ -591,7 +699,7 @@ fn test_executed_false_while_delay_not_elapsed() {
 
     // After successful execution, executed=true → can_be_executed returns false.
     assert!(
-        !can_be_executed(&mut h, timelock_addr, &salt),
+        !can_be_executed(&mut h, timelock_addr, &hash),
         "can_be_executed should be false after successful execution",
     );
 
@@ -672,20 +780,19 @@ fn test_malconstructed_payload_sets_executed_no_state_change() {
     // prologue byte-equality check will pass.
     let payload_bytes =
         bcs::to_bytes(&TimelockTransactionPayload::EntryFunction(bad_inner_fn.clone())).unwrap();
-    let salt = b"bad_payload_salt".to_vec();
+    let salt = salt32(b"bad_payload_salt");
+    let hash = timelock_hash(&payload_bytes, &salt);
 
     // Propose the transaction — the payload is accepted as-is (the timelock module
     // stores raw bytes without interpreting them).
-    assert_success!(h.run_entry_function(
+    assert_success!(propose_timelock_transaction(
+        &mut h,
         &creator,
-        str::parse("0x1::timelock::create_transaction").unwrap(),
-        vec![],
-        vec![
-            bcs::to_bytes(&timelock_addr).unwrap(),
-            bcs::to_bytes(&payload_bytes).unwrap(),
-            bcs::to_bytes(&DELAY).unwrap(),
-            bcs::to_bytes(&salt).unwrap(),
-        ],
+        timelock_addr,
+        Some(payload_bytes),
+        None,
+        DELAY,
+        salt.clone(),
     ));
 
     h.fast_forward(DELAY + 1);
@@ -717,7 +824,7 @@ fn test_malconstructed_payload_sets_executed_no_state_change() {
     // ── executed:true assurance ───────────────────────────────────────────────
     // can_be_executed returns false because executed was set to true by the cleanup.
     assert!(
-        !can_be_executed(&mut h, timelock_addr, &salt),
+        !can_be_executed(&mut h, timelock_addr, &hash),
         "can_be_executed should be false — executed=true was set by failed_transaction_execution_cleanup",
     );
 
@@ -781,18 +888,17 @@ fn test_self_governance_update_delay() {
     );
     let governance_payload = TimelockTransactionPayload::EntryFunction(governance_entry_fn.clone());
     let governance_payload_bytes = bcs::to_bytes(&governance_payload).unwrap();
-    let salt = b"governance_update_delay".to_vec();
+    let salt = salt32(b"governance_update_delay");
+    let hash = timelock_hash(&governance_payload_bytes, &salt);
 
-    assert_success!(h.run_entry_function(
+    assert_success!(propose_timelock_transaction(
+        &mut h,
         &creator,
-        str::parse("0x1::timelock::create_transaction").unwrap(),
-        vec![],
-        vec![
-            bcs::to_bytes(&timelock_addr).unwrap(),
-            bcs::to_bytes(&governance_payload_bytes).unwrap(),
-            bcs::to_bytes(&DELAY).unwrap(),
-            bcs::to_bytes(&salt).unwrap(),
-        ],
+        timelock_addr,
+        Some(governance_payload_bytes),
+        None,
+        DELAY,
+        salt.clone(),
     ));
 
     // Step 3: advance time.
@@ -800,13 +906,13 @@ fn test_self_governance_update_delay() {
     h.executor.new_block();
 
     // Step 4: execute the governance transaction.
-    let status = h.run_timelock(
-        &creator,
-        timelock_addr,
-        salt,
-        Some(governance_payload),
-    );
+    let status = h.run_timelock(&creator, timelock_addr, salt, Some(governance_payload));
     assert_success!(status);
+
+    assert!(
+        !can_be_executed(&mut h, timelock_addr, &hash),
+        "can_be_executed should be false after governance execution",
+    );
 
     // Step 5: verify the new delay is in effect.
     let result = h.execute_view_function(
@@ -854,31 +960,29 @@ fn test_non_sequential_salt_execution() {
     let payload_bytes =
         bcs::to_bytes(&TimelockTransactionPayload::EntryFunction(entry_fn.clone())).unwrap();
 
-    let salt_a = b"salt_alpha".to_vec();
-    let salt_b = b"salt_beta".to_vec();
+    let salt_a = salt32(b"salt_alpha");
+    let salt_b = salt32(b"salt_beta");
+    let hash_a = timelock_hash(&payload_bytes, &salt_a);
+    let hash_b = timelock_hash(&payload_bytes, &salt_b);
 
     // Propose A then B.
-    assert_success!(h.run_entry_function(
+    assert_success!(propose_timelock_transaction(
+        &mut h,
         &creator,
-        str::parse("0x1::timelock::create_transaction").unwrap(),
-        vec![],
-        vec![
-            bcs::to_bytes(&timelock_addr).unwrap(),
-            bcs::to_bytes(&payload_bytes).unwrap(),
-            bcs::to_bytes(&DELAY).unwrap(),
-            bcs::to_bytes(&salt_a).unwrap(),
-        ],
+        timelock_addr,
+        Some(payload_bytes.clone()),
+        None,
+        DELAY,
+        salt_a.clone(),
     ));
-    assert_success!(h.run_entry_function(
+    assert_success!(propose_timelock_transaction(
+        &mut h,
         &creator,
-        str::parse("0x1::timelock::create_transaction").unwrap(),
-        vec![],
-        vec![
-            bcs::to_bytes(&timelock_addr).unwrap(),
-            bcs::to_bytes(&payload_bytes).unwrap(),
-            bcs::to_bytes(&DELAY).unwrap(),
-            bcs::to_bytes(&salt_b).unwrap(),
-        ],
+        timelock_addr,
+        Some(payload_bytes),
+        None,
+        DELAY,
+        salt_b.clone(),
     ));
 
     h.fast_forward(DELAY + 1);
@@ -903,8 +1007,8 @@ fn test_non_sequential_salt_execution() {
     assert_success!(status);
 
     // Both are executed.
-    assert!(!can_be_executed(&mut h, timelock_addr, &salt_a));
-    assert!(!can_be_executed(&mut h, timelock_addr, &salt_b));
+    assert!(!can_be_executed(&mut h, timelock_addr, &hash_a));
+    assert!(!can_be_executed(&mut h, timelock_addr, &hash_b));
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -942,19 +1046,18 @@ fn test_creator_cancels_when_executor_list_nonempty() {
     let entry_fn = make_noop_entry_function();
     let payload_bytes =
         bcs::to_bytes(&TimelockTransactionPayload::EntryFunction(entry_fn.clone())).unwrap();
-    let salt = b"cancel_by_creator".to_vec();
+    let salt = salt32(b"cancel_by_creator");
+    let hash = timelock_hash(&payload_bytes, &salt);
 
     // Propose.
-    assert_success!(h.run_entry_function(
+    assert_success!(propose_timelock_transaction(
+        &mut h,
         &creator,
-        str::parse("0x1::timelock::create_transaction").unwrap(),
-        vec![],
-        vec![
-            bcs::to_bytes(&timelock_addr).unwrap(),
-            bcs::to_bytes(&payload_bytes).unwrap(),
-            bcs::to_bytes(&DELAY).unwrap(),
-            bcs::to_bytes(&salt).unwrap(),
-        ],
+        timelock_addr,
+        Some(payload_bytes),
+        None,
+        DELAY,
+        salt.clone(),
     ));
 
     // Creator cancels before the delay elapses.
@@ -964,7 +1067,7 @@ fn test_creator_cancels_when_executor_list_nonempty() {
         vec![],
         vec![
             bcs::to_bytes(&timelock_addr).unwrap(),
-            bcs::to_bytes(&salt).unwrap(),
+            bcs::to_bytes(&hash).unwrap(),
         ],
     ));
 
@@ -974,7 +1077,7 @@ fn test_creator_cancels_when_executor_list_nonempty() {
 
     // can_be_executed returns false because executed = true (canceled).
     assert!(
-        !can_be_executed(&mut h, timelock_addr, &salt),
+        !can_be_executed(&mut h, timelock_addr, &hash),
         "can_be_executed should be false — transaction was canceled",
     );
 
@@ -1019,32 +1122,28 @@ fn test_duplicate_salt_rejected() {
     let entry_fn = make_noop_entry_function();
     let payload_bytes =
         bcs::to_bytes(&TimelockTransactionPayload::EntryFunction(entry_fn.clone())).unwrap();
-    let salt = b"dup_salt_test".to_vec();
+    let salt = salt32(b"dup_salt_test");
 
     // First proposal — must succeed.
-    assert_success!(h.run_entry_function(
+    assert_success!(propose_timelock_transaction(
+        &mut h,
         &creator,
-        str::parse("0x1::timelock::create_transaction").unwrap(),
-        vec![],
-        vec![
-            bcs::to_bytes(&timelock_addr).unwrap(),
-            bcs::to_bytes(&payload_bytes).unwrap(),
-            bcs::to_bytes(&DELAY).unwrap(),
-            bcs::to_bytes(&salt).unwrap(),
-        ],
+        timelock_addr,
+        Some(payload_bytes.clone()),
+        None,
+        DELAY,
+        salt.clone(),
     ));
 
     // Second proposal with same salt — must fail (EDUPLICATE_SALT).
-    let status = h.run_entry_function(
+    let status = propose_timelock_transaction(
+        &mut h,
         &creator,
-        str::parse("0x1::timelock::create_transaction").unwrap(),
-        vec![],
-        vec![
-            bcs::to_bytes(&timelock_addr).unwrap(),
-            bcs::to_bytes(&payload_bytes).unwrap(),
-            bcs::to_bytes(&DELAY).unwrap(),
-            bcs::to_bytes(&salt).unwrap(),
-        ],
+        timelock_addr,
+        Some(payload_bytes.clone()),
+        None,
+        DELAY,
+        salt.clone(),
     );
     assert!(
         !matches!(status, TransactionStatus::Keep(aptos_types::transaction::ExecutionStatus::Success)),
@@ -1053,17 +1152,15 @@ fn test_duplicate_salt_rejected() {
     );
 
     // Different salt — must succeed.
-    let salt2 = b"dup_salt_test_2".to_vec();
-    assert_success!(h.run_entry_function(
+    let salt2 = salt32(b"dup_salt_test_2");
+    assert_success!(propose_timelock_transaction(
+        &mut h,
         &creator,
-        str::parse("0x1::timelock::create_transaction").unwrap(),
-        vec![],
-        vec![
-            bcs::to_bytes(&timelock_addr).unwrap(),
-            bcs::to_bytes(&payload_bytes).unwrap(),
-            bcs::to_bytes(&DELAY).unwrap(),
-            bcs::to_bytes(&salt2).unwrap(),
-        ],
+        timelock_addr,
+        Some(payload_bytes),
+        None,
+        DELAY,
+        salt2,
     ));
 }
 
@@ -1096,18 +1193,16 @@ fn test_timelock_transaction_payload_mismatch() {
     let payload_a = make_noop_entry_function();
     let payload_a_bytes =
         bcs::to_bytes(&TimelockTransactionPayload::EntryFunction(payload_a)).unwrap();
-    let salt = b"mismatch_salt".to_vec();
+    let salt = salt32(b"mismatch_salt");
 
-    assert_success!(h.run_entry_function(
+    assert_success!(propose_timelock_transaction(
+        &mut h,
         &creator,
-        str::parse("0x1::timelock::create_transaction").unwrap(),
-        vec![],
-        vec![
-            bcs::to_bytes(&timelock_addr).unwrap(),
-            bcs::to_bytes(&payload_a_bytes).unwrap(),
-            bcs::to_bytes(&DELAY).unwrap(),
-            bcs::to_bytes(&salt).unwrap(),
-        ],
+        timelock_addr,
+        Some(payload_a_bytes),
+        None,
+        DELAY,
+        salt.clone(),
     ));
 
     h.fast_forward(DELAY + 1);
@@ -1147,7 +1242,7 @@ fn test_timelock_transaction_non_timelock_account() {
 
     // Use the executor's own address — it is a regular account, not a timelock account.
     let fake_timelock_addr = *executor.address();
-    let salt = b"no_timelock_salt".to_vec();
+    let salt = salt32(b"no_timelock_salt");
 
     let status = h.run_timelock(
         &executor,
@@ -1194,7 +1289,7 @@ fn test_timelock_transaction_salt_not_found() {
     let status = h.run_timelock(
         &creator,
         timelock_addr,
-        b"ghost_salt".to_vec(),
+        salt32(b"ghost_salt"),
         Some(TimelockTransactionPayload::EntryFunction(make_noop_entry_function())),
     );
     assert!(
@@ -1233,19 +1328,18 @@ fn test_non_creator_cannot_propose() {
     let entry_fn = make_noop_entry_function();
     let payload_bytes =
         bcs::to_bytes(&TimelockTransactionPayload::EntryFunction(entry_fn)).unwrap();
-    let salt = b"non_creator_salt".to_vec();
+    let salt = salt32(b"non_creator_salt");
+    let hash = timelock_hash(&payload_bytes, &salt);
 
     // Non-creator attempts to propose — must fail.
-    let status = h.run_entry_function(
+    let status = propose_timelock_transaction(
+        &mut h,
         &non_creator,
-        str::parse("0x1::timelock::create_transaction").unwrap(),
-        vec![],
-        vec![
-            bcs::to_bytes(&timelock_addr).unwrap(),
-            bcs::to_bytes(&payload_bytes).unwrap(),
-            bcs::to_bytes(&DELAY).unwrap(),
-            bcs::to_bytes(&salt).unwrap(),
-        ],
+        timelock_addr,
+        Some(payload_bytes),
+        None,
+        DELAY,
+        salt.clone(),
     );
     assert!(
         !matches!(status, TransactionStatus::Keep(aptos_types::transaction::ExecutionStatus::Success)),
@@ -1256,7 +1350,771 @@ fn test_non_creator_cannot_propose() {
     // Verify no transaction was stored (the table should not contain the salt).
     // We do this by trying to read can_be_executed — it returns false (salt not present).
     assert!(
-        !can_be_executed(&mut h, timelock_addr, &salt),
+        !can_be_executed(&mut h, timelock_addr, &hash),
         "No transaction should have been stored after rejected proposal",
     );
+}
+
+// ──────────────────────────────────────────────────────────────
+// Test 16 — dedicated executor (not creator) runs a TimelockTransaction
+// ──────────────────────────────────────────────────────────────
+
+/// A timelock account with a dedicated executor list: the creator proposes, but only
+/// the executor (not the creator) is allowed to submit the TimelockTransaction.
+///
+///   1. Create timelock with creator and a dedicated executor.
+///   2. Creator proposes a transaction.
+///   3. Advance time past delay.
+///   4. Dedicated executor submits the TimelockTransaction → success.
+///   5. Creator tries to execute the same (already-executed) hash → Discard.
+#[test]
+fn test_dedicated_executor_runs_timelock_transaction() {
+    let mut h = MoveHarness::new();
+
+    let creator = h.new_account_at(AccountAddress::from_hex_literal("0xA100").unwrap());
+    let executor = h.new_account_at(AccountAddress::from_hex_literal("0xA101").unwrap());
+
+    let timelock_addr = timelock_account_address(*creator.address(), 10);
+    const DELAY: u64 = 3700;
+
+    // Create timelock: creator can propose, executor can execute (creator cannot).
+    assert_success!(h.run_entry_function(
+        &creator,
+        str::parse("0x1::timelock::create").unwrap(),
+        vec![],
+        vec![
+            bcs::to_bytes::<Vec<AccountAddress>>(&vec![]).unwrap(),
+            bcs::to_bytes::<Vec<AccountAddress>>(&vec![*executor.address()]).unwrap(),
+            bcs::to_bytes(&DELAY).unwrap(),
+        ],
+    ));
+
+    // Verify: executor list is non-empty, so creator is NOT an executor.
+    assert!(
+        !is_executor_view(&mut h, *creator.address(), timelock_addr),
+        "creator should not be executor when executor list is non-empty",
+    );
+    assert!(
+        is_executor_view(&mut h, *executor.address(), timelock_addr),
+        "executor should be recognized as executor",
+    );
+
+    let entry_fn = make_noop_entry_function();
+    let payload_bytes =
+        bcs::to_bytes(&TimelockTransactionPayload::EntryFunction(entry_fn.clone())).unwrap();
+    let salt = salt32(b"dedicated_executor_salt");
+    let hash = timelock_hash(&payload_bytes, &salt);
+
+    assert_success!(propose_timelock_transaction(
+        &mut h,
+        &creator,
+        timelock_addr,
+        Some(payload_bytes),
+        None,
+        DELAY,
+        salt.clone(),
+    ));
+
+    h.fast_forward(DELAY + 1);
+    h.executor.new_block();
+
+    // Dedicated executor submits the TimelockTransaction — must succeed.
+    let status = h.run_timelock(
+        &executor,
+        timelock_addr,
+        salt.clone(),
+        Some(TimelockTransactionPayload::EntryFunction(entry_fn.clone())),
+    );
+    assert_success!(status);
+
+    // Transaction is now executed — can_be_executed must return false.
+    assert!(
+        !can_be_executed(&mut h, timelock_addr, &hash),
+        "can_be_executed should be false after execution",
+    );
+
+    // Creator now tries to run the same (already-executed) hash → prologue reject.
+    let status = h.run_timelock(
+        &creator,
+        timelock_addr,
+        salt,
+        Some(TimelockTransactionPayload::EntryFunction(entry_fn)),
+    );
+    assert!(
+        matches!(status, aptos_types::transaction::TransactionStatus::Discard(_)),
+        "Expected Discard: creator cannot run already-executed tx, got: {:?}",
+        status
+    );
+}
+
+// ──────────────────────────────────────────────────────────────
+// Test 17 — self-governance: add_creators via TimelockTransaction
+// ──────────────────────────────────────────────────────────────
+
+/// Full VM path for the self-governance add_creators entry function.
+///
+///   1. Alice creates timelock (sole creator, no executors).
+///   2. Alice proposes `timelock::add_creators([bob])` via a TimelockTransaction.
+///   3. Time advances.
+///   4. Alice (executor) submits the TimelockTransaction.
+///      The VM uses the timelock's signer_cap to call add_creators as the timelock signer.
+///   5. Bob is now a creator and can propose transactions.
+#[test]
+fn test_self_governance_add_creators() {
+    let mut h = MoveHarness::new();
+
+    let alice = h.new_account_at(AccountAddress::from_hex_literal("0xA200").unwrap());
+    let bob = h.new_account_at(AccountAddress::from_hex_literal("0xA201").unwrap());
+    let timelock_addr = timelock_account_address(*alice.address(), 10);
+    const DELAY: u64 = 3700;
+
+    assert_success!(h.run_entry_function(
+        &alice,
+        str::parse("0x1::timelock::create").unwrap(),
+        vec![],
+        vec![
+            bcs::to_bytes::<Vec<AccountAddress>>(&vec![]).unwrap(),
+            bcs::to_bytes::<Vec<AccountAddress>>(&vec![]).unwrap(),
+            bcs::to_bytes(&DELAY).unwrap(),
+        ],
+    ));
+
+    assert!(!is_creator_view(&mut h, *bob.address(), timelock_addr));
+
+    // Build the add_creators payload: the timelock signer is injected by the VM,
+    // so we only encode `new_creators: vector<address>`.
+    let add_creators_fn = EntryFunction::new(
+        ModuleId::new(CORE_CODE_ADDRESS, ident_str!("timelock").to_owned()),
+        ident_str!("add_creators").to_owned(),
+        vec![],
+        vec![bcs::to_bytes::<Vec<AccountAddress>>(&vec![*bob.address()]).unwrap()],
+    );
+    let governance_payload = TimelockTransactionPayload::EntryFunction(add_creators_fn.clone());
+    let governance_payload_bytes = bcs::to_bytes(&governance_payload).unwrap();
+    let salt = salt32(b"add_creators_salt");
+
+    assert_success!(propose_timelock_transaction(
+        &mut h,
+        &alice,
+        timelock_addr,
+        Some(governance_payload_bytes),
+        None,
+        DELAY,
+        salt.clone(),
+    ));
+
+    h.fast_forward(DELAY + 1);
+    h.executor.new_block();
+
+    // Alice executes the governance TimelockTransaction.
+    let status = h.run_timelock(&alice, timelock_addr, salt, Some(governance_payload));
+    assert_success!(status);
+
+    // Bob is now a creator.
+    assert!(
+        is_creator_view(&mut h, *bob.address(), timelock_addr),
+        "bob should be a creator after add_creators governance tx",
+    );
+
+    // Bob can propose a transaction.
+    let entry_fn = make_noop_entry_function();
+    let payload_bytes =
+        bcs::to_bytes(&TimelockTransactionPayload::EntryFunction(entry_fn)).unwrap();
+    let bob_salt = salt32(b"bob_first_proposal");
+    let status = propose_timelock_transaction(
+        &mut h,
+        &bob,
+        timelock_addr,
+        Some(payload_bytes),
+        None,
+        DELAY,
+        bob_salt,
+    );
+    assert_success!(status);
+}
+
+// ──────────────────────────────────────────────────────────────
+// Test 18 — self-governance: remove_creators via TimelockTransaction
+// ──────────────────────────────────────────────────────────────
+
+/// Full VM path for the self-governance remove_creators entry function.
+///
+///   1. Alice creates timelock with herself and Bob as creators.
+///   2. Alice proposes `timelock::remove_creators([alice])`.
+///   3. Bob executes (also creator, empty executor list).
+///   4. Alice is no longer a creator; Bob still is.
+#[test]
+fn test_self_governance_remove_creators() {
+    let mut h = MoveHarness::new();
+
+    let alice = h.new_account_at(AccountAddress::from_hex_literal("0xA300").unwrap());
+    let bob = h.new_account_at(AccountAddress::from_hex_literal("0xA301").unwrap());
+    let timelock_addr = timelock_account_address(*alice.address(), 10);
+    const DELAY: u64 = 3700;
+
+    // Alice creates timelock with Bob as an additional creator.
+    assert_success!(h.run_entry_function(
+        &alice,
+        str::parse("0x1::timelock::create").unwrap(),
+        vec![],
+        vec![
+            bcs::to_bytes::<Vec<AccountAddress>>(&vec![*bob.address()]).unwrap(),
+            bcs::to_bytes::<Vec<AccountAddress>>(&vec![]).unwrap(),
+            bcs::to_bytes(&DELAY).unwrap(),
+        ],
+    ));
+
+    assert!(is_creator_view(&mut h, *alice.address(), timelock_addr));
+    assert!(is_creator_view(&mut h, *bob.address(), timelock_addr));
+
+    // Build the remove_creators payload targeting Alice.
+    let remove_creators_fn = EntryFunction::new(
+        ModuleId::new(CORE_CODE_ADDRESS, ident_str!("timelock").to_owned()),
+        ident_str!("remove_creators").to_owned(),
+        vec![],
+        vec![bcs::to_bytes::<Vec<AccountAddress>>(&vec![*alice.address()]).unwrap()],
+    );
+    let governance_payload = TimelockTransactionPayload::EntryFunction(remove_creators_fn);
+    let governance_payload_bytes = bcs::to_bytes(&governance_payload).unwrap();
+    let salt = salt32(b"remove_alice_salt");
+
+    // Alice proposes her own removal.
+    assert_success!(propose_timelock_transaction(
+        &mut h,
+        &alice,
+        timelock_addr,
+        Some(governance_payload_bytes),
+        None,
+        DELAY,
+        salt.clone(),
+    ));
+
+    h.fast_forward(DELAY + 1);
+    h.executor.new_block();
+
+    // Bob submits the TimelockTransaction (he is also a creator and executor list is empty).
+    let status = h.run_timelock(&bob, timelock_addr, salt, Some(governance_payload));
+    assert_success!(status);
+
+    // Alice is no longer a creator; Bob still is.
+    assert!(
+        !is_creator_view(&mut h, *alice.address(), timelock_addr),
+        "alice should have been removed from creators",
+    );
+    assert!(
+        is_creator_view(&mut h, *bob.address(), timelock_addr),
+        "bob should still be a creator",
+    );
+}
+
+// ──────────────────────────────────────────────────────────────
+// Test 19 — self-governance: add_executors via TimelockTransaction
+// ──────────────────────────────────────────────────────────────
+
+/// Full VM path for the self-governance add_executors entry function.
+///
+///   1. Alice creates timelock (sole creator, no executors).
+///   2. Alice proposes `timelock::add_executors([charlie])`.
+///   3. Alice executes (executor list still empty at proposal time).
+///   4. Charlie is now an executor — the executor list is non-empty.
+///   5. Alice (creator) is no longer executor; Charlie is.
+///   6. Charlie executes a subsequent TimelockTransaction successfully.
+#[test]
+fn test_self_governance_add_executors() {
+    let mut h = MoveHarness::new();
+
+    let alice = h.new_account_at(AccountAddress::from_hex_literal("0xA400").unwrap());
+    let charlie = h.new_account_at(AccountAddress::from_hex_literal("0xA401").unwrap());
+    let timelock_addr = timelock_account_address(*alice.address(), 10);
+    const DELAY: u64 = 3700;
+
+    assert_success!(h.run_entry_function(
+        &alice,
+        str::parse("0x1::timelock::create").unwrap(),
+        vec![],
+        vec![
+            bcs::to_bytes::<Vec<AccountAddress>>(&vec![]).unwrap(),
+            bcs::to_bytes::<Vec<AccountAddress>>(&vec![]).unwrap(),
+            bcs::to_bytes(&DELAY).unwrap(),
+        ],
+    ));
+
+    // Before governance tx: Alice is executor (empty executor list → creator fallback).
+    assert!(is_executor_view(&mut h, *alice.address(), timelock_addr));
+    assert!(!is_executor_view(&mut h, *charlie.address(), timelock_addr));
+
+    let add_executors_fn = EntryFunction::new(
+        ModuleId::new(CORE_CODE_ADDRESS, ident_str!("timelock").to_owned()),
+        ident_str!("add_executors").to_owned(),
+        vec![],
+        vec![bcs::to_bytes::<Vec<AccountAddress>>(&vec![*charlie.address()]).unwrap()],
+    );
+    let governance_payload = TimelockTransactionPayload::EntryFunction(add_executors_fn);
+    let governance_payload_bytes = bcs::to_bytes(&governance_payload).unwrap();
+    let salt = salt32(b"add_executors_salt");
+
+    assert_success!(propose_timelock_transaction(
+        &mut h,
+        &alice,
+        timelock_addr,
+        Some(governance_payload_bytes),
+        None,
+        DELAY,
+        salt.clone(),
+    ));
+
+    h.fast_forward(DELAY + 1);
+    h.executor.new_block();
+
+    // Alice executes (executor list still empty at this point → creator fallback).
+    let status = h.run_timelock(&alice, timelock_addr, salt, Some(governance_payload));
+    assert_success!(status);
+
+    // After governance: executor list is now [charlie]; creator fallback no longer applies.
+    assert!(
+        is_executor_view(&mut h, *charlie.address(), timelock_addr),
+        "charlie should now be an executor",
+    );
+    assert!(
+        !is_executor_view(&mut h, *alice.address(), timelock_addr),
+        "alice should no longer be executor (executor list is non-empty)",
+    );
+
+    // Charlie executes a subsequent TimelockTransaction.
+    let entry_fn = make_noop_entry_function();
+    let payload_bytes =
+        bcs::to_bytes(&TimelockTransactionPayload::EntryFunction(entry_fn.clone())).unwrap();
+    let salt2 = salt32(b"charlie_executes");
+
+    assert_success!(propose_timelock_transaction(
+        &mut h,
+        &alice,
+        timelock_addr,
+        Some(payload_bytes),
+        None,
+        DELAY,
+        salt2.clone(),
+    ));
+
+    h.fast_forward(DELAY + 1);
+    h.executor.new_block();
+
+    let status = h.run_timelock(
+        &charlie,
+        timelock_addr,
+        salt2,
+        Some(TimelockTransactionPayload::EntryFunction(entry_fn)),
+    );
+    assert_success!(status);
+}
+
+// ──────────────────────────────────────────────────────────────
+// Test 20 — self-governance: remove_executors via TimelockTransaction
+// ──────────────────────────────────────────────────────────────
+
+/// Full VM path for the self-governance remove_executors entry function.
+///
+///   1. Alice creates timelock with Eve as dedicated executor.
+///   2. Alice proposes `timelock::remove_executors([eve])`.
+///   3. Eve executes the governance TimelockTransaction.
+///   4. Executor list is now empty → Alice (creator) can execute again.
+///   5. Eve can no longer execute.
+#[test]
+fn test_self_governance_remove_executors() {
+    let mut h = MoveHarness::new();
+
+    let alice = h.new_account_at(AccountAddress::from_hex_literal("0xA500").unwrap());
+    let eve = h.new_account_at(AccountAddress::from_hex_literal("0xA501").unwrap());
+    let timelock_addr = timelock_account_address(*alice.address(), 10);
+    const DELAY: u64 = 3700;
+
+    assert_success!(h.run_entry_function(
+        &alice,
+        str::parse("0x1::timelock::create").unwrap(),
+        vec![],
+        vec![
+            bcs::to_bytes::<Vec<AccountAddress>>(&vec![]).unwrap(),
+            bcs::to_bytes::<Vec<AccountAddress>>(&vec![*eve.address()]).unwrap(),
+            bcs::to_bytes(&DELAY).unwrap(),
+        ],
+    ));
+
+    assert!(is_executor_view(&mut h, *eve.address(), timelock_addr));
+    assert!(!is_executor_view(&mut h, *alice.address(), timelock_addr));
+
+    let remove_executors_fn = EntryFunction::new(
+        ModuleId::new(CORE_CODE_ADDRESS, ident_str!("timelock").to_owned()),
+        ident_str!("remove_executors").to_owned(),
+        vec![],
+        vec![bcs::to_bytes::<Vec<AccountAddress>>(&vec![*eve.address()]).unwrap()],
+    );
+    let governance_payload = TimelockTransactionPayload::EntryFunction(remove_executors_fn);
+    let governance_payload_bytes = bcs::to_bytes(&governance_payload).unwrap();
+    let salt = salt32(b"remove_executors_salt");
+
+    assert_success!(propose_timelock_transaction(
+        &mut h,
+        &alice,
+        timelock_addr,
+        Some(governance_payload_bytes),
+        None,
+        DELAY,
+        salt.clone(),
+    ));
+
+    h.fast_forward(DELAY + 1);
+    h.executor.new_block();
+
+    // Eve executes the governance tx (she is still the executor at this point).
+    let status = h.run_timelock(&eve, timelock_addr, salt, Some(governance_payload));
+    assert_success!(status);
+
+    // Executor list is now empty → Alice (creator) is executor again.
+    assert!(
+        is_executor_view(&mut h, *alice.address(), timelock_addr),
+        "alice should be executor again once executor list is empty",
+    );
+    assert!(
+        !is_executor_view(&mut h, *eve.address(), timelock_addr),
+        "eve should no longer be executor",
+    );
+
+    // Alice executes a subsequent TimelockTransaction — must succeed.
+    let entry_fn = make_noop_entry_function();
+    let payload_bytes =
+        bcs::to_bytes(&TimelockTransactionPayload::EntryFunction(entry_fn.clone())).unwrap();
+    let salt2 = salt32(b"alice_executes_after_remove");
+
+    assert_success!(propose_timelock_transaction(
+        &mut h,
+        &alice,
+        timelock_addr,
+        Some(payload_bytes),
+        None,
+        DELAY,
+        salt2.clone(),
+    ));
+
+    h.fast_forward(DELAY + 1);
+    h.executor.new_block();
+
+    let status = h.run_timelock(
+        &alice,
+        timelock_addr,
+        salt2.clone(),
+        Some(TimelockTransactionPayload::EntryFunction(entry_fn.clone())),
+    );
+    assert_success!(status);
+
+    // Eve tries to execute a new transaction — should be rejected (no longer executor).
+    let salt3 = salt32(b"eve_tries_after_remove");
+    assert_success!(propose_timelock_transaction(
+        &mut h,
+        &alice,
+        timelock_addr,
+        Some(bcs::to_bytes(&TimelockTransactionPayload::EntryFunction(entry_fn.clone())).unwrap()),
+        None,
+        DELAY,
+        salt3.clone(),
+    ));
+
+    h.fast_forward(DELAY + 1);
+    h.executor.new_block();
+
+    let status = h.run_timelock(
+        &eve,
+        timelock_addr,
+        salt3,
+        Some(TimelockTransactionPayload::EntryFunction(entry_fn)),
+    );
+    assert!(
+        matches!(status, aptos_types::transaction::TransactionStatus::Discard(_)),
+        "Expected Discard: eve is no longer an executor, got: {:?}",
+        status
+    );
+}
+
+// ──────────────────────────────────────────────────────────────
+// Test 21 — executor cancels a pending transaction (entry function path)
+// ──────────────────────────────────────────────────────────────
+
+/// A dedicated executor calls `cancel_transaction` via an entry-function transaction,
+/// then verifies that the TimelockTransaction can no longer be executed.
+///
+///   1. Create timelock with creator and dedicated executor.
+///   2. Creator proposes a transaction.
+///   3. Executor cancels via `cancel_transaction` entry function.
+///   4. `can_be_executed` returns false (executed = true from cancellation).
+///   5. After delay, executor tries to run the canceled transaction → Discard.
+#[test]
+fn test_executor_cancels_transaction() {
+    let mut h = MoveHarness::new();
+
+    let creator = h.new_account_at(AccountAddress::from_hex_literal("0xA600").unwrap());
+    let executor = h.new_account_at(AccountAddress::from_hex_literal("0xA601").unwrap());
+    let timelock_addr = timelock_account_address(*creator.address(), 10);
+    const DELAY: u64 = 3700;
+
+    assert_success!(h.run_entry_function(
+        &creator,
+        str::parse("0x1::timelock::create").unwrap(),
+        vec![],
+        vec![
+            bcs::to_bytes::<Vec<AccountAddress>>(&vec![]).unwrap(),
+            bcs::to_bytes::<Vec<AccountAddress>>(&vec![*executor.address()]).unwrap(),
+            bcs::to_bytes(&DELAY).unwrap(),
+        ],
+    ));
+
+    let entry_fn = make_noop_entry_function();
+    let payload_bytes =
+        bcs::to_bytes(&TimelockTransactionPayload::EntryFunction(entry_fn.clone())).unwrap();
+    let salt = salt32(b"executor_cancel_salt");
+    let hash = timelock_hash(&payload_bytes, &salt);
+
+    assert_success!(propose_timelock_transaction(
+        &mut h,
+        &creator,
+        timelock_addr,
+        Some(payload_bytes),
+        None,
+        DELAY,
+        salt.clone(),
+    ));
+
+    // Executor cancels before the delay elapses.
+    assert_success!(h.run_entry_function(
+        &executor,
+        str::parse("0x1::timelock::cancel_transaction").unwrap(),
+        vec![],
+        vec![
+            bcs::to_bytes(&timelock_addr).unwrap(),
+            bcs::to_bytes(&hash).unwrap(),
+        ],
+    ));
+
+    // can_be_executed must return false (executed = true via cancellation).
+    assert!(
+        !can_be_executed(&mut h, timelock_addr, &hash),
+        "can_be_executed should be false after cancellation",
+    );
+
+    // Advance time past delay — the transaction is already canceled, must still be rejected.
+    h.fast_forward(DELAY + 1);
+    h.executor.new_block();
+
+    let status = h.run_timelock(
+        &executor,
+        timelock_addr,
+        salt,
+        Some(TimelockTransactionPayload::EntryFunction(entry_fn)),
+    );
+    assert!(
+        matches!(status, aptos_types::transaction::TransactionStatus::Discard(_)),
+        "Expected Discard (ETRANSACTION_ALREADY_EXECUTED) for canceled tx, got: {:?}",
+        status
+    );
+}
+
+// ──────────────────────────────────────────────────────────────
+// Test 22 — creating a timelock with num_seconds_execute <= 360 fails
+// ──────────────────────────────────────────────────────────────
+
+/// The minimum timelock delay enforced on-chain is > 360 seconds.
+/// Creating with delay = 360 must fail; delay = 361 must succeed.
+#[test]
+fn test_create_timelock_below_min_delay_fails() {
+    let mut h = MoveHarness::new();
+    let creator = h.new_account_at(AccountAddress::from_hex_literal("0xA700").unwrap());
+
+    // delay = 360 → must fail (ENUMBER_SECONDS_TOO_SMALL, error code 14).
+    let status = h.run_entry_function(
+        &creator,
+        str::parse("0x1::timelock::create").unwrap(),
+        vec![],
+        vec![
+            bcs::to_bytes::<Vec<AccountAddress>>(&vec![]).unwrap(),
+            bcs::to_bytes::<Vec<AccountAddress>>(&vec![]).unwrap(),
+            bcs::to_bytes(&360u64).unwrap(),
+        ],
+    );
+    assert!(
+        !matches!(
+            status,
+            aptos_types::transaction::TransactionStatus::Keep(
+                aptos_types::transaction::ExecutionStatus::Success
+            )
+        ),
+        "Expected failure for delay=360, got: {:?}",
+        status
+    );
+
+    // delay = 361 → must succeed (boundary: delay > 360).
+    let creator2 = h.new_account_at(AccountAddress::from_hex_literal("0xA702").unwrap());
+    assert_success!(h.run_entry_function(
+        &creator2,
+        str::parse("0x1::timelock::create").unwrap(),
+        vec![],
+        vec![
+            bcs::to_bytes::<Vec<AccountAddress>>(&vec![]).unwrap(),
+            bcs::to_bytes::<Vec<AccountAddress>>(&vec![]).unwrap(),
+            bcs::to_bytes(&361u64).unwrap(),
+        ],
+    ));
+}
+
+// ──────────────────────────────────────────────────────────────
+// Test 23 — proposing a transaction with num_seconds_execute below minimum fails
+// ──────────────────────────────────────────────────────────────
+
+/// `create_transaction` must reject any proposal whose `num_seconds_execute` is
+/// strictly less than the account's `min_num_seconds_execute`.
+#[test]
+fn test_propose_transaction_below_min_delay_fails() {
+    let mut h = MoveHarness::new();
+    let creator = h.new_account_at(AccountAddress::from_hex_literal("0xA800").unwrap());
+    let timelock_addr = timelock_account_address(*creator.address(), 10);
+    const MIN_DELAY: u64 = 3700;
+
+    assert_success!(h.run_entry_function(
+        &creator,
+        str::parse("0x1::timelock::create").unwrap(),
+        vec![],
+        vec![
+            bcs::to_bytes::<Vec<AccountAddress>>(&vec![]).unwrap(),
+            bcs::to_bytes::<Vec<AccountAddress>>(&vec![]).unwrap(),
+            bcs::to_bytes(&MIN_DELAY).unwrap(),
+        ],
+    ));
+
+    let entry_fn = make_noop_entry_function();
+    let payload_bytes =
+        bcs::to_bytes(&TimelockTransactionPayload::EntryFunction(entry_fn.clone())).unwrap();
+    let salt = salt32(b"below_min_delay_salt");
+
+    // Propose with num_seconds_execute = MIN_DELAY - 1 → must fail.
+    let status = propose_timelock_transaction(
+        &mut h,
+        &creator,
+        timelock_addr,
+        Some(payload_bytes.clone()),
+        None,
+        MIN_DELAY - 1,
+        salt.clone(),
+    );
+    assert!(
+        !matches!(
+            status,
+            aptos_types::transaction::TransactionStatus::Keep(
+                aptos_types::transaction::ExecutionStatus::Success
+            )
+        ),
+        "Expected failure for num_seconds_execute < min_delay, got: {:?}",
+        status
+    );
+
+    // Propose with exactly MIN_DELAY → must succeed.
+    let salt2 = salt32(b"exact_min_delay_salt");
+    let status = propose_timelock_transaction(
+        &mut h,
+        &creator,
+        timelock_addr,
+        Some(payload_bytes),
+        None,
+        MIN_DELAY,
+        salt2,
+    );
+    assert_success!(status);
+}
+
+// ──────────────────────────────────────────────────────────────
+// Test 24 — create_transaction with invalid salt length fails
+// ──────────────────────────────────────────────────────────────
+
+/// Salts must be exactly 32 bytes. Shorter or longer salts must be rejected
+/// (error::invalid_argument(EINVALID_BYTES_LENGTH)).
+#[test]
+fn test_create_transaction_invalid_salt_length_fails() {
+    let mut h = MoveHarness::new();
+    let creator = h.new_account_at(AccountAddress::from_hex_literal("0xA900").unwrap());
+    let timelock_addr = timelock_account_address(*creator.address(), 10);
+    const DELAY: u64 = 3700;
+
+    assert_success!(h.run_entry_function(
+        &creator,
+        str::parse("0x1::timelock::create").unwrap(),
+        vec![],
+        vec![
+            bcs::to_bytes::<Vec<AccountAddress>>(&vec![]).unwrap(),
+            bcs::to_bytes::<Vec<AccountAddress>>(&vec![]).unwrap(),
+            bcs::to_bytes(&DELAY).unwrap(),
+        ],
+    ));
+
+    let entry_fn = make_noop_entry_function();
+    let payload_bytes =
+        bcs::to_bytes(&TimelockTransactionPayload::EntryFunction(entry_fn)).unwrap();
+
+    // Salt too short (< 32 bytes) → must fail.
+    let short_salt: Vec<u8> = b"short".to_vec();
+    let status = h.run_entry_function(
+        &creator,
+        str::parse("0x1::timelock::create_transaction").unwrap(),
+        vec![],
+        vec![
+            bcs::to_bytes(&timelock_addr).unwrap(),
+            bcs::to_bytes(&payload_bytes).unwrap(),
+            bcs::to_bytes(&DELAY).unwrap(),
+            bcs::to_bytes(&short_salt).unwrap(),
+        ],
+    );
+    assert!(
+        !matches!(
+            status,
+            aptos_types::transaction::TransactionStatus::Keep(
+                aptos_types::transaction::ExecutionStatus::Success
+            )
+        ),
+        "Expected failure for salt.len() < 32, got: {:?}",
+        status
+    );
+
+    // Salt too long (> 32 bytes) → must fail.
+    let long_salt: Vec<u8> = vec![0u8; 33];
+    let status = h.run_entry_function(
+        &creator,
+        str::parse("0x1::timelock::create_transaction").unwrap(),
+        vec![],
+        vec![
+            bcs::to_bytes(&timelock_addr).unwrap(),
+            bcs::to_bytes(&payload_bytes).unwrap(),
+            bcs::to_bytes(&DELAY).unwrap(),
+            bcs::to_bytes(&long_salt).unwrap(),
+        ],
+    );
+    assert!(
+        !matches!(
+            status,
+            aptos_types::transaction::TransactionStatus::Keep(
+                aptos_types::transaction::ExecutionStatus::Success
+            )
+        ),
+        "Expected failure for salt.len() > 32, got: {:?}",
+        status
+    );
+
+    // Exactly 32 bytes → must succeed.
+    let valid_salt = salt32(b"valid_salt_exactly_32");
+    let status = h.run_entry_function(
+        &creator,
+        str::parse("0x1::timelock::create_transaction").unwrap(),
+        vec![],
+        vec![
+            bcs::to_bytes(&timelock_addr).unwrap(),
+            bcs::to_bytes(&payload_bytes).unwrap(),
+            bcs::to_bytes(&DELAY).unwrap(),
+            bcs::to_bytes(&valid_salt).unwrap(),
+        ],
+    );
+    assert_success!(status);
 }

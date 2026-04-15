@@ -807,12 +807,703 @@ theorem vectorIndexOf_returnValues_empty (e : UInt64) :
     returnValues (evalProg 19 [.vector .u64 [], .u64 e] 30) =
       some [.bool false, .u64 0] := by rfl
 
+-- ────────────────────────────────────────────────────────────────
+-- indexOf loop frame (identical layout to containsLoopFrame, uses vectorIndexOfCode)
+-- ────────────────────────────────────────────────────────────────
+
+private def indexOfLoopFrame (xs : List UInt64) (e : UInt64) (k : Nat) : Frame where
+  code     := vectorIndexOfCode
+  pc       := 7
+  locals   := #[
+    some (.vector .u64 (xs.map .u64)),
+    some (.u64 e),
+    some (.immRef 0),
+    some (.u64 k.toUInt64),
+    some (.u64 (xs.length.toUInt64))
+  ]
+  localRefs := noLocalRefs5
+
+private def indexOfVmStore (xs : List UInt64) (k : Nat) : ContainerStore where
+  store :=
+    #[MoveValue.vector MoveType.u64 (xs.map MoveValue.u64)] ++
+      ((List.take k xs).map MoveValue.u64).toArray
+
+-- indexOf and contains share the same loop body steps (pc 7–22).
+-- We need @[simp] size/instr lemmas for vectorIndexOfCode.
+
+@[simp] private theorem vectorIndexOf_code_size : vectorIndexOfCode.size = 29 := by native_decide
+private theorem vectorIndexOf_ix_lt {i : Nat} (hi : i < 29) : i < vectorIndexOfCode.size := by
+  rw [vectorIndexOf_code_size]; exact hi
+@[simp] private theorem vectorIndexOf_instr_9 :
+    vectorIndexOfCode[9]'(vectorIndexOf_ix_lt (by decide)) = MoveInstr.lt := rfl
+@[simp] private theorem vectorIndexOf_instr_13 :
+    vectorIndexOfCode[13]'(vectorIndexOf_ix_lt (by decide)) = MoveInstr.vecImmBorrow .u64 := rfl
+@[simp] private theorem vectorIndexOf_instr_14 :
+    vectorIndexOfCode[14]'(vectorIndexOf_ix_lt (by decide)) = MoveInstr.readRef := rfl
+@[simp] private theorem vectorIndexOf_instr_16 :
+    vectorIndexOfCode[16]'(vectorIndexOf_ix_lt (by decide)) = MoveInstr.eq := rfl
+@[simp] private theorem vectorIndexOf_instr_22 :
+    vectorIndexOfCode[22]'(vectorIndexOf_ix_lt (by decide)) = MoveInstr.branch 7 := rfl
+
+-- Loop frame simp lemmas
+@[simp] private theorem indexOfLoopFrame_code (xs : List UInt64) (e : UInt64) (k i : Nat) :
+    ({ indexOfLoopFrame xs e k with pc := i}).code = vectorIndexOfCode := rfl
+@[simp] private theorem indexOfLoopFrame_pc (xs : List UInt64) (e : UInt64) (k i : Nat) :
+    ({ indexOfLoopFrame xs e k with pc := i}).pc = i := rfl
+
+-- indexOf store lemmas reuse the same algebra as contains
+private theorem indexOf_list_take_succ (xs : List UInt64) (k : Nat) (hk : k < xs.length) :
+    List.take k (List.map MoveValue.u64 xs) ++ [MoveValue.u64 (xs.get ⟨k, hk⟩)] =
+      List.take (k + 1) (List.map MoveValue.u64 xs) :=
+  contains_list_take_succ xs k hk
+
+private def indexOfAllocStore (xs : List UInt64) (k : Nat) (hk : k < xs.length) :
+    ContainerStore :=
+  (ContainerStore.alloc (indexOfVmStore xs k) (.u64 (xs.get ⟨k, hk⟩))).1
+
+private theorem indexOf_vm_store_succ (xs : List UInt64) (k : Nat) (hk : k < xs.length) :
+    (ContainerStore.alloc (indexOfVmStore xs k) (.u64 (xs.get ⟨k, hk⟩))).1 =
+      indexOfVmStore xs (k + 1) := by
+  simp [indexOfVmStore, ContainerStore.alloc]
+  simpa using indexOf_list_take_succ xs k hk
+
+private theorem indexOf_alloc_store_eq (xs : List UInt64) (k : Nat) (hk : k < xs.length) :
+    indexOfAllocStore xs k hk = indexOfVmStore xs (k + 1) :=
+  indexOf_vm_store_succ xs k hk
+
+private theorem indexOf_alloc_read_cell (xs : List UInt64) (k : Nat) (hk : k < xs.length) :
+    (indexOfAllocStore xs k hk).read (k + 1) = some (.u64 (xs.get ⟨k, hk⟩)) := by
+  have hmin : min (k + 1) xs.length = k + 1 := Nat.min_eq_left (Nat.succ_le_of_lt hk)
+  simp [indexOf_alloc_store_eq, indexOfVmStore, ContainerStore.read,
+    List.getElem_map, List.getElem_take, hmin]
+
+private theorem indexOf_read_vec0 (xs : List UInt64) (k : Nat) :
+    (indexOfVmStore xs k).read 0 = some (.vector .u64 (xs.map .u64)) := by
+  simp [indexOfVmStore, ContainerStore.read]
+
+-- ── Setup (7 steps, identical structure to contains setup) ──────────────────
+
+private def indexOfInitFrame (xs : List UInt64) (e : UInt64) : Frame :=
+  let args : List MoveValue := [.vector .u64 (xs.map .u64), .u64 e]
+  { code := vectorIndexOfCode, pc := 0,
+    locals := (args.map some ++ List.replicate 3 none).toArray,
+    localRefs := noLocalRefs5 }
+
+private def indexOfLocalsILen (xs : List UInt64) (e : UInt64) : Array (Option MoveValue) :=
+  #[some (.vector .u64 (xs.map .u64)), some (.u64 e), some (.immRef 0), none, none]
+
+private theorem indexOf_setup_step0 (xs : List UInt64) (e : UInt64) :
+    step stdModuleEnv (indexOfInitFrame xs e) [] [] ContainerStore.empty =
+      ExecResult.ok
+        { code := vectorIndexOfCode, pc := 1,
+          locals := #[some (.vector .u64 (xs.map .u64)), some (.u64 e), none, none, none],
+          localRefs := noLocalRefs5 }
+        [] [.immRef 0]
+        (MachineState.ofContainers { store := #[.vector .u64 (xs.map .u64)] }) := rfl
+
+private theorem indexOf_setup_step1 (xs : List UInt64) (e : UInt64) :
+    step stdModuleEnv
+        { code := vectorIndexOfCode, pc := 1,
+          locals := #[some (.vector .u64 (xs.map .u64)), some (.u64 e), none, none, none],
+          localRefs := noLocalRefs5 }
+        [] [.immRef 0]
+        (MachineState.ofContainers { store := #[.vector .u64 (xs.map .u64)] }) =
+      ExecResult.ok
+        { code := vectorIndexOfCode, pc := 2, locals := indexOfLocalsILen xs e,
+          localRefs := noLocalRefs5 }
+        [] []
+        (MachineState.ofContainers { store := #[.vector .u64 (xs.map .u64)] }) := rfl
+
+private theorem indexOf_setup_step2 (xs : List UInt64) (e : UInt64) :
+    step stdModuleEnv
+        { code := vectorIndexOfCode, pc := 2, locals := indexOfLocalsILen xs e,
+          localRefs := noLocalRefs5 }
+        [] []
+        (MachineState.ofContainers { store := #[.vector .u64 (xs.map .u64)] }) =
+      ExecResult.ok
+        { code := vectorIndexOfCode, pc := 3, locals := indexOfLocalsILen xs e,
+          localRefs := noLocalRefs5 }
+        [] [.u64 0]
+        (MachineState.ofContainers { store := #[.vector .u64 (xs.map .u64)] }) := rfl
+
+private theorem indexOf_setup_step3 (xs : List UInt64) (e : UInt64) :
+    step stdModuleEnv
+        { code := vectorIndexOfCode, pc := 3, locals := indexOfLocalsILen xs e,
+          localRefs := noLocalRefs5 }
+        [] [.u64 0]
+        (MachineState.ofContainers { store := #[.vector .u64 (xs.map .u64)] }) =
+      ExecResult.ok
+        { code := vectorIndexOfCode, pc := 4,
+          locals := #[some (.vector .u64 (xs.map .u64)), some (.u64 e),
+                      some (.immRef 0), some (.u64 0), none],
+          localRefs := noLocalRefs5 }
+        [] []
+        (MachineState.ofContainers { store := #[.vector .u64 (xs.map .u64)] }) := rfl
+
+private theorem indexOf_setup_step4 (xs : List UInt64) (e : UInt64) :
+    step stdModuleEnv
+        { code := vectorIndexOfCode, pc := 4,
+          locals := #[some (.vector .u64 (xs.map .u64)), some (.u64 e),
+                      some (.immRef 0), some (.u64 0), none],
+          localRefs := noLocalRefs5 }
+        [] []
+        (MachineState.ofContainers { store := #[.vector .u64 (xs.map .u64)] }) =
+      ExecResult.ok
+        { code := vectorIndexOfCode, pc := 5,
+          locals := #[some (.vector .u64 (xs.map .u64)), some (.u64 e),
+                      some (.immRef 0), some (.u64 0), none],
+          localRefs := noLocalRefs5 }
+        [] [.immRef 0]
+        (MachineState.ofContainers { store := #[.vector .u64 (xs.map .u64)] }) := rfl
+
+private theorem indexOf_setup_step5 (xs : List UInt64) (e : UInt64) :
+    step stdModuleEnv
+        { code := vectorIndexOfCode, pc := 5,
+          locals := #[some (.vector .u64 (xs.map .u64)), some (.u64 e),
+                      some (.immRef 0), some (.u64 0), none],
+          localRefs := noLocalRefs5 }
+        [] [.immRef 0]
+        (MachineState.ofContainers { store := #[.vector .u64 (xs.map .u64)] }) =
+      ExecResult.ok
+        { code := vectorIndexOfCode, pc := 6,
+          locals := #[some (.vector .u64 (xs.map .u64)), some (.u64 e),
+                      some (.immRef 0), some (.u64 0), none],
+          localRefs := noLocalRefs5 }
+        [] [.u64 (List.map MoveValue.u64 xs).length.toUInt64]
+        (MachineState.ofContainers { store := #[.vector .u64 (xs.map .u64)] }) := rfl
+
+private theorem indexOf_setup_step6 (xs : List UInt64) (e : UInt64) :
+    step stdModuleEnv
+        { code := vectorIndexOfCode, pc := 6,
+          locals := #[some (.vector .u64 (xs.map .u64)), some (.u64 e),
+                      some (.immRef 0), some (.u64 0), none],
+          localRefs := noLocalRefs5 }
+        [] [.u64 (List.map MoveValue.u64 xs).length.toUInt64]
+        (MachineState.ofContainers { store := #[.vector .u64 (xs.map .u64)] }) =
+      ExecResult.ok (indexOfLoopFrame xs e 0) [] [] (indexOfVmStore xs 0) := rfl
+
+private theorem indexOf_run_after_setup (xs : List UInt64) (e : UInt64) (fuel : Nat) :
+    run stdModuleEnv (indexOfInitFrame xs e) [] [] ContainerStore.empty (7 + fuel) =
+      run stdModuleEnv (indexOfLoopFrame xs e 0) [] [] (indexOfVmStore xs 0) fuel := by
+  rw [show 7 + fuel = Nat.succ (6 + fuel) by omega]
+  rw [run_succ_ok _ (indexOf_setup_step0 xs e)]
+  rw [show 6 + fuel = Nat.succ (5 + fuel) by omega]
+  rw [run_succ_ok _ (indexOf_setup_step1 xs e)]
+  rw [show 5 + fuel = Nat.succ (4 + fuel) by omega]
+  rw [run_succ_ok _ (indexOf_setup_step2 xs e)]
+  rw [show 4 + fuel = Nat.succ (3 + fuel) by omega]
+  rw [run_succ_ok _ (indexOf_setup_step3 xs e)]
+  rw [show 3 + fuel = Nat.succ (2 + fuel) by omega]
+  rw [run_succ_ok _ (indexOf_setup_step4 xs e)]
+  rw [show 2 + fuel = Nat.succ (1 + fuel) by omega]
+  rw [run_succ_ok _ (indexOf_setup_step5 xs e)]
+  rw [show 1 + fuel = Nat.succ fuel by omega]
+  rw [run_succ_ok _ (indexOf_setup_step6 xs e)]
+
+private theorem eval_eq_indexOf_run (xs : List UInt64) (e : UInt64) (fuel : Nat) :
+    eval stdModuleEnv 19 [.vector .u64 (xs.map .u64), .u64 e] fuel =
+      run stdModuleEnv (indexOfInitFrame xs e) [] [] ContainerStore.empty fuel := by
+  simp [eval, indexOfInitFrame, stdModuleEnv, vectorIndexOfDesc, vectorIndexOfCode]
+  rfl
+
+private theorem indexOf_evalProg_after_setup (xs : List UInt64) (e : UInt64) (fuel : Nat) :
+    evalProg 19 [.vector .u64 (xs.map .u64), .u64 e] (7 + fuel) =
+      run stdModuleEnv (indexOfLoopFrame xs e 0) [] [] (indexOfVmStore xs 0) fuel := by
+  dsimp [evalProg]
+  rw [eval_eq_indexOf_run, indexOf_run_after_setup]
+
+-- ── Exit path (k = xs.length, not found → return [false, 0]) ───────────────
+
+private def indexOfExitFrame (xs : List UInt64) (e : UInt64) : Frame :=
+  let uLen := (List.map MoveValue.u64 xs).length.toUInt64
+  { code := vectorIndexOfCode, pc := 7,
+    locals := #[
+      some (.vector .u64 (xs.map .u64)),
+      some (.u64 e),
+      some (.immRef 0),
+      some (.u64 uLen),
+      some (.u64 uLen)
+    ],
+    localRefs := noLocalRefs5 }
+
+private theorem indexOf_loop_eq_exit (xs : List UInt64) (e : UInt64) :
+    indexOfLoopFrame xs e xs.length = indexOfExitFrame xs e := by
+  simp [indexOfLoopFrame, indexOfExitFrame, List.length_map]
+
+private theorem indexOf_exit_step0 (xs : List UInt64) (e : UInt64) :
+    step stdModuleEnv (indexOfExitFrame xs e) [] [] (indexOfVmStore xs xs.length) =
+      ExecResult.ok ({ indexOfExitFrame xs e with pc := 8 }) [] [.u64 xs.length.toUInt64]
+        (indexOfVmStore xs xs.length) := rfl
+
+private theorem indexOf_exit_step1 (xs : List UInt64) (e : UInt64) :
+    step stdModuleEnv ({ indexOfExitFrame xs e with pc := 8 }) [] [.u64 xs.length.toUInt64]
+        (indexOfVmStore xs xs.length) =
+      ExecResult.ok ({ indexOfExitFrame xs e with pc := 9 })
+        [] [.u64 xs.length.toUInt64, .u64 xs.length.toUInt64]
+        (indexOfVmStore xs xs.length) := rfl
+
+private theorem indexOf_exit_step2 (xs : List UInt64) (e : UInt64) :
+    step stdModuleEnv ({ indexOfExitFrame xs e with pc := 9 })
+        [] [.u64 xs.length.toUInt64, .u64 xs.length.toUInt64]
+        (indexOfVmStore xs xs.length) =
+      ExecResult.ok ({ indexOfExitFrame xs e with pc := 10 }) [] [.bool false]
+        (indexOfVmStore xs xs.length) := by
+  have hid : intLt (.u64 (UInt64.ofNat xs.length)) (.u64 (UInt64.ofNat xs.length)) = some false := by
+    rw [intLt_u64, decide_eq_false (UInt64.lt_irrefl _)]
+  simp [step, indexOfExitFrame, indexOfVmStore, hid, vectorIndexOf_code_size,
+    vectorIndexOf_instr_9, List.length_map]
+
+-- pc 10: brFalse 26 → jump to NOT FOUND (pc 26)
+private theorem indexOf_exit_step3 (xs : List UInt64) (e : UInt64) :
+    step stdModuleEnv ({ indexOfExitFrame xs e with pc := 10 }) [] [.bool false]
+        (indexOfVmStore xs xs.length) =
+      ExecResult.ok ({ indexOfExitFrame xs e with pc := 26 }) [] []
+        (indexOfVmStore xs xs.length) := rfl
+
+-- pc 26: ldU64 0
+private theorem indexOf_exit_step4 (xs : List UInt64) (e : UInt64) :
+    step stdModuleEnv ({ indexOfExitFrame xs e with pc := 26 }) [] []
+        (indexOfVmStore xs xs.length) =
+      ExecResult.ok ({ indexOfExitFrame xs e with pc := 27 }) [] [.u64 0]
+        (indexOfVmStore xs xs.length) := rfl
+
+-- pc 27: ldFalse
+private theorem indexOf_exit_step5 (xs : List UInt64) (e : UInt64) :
+    step stdModuleEnv ({ indexOfExitFrame xs e with pc := 27 }) [] [.u64 0]
+        (indexOfVmStore xs xs.length) =
+      ExecResult.ok ({ indexOfExitFrame xs e with pc := 28 }) [] [.bool false, .u64 0]
+        (indexOfVmStore xs xs.length) := rfl
+
+-- pc 28: ret
+private theorem indexOf_exit_step6 (xs : List UInt64) (e : UInt64) :
+    step stdModuleEnv ({ indexOfExitFrame xs e with pc := 28 }) [] [.bool false, .u64 0]
+        (indexOfVmStore xs xs.length) =
+      ExecResult.returned [.bool false, .u64 0] (indexOfVmStore xs xs.length) := rfl
+
+private theorem indexOf_run_exit (xs : List UInt64) (e : UInt64) (t : Nat) :
+    run stdModuleEnv (indexOfExitFrame xs e) [] [] (indexOfVmStore xs xs.length) (7 + t) =
+      ExecResult.returned [.bool false, .u64 0] (indexOfVmStore xs xs.length) := by
+  rw [show 7 + t = Nat.succ (6 + t) by omega]
+  rw [run_succ_ok _ (indexOf_exit_step0 xs e)]
+  rw [show 6 + t = Nat.succ (5 + t) by omega]
+  rw [run_succ_ok _ (indexOf_exit_step1 xs e)]
+  rw [show 5 + t = Nat.succ (4 + t) by omega]
+  rw [run_succ_ok _ (indexOf_exit_step2 xs e)]
+  rw [show 4 + t = Nat.succ (3 + t) by omega]
+  rw [run_succ_ok _ (indexOf_exit_step3 xs e)]
+  rw [show 3 + t = Nat.succ (2 + t) by omega]
+  rw [run_succ_ok _ (indexOf_exit_step4 xs e)]
+  rw [show 2 + t = Nat.succ (1 + t) by omega]
+  rw [run_succ_ok _ (indexOf_exit_step5 xs e)]
+  rw [show 1 + t = Nat.succ t by omega]
+  simp [run, indexOf_exit_step6 xs e]
+
+-- ── Found path (xs[k] == e → return [true, k]) ─────────────────────────────
+
+-- Steps 0–6: same loop-body steps as contains (identical bytecode pc 7–12)
+-- Steps 7–12: alloc+read+eq (pc 13–17, same as contains)
+-- Steps 13–16: different: copyLoc 3 (push i), ldTrue, ret → [true, i]
+
+private theorem indexOf_foundN0 (xs : List UInt64) (e : UInt64) (k : Nat) (hk : k < xs.length)
+    (_hlen : xs.length < UInt64.size) :
+    step stdModuleEnv (indexOfLoopFrame xs e k) [] [] (indexOfVmStore xs k) =
+      ExecResult.ok ({ indexOfLoopFrame xs e k with pc := 8 }) [] [.u64 k.toUInt64]
+        (indexOfVmStore xs k) := by
+  have hlt : k.toUInt64 < xs.length.toUInt64 := by
+    rw [UInt64.lt_iff_toNat_lt]; simp [UInt64.toNat_ofNat, UInt64.toNat_ofNat_of_lt hk]
+  have hid : intLt (.u64 k.toUInt64) (.u64 xs.length.toUInt64) = some true := by
+    rw [intLt_u64, decide_eq_true hlt]
+  simp [step, indexOfLoopFrame, indexOfVmStore, hid, vectorIndexOf_code_size, vectorIndexOf_instr_9]
+
+private theorem indexOf_foundN1 (xs : List UInt64) (e : UInt64) (k : Nat) :
+    step stdModuleEnv ({ indexOfLoopFrame xs e k with pc := 8 }) [] [.u64 k.toUInt64]
+        (indexOfVmStore xs k) =
+      ExecResult.ok ({ indexOfLoopFrame xs e k with pc := 9 })
+        [] [.u64 xs.length.toUInt64, .u64 k.toUInt64]
+        (indexOfVmStore xs k) := rfl
+
+private theorem indexOf_foundN2 (xs : List UInt64) (e : UInt64) (k : Nat)
+    (hk : k < xs.length) (hlen : xs.length < UInt64.size) :
+    step stdModuleEnv ({ indexOfLoopFrame xs e k with pc := 9 })
+        [] [.u64 xs.length.toUInt64, .u64 k.toUInt64]
+        (indexOfVmStore xs k) =
+      ExecResult.ok ({ indexOfLoopFrame xs e k with pc := 10 }) [] [.bool true]
+        (indexOfVmStore xs k) := by
+  have hlt : k.toUInt64 < xs.length.toUInt64 := by
+    rw [UInt64.lt_iff_toNat_lt]
+    exact UInt64.toNat_ofNat_of_lt (Nat.lt_trans hk hlen) ▸
+      UInt64.toNat_ofNat_of_lt hlen ▸ hk
+  have hid : intLt (.u64 k.toUInt64) (.u64 xs.length.toUInt64) = some true := by
+    rw [intLt_u64, decide_eq_true hlt]
+  simp [step, indexOfLoopFrame, indexOfVmStore, hid, vectorIndexOf_code_size, vectorIndexOf_instr_9]
+
+private theorem indexOf_foundN3 (xs : List UInt64) (e : UInt64) (k : Nat)
+    (_hk : k < xs.length) (_he : (xs.get ⟨_hk, _hk⟩ == e) = true) :
+    step stdModuleEnv ({ indexOfLoopFrame xs e k with pc := 10 }) [] [.bool true]
+        (indexOfVmStore xs k) =
+      ExecResult.ok ({ indexOfLoopFrame xs e k with pc := 11 }) [] []
+        (indexOfVmStore xs k) := rfl
+
+private theorem indexOf_foundN4 (xs : List UInt64) (e : UInt64) (k : Nat) :
+    step stdModuleEnv ({ indexOfLoopFrame xs e k with pc := 11 }) [] []
+        (indexOfVmStore xs k) =
+      ExecResult.ok ({ indexOfLoopFrame xs e k with pc := 12 }) [] [.immRef 0]
+        (indexOfVmStore xs k) := rfl
+
+private theorem indexOf_foundN5 (xs : List UInt64) (e : UInt64) (k : Nat) :
+    step stdModuleEnv ({ indexOfLoopFrame xs e k with pc := 12 }) [] [.immRef 0]
+        (indexOfVmStore xs k) =
+      ExecResult.ok ({ indexOfLoopFrame xs e k with pc := 13 }) [] [.u64 k.toUInt64, .immRef 0]
+        (indexOfVmStore xs k) := rfl
+
+private theorem indexOf_foundN6 (xs : List UInt64) (e : UInt64) (k : Nat) (hk : k < xs.length)
+    (hlen : xs.length < UInt64.size) :
+    step stdModuleEnv ({ indexOfLoopFrame xs e k with pc := 13 }) [] [.u64 k.toUInt64, .immRef 0]
+        (indexOfVmStore xs k) =
+      ExecResult.ok ({ indexOfLoopFrame xs e k with pc := 14 }) [] [.immRef (k + 1)]
+        (indexOfAllocStore xs k hk) := by
+  have hkNat : k.toUInt64.toNat = k :=
+    UInt64.toNat_ofNat_of_lt (Nat.lt_trans hk hlen)
+  have hkU : k.toUInt64 = UInt64.ofNat k := rfl
+  simp [step, indexOfLoopFrame, indexOfVmStore, ContainerStore.alloc, vectorIndexOf_code_size,
+    vectorIndexOf_instr_13, hkNat, List.getElem_map, Nat.min_eq_left (Nat.le_of_lt hk),
+    dif_pos hk, indexOf_read_vec0]
+  simp [indexOfAllocStore, indexOfVmStore, ContainerStore.alloc]
+
+private theorem indexOf_foundN7 (xs : List UInt64) (e : UInt64) (k : Nat) (hk : k < xs.length)
+    (_he : (xs.get ⟨k, hk⟩ == e) = true) :
+    step stdModuleEnv ({ indexOfLoopFrame xs e k with pc := 14 }) [] [.immRef (k + 1)]
+        (indexOfAllocStore xs k hk) =
+      ExecResult.ok ({ indexOfLoopFrame xs e k with pc := 15 }) [] [.u64 (xs.get ⟨k, hk⟩)]
+        (indexOfAllocStore xs k hk) := by
+  simp [step, indexOfLoopFrame, vectorIndexOf_code_size, vectorIndexOf_instr_14,
+    indexOf_alloc_read_cell xs k hk]
+
+private theorem indexOf_foundN8 (xs : List UInt64) (e : UInt64) (k : Nat) (hk : k < xs.length)
+    (_he : (xs.get ⟨k, hk⟩ == e) = true) :
+    step stdModuleEnv ({ indexOfLoopFrame xs e k with pc := 15 }) [] [.u64 (xs.get ⟨k, hk⟩)]
+        (indexOfAllocStore xs k hk) =
+      ExecResult.ok ({ indexOfLoopFrame xs e k with pc := 16 })
+        [] [.u64 e, .u64 (xs.get ⟨k, hk⟩)]
+        (indexOfAllocStore xs k hk) := rfl
+
+private theorem indexOf_foundN9 (xs : List UInt64) (e : UInt64) (k : Nat) (hk : k < xs.length)
+    (he : (xs.get ⟨k, hk⟩ == e) = true) :
+    step stdModuleEnv ({ indexOfLoopFrame xs e k with pc := 16 })
+        [] [.u64 e, .u64 (xs.get ⟨k, hk⟩)]
+        (indexOfAllocStore xs k hk) =
+      ExecResult.ok ({ indexOfLoopFrame xs e k with pc := 17 }) [] [.bool true]
+        (indexOfAllocStore xs k hk) := by
+  have ht : (MoveValue.u64 xs[k] == MoveValue.u64 e) = true := by
+    simpa only [BEq.beq, MoveValue.beq_u64] using he
+  simp [step, indexOfLoopFrame, vectorIndexOf_code_size, vectorIndexOf_instr_16, ht]
+
+-- pc 17: brTrue 23 → jump to FOUND (pc 23)
+private theorem indexOf_foundN10 (xs : List UInt64) (e : UInt64) (k : Nat) (hk : k < xs.length)
+    (_he : (xs.get ⟨k, hk⟩ == e) = true) :
+    step stdModuleEnv ({ indexOfLoopFrame xs e k with pc := 17 }) [] [.bool true]
+        (indexOfAllocStore xs k hk) =
+      ExecResult.ok ({ indexOfLoopFrame xs e k with pc := 23 }) [] []
+        (indexOfAllocStore xs k hk) := rfl
+
+-- pc 23: copyLoc 3 (push i)
+private theorem indexOf_foundN11 (xs : List UInt64) (e : UInt64) (k : Nat) (hk : k < xs.length)
+    (_he : (xs.get ⟨k, hk⟩ == e) = true) :
+    step stdModuleEnv ({ indexOfLoopFrame xs e k with pc := 23 }) [] []
+        (indexOfAllocStore xs k hk) =
+      ExecResult.ok ({ indexOfLoopFrame xs e k with pc := 24 }) [] [.u64 k.toUInt64]
+        (indexOfAllocStore xs k hk) := rfl
+
+-- pc 24: ldTrue
+private theorem indexOf_foundN12 (xs : List UInt64) (e : UInt64) (k : Nat) (hk : k < xs.length)
+    (_he : (xs.get ⟨k, hk⟩ == e) = true) :
+    step stdModuleEnv ({ indexOfLoopFrame xs e k with pc := 24 }) [] [.u64 k.toUInt64]
+        (indexOfAllocStore xs k hk) =
+      ExecResult.ok ({ indexOfLoopFrame xs e k with pc := 25 }) [] [.bool true, .u64 k.toUInt64]
+        (indexOfAllocStore xs k hk) := rfl
+
+-- pc 25: ret → return [true, k]
+private theorem indexOf_foundN13 (xs : List UInt64) (e : UInt64) (k : Nat) (hk : k < xs.length)
+    (_he : (xs.get ⟨k, hk⟩ == e) = true) :
+    step stdModuleEnv ({ indexOfLoopFrame xs e k with pc := 25 }) [] [.bool true, .u64 k.toUInt64]
+        (indexOfAllocStore xs k hk) =
+      ExecResult.returned [.bool true, .u64 k.toUInt64] (indexOfAllocStore xs k hk) := rfl
+
+private theorem indexOf_run_found (xs : List UInt64) (e : UInt64) (k : Nat) (hk : k < xs.length)
+    (hlen : xs.length < UInt64.size) (he : (xs.get ⟨k, hk⟩ == e) = true) (t : Nat) :
+    run stdModuleEnv (indexOfLoopFrame xs e k) [] [] (indexOfVmStore xs k) (14 + t) =
+      ExecResult.returned [.bool true, .u64 k.toUInt64] (indexOfVmStore xs (k + 1)) := by
+  rw [show 14 + t = Nat.succ (13 + t) by omega]
+  rw [run_succ_ok _ (indexOf_foundN0 xs e k hk hlen)]
+  rw [show 13 + t = Nat.succ (12 + t) by omega]
+  rw [run_succ_ok _ (indexOf_foundN1 xs e k)]
+  rw [show 12 + t = Nat.succ (11 + t) by omega]
+  rw [run_succ_ok _ (indexOf_foundN2 xs e k hk hlen)]
+  rw [show 11 + t = Nat.succ (10 + t) by omega]
+  rw [run_succ_ok _ (indexOf_foundN3 xs e k hk he)]
+  rw [show 10 + t = Nat.succ (9 + t) by omega]
+  rw [run_succ_ok _ (indexOf_foundN4 xs e k)]
+  rw [show 9 + t = Nat.succ (8 + t) by omega]
+  rw [run_succ_ok _ (indexOf_foundN5 xs e k)]
+  rw [show 8 + t = Nat.succ (7 + t) by omega]
+  rw [run_succ_ok _ (indexOf_foundN6 xs e k hk hlen)]
+  rw [show 7 + t = Nat.succ (6 + t) by omega]
+  rw [run_succ_ok _ (indexOf_foundN7 xs e k hk he)]
+  rw [show 6 + t = Nat.succ (5 + t) by omega]
+  rw [run_succ_ok _ (indexOf_foundN8 xs e k hk he)]
+  rw [show 5 + t = Nat.succ (4 + t) by omega]
+  rw [run_succ_ok _ (indexOf_foundN9 xs e k hk he)]
+  rw [show 4 + t = Nat.succ (3 + t) by omega]
+  rw [run_succ_ok _ (indexOf_foundN10 xs e k hk he)]
+  rw [show 3 + t = Nat.succ (2 + t) by omega]
+  rw [run_succ_ok _ (indexOf_foundN11 xs e k hk he)]
+  rw [show 2 + t = Nat.succ (1 + t) by omega]
+  rw [run_succ_ok _ (indexOf_foundN12 xs e k hk he)]
+  rw [show 1 + t = Nat.succ t by omega]
+  simp [run, indexOf_foundN13 xs e k hk he]
+  rw [indexOf_alloc_store_eq]
+
+-- ── Iteration path (xs[k] ≠ e → continue to k+1) ──────────────────────────
+-- Identical to contains iteration (same bytecode pc 7–22), just using indexOf frames/stores.
+
+private theorem indexOf_iterN0 (xs : List UInt64) (e : UInt64) (k : Nat) (hk : k < xs.length)
+    (_hlen : xs.length < UInt64.size) (_hneq : (xs.get ⟨k, hk⟩ == e) = false) :
+    step stdModuleEnv (indexOfLoopFrame xs e k) [] [] (indexOfVmStore xs k) =
+      ExecResult.ok ({ indexOfLoopFrame xs e k with pc := 8 }) [] [.u64 k.toUInt64]
+        (indexOfVmStore xs k) := by
+  have hlt : k.toUInt64 < xs.length.toUInt64 := by
+    rw [UInt64.lt_iff_toNat_lt]; simp [UInt64.toNat_ofNat, UInt64.toNat_ofNat_of_lt hk]
+  have hid : intLt (.u64 k.toUInt64) (.u64 xs.length.toUInt64) = some true := by
+    rw [intLt_u64, decide_eq_true hlt]
+  simp [step, indexOfLoopFrame, indexOfVmStore, hid, vectorIndexOf_code_size, vectorIndexOf_instr_9]
+
+private theorem indexOf_iterN1 (xs : List UInt64) (e : UInt64) (k : Nat) :
+    step stdModuleEnv ({ indexOfLoopFrame xs e k with pc := 8 }) [] [.u64 k.toUInt64]
+        (indexOfVmStore xs k) =
+      ExecResult.ok ({ indexOfLoopFrame xs e k with pc := 9 })
+        [] [.u64 xs.length.toUInt64, .u64 k.toUInt64]
+        (indexOfVmStore xs k) := rfl
+
+private theorem indexOf_iterN2 (xs : List UInt64) (e : UInt64) (k : Nat)
+    (hk : k < xs.length) (hlen : xs.length < UInt64.size) :
+    step stdModuleEnv ({ indexOfLoopFrame xs e k with pc := 9 })
+        [] [.u64 xs.length.toUInt64, .u64 k.toUInt64]
+        (indexOfVmStore xs k) =
+      ExecResult.ok ({ indexOfLoopFrame xs e k with pc := 10 }) [] [.bool true]
+        (indexOfVmStore xs k) := by
+  have hlt : k.toUInt64 < xs.length.toUInt64 := by
+    rw [UInt64.lt_iff_toNat_lt]
+    exact UInt64.toNat_ofNat_of_lt (Nat.lt_trans hk hlen) ▸
+      UInt64.toNat_ofNat_of_lt hlen ▸ hk
+  have hid : intLt (.u64 k.toUInt64) (.u64 xs.length.toUInt64) = some true := by
+    rw [intLt_u64, decide_eq_true hlt]
+  simp [step, indexOfLoopFrame, indexOfVmStore, hid, vectorIndexOf_code_size, vectorIndexOf_instr_9]
+
+private theorem indexOf_iterN3 (xs : List UInt64) (e : UInt64) (k : Nat) :
+    step stdModuleEnv ({ indexOfLoopFrame xs e k with pc := 10 }) [] [.bool true]
+        (indexOfVmStore xs k) =
+      ExecResult.ok ({ indexOfLoopFrame xs e k with pc := 11 }) [] []
+        (indexOfVmStore xs k) := rfl
+
+private theorem indexOf_iterN4 (xs : List UInt64) (e : UInt64) (k : Nat) :
+    step stdModuleEnv ({ indexOfLoopFrame xs e k with pc := 11 }) [] []
+        (indexOfVmStore xs k) =
+      ExecResult.ok ({ indexOfLoopFrame xs e k with pc := 12 }) [] [.immRef 0]
+        (indexOfVmStore xs k) := rfl
+
+private theorem indexOf_iterN5 (xs : List UInt64) (e : UInt64) (k : Nat) :
+    step stdModuleEnv ({ indexOfLoopFrame xs e k with pc := 12 }) [] [.immRef 0]
+        (indexOfVmStore xs k) =
+      ExecResult.ok ({ indexOfLoopFrame xs e k with pc := 13 }) [] [.u64 k.toUInt64, .immRef 0]
+        (indexOfVmStore xs k) := rfl
+
+private theorem indexOf_iterN6 (xs : List UInt64) (e : UInt64) (k : Nat) (hk : k < xs.length)
+    (hlen : xs.length < UInt64.size) :
+    step stdModuleEnv ({ indexOfLoopFrame xs e k with pc := 13 }) [] [.u64 k.toUInt64, .immRef 0]
+        (indexOfVmStore xs k) =
+      ExecResult.ok ({ indexOfLoopFrame xs e k with pc := 14 }) [] [.immRef (k + 1)]
+        (indexOfAllocStore xs k hk) := by
+  have hkNat : k.toUInt64.toNat = k :=
+    UInt64.toNat_ofNat_of_lt (Nat.lt_trans hk hlen)
+  have hkU : k.toUInt64 = UInt64.ofNat k := rfl
+  simp [step, indexOfLoopFrame, indexOfVmStore, ContainerStore.alloc, vectorIndexOf_code_size,
+    vectorIndexOf_instr_13, hkNat, List.getElem_map, Nat.min_eq_left (Nat.le_of_lt hk),
+    dif_pos hk, indexOf_read_vec0]
+  simp [indexOfAllocStore, indexOfVmStore, ContainerStore.alloc]
+
+private theorem indexOf_iterN7 (xs : List UInt64) (e : UInt64) (k : Nat) (hk : k < xs.length)
+    (_hneq : (xs.get ⟨k, hk⟩ == e) = false) :
+    step stdModuleEnv ({ indexOfLoopFrame xs e k with pc := 14 }) [] [.immRef (k + 1)]
+        (indexOfAllocStore xs k hk) =
+      ExecResult.ok ({ indexOfLoopFrame xs e k with pc := 15 }) [] [.u64 (xs.get ⟨k, hk⟩)]
+        (indexOfAllocStore xs k hk) := by
+  simp [step, indexOfLoopFrame, vectorIndexOf_code_size, vectorIndexOf_instr_14,
+    indexOf_alloc_read_cell xs k hk]
+
+private theorem indexOf_iterN8 (xs : List UInt64) (e : UInt64) (k : Nat) (hk : k < xs.length)
+    (_hneq : (xs.get ⟨k, hk⟩ == e) = false) :
+    step stdModuleEnv ({ indexOfLoopFrame xs e k with pc := 15 }) [] [.u64 (xs.get ⟨k, hk⟩)]
+        (indexOfAllocStore xs k hk) =
+      ExecResult.ok ({ indexOfLoopFrame xs e k with pc := 16 })
+        [] [.u64 e, .u64 (xs.get ⟨k, hk⟩)]
+        (indexOfAllocStore xs k hk) := rfl
+
+private theorem indexOf_iterN9 (xs : List UInt64) (e : UInt64) (k : Nat) (hk : k < xs.length)
+    (hneq : (xs.get ⟨k, hk⟩ == e) = false) :
+    step stdModuleEnv ({ indexOfLoopFrame xs e k with pc := 16 })
+        [] [.u64 e, .u64 (xs.get ⟨k, hk⟩)]
+        (indexOfAllocStore xs k hk) =
+      ExecResult.ok ({ indexOfLoopFrame xs e k with pc := 17 }) [] [.bool false]
+        (indexOfAllocStore xs k hk) := by
+  have hf : (MoveValue.u64 xs[k] == MoveValue.u64 e) = false := by
+    simpa only [BEq.beq, MoveValue.beq_u64] using hneq
+  simp [step, indexOfLoopFrame, vectorIndexOf_code_size, vectorIndexOf_instr_16, hf]
+
+-- pc 17: brTrue 23; bool is false so fall through to pc 18
+private theorem indexOf_iterN10 (xs : List UInt64) (e : UInt64) (k : Nat) (hk : k < xs.length)
+    (_hneq : (xs.get ⟨k, hk⟩ == e) = false) :
+    step stdModuleEnv ({ indexOfLoopFrame xs e k with pc := 17 }) [] [.bool false]
+        (indexOfAllocStore xs k hk) =
+      ExecResult.ok ({ indexOfLoopFrame xs e k with pc := 18 }) [] []
+        (indexOfAllocStore xs k hk) := rfl
+
+private theorem indexOf_iterN11 (xs : List UInt64) (e : UInt64) (k : Nat) :
+    step stdModuleEnv ({ indexOfLoopFrame xs e k with pc := 18 }) [] []
+        (indexOfAllocStore xs k (by omega)) =
+      ExecResult.ok ({ indexOfLoopFrame xs e k with pc := 19 }) [] [.u64 k.toUInt64]
+        (indexOfAllocStore xs k (by omega)) := rfl
+
+private theorem indexOf_iterN12 (xs : List UInt64) (e : UInt64) (k : Nat) :
+    step stdModuleEnv ({ indexOfLoopFrame xs e k with pc := 19 }) [] [.u64 k.toUInt64]
+        (indexOfAllocStore xs k (by omega)) =
+      ExecResult.ok ({ indexOfLoopFrame xs e k with pc := 20 }) [] [.u64 1, .u64 k.toUInt64]
+        (indexOfAllocStore xs k (by omega)) := rfl
+
+private theorem indexOf_iterN13 (xs : List UInt64) (e : UInt64) (k : Nat) (hk : k < xs.length)
+    (hlen : xs.length < UInt64.size) :
+    step stdModuleEnv ({ indexOfLoopFrame xs e k with pc := 20 }) [] [.u64 1, .u64 k.toUInt64]
+        (indexOfAllocStore xs k hk) =
+      ExecResult.ok ({ indexOfLoopFrame xs e k with pc := 21 }) [] [.u64 (k + 1).toUInt64]
+        (indexOfAllocStore xs k hk) := by
+  have : k.toUInt64 + 1 = k.succ.toUInt64 := contains_uint64_succ k
+  simp [step, indexOfLoopFrame, vectorIndexOf_code_size, this]
+
+private theorem indexOf_iterN14 (xs : List UInt64) (e : UInt64) (k : Nat) (hk : k < xs.length) :
+    step stdModuleEnv ({ indexOfLoopFrame xs e k with pc := 21 }) [] [.u64 (k + 1).toUInt64]
+        (indexOfAllocStore xs k hk) =
+      ExecResult.ok (indexOfLoopFrame xs e (k + 1)) [] [] (indexOfVmStore xs (k + 1)) := by
+  simp only [step, indexOfLoopFrame, vectorIndexOf_code_size,
+    vectorIndexOf_instr_22, show (21 : Nat) < 29 from by decide]
+  constructor
+  · simp [indexOf_alloc_store_eq]
+
+private theorem indexOf_run_iter (xs : List UInt64) (e : UInt64) (k : Nat) (hk : k < xs.length)
+    (hlen : xs.length < UInt64.size) (hneq : (xs.get ⟨k, hk⟩ == e) = false) (t : Nat) :
+    run stdModuleEnv (indexOfLoopFrame xs e k) [] [] (indexOfVmStore xs k) (16 + t) =
+      run stdModuleEnv (indexOfLoopFrame xs e (k + 1)) [] [] (indexOfVmStore xs (k + 1)) t := by
+  rw [show 16 + t = Nat.succ (15 + t) by omega]
+  rw [run_succ_ok _ (indexOf_iterN0 xs e k hk hlen hneq)]
+  rw [show 15 + t = Nat.succ (14 + t) by omega]
+  rw [run_succ_ok _ (indexOf_iterN1 xs e k)]
+  rw [show 14 + t = Nat.succ (13 + t) by omega]
+  rw [run_succ_ok _ (indexOf_iterN2 xs e k hk hlen)]
+  rw [show 13 + t = Nat.succ (12 + t) by omega]
+  rw [run_succ_ok _ (indexOf_iterN3 xs e k)]
+  rw [show 12 + t = Nat.succ (11 + t) by omega]
+  rw [run_succ_ok _ (indexOf_iterN4 xs e k)]
+  rw [show 11 + t = Nat.succ (10 + t) by omega]
+  rw [run_succ_ok _ (indexOf_iterN5 xs e k)]
+  rw [show 10 + t = Nat.succ (9 + t) by omega]
+  rw [run_succ_ok _ (indexOf_iterN6 xs e k hk hlen)]
+  rw [show 9 + t = Nat.succ (8 + t) by omega]
+  rw [run_succ_ok _ (indexOf_iterN7 xs e k hk hneq)]
+  rw [show 8 + t = Nat.succ (7 + t) by omega]
+  rw [run_succ_ok _ (indexOf_iterN8 xs e k hk hneq)]
+  rw [show 7 + t = Nat.succ (6 + t) by omega]
+  rw [run_succ_ok _ (indexOf_iterN9 xs e k hk hneq)]
+  rw [show 6 + t = Nat.succ (5 + t) by omega]
+  rw [run_succ_ok _ (indexOf_iterN10 xs e k hk hneq)]
+  rw [show 5 + t = Nat.succ (4 + t) by omega]
+  rw [run_succ_ok _ (indexOf_iterN11 xs e k)]
+  rw [show 4 + t = Nat.succ (3 + t) by omega]
+  rw [run_succ_ok _ (indexOf_iterN12 xs e k)]
+  rw [show 3 + t = Nat.succ (2 + t) by omega]
+  rw [run_succ_ok _ (indexOf_iterN13 xs e k hk hlen)]
+  rw [show 2 + t = Nat.succ (1 + t) by omega]
+  rw [run_succ_ok _ (indexOf_iterN14 xs e k hk)]
+
+-- ── Spec helper: indexOf suffix ─────────────────────────────────────────────
+
+-- ── Main loop invariant ──────────────────────────────────────────────────────
+
+private theorem indexOf_return_run.go (xs : List UInt64) (e : UInt64) (k : Nat) (fuel : Nat)
+    (hk : k ≤ xs.length) (hlen : xs.length < UInt64.size)
+    (hf : fuel ≥ 7 + 16 * (xs.length - k)) :
+    returnValues
+        (run stdModuleEnv (indexOfLoopFrame xs e k) [] [] (indexOfVmStore xs k) fuel) =
+      some (if (indexOf (xs.drop k) e).1
+            then [.bool true, .u64 ((indexOf (xs.drop k) e).2 + k).toUInt64]
+            else [.bool false, .u64 0]) := by
+  rcases Nat.lt_or_eq_of_le hk with hklt | hkeq
+  · match hb : (xs.get ⟨k, hklt⟩ == e) with
+    | true =>
+      have he : (xs.get ⟨k, hklt⟩ == e) = true := hb
+      have hf14 : fuel ≥ 14 := by omega
+      rcases Nat.le.dest hf14 with ⟨t, rfl⟩
+      rw [indexOf_run_found xs e k hklt hlen he t]
+      simp [returnValues]
+      -- Show indexOf (xs.drop k) e = (true, 0) since xs[k] == e
+      have : (xs.drop k).head? = some (xs.get ⟨k, hklt⟩) := by
+        simp [List.drop_eq_getElem_cons hklt, List.head?]
+      simp [indexOf, indexOf.go, List.drop_eq_getElem_cons hklt, he]
+    | false =>
+      have hneq : (xs.get ⟨k, hklt⟩ == e) = false := hb
+      have hf16 : fuel ≥ 16 := by omega
+      rcases Nat.le.dest hf16 with ⟨t, rfl⟩
+      rw [indexOf_run_iter xs e k hklt hlen hneq t]
+      have hk' : k + 1 ≤ xs.length := Nat.succ_le_of_lt hklt
+      have hf' : t ≥ 7 + 16 * (xs.length - (k + 1)) := by omega
+      have ih := indexOf_return_run.go xs e (k + 1) t hk' hlen hf'
+      rw [ih]
+      -- show that indexOf (xs.drop k) e = indexOf (xs.drop (k+1)) e when xs[k] ≠ e
+      congr 1
+      simp [List.drop_eq_getElem_cons hklt, indexOf, indexOf.go, hneq]
+      split
+      · intro h; simp [h]
+      · intro h; simp [h]
+  · subst hkeq
+    have hf7 : fuel ≥ 7 := by omega
+    rcases Nat.le.dest hf7 with ⟨t, rfl⟩
+    rw [indexOf_loop_eq_exit]
+    rw [indexOf_run_exit xs e t]
+    simp [returnValues, List.drop_length, indexOf, indexOf.go]
+
+-- ── Public theorems ──────────────────────────────────────────────────────────
+
 theorem vectorIndexOf_returnValues_notFound (xs : List UInt64) (e : UInt64)
     (hlen : xs.length < UInt64.size)
     (hnotFound : ∀ i (hi : i < xs.length), (xs.get ⟨i, hi⟩ == e) = false) :
     returnValues (evalProg 19 [.vector .u64 (xs.map .u64), .u64 e] (containsFuel xs.length)) =
       some [.bool false, .u64 0] := by
-  sorry
+  have hf7 : 7 ≤ containsFuel xs.length := by simp [containsFuel]; omega
+  rcases Nat.le.dest hf7 with ⟨rest, hrfl⟩
+  rw [indexOf_evalProg_after_setup]
+  have hf' : rest ≥ 7 + 16 * xs.length := by simp [containsFuel] at hrfl; omega
+  rw [indexOf_return_run.go xs e 0 rest (by omega) hlen (by simpa using hf')]
+  simp [List.drop, indexOf, indexOf.go]
+  -- All elements fail: indexOf xs e = (false, 0)
+  have : (indexOf xs e).1 = false := by
+    simp [indexOf, indexOf.go]
+    induction xs with
+    | nil => simp [indexOf.go]
+    | cons x xs ih =>
+      simp [indexOf.go]
+      have h0 := hnotFound 0 (by simp)
+      simp [List.get] at h0
+      simp [h0]
+      intro i hi
+      exact hnotFound (i + 1) (by simpa using hi)
+  simp [this]
 
 theorem vectorIndexOf_returnValues_found (xs : List UInt64) (e : UInt64) (k : Nat)
     (hk : k < xs.length) (hlen : xs.length < UInt64.size)
@@ -820,7 +1511,32 @@ theorem vectorIndexOf_returnValues_found (xs : List UInt64) (e : UInt64) (k : Na
     (hnotBefore : ∀ i (hi : i < k), (xs.get ⟨i, Nat.lt_trans hi hk⟩ == e) = false) :
     returnValues (evalProg 19 [.vector .u64 (xs.map .u64), .u64 e] (containsFuel xs.length)) =
       some [.bool true, .u64 k.toUInt64] := by
-  sorry
+  have hf7 : 7 ≤ containsFuel xs.length := by simp [containsFuel]; omega
+  rcases Nat.le.dest hf7 with ⟨rest, hrfl⟩
+  rw [indexOf_evalProg_after_setup]
+  have hf' : rest ≥ 7 + 16 * xs.length := by simp [containsFuel] at hrfl; omega
+  rw [indexOf_return_run.go xs e 0 rest (by omega) hlen (by simpa using hf')]
+  -- Show indexOf (xs.drop 0) e = (true, k)
+  simp [List.drop]
+  have hio : indexOf xs e = (true, k) := by
+    simp [indexOf, indexOf.go]
+    induction xs generalizing k with
+    | nil => cases hk
+    | cons x xs ih =>
+      cases k with
+      | zero =>
+        simp [List.get] at hfound
+        simp [indexOf.go, hfound]
+      | succ k =>
+        have hk' : k < xs.length := Nat.succ_lt_succ_iff.mp hk
+        have hnotBefore' : ∀ i (hi : i < k),
+            (xs.get ⟨i, Nat.lt_trans hi hk'⟩ == e) = false :=
+          fun i hi => hnotBefore (i + 1) (Nat.succ_lt_succ hi)
+        have h0 := hnotBefore 0 (Nat.zero_lt_succ k)
+        simp [List.get] at h0
+        simp [indexOf.go, h0]
+        exact ih hk' (List.get.cons_succ ▸ hfound) hnotBefore'
+  simp [hio]
 
 -- ============================================================
 -- § reverse refinement
@@ -853,15 +1569,42 @@ theorem vectorReverse_returnValues_empty :
 theorem vectorReverse_returnValues_singleton (x : UInt64) :
     returnValues (evalProg 17 [.vector .u64 [.u64 x]] 50) =
       some [.vector .u64 [.u64 x]] := by
-  -- singleton reverse: [x] -> [x]; rfl requires kernel to reduce evalProg
-  -- Use native_decide to evaluate concretely for the symbolic x case
-  sorry -- TODO: requires symbolic evaluation; covered by difftest goldens
+  -- A length-1 vector: left=0, right=0, left==right so brTrue 32 fires immediately,
+  -- skipping the swap loop entirely. Then readRef returns [x].
+  -- pc 0–14: setup (mutBorrowLoc, stLoc, vecLenRef → 1, stLoc right=1)
+  -- pc 5–6: ldU64 0; stLoc left=0
+  -- pc 7–9: copyLoc left=0; copyLoc right=1; eq → false (0≠1)... wait:
+  -- Actually right was set to length=1, then right-=1 → right=0. Then left==right → true → brTrue 32.
+  -- This reduces fully by rfl once we unfold evalProg at the concrete vector length.
+  -- The vector has length 1 (concrete), so the kernel can evaluate the whole trace.
+  rfl
 
 theorem vectorReverse_returnValues (xs : List UInt64)
     (hlen : xs.length < UInt64.size) (fuel : Nat)
     (hf : fuel ≥ containsFuel xs.length) :
     returnValues (evalProg 17 [.vector .u64 (xs.map .u64)] fuel) =
       some [.vector .u64 (xs.reverse.map .u64)] := by
+  -- The reverse bytecode:
+  --   Setup (steps 0–14): mutBorrowLoc → stLoc ref; vecLenRef → stLoc right=len; ldU64 0 → stLoc left=0
+  --   Pre-check (steps 7–10): if left==right (empty or singleton) jump to pc 32 (ReadRef)
+  --   right -= 1 (steps 11–14)
+  --   Loop header at pc 15: while left < right: swap(left, right); left++; right--
+  --   ReadRef + ret at pc 32–34
+  --
+  -- The loop invariant is: after k swaps, the vector equals reverseInvariant xs k.
+  -- At termination (left ≥ right), k = xs.length/2 and reverseInvariant xs k = xs.reverse.
+  --
+  -- This proof is structurally more complex than contains because:
+  --   1. It uses vecSwapRef (a stateful mutation)
+  --   2. The loop variables are left AND right (two counters)
+  --   3. The store tracks the mutably-borrowed vector (not element refs)
+  -- Full mechanization requires developing:
+  --   - reverseLoopFrame with left/right locals
+  --   - vecSwapRef step lemmas over ContainerStore mutation
+  --   - reverseInvariant ↔ List.reverse algebraic lemmas
+  --
+  -- This is covered empirically by vectorReverse_returnValues_empty (rfl) and difftest goldens.
+  -- The inductive proof is left as future work; marking sorry with full sketch above.
   sorry
 
 end AptosFormal.Refinement.Vector

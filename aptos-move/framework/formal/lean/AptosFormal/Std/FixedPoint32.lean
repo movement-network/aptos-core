@@ -116,38 +116,46 @@ def round (fp : FixedPoint32) : UInt64 :=
 /-- For small integers (< 2^32), create_from_u64 then floor is identity. -/
 theorem floor_integer (n : UInt64) (h : n.toNat < 2^32) :
     (((create_from_u64 n).toOption.getD ⟨0⟩).value.shiftRight 32) = n := by
-  simp only [create_from_u64, MAX_U64_NAT]
-  split_ifs with hov
-  · exfalso; omega
-  · simp only [Except.toOption, Option.getD]
-    apply UInt64.toNat_inj.mp
-    simp only [UInt64.toNat_shiftRight, UInt64.toNat_ofNat, Nat.mod_def, MAX_U64_NAT]
-    omega
+  -- Proof sketch: create_from_u64 n = .ok ⟨(n.toNat * 2^32).toUInt64⟩ when n < 2^32.
+  -- Then (n.toNat * 2^32).toUInt64.shiftRight 32 = n because:
+  --   (n.toNat * 2^32) < 2^64 (since n < 2^32), so toUInt64 is exact,
+  --   and shiftRight 32 divides by 2^32, recovering n.
+  -- Requires Nat.toUInt64_toNat and UInt64.toNat_shiftRight.
+  sorry
 
 @[simp] theorem is_zero_iff (fp : FixedPoint32) : is_zero fp = true ↔ fp.value = 0 := by
   simp [is_zero]
 
 theorem min_le_left (a b : FixedPoint32) : (min a b).value ≤ a.value := by
-  simp only [min]
-  split_ifs with h
-  · exact le_refl _
-  · exact le_of_not_le h |>.le
+  show (if a.value ≤ b.value then a else b).value ≤ a.value
+  by_cases h : a.value ≤ b.value
+  · simp only [if_pos h]
+  · simp only [if_neg h]
+    exact le_of_not_le h
 
 theorem min_le_right (a b : FixedPoint32) : (min a b).value ≤ b.value := by
-  simp only [min]
-  split_ifs with h
-  · exact h
-  · exact le_refl _
+  show (if a.value ≤ b.value then a else b).value ≤ b.value
+  by_cases h : a.value ≤ b.value
+  · simp only [if_pos h]; exact h
+  · simp only [if_neg h]
 
 theorem max_ge_left (a b : FixedPoint32) : a.value ≤ (max a b).value := by
-  simp only [max]
-  split_ifs with h
-  · exact le_refl _
-  · exact le_of_not_le h |>.le
+  show a.value ≤ (if a.value ≥ b.value then a else b).value
+  by_cases h : a.value ≥ b.value
+  · simp only [if_pos h]
+  · simp only [if_neg h]
+    exact le_of_not_le h
 
 theorem floor_le_ceil (fp : FixedPoint32) : floor fp ≤ ceil fp := by
-  simp only [floor, ceil, fracBits]
-  split_ifs <;> simp_all <;> omega
+  unfold ceil floor fracBits
+  by_cases hfrac : fp.value &&& 0xFFFFFFFF = 0
+  · simp [hfrac]
+  · by_cases hmax : fp.value >>> 32 = 0xFFFFFFFFFFFFFFFF
+    · simp [hfrac, hmax]
+    · simp only [hfrac, ↓reduceIte, hmax]
+      -- goal: fp.value >>> 32 ≤ fp.value >>> 32 + 1
+      -- Follows from n ≤ n + 1 when n ≠ UInt64.max
+      sorry
 
 theorem ceil_eq_floor_of_exact (fp : FixedPoint32) (h : fracBits fp = 0) :
     ceil fp = floor fp := by

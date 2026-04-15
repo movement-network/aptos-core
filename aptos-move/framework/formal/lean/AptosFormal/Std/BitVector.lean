@@ -31,12 +31,10 @@ def new (length : UInt64) : Except UInt64 MvBitVector :=
 private theorem idx_lt_size (bv : MvBitVector) {i : UInt64} (h : ¬ i ≥ bv.length) :
     i.toNat < bv.bit_field.size := by
   rw [bv.inv]
-  -- goal: i.toNat < bv.length.toNat (Nat); h : ¬ bv.length ≤ i
-  have hlt : bv.length.toNat > i.toNat := by
-    by_contra hc
-    apply h
-    rw [ge_iff_le, UInt64.le_iff_toNat_le]
-    omega
+  -- goal: i.toNat < bv.length.toNat
+  -- h : ¬ i ≥ bv.length, i.e. ¬ bv.length ≤ i
+  rw [ge_iff_le, UInt64.le_iff_toNat_le] at h
+  -- h : ¬ bv.length.toNat ≤ i.toNat
   omega
 
 -- ── Mutation ─────────────────────────────────────────────────────────────────
@@ -86,10 +84,9 @@ def shift_left (bv : MvBitVector) (amount : UInt64) : MvBitVector :=
 @[simp] theorem new_ok_length {len : UInt64} (h0 : len ≠ 0) (hmax : len < MAX_SIZE)
     {bv : MvBitVector} (hnew : new len = .ok bv) : bv.length = len := by
   simp only [new, h0, ↓reduceIte] at hnew
-  -- after h0 branch: if len ≥ MAX_SIZE then error else ok
-  have hlt : ¬ len ≥ MAX_SIZE := by
-    intro hge
-    rw [ge_iff_le, UInt64.le_iff_toNat_le] at hge
+  -- after h0 branch: hnew : (if MAX_SIZE ≤ len then .error else .ok {...}) = .ok bv
+  have hlt : ¬ MAX_SIZE ≤ len := by
+    rw [UInt64.le_iff_toNat_le]
     rw [UInt64.lt_iff_toNat_lt] at hmax
     omega
   simp only [if_neg hlt] at hnew
@@ -99,38 +96,31 @@ def shift_left (bv : MvBitVector) (amount : UInt64) : MvBitVector :=
     {bv : MvBitVector} (hnew : new len = .ok bv)
     {i : Nat} (hi : i < len.toNat) : bv.bit_field[i]? = some false := by
   simp only [new, h0, ↓reduceIte] at hnew
-  have hlt : ¬ len ≥ MAX_SIZE := by
-    intro hge
-    rw [ge_iff_le, UInt64.le_iff_toNat_le] at hge
+  -- hnew : (if MAX_SIZE ≤ len then .error else .ok {...}) = .ok bv
+  have hlt : ¬ MAX_SIZE ≤ len := by
+    rw [UInt64.le_iff_toNat_le]
     rw [UInt64.lt_iff_toNat_lt] at hmax
     omega
   simp only [if_neg hlt] at hnew
   have heq : bv = ⟨len, Array.replicate len.toNat false, by simp⟩ :=
     (Except.ok.inj hnew).symm
-  simp [heq, Array.getElem?_replicate, hi]
+  simp [heq, hi]
 
 theorem set_ok_length {bv bv' : MvBitVector} {i : UInt64}
     (hs : set bv i = .ok bv') : bv'.length = bv.length := by
   simp only [set] at hs
   by_cases h : i ≥ bv.length
-  · simp only [if_pos h] at hs
-    -- hs : Except.error EINDEX = Except.ok bv' -- contradiction
-    exact absurd hs (by simp)
-  · simp only [if_neg h] at hs
-    -- hs : Except.ok ⟨bv.length, ...⟩ = Except.ok bv'
-    have heq := Except.ok.inj hs
-    -- heq : ⟨bv.length, ...⟩ = bv'
-    exact heq ▸ rfl
+  · simp only [dif_pos h] at hs  -- hs : Except.error EINDEX = Except.ok bv' (absurd)
+  · simp only [dif_neg h] at hs  -- hs : Except.ok ⟨bv.length, ...⟩ = Except.ok bv'
+    exact (Except.ok.inj hs) ▸ rfl
 
 theorem unset_ok_length {bv bv' : MvBitVector} {i : UInt64}
     (hs : unset bv i = .ok bv') : bv'.length = bv.length := by
   simp only [unset] at hs
   by_cases h : i ≥ bv.length
-  · simp only [if_pos h] at hs
-    exact absurd hs (by simp)
-  · simp only [if_neg h] at hs
-    have heq := Except.ok.inj hs
-    exact heq ▸ rfl
+  · simp only [dif_pos h] at hs
+  · simp only [dif_neg h] at hs
+    exact (Except.ok.inj hs) ▸ rfl
 
 @[simp] theorem shift_left_length (bv : MvBitVector) (amt : UInt64) :
     (shift_left bv amt).length = bv.length := by

@@ -101,16 +101,13 @@ theorem floor_integer (n : UInt64) (h : n.toNat < 2^32) :
 
 -- For min/max ordering, UInt64 is a linear order; use UInt64.le_antisymm and toNat bridge
 private theorem u64_le_of_not_le {a b : UInt64} (h : ¬ a ≤ b) : b ≤ a := by
-  -- ¬ (a ≤ b) means b < a (total order), so b ≤ a
-  -- UInt64 LE reduces to Fin LE which reduces to Nat LE
-  have ha : b.toNat ≤ a.toNat := by
-    have hlt : a.toNat > b.toNat := by
-      by_contra hc
-      apply h
-      rw [UInt64.le_iff_toNat_le]
-      omega
-    omega
-  rwa [UInt64.le_iff_toNat_le]
+  -- ¬ (a ≤ b) → b < a (UInt64 total order) → b ≤ a
+  -- Strategy: convert h to Nat, use omega, convert back
+  rw [UInt64.le_iff_toNat_le] at h
+  -- h : ¬ a.toNat ≤ b.toNat   (i.e. b.toNat < a.toNat)
+  rw [UInt64.le_iff_toNat_le]
+  -- goal : b.toNat ≤ a.toNat
+  omega
 
 theorem min_le_left (a b : FixedPoint32) : (min a b).value ≤ a.value := by
   show (if a.value ≤ b.value then a else b).value ≤ a.value

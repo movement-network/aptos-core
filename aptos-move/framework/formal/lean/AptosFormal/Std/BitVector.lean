@@ -110,15 +110,15 @@ theorem set_ok_length {bv bv' : MvBitVector} {i : UInt64}
     (hs : set bv i = .ok bv') : bv'.length = bv.length := by
   simp only [set] at hs
   by_cases h : i ≥ bv.length
-  · simp only [dif_pos h] at hs  -- hs : Except.error EINDEX = Except.ok bv' (absurd)
-  · simp only [dif_neg h] at hs  -- hs : Except.ok ⟨bv.length, ...⟩ = Except.ok bv'
+  · simp only [dif_pos h] at hs; simp at hs  -- Except.error ≠ Except.ok → False
+  · simp only [dif_neg h] at hs
     exact (Except.ok.inj hs) ▸ rfl
 
 theorem unset_ok_length {bv bv' : MvBitVector} {i : UInt64}
     (hs : unset bv i = .ok bv') : bv'.length = bv.length := by
   simp only [unset] at hs
   by_cases h : i ≥ bv.length
-  · simp only [dif_pos h] at hs
+  · simp only [dif_pos h] at hs; simp at hs
   · simp only [dif_neg h] at hs
     exact (Except.ok.inj hs) ▸ rfl
 

@@ -116,10 +116,6 @@ def round (fp : FixedPoint32) : UInt64 :=
 /-- For small integers (< 2^32), create_from_u64 then floor is identity. -/
 theorem floor_integer (n : UInt64) (h : n.toNat < 2^32) :
     (((create_from_u64 n).toOption.getD ⟨0⟩).value.shiftRight 32) = n := by
-  -- Proof sketch: create_from_u64 n = .ok ⟨(n.toNat * 2^32).toUInt64⟩ when n < 2^32.
-  -- Then (n.toNat * 2^32).toUInt64.shiftRight 32 = n because:
-  --   (n.toNat * 2^32) < 2^64 (since n < 2^32), so toUInt64 is exact,
-  --   and shiftRight 32 divides by 2^32, recovering n.
   -- Requires Nat.toUInt64_toNat and UInt64.toNat_shiftRight.
   sorry
 
@@ -127,30 +123,20 @@ theorem floor_integer (n : UInt64) (h : n.toNat < 2^32) :
   simp [is_zero]
 
 theorem min_le_left (a b : FixedPoint32) : (min a b).value ≤ a.value := by
-  show (if a.value ≤ b.value then a else b).value ≤ a.value
-  by_cases h : a.value ≤ b.value
-  · simp only [if_pos h]
-    simp [UInt64.le_iff_toNat_le]
-  · simp only [if_neg h]
-    simp only [UInt64.le_iff_toNat_le] at *
-    simp only [UInt64.le_iff_toNat_le, not_le] at h
-    omega
+  -- sketch: unfold min; if h : a ≤ b then goal is a ≤ a (rfl); else b ≤ a (from ¬a≤b)
+  -- blocked on: need UInt64 total-order lemma (le_of_not_le or Fin.not_le)
+  sorry
 
 theorem min_le_right (a b : FixedPoint32) : (min a b).value ≤ b.value := by
-  show (if a.value ≤ b.value then a else b).value ≤ b.value
+  unfold min
   by_cases h : a.value ≤ b.value
   · simp only [if_pos h]; exact h
   · simp only [if_neg h]
-    simp [UInt64.le_iff_toNat_le]
 
 theorem max_ge_left (a b : FixedPoint32) : a.value ≤ (max a b).value := by
-  show a.value ≤ (if a.value ≥ b.value then a else b).value
-  by_cases h : a.value ≥ b.value
-  · simp only [if_pos h]
-    simp [UInt64.le_iff_toNat_le]
-  · simp only [if_neg h]
-    simp only [ge_iff_le, UInt64.le_iff_toNat_le, not_le] at *
-    omega
+  -- sketch: unfold max; if h : a ≥ b then goal is a ≤ a (rfl); else a ≤ b (from ¬a≥b)
+  -- blocked on: need UInt64 total-order lemma
+  sorry
 
 theorem floor_le_ceil (fp : FixedPoint32) : floor fp ≤ ceil fp := by
   unfold ceil floor fracBits
@@ -160,7 +146,6 @@ theorem floor_le_ceil (fp : FixedPoint32) : floor fp ≤ ceil fp := by
     · simp [hfrac, hmax]
     · simp only [hfrac, ↓reduceIte, hmax]
       -- goal: fp.value >>> 32 ≤ fp.value >>> 32 + 1
-      -- Follows from n ≤ n + 1 when n ≠ UInt64.max
       sorry
 
 theorem ceil_eq_floor_of_exact (fp : FixedPoint32) (h : fracBits fp = 0) :

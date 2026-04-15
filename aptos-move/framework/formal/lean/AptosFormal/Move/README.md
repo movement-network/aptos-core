@@ -17,7 +17,12 @@ AptosFormal/
 │   ├── Bcs/                  BCS serialization (u8, u64, u128, bool, vector)
 │   ├── Hash/                 SHA3-256, SHA3-512, SHA2-512, Keccak-f[1600]
 │   ├── Crypto/               Ristretto255 scalar field, compressed points
-│   └── MoveStdlibGoldens    byte-level golden checks
+│   ├── MoveStdlibGoldens    byte-level golden checks
+│   ├── Error.lean            std::error — canonical + 13 category wrappers
+│   ├── Option.lean           std::option — swap_or_fill, is_some, extract, etc.
+│   ├── Signer.lean           std::signer — borrow_address / address_of
+│   ├── FixedPoint32.lean     std::fixed_point32 — create_from_rational, floor/ceil/round, min/max
+│   └── BitVector.lean        std::bit_vector — new, set, unset, is_index_set, shift_left
 │
 ├── Experimental/         specs: what experimental functions should compute
 │   └── ConfidentialAsset/Registration/
@@ -46,20 +51,24 @@ AptosFormal/
 │   ├── Native.lean           native function bindings to Std.* specs
 │   ├── Programs.lean         module env definitions (imports Core + Vector)
 │   ├── Native/
-│   │   └── Registration.lean oracle-parameterized natives (nativeRef + derefImm)
+│   │   ├── Registration.lean oracle-parameterized natives (nativeRef + derefImm)
+│   │   └── StdPrimitives.lean native models for signer, fixed_point32, bit_vector, option
 │   └── Programs/
 │       ├── Core.lean         basic programs (add, max, bcs, refs)
 │       ├── GlobalSmoke.lean  minimal `globalExists` / `globalMoveTo` / `mutBorrowGlobal` smoke
 │       ├── Registration.lean transcribed bytecode for verify_registration_proof (83 instrs)
 │       ├── RegistrationDifftestOracle.lean  table oracle for difftest roundtrip
+│       ├── StdPrimitives.lean bytecode for std::error (canonical + 13 wrappers) + bit_vector::length
 │       └── Vector.lean       vector programs (hand-written + real compiler)
 │
 ├── Refinement/           ∀-quantified proofs connecting execution to specs
 │   ├── Core.lean             rfl proofs: addU64, bcsU64, readViaRef, etc.
-│   └── Vector.lean           `vector::contains` refinement vs `Std.Vector.contains`
+│   ├── StdPrimitives.lean    rfl refinement: error functions + bit_vector::length
+│   └── Vector.lean           vector::contains + vector::index_of refinement proofs
 │
 └── Tests/                concrete smoke tests (native_decide on fixed inputs)
     ├── Defs.lean             shared helpers (evalProg, returnValues, u64Vec)
+    ├── StdPrimitives.lean    smoke tests for error, signer, fixed_point32, bit_vector, option
     └── Vector.lean           vector tests (hand-written + real compiler)
 ```
 
@@ -222,18 +231,32 @@ correctness of fundamental stdlib functions:
 
 **6b. Stdlib vector operations:**
 - `vector::reverse` — loop with `swap` via `VecSwapRef` (bytecode + smoke tests;
-  universal refinement proof still open).
+  universal refinement proof sketch in `Refinement/Vector.lean`, still uses `sorry`).
 - `vector::contains` — loop with `VecImmBorrow` + `ReadRef` + `Eq`. Specs in
   `Std/Vector/Operations.lean`. Smoke tests: `Tests/Vector.lean` (`native_decide`).
-  **Refinement:** `Refinement/Vector.lean` proves `vectorContains_returnValues` for
+  **Refinement (done):** `Refinement/Vector.lean` proves `vectorContains_returnValues` for
   the hand-written `vectorContainsCode` in `Programs/Vector.lean`, against
   `Std.Vector.contains`, with `xs.length < UInt64.size` so indices match `u64`
   comparisons (see theorem statement). Differential tests cover `vector::contains`
   in [`../../../difftest/README.md`](../../../difftest/README.md).
-- `vector::index_of` — loop returning `(bool, u64)` (bytecode + smoke tests;
-  universal refinement proof still open).
+- `vector::index_of` — loop returning `(bool, u64)`. **Refinement (done):**
+  `Refinement/Vector.lean` proves `vectorIndexOf_returnValues_found` and
+  `vectorIndexOf_returnValues_notFound` for `vectorIndexOfCode` (bytecode index 19
+  in `stdModuleEnv`), with `xs.length < UInt64.size`. Proof is kernel-checked
+  (no `sorry`).
 
-**6c–6e.** Remaining stdlib coverage (option, math, BCS) — same approach.
+**6c. Stdlib primitive modules (done):**
+- `std::error` — spec (`Std/Error.lean`), bytecode (`Programs/StdPrimitives.lean`),
+  `rfl`-proved refinement (`Refinement/StdPrimitives.lean`) for `canonical` + all
+  13 category wrappers. Smoke tests in `Tests/StdPrimitives.lean`.
+- `std::signer` — spec (`Std/Signer.lean`), native model (`Native/StdPrimitives.lean`).
+- `std::fixed_point32` — spec (`Std/FixedPoint32.lean`), native model. Two `sorry`
+  remain on `UInt64` order lemmas.
+- `std::bit_vector` — spec (`Std/BitVector.lean`), native model + bytecode for
+  `length`. One `sorry` on `shift_left` inductive step.
+- `std::option` — spec (`Std/Option.lean`), native model.
+
+**6d–6e.** Remaining stdlib coverage (math, string, BCS wrappers) — same approach.
 
 ### Phase 7: Model fidelity testing
 
@@ -287,15 +310,24 @@ stdlib-style specs in Lean.
 Universally quantified correctness for stdlib-style bytecode, using induction
 and loop invariants where needed:
 
-- **`vector::contains` (done for the formalized hand-written bytecode):**
+- **`vector::contains` (done):**
   `Refinement/Vector.lean` — `vectorContains_returnValues` / `vectorContains_correct`
   (hypothesis `xs.length < UInt64.size`, adequate fuel). Proof is kernel-checked
   (no `sorry`). The proof targets the curated bytecode wired as stdlib function
   index 18 in `stdModuleEnv`, not a compiler-equality claim for every toolchain
   output.
-- **`vector::reverse`:** universal refinement vs `List.reverse` — open.
-- **`vector::index_of`:** universal refinement vs the spec in
-  `Std/Vector/Operations.lean` — open.
+- **`vector::index_of` (done):**
+  `Refinement/Vector.lean` — `vectorIndexOf_returnValues_found` /
+  `vectorIndexOf_returnValues_notFound` (hypothesis `xs.length < UInt64.size`,
+  adequate fuel). Proof is kernel-checked (no `sorry`). Uses `suffices` to
+  generalize over `indexOf.go` offsets, and `contains_uint64_succ` / `contains_idx_u64_lt_len`
+  lemmas shared with the `contains` proof.
+- **`vector::reverse`:** universal refinement vs `List.reverse` — proof sketch
+  present (`sorry`), full proof open.
+- **`std::error` (done):** all 14 functions proved correct via `rfl` in
+  `Refinement/StdPrimitives.lean`.
+- **`std::bit_vector::length` (done):** proved correct via `rfl` in
+  `Refinement/StdPrimitives.lean`.
 
 These `∀`-theorems are checked by Lean's kernel for all inputs satisfying the
 stated hypotheses, unlike difftest goldens alone.

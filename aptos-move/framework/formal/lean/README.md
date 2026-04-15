@@ -10,7 +10,7 @@ beyond a single package.
 | `AptosFormal.Std.Bcs.*` | BCS primitives |
 | `AptosFormal.Std.MoveStdlibGoldens` | Byte-level golden tests for hash/BCS/vector |
 | `AptosFormal.Move.*` | Move bytecode interpreter (`Step`, `Programs`, natives → specs); roadmap: [`AptosFormal/Move/README.md`](AptosFormal/Move/README.md) |
-| `AptosFormal.Refinement.*` | Proofs that selected bytecode matches `Std.*` specs (e.g. `vector::contains`) |
+| `AptosFormal.Refinement.*` | Proofs that selected bytecode matches `Std.*` specs (e.g. `vector::contains`, `vector::index_of`, `std::error` functions, `bit_vector::length`) |
 | `AptosFormal.Std.Error` | Lean spec for `std::error` — `canonical` + 13 category wrappers; all `@[simp]` lemmas |
 | `AptosFormal.Std.FixedPoint32` | Lean spec for `std::fixed_point32` — `multiply_u64`, `divide_u64`, `create_from_rational`, `floor`/`ceil`/`round` (overflow-safe via `Nat`) |
 | `AptosFormal.Std.BitVector` | Lean spec for `std::bit_vector` — `new`, `set`, `unset`, `is_index_set`, `shift_left`; `shift_left_zero` proved |
@@ -74,8 +74,12 @@ grep -r "sorry" AptosFormal/ --include="*.lean"
 
 This should return **no matches** for the core stdlib specs (`Std.*`, `Move.Programs.StdPrimitives`, `Refinement.StdPrimitives`).
 
-> **Note:** `Refinement/Vector.lean` and `Experimental/ConfidentialAsset/` contain flagged `sorry`s
-> on inductive loop steps and abstract bytecode stepping respectively — see inline comments for status. (The word "sorry" may appear in comments explaining what
+> **Note:** `Refinement/Vector.lean` contains a `sorry` in the `vector::reverse` proof sketch only;
+> the `vector::contains` and `vector::index_of` refinements are fully kernel-checked (no `sorry`).
+> `Std/FixedPoint32.lean` and `Std/BitVector.lean` have a small number of `sorry` on auxiliary
+> lemmas tracked for future work.
+> `Experimental/ConfidentialAsset/` contains flagged `sorry`s on abstract bytecode stepping
+> — see inline comments for status. (The word "sorry" may appear in comments explaining what
 *could* be sorry'd; `grep` for `sorry` outside comments if you want to be precise, or run
 `lake env printPaths` and inspect the `.olean` files for `sorryAx` usage.)
 

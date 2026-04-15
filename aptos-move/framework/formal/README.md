@@ -6,7 +6,7 @@ tracks **stdlib**-aligned primitives (`aptos-stdlib`, `move-stdlib`, …) and
 
 | Path | Contents |
 | ---- | -------- |
-| [`lean/`](lean/) | Lake project root — see [`lean/README.md`](lean/README.md) for **prerequisites and build instructions** |
+| [`lean/`](lean/) | Lake project root — see [`lean/README.md`](lean/README.md) for **prerequisites and build instructions** (stdlib specs, bytecode refinement for `vector::contains` / `vector::index_of` / `std::error` / `bit_vector::length`, CA formal work) |
 | [`REGISTRATION_VERIFY_REVIEW.md`](REGISTRATION_VERIFY_REVIEW.md) | Auditor-facing review note for `verify_registration_proof` |
 | `../move-stdlib/tests/formal_goldens_*.move` | Curated Move stdlib tests (hash / BCS / vector) aligned with `AptosFormal.Std.MoveStdlibGoldens` |
 | `../aptos-experimental/tests/confidential_asset/formal_goldens_*.move` | Move golden tests for Ristretto group laws, Fiat–Shamir transcript bytes, and verification equation |

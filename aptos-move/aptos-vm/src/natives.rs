@@ -197,7 +197,6 @@ pub fn configure_for_unit_test() {
     move_unit_test::extensions::set_extension_hook(Box::new(unit_test_extensions_hook))
 }
 
-
 #[cfg(feature = "testing")]
 fn unit_test_extensions_hook(exts: &mut NativeContextExtensions) {
     use aptos_framework::natives::object::NativeObjectContext;

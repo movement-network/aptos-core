@@ -89,6 +89,9 @@ module aptos_experimental::confidential_asset {
     /// supply hooks) are not yet supported in confidential transfers.
     const EUNSAFE_DISPATCHABLE_FA: u64 = 19;
 
+    /// No confidential asset pool exists for the given asset type.
+    const ENO_CONFIDENTIAL_ASSET_POOL: u64 = 20;
+
     //
     // Constants
     //
@@ -1192,7 +1195,9 @@ module aptos_experimental::confidential_asset {
 
     /// Returns the pool's primary fungible store for the given token, aborting if it does not exist.
     fun get_pool_fa_store(token: Object<Metadata>): Object<FungibleStore> acquires FAController {
-        primary_fungible_store::primary_store(get_fa_store_address(), token)
+        let pool_addr = get_fa_store_address();
+        assert!(primary_fungible_store::primary_store_exists(pool_addr, token), error::not_found(ENO_CONFIDENTIAL_ASSET_POOL));
+        primary_fungible_store::primary_store(pool_addr, token)
     }
 
     /// Returns the pool's primary fungible store for the given token, creating it if necessary.

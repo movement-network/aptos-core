@@ -13,7 +13,7 @@ module aptos_experimental::confidential_asset {
     use aptos_framework::coin;
     use aptos_framework::event;
     use aptos_framework::dispatchable_fungible_asset;
-    use aptos_framework::fungible_asset::{Self, Metadata};
+    use aptos_framework::fungible_asset::{Self, FungibleStore, Metadata};
     use aptos_framework::object::{Self, ExtendRef, Object};
     use aptos_framework::primary_fungible_store;
     use aptos_framework::system_addresses;
@@ -754,10 +754,7 @@ module aptos_experimental::confidential_asset {
     #[view]
     /// Returns the circulating supply of the confidential asset.
     public fun confidential_asset_balance(token: Object<Metadata>): u64 acquires FAController {
-        let fa_store_address = get_fa_store_address();
-        assert!(primary_fungible_store::primary_store_exists(fa_store_address, token), EINTERNAL_ERROR);
-
-        primary_fungible_store::balance(fa_store_address, token)
+        fungible_asset::balance(get_pool_fa_store(token))
     }
 
     //
@@ -809,15 +806,11 @@ module aptos_experimental::confidential_asset {
 
         let from = signer::address_of(sender);
 
-        let sender_fa_store = primary_fungible_store::ensure_primary_store_exists(from, token);
-        let ca_fa_store = primary_fungible_store::ensure_primary_store_exists(get_fa_store_address(), token);
+        let pool_fa_store = ensure_pool_fa_store(token);
 
-        let pool_before = fungible_asset::balance(ca_fa_store);
-        dispatchable_fungible_asset::transfer(sender, sender_fa_store, ca_fa_store, amount);
-        assert!(
-            fungible_asset::balance(ca_fa_store) - pool_before == amount,
-            error::invalid_argument(EUNSAFE_DISPATCHABLE_FA)
-        );
+        let pool_before = fungible_asset::balance(pool_fa_store);
+        let sender_fa_store = primary_fungible_store::primary_store(from, token);
+        dispatchable_fungible_asset::transfer(sender, sender_fa_store, pool_fa_store, amount);
 
         let ca_store = borrow_global_mut<ConfidentialAssetStore>(get_user_address(to, token));
         let pending_balance = confidential_balance::decompress_balance(&ca_store.pending_balance);
@@ -843,6 +836,11 @@ module aptos_experimental::confidential_asset {
             amount,
             new_pending_balance: ca_store.pending_balance,
         });
+
+        assert!(
+            amount == fungible_asset::balance(pool_fa_store) - pool_before,
+            error::invalid_argument(EUNSAFE_DISPATCHABLE_FA)
+        );
     }
 
     /// Implementation of the `withdraw_to` entry function.
@@ -879,12 +877,10 @@ module aptos_experimental::confidential_asset {
         ca_store.normalized = true;
         ca_store.actual_balance = confidential_balance::compress_balance(&new_balance);
 
-        let pool_before = primary_fungible_store::balance(get_fa_store_address(), token);
-        primary_fungible_store::transfer(&get_fa_store_signer(), token, to, amount);
-        assert!(
-            pool_before - primary_fungible_store::balance(get_fa_store_address(), token) == amount,
-            error::invalid_argument(EUNSAFE_DISPATCHABLE_FA)
-        );
+        let pool_fa_store = get_pool_fa_store(token);
+        let pool_before = fungible_asset::balance(pool_fa_store);
+        let recipient_fa_store = primary_fungible_store::ensure_primary_store_exists(to, token);
+        dispatchable_fungible_asset::transfer(&get_fa_store_signer(), pool_fa_store, recipient_fa_store, amount);
 
         event::emit(Withdrawn {
             from,
@@ -893,6 +889,11 @@ module aptos_experimental::confidential_asset {
             amount,
             new_available_balance: ca_store.actual_balance,
         });
+
+        assert!(
+            amount == pool_before - fungible_asset::balance(pool_fa_store),
+            error::invalid_argument(EUNSAFE_DISPATCHABLE_FA)
+        );
     }
 
     /// Implementation of the `confidential_transfer` entry function.
@@ -1187,6 +1188,16 @@ module aptos_experimental::confidential_asset {
     /// Returns the address that handles all the FA primary stores.
     fun get_fa_store_address(): address acquires FAController {
         object::address_from_extend_ref(&borrow_global<FAController>(@aptos_experimental).extend_ref)
+    }
+
+    /// Returns the pool's primary fungible store for the given token, aborting if it does not exist.
+    fun get_pool_fa_store(token: Object<Metadata>): Object<FungibleStore> acquires FAController {
+        primary_fungible_store::primary_store(get_fa_store_address(), token)
+    }
+
+    /// Returns the pool's primary fungible store for the given token, creating it if necessary.
+    fun ensure_pool_fa_store(token: Object<Metadata>): Object<FungibleStore> acquires FAController {
+        primary_fungible_store::ensure_primary_store_exists(get_fa_store_address(), token)
     }
 
     /// Returns an object for handling the `ConfidentialAssetStore` and returns a signer for it.

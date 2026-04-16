@@ -531,6 +531,10 @@ $$(k - e \cdot dk^{-1}) \cdot H + e \cdot dk^{-1} \cdot H = k \cdot H = R \quad 
 - Bulletproofs range proofs prevent overflow/underflow attacks (each chunk proven < $2^{16}$)
 - MSM batching via random $\gamma$ scalars preserves soundness with overwhelming probability
 
+### Batch Soundness
+
+Transfer proof verification uses **batched multi-scalar multiplication (MSM)** to check all sigma-protocol relations in a single equation (see [`msm_transfer_gammas`](./sources/confidential_asset/confidential_proof.move)).  Each relation is assigned a random weight (gamma) derived as `SHA2-512(rho || i || j)` where `(i, j)` is a unique index pair.  The per-auditor ciphertext relations (`g7s`) use indices `(7+k, j)` for auditor row `k ∈ [0, n)`, and the sender-amount relation (`g8s`) uses index `(7+n, j)` — i.e. always one past the last auditor row.  This ensures every proof relation receives a distinct random weight regardless of auditor count, preserving the full soundness guarantee of the batch verifier.
+
 ### Replay Protection
 
 ```mermaid

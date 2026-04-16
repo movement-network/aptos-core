@@ -1602,8 +1602,10 @@ module aptos_experimental::confidential_proof {
                     ristretto255::new_scalar_from_sha2_512(msm_gamma_2(rho, (i + 7 as u8), (j as u8)))
                 })
             }),
+            // Index starts past g7s range to avoid gamma collision when auditors_count >= 2.
+            // g7s uses indices 7..7+n-1; g8s uses 7+n.
             g8s: vector::range(0, 4).map(|i| {
-                ristretto255::new_scalar_from_sha2_512(msm_gamma_2(rho, 8, (i as u8)))
+                ristretto255::new_scalar_from_sha2_512(msm_gamma_2(rho, (auditors_count + 7 as u8), (i as u8)))
             }),
         }
     }

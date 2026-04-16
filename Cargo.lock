@@ -7984,7 +7984,6 @@ dependencies = [
  "legacy-move-compiler",
  "move-binary-format",
  "move-core-types",
- "move-lean-difftest",
  "move-model",
  "move-package",
  "move-symbol-pool",
@@ -7995,7 +7994,6 @@ dependencies = [
  "rand 0.7.3",
  "rstest",
  "serde",
- "serde_json",
  "sha3 0.9.1",
  "test-case",
  "tokio",
@@ -12133,36 +12131,6 @@ dependencies = [
  "move-symbol-pool",
  "once_cell",
  "serde",
-]
-
-[[package]]
-name = "move-lean-difftest"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "aptos-cached-packages",
- "aptos-framework",
- "aptos-gas-schedule",
- "aptos-types",
- "aptos-vm",
- "bcs 0.1.4",
- "codespan-reporting",
- "curve25519-dalek-ng",
- "hex",
- "legacy-move-compiler",
- "move-binary-format",
- "move-compiler-v2",
- "move-core-types",
- "move-model",
- "move-stdlib",
- "move-vm-runtime",
- "move-vm-test-utils",
- "move-vm-types",
- "serde",
- "serde_json",
- "sha2 0.9.9",
- "sha3 0.9.1",
- "tempfile",
 ]
 
 [[package]]

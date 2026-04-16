@@ -249,7 +249,7 @@ module aptos_experimental::confidential_proof {
     /// `ristretto255::new_scalar_from_sha2_512(msg)` (DST is the prefix of `msg`).
     ///
     /// Exposed as a normal `public` entry (not `#[test_only]`) so off-chain tooling and
-    /// `move-lean-difftest` harnesses can pin the transcript without duplicating concatenation logic.
+    /// test harnesses can pin the transcript without duplicating concatenation logic.
     public fun registration_fs_message_for_test(
         chain_id: u8,
         sender: address,
@@ -271,7 +271,7 @@ module aptos_experimental::confidential_proof {
     /// Deterministic registration Schnorr commitment/response using caller-supplied nonce `k`
     /// (same transcript + algebra as `prove_registration`, but without `random_scalar()`).
     ///
-    /// Intended for `move-lean-difftest` and off-chain parity checks against `verify_registration_proof`.
+    /// Intended for parity checks in test harnesses against `verify_registration_proof`.
     public fun prove_registration_deterministic_for_difftest(
         chain_id: u8,
         sender: address,
@@ -304,7 +304,7 @@ module aptos_experimental::confidential_proof {
     }
 
     /// Public wrapper around [`verify_registration_proof`] for harnesses that are not `friend`
-    /// of `confidential_proof` (e.g. `0x1::difftest_confidential_proof` in `move-lean-difftest`).
+    /// of `confidential_proof` (e.g. separate test-only Move modules).
     public fun verify_registration_proof_for_difftest(
         chain_id: u8,
         sender: address,

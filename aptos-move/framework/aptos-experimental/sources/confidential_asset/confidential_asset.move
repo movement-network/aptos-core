@@ -1375,7 +1375,7 @@ module aptos_experimental::confidential_asset {
         confidential_balance::verify_actual_balance(&actual_balance, user_dk, amount)
     }
 
-    /// Pure serialization helpers (no `borrow_global`). Public so `move-lean-difftest` and other
+    /// Pure serialization helpers (no `borrow_global`). Public so off-chain tooling and
     /// tooling can exercise the same entrypoints as tests without `#[test_only]` harness modules.
     public fun serialize_auditor_eks(auditor_eks: &vector<twisted_elgamal::CompressedPubkey>): vector<u8> {
         let auditor_eks_bytes = vector[];

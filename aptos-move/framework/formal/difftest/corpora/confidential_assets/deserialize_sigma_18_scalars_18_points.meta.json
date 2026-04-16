@@ -1,9 +1,0 @@
-{
-  "name": "deserialize_sigma_18_scalars_18_points",
-  "length_bytes": 1152,
-  "encoding": "hex",
-  "bytes_file": "deserialize_sigma_18_scalars_18_points.hex",
-  "move_anchor": "0x1::difftest_confidential_proof::layout_sigma_18_scalars_18_points (withdrawal + normalization deserialize layout-`Some`)",
-  "lean_def": "AptosFormal.Move.Programs.Confidential.deserializeSigma18Scalars18PointsBytes",
-  "lean_theorem": "AptosFormal.Move.Programs.Confidential.deserializeSigma18Scalars18PointsBytes_length"
-}

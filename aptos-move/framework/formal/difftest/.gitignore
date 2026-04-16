@@ -1,7 +1,0 @@
-# VM oracle output from `cargo run -p move-lean-difftest` — regenerate before `lake exe difftest`.
-difftest_oracle*.json
-# `move-lean-difftest merge -o difftest_merged.json ...`
-difftest_merged.json
-# CA e2e export + CI merged oracle
-difftest_ca_e2e_fragment.json
-difftest_ci_merged.json

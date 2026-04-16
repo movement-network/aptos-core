@@ -1,9 +1,0 @@
-{
-  "name": "bulletproofs_dst",
-  "length_bytes": 44,
-  "encoding": "hex",
-  "bytes_file": "bulletproofs_dst.hex",
-  "move_anchor": "aptos_experimental::confidential_proof::BULLETPROOFS_DST",
-  "lean_def": "AptosFormal.Move.Programs.Confidential.bulletproofsDstBytes",
-  "lean_theorem": "AptosFormal.Move.Programs.Confidential.bulletproofsDstBytes_length"
-}

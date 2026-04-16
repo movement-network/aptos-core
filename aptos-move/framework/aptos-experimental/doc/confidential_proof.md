@@ -1141,7 +1141,7 @@ Byte-for-byte the Fiat–Shamir input <code>msg</code> built in <code>verify_reg
 <code><a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_new_scalar_from_sha2_512">ristretto255::new_scalar_from_sha2_512</a>(msg)</code> (DST is the prefix of <code>msg</code>).
 
 Exposed as a normal <code><b>public</b></code> entry (not <code>#[test_only]</code>) so off-chain tooling and
-<code><b>move</b>-lean-difftest</code> harnesses can pin the transcript without duplicating concatenation logic.
+off-chain tooling harnesses can pin the transcript without duplicating concatenation logic.
 
 
 <pre><code><b>public</b> <b>fun</b> <a href="confidential_proof.md#0x7_confidential_proof_registration_fs_message_for_test">registration_fs_message_for_test</a>(<a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a>: u8, sender: <b>address</b>, contract_address: <b>address</b>, token_address: <b>address</b>, ek: &<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedPubkey">ristretto255_twisted_elgamal::CompressedPubkey</a>, commitment_bytes: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
@@ -1183,7 +1183,7 @@ Exposed as a normal <code><b>public</b></code> entry (not <code>#[test_only]</co
 Deterministic registration Schnorr commitment/response using caller-supplied nonce <code>k</code>
 (same transcript + algebra as <code>prove_registration</code>, but without <code>random_scalar()</code>).
 
-Intended for <code><b>move</b>-lean-difftest</code> and off-chain parity checks against <code>verify_registration_proof</code>.
+Intended for off-chain tooling and off-chain parity checks against <code>verify_registration_proof</code>.
 
 
 <pre><code><b>public</b> <b>fun</b> <a href="confidential_proof.md#0x7_confidential_proof_prove_registration_deterministic_for_difftest">prove_registration_deterministic_for_difftest</a>(<a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a>: u8, sender: <b>address</b>, contract_address: <b>address</b>, dk: &<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_Scalar">ristretto255::Scalar</a>, ek: &<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedPubkey">ristretto255_twisted_elgamal::CompressedPubkey</a>, token_address: <b>address</b>, k: &<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_Scalar">ristretto255::Scalar</a>): (<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;)
@@ -1236,7 +1236,7 @@ Intended for <code><b>move</b>-lean-difftest</code> and off-chain parity checks 
 ## Function `verify_registration_proof_for_difftest`
 
 Public wrapper around [<code>verify_registration_proof</code>] for harnesses that are not <code><b>friend</b></code>
-of <code><a href="confidential_proof.md#0x7_confidential_proof">confidential_proof</a></code> (e.g. <code>0x1::difftest_confidential_proof</code> in <code><b>move</b>-lean-difftest</code>).
+of <code><a href="confidential_proof.md#0x7_confidential_proof">confidential_proof</a></code> (e.g. separate test-only Move modules).
 
 
 <pre><code><b>public</b> <b>fun</b> <a href="confidential_proof.md#0x7_confidential_proof_verify_registration_proof_for_difftest">verify_registration_proof_for_difftest</a>(<a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a>: u8, sender: <b>address</b>, contract_address: <b>address</b>, ek: &<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedPubkey">ristretto255_twisted_elgamal::CompressedPubkey</a>, token_address: <b>address</b>, commitment_bytes: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, response_bytes: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;)

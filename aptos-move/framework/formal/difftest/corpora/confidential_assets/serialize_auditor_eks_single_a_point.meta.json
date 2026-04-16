@@ -1,9 +1,0 @@
-{
-  "name": "serialize_auditor_eks_single_a_point",
-  "length_bytes": 32,
-  "encoding": "hex",
-  "bytes_file": "serialize_auditor_eks_single_a_point.hex",
-  "move_anchor": "0x1::difftest_confidential_asset_layer::test_serialize_auditor_eks_single_a_point_framework → aptos_experimental::confidential_asset::serialize_auditor_eks",
-  "lean_def": "AptosFormal.Move.Programs.Confidential.deserializeRistrettoAPointBytes",
-  "lean_theorem": "AptosFormal.Move.Programs.Confidential.deserializeRistrettoAPointBytes_length"
-}

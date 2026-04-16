@@ -3072,7 +3072,7 @@ Returns <code>Some(Object&lt;Metadata&gt;)</code> if user has a sufficient amoun
 
 ## Function `serialize_auditor_eks`
 
-Pure serialization helpers (no <code><b>borrow_global</b></code>). Public so <code><b>move</b>-lean-difftest</code> and other
+Pure serialization helpers (no <code><b>borrow_global</b></code>). Public so off-chain tooling and other
 tooling can exercise the same entrypoints as tests without <code>#[test_only]</code> harness modules.
 
 

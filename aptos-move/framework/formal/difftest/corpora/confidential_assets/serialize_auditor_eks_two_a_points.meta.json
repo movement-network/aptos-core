@@ -1,9 +1,0 @@
-{
-  "name": "serialize_auditor_eks_two_a_points",
-  "length_bytes": 64,
-  "encoding": "hex",
-  "bytes_file": "serialize_auditor_eks_two_a_points.hex",
-  "move_anchor": "0x1::difftest_confidential_asset_layer::test_serialize_auditor_eks_two_a_points_framework",
-  "lean_def": "AptosFormal.Move.Programs.Confidential.serializeAuditorEksTwoApointWireBytes",
-  "lean_theorem": "AptosFormal.Move.Programs.Confidential.serializeAuditorEksTwoApointWireBytes_length"
-}

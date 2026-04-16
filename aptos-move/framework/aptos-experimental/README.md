@@ -11,7 +11,7 @@ Move packages that are **experimental**: APIs may change. The largest surface ar
 | [`sources/confidential_asset/`](./sources/confidential_asset/) | Modules: `confidential_asset`, `confidential_proof`, `confidential_balance`, `ristretto255_twisted_elgamal`, gas e2e helpers (`#[test_only]`). |
 | [`tests/confidential_asset/`](./tests/confidential_asset/) | Move unit tests (`confidential_asset_tests`, `confidential_proof_tests`). |
 
-Rust **`e2e-move-tests`** (repo root `aptos-move/e2e-move-tests`) calls into `confidential_gas_e2e_helpers` to pack proofs for real transactions; they complement but do not replace Move tests for event shape.
+Rust **`e2e-move-tests`** (repo root `aptos-move/e2e-move-tests`) calls into `confidential_gas_e2e_helpers` to pack proofs for real transactions; they complement but do not replace Move tests for event shape. If those Rust tests overflow the stack on your machine, set **`RUST_MIN_STACK`** as documented in `e2e-move-tests/README.md`.
 
 ## `Transferred` event (indexers & integrators)
 

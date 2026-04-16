@@ -149,7 +149,6 @@ Mahdi and Boneh, Dan; in Financial Cryptography and Data Security; 2020
 -  [Struct `TransferProof`](#0x7_veiled_coin_TransferProof)
 -  [Struct `WithdrawalProof`](#0x7_veiled_coin_WithdrawalProof)
 -  [Constants](#@Constants_6)
--  [Function `init_module`](#0x7_veiled_coin_init_module)
 -  [Function `register`](#0x7_veiled_coin_register)
 -  [Function `veil_to`](#0x7_veiled_coin_veil_to)
 -  [Function `veil`](#0x7_veiled_coin_veil)
@@ -170,8 +169,6 @@ Mahdi and Boneh, Dan; in Financial Cryptography and Data Security; 2020
 -  [Function `unveil_to_internal`](#0x7_veiled_coin_unveil_to_internal)
 -  [Function `fully_veiled_transfer_internal`](#0x7_veiled_coin_fully_veiled_transfer_internal)
 -  [Function `verify_range_proofs`](#0x7_veiled_coin_verify_range_proofs)
--  [Function `get_resource_account_signer`](#0x7_veiled_coin_get_resource_account_signer)
--  [Function `veiled_mint_from_coin`](#0x7_veiled_coin_veiled_mint_from_coin)
 
 
 <pre><code><b>use</b> <a href="../../aptos-framework/doc/account.md#0x1_account">0x1::account</a>;
@@ -203,28 +200,6 @@ These are kept in a single resource to ensure locality of data.
 
 
 
-<details>
-<summary>Fields</summary>
-
-
-<dl>
-<dt>
-<code>veiled_balance: <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255_elgamal.md#0x1_ristretto255_elgamal_CompressedCiphertext">ristretto255_elgamal::CompressedCiphertext</a></code>
-</dt>
-<dd>
- A ElGamal ciphertext of a value $v \in [0, 2^{32})$, an invariant that is enforced throughout the code.
-</dd>
-<dt>
-<code>pk: <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255_elgamal.md#0x1_ristretto255_elgamal_CompressedPubkey">ristretto255_elgamal::CompressedPubkey</a></code>
-</dt>
-<dd>
-
-</dd>
-</dl>
-
-
-</details>
-
 <a id="0x7_veiled_coin_Deposit"></a>
 
 ## Struct `Deposit`
@@ -237,22 +212,6 @@ Event emitted when some amount of veiled coins were deposited into an account.
 </code></pre>
 
 
-
-<details>
-<summary>Fields</summary>
-
-
-<dl>
-<dt>
-<code>user: <b>address</b></code>
-</dt>
-<dd>
-
-</dd>
-</dl>
-
-
-</details>
 
 <a id="0x7_veiled_coin_Withdraw"></a>
 
@@ -267,22 +226,6 @@ Event emitted when some amount of veiled coins were withdrawn from an account.
 
 
 
-<details>
-<summary>Fields</summary>
-
-
-<dl>
-<dt>
-<code>user: <b>address</b></code>
-</dt>
-<dd>
-
-</dd>
-</dl>
-
-
-</details>
-
 <a id="0x7_veiled_coin_VeiledCoinMinter"></a>
 
 ## Resource `VeiledCoinMinter`
@@ -296,22 +239,6 @@ resource account houses a <code><a href="../../aptos-framework/doc/coin.md#0x1_c
 
 
 
-<details>
-<summary>Fields</summary>
-
-
-<dl>
-<dt>
-<code>signer_cap: <a href="../../aptos-framework/doc/account.md#0x1_account_SignerCapability">account::SignerCapability</a></code>
-</dt>
-<dd>
-
-</dd>
-</dl>
-
-
-</details>
-
 <a id="0x7_veiled_coin_VeiledCoin"></a>
 
 ## Struct `VeiledCoin`
@@ -323,23 +250,6 @@ Main structure representing a coin in an account's custody.
 </code></pre>
 
 
-
-<details>
-<summary>Fields</summary>
-
-
-<dl>
-<dt>
-<code>veiled_amount: <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255_elgamal.md#0x1_ristretto255_elgamal_Ciphertext">ristretto255_elgamal::Ciphertext</a></code>
-</dt>
-<dd>
- ElGamal ciphertext which encrypts the number of coins $v \in [0, 2^{32})$. This $[0, 2^{32})$ range invariant
- is enforced throughout the code via Bulletproof-based ZK range proofs.
-</dd>
-</dl>
-
-
-</details>
 
 <a id="0x7_veiled_coin_TransferProof"></a>
 
@@ -353,34 +263,6 @@ A cryptographic proof that ensures correctness of a veiled-to-veiled coin transf
 
 
 
-<details>
-<summary>Fields</summary>
-
-
-<dl>
-<dt>
-<code>sigma_proof: <a href="sigma_protos.md#0x7_sigma_protos_TransferSubproof">sigma_protos::TransferSubproof</a></code>
-</dt>
-<dd>
-
-</dd>
-<dt>
-<code>zkrp_new_balance: <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255_bulletproofs.md#0x1_ristretto255_bulletproofs_RangeProof">ristretto255_bulletproofs::RangeProof</a></code>
-</dt>
-<dd>
-
-</dd>
-<dt>
-<code>zkrp_amount: <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255_bulletproofs.md#0x1_ristretto255_bulletproofs_RangeProof">ristretto255_bulletproofs::RangeProof</a></code>
-</dt>
-<dd>
-
-</dd>
-</dl>
-
-
-</details>
-
 <a id="0x7_veiled_coin_WithdrawalProof"></a>
 
 ## Struct `WithdrawalProof`
@@ -392,28 +274,6 @@ A cryptographic proof that ensures correctness of a veiled-to-*unveiled* coin tr
 </code></pre>
 
 
-
-<details>
-<summary>Fields</summary>
-
-
-<dl>
-<dt>
-<code>sigma_proof: <a href="sigma_protos.md#0x7_sigma_protos_WithdrawalSubproof">sigma_protos::WithdrawalSubproof</a></code>
-</dt>
-<dd>
-
-</dd>
-<dt>
-<code>zkrp_new_balance: <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255_bulletproofs.md#0x1_ristretto255_bulletproofs_RangeProof">ristretto255_bulletproofs::RangeProof</a></code>
-</dt>
-<dd>
-
-</dd>
-</dl>
-
-
-</details>
 
 <a id="@Constants_6"></a>
 
@@ -555,50 +415,6 @@ The domain separation tag (DST) used for the Bulletproofs prover.
 
 
 
-<a id="0x7_veiled_coin_init_module"></a>
-
-## Function `init_module`
-
-Initializes a so-called "resource" account which will maintain a <code><a href="../../aptos-framework/doc/coin.md#0x1_coin_CoinStore">coin::CoinStore</a>&lt;T&gt;</code> resource for all <code>Coin&lt;T&gt;</code>'s
-that have been converted into a <code><a href="veiled_coin.md#0x7_veiled_coin_VeiledCoin">VeiledCoin</a>&lt;T&gt;</code>.
-
-
-<pre><code><b>fun</b> <a href="veiled_coin.md#0x7_veiled_coin_init_module">init_module</a>(deployer: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>)
-</code></pre>
-
-
-
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>fun</b> <a href="veiled_coin.md#0x7_veiled_coin_init_module">init_module</a>(deployer: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>) {
-    <b>assert</b>!(
-        bulletproofs::get_max_range_bits() &gt;= <a href="veiled_coin.md#0x7_veiled_coin_MAX_BITS_IN_VEILED_COIN_VALUE">MAX_BITS_IN_VEILED_COIN_VALUE</a>,
-        <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_internal">error::internal</a>(<a href="veiled_coin.md#0x7_veiled_coin_ERANGE_PROOF_SYSTEM_HAS_INSUFFICIENT_RANGE">ERANGE_PROOF_SYSTEM_HAS_INSUFFICIENT_RANGE</a>)
-    );
-
-    <b>assert</b>!(
-        <a href="veiled_coin.md#0x7_veiled_coin_NUM_LEAST_SIGNIFICANT_BITS_REMOVED">NUM_LEAST_SIGNIFICANT_BITS_REMOVED</a> + <a href="veiled_coin.md#0x7_veiled_coin_NUM_MOST_SIGNIFICANT_BITS_REMOVED">NUM_MOST_SIGNIFICANT_BITS_REMOVED</a> == 32,
-        <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_internal">error::internal</a>(<a href="veiled_coin.md#0x7_veiled_coin_EU64_COIN_AMOUNT_CLAMPING_IS_INCORRECT">EU64_COIN_AMOUNT_CLAMPING_IS_INCORRECT</a>)
-    );
-
-    // Create the resource <a href="../../aptos-framework/doc/account.md#0x1_account">account</a>. This will allow this <b>module</b> <b>to</b> later obtain a `<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>` for this <a href="../../aptos-framework/doc/account.md#0x1_account">account</a> and
-    // transfer `Coin&lt;T&gt;`'s into its `CoinStore&lt;T&gt;` before minting a `<a href="veiled_coin.md#0x7_veiled_coin_VeiledCoin">VeiledCoin</a>&lt;T&gt;`.
-    <b>let</b> (_resource, signer_cap) = <a href="../../aptos-framework/doc/account.md#0x1_account_create_resource_account">account::create_resource_account</a>(deployer, <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector_empty">vector::empty</a>());
-
-    <b>move_to</b>(deployer,
-        <a href="veiled_coin.md#0x7_veiled_coin_VeiledCoinMinter">VeiledCoinMinter</a> {
-            signer_cap
-        }
-    )
-}
-</code></pre>
-
-
-
-</details>
-
 <a id="0x7_veiled_coin_register"></a>
 
 ## Function `register`
@@ -611,20 +427,6 @@ Importantly, the user's wallet must retain their corresponding secret key.
 </code></pre>
 
 
-
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>public</b> entry <b>fun</b> <a href="veiled_coin.md#0x7_veiled_coin_register">register</a>&lt;CoinType&gt;(user: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, pk: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;) {
-    <b>let</b> pk = elgamal::new_pubkey_from_bytes(pk);
-    <a href="veiled_coin.md#0x7_veiled_coin_register_internal">register_internal</a>&lt;CoinType&gt;(user, pk.extract());
-}
-</code></pre>
-
-
-
-</details>
 
 <a id="0x7_veiled_coin_veil_to"></a>
 
@@ -639,25 +441,6 @@ Sends a *public* <code>amount</code> of normal coins from <code>sender</code> to
 </code></pre>
 
 
-
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>public</b> entry <b>fun</b> <a href="veiled_coin.md#0x7_veiled_coin_veil_to">veil_to</a>&lt;CoinType&gt;(
-    sender: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, recipient: <b>address</b>, amount: u32) <b>acquires</b> <a href="veiled_coin.md#0x7_veiled_coin_VeiledCoinMinter">VeiledCoinMinter</a>, <a href="veiled_coin.md#0x7_veiled_coin_VeiledCoinStore">VeiledCoinStore</a>
-{
-    <b>let</b> c = <a href="../../aptos-framework/doc/coin.md#0x1_coin_withdraw">coin::withdraw</a>&lt;CoinType&gt;(sender, <a href="veiled_coin.md#0x7_veiled_coin_cast_u32_to_u64_amount">cast_u32_to_u64_amount</a>(amount));
-
-    <b>let</b> vc = <a href="veiled_coin.md#0x7_veiled_coin_veiled_mint_from_coin">veiled_mint_from_coin</a>(c);
-
-    <a href="veiled_coin.md#0x7_veiled_coin_veiled_deposit">veiled_deposit</a>&lt;CoinType&gt;(recipient, vc)
-}
-</code></pre>
-
-
-
-</details>
 
 <a id="0x7_veiled_coin_veil"></a>
 
@@ -674,19 +457,6 @@ This function can be used by the <code>owner</code> to initialize his veiled bal
 </code></pre>
 
 
-
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>public</b> entry <b>fun</b> <a href="veiled_coin.md#0x7_veiled_coin_veil">veil</a>&lt;CoinType&gt;(owner: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, amount: u32) <b>acquires</b> <a href="veiled_coin.md#0x7_veiled_coin_VeiledCoinMinter">VeiledCoinMinter</a>, <a href="veiled_coin.md#0x7_veiled_coin_VeiledCoinStore">VeiledCoinStore</a> {
-    <a href="veiled_coin.md#0x7_veiled_coin_veil_to">veil_to</a>&lt;CoinType&gt;(owner, <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(owner), amount)
-}
-</code></pre>
-
-
-
-</details>
 
 <a id="0x7_veiled_coin_unveil_to"></a>
 
@@ -706,42 +476,6 @@ No ZK range proof is necessary for the <code>amount</code>, which is given as a 
 
 
 
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>public</b> entry <b>fun</b> <a href="veiled_coin.md#0x7_veiled_coin_unveil_to">unveil_to</a>&lt;CoinType&gt;(
-    sender: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>,
-    recipient: <b>address</b>,
-    amount: u32,
-    comm_new_balance: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
-    zkrp_new_balance: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
-    withdraw_subproof: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;) <b>acquires</b> <a href="veiled_coin.md#0x7_veiled_coin_VeiledCoinStore">VeiledCoinStore</a>, <a href="veiled_coin.md#0x7_veiled_coin_VeiledCoinMinter">VeiledCoinMinter</a>
-{
-    // Deserialize all the proofs into their proper Move structs
-    <b>let</b> comm_new_balance = pedersen::new_commitment_from_bytes(comm_new_balance);
-    <b>assert</b>!(comm_new_balance.is_some(), <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="veiled_coin.md#0x7_veiled_coin_EDESERIALIZATION_FAILED">EDESERIALIZATION_FAILED</a>));
-
-    <b>let</b> sigma_proof = <a href="sigma_protos.md#0x7_sigma_protos_deserialize_withdrawal_subproof">sigma_protos::deserialize_withdrawal_subproof</a>(withdraw_subproof);
-    <b>assert</b>!(std::option::is_some(&sigma_proof), <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="veiled_coin.md#0x7_veiled_coin_EDESERIALIZATION_FAILED">EDESERIALIZATION_FAILED</a>));
-
-    <b>let</b> comm_new_balance = comm_new_balance.extract();
-    <b>let</b> zkrp_new_balance = bulletproofs::range_proof_from_bytes(zkrp_new_balance);
-
-    <b>let</b> withdrawal_proof = <a href="veiled_coin.md#0x7_veiled_coin_WithdrawalProof">WithdrawalProof</a> {
-        sigma_proof: std::option::extract(&<b>mut</b> sigma_proof),
-        zkrp_new_balance,
-    };
-
-    // Do the actual work
-    <a href="veiled_coin.md#0x7_veiled_coin_unveil_to_internal">unveil_to_internal</a>&lt;CoinType&gt;(sender, recipient, amount, comm_new_balance, withdrawal_proof);
-}
-</code></pre>
-
-
-
-</details>
-
 <a id="0x7_veiled_coin_unveil"></a>
 
 ## Function `unveil`
@@ -753,32 +487,6 @@ Like <code>unveil_to</code>, except the <code>sender</code> is also the recipien
 </code></pre>
 
 
-
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>public</b> entry <b>fun</b> <a href="veiled_coin.md#0x7_veiled_coin_unveil">unveil</a>&lt;CoinType&gt;(
-    sender: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>,
-    amount: u32,
-    comm_new_balance: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
-    zkrp_new_balance: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
-    withdraw_subproof: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;) <b>acquires</b> <a href="veiled_coin.md#0x7_veiled_coin_VeiledCoinStore">VeiledCoinStore</a>, <a href="veiled_coin.md#0x7_veiled_coin_VeiledCoinMinter">VeiledCoinMinter</a>
-{
-    <a href="veiled_coin.md#0x7_veiled_coin_unveil_to">unveil_to</a>&lt;CoinType&gt;(
-        sender,
-        <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(sender),
-        amount,
-        comm_new_balance,
-        zkrp_new_balance,
-        withdraw_subproof
-    )
-}
-</code></pre>
-
-
-
-</details>
 
 <a id="0x7_veiled_coin_fully_veiled_transfer"></a>
 
@@ -806,60 +514,6 @@ as in 'deposit_ct' (with the same randomness) and as in <code>comm_amount</code>
 
 
 
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>public</b> entry <b>fun</b> <a href="veiled_coin.md#0x7_veiled_coin_fully_veiled_transfer">fully_veiled_transfer</a>&lt;CoinType&gt;(
-    sender: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>,
-    recipient: <b>address</b>,
-    withdraw_ct: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
-    deposit_ct: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
-    comm_new_balance: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
-    comm_amount: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
-    zkrp_new_balance: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
-    zkrp_amount: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
-    transfer_subproof: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;) <b>acquires</b> <a href="veiled_coin.md#0x7_veiled_coin_VeiledCoinStore">VeiledCoinStore</a>
-{
-    // Deserialize everything into their proper Move structs
-    <b>let</b> veiled_withdraw_amount = elgamal::new_ciphertext_from_bytes(withdraw_ct);
-    <b>assert</b>!(veiled_withdraw_amount.is_some(), <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="veiled_coin.md#0x7_veiled_coin_EDESERIALIZATION_FAILED">EDESERIALIZATION_FAILED</a>));
-
-    <b>let</b> veiled_deposit_amount = elgamal::new_ciphertext_from_bytes(deposit_ct);
-    <b>assert</b>!(veiled_deposit_amount.is_some(), <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="veiled_coin.md#0x7_veiled_coin_EDESERIALIZATION_FAILED">EDESERIALIZATION_FAILED</a>));
-
-    <b>let</b> comm_new_balance = pedersen::new_commitment_from_bytes(comm_new_balance);
-    <b>assert</b>!(comm_new_balance.is_some(), <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="veiled_coin.md#0x7_veiled_coin_EDESERIALIZATION_FAILED">EDESERIALIZATION_FAILED</a>));
-
-    <b>let</b> comm_amount = pedersen::new_commitment_from_bytes(comm_amount);
-    <b>assert</b>!(comm_amount.is_some(), <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="veiled_coin.md#0x7_veiled_coin_EDESERIALIZATION_FAILED">EDESERIALIZATION_FAILED</a>));
-
-    <b>let</b> transfer_subproof = <a href="sigma_protos.md#0x7_sigma_protos_deserialize_transfer_subproof">sigma_protos::deserialize_transfer_subproof</a>(transfer_subproof);
-    <b>assert</b>!(std::option::is_some(&transfer_subproof), <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="veiled_coin.md#0x7_veiled_coin_EDESERIALIZATION_FAILED">EDESERIALIZATION_FAILED</a>));
-
-    <b>let</b> transfer_proof = <a href="veiled_coin.md#0x7_veiled_coin_TransferProof">TransferProof</a> {
-        zkrp_new_balance: bulletproofs::range_proof_from_bytes(zkrp_new_balance),
-        zkrp_amount: bulletproofs::range_proof_from_bytes(zkrp_amount),
-        sigma_proof: std::option::extract(&<b>mut</b> transfer_subproof)
-    };
-
-    // Do the actual work
-    <a href="veiled_coin.md#0x7_veiled_coin_fully_veiled_transfer_internal">fully_veiled_transfer_internal</a>&lt;CoinType&gt;(
-        sender,
-        recipient,
-        veiled_withdraw_amount.extract(),
-        veiled_deposit_amount.extract(),
-        comm_new_balance.extract(),
-        comm_amount.extract(),
-        &transfer_proof,
-    )
-}
-</code></pre>
-
-
-
-</details>
-
 <a id="0x7_veiled_coin_clamp_u64_to_u32_amount"></a>
 
 ## Function `clamp_u64_to_u32_amount`
@@ -874,27 +528,6 @@ WARNING: Precision is lost here (see "Veiled coin amounts as truncated <code>u32
 
 
 
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="veiled_coin.md#0x7_veiled_coin_clamp_u64_to_u32_amount">clamp_u64_to_u32_amount</a>(amount: u64): u32 {
-    // Removes the `<a href="veiled_coin.md#0x7_veiled_coin_NUM_MOST_SIGNIFICANT_BITS_REMOVED">NUM_MOST_SIGNIFICANT_BITS_REMOVED</a>` most significant bits.
-    amount &lt;&lt; <a href="veiled_coin.md#0x7_veiled_coin_NUM_MOST_SIGNIFICANT_BITS_REMOVED">NUM_MOST_SIGNIFICANT_BITS_REMOVED</a>;
-    amount &gt;&gt; <a href="veiled_coin.md#0x7_veiled_coin_NUM_MOST_SIGNIFICANT_BITS_REMOVED">NUM_MOST_SIGNIFICANT_BITS_REMOVED</a>;
-
-    // Removes the other `32 - <a href="veiled_coin.md#0x7_veiled_coin_NUM_MOST_SIGNIFICANT_BITS_REMOVED">NUM_MOST_SIGNIFICANT_BITS_REMOVED</a>` least significant bits.
-    amount = amount &gt;&gt; <a href="veiled_coin.md#0x7_veiled_coin_NUM_LEAST_SIGNIFICANT_BITS_REMOVED">NUM_LEAST_SIGNIFICANT_BITS_REMOVED</a>;
-
-    // We are now left <b>with</b> a 32-bit value
-    (amount <b>as</b> u32)
-}
-</code></pre>
-
-
-
-</details>
-
 <a id="0x7_veiled_coin_cast_u32_to_u64_amount"></a>
 
 ## Function `cast_u32_to_u64_amount`
@@ -906,19 +539,6 @@ Casts a <code>u32</code> to-be-veiled amount to a <code>u64</code> normal public
 </code></pre>
 
 
-
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="veiled_coin.md#0x7_veiled_coin_cast_u32_to_u64_amount">cast_u32_to_u64_amount</a>(amount: u32): u64 {
-    (amount <b>as</b> u64) &lt;&lt; <a href="veiled_coin.md#0x7_veiled_coin_NUM_MOST_SIGNIFICANT_BITS_REMOVED">NUM_MOST_SIGNIFICANT_BITS_REMOVED</a>
-}
-</code></pre>
-
-
-
-</details>
 
 <a id="0x7_veiled_coin_has_veiled_coin_store"></a>
 
@@ -932,19 +552,6 @@ Returns <code><b>true</b></code> if <code>addr</code> is registered to receive v
 
 
 
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="veiled_coin.md#0x7_veiled_coin_has_veiled_coin_store">has_veiled_coin_store</a>&lt;CoinType&gt;(addr: <b>address</b>): bool {
-    <b>exists</b>&lt;<a href="veiled_coin.md#0x7_veiled_coin_VeiledCoinStore">VeiledCoinStore</a>&lt;CoinType&gt;&gt;(addr)
-}
-</code></pre>
-
-
-
-</details>
-
 <a id="0x7_veiled_coin_veiled_amount"></a>
 
 ## Function `veiled_amount`
@@ -956,19 +563,6 @@ Returns the ElGamal encryption of the value of <code><a href="../../aptos-framew
 </code></pre>
 
 
-
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="veiled_coin.md#0x7_veiled_coin_veiled_amount">veiled_amount</a>&lt;CoinType&gt;(<a href="../../aptos-framework/doc/coin.md#0x1_coin">coin</a>: &<a href="veiled_coin.md#0x7_veiled_coin_VeiledCoin">VeiledCoin</a>&lt;CoinType&gt;): &elgamal::Ciphertext {
-    &<a href="../../aptos-framework/doc/coin.md#0x1_coin">coin</a>.veiled_amount
-}
-</code></pre>
-
-
-
-</details>
 
 <a id="0x7_veiled_coin_veiled_balance"></a>
 
@@ -982,24 +576,6 @@ Returns the ElGamal encryption of the veiled balance of <code>owner</code> for t
 
 
 
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="veiled_coin.md#0x7_veiled_coin_veiled_balance">veiled_balance</a>&lt;CoinType&gt;(owner: <b>address</b>): elgamal::CompressedCiphertext <b>acquires</b> <a href="veiled_coin.md#0x7_veiled_coin_VeiledCoinStore">VeiledCoinStore</a> {
-    <b>assert</b>!(
-        <a href="veiled_coin.md#0x7_veiled_coin_has_veiled_coin_store">has_veiled_coin_store</a>&lt;CoinType&gt;(owner),
-        <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_not_found">error::not_found</a>(<a href="veiled_coin.md#0x7_veiled_coin_EVEILED_COIN_STORE_NOT_PUBLISHED">EVEILED_COIN_STORE_NOT_PUBLISHED</a>),
-    );
-
-    <b>borrow_global</b>&lt;<a href="veiled_coin.md#0x7_veiled_coin_VeiledCoinStore">VeiledCoinStore</a>&lt;CoinType&gt;&gt;(owner).veiled_balance
-}
-</code></pre>
-
-
-
-</details>
-
 <a id="0x7_veiled_coin_encryption_public_key"></a>
 
 ## Function `encryption_public_key`
@@ -1011,24 +587,6 @@ Given an address <code>addr</code>, returns the ElGamal encryption public key as
 </code></pre>
 
 
-
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="veiled_coin.md#0x7_veiled_coin_encryption_public_key">encryption_public_key</a>&lt;CoinType&gt;(addr: <b>address</b>): elgamal::CompressedPubkey <b>acquires</b> <a href="veiled_coin.md#0x7_veiled_coin_VeiledCoinStore">VeiledCoinStore</a> {
-    <b>assert</b>!(
-        <a href="veiled_coin.md#0x7_veiled_coin_has_veiled_coin_store">has_veiled_coin_store</a>&lt;CoinType&gt;(addr),
-        <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_not_found">error::not_found</a>(<a href="veiled_coin.md#0x7_veiled_coin_EVEILED_COIN_STORE_NOT_PUBLISHED">EVEILED_COIN_STORE_NOT_PUBLISHED</a>)
-    );
-
-    <b>borrow_global_mut</b>&lt;<a href="veiled_coin.md#0x7_veiled_coin_VeiledCoinStore">VeiledCoinStore</a>&lt;CoinType&gt;&gt;(addr).pk
-}
-</code></pre>
-
-
-
-</details>
 
 <a id="0x7_veiled_coin_total_veiled_coins"></a>
 
@@ -1042,22 +600,6 @@ Returns the total supply of veiled coins
 
 
 
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="veiled_coin.md#0x7_veiled_coin_total_veiled_coins">total_veiled_coins</a>&lt;CoinType&gt;(): u64 <b>acquires</b> <a href="veiled_coin.md#0x7_veiled_coin_VeiledCoinMinter">VeiledCoinMinter</a> {
-    <b>let</b> rsrc_acc_addr = <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(&<a href="veiled_coin.md#0x7_veiled_coin_get_resource_account_signer">get_resource_account_signer</a>());
-    <b>assert</b>!(<a href="../../aptos-framework/doc/coin.md#0x1_coin_is_account_registered">coin::is_account_registered</a>&lt;CoinType&gt;(rsrc_acc_addr), <a href="veiled_coin.md#0x7_veiled_coin_EINTERNAL_ERROR">EINTERNAL_ERROR</a>);
-
-    <a href="../../aptos-framework/doc/coin.md#0x1_coin_balance">coin::balance</a>&lt;CoinType&gt;(rsrc_acc_addr)
-}
-</code></pre>
-
-
-
-</details>
-
 <a id="0x7_veiled_coin_get_veiled_coin_bulletproofs_dst"></a>
 
 ## Function `get_veiled_coin_bulletproofs_dst`
@@ -1069,19 +611,6 @@ Returns the domain separation tag (DST) for constructing Bulletproof-based range
 </code></pre>
 
 
-
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="veiled_coin.md#0x7_veiled_coin_get_veiled_coin_bulletproofs_dst">get_veiled_coin_bulletproofs_dst</a>(): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt; {
-    <a href="veiled_coin.md#0x7_veiled_coin_VEILED_COIN_BULLETPROOFS_DST">VEILED_COIN_BULLETPROOFS_DST</a>
-}
-</code></pre>
-
-
-
-</details>
 
 <a id="0x7_veiled_coin_get_max_bits_in_veiled_coin_value"></a>
 
@@ -1096,19 +625,6 @@ represent normal <code>aptos_framework::coin::Coin</code> values.
 
 
 
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="veiled_coin.md#0x7_veiled_coin_get_max_bits_in_veiled_coin_value">get_max_bits_in_veiled_coin_value</a>(): u64 {
-    <a href="veiled_coin.md#0x7_veiled_coin_MAX_BITS_IN_VEILED_COIN_VALUE">MAX_BITS_IN_VEILED_COIN_VALUE</a>
-}
-</code></pre>
-
-
-
-</details>
-
 <a id="0x7_veiled_coin_register_internal"></a>
 
 ## Function `register_internal`
@@ -1122,33 +638,6 @@ TODO: Do we want to require a PoK of the SK here?
 
 
 
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="veiled_coin.md#0x7_veiled_coin_register_internal">register_internal</a>&lt;CoinType&gt;(user: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, pk: elgamal::CompressedPubkey) {
-    <b>let</b> account_addr = <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(user);
-    <b>assert</b>!(
-        !<a href="veiled_coin.md#0x7_veiled_coin_has_veiled_coin_store">has_veiled_coin_store</a>&lt;CoinType&gt;(account_addr),
-        <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_already_exists">error::already_exists</a>(<a href="veiled_coin.md#0x7_veiled_coin_EVEILED_COIN_STORE_ALREADY_PUBLISHED">EVEILED_COIN_STORE_ALREADY_PUBLISHED</a>),
-    );
-
-    // Note: There is no way <b>to</b> find an ElGamal SK such that the `(0_G, 0_G)` ciphertext below decrypts <b>to</b> a non-zero
-    // value. We'd need <b>to</b> have `(r * G, v * G + r * pk) = (0_G, 0_G)`, which implies `r = 0` for <a href="../../aptos-framework/../aptos-stdlib/doc/any.md#0x1_any">any</a> choice of PK/SK.
-    // Thus, we must have `v * G = 0_G`, which implies `v = 0`.
-
-    <b>let</b> coin_store = <a href="veiled_coin.md#0x7_veiled_coin_VeiledCoinStore">VeiledCoinStore</a>&lt;CoinType&gt; {
-        veiled_balance: <a href="helpers.md#0x7_helpers_get_veiled_balance_zero_ciphertext">helpers::get_veiled_balance_zero_ciphertext</a>(),
-        pk,
-    };
-    <b>move_to</b>(user, coin_store);
-}
-</code></pre>
-
-
-
-</details>
-
 <a id="0x7_veiled_coin_veiled_deposit"></a>
 
 ## Function `veiled_deposit`
@@ -1160,41 +649,6 @@ Deposits a veiled <code><a href="../../aptos-framework/doc/coin.md#0x1_coin">coi
 </code></pre>
 
 
-
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="veiled_coin.md#0x7_veiled_coin_veiled_deposit">veiled_deposit</a>&lt;CoinType&gt;(to_addr: <b>address</b>, <a href="../../aptos-framework/doc/coin.md#0x1_coin">coin</a>: <a href="veiled_coin.md#0x7_veiled_coin_VeiledCoin">VeiledCoin</a>&lt;CoinType&gt;) <b>acquires</b> <a href="veiled_coin.md#0x7_veiled_coin_VeiledCoinStore">VeiledCoinStore</a> {
-    <b>assert</b>!(
-        <a href="veiled_coin.md#0x7_veiled_coin_has_veiled_coin_store">has_veiled_coin_store</a>&lt;CoinType&gt;(to_addr),
-        <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_not_found">error::not_found</a>(<a href="veiled_coin.md#0x7_veiled_coin_EVEILED_COIN_STORE_NOT_PUBLISHED">EVEILED_COIN_STORE_NOT_PUBLISHED</a>),
-    );
-
-    <b>let</b> veiled_coin_store = <b>borrow_global_mut</b>&lt;<a href="veiled_coin.md#0x7_veiled_coin_VeiledCoinStore">VeiledCoinStore</a>&lt;CoinType&gt;&gt;(to_addr);
-
-    // Fetch the veiled balance
-    <b>let</b> veiled_balance = elgamal::decompress_ciphertext(&veiled_coin_store.veiled_balance);
-
-    // Add the veiled amount <b>to</b> the veiled balance (leverages the homomorphism of the encryption scheme)
-    elgamal::ciphertext_add_assign(&<b>mut</b> veiled_balance, &<a href="../../aptos-framework/doc/coin.md#0x1_coin">coin</a>.veiled_amount);
-
-    // Update the veiled balance
-    veiled_coin_store.veiled_balance = elgamal::compress_ciphertext(&veiled_balance);
-
-    // Make sure the veiled <a href="../../aptos-framework/doc/coin.md#0x1_coin">coin</a> is dropped so it cannot be double spent
-    <b>let</b> <a href="veiled_coin.md#0x7_veiled_coin_VeiledCoin">VeiledCoin</a>&lt;CoinType&gt; { veiled_amount: _ } = <a href="../../aptos-framework/doc/coin.md#0x1_coin">coin</a>;
-
-    // Once successful, emit an <a href="../../aptos-framework/doc/event.md#0x1_event">event</a> that a veiled deposit occurred.
-    <a href="../../aptos-framework/doc/event.md#0x1_event_emit">event::emit</a>(
-        <a href="veiled_coin.md#0x7_veiled_coin_Deposit">Deposit</a> { user: to_addr },
-    );
-}
-</code></pre>
-
-
-
-</details>
 
 <a id="0x7_veiled_coin_unveil_to_internal"></a>
 
@@ -1208,72 +662,6 @@ Like <code>unveil_to</code>, except the proofs have been deserialized into type-
 
 
 
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="veiled_coin.md#0x7_veiled_coin_unveil_to_internal">unveil_to_internal</a>&lt;CoinType&gt;(
-    sender: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>,
-    recipient: <b>address</b>,
-    amount: u32,
-    comm_new_balance: pedersen::Commitment,
-    withdrawal_proof: <a href="veiled_coin.md#0x7_veiled_coin_WithdrawalProof">WithdrawalProof</a>
-) <b>acquires</b> <a href="veiled_coin.md#0x7_veiled_coin_VeiledCoinStore">VeiledCoinStore</a>, <a href="veiled_coin.md#0x7_veiled_coin_VeiledCoinMinter">VeiledCoinMinter</a> {
-    <b>let</b> addr = <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(sender);
-    <b>assert</b>!(
-        <a href="veiled_coin.md#0x7_veiled_coin_has_veiled_coin_store">has_veiled_coin_store</a>&lt;CoinType&gt;(addr),
-        <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_not_found">error::not_found</a>(<a href="veiled_coin.md#0x7_veiled_coin_EVEILED_COIN_STORE_NOT_PUBLISHED">EVEILED_COIN_STORE_NOT_PUBLISHED</a>)
-    );
-
-    // Fetch the sender's ElGamal encryption <b>public</b> key
-    <b>let</b> sender_pk = <a href="veiled_coin.md#0x7_veiled_coin_encryption_public_key">encryption_public_key</a>&lt;CoinType&gt;(addr);
-
-    // Fetch the sender's veiled balance
-    <b>let</b> veiled_coin_store = <b>borrow_global_mut</b>&lt;<a href="veiled_coin.md#0x7_veiled_coin_VeiledCoinStore">VeiledCoinStore</a>&lt;CoinType&gt;&gt;(addr);
-    <b>let</b> veiled_balance = elgamal::decompress_ciphertext(&veiled_coin_store.veiled_balance);
-
-    // Create a (not-yet-secure) encryption of `amount`, since `amount` is a <b>public</b> argument here.
-    <b>let</b> scalar_amount = <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_new_scalar_from_u32">ristretto255::new_scalar_from_u32</a>(amount);
-
-    // Verify that `comm_new_balance` is a commitment <b>to</b> the remaing balance after withdrawing `amount`.
-    <a href="sigma_protos.md#0x7_sigma_protos_verify_withdrawal_subproof">sigma_protos::verify_withdrawal_subproof</a>(
-        &sender_pk,
-        &veiled_balance,
-        &comm_new_balance,
-        &scalar_amount,
-        &withdrawal_proof.sigma_proof);
-
-    // Verify a ZK range proof on `comm_new_balance` (and thus on the remaining `veiled_balance`)
-    <a href="veiled_coin.md#0x7_veiled_coin_verify_range_proofs">verify_range_proofs</a>(
-        &comm_new_balance,
-        &withdrawal_proof.zkrp_new_balance,
-        &std::option::none(),
-        &std::option::none());
-
-    <b>let</b> veiled_amount = elgamal::new_ciphertext_no_randomness(&scalar_amount);
-
-    // <a href="veiled_coin.md#0x7_veiled_coin_Withdraw">Withdraw</a> `amount` from the veiled balance (leverages the homomorphism of the encryption scheme.)
-    elgamal::ciphertext_sub_assign(&<b>mut</b> veiled_balance, &veiled_amount);
-
-    // Update the veiled balance <b>to</b> reflect the veiled withdrawal
-    veiled_coin_store.veiled_balance = elgamal::compress_ciphertext(&veiled_balance);
-
-    // Emit <a href="../../aptos-framework/doc/event.md#0x1_event">event</a> <b>to</b> indicate a veiled withdrawal occurred
-    <a href="../../aptos-framework/doc/event.md#0x1_event_emit">event::emit</a>(
-        <a href="veiled_coin.md#0x7_veiled_coin_Withdraw">Withdraw</a> { user: addr },
-    );
-
-    // <a href="veiled_coin.md#0x7_veiled_coin_Withdraw">Withdraw</a> normal `Coin`'s from the resource <a href="../../aptos-framework/doc/account.md#0x1_account">account</a> and deposit them in the recipient's
-    <b>let</b> c = <a href="../../aptos-framework/doc/coin.md#0x1_coin_withdraw">coin::withdraw</a>(&<a href="veiled_coin.md#0x7_veiled_coin_get_resource_account_signer">get_resource_account_signer</a>(), <a href="veiled_coin.md#0x7_veiled_coin_cast_u32_to_u64_amount">cast_u32_to_u64_amount</a>(amount));
-
-    <a href="../../aptos-framework/doc/coin.md#0x1_coin_deposit">coin::deposit</a>&lt;CoinType&gt;(recipient, c);
-}
-</code></pre>
-
-
-
-</details>
-
 <a id="0x7_veiled_coin_fully_veiled_transfer_internal"></a>
 
 ## Function `fully_veiled_transfer_internal`
@@ -1286,75 +674,6 @@ Like <code>fully_veiled_transfer</code>, except the ciphertext and proofs have b
 
 
 
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="veiled_coin.md#0x7_veiled_coin_fully_veiled_transfer_internal">fully_veiled_transfer_internal</a>&lt;CoinType&gt;(
-    sender: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>,
-    recipient_addr: <b>address</b>,
-    veiled_withdraw_amount: elgamal::Ciphertext,
-    veiled_deposit_amount: elgamal::Ciphertext,
-    comm_new_balance: pedersen::Commitment,
-    comm_amount: pedersen::Commitment,
-    transfer_proof: &<a href="veiled_coin.md#0x7_veiled_coin_TransferProof">TransferProof</a>) <b>acquires</b> <a href="veiled_coin.md#0x7_veiled_coin_VeiledCoinStore">VeiledCoinStore</a>
-{
-    <b>let</b> sender_addr = <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(sender);
-
-    <b>let</b> sender_pk = <a href="veiled_coin.md#0x7_veiled_coin_encryption_public_key">encryption_public_key</a>&lt;CoinType&gt;(sender_addr);
-    <b>let</b> recipient_pk = <a href="veiled_coin.md#0x7_veiled_coin_encryption_public_key">encryption_public_key</a>&lt;CoinType&gt;(recipient_addr);
-
-    // Note: The `encryption_public_key` call from above already asserts that `sender_addr` <b>has</b> a <a href="../../aptos-framework/doc/coin.md#0x1_coin">coin</a> store.
-    <b>let</b> sender_veiled_coin_store = <b>borrow_global_mut</b>&lt;<a href="veiled_coin.md#0x7_veiled_coin_VeiledCoinStore">VeiledCoinStore</a>&lt;CoinType&gt;&gt;(sender_addr);
-
-    // Fetch the veiled balance of the veiled <a href="../../aptos-framework/doc/account.md#0x1_account">account</a>
-    <b>let</b> veiled_balance = elgamal::decompress_ciphertext(&sender_veiled_coin_store.veiled_balance);
-
-    // Checks that `veiled_withdraw_amount` and `veiled_deposit_amount` encrypt the same amount of coins, under the
-    // sender and recipient's PKs. Also checks this amount is committed inside `comm_amount`. Also, checks that the
-    // new balance encrypted in `veiled_balance` is committed in `comm_new_balance`.
-    <a href="sigma_protos.md#0x7_sigma_protos_verify_transfer_subproof">sigma_protos::verify_transfer_subproof</a>(
-        &sender_pk,
-        &recipient_pk,
-        &veiled_withdraw_amount,
-        &veiled_deposit_amount,
-        &comm_amount,
-        &comm_new_balance,
-        &veiled_balance,
-        &transfer_proof.sigma_proof);
-
-    // Update the <a href="../../aptos-framework/doc/account.md#0x1_account">account</a>'s veiled balance by homomorphically subtracting the veiled amount from the veiled balance.
-    elgamal::ciphertext_sub_assign(&<b>mut</b> veiled_balance, &veiled_withdraw_amount);
-
-
-    // Verifies range proofs on the transferred amount and the remaining balance
-    <a href="veiled_coin.md#0x7_veiled_coin_verify_range_proofs">verify_range_proofs</a>(
-        &comm_new_balance,
-        &transfer_proof.zkrp_new_balance,
-        &std::option::some(comm_amount),
-        &std::option::some(transfer_proof.zkrp_amount));
-
-    // Update the veiled balance <b>to</b> reflect the veiled withdrawal
-    sender_veiled_coin_store.veiled_balance = elgamal::compress_ciphertext(&veiled_balance);
-
-    // Once everything succeeds, emit an <a href="../../aptos-framework/doc/event.md#0x1_event">event</a> <b>to</b> indicate a veiled withdrawal occurred
-    <a href="../../aptos-framework/doc/event.md#0x1_event_emit">event::emit</a>(
-        <a href="veiled_coin.md#0x7_veiled_coin_Withdraw">Withdraw</a> { user: sender_addr },
-    );
-
-    // Create a new veiled <a href="../../aptos-framework/doc/coin.md#0x1_coin">coin</a> for the recipient.
-    <b>let</b> vc = <a href="veiled_coin.md#0x7_veiled_coin_VeiledCoin">VeiledCoin</a>&lt;CoinType&gt; { veiled_amount: veiled_deposit_amount };
-
-    // Deposits `veiled_deposit_amount` into the recipient's <a href="../../aptos-framework/doc/account.md#0x1_account">account</a>
-    // (Note, <b>if</b> this aborts, the whole transaction aborts, so we do not need <b>to</b> worry about atomicity.)
-    <a href="veiled_coin.md#0x7_veiled_coin_veiled_deposit">veiled_deposit</a>(recipient_addr, vc);
-}
-</code></pre>
-
-
-
-</details>
-
 <a id="0x7_veiled_coin_verify_range_proofs"></a>
 
 ## Function `verify_range_proofs`
@@ -1365,146 +684,3 @@ the transferred amount committed inside <code>comm_amount</code>.
 
 <pre><code><b>public</b> <b>fun</b> <a href="veiled_coin.md#0x7_veiled_coin_verify_range_proofs">verify_range_proofs</a>(comm_new_balance: &<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255_pedersen.md#0x1_ristretto255_pedersen_Commitment">ristretto255_pedersen::Commitment</a>, zkrp_new_balance: &<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255_bulletproofs.md#0x1_ristretto255_bulletproofs_RangeProof">ristretto255_bulletproofs::RangeProof</a>, comm_amount: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_Option">option::Option</a>&lt;<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255_pedersen.md#0x1_ristretto255_pedersen_Commitment">ristretto255_pedersen::Commitment</a>&gt;, zkrp_amount: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_Option">option::Option</a>&lt;<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255_bulletproofs.md#0x1_ristretto255_bulletproofs_RangeProof">ristretto255_bulletproofs::RangeProof</a>&gt;)
 </code></pre>
-
-
-
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="veiled_coin.md#0x7_veiled_coin_verify_range_proofs">verify_range_proofs</a>(
-    comm_new_balance: &pedersen::Commitment,
-    zkrp_new_balance: &RangeProof,
-    comm_amount: &Option&lt;pedersen::Commitment&gt;,
-    zkrp_amount: &Option&lt;RangeProof&gt;
-) {
-    // Let `amount` denote the amount committed in `comm_amount` and `new_bal` the balance committed in `comm_new_balance`.
-    //
-    // This function checks <b>if</b> it is possible <b>to</b> withdraw a veiled `amount` from a veiled `bal`, obtaining a new
-    // veiled balance `new_bal = bal - amount`. This function is used <b>to</b> maintains a key safety <b>invariant</b> throughout
-    // the veild <a href="../../aptos-framework/doc/coin.md#0x1_coin">coin</a> <a href="../../aptos-framework/doc/code.md#0x1_code">code</a>: i.e., that every <a href="../../aptos-framework/doc/account.md#0x1_account">account</a> <b>has</b> `new_bal \in [0, 2^{32})`.
-    //
-    // This <b>invariant</b> is enforced <b>as</b> follows:
-    //
-    //  1. We <b>assume</b> (by the <b>invariant</b>) that `bal \in [0, 2^{32})`.
-    //
-    //  2. We verify a ZK range proof that `amount \in [0, 2^{32})`. Otherwise, a sender could set `amount = p-1`
-    //     <b>where</b> `p` is the order of the scalar field, which would give `new_bal = bal - (p-1) mod p = bal + 1`.
-    //     Therefore, a malicious spender could create coins out of thin air for themselves.
-    //
-    //  3. We verify a ZK range proof that `new_bal \in [0, 2^{32})`. Otherwise, a sender could set `amount = bal + 1`,
-    //     which would satisfy condition (2) from above but would give `new_bal = bal - (bal + 1) = -1`. Therefore,
-    //     a malicious spender could spend more coins than they have.
-    //
-    // Altogether, these checks ensure that `bal - amount &gt;= 0` (<b>as</b> integers) and therefore that `bal &gt;= amount`
-    // (again, <b>as</b> integers).
-    //
-    // When the caller of this function created the `comm_amount` from a <b>public</b> `u32` value, it is guaranteed that
-    // condition (2) from above holds, so no range proof is necessary. This happens when withdrawing a <b>public</b>
-    // amount from a veiled balance via `unveil_to` or `unveil`.
-
-    // Checks that the remaining balance is &gt;= 0; i.e., range condition (3)
-    <b>assert</b>!(
-        bulletproofs::verify_range_proof_pedersen(
-            comm_new_balance,
-            zkrp_new_balance,
-            <a href="veiled_coin.md#0x7_veiled_coin_MAX_BITS_IN_VEILED_COIN_VALUE">MAX_BITS_IN_VEILED_COIN_VALUE</a>, <a href="veiled_coin.md#0x7_veiled_coin_VEILED_COIN_BULLETPROOFS_DST">VEILED_COIN_BULLETPROOFS_DST</a>
-        ),
-        <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_out_of_range">error::out_of_range</a>(<a href="veiled_coin.md#0x7_veiled_coin_ERANGE_PROOF_VERIFICATION_FAILED">ERANGE_PROOF_VERIFICATION_FAILED</a>)
-    );
-
-    // Checks that the transferred amount is in range (when this amount did not originate from a <b>public</b> amount); i.e., range condition (2)
-    <b>if</b> (zkrp_amount.is_some()) {
-        <b>assert</b>!(
-            bulletproofs::verify_range_proof_pedersen(
-                comm_amount.borrow(),
-                zkrp_amount.borrow(),
-                <a href="veiled_coin.md#0x7_veiled_coin_MAX_BITS_IN_VEILED_COIN_VALUE">MAX_BITS_IN_VEILED_COIN_VALUE</a>, <a href="veiled_coin.md#0x7_veiled_coin_VEILED_COIN_BULLETPROOFS_DST">VEILED_COIN_BULLETPROOFS_DST</a>
-            ),
-            <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_out_of_range">error::out_of_range</a>(<a href="veiled_coin.md#0x7_veiled_coin_ERANGE_PROOF_VERIFICATION_FAILED">ERANGE_PROOF_VERIFICATION_FAILED</a>)
-        );
-    };
-}
-</code></pre>
-
-
-
-</details>
-
-<a id="0x7_veiled_coin_get_resource_account_signer"></a>
-
-## Function `get_resource_account_signer`
-
-Returns a signer for the resource account storing all the normal coins that have been veiled.
-
-
-<pre><code><b>fun</b> <a href="veiled_coin.md#0x7_veiled_coin_get_resource_account_signer">get_resource_account_signer</a>(): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>
-</code></pre>
-
-
-
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>fun</b> <a href="veiled_coin.md#0x7_veiled_coin_get_resource_account_signer">get_resource_account_signer</a>(): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a> <b>acquires</b> <a href="veiled_coin.md#0x7_veiled_coin_VeiledCoinMinter">VeiledCoinMinter</a> {
-    <a href="../../aptos-framework/doc/account.md#0x1_account_create_signer_with_capability">account::create_signer_with_capability</a>(&<b>borrow_global</b>&lt;<a href="veiled_coin.md#0x7_veiled_coin_VeiledCoinMinter">VeiledCoinMinter</a>&gt;(@aptos_experimental).signer_cap)
-}
-</code></pre>
-
-
-
-</details>
-
-<a id="0x7_veiled_coin_veiled_mint_from_coin"></a>
-
-## Function `veiled_mint_from_coin`
-
-Mints a veiled coin from a normal coin, shelving the normal coin into the resource account's coin store.
-
-**WARNING:** Fundamentally, there is no way to hide the value of the coin being minted here.
-
-
-<pre><code><b>fun</b> <a href="veiled_coin.md#0x7_veiled_coin_veiled_mint_from_coin">veiled_mint_from_coin</a>&lt;CoinType&gt;(c: <a href="../../aptos-framework/doc/coin.md#0x1_coin_Coin">coin::Coin</a>&lt;CoinType&gt;): <a href="veiled_coin.md#0x7_veiled_coin_VeiledCoin">veiled_coin::VeiledCoin</a>&lt;CoinType&gt;
-</code></pre>
-
-
-
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>fun</b> <a href="veiled_coin.md#0x7_veiled_coin_veiled_mint_from_coin">veiled_mint_from_coin</a>&lt;CoinType&gt;(c: Coin&lt;CoinType&gt;): <a href="veiled_coin.md#0x7_veiled_coin_VeiledCoin">VeiledCoin</a>&lt;CoinType&gt; <b>acquires</b> <a href="veiled_coin.md#0x7_veiled_coin_VeiledCoinMinter">VeiledCoinMinter</a> {
-    // If there is no `<a href="../../aptos-framework/doc/coin.md#0x1_coin_CoinStore">coin::CoinStore</a>&lt;CoinType&gt;` in the resource <a href="../../aptos-framework/doc/account.md#0x1_account">account</a>, create one.
-    <b>let</b> rsrc_acc_signer = <a href="veiled_coin.md#0x7_veiled_coin_get_resource_account_signer">get_resource_account_signer</a>();
-    <b>let</b> rsrc_acc_addr = <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(&rsrc_acc_signer);
-    <b>if</b> (!<a href="../../aptos-framework/doc/coin.md#0x1_coin_is_account_registered">coin::is_account_registered</a>&lt;CoinType&gt;(rsrc_acc_addr)) {
-        <a href="../../aptos-framework/doc/coin.md#0x1_coin_register">coin::register</a>&lt;CoinType&gt;(&rsrc_acc_signer);
-    };
-
-    // Move the normal <a href="../../aptos-framework/doc/coin.md#0x1_coin">coin</a> into the <a href="../../aptos-framework/doc/coin.md#0x1_coin">coin</a> store, so we can mint a veiled <a href="../../aptos-framework/doc/coin.md#0x1_coin">coin</a>.
-    // (There is no other way <b>to</b> drop a normal <a href="../../aptos-framework/doc/coin.md#0x1_coin">coin</a>, for safety reasons, so moving it into a <a href="../../aptos-framework/doc/coin.md#0x1_coin">coin</a> store is
-    //  the only <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option">option</a>.)
-    <b>let</b> value_u64 = <a href="../../aptos-framework/doc/coin.md#0x1_coin_value">coin::value</a>(&c);
-    <b>let</b> value_u32 = <a href="veiled_coin.md#0x7_veiled_coin_clamp_u64_to_u32_amount">clamp_u64_to_u32_amount</a>(value_u64);
-
-    // Paranoid check: <b>assert</b> that the u64 <a href="../../aptos-framework/doc/coin.md#0x1_coin">coin</a> value had only its middle 32 bits set (should be the case
-    // because the caller should have withdrawn a u32 amount, but enforcing this here anyway).
-    <b>assert</b>!(<a href="veiled_coin.md#0x7_veiled_coin_cast_u32_to_u64_amount">cast_u32_to_u64_amount</a>(value_u32) == value_u64, <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_internal">error::internal</a>(<a href="veiled_coin.md#0x7_veiled_coin_EINTERNAL_ERROR">EINTERNAL_ERROR</a>));
-
-    // <a href="veiled_coin.md#0x7_veiled_coin_Deposit">Deposit</a> a normal <a href="../../aptos-framework/doc/coin.md#0x1_coin">coin</a> into the resource <a href="../../aptos-framework/doc/account.md#0x1_account">account</a>...
-    <a href="../../aptos-framework/doc/coin.md#0x1_coin_deposit">coin::deposit</a>(rsrc_acc_addr, c);
-
-    // ...and mint a veiled <a href="../../aptos-framework/doc/coin.md#0x1_coin">coin</a>, which is backed by the normal <a href="../../aptos-framework/doc/coin.md#0x1_coin">coin</a>
-    <a href="veiled_coin.md#0x7_veiled_coin_VeiledCoin">VeiledCoin</a>&lt;CoinType&gt; {
-        veiled_amount: <a href="helpers.md#0x7_helpers_public_amount_to_veiled_balance">helpers::public_amount_to_veiled_balance</a>(value_u32)
-    }
-}
-</code></pre>
-
-
-
-</details>
-
-
-[move-book]: https://aptos.dev/move/book/SUMMARY

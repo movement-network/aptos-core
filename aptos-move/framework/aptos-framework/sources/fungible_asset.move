@@ -700,6 +700,13 @@ module aptos_framework::fungible_asset {
         exists<DispatchFunctionStore>(metadata_addr)
     }
 
+    #[view]
+    /// Return whether a fungible asset type has any dispatch or derived-supply hooks registered.
+    public fun is_asset_type_dispatchable(metadata: &Object<Metadata>): bool {
+        let metadata_addr = object::object_address(metadata);
+        exists<DispatchFunctionStore>(metadata_addr) || exists<DeriveSupply>(metadata_addr)
+    }
+
     public fun deposit_dispatch_function<T: key>(store: Object<T>): Option<FunctionInfo> acquires FungibleStore, DispatchFunctionStore {
         let fa_store = borrow_store_resource(&store);
         let metadata_addr = object::object_address(&fa_store.metadata);

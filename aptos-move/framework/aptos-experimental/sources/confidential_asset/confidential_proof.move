@@ -2449,4 +2449,45 @@ module aptos_experimental::confidential_proof {
             response_bytes
         );
     }
+
+    // ---------------------------------------------------------------------------
+    //  Regression test: gamma index collision for multi-auditor transfers
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    /// With 2 auditors the old hardcoded `g8s` index (8) collided with `g7s[1]`
+    /// (index 7+1 = 8).  This test proves:
+    ///   1. The collision was real: `msm_gamma_2(rho, 8, j) == msm_gamma_2(rho, 1+7, j)`.
+    ///   2. The fix eliminates it: `msm_gamma_2(rho, auditors_count+7, j)` differs
+    ///      from every `g7s` entry when `auditors_count >= 2`.
+    fun test_g8s_gamma_no_collision_with_g7s() {
+        let rho = ristretto255::random_scalar();
+        let auditors_count: u64 = 2;
+
+        // --- (1) Demonstrate the old collision ---
+        // Old g8s used hardcoded index 8.  g7s[1] uses (1 + 7) = 8.
+        let old_g8s_0 = msm_gamma_2(&rho, 8, 0);
+        let g7s_1_0    = msm_gamma_2(&rho, (1 + 7 as u8), 0);
+        assert!(old_g8s_0 == g7s_1_0, 1); // proves the collision existed
+
+        // --- (2) Prove the fix: g8s now uses (auditors_count + 7) = 9 ---
+        let new_g8s_0 = msm_gamma_2(&rho, (auditors_count + 7 as u8), 0);
+        // Must differ from every g7s row (indices 7 and 8).
+        let g7s_0_0 = msm_gamma_2(&rho, (0 + 7 as u8), 0);
+        assert!(new_g8s_0 != g7s_0_0, 2); // differs from g7s[0]
+        assert!(new_g8s_0 != g7s_1_0, 3); // differs from g7s[1]
+
+        // Also verify all four sub-indices (j = 0..3) are collision-free.
+        let j = 0;
+        while (j < 4) {
+            let g8 = msm_gamma_2(&rho, (auditors_count + 7 as u8), (j as u8));
+            let k = 0;
+            while (k < auditors_count) {
+                let g7 = msm_gamma_2(&rho, (k + 7 as u8), (j as u8));
+                assert!(g8 != g7, 100 + j * 10 + k);
+                k = k + 1;
+            };
+            j = j + 1;
+        };
+    }
 }

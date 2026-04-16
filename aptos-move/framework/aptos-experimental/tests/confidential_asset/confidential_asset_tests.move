@@ -1027,7 +1027,7 @@ module aptos_experimental::confidential_asset_tests {
         fa = @0xfa,
         alice = @0xa1
     )]
-    fun success_vanilla_fa_not_blocked(
+    fun success_standard_fa_not_blocked(
         confidential_asset: signer,
         aptos_fx: signer,
         fa: signer,

@@ -1156,7 +1156,7 @@ module aptos_experimental::confidential_asset {
     /// Dispatchable fungible assets can override withdraw, deposit, balance, or supply
     /// behaviour in ways that are incompatible with encrypted on-chain balances (e.g.,
     /// fee-on-transfer tokens, rebasing balances, custom supply hooks). Until a safe
-    /// integration path exists, only vanilla (non-dispatchable) FA types are accepted.
+    /// integration path exists, only standard (non-dispatchable) FA types are accepted.
     fun is_safe_for_confidentiality(token: &Object<Metadata>): bool {
         !fungible_asset::is_asset_type_dispatchable(token)
     }

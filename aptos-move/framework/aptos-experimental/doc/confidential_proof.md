@@ -3194,8 +3194,10 @@ Returns the scalar multipliers for the <code><a href="confidential_proof.md#0x7_
                 <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_new_scalar_from_sha2_512">ristretto255::new_scalar_from_sha2_512</a>(<a href="confidential_proof.md#0x7_confidential_proof_msm_gamma_2">msm_gamma_2</a>(rho, (i + 7 <b>as</b> u8), (j <b>as</b> u8)))
             })
         }),
+        // Index starts past g7s range <b>to</b> avoid gamma collision when auditors_count &gt;= 2.
+        // g7s uses indices 7..7+n-1; g8s uses 7+n.
         g8s: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector_range">vector::range</a>(0, 4).map(|i| {
-            <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_new_scalar_from_sha2_512">ristretto255::new_scalar_from_sha2_512</a>(<a href="confidential_proof.md#0x7_confidential_proof_msm_gamma_2">msm_gamma_2</a>(rho, 8, (i <b>as</b> u8)))
+            <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_new_scalar_from_sha2_512">ristretto255::new_scalar_from_sha2_512</a>(<a href="confidential_proof.md#0x7_confidential_proof_msm_gamma_2">msm_gamma_2</a>(rho, (auditors_count + 7 <b>as</b> u8), (i <b>as</b> u8)))
         }),
     }
 }

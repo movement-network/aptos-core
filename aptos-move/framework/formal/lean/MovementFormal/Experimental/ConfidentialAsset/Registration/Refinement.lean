@@ -24,8 +24,10 @@ L2  eval (bytecode)
 
 **L2 ≡ L1.5** (`eval_eq_func`): up to `MachineState` (via `.dropMs`), since the real
 83-instruction bytecode populates the `ContainerStore` via references.
-Abstract proof (`eval_eq_func_100`) requires symbolic bytecode stepping (sorry).
-Concrete instances verified by `native_decide` in `BytecodeDifftestEval.lean`.
+The general `eval ≡ func` step is the theorem `registration_eval_equiv_functional_sim`
+in `EvalEquiv.lean` (case-split). The singleton success path uses the axiom
+`registration_eval_equiv_singleton_tail` (PC 2→`ret` tail vs `blockB`/`blockCDE`).
+Concrete traces remain in `BytecodeDifftestEval.lean` (`native_decide`).
 
 **L1.5 ≡ L1** (`func_success_implies_exec_some`, `func_abort_implies_exec_none`):
 algebraic equivalence under oracle coherence. Both directions proven.
@@ -227,185 +229,21 @@ structure OracleCoherence (nOracle : RegistrationNativeOracle)
       single? (optionIsSome [sOpt]) = some (.bool false) →
       sOracle.scalarFromBytes bs = none
 
-/-! ## Block extraction: decompose a successful functional sim into intermediate values
+/-! ## Block extraction / abort classification
 
-Given `verifyRegistrationBytecodeResult o args = .returned [] .empty`, extract
-all 12 intermediate MoveValues that the computation produced. This is a pure
-structural decomposition — no oracle coherence needed, only constructor
-discrimination (`cases hfunc` closes branches where `.error = .returned`). -/
+`func_success_extracts` and `func_abort_classification` live in
+`FunctionalSim.lean` (same namespace) so `EvalEquiv` can use them without a
+circular import through this file.
 
-set_option maxHeartbeats 800000 in
-theorem func_success_extracts
-    (o : RegistrationNativeOracle)
-    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
-    (hfunc : verifyRegistrationBytecodeResult o
-      [.u8 chainId, .address sender, .address contract,
-       .struct_ [.vector .u8 (ekBa.toList.map .u8)],
-       .address token,
-       .vector .u8 (commitBa.toList.map .u8),
-       .vector .u8 (respBa.toList.map .u8)] =
-      .returned [] MachineState.empty) :
-    ∃ (rOpt rMv sOpt sMv msgMv eMv hMv ekPtMv hsMv ekeMv lhsMv rhsMv : MoveValue),
-      single? (o.newCompressedPointFromBytes [.vector .u8 (commitBa.toList.map .u8)]) = some rOpt ∧
-      single? (optionIsSome [rOpt]) = some (.bool true) ∧
-      single? (optionExtract [rOpt]) = some rMv ∧
-      single? (o.newScalarFromBytes [.vector .u8 (respBa.toList.map .u8)]) = some sOpt ∧
-      single? (optionIsSome [sOpt]) = some (.bool true) ∧
-      single? (optionExtract [sOpt]) = some sMv ∧
-      buildFSMessageMv o chainId sender contract token
-        (.struct_ [.vector .u8 (ekBa.toList.map .u8)]) rMv = some msgMv ∧
-      single? (newScalarFromSha2_512 [msgMv]) = some eMv ∧
-      single? (o.hashToPointBase []) = some hMv ∧
-      single? (o.pubkeyToPoint [.struct_ [.vector .u8 (ekBa.toList.map .u8)]]) = some ekPtMv ∧
-      single? (o.pointMul [hMv, sMv]) = some hsMv ∧
-      single? (o.pointMul [ekPtMv, eMv]) = some ekeMv ∧
-      single? (o.pointAdd [hsMv, ekeMv]) = some lhsMv ∧
-      single? (o.pointDecompress [rMv]) = some rhsMv ∧
-      single? (o.pointEquals [lhsMv, rhsMv]) = some (.bool true) := by
-  simp only [verifyRegistrationBytecodeResult,
-    verifyRegistrationBytecodeResult.blockB,
-    verifyRegistrationBytecodeResult.blockCDE] at hfunc
-  split at hfunc
-  · rename_i rOpt hR1; split at hfunc
-    · rename_i hIS1; split at hfunc
-      · rename_i rMv hEX1; split at hfunc
-        · rename_i sOpt hR2; split at hfunc
-          · rename_i hIS2; split at hfunc
-            · rename_i sMv hEX2; split at hfunc
-              · rename_i msgMv hMsg; split at hfunc
-                · rename_i eMv hTag; split at hfunc
-                  · rename_i hMv hHash; split at hfunc
-                    · rename_i ekPtMv hPub; split at hfunc
-                      · rename_i hsMv hMul1; split at hfunc
-                        · rename_i ekeMv hMul2; split at hfunc
-                          · rename_i lhsMv hAdd; split at hfunc
-                            · rename_i rhsMv hDec; split at hfunc
-                              · rename_i hEq
-                                exact ⟨rOpt, rMv, sOpt, sMv, msgMv, eMv, hMv, ekPtMv,
-                                  hsMv, ekeMv, lhsMv, rhsMv,
-                                  hR1, hIS1, hEX1, hR2, hIS2, hEX2,
-                                  hMsg, hTag, hHash, hPub, hMul1, hMul2, hAdd, hDec, hEq⟩
-                              all_goals cases hfunc
-                            all_goals cases hfunc
-                          all_goals cases hfunc
-                        all_goals cases hfunc
-                      all_goals cases hfunc
-                    all_goals cases hfunc
-                  all_goals cases hfunc
-                all_goals cases hfunc
-              all_goals cases hfunc
-            all_goals cases hfunc
-          all_goals cases hfunc
-        all_goals cases hfunc
-      all_goals cases hfunc
-    all_goals cases hfunc
-  all_goals cases hfunc
-
-/-! ## Abort path classification
-
-Given `verifyRegistrationBytecodeResult o args = .aborted ABORT_CODE`, classify
-which of the 3 abort points was reached:
-
-1. **Path 1**: Commitment `optionIsSome` returned `false`
-2. **Path 2**: Scalar `optionIsSome` returned `false`
-3. **Path 3**: All intermediate steps succeeded, `pointEquals` returned `false`
-
-This is the abort counterpart of `func_success_extracts`. -/
-
-set_option maxHeartbeats 1200000 in
-theorem func_abort_classification
-    (o : RegistrationNativeOracle)
-    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
-    (hfunc : verifyRegistrationBytecodeResult o
-      [.u8 chainId, .address sender, .address contract,
-       .struct_ [.vector .u8 (ekBa.toList.map .u8)],
-       .address token,
-       .vector .u8 (commitBa.toList.map .u8),
-       .vector .u8 (respBa.toList.map .u8)] =
-      .aborted ESIGMA_PROTOCOL_VERIFY_FAILED_ABORT_CODE) :
-    (∃ rOpt : MoveValue,
-      single? (o.newCompressedPointFromBytes [.vector .u8 (commitBa.toList.map .u8)]) = some rOpt ∧
-      single? (optionIsSome [rOpt]) = some (.bool false))
-    ∨
-    (∃ sOpt : MoveValue,
-      single? (o.newScalarFromBytes [.vector .u8 (respBa.toList.map .u8)]) = some sOpt ∧
-      single? (optionIsSome [sOpt]) = some (.bool false))
-    ∨
-    (∃ (rOpt rMv sOpt sMv msgMv eMv hMv ekPtMv hsMv ekeMv lhsMv rhsMv : MoveValue),
-      single? (o.newCompressedPointFromBytes [.vector .u8 (commitBa.toList.map .u8)]) = some rOpt ∧
-      single? (optionIsSome [rOpt]) = some (.bool true) ∧
-      single? (optionExtract [rOpt]) = some rMv ∧
-      single? (o.newScalarFromBytes [.vector .u8 (respBa.toList.map .u8)]) = some sOpt ∧
-      single? (optionIsSome [sOpt]) = some (.bool true) ∧
-      single? (optionExtract [sOpt]) = some sMv ∧
-      buildFSMessageMv o chainId sender contract token
-        (.struct_ [.vector .u8 (ekBa.toList.map .u8)]) rMv = some msgMv ∧
-      single? (newScalarFromSha2_512 [msgMv]) = some eMv ∧
-      single? (o.hashToPointBase []) = some hMv ∧
-      single? (o.pubkeyToPoint [.struct_ [.vector .u8 (ekBa.toList.map .u8)]]) = some ekPtMv ∧
-      single? (o.pointMul [hMv, sMv]) = some hsMv ∧
-      single? (o.pointMul [ekPtMv, eMv]) = some ekeMv ∧
-      single? (o.pointAdd [hsMv, ekeMv]) = some lhsMv ∧
-      single? (o.pointDecompress [rMv]) = some rhsMv ∧
-      single? (o.pointEquals [lhsMv, rhsMv]) = some (.bool false)) := by
-  simp only [verifyRegistrationBytecodeResult,
-    verifyRegistrationBytecodeResult.blockB,
-    verifyRegistrationBytecodeResult.blockCDE] at hfunc
-  split at hfunc
-  · rename_i rOpt hR1; split at hfunc
-    · rename_i hIS1; split at hfunc
-      · rename_i rMv hEX1; split at hfunc
-        · rename_i sOpt hR2; split at hfunc
-          · rename_i hIS2; split at hfunc
-            · rename_i sMv hEX2; split at hfunc
-              · rename_i msgMv hMsg; split at hfunc
-                · rename_i eMv hTag; split at hfunc
-                  · rename_i hMv hHash; split at hfunc
-                    · rename_i ekPtMv hPub; split at hfunc
-                      · rename_i hsMv hMul1; split at hfunc
-                        · rename_i ekeMv hMul2; split at hfunc
-                          · rename_i lhsMv hAdd; split at hfunc
-                            · rename_i rhsMv hDec; split at hfunc
-                              · cases hfunc
-                              · rename_i hEq
-                                exact Or.inr (Or.inr ⟨rOpt, rMv, sOpt, sMv, msgMv, eMv,
-                                  hMv, ekPtMv, hsMv, ekeMv, lhsMv, rhsMv,
-                                  hR1, hIS1, hEX1, hR2, hIS2, hEX2,
-                                  hMsg, hTag, hHash, hPub, hMul1, hMul2, hAdd, hDec, hEq⟩)
-                              · cases hfunc
-                            all_goals cases hfunc
-                          all_goals cases hfunc
-                        all_goals cases hfunc
-                      all_goals cases hfunc
-                    all_goals cases hfunc
-                  all_goals cases hfunc
-                all_goals cases hfunc
-              all_goals cases hfunc
-            all_goals cases hfunc
-          · rename_i hIS2
-            exact Or.inr (Or.inl ⟨sOpt, hR2, hIS2⟩)
-          · cases hfunc
-        all_goals cases hfunc
-      all_goals cases hfunc
-    · rename_i hIS1
-      exact Or.inl ⟨rOpt, hR1, hIS1⟩
-    · cases hfunc
-  all_goals cases hfunc
-
-/-! ## L2 ≡ L1.5: eval ≡ verifyRegistrationBytecodeResult (up to MachineState)
+## L2 ≡ L1.5: eval ≡ verifyRegistrationBytecodeResult (up to MachineState)
 
 The real 83-instruction bytecode uses `immBorrowLoc` / `mutBorrowLoc` /
 `nativeRef` calls, so `eval` returns a populated `ContainerStore` in
 its `MachineState`. The functional sim returns `MachineState.empty`.
 We compare via `.dropMs` which projects away the `MachineState`.
 
-**Fuel lifting:** `eval_fuel_ge` shows that non-error results are
-fuel-monotone. Combined with `eval_eq_func_100` (at fuel 200) and
-`func_trichotomy`, we lift to arbitrary `fuel ≥ 200`.
-
-The `.error` case (oracle returns garbage) requires an error-fuel-monotonicity
-argument that the computation terminates in < 200 steps. This sorry is
-**vacuous for callers** which assume `.returned` or `.aborted`. -/
+**Fuel:** `registration_eval_equiv_functional_sim` is stated directly for every
+`fuel ≥ 200`, so no separate fuel-lifting or error-branch lemma is needed here. -/
 
 theorem eval_eq_func
     (o : RegistrationNativeOracle)
@@ -423,19 +261,8 @@ theorem eval_eq_func
        .struct_ [.vector .u8 (ekBa.toList.map .u8)],
        .address token,
        .vector .u8 (commitBa.toList.map .u8),
-       .vector .u8 (respBa.toList.map .u8)] := by
-  have h100 := eval_eq_func_100 o chainId sender contract token ekBa commitBa respBa
-  by_cases hne : eval (registrationModuleEnv o) verifyRegistrationProofIdx
-      [.u8 chainId, .address sender, .address contract,
-       .struct_ [.vector .u8 (ekBa.toList.map .u8)],
-       .address token,
-       .vector .u8 (commitBa.toList.map .u8),
-       .vector .u8 (respBa.toList.map .u8)]
-      200 MachineState.empty ≠ .error
-  · rw [eval_fuel_ge_dropMs _ _ _ _ _ _ hfuel hne]; exact h100
-  · push_neg at hne; rw [hne] at h100; simp [ExecResult.dropMs] at h100
-    rw [← h100]
-    sorry
+       .vector .u8 (respBa.toList.map .u8)] :=
+  registration_eval_equiv_functional_sim o chainId sender contract token ekBa commitBa respBa fuel hfuel
 
 /-! ## L1.5 ≡ L1: func ≡ execVerifyRegistrationProof
 
@@ -699,7 +526,7 @@ Composing L2≡L1.5 (`eval_eq_func` with `.dropMs`),
 L1.5→L1 abort (`func_abort_implies_exec_none`), and
 L1↔L0 (`execVerifyRegistrationProof_iff`) gives the end-to-end abort theorem.
 
-**Note:** depends on `eval_eq_func` (which depends on `eval_eq_func_100`, sorry).
+**Note:** depends on `eval_eq_func` (via `registration_eval_equiv_functional_sim`; the singleton success path uses the axiom `registration_eval_equiv_singleton_tail` in `EvalEquiv.lean`).
 The `.aborted` constructor doesn't carry `MachineState`, so `dropMs` is trivial. -/
 
 theorem eval_abort_implies_not_prop

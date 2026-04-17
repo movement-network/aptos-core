@@ -62,7 +62,8 @@ Move's compiled bytecode passes many arguments by reference (`&T`, `&mut T`).
 These helpers dereference `MoveValue.immRef`/`.mutRef` from the `ContainerStore`
 so that existing value-level oracle and native functions can be reused. -/
 
-private def derefImm (cs : ContainerStore) : MoveValue → Option MoveValue
+/-- Exposed for bytecode proofs (`EvalEquiv`) that relate `wrapOracleImmRef1` to value-level oracles. -/
+def derefImm (cs : ContainerStore) : MoveValue → Option MoveValue
   | .immRef id => cs.read id
   | v => some v
 

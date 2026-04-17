@@ -11,19 +11,19 @@ and other suites. It implements the engineering constraints from
 For a JSON case to run under `lake exe difftest`, **all** of the following must hold:
 
 1. **Bytecode (or an explicit substitute)**  
-   Either the case maps to **`FuncBody.bytecode`** in `AptosFormal.Move.Programs.*`
+   Either the case maps to **`FuncBody.bytecode`** in `MovementFormal.MoveModel.Programs.*`
    (hand-written or transcribed from `movement move disassemble`), **or** the team
    documents a deliberate **native-only** entry (see §2).
 
 2. **`MoveInstr` + `step`**  
    Every instruction used by that bytecode must be implemented in
-   `AptosFormal/Move/Instr.lean` and `Step.lean`. Missing opcodes → **`.error`** or
+   `MovementFormal/MoveModel/Instr.lean` and `Step.lean`. Missing opcodes → **`.error`** or
    wrong semantics → oracle mismatch.
 
 3. **Natives**  
    Every `Call` to a **`FuncBody.native`** must have a Lean implementation that
-   matches the VM on the oracle inputs (usually by delegating to `AptosFormal.Std.*`
-   / `AptosFormal.AptosStd.*` specs, or by a **stub** table documented here).
+   matches the VM on the oracle inputs (usually by delegating to `MovementFormal.Std.*`
+   / `MovementFormal.AptosStd.*` specs, or by a **stub** table documented here).
 
 **Globals:** resource-like behavior is modeled separately (§4); it is **not**
 automatically the same as Aptos `borrow_global` / `move_to` opcodes from the
@@ -48,7 +48,7 @@ suite: only entrypoints that **do not require** a modeled global store appear in
 the VM↔Lean oracle.
 
 Separately, the Lean model now includes **`MachineState`** with **`GlobalResourceKey`**
-(see `Move/README.md`) so **new** bytecode can use abstract **`globalExists`** /
+(see `MoveModel/README.md`) so **new** bytecode can use abstract **`globalExists`** /
 **`globalMoveTo`** / **`mutBorrowGlobal`** without inventing a one-off native per
 resource. **That is not yet** full Aptos wiring:
 
@@ -86,7 +86,7 @@ Aptos `primary_fungible_store` / `Object` semantics — transactional CA e2e row
 
 ## 4. `GlobalResourceKey` (Lean L4 scaffolding)
 
-Defined in `lean/AptosFormal/Move/Value.lean`:
+Defined in `lean/MovementFormal/MoveModel/Value.lean`:
 
 - `address : ByteArray` — publish site.
 - `structTagHash : Nat` — stand-in fingerprint; may coexist with optional `structTag`.
@@ -109,8 +109,8 @@ in Rust and document in [`ORACLE_CHANGELOG.md`](ORACLE_CHANGELOG.md). Changes to
 
 | File | Role |
 |------|------|
-| [`lean/AptosFormal/Move/README.md`](../lean/AptosFormal/Move/README.md) | Execution model + phases |
-| [`lean/AptosFormal/DiffTest/Runner.lean`](../lean/AptosFormal/DiffTest/Runner.lean) | Difftest driver + case name → `eval` glue |
-| [`lean/AptosFormal/DiffTest/RunnerFuncMappingAux.lean`](../lean/AptosFormal/DiffTest/RunnerFuncMappingAux.lean) | Large oracle name table (split `match` + `<|>` so elaboration stays under default `maxHeartbeats`) |
-| [`lean/AptosFormal/Move/Programs/Confidential.lean`](../lean/AptosFormal/Move/Programs/Confidential.lean) | CA stub `ModuleEnv` |
+| [`lean/MovementFormal/MoveModel/README.md`](../lean/MovementFormal/MoveModel/README.md) | Execution model + phases |
+| [`lean/MovementFormal/DiffTest/Runner.lean`](../lean/MovementFormal/DiffTest/Runner.lean) | Difftest driver + case name → `eval` glue |
+| [`lean/MovementFormal/DiffTest/RunnerFuncMappingAux.lean`](../lean/MovementFormal/DiffTest/RunnerFuncMappingAux.lean) | Large oracle name table (split `match` + `<|>` so elaboration stays under default `maxHeartbeats`) |
+| [`lean/MovementFormal/MoveModel/Programs/Confidential.lean`](../lean/MovementFormal/MoveModel/Programs/Confidential.lean) | CA stub `ModuleEnv` |
 | [`INVENTORY.md`](INVENTORY.md) | Suite registry + methodology |

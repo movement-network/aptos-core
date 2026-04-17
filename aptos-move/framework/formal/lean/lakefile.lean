@@ -2,77 +2,86 @@ import Lake
 open Lake DSL
 
 /-!
-Lake package **`AptosFormal`**: Aptos Move framework formalization (Lean 4).
+Lake package **`MovementFormal`**: Aptos Move framework formalization (Lean 4).
 
-- **`AptosFormal.Std.*`** — specs for **`move-stdlib`** (`third_party/move/move-stdlib/`): BCS, SHA3-256,
-  vector operations, Keccak sponge.
-- **`AptosFormal.AptosStd.*`** — specs for **`aptos-stdlib`** (`aptos-move/framework/aptos-stdlib/`):
+- **`MovementFormal.Std.*`** — specs for **`move-stdlib`** (`third_party/move/move-stdlib/`): BCS, SHA3-256,
+  vector operations, Keccak sponge, **UTF-8 predicate** (`String.fromUTF8?`), **`type_name`** accessors.
+- **`MovementFormal.MoveModel.*`** — Move **bytecode** semantics (`Value`, `Instr`, `Step`, `Programs`, natives).
+- **`MovementFormal.MoveModel.BcsCatalog`** — closed `std::bcs` native table for VM↔Lean difftest (indices 0–17).
+- **`MovementFormal.AptosStd.*`** — specs for **`aptos-stdlib`** (`aptos-move/framework/aptos-stdlib/`):
   SHA3-512, Ristretto255 scalar/wire scaffolding.
-- **`AptosFormal.Experimental.ConfidentialAsset.Registration.*`** — registration proof verifier spec
+- **`MovementFormal.Experimental.ConfidentialAsset.Registration.*`** — registration proof verifier spec
   (`confidential_proof.move` `verify_registration_proof` in this repo).
 
 Open this directory as the Lean project root (`lake build`). Primary Move anchor:  
 `aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_proof.move`.
 -/
 
-package «AptosFormal» where
+package «MovementFormal» where
 
 require mathlib from git
   "https://github.com/leanprover-community/mathlib4.git" @ "v4.24.0"
 
 @[default_target]
-lean_lib «AptosFormal» where
+lean_lib «MovementFormal» where
   roots := #[
-    `AptosFormal.Std.Hash.Keccak,
-    `AptosFormal.Std.Hash.Sha3_256,
-    `AptosFormal.AptosStd.Hash.Sha3_512,
-    `AptosFormal.AptosStd.Hash.Sha2_512,
-    `AptosFormal.Std.Bcs.Primitives,
-    `AptosFormal.Std.MoveStdlibGoldens,
-    `AptosFormal.AptosStd.Crypto.Ristretto255,
-    `AptosFormal.Std.Vector.Operations,
-    `AptosFormal.Std.Option,
-    `AptosFormal.Std.Signer,
-    `AptosFormal.Std.Error,
-    `AptosFormal.Std.FixedPoint32,
-    `AptosFormal.Std.BitVector,
-    `AptosFormal.Experimental.ConfidentialAsset.Registration.Formal,
-    `AptosFormal.Experimental.ConfidentialAsset.Registration.VerifyMath,
-    `AptosFormal.Experimental.ConfidentialAsset.Registration.Refinement,
-    `AptosFormal.Experimental.ConfidentialAsset.Registration.SchnorrCompleteness,
-    `AptosFormal.Experimental.ConfidentialAsset.Registration.Operational,
-    `AptosFormal.Experimental.ConfidentialAsset.Registration.TranscriptAlignment,
-    `AptosFormal.Experimental.ConfidentialAsset.Registration.GroupAxioms,
-    `AptosFormal.Experimental.ConfidentialAsset.Registration.EndToEnd,
-    `AptosFormal.Experimental.ConfidentialAsset.Registration.CryptoSecurity,
-    `AptosFormal.Experimental.ConfidentialAsset.Registration.FiatShamirSymbolic,
-    `AptosFormal.Experimental.ConfidentialAsset.Registration.BytecodeSmoke,
-    `AptosFormal.Experimental.ConfidentialAsset.Registration.FunctionalSim,
-    `AptosFormal.Experimental.ConfidentialAsset.Registration.EvalEquiv,
-    `AptosFormal.Experimental.ConfidentialAsset.Registration.BytecodeDifftestEval,
-    `AptosFormal.Experimental.ConfidentialAsset.Registration.BytecodeDifftestBridge,
-    `AptosFormal.Experimental.ConfidentialAsset.Registration.RegisterEntryStub,
-    `AptosFormal.Move.Value,
-    `AptosFormal.Move.Instr,
-    `AptosFormal.Move.State,
-    `AptosFormal.Move.Step,
-    `AptosFormal.Move.Native,
-    `AptosFormal.Move.Programs,
-    `AptosFormal.Move.Native.Registration,
-    `AptosFormal.Move.Programs.Registration,
-    `AptosFormal.Move.Programs.RegistrationDifftestOracle,
-    `AptosFormal.Move.Programs.Confidential,
-    `AptosFormal.Refinement.Core,
-    `AptosFormal.Refinement.Vector,
-    `AptosFormal.Refinement.Confidential,
-    `AptosFormal.Tests.Defs,
-    `AptosFormal.Tests.Vector,
-    `AptosFormal.Tests.GlobalSmoke,
-    `AptosFormal.Tests.Confidential,
-    `AptosFormal.DiffTest.JsonParser,
-    `AptosFormal.DiffTest.RunnerFuncMappingAux,
-    `AptosFormal.DiffTest.Runner
+    `MovementFormal.Std.Hash.Keccak,
+    `MovementFormal.Std.Hash.Sha3_256,
+    `MovementFormal.AptosStd.Hash.Sha3_512,
+    `MovementFormal.AptosStd.Hash.Sha2_512,
+    `MovementFormal.Std.Bcs.Primitives,
+    `MovementFormal.Std.MoveStdlibGoldens,
+    `MovementFormal.AptosStd.Crypto.Ristretto255,
+    `MovementFormal.Std.Vector.Operations,
+    `MovementFormal.Std.Option,
+    `MovementFormal.Std.Signer,
+    `MovementFormal.Std.Error,
+    `MovementFormal.Std.FixedPoint32,
+    `MovementFormal.Std.BitVector,
+    `MovementFormal.Std.String,
+    `MovementFormal.Std.TypeName,
+    `MovementFormal.Refinement.Std.Bcs,
+    `MovementFormal.SmokeTests.String,
+    `MovementFormal.SmokeTests.TypeName,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.Formal,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.VerifyMath,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.Refinement,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.SchnorrCompleteness,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.Operational,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.TranscriptAlignment,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.GroupAxioms,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.EndToEnd,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.CryptoSecurity,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.FiatShamirSymbolic,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.BytecodeSmoke,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.FunctionalSim,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.EvalEquiv,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.BytecodeDifftestEval,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.BytecodeDifftestBridge,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.RegisterEntryStub,
+    `MovementFormal.MoveModel.BcsCatalog,
+    `MovementFormal.MoveModel.Value,
+    `MovementFormal.MoveModel.Instr,
+    `MovementFormal.MoveModel.State,
+    `MovementFormal.MoveModel.Step,
+    `MovementFormal.MoveModel.Native,
+    `MovementFormal.MoveModel.Programs,
+    `MovementFormal.MoveModel.Native.Registration,
+    `MovementFormal.MoveModel.Programs.Registration,
+    `MovementFormal.MoveModel.Programs.RegistrationDifftestOracle,
+    `MovementFormal.MoveModel.Programs.Confidential,
+    `MovementFormal.Refinement.Std.Core,
+    `MovementFormal.Refinement.Std.StdPrimitives,
+    `MovementFormal.Refinement.Std.Vector,
+    `MovementFormal.Refinement.AptosExperimental.Confidential,
+    `MovementFormal.SmokeTests.Defs,
+    `MovementFormal.SmokeTests.Vector,
+    `MovementFormal.SmokeTests.GlobalSmoke,
+    `MovementFormal.SmokeTests.Confidential,
+    `MovementFormal.DiffTest.JsonParser,
+    `MovementFormal.DiffTest.RunnerFuncMappingAux,
+    `MovementFormal.DiffTest.Runner
   ]
 
 lean_exe «difftest» where
-  root := `AptosFormal.DiffTest.Runner
+  root := `MovementFormal.DiffTest.Runner

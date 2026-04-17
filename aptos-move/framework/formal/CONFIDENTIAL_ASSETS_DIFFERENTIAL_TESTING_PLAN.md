@@ -20,7 +20,7 @@ This document remains **empirical / finite**: it shows agreement on **recorded o
 
 - **Differential testing** here means: run the **same** inputs through  
   (A) the **real Move VM** (Rust, in-repo), and  
-  (B) the **Lean** small-step evaluator (`AptosFormal.Move.Step` / `eval`),  
+  (B) the **Lean** small-step evaluator (`MovementFormal.MoveModel.Step` / `eval`),  
   then compare **outputs** (and aborts / errors) encoded in a shared **JSON oracle**.
 - It is **empirical**, **finite**, and **regression-oriented**: it shows agreement on **the cases you run**, not a **proof for all inputs** or all execution paths.
 
@@ -53,7 +53,7 @@ Differential testing gives **high-confidence alignment between two implementatio
 
 ## 3. Important constraint: Lean must be able to **run** what you test
 
-In this repository, the **Lean side of difftest is not a second Move VM** — it is **`AptosFormal.Move`**’s evaluator over **transcribed** bytecode + **native** implementations in Lean ([`Native.lean`](lean/AptosFormal/Move/Native.lean), `ModuleEnv`).
+In this repository, the **Lean side of difftest is not a second Move VM** — it is **`MovementFormal.MoveModel`**’s evaluator over **transcribed** bytecode + **native** implementations in Lean ([`Native.lean`](lean/MovementFormal/MoveModel/Native.lean), `ModuleEnv`).
 
 So **“entire confidential assets codebase under difftest”** still requires **engineering work** for every path you want to cover:
 
@@ -193,7 +193,7 @@ Use this table to avoid arguing from slogans. **Update the Status column** when 
 | **§4.3 (ii)** equivalence-class matrix written down | [`difftest/inventory/confidential_assets.md`](difftest/inventory/confidential_assets.md) §8–10 | **Ongoing** — extend as suites grow. |
 | **§4.3 (iii)** independent / gold crypto vectors | [`difftest/corpora/confidential_assets/`](difftest/corpora/confidential_assets/) + **`cargo run -p move-lean-difftest -- verify-corpora`** (Rust; **`difftest.sh` \[0\]** / **`.github/workflows/formal-difftest.yaml`**) | **Partial** — registration FS + SHA2-512 digest + BP DST (SHA3-512) + **fixed sigma wire layouts** (`deserialize_sigma_*.hex`, **1152 / 1216 / 1792 / 1920 / 2048 / 2176 / 2304 / 2432 / 2560 / 2688 / 2816 / 2944 / 3072 / 3200 / 3328 / 3456 / 3584 / 3712 / 3840 / 3968 / 4096 / 4224** B transfer extension classes) + **auditor serializer wires** (EK **32 / 64 / 96 / 128 / 160 / 192** B; pending amounts **256 / 512** B zero rows + **256** B VM-pinned **`u64(1)`** no-rand + **512** B actual-width zero + **512** B mixed two-pending wires in **both** vector orders: zero-then-**`u64(1)`** and **`u64(1)`**-then-zero + **768** B mixed **actual**-zero + **`u64(1)`**-pending in **both** orders) checked vs Rust verifier + Lean defs/theorems; extend with more Ristretto/BP/third-party vectors when claiming broader crypto alignment. |
 | **§4.3 (iv)** valid serialized proof corpus for `deserialize_*` `Some` paths | harness + Lean bytecode + [`corpora/confidential_assets/deserialize_sigma_*.hex`](difftest/corpora/confidential_assets/) | **Partial** — harness rows **`test_deserialize_{withdrawal,normalization,rotation,transfer}_layout_ok_is_some`** exercise VM `Some` on canonical scalar **0** + fixed compressed point **A_POINT** at correct sigma lengths (+ empty ZKRP wrappers); **`test_deserialize_transfer_layout_extended_one_auditor_ok_is_some`** / **`…_two_auditors_ok_is_some`** / **`…_three_auditors_ok_is_some`** / **`…_four_auditors_ok_is_some`** / **`…_five_auditors_ok_is_some`** / **`…_six_auditors_ok_is_some`** / **`…_seven_auditors_ok_is_some`** / **`…_eight_auditors_ok_is_some`** / **`…_nine_auditors_ok_is_some`** / **`…_ten_auditors_ok_is_some`** / **`…_eleven_auditors_ok_is_some`** / **`…_twelve_auditors_ok_is_some`** / **`…_thirteen_auditors_ok_is_some`** / **`…_fourteen_auditors_ok_is_some`** / **`…_fifteen_auditors_ok_is_some`** / **`…_sixteen_auditors_ok_is_some`** / **`…_seventeen_auditors_ok_is_some`** / **`…_eighteen_auditors_ok_is_some`** / **`…_nineteen_auditors_ok_is_some`** cover **1920**- through **4224**-byte transfer sigmas (+ empty ZKRP); **hex** + **`verify-corpora`** + Lean **`deserializeSigma*Bytes`** / slice lemmas; Lean **110–113** use the same real **`Step`** as **128–130**; **132**/**134**/**136**/**138**/**140**/**142**/**144**/**146**/**148**/**150**/**152**/**154**/**156**/**158**/**160**/**162**/**164**/**166**/**168** match **131**/**133**/**135**/**137**/**139**/**141**/**143**/**145**/**147**/**149**/**151**/**153**/**155**/**157**/**159**/**161**/**163**/**165**/**167** (`ldConst` **27**/**28**/**29**/**30**/**31**/**32**/**33**/**34**/**35**/**36**/**37**/**38**/**39**/**40**/**41**/**42**/**43**/**44**/**45** + `vecLen` + `eq`). **`test_layout_sigma_*_byte_length_is_*`** at **128–131**, **133**, **135**, **137**, **139**, **141**, **143**, **145**, **147**, **149**, **151**, **153**, **155**, **157**, **159**, **161**, **163**, **165**, and **167**. Still **open** for full Lean `eval` replay of **`deserialize_*`** + cryptographic `verify_*` alignment. |
-| **§4.3 (iv)** Lean runs real `verify_*` on proof blobs | `AptosFormal.Move.Native` + `Programs/Confidential` | **Open / formal-plan scale** — not implied by `lake exe difftest` today. |
+| **§4.3 (iv)** Lean runs real `verify_*` on proof blobs | `MovementFormal.MoveModel.Native` + `Programs/Confidential` | **Open / formal-plan scale** — not implied by `lake exe difftest` today. |
 | **§4.3 (v)** Lean replays FA + `borrow_global` + entrypoints | `Move.State` / store model | **Open** — see **§7.1-A/C** and formal verification plan. |
 | **§4.3 (vi)** stub vs real bytecode documented per CA row | `Programs/Confidential.lean` + inventory + [`difftest/inventory/confidential_native_matrix.md`](difftest/inventory/confidential_native_matrix.md) | **Ongoing** — expand comments when adding indices; native matrix tracks **stdlib crypto** vs Lean. |
 | **§4.3 (vii)** triage rule + oracle regen discipline | `difftest/ORACLE_CHANGELOG.md`, `difftest/README.md` | **Track** — keep current. |
@@ -212,12 +212,12 @@ Use this table to avoid arguing from slogans. **Update the Status column** when 
 
 ### 5.2 JSON schema
 
-- Extend [`schema.rs`](difftest/src/schema.rs) / Lean [`DiffTest/JsonParser.lean`](lean/AptosFormal/DiffTest/JsonParser.lean) if CA cases need richer payloads (large `vector<u8>`, multiple return values, structured errors).
+- Extend [`schema.rs`](difftest/src/schema.rs) / Lean [`DiffTest/JsonParser.lean`](lean/MovementFormal/DiffTest/JsonParser.lean) if CA cases need richer payloads (large `vector<u8>`, multiple return values, structured errors).
 - Version the schema if old oracles must keep working.
 
 ### 5.3 Lean (`lake exe difftest`)
 
-- Extend [`DiffTest/Runner.lean`](lean/AptosFormal/DiffTest/Runner.lean) (or a sibling) to:
+- Extend [`DiffTest/Runner.lean`](lean/MovementFormal/DiffTest/Runner.lean) (or a sibling) to:
   - parse CA cases;
   - map case → **`ModuleEnv`** function index + **decoded `MoveValue` args**;
   - run `eval` / `evalProg` with sufficient **fuel**;
@@ -277,7 +277,7 @@ So: **infrastructure and a real differential slice are done**; **full Phase 2–
 **Deliverables**
 
 - [x] Oracles for **public** helpers: zero balance, compress/decompress roundtrip, add (fixed inputs), serialization size checks, chunk constants, `Option` deserialization edge cases, etc.
-- [x] Lean: **native stubs** in `AptosFormal.Move.Programs.Confidential` aligned with VM outputs on oracle inputs (not full bytecode transcription for every path — see inventory skip list).
+- [x] Lean: **native stubs** in `MovementFormal.MoveModel.Programs.Confidential` aligned with VM outputs on oracle inputs (not full bytecode transcription for every path — see inventory skip list).
 
 **Success criterion:** Suite runs **N** cases; documented list of **skipped** functions and why — [`difftest/inventory/confidential_assets.md`](difftest/inventory/confidential_assets.md).
 
@@ -288,7 +288,7 @@ So: **infrastructure and a real differential slice are done**; **full Phase 2–
 **Sub-tracks**
 
 - [x] **Registration transcript (partial):** harness rows **`test_registration_fs_message_golden_move`** / **`test_registration_fs_message_golden_move_second`** return the **199-byte** FS `msg` (DST prefix + transcript) for the two formal goldens; Lean uses **`TranscriptAlignment.expectedRegistrationFsMsgMoveGolden`** / **`expectedRegistrationFsMsg2`** (same bytes as [`formal_goldens_registration.move`](../aptos-experimental/tests/confidential_asset/formal_goldens_registration.move)). Framework-vs-helpers rows **170** / **173** VM-pin **`registration_fs_message_for_test`** on each scenario. This tightens **transcript** alignment; it is **not** a `verify_registration_proof` **curve** check in `eval`.
-- [x] **Harness Schnorr roundtrip:** `difftest_registration_helpers::registration_roundtrip_vm` (VM). Lean column: **bool stub** until Ristretto/group operations are executable in `AptosFormal.Move` natives.
+- [x] **Harness Schnorr roundtrip:** `difftest_registration_helpers::registration_roundtrip_vm` (VM). Lean column: **bool stub** until Ristretto/group operations are executable in `MovementFormal.MoveModel` natives.
 - [x] **Partial — production curve verify in harness JSON:** `verify_registration_proof_for_difftest` + deterministic prover on the **`registration_roundtrip_vm`** fixture (`test_registration_proof_framework_deterministic_verify_roundtrip`, Lean **171** = same `execVerifyRegistrationProof` column as **35**). Full **`register` → friend `verify_registration_proof`** on transactions remains **e2e** canonical (`§7.0`).
 - [ ] **Transfer / withdraw / normalize / key rotation in harness+Lean:** same as above; **e2e merged oracle** records real `verify_*` on transactions (`skip_lean`).
 
@@ -298,7 +298,7 @@ So: **infrastructure and a real differential slice are done**; **full Phase 2–
 
 ### Phase 4 — `confidential_asset` entrypoints (depends on Phase 2–3 + storage)
 
-**Challenge:** Entrypoints touch **global storage** and **FA**; current `Move.*` model **omits globals** (see [`Move/README.md`](lean/AptosFormal/Move/README.md)).
+**Challenge:** Entrypoints touch **global storage** and **FA**; current `MoveModel.*` model **omits globals** (see [`MoveModel/README.md`](lean/MovementFormal/MoveModel/README.md)).
 
 **Options (pick explicitly):**
 
@@ -362,7 +362,7 @@ RUST_MIN_STACK=8388608 cargo test -p e2e-move-tests tests::confidential_asset_e2
 
 | Track | Idea | Lean column? |
 |-------|------|----------------|
-| **7.1-A** | Extend difftest session with **minimal global store + FA** (or share harness code with e2e) | After `AptosFormal.Move.State` matches |
+| **7.1-A** | Extend difftest session with **minimal global store + FA** (or share harness code with e2e) | After `MovementFormal.MoveModel.State` matches |
 | **7.1-B** | Emit **JSON** from **e2e** (or `aptos move test`) for VM-only rows, optional `lake exe` skip | VM-only until Lean store |
 | **7.1-C** | **Option A** from Phase 4 (§6): full Lean container store + FA | Largest Lean surface |
 
@@ -374,13 +374,13 @@ RUST_MIN_STACK=8388608 cargo test -p e2e-move-tests tests::confidential_asset_e2
 
 **On `move-lean-difftest` today:** only **release-visible** smoke (`deserialize_*` on empty, constants). Friend-only **`verify_registration_proof`** and **`prove_*`** are **not** in **`head.mrb`**.
 
-**Lean:** still **no** faithful sigma + Bulletproofs over full proof blobs in `AptosFormal.Move.Programs.Confidential`; stubs only match the **narrow** oracle cases.
+**Lean:** still **no** faithful sigma + Bulletproofs over full proof blobs in `MovementFormal.MoveModel.Programs.Confidential`; stubs only match the **narrow** oracle cases.
 
 **Suggested order:** optional **JSON export** from e2e scenarios → **VM-only** rows in schema (§9) → long-term **Lean natives** or bytecode transcription (**7.3**).
 
 ### 7.3 “True” bytecode parity in Lean (whole CA modules, not stub `ModuleEnv`)
 
-**What it means:** For each function under test, **disassembled** `MoveInstr` in Lean (or generated from the same compiler pipeline), **`Step`** coverage for **every** instruction, and **every** `native` on those paths bound in `AptosFormal.Move.Native` with semantics matching the VM — **then** `eval` against `realModuleEnv`-style tables instead of **`Programs/Confidential` stub `FuncDesc`**.
+**What it means:** For each function under test, **disassembled** `MoveInstr` in Lean (or generated from the same compiler pipeline), **`Step`** coverage for **every** instruction, and **every** `native` on those paths bound in `MovementFormal.MoveModel.Native` with semantics matching the VM — **then** `eval` against `realModuleEnv`-style tables instead of **`Programs/Confidential` stub `FuncDesc`**.
 
 **Why it is large:** `confidential_proof.move` alone is thousands of lines with many natives (Ristretto, SHA3, Bulletproofs, …). This is **orthogonal** to “no refinement proofs” — you still need a **complete interpreter slice**.
 
@@ -430,9 +430,9 @@ Requests sometimes bundle: **FA + globals + `borrow_global`**, **real `verify_*`
 | Ask | In-repo status |
 |-----|----------------|
 | FA + CA entrypoints + real proofs **in the VM oracle** | **Yes (VM column + merged oracle):** [`confidential_asset_e2e_oracle_impl.rs`](../../e2e-move-tests/src/tests/confidential_asset_e2e_oracle_impl.rs) scenarios + merge into `difftest_ci_merged.json`. Lean **compares** mapped rows (`skip_lean: false`) on **witness** programs, not the full transactional stack. |
-| FA + the same in **Lean `eval`** | **No:** would require a large `AptosFormal.Move` store + FA + confidential bytecode + natives — see [`CONFIDENTIAL_ASSETS_FORMAL_VERIFICATION_PLAN.md`](CONFIDENTIAL_ASSETS_FORMAL_VERIFICATION_PLAN.md). |
+| FA + the same in **Lean `eval`** | **No:** would require a large `MovementFormal.MoveModel` store + FA + confidential bytecode + natives — see [`CONFIDENTIAL_ASSETS_FORMAL_VERIFICATION_PLAN.md`](CONFIDENTIAL_ASSETS_FORMAL_VERIFICATION_PLAN.md). |
 | **Full Bulletproof verify in Lean** (matching VM bit-for-bit on proof blobs) | **No:** not implemented; difftest checks **SHA3-512** on the BP **DST string** and **SHA2-512** on FS digests, plus other **narrow** stubs only. |
-| **Refinement proof** of registration inside the difftest runner | **No:** registration **math** lives under `AptosFormal.Experimental.ConfidentialAsset.Registration.*` (e.g. `SchnorrCompleteness`, `TranscriptAlignment`); `lake exe difftest` is **operational** alignment on oracle rows, not a proof obligation discharge. |
+| **Refinement proof** of registration inside the difftest runner | **No:** registration **math** lives under `MovementFormal.Experimental.ConfidentialAsset.Registration.*` (e.g. `SchnorrCompleteness`, `TranscriptAlignment`); `lake exe difftest` is **operational** alignment on oracle rows, not a proof obligation discharge. |
 | **`borrow_global` in harness JSON** | **Yes (VM↔Lean):** suite `global_resource_smoke` (`difftest_global_smoke.move` + published `Counter`). |
 
 **Local CI mirror:** `./aptos-move/framework/formal/difftest.sh` (harness + Lean); with `DIFTEST_MERGE_CA_E2E=1`, e2e export + merge + Lean on `difftest_ci_merged.json` (same as [`.github/workflows/formal-difftest.yaml`](../../../.github/workflows/formal-difftest.yaml)).

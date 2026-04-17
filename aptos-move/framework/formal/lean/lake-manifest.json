@@ -91,5 +91,5 @@
    "inputRev": "main",
    "inherited": true,
    "configFile": "lakefile.toml"}],
- "name": "AptosFormal",
+ "name": "MovementFormal",
  "lakeDir": ".lake"}

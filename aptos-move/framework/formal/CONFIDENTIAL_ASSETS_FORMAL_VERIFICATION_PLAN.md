@@ -15,12 +15,12 @@ Neither track replaces the other: difftest catches **VM↔model drift** on golde
 
 ---
 
-This document is a **roadmap** for extending the **`AptosFormal`** stack so that **confidential assets** (`aptos_experimental::confidential_*` and dependencies) can be **machine-checked** with a clear statement of what is proved against what. It is written for engineers and proof engineers working in `aptos-move/framework/formal/`.
+This document is a **roadmap** for extending the **`MovementFormal`** stack so that **confidential assets** (`aptos_experimental::confidential_*` and dependencies) can be **machine-checked** with a clear statement of what is proved against what. It is written for engineers and proof engineers working in `aptos-move/framework/formal/`.
 
 **Related docs**
 
 - Lean build / difftest workflow: [`lean/README.md`](lean/README.md), [`difftest/README.md`](difftest/README.md)
-- Bytecode model + roadmap: [`lean/AptosFormal/Move/README.md`](lean/AptosFormal/Move/README.md)
+- Bytecode model + roadmap: [`lean/MovementFormal/MoveModel/README.md`](lean/MovementFormal/MoveModel/README.md)
 - Registration **spec-level** review (today’s main CA formal work): [`REGISTRATION_VERIFY_REVIEW.md`](REGISTRATION_VERIFY_REVIEW.md)
 - CA Move **audit notes** (semantics / harness sharp edges while building formal artifacts): [`CONFIDENTIAL_ASSETS_MOVE_AUDIT_NOTES.md`](CONFIDENTIAL_ASSETS_MOVE_AUDIT_NOTES.md)
 
@@ -53,9 +53,9 @@ Use **explicit levels** so stakeholders do not confuse them:
 
 | Level | Meaning | Example |
 |-------|---------|---------|
-| **L0 – Spec only** | Pure Lean `Prop` / functions aligned to Move **source**; no bytecode. | Today: `AptosFormal.Experimental.ConfidentialAsset.Registration.*` for `verify_registration_proof` math + transcript goldens. |
+| **L0 – Spec only** | Pure Lean `Prop` / functions aligned to Move **source**; no bytecode. | Today: `MovementFormal.Experimental.ConfidentialAsset.Registration.*` for `verify_registration_proof` math + transcript goldens. |
 | **L1 – Differential** | Real VM vs Lean **evaluator** on shared oracles; **not** a proof. | Today: `vector`, `bcs`, `hash`, **`global_resource_smoke`**, **`confidential_*`** harness suites + **merged CA e2e** JSON in CI; many merged CA rows use Lean **witness** stubs (constant returns) — see differential plan **§4.5 / §11**. |
-| **L2 – Bytecode refinement (local)** | For a **single** function or closed snippet: transcribed `CodeUnit` in Lean + `Move.step`/`eval` agrees with a **Lean spec** (possibly `sorry`-free under hypotheses). | Today: `Refinement/Core.lean`, `Refinement/Vector.lean` for stdlib-shaped code. |
+| **L2 – Bytecode refinement (local)** | For a **single** function or closed snippet: transcribed `CodeUnit` in Lean + `Move.step`/`eval` agrees with a **Lean spec** (possibly `sorry`-free under hypotheses). | Today: `Refinement/Std/Core.lean`, `Refinement/Std/Vector.lean` for stdlib-shaped code. |
 | **L3 – Bytecode + module wiring** | Correct `ModuleEnv`, constant pool, **native dispatch**, `Call`/`Ret` across **multiple** functions in one compilation unit. | Not done for CA. |
 | **L4 – Resource / global state** | Model **`borrow_global`**, `move_to`, signer, **FA stores**; proofs about **entrypoints** that touch storage. | **Not** in current `Move.Instr` “omitted” set; largest extension. |
 | **L5 – End-to-end chain** | L4 + **compiler correctness** (Move source ↔ bytecode) or a **trusted** disassembly pipeline. | Optional; separate project from “verify this branch’s Move”. |
@@ -82,14 +82,14 @@ Stakeholders sometimes split “formal verification” into *crypto proofs* vs *
 
 ### 2.1 Already present
 
-- **`AptosFormal.Move.*`**: partial bytecode instruction set, `Step`/`run`/`eval`, `ModuleEnv`, **`MachineState`** with abstract globals (`GlobalResourceKey`); **no** full `StructTag`+FA signer semantics, variants, or closures (see [`Move/README.md`](lean/AptosFormal/Move/README.md), [`difftest/STUB_POLICY.md`](difftest/STUB_POLICY.md)).
-- **`AptosFormal.Native`**: BCS (selected monomorphizations), `sha3_256`, vector-related natives — **not** CA’s full native surface.
-- **`AptosFormal.Refinement`**: small `rfl` programs + **`vector::contains`** and **`vector::index_of`** universal proofs for curated bytecode; **`std::error`** (all 14 functions) and **`bit_vector::length`** via `rfl` in `Refinement/StdPrimitives.lean`.
-- **`AptosFormal.Refinement.Confidential`** (**L2 / track B**): `eval confidentialModuleEnv …` agrees with **Move-constant** specs for CA harness rows — **`confidential_balance`** chunk / zero-serialization **`u64`** views (**0–4**), **Bulletproofs** UTF-8 DST + **`u64(16)`** num-bits + **SHA3-512** digest (**14** / **15** / **34**, full **`vector<u8>`** where applicable), **Fiat–Shamir sigma DST** getters (**43–46** / **51**, full **`mvU8Wire`** vs **`Programs.Confidential.fiat*SigmaDstBytes`**), **registration FS golden `msg`** (**38**, **`mvU8Wire`** vs **`Programs.Confidential.registrationFsMsgGoldenMoveBytes`**), **registration SHA2-512 goldens** (**174** / **175**, **`mvU8Wire`** vs **`TranscriptAlignment.expectedTaggedHashGolden{,2}.toList`** via **`Programs.Confidential.registrationSha2_512Golden*MoveBytes`**), **sigma wire length** **`bool(true)`** indices **128–130** and transfer-extension **131** / **133** / **135** / **137** / **139** / **141** / **143** / **145** / **147** / **149** / **151** / **153** / **155** / **157** / **159** / **161** / **163** / **165** / **167** (through **4224** B), FA stub **`faWriteBalance` + `faReadBalance`** round-trip (**169**, **`u64(9999)`** from empty **`faBalances`**), registration FS framework **`bool(true)`** (**170**), registration Schnorr verify on the fixed difftest fixture (**35** / **171**, same **`Operational.execVerifyRegistrationProof`** oracle), second FS golden **`vector<u8>`** + framework **`bool`** rows (**172** / **173**), empty **`serialize_auditor_*`** vectors (**36** / **37**), and pinned **`serialize_auditor_*`** wires (**114–127**); see `lean/AptosFormal/Refinement/Confidential.lean`.
+- **`MovementFormal.MoveModel.*`**: partial bytecode instruction set, `Step`/`run`/`eval`, `ModuleEnv`, **`MachineState`** with abstract globals (`GlobalResourceKey`); **no** full `StructTag`+FA signer semantics, variants, or closures (see [`MoveModel/README.md`](lean/MovementFormal/MoveModel/README.md), [`difftest/STUB_POLICY.md`](difftest/STUB_POLICY.md)).
+- **`MovementFormal.Native`**: BCS (selected monomorphizations), `sha3_256`, vector-related natives — **not** CA’s full native surface.
+- **`MovementFormal.Refinement`**: small `rfl` programs + **`vector::contains`** and **`vector::index_of`** universal proofs for curated bytecode; **`std::error`** (all 14 functions) and **`bit_vector::length`** via `rfl` in `Refinement/StdPrimitives.lean`.
+- **`MovementFormal.Refinement.AptosExperimental.Confidential`** (**L2 / track B**): `eval confidentialModuleEnv …` agrees with **Move-constant** specs for CA harness rows — **`confidential_balance`** chunk / zero-serialization **`u64`** views (**0–4**), **Bulletproofs** UTF-8 DST + **`u64(16)`** num-bits + **SHA3-512** digest (**14** / **15** / **34**, full **`vector<u8>`** where applicable), **Fiat–Shamir sigma DST** getters (**43–46** / **51**, full **`mvU8Wire`** vs **`Programs.Confidential.fiat*SigmaDstBytes`**), **registration FS golden `msg`** (**38**, **`mvU8Wire`** vs **`Programs.Confidential.registrationFsMsgGoldenMoveBytes`**), **registration SHA2-512 goldens** (**174** / **175**, **`mvU8Wire`** vs **`TranscriptAlignment.expectedTaggedHashGolden{,2}.toList`** via **`Programs.Confidential.registrationSha2_512Golden*MoveBytes`**), **sigma wire length** **`bool(true)`** indices **128–130** and transfer-extension **131** / **133** / **135** / **137** / **139** / **141** / **143** / **145** / **147** / **149** / **151** / **153** / **155** / **157** / **159** / **161** / **163** / **165** / **167** (through **4224** B), FA stub **`faWriteBalance` + `faReadBalance`** round-trip (**169**, **`u64(9999)`** from empty **`faBalances`**), registration FS framework **`bool(true)`** (**170**), registration Schnorr verify on the fixed difftest fixture (**35** / **171**, same **`Operational.execVerifyRegistrationProof`** oracle), second FS golden **`vector<u8>`** + framework **`bool`** rows (**172** / **173**), empty **`serialize_auditor_*`** vectors (**36** / **37**), and pinned **`serialize_auditor_*`** wires (**114–127**); see `lean/MovementFormal/Refinement/Confidential.lean`.
 - **`move-lean-difftest`**: **`vector`**, **`bcs`**, **`hash`**, **`global_resource_smoke`**, **`confidential_balance`**, **`confidential_elgamal`**, **`confidential_proof`**, **`confidential_asset`** (layer), **`fa_stub`** ([`difftest/src/suites/mod.rs`](difftest/src/suites/mod.rs)); plus **e2e-exported** CA oracle fragments merged for CI (`DIFTEST_MERGE_CA_E2E`).
-- **`AptosFormal.Experimental.ConfidentialAsset.Registration.*`**: **L0** for **`verify_registration_proof`** (crypto story, transcript bytes, axioms/oracles) — **not** bytecode execution in Lean. **`TranscriptAlignment`** pins **`registrationChallengeScalarMove`** on each golden FS `msg` to **`scalarUniformFrom64Bytes`** of the matching **64**-byte SHA2-512 digest (`registrationChallengeScalarMove_golden1_msg_eq_uniform_expectedTaggedHashGolden`, `registrationChallengeScalarMove_golden2_msg_eq_uniform_expectedTaggedHashGolden2`). **`Operational`** includes **`execVerifyRegistrationProof_eq_some_iff_pointEqBool_of_parsed`** (post-parse success ↔ `pointEqBool` on the Schnorr LHS).
+- **`MovementFormal.Experimental.ConfidentialAsset.Registration.*`**: **L0** for **`verify_registration_proof`** (crypto story, transcript bytes, axioms/oracles) — **not** bytecode execution in Lean. **`TranscriptAlignment`** pins **`registrationChallengeScalarMove`** on each golden FS `msg` to **`scalarUniformFrom64Bytes`** of the matching **64**-byte SHA2-512 digest (`registrationChallengeScalarMove_golden1_msg_eq_uniform_expectedTaggedHashGolden`, `registrationChallengeScalarMove_golden2_msg_eq_uniform_expectedTaggedHashGolden2`). **`Operational`** includes **`execVerifyRegistrationProof_eq_some_iff_pointEqBool_of_parsed`** (post-parse success ↔ `pointEqBool` on the Schnorr LHS).
 - **VM↔Lean sigma wire lengths (L1-flavored, real `Step`):** indices **128–130** return **`bool(true)`** when the pinned **`deserialize_sigma_*.hex`** byte vectors have lengths **1152** / **1216** / **1792** (`ldConst` + `vecLen` + `eq`) — complements **M11** stubs on **`deserialize_*` `Some`** rows without claiming parser parity.
-- **Wire-level lemmas (L0-flavored, not `eval`):** `AptosFormal.Move.Programs.Confidential` pins VM auditor amount serializer bytes and proves small structural facts (e.g. **`serializeAuditorAmounts_mixed512_orders_distinct`**, **`serializeAuditorAmounts_mixed768_orders_distinct`** — permutations with identical multiset of balances but different vector order are byte-distinct; **`serializeAuditorEksThreeApointWireBytes_length`** / append characterization for **96**-byte triple-**A_POINT** EK wires; **`serializeAuditorEksFourApointWireBytes_length`** for **128**-byte quadruple-**A_POINT** EK wires; **`serializeAuditorEksFiveApointWireBytes_length`** and **`serializeAuditorEksFiveApointWireBytes_eq_deserializeRepeatConcat`** for **160**-byte quintuple-**A_POINT** EK wires vs the same repeat-concat used in sigma layout bytes; **`serializeAuditorEksSixApointWireBytes_length`** / **`serializeAuditorEksSixApointWireBytes_eq_deserializeRepeatConcat`** for **192**-byte sextuple-**A_POINT** EK wires; **`deserializeSigma18Scalars18PointsBytes_five_points_eq_serializeAuditorEksFiveApoint`** / **19** / **transfer** variants — the first five **A_POINT** slots in each checked **`deserialize_sigma_*.hex`** layout match the **160**-byte EK corpus; **`deserializeSigma18Scalars18PointsBytes_six_points_eq_serializeAuditorEksSixApoint`** (and **19** / **transfer** variants) match the first **six** compressed-point slots to the **192**-byte EK corpus), supporting difftest corpora without claiming full `deserialize_*` / `verify_*` in the evaluator.
+- **Wire-level lemmas (L0-flavored, not `eval`):** `MovementFormal.MoveModel.Programs.Confidential` pins VM auditor amount serializer bytes and proves small structural facts (e.g. **`serializeAuditorAmounts_mixed512_orders_distinct`**, **`serializeAuditorAmounts_mixed768_orders_distinct`** — permutations with identical multiset of balances but different vector order are byte-distinct; **`serializeAuditorEksThreeApointWireBytes_length`** / append characterization for **96**-byte triple-**A_POINT** EK wires; **`serializeAuditorEksFourApointWireBytes_length`** for **128**-byte quadruple-**A_POINT** EK wires; **`serializeAuditorEksFiveApointWireBytes_length`** and **`serializeAuditorEksFiveApointWireBytes_eq_deserializeRepeatConcat`** for **160**-byte quintuple-**A_POINT** EK wires vs the same repeat-concat used in sigma layout bytes; **`serializeAuditorEksSixApointWireBytes_length`** / **`serializeAuditorEksSixApointWireBytes_eq_deserializeRepeatConcat`** for **192**-byte sextuple-**A_POINT** EK wires; **`deserializeSigma18Scalars18PointsBytes_five_points_eq_serializeAuditorEksFiveApoint`** / **19** / **transfer** variants — the first five **A_POINT** slots in each checked **`deserialize_sigma_*.hex`** layout match the **160**-byte EK corpus; **`deserializeSigma18Scalars18PointsBytes_six_points_eq_serializeAuditorEksSixApoint`** (and **19** / **transfer** variants) match the first **six** compressed-point slots to the **192**-byte EK corpus), supporting difftest corpora without claiming full `deserialize_*` / `verify_*` in the evaluator.
 
 ### 2.2 Gap
 
@@ -139,13 +139,13 @@ There is **no** end-to-end continuous path yet from **full** **`confidential_ass
 
 **Goal:** For every **Move native** invoked on CA paths, either:
 
-- implement **`List MoveValue → Option (List MoveValue)`** in Lean consistent with `AptosFormal.Std.*` / `AptosFormal.AptosStd.*`, or  
+- implement **`List MoveValue → Option (List MoveValue)`** in Lean consistent with `MovementFormal.Std.*` / `MovementFormal.AptosStd.*`, or  
 - document an **`opaque` / axiom** boundary with a **reviewed** contract (weaker).
 
 **Tasks**
 
 - Build a **static call graph** from disassembled CA + dependencies (script or manual table): list each `native fun` and `Call` target.
-- For each native: map to existing Lean (`Std.Hash`, `Std.Bcs`, `AptosStd.Crypto`, …) or add new spec modules.
+- For each native: map to existing Lean (`MovementFormal.Std.Hash`, `MovementFormal.Std.Bcs`, `MovementFormal.AptosStd.Crypto`, …) or add new spec modules.
 - **Bulletproofs / range proof verification**: either full Lean spec (very large) or **oracle** for difftest + abstract interface for proofs (“if native returns `true`, then …”).
 - Align **SHA2-512 (Fiat-Shamir)**, **scalar from bytes**, **decompress**, etc., with goldens already used in registration / Move tests.
 
@@ -163,8 +163,8 @@ There is **no** end-to-end continuous path yet from **full** **`confidential_ass
 
 **Tasks**
 
-- For each target function: `movement move compile` + disassemble; diff against supported `MoveInstr` set; extend [`Instr.lean`](lean/AptosFormal/Move/Instr.lean) / [`Step.lean`](lean/AptosFormal/Move/Step.lean) as needed.
-- Revisit **omissions** from [`Move/README.md`](lean/AptosFormal/Move/README.md): **globals**, **variants**, **closures** — decide **per milestone** whether to add them or keep verification **intraprocedural** (function body only with **assumed** initial locals / heap snippet).
+- For each target function: `movement move compile` + disassemble; diff against supported `MoveInstr` set; extend [`Instr.lean`](lean/MovementFormal/MoveModel/Instr.lean) / [`Step.lean`](lean/MovementFormal/MoveModel/Step.lean) as needed.
+- Revisit **omissions** from [`MoveModel/README.md`](lean/MovementFormal/MoveModel/README.md): **globals**, **variants**, **closures** — decide **per milestone** whether to add them or keep verification **intraprocedural** (function body only with **assumed** initial locals / heap snippet).
 
 **Exit criteria**
 
@@ -178,8 +178,8 @@ There is **no** end-to-end continuous path yet from **full** **`confidential_ass
 
 **Tasks**
 
-- Add `Programs/Confidential*.lean` (or similar) mirroring today’s [`Programs/Vector.lean`](lean/AptosFormal/Move/Programs/Vector.lean) pattern: hand-written + **real** `real…Code` where useful.
-- Extend [`Programs.lean`](lean/AptosFormal/Move/Programs.lean) `stdModuleEnv` (or a dedicated **`caModuleEnv`**) with function indices; keep **disassembly provenance** in comments (commit hash, compiler version).
+- Add `Programs/Confidential*.lean` (or similar) mirroring today’s [`Programs/Vector.lean`](lean/MovementFormal/MoveModel/Programs/Vector.lean) pattern: hand-written + **real** `real…Code` where useful.
+- Extend [`Programs.lean`](lean/MovementFormal/MoveModel/Programs.lean) `stdModuleEnv` (or a dedicated **`caModuleEnv`**) with function indices; keep **disassembly provenance** in comments (commit hash, compiler version).
 - Serialization: Move **BCS / vector-of-u8** arguments must match Lean `MoveValue` decoding used by `eval` and difftest.
 
 **Exit criteria**
@@ -196,7 +196,7 @@ There is **no** end-to-end continuous path yet from **full** **`confidential_ass
 
 - **Rust:** load compiled packages containing CA modules (same layout as today’s vector suite: `InMemoryStorage`, publish modules, invoke script or test entry).
 - **Oracle JSON schema:** extend [`schema.rs`](difftest/src/schema.rs) if needed: function id, serialized args, expected **return values** / **abort** / optional **event** payloads.
-- **Lean:** extend [`DiffTest/Runner.lean`](lean/AptosFormal/DiffTest/Runner.lean) (or parallel) to dispatch CA cases to `eval` / `evalProg` with **`caModuleEnv`**.
+- **Lean:** extend [`DiffTest/Runner.lean`](lean/MovementFormal/DiffTest/Runner.lean) (or parallel) to dispatch CA cases to `eval` / `evalProg` with **`caModuleEnv`**.
 - **`difftest.sh` / CI:** register the new suite in [`suites/mod.rs`](difftest/src/suites/mod.rs).
 
 **Exit criteria**
@@ -211,8 +211,8 @@ There is **no** end-to-end continuous path yet from **full** **`confidential_ass
 
 **Tasks**
 
-- **Registration (`verify_registration_proof`)**: prove equivalence between **bytecode `eval`** result and **`verifyRegistrationProofProp`** (or `execVerifyRegistrationProof`) under explicit **fuel** and **parsing-success** side conditions — reusing [`Operational.lean`](lean/AptosFormal/Experimental/ConfidentialAsset/Registration/Operational.lean) / [`VerifyMath.lean`](lean/AptosFormal/Experimental/ConfidentialAsset/Registration/VerifyMath.lean).
-- **`confidential_balance`**: lemmas that homomorphic ops match **Twisted ElGamal** specs in Lean (may require **`AptosFormal`** specs for `ristretto255_twisted_elgamal` parallel to Move).
+- **Registration (`verify_registration_proof`)**: prove equivalence between **bytecode `eval`** result and **`verifyRegistrationProofProp`** (or `execVerifyRegistrationProof`) under explicit **fuel** and **parsing-success** side conditions — reusing [`Operational.lean`](lean/MovementFormal/Experimental/ConfidentialAsset/Registration/Operational.lean) / [`VerifyMath.lean`](lean/MovementFormal/Experimental/ConfidentialAsset/Registration/VerifyMath.lean).
+- **`confidential_balance`**: lemmas that homomorphic ops match **Twisted ElGamal** specs in Lean (may require **`MovementFormal`** specs for `ristretto255_twisted_elgamal` parallel to Move).
 - **`confidential_proof`**: sigma + range proof **verification** as logical implications from native return + structured inputs.
 - **`confidential_asset`**: only after **L4** or **stubbed** store — prove **local** helpers first.
 
@@ -336,7 +336,7 @@ Use this as a **release gate** for claiming “CA is formally verified” at a g
 - [ ] **`#print axioms`** reviewed and listed (including **`ristretto_subgroup_order_prime`**-style custom axioms).
 - [ ] **Difftest** covers every **transcribed** function on representative inputs (or explains why not).
 - [ ] **REGISTRATION_VERIFY_REVIEW** (or successor) updated to describe **bytecode refinement** if L2+ shipped for registration.
-- [ ] **Move/README.md** updated: which **globals** / **natives** are supported for CA.
+- [ ] **MoveModel/README.md** updated: which **globals** / **natives** are supported for CA.
 
 ---
 

@@ -1,4 +1,4 @@
-# AptosFormal (Lean 4)
+# MovementFormal (Lean 4)
 
 Machine-checked definitions and proofs for **Aptos Move framework** behavior, structured for growth
 beyond a single package.
@@ -6,30 +6,32 @@ beyond a single package.
 
 | Prefix                                                      | Role                                                                                                                                                                                                                                         |
 | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `AptosFormal.Std.Hash.`*                                    | SHA3-512/256 vs `aptos_std::aptos_hash`; SHA2-512 for Fiat-Shamir challenges                                                                                                                                                                 |
-| `AptosFormal.AptosStd.Crypto.*`                             | Ristretto scalar / wire types vs `aptos_std::ristretto255`                                                                                                                                                                                   |
-| `AptosFormal.Std.Bcs.*`                                     | BCS primitives                                                                                                                                                                                                                               |
-| `AptosFormal.Std.MoveStdlibGoldens`                         | Byte-level golden tests for hash/BCS/vector                                                                                                                                                                                                  |
-| `AptosFormal.Move.*`                                        | Move bytecode interpreter (`Step`, `Programs`, natives → specs); roadmap: `[AptosFormal/Move/README.md](AptosFormal/Move/README.md)`                                                                                                         |
-| `AptosFormal.Refinement.*`                                  | Proofs that selected bytecode matches `Std.*` specs (e.g. `vector::contains`, `vector::index_of`, `std::error` functions, `bit_vector::length`)                                                                                              |
-| `AptosFormal.Std.Error`                                     | Lean spec for `std::error` — `canonical` + 13 category wrappers; all `@[simp]` lemmas                                                                                                                                                        |
-| `AptosFormal.Std.FixedPoint32`                              | Lean spec for `std::fixed_point32` — `multiply_u64`, `divide_u64`, `create_from_rational`, `floor`/`ceil`/`round` (overflow-safe via `Nat`)                                                                                                  |
-| `AptosFormal.Std.BitVector`                                 | Lean spec for `std::bit_vector` — `new`, `set`, `unset`, `is_index_set`, `shift_left`; `shift_left_zero` proved                                                                                                                              |
-| `AptosFormal.Std.Option`                                    | Lean spec for `std::option` — all functions including `swap_or_fill` (correct displaced-value semantics)                                                                                                                                     |
-| `AptosFormal.Std.Signer`                                    | Lean spec for `std::signer` — native `borrow_address` / `address_of`                                                                                                                                                                         |
-| `AptosFormal.Move.Programs.StdPrimitives`                   | Bytecode programs for `std::error` (canonical + 13 wrappers) and `bit_vector::length`                                                                                                                                                        |
-| `AptosFormal.Move.Native.StdPrimitives`                     | Native bindings for `std::signer`, `std::fixed_point32`, `std::bit_vector`, `std::option`                                                                                                                                                    |
-| `AptosFormal.Refinement.StdPrimitives`                      | `rfl`-proved refinement theorems: bytecode ↔ Lean spec for all error functions and `bit_vector::length`                                                                                                                                      |
-| `AptosFormal.Tests.StdPrimitives`                           | `native_decide` smoke tests for all five stdlib modules                                                                                                                                                                                      |
-| `AptosFormal.DiffTest.*`                                    | Lean side of VM ↔ Lean differential tests (JSON oracles); see `[../difftest/README.md](../difftest/README.md)`                                                                                                                               |
-| `AptosFormal.Tests.*`                                       | Concrete smoke tests (`native_decide`) on the evaluator                                                                                                                                                                                      |
-| `AptosFormal.Experimental.ConfidentialAsset.Registration.*` | `verify_registration_proof`: crypto proofs (L0), operational spec (L1), functional simulation (L1.5), bytecode refinement (L2), `native_decide` difftest proofs. See `[../REGISTRATION_VERIFY_REVIEW.md](../REGISTRATION_VERIFY_REVIEW.md)`. |
+| `MovementFormal.Std.Hash.`*                                    | SHA3-512/256 vs `aptos_std::aptos_hash`; SHA2-512 for Fiat-Shamir challenges                                                                                                                                                                 |
+| `MovementFormal.AptosStd.Crypto.*`                             | Ristretto scalar / wire types vs `aptos_std::ristretto255`                                                                                                                                                                                   |
+| `MovementFormal.Std.Bcs.*`                                     | BCS primitives (`uleb128`, `vectorU8Bcs`, fixed-size constants); see `Refinement/Std/Bcs` + `MoveModel/BcsCatalog`                                                                                                                                  |
+| `MovementFormal.Std.MoveStdlibGoldens`                         | Byte-level golden tests for hash/BCS/vector                                                                                                                                                                                                  |
+| `MovementFormal.MoveModel.*`                                        | Move bytecode interpreter (`Step`, `Programs`, natives → specs); roadmap: `[MovementFormal/MoveModel/README.md](MovementFormal/MoveModel/README.md)`                                                                                                         |
+| `MovementFormal.Refinement.*`                                  | Proofs that selected bytecode matches `Std.*` specs (e.g. `vector::contains`, `vector::index_of`, `std::error` functions, `bit_vector::length`)                                                                                              |
+| `MovementFormal.Std.Error`                                     | Lean spec for `std::error` — `canonical` (`<<<` + `|||`, matches VM `bitOr`) + 13 category wrappers; `@[simp]` lemmas                                                                                                                                                        |
+| `MovementFormal.Std.FixedPoint32`                              | Lean spec for `std::fixed_point32` — `multiply_u64`, `divide_u64`, `create_from_rational`, `floor`/`ceil`/`round` (overflow-safe via `Nat`)                                                                                                  |
+| `MovementFormal.Std.BitVector`                                 | Lean spec for `std::bit_vector` — `new`, `set`, `unset`, `is_index_set`, `shift_left`; `shift_left_zero` proved                                                                                                                              |
+| `MovementFormal.Std.Option`                                    | Lean spec for `std::option` — all functions including `swap_or_fill` (correct displaced-value semantics)                                                                                                                                     |
+| `MovementFormal.Std.Signer`                                    | Lean spec for `std::signer` — native `borrow_address` / `address_of`                                                                                                                                                                         |
+| `MovementFormal.Std.String`                                    | UTF-8 well-formedness via Lean `String.fromUTF8?` on `ByteArray` (aligns with VM UTF-8 acceptance)                                                                                                                                           |
+| `MovementFormal.Std.TypeName`                                    | `type_name::TypeName` shape + `borrow_string` / `into_string` (no `get<T>()` — native)                                                                                                                                                        |
+| `MovementFormal.MoveModel.Programs.StdPrimitives`                   | Bytecode programs for `std::error` (canonical + 13 wrappers) and `bit_vector::length`                                                                                                                                                        |
+| `MovementFormal.MoveModel.Native.StdPrimitives`                     | Native bindings for `std::signer`, `std::fixed_point32`, `std::bit_vector`, `std::option`                                                                                                                                                    |
+| `MovementFormal.Refinement.Std.StdPrimitives`                      | `rfl`-proved refinement theorems: bytecode ↔ Lean spec for all error functions and `bit_vector::length`                                                                                                                                      |
+| `MovementFormal.SmokeTests.StdPrimitives`                           | `native_decide` smoke tests for all five stdlib modules                                                                                                                                                                                      |
+| `MovementFormal.DiffTest.*`                                    | Lean side of VM ↔ Lean differential tests (JSON oracles); see `[../difftest/README.md](../difftest/README.md)`                                                                                                                               |
+| `MovementFormal.SmokeTests.*`                                       | Concrete smoke tests (`native_decide`) on the evaluator                                                                                                                                                                                      |
+| `MovementFormal.Experimental.ConfidentialAsset.Registration.*` | `verify_registration_proof`: crypto proofs (L0), operational spec (L1), functional simulation (L1.5), bytecode refinement (L2), `native_decide` difftest proofs. See `[../REGISTRATION_VERIFY_REVIEW.md](../REGISTRATION_VERIFY_REVIEW.md)`. |
 
 
 ### Confidential assets: difftest (L1) vs formal verification (L0–L2+)
 
 - **Difftest (alignment, not a proof):** real Move VM JSON oracles vs Lean `eval` on the same cases. CA adds a **transactional** fragment from `e2e-move-tests` merged in CI; many rows use **witness** bytecode in Lean (`RunnerFuncMappingAux` / `Programs.Confidential`), not a full FA + storage replay. **Roadmap / Option B (globals):** `[../CONFIDENTIAL_ASSETS_DIFFERENTIAL_TESTING_PLAN.md](../CONFIDENTIAL_ASSETS_DIFFERENTIAL_TESTING_PLAN.md)`. **Inventory log:** `[../difftest/inventory/confidential_assets.md](../difftest/inventory/confidential_assets.md)`. **Local CI-shaped run:** `DIFTEST_MERGE_CA_E2E=1 ./aptos-move/framework/formal/difftest.sh` (from repo root; see `[../difftest/README.md](../difftest/README.md)` § “CI parity”).
-- **Formal verification:** registration **crypto / transcript** story in `AptosFormal.Experimental.ConfidentialAsset.Registration.`* (L0-heavy); bytecode **refinement** and constant views in `AptosFormal.Refinement.Confidential` + `Move.State` / `Move.Step` scaffolding toward L2–L4. **Program bar (A)/(B)/(C) and levels L0–L5:** `[../CONFIDENTIAL_ASSETS_FORMAL_VERIFICATION_PLAN.md](../CONFIDENTIAL_ASSETS_FORMAL_VERIFICATION_PLAN.md)`.
+- **Formal verification:** registration **crypto / transcript** story in `MovementFormal.Experimental.ConfidentialAsset.Registration.`* (L0-heavy); bytecode **refinement** and constant views in `MovementFormal.Refinement.AptosExperimental.Confidential` + `Move.State` / `Move.Step` scaffolding toward L2–L4. **Program bar (A)/(B)/(C) and levels L0–L5:** `[../CONFIDENTIAL_ASSETS_FORMAL_VERIFICATION_PLAN.md](../CONFIDENTIAL_ASSETS_FORMAL_VERIFICATION_PLAN.md)`.
 
 **Auditor-oriented narrative** (Confidential Asset registration / `**verify_registration_proof` only**):
 `[../REGISTRATION_VERIFY_REVIEW.md](../REGISTRATION_VERIFY_REVIEW.md)`.
@@ -73,12 +75,12 @@ After building, check that none exist:
 
 ```bash
 cd aptos-move/framework/formal/lean
-grep -r "sorry" AptosFormal/ --include="*.lean"
+grep -r "sorry" MovementFormal/ --include="*.lean"
 ```
 
-This should return **no matches** for the core stdlib specs (`Std.`*, `Move.Programs.StdPrimitives`, `Refinement.StdPrimitives`).
+This should return **no matches** for the core stdlib specs (`Std.`*, `MoveModel.Programs.StdPrimitives`, `Refinement.Std.StdPrimitives`).
 
-> **Note:** `Refinement/Vector.lean` contains a `sorry` in the `vector::reverse` proof sketch only;
+> **Note:** `Refinement/Std/Vector.lean` contains a `sorry` in the `vector::reverse` proof sketch only;
 > the `vector::contains` and `vector::index_of` refinements are fully kernel-checked (no `sorry`).
 > `Std/FixedPoint32.lean` and `Std/BitVector.lean` have a small number of `sorry` on auxiliary
 > lemmas tracked for future work.
@@ -90,13 +92,13 @@ This should return **no matches** for the core stdlib specs (`Std.`*, `Move.Prog
 You can also check what axioms any theorem depends on. Create a file `_check_axioms.lean`:
 
 ```lean
-import AptosFormal.Experimental.ConfidentialAsset.Registration.EndToEnd
-import AptosFormal.Experimental.ConfidentialAsset.Registration.CryptoSecurity
-import AptosFormal.Experimental.ConfidentialAsset.Registration.FiatShamirSymbolic
+import MovementFormal.Experimental.ConfidentialAsset.Registration.EndToEnd
+import MovementFormal.Experimental.ConfidentialAsset.Registration.CryptoSecurity
+import MovementFormal.Experimental.ConfidentialAsset.Registration.FiatShamirSymbolic
 
-open AptosFormal.Experimental.ConfidentialAsset.Registration.EndToEnd
-open AptosFormal.Experimental.ConfidentialAsset.Registration.CryptoSecurity
-open AptosFormal.Experimental.ConfidentialAsset.Registration.FiatShamirSymbolic
+open MovementFormal.Experimental.ConfidentialAsset.Registration.EndToEnd
+open MovementFormal.Experimental.ConfidentialAsset.Registration.CryptoSecurity
+open MovementFormal.Experimental.ConfidentialAsset.Registration.FiatShamirSymbolic
 
 #print axioms registration_verification_iff_schnorr
 #print axioms registration_honest_prover_accepted

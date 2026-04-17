@@ -8,7 +8,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-LEAN_DIR="$REPO_ROOT/aptos-move/framework/formal/lean/AptosFormal"
+LEAN_DIR="$REPO_ROOT/aptos-move/framework/formal/lean/MovementFormal"
 MOVE_STDLIB_TESTS="$REPO_ROOT/aptos-move/framework/move-stdlib/tests"
 MOVE_EXP_TESTS="$REPO_ROOT/aptos-move/framework/aptos-experimental/tests/confidential_asset"
 

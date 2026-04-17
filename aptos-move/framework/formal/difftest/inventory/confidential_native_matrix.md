@@ -1,13 +1,13 @@
 # CA native & crypto dependency matrix (living)
 
-**Purpose:** Track what the **Move VM** executes on confidential-asset paths vs what **`AptosFormal.Move` / difftest** model today. Feeds **[`CONFIDENTIAL_ASSETS_FORMAL_VERIFICATION_PLAN.md`](../../CONFIDENTIAL_ASSETS_FORMAL_VERIFICATION_PLAN.md)** Workstream **A** (native specs) and **[`STUB_POLICY.md`](../STUB_POLICY.md)**.
+**Purpose:** Track what the **Move VM** executes on confidential-asset paths vs what **`MovementFormal.MoveModel` / difftest** model today. Feeds **[`CONFIDENTIAL_ASSETS_FORMAL_VERIFICATION_PLAN.md`](../../CONFIDENTIAL_ASSETS_FORMAL_VERIFICATION_PLAN.md)** Workstream **A** (native specs) and **[`STUB_POLICY.md`](../STUB_POLICY.md)**.
 
 **Legend**
 
 | Status | Meaning |
 |--------|---------|
 | **Oracle** | VM↔Lean agree on harness / merged JSON rows (may be constant witness, not full native). |
-| **Lean spec** | Pure Lean (`AptosFormal.AptosStd.*`, `Std.*`) used in proofs or `native_decide` checks. |
+| **Lean spec** | Pure Lean (`MovementFormal.AptosStd.*`, `MovementFormal.Std.*`) used in proofs or `native_decide` checks. |
 | **Open** | No Lean executable spec on CA paths; difftest witness or VM-only. |
 
 ---
@@ -16,8 +16,8 @@
 
 | Surface | Move | Lean / difftest | Status |
 |---------|------|-----------------|--------|
-| SHA3-512 | `sha3_512_internal` → `sha3_512` | `AptosFormal.AptosStd.Hash.Sha3_512` | **Lean spec** + **Oracle** (BP DST digest, …) |
-| SHA2-512 (Fiat-Shamir) | `ristretto255::new_scalar_from_sha2_512` | `AptosFormal.AptosStd.Hash.Sha2_512` | **Lean spec** + **Oracle** (registration FS challenge, …) |
+| SHA3-512 | `sha3_512_internal` → `sha3_512` | `MovementFormal.AptosStd.Hash.Sha3_512` | **Lean spec** + **Oracle** (BP DST digest, …) |
+| SHA2-512 (Fiat-Shamir) | `ristretto255::new_scalar_from_sha2_512` | `MovementFormal.AptosStd.Hash.Sha2_512` | **Lean spec** + **Oracle** (registration FS challenge, …) |
 
 ---
 
@@ -46,7 +46,7 @@ Move: `ristretto255_bulletproofs.move` — `verify_range_proof_internal`, `verif
 - [`../corpora/confidential_assets/bulletproofs_dst.hex`](../corpora/confidential_assets/bulletproofs_dst.hex) — UTF-8 DST (44 B).
 - [`../corpora/confidential_assets/bulletproofs_dst_sha3_512.hex`](../corpora/confidential_assets/bulletproofs_dst_sha3_512.hex) — `sha3_512(DST)` (64 B).
 
-**Lean length facts:** `AptosFormal.Move.Programs.Confidential.bulletproofsDstBytes_length` / `bulletproofsDstSha3Bytes_length`.
+**Lean length facts:** `MovementFormal.MoveModel.Programs.Confidential.bulletproofsDstBytes_length` / `bulletproofsDstSha3Bytes_length`.
 
 ---
 
@@ -140,7 +140,7 @@ Move: `ristretto255_bulletproofs.move` — `verify_range_proof_internal`, `verif
 | **172** | Second formal FS golden **`vector<u8>`** (`test_registration_fs_message_golden_move_second`); Lean **`ldConst` 46** + `ret` vs **`TranscriptAlignment.expectedRegistrationFsMsg2`** |
 | **173** | Second scenario **`registration_fs_message_for_test`** **==** **`registration_fs_message_golden_move_second_scenario`** (`test_registration_fs_message_framework_second_scenario_matches_helpers_golden`); Lean **`ldTrue`** stub |
 
-Details: [`STUB_POLICY.md`](../STUB_POLICY.md), [`Programs/Confidential.lean`](../../lean/AptosFormal/Move/Programs/Confidential.lean), [`DiffTest/Runner.lean`](../../lean/AptosFormal/DiffTest/Runner.lean), [`DiffTest/RunnerFuncMappingAux.lean`](../../lean/AptosFormal/DiffTest/RunnerFuncMappingAux.lean).
+Details: [`STUB_POLICY.md`](../STUB_POLICY.md), [`Programs/Confidential.lean`](../../lean/MovementFormal/MoveModel/Programs/Confidential.lean), [`DiffTest/Runner.lean`](../../lean/MovementFormal/DiffTest/Runner.lean), [`DiffTest/RunnerFuncMappingAux.lean`](../../lean/MovementFormal/DiffTest/RunnerFuncMappingAux.lean).
 
 ---
 

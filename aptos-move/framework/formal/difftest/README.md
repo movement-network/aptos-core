@@ -61,7 +61,7 @@ Keep CI green when extending the VM↔Lean fragment:
 
 1. Add the scenario in [`../../e2e-move-tests/src/tests/confidential_asset_e2e_oracle_impl.rs`](../../e2e-move-tests/src/tests/confidential_asset_e2e_oracle_impl.rs) and append it from **`all_fragment_cases()`**.
 2. Add a **`#[test]`** wrapper in [`../../e2e-move-tests/src/tests/confidential_asset_e2e.rs`](../../e2e-move-tests/src/tests/confidential_asset_e2e.rs) so `cargo test` exercises the harness path.
-3. Map the full oracle id in [`../lean/AptosFormal/DiffTest/RunnerFuncMappingAux.lean`](../lean/AptosFormal/DiffTest/RunnerFuncMappingAux.lean) (`funcIdx` + env flags).
+3. Map the full oracle id in [`../lean/MovementFormal/DiffTest/RunnerFuncMappingAux.lean`](../lean/MovementFormal/DiffTest/RunnerFuncMappingAux.lean) (`funcIdx` + env flags).
 4. Record the extension in [`ORACLE_CHANGELOG.md`](ORACLE_CHANGELOG.md) and a row in [`inventory/confidential_assets.md`](inventory/confidential_assets.md).
 
 Then run **`DIFTEST_MERGE_CA_E2E=1 ./aptos-move/framework/formal/difftest.sh`** before landing if you changed Lean or need to reproduce CI locally.
@@ -70,9 +70,9 @@ Then run **`DIFTEST_MERGE_CA_E2E=1 ./aptos-move/framework/formal/difftest.sh`** 
 
 The Move module **`0x1::difftest_vector`** is only the **vector** suite’s wrapper; BCS and hash use **`difftest_bcs`** and **`difftest_hash`**. Confidential-asset smoke modules: **`0x1::difftest_confidential_balance`**, **`difftest_confidential_proof`**, **`difftest_confidential_asset_layer`**.
 
-**`confidential_asset` and globals:** the Lean `Move.*` model has a **minimal global map**
+**`confidential_asset` and globals:** the Lean `MoveModel.*` model has a **minimal global map**
 (`MachineState` + `GlobalResourceKey`; see [`STUB_POLICY.md`](STUB_POLICY.md) and
-[`../lean/AptosFormal/Move/README.md`](../lean/AptosFormal/Move/README.md)). It is **not**
+[`../lean/MovementFormal/MoveModel/README.md`](../lean/MovementFormal/MoveModel/README.md)). It is **not**
 full Aptos `borrow_global` / FA / signer wiring. The **`confidential_asset`** suite still
 follows **Option B** from [`../CONFIDENTIAL_ASSETS_DIFFERENTIAL_TESTING_PLAN.md`](../CONFIDENTIAL_ASSETS_DIFFERENTIAL_TESTING_PLAN.md): only **functions that need no globals**
 stay in the VM↔Lean oracle until bytecode + keys + policy are extended; FA-heavy
@@ -176,11 +176,11 @@ Pass whichever oracle file you generated.
 | [`ORACLE_CHANGELOG.md`](ORACLE_CHANGELOG.md) | **Schema version** history for the JSON oracle format. |
 | [`STUB_POLICY.md`](STUB_POLICY.md) | **Bytecode / natives / globals** policy for the Lean column (CA §3). |
 | `difftest_oracle*.json` | Generated oracle(s); **ignored by git** by default (see above). |
-| `../lean/AptosFormal/DiffTest/` | Lean JSON parser and runner. |
+| `../lean/MovementFormal/DiffTest/` | Lean JSON parser and runner. |
 
 ## Adding coverage
 
 1. Read [`INVENTORY.md`](INVENTORY.md) and copy [`inventory/move_framework_template.md`](inventory/move_framework_template.md) if you need a new per-package inventory table.
 2. Add a `DiffTestSuite` in `src/suites/`, register it in `mod.rs` (`all_suites` + **`suites_filtered` match** — must stay in sync; see comment in `mod.rs`).
 3. Run `cargo run -p move-lean-difftest -- --list-suites` to verify the new id appears.
-4. Extend **`funcNameToMapping`** in `AptosFormal.DiffTest.Runner`, and wire Lean **`ModuleEnv`** / natives as needed.
+4. Extend **`funcNameToMapping`** in `MovementFormal.DiffTest.Runner`, and wire Lean **`ModuleEnv`** / natives as needed.

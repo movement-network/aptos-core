@@ -1,5 +1,5 @@
 #[test_only]
-/// Curated BCS bytes for Lean `AptosFormal.Std.Bcs` alignment (`MoveStdlibGoldens.lean`).
+/// Curated BCS bytes for Lean `MovementFormal.Std.Bcs` alignment (`MoveStdlibGoldens.lean`).
 /// Overlaps `bcs_tests.move`; separate file avoids editing existing tests.
 module std::formal_goldens_bcs {
     use std::bcs;

@@ -5,7 +5,7 @@ This directory supports **`CONFIDENTIAL_ASSETS_DIFFERENTIAL_TESTING_PLAN.md` §4
 ## Intended use
 
 - **Small, versioned blobs** (hex or JSON) with a one-line **provenance** (e.g. RFC test vector id, internal golden name, Move `#[test]` source path).
-- Consumed by future harness or **offline checks** (e.g. hash-to-curve expected encoding, scalar ops, transcript bytes already mirrored in `AptosFormal.Experimental.ConfidentialAsset.Registration.*` goldens).
+- Consumed by future harness or **offline checks** (e.g. hash-to-curve expected encoding, scalar ops, transcript bytes already mirrored in `MovementFormal.Experimental.ConfidentialAsset.Registration.*` goldens).
 - **Not** a substitute for formal proofs; complements **[`CONFIDENTIAL_ASSETS_FORMAL_VERIFICATION_PLAN.md`](../../CONFIDENTIAL_ASSETS_FORMAL_VERIFICATION_PLAN.md)** Workstream A.
 
 ## Curated entries (registration FS `msg` goldens)

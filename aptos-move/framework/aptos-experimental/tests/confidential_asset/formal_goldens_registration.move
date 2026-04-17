@@ -1,5 +1,5 @@
 #[test_only]
-/// Goldens for Lean `AptosFormal` registration transcript alignment (`verify_registration_proof` FS `msg`).
+/// Goldens for Lean `MovementFormal` registration transcript alignment (`verify_registration_proof` FS `msg`).
 module aptos_experimental::formal_goldens_registration {
     use aptos_experimental::confidential_proof;
     use aptos_experimental::ristretto255_twisted_elgamal as twisted_elgamal;

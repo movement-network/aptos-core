@@ -1,6 +1,6 @@
 //! VM oracles for `aptos_experimental::confidential_balance` (Phase 2 of the CA difftest plan).
 //!
-//! Lean coverage: see `AptosFormal.Move.Programs.Confidential` — constants and simple predicates
+//! Lean coverage: see `MovementFormal.MoveModel.Programs.Confidential` — constants and simple predicates
 //! are modeled; skipped cases are listed in `difftest/inventory/confidential_assets.md`.
 
 use anyhow::Result;

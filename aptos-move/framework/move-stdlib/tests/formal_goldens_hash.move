@@ -1,5 +1,5 @@
 #[test_only]
-/// Curated digests for Lean `AptosFormal` alignment (`Std.Hash.Sha3_256` / future SHA2-256).
+/// Curated digests for Lean `MovementFormal` alignment (`MoveStd.Hash.Sha3_256` / future SHA2-256).
 /// Same values as `hash_tests.move`; kept in a separate module so we do not edit existing tests.
 module std::formal_goldens_hash {
     use std::hash;

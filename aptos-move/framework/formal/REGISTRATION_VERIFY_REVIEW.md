@@ -1,8 +1,8 @@
 # Registration proof verification: what Lean claims vs how to review Move
 
 This note is for **engineers and auditors** working on
-`aptos_experimental::confidential_proof::verify_registration_proof` and the Lean `**AptosFormal`** project under
-`aptos-move/framework/formal/lean/` (Lake package root; shared `**AptosFormal.Std.*`** modules apply across the framework, not only `aptos-experimental`).
+`aptos_experimental::confidential_proof::verify_registration_proof` and the Lean `**MovementFormal`** project under
+`aptos-move/framework/formal/lean/` (Lake package root; shared `**MovementFormal.Std.*`** modules apply across the framework, not only `aptos-experimental`).
 
 **Scope.** The Lean files and this note are aligned with **the Move sources in this branch** (e.g. `aptos-move/framework/aptos-experimental/sources/...`).
 
@@ -31,17 +31,17 @@ Lean is written to track **these files** as they appear in **this** `aptos-core`
 
 | Layer                                                                    | Role                                                                                                                                                                                      |
 | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `**AptosFormal.Experimental.ConfidentialAsset.Registration.Formal`**     | Transcript layout (`msg`), abstract Fiat–Shamir challenge, abstract Schnorr equation `s·H + e·ek = R`.                                                                                    |
-| `**AptosFormal.Std.Crypto.Ristretto255`**                                | Concrete **scalar field** ℤ/ℓℤ (`RistrettoScalar`) and **32-byte** compressed-point carrier (`CompressedRistretto32`) vs `aptos_std::ristretto255`.                                       |
-| `**AptosFormal.AptosStd.Hash.Sha2_512`**                                 | SHA2-512 vs `ristretto255::new_scalar_from_sha2_512` (reusable stdlib layer).                                                                                                              |
-| `**AptosFormal.Experimental.ConfidentialAsset.Registration.VerifyMath`** | `verifyRegistrationProofProp`, `CryptoOracle`, BCS helpers, `registrationChallengeScalarMove` (SHA2-512 with DST prefix).                                                                 |
+| `**MovementFormal.Experimental.ConfidentialAsset.Registration.Formal`**     | Transcript layout (`msg`), abstract Fiat–Shamir challenge, abstract Schnorr equation `s·H + e·ek = R`.                                                                                    |
+| `**MovementFormal.AptosStd.Crypto.Ristretto255`**                                | Concrete **scalar field** ℤ/ℓℤ (`RistrettoScalar`) and **32-byte** compressed-point carrier (`CompressedRistretto32`) vs `aptos_std::ristretto255`.                                       |
+| `**MovementFormal.AptosStd.Hash.Sha2_512`**                                 | SHA2-512 vs `ristretto255::new_scalar_from_sha2_512` (reusable stdlib layer).                                                                                                              |
+| `**MovementFormal.Experimental.ConfidentialAsset.Registration.VerifyMath`** | `verifyRegistrationProofProp`, `CryptoOracle`, BCS helpers, `registrationChallengeScalarMove` (SHA2-512 with DST prefix).                                                                 |
 | `**…Registration.SchnorrCompleteness**`                                  | Honest-prover algebra + ideal-oracle bridge.                                                                                                                                              |
 | `**…Registration.Operational**`                                          | `execVerifyRegistrationProof` (`Option Unit`) ↔ `verifyRegistrationProofProp`.                                                                                                            |
 | `**…Registration.Refinement**`                                           | L2≡L1.5≡L1↔L0 refinement chain. `eval_eq_func` (L2≡L1.5 via `.dropMs`), `func_success_implies_exec_some` / `func_abort_implies_exec_none` (L1.5≡L1, proven), `eval_success_implies_prop` / `eval_abort_implies_not_prop` (L2→L0 compositions). |
 | `**…Registration.EvalEquiv**`                                            | `eval_eq_func_100` (L2≡L1.5 at fuel 200), `ExecResult.dropMs` helper, `eval_fuel_ge`/`eval_fuel_ge_dropMs`, `@[simp]` fusion lemmas (`match_single?`, `bind_single?`, `match_match_some_single_none`). |
 | `**…Registration.BytecodeSmoke**`                                        | `native_decide` smoke: transcribed bytecode `eval` succeeds on valid-proof oracle, aborts on invalid-proof oracle (golden inputs, reference args).                                         |
-| `**AptosFormal.Move.Native.Registration**`                               | Oracle-parameterized native bindings (Ristretto, SHA2-512, BCS, Option) using `nativeRef` for reference-aware crypto ops and `native` for pure functions. `derefImm` handles both ref and value args. |
-| `**AptosFormal.Move.Programs.Registration**`                             | Transcribed **83-instruction** bytecode for `verify_registration_proof` (matching `movement` v7.4 compiler output), constant pool, `registrationModuleEnv` with `nativeRef` function descriptors. |
+| `**MovementFormal.MoveModel.Native.Registration**`                               | Oracle-parameterized native bindings (Ristretto, SHA2-512, BCS, Option) using `nativeRef` for reference-aware crypto ops and `native` for pure functions. `derefImm` handles both ref and value args. |
+| `**MovementFormal.MoveModel.Programs.Registration**`                             | Transcribed **83-instruction** bytecode for `verify_registration_proof` (matching `movement` v7.4 compiler output), constant pool, `registrationModuleEnv` with `nativeRef` function descriptors. |
 | `**…Registration.TranscriptAlignment**`                                  | `registration_fiat_shamir_msg_matches_move_golden`: FS `msg` bytes = Move `registration_fs_message_for_test` (two goldens: `@0x1`/`@0x2`/`@0x3` and `@0x10`/`@0x20`/`@0x30`).             |
 | `**…Registration.GroupAxioms**`                                          | `RistrettoGroupAxioms`: axiom bundle asserting Move's `ristretto255` ops form an `AddCommGroup` + `Module RistrettoScalar` (§6.2 obligation).                                             |
 | `**…Registration.EndToEnd**`                                             | `registration_verification_iff_schnorr` + `registration_honest_prover_accepted`: under group axioms, Move's verifier accepts iff the Schnorr equation holds; honest prover always passes. |
@@ -221,14 +221,14 @@ Lean does not replace this.
 
 1. **Read the code path** — `verify_registration_proof` in `confidential_proof.move` (and callees in `ristretto255` / `twisted_elgamal`).
 2. **Unit tests** — `confidential_proof_tests.move` registration tests: honest proof verifies; wrong `ek`, token, chain, sender, contract fail.
-3. **Cross-check constants** — DST string, order ℓ in Lean `AptosFormal.Std.Crypto.Ristretto255` vs Ristretto / Curve25519 references.
+3. **Cross-check constants** — DST string, order ℓ in Lean `MovementFormal.AptosStd.Crypto.Ristretto255` vs Ristretto / Curve25519 references.
 4. **Cross-check transcript** — `registrationFiatShamirMsg` field order vs `msg.append` order in Move.
 5. **External crypto references** — Ristretto group formulas, DST-prefix domain separation for `new_scalar_from_sha2_512`, and how `std::bcs` encodes `address` **in the framework version pinned by this branch**.
 6. **Optional**: independent implementation (e.g. script) that recomputes `e` and the group check from the same byte inputs for golden test vectors (not required for Lean).
 
 ## 5. Where to extend Lean next
 
-- Prove lemmas **assuming** group laws and an injective challenge map (already partly in `AptosFormal.Experimental.ConfidentialAsset.Registration.Formal`).
+- Prove lemmas **assuming** group laws and an injective challenge map (already partly in `MovementFormal.Experimental.ConfidentialAsset.Registration.Formal`).
 - Refine `CryptoOracle` with **axioms** that state algebraic laws (e.g. associativity of `pointAdd`) and relate `challengeScalarFromMsg` to `fiatShamirRegistrationDst` concatenation.
 - A full proof chain to **concrete** framework natives (as compiled from **this** tree) is a **large** separate project; see **§6** for a structured list of what is still missing.
 
@@ -236,7 +236,7 @@ Lean does not replace this.
 
 ## 6. Remaining proof obligations (not covered by current Lean)
 
-This section records **everything that is not** machine-checked today, in one place. Completeness of the Schnorr equation and the ideal-oracle bridge are in `AptosFormal.Experimental.ConfidentialAsset.Registration.SchnorrCompleteness`; the items below are **still external** (review, tests, crypto argument, or a future formalization stack).
+This section records **everything that is not** machine-checked today, in one place. Completeness of the Schnorr equation and the ideal-oracle bridge are in `MovementFormal.Experimental.ConfidentialAsset.Registration.SchnorrCompleteness`; the items below are **still external** (review, tests, crypto argument, or a future formalization stack).
 
 ### 6.1 Move VM semantics
 
@@ -277,7 +277,7 @@ The theorem `execVerifyRegistrationProof_iff` proves this `Option`-returning fun
 | Oracle field (`CryptoOracle`) | Move / framework hook                                                  | Lean counterpart (if any)                                                                                                                                                                                                                                                |
 | ----------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `scalarFromBytes`             | `ristretto255::new_scalar_from_bytes`                                  | Parsing + range as in Move; `Ristretto255` gives `ℤ/ℓℤ` as the type of scalars, not byte-level canonicality proofs.                                                                                                                                                      |
-| `challengeScalarFromMsg`      | `new_scalar_from_sha2_512(DST ‖ msg)`  | `registrationChallengeScalarMove` = `scalarUniformFrom64Bytes (sha2_512 (registrationDstBytes ++ msg))` — **byte-level SHA2-512** in `AptosFormal/AptosStd/Hash/Sha2_512.lean`; **no proof** that Move's native hash is bit-identical to that Lean function. |
+| `challengeScalarFromMsg`      | `new_scalar_from_sha2_512(DST ‖ msg)`  | `registrationChallengeScalarMove` = `scalarUniformFrom64Bytes (sha2_512 (registrationDstBytes ++ msg))` — **byte-level SHA2-512** in `MovementFormal/AptosStd/Hash/Sha2_512.lean`; **no proof** that Move's native hash is bit-identical to that Lean function. |
 | `hashToPointBase`             | `ristretto255::hash_to_point_base()`                                   | Abstract `Point`; no Ristretto proof.                                                                                                                                                                                                                                    |
 | `pointMul`                    | `ristretto255::point_mul`                                              | Abstract; no proof of group law / encoding.                                                                                                                                                                                                                              |
 | `pointAdd`                    | `ristretto255::point_add`                                              | Abstract.                                                                                                                                                                                                                                                                |
@@ -313,9 +313,9 @@ The theorem `execVerifyRegistrationProof_iff` proves this `Option`-returning fun
 
 **What Lean provides today.**
 
-- **Transcribed bytecode** (`AptosFormal.Move.Programs.Registration`): an **83-instruction** `MoveInstr` array faithfully transcribed from the **`movement` v7.4.0** compiler output (`movement move disassemble`, def_idx 39, PC 0–82). Local layout: 7 parameters (chain_id, sender, contract_address, ek, token_address, commitment_bytes, response_bytes) + 12 temporaries (19 locals total). The transcription uses reference-semantic instructions (`immBorrowLoc`, `mutBorrowLoc`) matching the compiler output exactly.
+- **Transcribed bytecode** (`MovementFormal.MoveModel.Programs.Registration`): an **83-instruction** `MoveInstr` array faithfully transcribed from the **`movement` v7.4.0** compiler output (`movement move disassemble`, def_idx 39, PC 0–82). Local layout: 7 parameters (chain_id, sender, contract_address, ek, token_address, commitment_bytes, response_bytes) + 12 temporaries (19 locals total). The transcription uses reference-semantic instructions (`immBorrowLoc`, `mutBorrowLoc`) matching the compiler output exactly.
 
-- **Oracle-parameterized natives** (`AptosFormal.Move.Native.Registration`): `RegistrationNativeOracle` bundles Ristretto point operations, scalar parsing, pubkey wire conversions, and twisted ElGamal helpers. Crypto-ops use `FuncBody.nativeRef` (receiving `ContainerStore` + `List MoveValue` and returning `Option (List MoveValue × ContainerStore)`) with a `derefImm` helper that transparently handles both immutable references (`.immRef id` → container store lookup) and direct values (pass-through). Non-oracle natives (SHA2-512 hash, BCS, Option is_some/extract, vector append/singleton) use `FuncBody.native` and are **executable** in Lean (no oracle).
+- **Oracle-parameterized natives** (`MovementFormal.MoveModel.Native.Registration`): `RegistrationNativeOracle` bundles Ristretto point operations, scalar parsing, pubkey wire conversions, and twisted ElGamal helpers. Crypto-ops use `FuncBody.nativeRef` (receiving `ContainerStore` + `List MoveValue` and returning `Option (List MoveValue × ContainerStore)`) with a `derefImm` helper that transparently handles both immutable references (`.immRef id` → container store lookup) and direct values (pass-through). Non-oracle natives (SHA2-512 hash, BCS, Option is_some/extract, vector append/singleton) use `FuncBody.native` and are **executable** in Lean (no oracle).
 
 - **Module environment** (`registrationModuleEnv`): 18-slot function table (indices 0–9 oracle `nativeRef`, 10–16 executable `native`, 17 bytecode verifier). Constant pool entry 0 is the `FIAT_SHAMIR_REGISTRATION_SIGMA_DST` bytes.
 
@@ -361,7 +361,7 @@ The theorem `execVerifyRegistrationProof_iff` proves this `Option`-returning fun
 
 ### 6.3d Bytecode disassembly cross-check (compiler output vs Lean transcription)
 
-**Goal.** Verify that the hand-transcribed `MoveInstr` array in `AptosFormal.Move.Programs.Registration` faithfully represents the actual bytecode produced by the production compiler for `verify_registration_proof`.
+**Goal.** Verify that the hand-transcribed `MoveInstr` array in `MovementFormal.MoveModel.Programs.Registration` faithfully represents the actual bytecode produced by the production compiler for `verify_registration_proof`.
 
 **Method.** Compiled `aptos-experimental` with `movement` v7.4.0 (`movement move compile --package-dir aptos-move/framework/aptos-experimental --named-addresses "aptos_experimental=0x1"`), then disassembled the output (`movement move disassemble --bytecode-path .../confidential_proof.mv`). The disassembly lives at `aptos-move/framework/aptos-experimental/build/AptosExperimental/bytecode_modules/confidential_proof.mv.asm`, lines 4811–4914, function definition index 39.
 
@@ -427,7 +427,7 @@ Lean does **not** formalize a random oracle, a computational game, or a reductio
 
 ### 6.5 Primality of ℓ (subgroup order)
 
-**Current status.** `ristretto_subgroup_order_prime : Nat.Prime ristrettoSubgroupOrder` is an `**axiom`** in `AptosFormal.Std.Crypto.Ristretto255` (spec constant from Ristretto / Curve25519 literature), not a **formal primality certificate** inside Lean. A `Fact (Nat.Prime ristrettoSubgroupOrder)` instance is derived from the axiom, making `Field RistrettoScalar` available everywhere (used by the special soundness proof in `CryptoSecurity.lean`).
+**Current status.** `ristretto_subgroup_order_prime : Nat.Prime ristrettoSubgroupOrder` is an `**axiom`** in `MovementFormal.AptosStd.Crypto.Ristretto255` (spec constant from Ristretto / Curve25519 literature), not a **formal primality certificate** inside Lean. A `Fact (Nat.Prime ristrettoSubgroupOrder)` instance is derived from the axiom, making `Field RistrettoScalar` available everywhere (used by the special soundness proof in `CryptoSecurity.lean`).
 
 **To remove the axiom.** Supply a **Pratt primality certificate** for `ristrettoSubgroupOrder` and verify it in Lean. This requires:
 
@@ -437,7 +437,7 @@ Lean does **not** formalize a random oracle, a computational game, or a reductio
 
 Trial division (`native_decide` on `Nat.Prime`) is infeasible for a 252-bit prime (≈ 2^126 trial divisions).
 
-**Review anchor.** Standard curve parameters [HDEVALENCE, Ber06] vs the numeric literal in `AptosFormal.Std.Crypto.Ristretto255`.
+**Review anchor.** Standard curve parameters [HDEVALENCE, Ber06] vs the numeric literal in `MovementFormal.AptosStd.Crypto.Ristretto255`.
 
 ---
 
@@ -445,7 +445,7 @@ Trial division (`native_decide` on `Nat.Prime`) is infeasible for a 252-bit prim
 
 ```text
 [✓] §6.1   VM: verify_registration_proof success/abort matches Option/False split in verifyRegistrationProofProp (execVerifyRegistrationProof_iff, no sorry).
-[✓] §6.2   Natives: each CryptoOracle field matched to Move; SHA2-512 hash vs `AptosFormal/AptosStd/Hash/Sha2_512.lean` explicitly reviewed.
+[✓] §6.2   Natives: each CryptoOracle field matched to Move; SHA2-512 hash vs `MovementFormal/AptosStd/Hash/Sha2_512.lean` explicitly reviewed.
 [✓] §6.3   BCS: sender/contract/token bytes are to_bytes(&address) as in this framework version (32-byte model).
 [✓] §6.3a  Bytecode: transcribed 83-instruction body (matching compiler output with reference semantics); eval smoke passes on 4 traces with reference args; 7 func≡eval native_decide proofs with value args + .dropMs; func_success_implies_exec_some PROVEN; func_abort_implies_exec_none PROVEN; eval_success_implies_prop + eval_abort_implies_not_prop compositions proven. eval_eq_func_100 SORRY (abstract symbolic stepping through 83 instructions with container-store threading). Residual sorry in eval_eq_func for error-fuel-monotonicity (vacuous for callers).
 [✓] §6.3d  Disassembly cross-check: Lean transcription now matches `movement` v7.4 compiler output (83 instructions) instruction-for-instruction. MachineState abstraction via ExecResult.dropMs documented. Previous 67→83 divergence analysis archived.

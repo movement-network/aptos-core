@@ -4,6 +4,6 @@
   "encoding": "hex",
   "bytes_file": "registration_fs_msg_move_golden_1.hex",
   "move_anchor": "aptos-move/framework/aptos-experimental/tests/confidential_asset/formal_goldens_registration.move",
-  "lean_def": "AptosFormal.Experimental.ConfidentialAsset.Registration.TranscriptAlignment.expectedRegistrationFsMsgMoveGolden",
+  "lean_def": "MovementFormal.Experimental.ConfidentialAsset.Registration.TranscriptAlignment.expectedRegistrationFsMsgMoveGolden",
   "difftest_harness": "move-lean-difftest confidential_proof :: test_registration_fs_message_golden_move"
 }

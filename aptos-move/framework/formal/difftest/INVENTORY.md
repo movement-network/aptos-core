@@ -5,7 +5,7 @@ This document is the **hub** for planning and extending **Move VM ↔ Lean** dif
 ## 1. Source of truth — tests are allowed to fail
 
 - The **JSON oracle** is produced by running the **real Move VM** (Rust) on concrete inputs. Those outputs are treated as **ground truth for that run**.
-- The **Lean** side **re-computes** the same case using `AptosFormal.Move` and **compares** to the oracle.
+- The **Lean** side **re-computes** the same case using `MovementFormal.MoveModel` and **compares** to the oracle.
 - **If Move code is wrong** but Lean matches a *correct* spec, the VM oracle will still record what Move *actually* did — a **later** Lean change to match buggy Move would show as “passing” while being wrong. The intended discipline is:
   - **Independent** expectations for high-value cases (e.g. golden vectors from crypto reviews, or second tooling), **or**
   - **Regression**: when you **intentionally fix** Move, the oracle **must be regenerated**; Lean should then match the **new** VM behavior — a **failure** before regen catches drift.
@@ -17,7 +17,7 @@ Neither implementation is assumed correct **by construction**; agreement is **ev
 
 - **Rust:** one implementation of `DiffTestSuite` per logical area; register in [`src/suites/mod.rs`](src/suites/mod.rs) (`all_suites` + `suites_filtered` match arms — **keep match arms in sync** with `all_suites()`).
 - **List ids:** `cargo run -p move-lean-difftest -- --list-suites` or `./aptos-move/framework/formal/difftest.sh --list-suites`.
-- **Lean:** extend `AptosFormal.DiffTest.Runner` (`funcNameToMapping` / case dispatch) and `Move` `ModuleEnv` / natives for each **new** function you add to an oracle.
+- **Lean:** extend `MovementFormal.DiffTest.Runner` (`funcNameToMapping` / case dispatch) and `Move` `ModuleEnv` / natives for each **new** function you add to an oracle.
 
 See [`README.md`](README.md) § *Adding coverage* for the file-level checklist.
 

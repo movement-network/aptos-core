@@ -1,5 +1,8 @@
 use anyhow::{Context, Result};
-use move_core_types::value::{MoveTypeLayout, MoveValue};
+use move_core_types::{
+    account_address::AccountAddress,
+    value::{MoveTypeLayout, MoveValue},
+};
 
 use crate::schema::TypedValue;
 
@@ -90,6 +93,11 @@ pub fn typed_value_to_move(tv: &TypedValue) -> Result<(MoveValue, MoveTypeLayout
             let n: u128 = s.parse().context("invalid u128")?;
             Ok((MoveValue::U128(n), MoveTypeLayout::U128))
         },
+        "address" => {
+            let s = tv.value.as_str().context("expected address hex string")?;
+            let addr = AccountAddress::from_hex_literal(s)?;
+            Ok((MoveValue::Address(addr), MoveTypeLayout::Address))
+        },
         ty if ty.starts_with("vector<") && ty.ends_with('>') => {
             let inner_ty_str = &ty[7..ty.len() - 1];
             let arr = tv.value.as_array().context("expected array for vector")?;
@@ -171,5 +179,12 @@ pub fn make_u8_vec(bytes: &[u8]) -> TypedValue {
     TypedValue {
         ty: "vector<u8>".into(),
         value: serde_json::Value::Array(bytes.iter().map(|&b| serde_json::json!(b)).collect()),
+    }
+}
+
+pub fn make_address_hex(literal: &str) -> TypedValue {
+    TypedValue {
+        ty: "address".into(),
+        value: serde_json::Value::String(literal.into()),
     }
 }

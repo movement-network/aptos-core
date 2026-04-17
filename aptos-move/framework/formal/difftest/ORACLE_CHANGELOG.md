@@ -1,6 +1,6 @@
 # JSON oracle changelog (`move-lean-difftest` → `lake exe difftest`)
 
-The Lean runner (`AptosFormal.DiffTest.JsonParser`) and the Rust harness (`schema.rs`) must stay in lockstep. When the JSON shape changes incompatibly:
+The Lean runner (`MovementFormal.DiffTest.JsonParser`) and the Rust harness (`schema.rs`) must stay in lockstep. When the JSON shape changes incompatibly:
 
 1. Bump `CURRENT_SCHEMA_VERSION` in `difftest/src/schema.rs`.
 2. Update the Lean parser and any `TestSuite` / `TestCase` structures as needed.

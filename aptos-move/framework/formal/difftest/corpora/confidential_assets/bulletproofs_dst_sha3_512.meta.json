@@ -4,6 +4,6 @@
   "encoding": "hex",
   "bytes_file": "bulletproofs_dst_sha3_512.hex",
   "move_anchor": "aptos_std::aptos_hash::sha3_512(BULLETPROOFS_DST)",
-  "lean_def": "AptosFormal.Move.Programs.Confidential.bulletproofsDstSha3Bytes",
-  "lean_theorem": "AptosFormal.Move.Programs.Confidential.bulletproofsDstSha3Bytes_length"
+  "lean_def": "MovementFormal.MoveModel.Programs.Confidential.bulletproofsDstSha3Bytes",
+  "lean_theorem": "MovementFormal.MoveModel.Programs.Confidential.bulletproofsDstSha3Bytes_length"
 }

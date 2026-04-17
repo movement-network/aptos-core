@@ -7,7 +7,7 @@
 **Move sources:** `aptos-move/framework/aptos-experimental/sources/confidential_asset/`  
 **Modules:** `confidential_asset`, `confidential_proof`, `confidential_balance`, `ristretto255_twisted_elgamal` (+ `confidential_gas_e2e_helpers` for tests)  
 **Rust suite ids (registered):** `global_resource_smoke`, `confidential_balance`, `confidential_elgamal`, `confidential_proof`, `confidential_asset`, **`fa_stub`** (FA `MachineState` stub alignment), meta **`confidential`** (the four CA-related suites + `fa_stub`; `global_resource_smoke` is separate).  
-**Lean:** `AptosFormal.Move.Programs.Confidential` + `DiffTest.Runner` mappings for the oracle function names listed in those suites.
+**Lean:** `MovementFormal.MoveModel.Programs.Confidential` + `DiffTest.Runner` mappings for the oracle function names listed in those suites.
 
 ## 1. Testing discipline (confidential assets are not assumed correct)
 
@@ -181,7 +181,7 @@ The CA `.move` files under `confidential_asset/` declare **no** `native fun` the
 | `e2e_norm_twice` | `normalize` | **`deposit`** + **`rollover`** → **`normalize`** succeeds → second **`normalize`** with same packed args | **`MoveAbort`** **`196619`** (`EALREADY_NORMALIZED` / `invalid_state(11)`) | **VM:** abort before second **`verify_normalization_proof`**. **Lean:** witness **184** (`caE2eAbort196619Desc`); **`RunnerFuncMappingAux`**. |
 | *(stretch)* entrypoints / `*_internal` with store+FA | `confidential_asset` | real signers + published `ConfidentialAssetStore` + FA | abort / state | **VM:** covered by **`e2e-move-tests`** (`confidential_asset_e2e.rs`, plan **§7.0**). **`move-lean-difftest`:** still Option B / **Blocked** for VM↔Lean (**§7.1**). |
 | *(stretch)* `verify_*` + registration | `confidential_proof` | valid proof structs / friend-visible registration path | abort / unit | **VM:** same **e2e** harness (real `register` → `verify_registration_proof`; transfers/withdraw/rotate). **`move-lean-difftest` + Lean:** narrow smoke includes **171** (production **`verify_registration_proof_for_difftest`** on fixed fixture; friend-only **`verify_registration_proof`** on `register` still **e2e**). |
-| *(stretch)* bytecode parity | Lean `Move.*` | disasm → `MoveInstr` + natives per opcode | same as VM | **Blocked** — program-sized (**§7.3**). |
+| *(stretch)* bytecode parity | Lean `MoveModel.*` | disasm → `MoveInstr` + natives per opcode | same as VM | **Blocked** — program-sized (**§7.3**). |
 
 ## 9. VM-only vs VM↔Lean (decision log)
 
@@ -189,7 +189,7 @@ The CA `.move` files under `confidential_asset/` declare **no** `native fun` the
 | --------- | ------ |
 | Lean `MoveInstr` / `Step` / native missing | **VM-only** oracle + **Blocked** row until Lean catches up **or** narrow case. |
 | Pure `u64` / `vector<u8>` / bool return, no globals | **VM↔Lean** once `ModuleEnv` + runner wired. |
-| Entry touching `borrow_global` / FA | **Blocked** for full `Move.*` until L4-style store (see formal verification plan) **or** test `*_internal` with synthetic locals only. |
+| Entry touching `borrow_global` / FA | **Blocked** for full `MoveModel.*` until L4-style store (see formal verification plan) **or** test `*_internal` with synthetic locals only. |
 
 ## 10. Changelog
 
@@ -310,7 +310,7 @@ The CA `.move` files under `confidential_asset/` declare **no** `native fun` the
 | 2026-04-10 | **Second registration FS golden:** helpers **`registration_fs_message_golden_move_second_scenario`**; harness **`test_registration_fs_message_golden_move_second`** + **`test_registration_fs_message_framework_second_scenario_matches_helpers_golden`**; Lean **172–173** (const pool **46** + **`ldTrue`**); **`prove_registration`** refactored to call **`prove_registration_deterministic_for_difftest`**; **`Refinement.Confidential`** **`registration_fs_message_golden_move_second_eval_eq_vector`** / **`registration_fs_framework_second_scenario_matches_helpers_golden_eval_eq_true`**. |
 | 2026-04-10 | **Second registration SHA2-512 corpus:** **`registration_sha2_512_golden_2.hex`** + **`verify-corpora`** Rust check; Lean **`TranscriptAlignment`** **`tagged_hash_golden2_msg_matches`** / length lemmas; **`Programs/Confidential`** **`registrationFsMsgGolden2MoveBytes_eq_expectedRegistrationFsMsg2_toList`**; Move audit **M2** hardening on **`new_scalar_from_sha2_512`**. |
 | 2026-04-10 | **Oracle + L2:** harness **`test_registration_sha2_512_golden_move_{first,second}`** (via **`difftest_registration_helpers`**); Lean **`confidentialModuleEnv`** indices **174–175** (`ldConst` **47–48**); **`Refinement.Confidential`** **`registration_sha2_512_golden_move_*_eval_eq_vector`**. |
-| 2026-04-12 | **Move audit notes:** [`CONFIDENTIAL_ASSETS_MOVE_AUDIT_NOTES.md`](../../CONFIDENTIAL_ASSETS_MOVE_AUDIT_NOTES.md) — static-review log for CA Move API semantics / harness preconditions (not product security sign-off); linked from CA plans, `lean/README`, `difftest/README`, `Move/State.lean`. |
+| 2026-04-12 | **Move audit notes:** [`CONFIDENTIAL_ASSETS_MOVE_AUDIT_NOTES.md`](../../CONFIDENTIAL_ASSETS_MOVE_AUDIT_NOTES.md) — static-review log for CA Move API semantics / harness preconditions (not product security sign-off); linked from CA plans, `lean/README`, `difftest/README`, `MoveModel/State.lean`. |
 | 2026-04-12 | **`serialize_auditor_eks` non-empty:** `test_serialize_auditor_eks_single_a_point_framework` (32 B **A_POINT** wire); Lean **`funcIdx` 114** + const pool **10**; `oracle_row::vm_lean_row` refactor on layer suite; Move doc typo fixes (`sufficient`, `decrypt it`). |
 | 2026-04-12 | **`serialize_auditor_amounts` non-empty:** `test_serialize_auditor_amounts_one_zero_pending_framework` (256 B all-zero wire); Lean **`funcIdx` 115** + const pool **11**; **`.meta.json`** + **`verify-corpora`** for serializer hex files. |
 | 2026-04-12 | **Multi-element serializer wires:** `test_serialize_auditor_eks_two_a_points_framework` (**64** B), `test_serialize_auditor_amounts_two_zero_pending_framework` (**512** B); Lean **116–117**; const pool **12–13**; corpus + **`verify-corpora`** extended. |

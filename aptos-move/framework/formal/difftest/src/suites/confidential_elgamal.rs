@@ -1,6 +1,6 @@
 //! VM oracles for `aptos_experimental::ristretto255_twisted_elgamal` (release-visible API surface).
 //!
-//! Lean: `AptosFormal.Move.Programs.Confidential` stubs indices **20–31**, **53–54** (`*_assign`),
+//! Lean: `MovementFormal.MoveModel.Programs.Confidential` stubs indices **20–31**, **53–54** (`*_assign`),
 //! **58** (`ciphertext_sub` self), **66** (`ciphertext_add` commutes at zero), **72** (three-way associativity at zero),
 //! **77–78** (short pubkey / 63-byte CT `Option` edges), **88–92** (split chunk-1 smoke, 65-byte CT, 31-byte PK, sub/add restore); see `Runner.funcNameToMapping`.
 

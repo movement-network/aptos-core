@@ -1,6 +1,6 @@
 # Confidential assets — Move source audit notes (formal / difftest track)
 
-**Audience:** Engineers and proof engineers working on `AptosFormal`, `move-lean-difftest`, and CA alignment.
+**Audience:** Engineers and proof engineers working on `MovementFormal`, `move-lean-difftest`, and CA alignment.
 
 **Scope:** Targeted review of `aptos_experimental::confidential_*` and related `aptos_std` crypto helpers while extending formal artifacts. This is **not** a substitute for Aptos product security review, external audit, or bug bounty triage.
 
@@ -171,7 +171,7 @@ The output is a concatenation of per-balance encodings in **`amounts` vector ord
 
 ## M11 — Lean column for `deserialize_*` layout-`Some` rows (length check, not parser replay)
 
-**Locations:** `AptosFormal.Move.Programs.Confidential` (function indices **110–113**); `AptosFormal.DiffTest.Runner` name mappings; `difftest/src/suites/confidential_proof.rs` harness.
+**Locations:** `MovementFormal.MoveModel.Programs.Confidential` (function indices **110–113**); `MovementFormal.DiffTest.Runner` name mappings; `difftest/src/suites/confidential_proof.rs` harness.
 
 **Observation**
 

@@ -4,6 +4,6 @@
   "encoding": "hex",
   "bytes_file": "serialize_auditor_amounts_u64_one_pending_then_actual_zero.hex",
   "move_anchor": "0x1::difftest_confidential_asset_layer::test_serialize_auditor_amounts_u64_one_pending_then_actual_zero_framework → `[new_pending_balance_u64_no_randonmess(1), new_actual_balance_no_randomness()]`",
-  "lean_def": "AptosFormal.Move.Programs.Confidential.serializeAuditorAmountsU64OnePendingThenActualZeroWireBytes",
-  "lean_theorem": "AptosFormal.Move.Programs.Confidential.serializeAuditorAmountsU64OnePendingThenActualZeroWireBytes_length"
+  "lean_def": "MovementFormal.MoveModel.Programs.Confidential.serializeAuditorAmountsU64OnePendingThenActualZeroWireBytes",
+  "lean_theorem": "MovementFormal.MoveModel.Programs.Confidential.serializeAuditorAmountsU64OnePendingThenActualZeroWireBytes_length"
 }

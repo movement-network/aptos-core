@@ -2,11 +2,22 @@ import MovementFormal.DiffTest.JsonParser
 import MovementFormal.MoveModel.Step
 import MovementFormal.MoveModel.Programs
 import MovementFormal.MoveModel.BcsCatalog
+import MovementFormal.MoveModel.ErrorCatalog
+import MovementFormal.MoveModel.HashCatalog
+import MovementFormal.MoveModel.SignerCatalog
+import MovementFormal.MoveModel.FixedPoint32Catalog
+import MovementFormal.MoveModel.OptionCatalog
+import MovementFormal.MoveModel.BitVectorCatalog
+import MovementFormal.MoveModel.AclCatalog
+import MovementFormal.MoveModel.StringCatalog
+import MovementFormal.MoveModel.CmpCatalog
 import MovementFormal.MoveModel.Programs.Confidential
 import MovementFormal.DiffTest.RunnerFuncMappingAux
 
 /-!
 # Differential test runner
+
+**Source:** VM oracles from `aptos-move/framework/formal/difftest/` (`cargo run -p move-lean-difftest`); Move modules under `aptos-move/framework/move-stdlib/` and related difftest harness sources in `aptos-move/framework/formal/difftest/src/suites/`.
 
 Reads JSON test vectors produced by the Rust `move-lean-difftest` harness,
 runs each test case through the Lean Move evaluator, and compares results.
@@ -26,6 +37,15 @@ namespace MovementFormal.DiffTest
 open MovementFormal.MoveModel
 open MovementFormal.MoveModel.Programs
 open MovementFormal.MoveModel.BcsCatalog
+open MovementFormal.MoveModel.ErrorCatalog
+open MovementFormal.MoveModel.HashCatalog
+open MovementFormal.MoveModel.SignerCatalog
+open MovementFormal.MoveModel.FixedPoint32Catalog
+open MovementFormal.MoveModel.OptionCatalog
+open MovementFormal.MoveModel.BitVectorCatalog
+open MovementFormal.MoveModel.AclCatalog
+open MovementFormal.MoveModel.StringCatalog
+open MovementFormal.MoveModel.CmpCatalog
 open MovementFormal.MoveModel.Programs.Confidential
 
 /-! ## Function name → evaluator call mapping
@@ -35,9 +55,9 @@ against `realModuleEnv`. Uses real compiler-output bytecode where available
 and native functions for simpler cases.
 
 Index assignments in `realModuleEnv`:
-- 0–3: `bcs::to_bytes` natives (u8, u64, u128, bool) — also in `stdModuleEnv` (legacy); **`bcs` difftest** uses `bcsCatalogModuleEnv` only (see `MoveModel/BcsCatalog.lean`, indices 0–17)
+- 0–3: `bcs::to_bytes` natives (u8, u64, u128, bool) — also in `stdModuleEnv` (legacy); **`bcs` difftest** uses `bcsCatalogModuleEnv` only (see `MoveModel/BcsCatalog.lean`, indices 0–26; includes `u16` / `u32` / `u256`)
 - 4–5: `vector::length`, `vector::is_empty` (natives)
-- 20: `hash::sha3_256` (native) — `stdModuleEnv`
+- 20: `hash::sha3_256` (native) — `stdModuleEnv` (legacy); **`hash` difftest** uses `hashCatalogModuleEnv` only (see `MoveModel/HashCatalog.lean`, indices 0–1); **`signer` difftest** uses `signerCatalogModuleEnv` (`MoveModel/SignerCatalog.lean`, indices 0–1); **`string` difftest** uses `stringCatalogModuleEnv` (`MoveModel/StringCatalog.lean`, indices 0–3: `internal_check_utf8`, `internal_sub_string`, `internal_index_of`, `internal_is_char_boundary`); **`cmp` difftest** uses `cmpCatalogModuleEnv` (`MoveModel/CmpCatalog.lean`, indices 0–47: `compare` + `is_*` on scalars incl. `u256`)
 - 21–22: global smoke (`Programs.GlobalSmoke`)
 - 27–29: `testRealContains` / `testRealIndexOf` / `testRealReverse` (wrappers)
 - 30–33: `vector::remove` / `swap_remove` / `append` / `singleton` (`u64` natives)
@@ -197,6 +217,15 @@ def runTestCase (tc : TestCase) : TestOutcome :=
     let env :=
       if mapping.useConfidentialEnv then confidentialModuleEnv
       else if mapping.useBcsCatalogEnv then bcsCatalogModuleEnv
+      else if mapping.useErrorCatalogEnv then errorCatalogModuleEnv
+      else if mapping.useHashCatalogEnv then hashCatalogModuleEnv
+      else if mapping.useSignerCatalogEnv then signerCatalogModuleEnv
+      else if mapping.useFixedPoint32CatalogEnv then fixedPoint32CatalogModuleEnv
+      else if mapping.useOptionCatalogEnv then optionCatalogModuleEnv
+      else if mapping.useBitVectorCatalogEnv then bitVectorCatalogModuleEnv
+      else if mapping.useAclCatalogEnv then aclCatalogModuleEnv
+      else if mapping.useStringCatalogEnv then stringCatalogModuleEnv
+      else if mapping.useCmpCatalogEnv then cmpCatalogModuleEnv
       else if mapping.useRealEnv then realModuleEnv
       else stdModuleEnv
     let base :=

@@ -65,7 +65,7 @@ structure MachineState where
   containers : ContainerStore
   globals : List (GlobalResourceKey × RefId)
   /-- Difftest stub for primary-store style `(metadataKey, ownerKey) → balance` reads.
-  Not the real Aptos FA layout — see `difftest/STUB_POLICY.md` Phase L5. -/
+  Not the real on-chain FA layout — see `difftest/STUB_POLICY.md` Phase L5. -/
   faBalances : List ((UInt64 × UInt64) × UInt64) := []
   deriving BEq
 

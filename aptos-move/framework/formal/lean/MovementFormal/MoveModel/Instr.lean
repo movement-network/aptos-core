@@ -154,6 +154,9 @@ or a native function modeled as a Lean function on values. -/
 inductive FuncBody where
   | bytecode (code : Array MoveInstr) (numLocals : Nat)
   | native (impl : List MoveValue → Option (List MoveValue))
+  /-- Like `native`, but may **abort** with a concrete `u64` code (`Except.error`),
+      matching VM `abort` / `assert!` (difftest JSON `status: aborted`). Success uses `Except.ok`. -/
+  | nativeAbort (impl : List MoveValue → Option (Except UInt64 (List MoveValue)))
   /-- Native function that can read/write through references in the `ContainerStore`.
       Takes the current container store and raw stack arguments (which may include
       `.immRef`/`.mutRef` values), returns updated return values and container store. -/

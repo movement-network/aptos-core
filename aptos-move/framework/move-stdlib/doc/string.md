@@ -385,9 +385,10 @@ Computes the index of the first occurrence of a string. Returns <code><a href="s
 
 ## Function `internal_is_char_boundary`
 
+Low-level UTF-8 boundary test (same as Rust <code>str::is_char_boundary</code> on the byte view).
 
 
-<pre><code><b>fun</b> <a href="string.md#0x1_string_internal_is_char_boundary">internal_is_char_boundary</a>(v: &<a href="vector.md#0x1_vector">vector</a>&lt;u8&gt;, i: u64): bool
+<pre><code><b>public</b> <b>fun</b> <a href="string.md#0x1_string_internal_is_char_boundary">internal_is_char_boundary</a>(v: &<a href="vector.md#0x1_vector">vector</a>&lt;u8&gt;, i: u64): bool
 </code></pre>
 
 
@@ -396,7 +397,7 @@ Computes the index of the first occurrence of a string. Returns <code><a href="s
 <summary>Implementation</summary>
 
 
-<pre><code><b>native</b> <b>fun</b> <a href="string.md#0x1_string_internal_is_char_boundary">internal_is_char_boundary</a>(v: &<a href="vector.md#0x1_vector">vector</a>&lt;u8&gt;, i: u64): bool;
+<pre><code><b>public</b> <b>native</b> <b>fun</b> <a href="string.md#0x1_string_internal_is_char_boundary">internal_is_char_boundary</a>(v: &<a href="vector.md#0x1_vector">vector</a>&lt;u8&gt;, i: u64): bool;
 </code></pre>
 
 
@@ -475,7 +476,7 @@ Computes the index of the first occurrence of a string. Returns <code><a href="s
 ### Function `internal_is_char_boundary`
 
 
-<pre><code><b>fun</b> <a href="string.md#0x1_string_internal_is_char_boundary">internal_is_char_boundary</a>(v: &<a href="vector.md#0x1_vector">vector</a>&lt;u8&gt;, i: u64): bool
+<pre><code><b>public</b> <b>fun</b> <a href="string.md#0x1_string_internal_is_char_boundary">internal_is_char_boundary</a>(v: &<a href="vector.md#0x1_vector">vector</a>&lt;u8&gt;, i: u64): bool
 </code></pre>
 
 

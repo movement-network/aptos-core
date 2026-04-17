@@ -1,7 +1,9 @@
 /-
 Copyright (c) Move Industries.
 
-# Aptos `aptos_std::ristretto255` — scalar / wire scaffolding (stdlib-wide)
+# Movement formalization of `aptos_std::ristretto255` — scalar / wire scaffolding (stdlib-wide)
+
+**Source:** `aptos-move/framework/aptos-stdlib/sources/cryptography/ristretto255.move`; external Ristretto / Curve25519 / RFC 8032 references below.
 
 Ristretto255 wire-level and scalar-field definitions aligned with the Ristretto / Curve25519 specs.
 

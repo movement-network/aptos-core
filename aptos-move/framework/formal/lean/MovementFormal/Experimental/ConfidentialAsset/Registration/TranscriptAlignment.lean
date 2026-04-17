@@ -3,6 +3,8 @@ Copyright (c) Move Industries.
 
 # Registration Fiat–Shamir `msg` — Move vs Lean byte alignment
 
+**Source:** `aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_proof.move`; goldens `aptos-move/framework/aptos-experimental/tests/confidential_asset/formal_goldens_registration.move`.
+
 Machine-checked equality between:
 
 - `registrationFiatShamirMsg` (`Formal.lean`), with `AptosAddress32` standing in for BCS `address`, and
@@ -11,7 +13,7 @@ Machine-checked equality between:
 
 Move anchor: `aptos-move/framework/aptos-experimental/tests/confidential_asset/formal_goldens_registration.move`.
 
-**Address BCS.** For `@0xN` with `N < 256`, Aptos encodes `address` as 32 bytes: 31 zero bytes then `N` in the
+**Address BCS.** For `@0xN` with `N < 256`, the Movement VM encodes `address` as 32 bytes: 31 zero bytes then `N` in the
 last byte (matches `std::bcs::to_bytes` / `bcs_tests`-style layout).
 
 This does **not** yet prove Ristretto group arithmetic, `new_scalar_from_bytes`, or `point_equals` match Move;

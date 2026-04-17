@@ -3,6 +3,8 @@ Copyright (c) Move Industries.
 
 # Cryptographic security properties for registration Schnorr verification
 
+**Source:** `aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_proof.move` (Schnorr / Fiat–Shamir intent).
+
 Machine-checked proofs of:
 - **Special soundness** (§6.4a): two accepting transcripts with distinct challenges
   yield the witness `dk` with an explicit extraction formula.

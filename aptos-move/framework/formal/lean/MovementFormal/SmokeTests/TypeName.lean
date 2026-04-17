@@ -2,6 +2,8 @@ import MovementFormal.Std.TypeName
 
 /-!
 # Smoke tests for `MovementFormal.Std.TypeName`
+
+**Source:** `MovementFormal.Std.TypeName` → `aptos-move/framework/move-stdlib/sources/type_name.move`.
 -/
 
 namespace MovementFormal.SmokeTests.TypeName

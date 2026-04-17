@@ -1,6 +1,8 @@
 /-
 Copyright (c) Move Industries.
 
+**Source:** `aptos-move/framework/aptos-experimental/sources/confidential_asset/` (CA Move modules); Lean bytecode env `MovementFormal.MoveModel.Programs.Confidential`.
+
 **Formal verification (track B — bytecode vs spec):** refinement-style theorems for
 `MovementFormal.MoveModel.Programs.Confidential.confidentialModuleEnv`, the Lean transcription of the
 `move-lean-difftest` CA harness bytecode (`difftest` oracle column).

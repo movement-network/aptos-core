@@ -292,7 +292,7 @@ So: **infrastructure and a real differential slice are done**; **full Phase 2–
 - [x] **Partial — production curve verify in harness JSON:** `verify_registration_proof_for_difftest` + deterministic prover on the **`registration_roundtrip_vm`** fixture (`test_registration_proof_framework_deterministic_verify_roundtrip`, Lean **171** = same `execVerifyRegistrationProof` column as **35**). Full **`register` → friend `verify_registration_proof`** on transactions remains **e2e** canonical (`§7.0`).
 - [ ] **Transfer / withdraw / normalize / key rotation in harness+Lean:** same as above; **e2e merged oracle** records real `verify_*` on transactions (`skip_lean`).
 
-**Native-heavy areas:** range proof / sigma / Bulletproofs — **VM↔Lean equality on full verify** would require Lean natives matching Aptos Bulletproofs + Ristretto batch interfaces; that is **orthogonal** to this difftest roadmap (treat as proof or reference-library work).
+**Native-heavy areas:** range proof / sigma / Bulletproofs — **VM↔Lean equality on full verify** would require Lean natives matching the VM’s Bulletproofs + Ristretto batch interfaces; that is **orthogonal** to this difftest roadmap (treat as proof or reference-library work).
 
 ---
 
@@ -356,7 +356,7 @@ RUST_MIN_STACK=8388608 cargo test -p e2e-move-tests tests::confidential_asset_e2
 
 ### 7.1 `confidential_asset` in **`move-lean-difftest`** (still Option B)
 
-**Why `move-lean-difftest` alone is still limited:** `register`, `deposit_to`, … **`acquire`** store + FA; the harness uses **`InMemoryStorage` + `execute_loaded_function`**, not a full Aptos transaction. **`head.mrb`** omits **`#[test_only]`** symbols, so **`register_for_testing`** etc. are **not** in that compiler graph.
+**Why `move-lean-difftest` alone is still limited:** `register`, `deposit_to`, … **`acquire`** store + FA; the harness uses **`InMemoryStorage` + `execute_loaded_function`**, not a full ledger transaction. **`head.mrb`** omits **`#[test_only]`** symbols, so **`register_for_testing`** etc. are **not** in that compiler graph.
 
 **Forks if you want VM↔Lean on entrypoints here:**
 
@@ -392,7 +392,7 @@ RUST_MIN_STACK=8388608 cargo test -p e2e-move-tests tests::confidential_asset_e2
 
 **You can honestly claim:**
 
-- “On **{N}** automated cases, the **Lean bytecode evaluator** and the **Aptos Move VM** **agreed** on outputs for **{listed}** confidential-asset paths, revision **{git SHA}**, toolchain **{versions}**.”
+- “On **{N}** automated cases, the **Lean bytecode evaluator** and the **Movement Move VM** **agreed** on outputs for **{listed}** confidential-asset paths, revision **{git SHA}**, toolchain **{versions}**.”
 
 **You should not claim:**
 

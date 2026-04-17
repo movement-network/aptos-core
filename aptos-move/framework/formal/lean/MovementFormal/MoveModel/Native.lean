@@ -1,5 +1,6 @@
 import MovementFormal.MoveModel.State
 import MovementFormal.Std.Bcs.Primitives
+import MovementFormal.Std.Hash.Sha2_256
 import MovementFormal.Std.Hash.Sha3_256
 
 /-!
@@ -7,24 +8,27 @@ import MovementFormal.Std.Hash.Sha3_256
 
 Connects Move native functions to their Lean specifications from `Std.*`.
 Each native wraps a `List MoveValue → Option (List MoveValue)` that the
-evaluator calls when it encounters `FuncBody.native`.
+evaluator calls when it encounters `FuncBody.native`. **`FuncBody.nativeAbort`**
+uses `Option (Except UInt64 (List MoveValue))` so natives can model **`abort`** with a
+fixed code (see `Step.handleNativeAbortResult`).
 
 **Source:**
 - `aptos-move/framework/move-stdlib/sources/bcs.move` — `native fun to_bytes`
-- `aptos-move/framework/move-stdlib/sources/hash.move` — `native fun sha3_256`
+- `aptos-move/framework/move-stdlib/sources/hash.move` — `native fun sha2_256`, `sha3_256`
 - `aptos-move/framework/move-stdlib/sources/vector.move` — `native fun length`, etc.
 -/
 
 namespace MovementFormal.MoveModel.Native
 
 open MovementFormal.Std.Bcs
+open MovementFormal.Std.Hash.Sha2_256
 open MovementFormal.Std.Hash.Sha3_256
 open MovementFormal.MoveModel
 
 /-! ## BCS natives
 
 `bcs::to_bytes` is a generic native. We provide monomorphic wrappers
-for the types we need: `u8`, `u64`, `u128`, `bool`. Each converts a
+for the types we need: `u8`, `u64`, `u128`, `u16`, `u32`, `u256`, `bool`. Each converts a
 `MoveValue` to BCS bytes via the spec in `Std.Bcs.Primitives`, then
 wraps the result as `MoveValue.vector .u8`. -/
 
@@ -44,21 +48,41 @@ def bcsToBytes_u128 : List MoveValue → Option (List MoveValue)
   | [.u128 x] => some [bytesToMoveVec (u128LeNat x.val)]
   | _ => none
 
+def bcsToBytes_u16 : List MoveValue → Option (List MoveValue)
+  | [.u16 x] => some [bytesToMoveVec (u16Le x)]
+  | _ => none
+
+def bcsToBytes_u32 : List MoveValue → Option (List MoveValue)
+  | [.u32 x] => some [bytesToMoveVec (u32Le x)]
+  | _ => none
+
+def bcsToBytes_u256 : List MoveValue → Option (List MoveValue)
+  | [.u256 x] => some [bytesToMoveVec (u256LeNat x.val)]
+  | _ => none
+
 def bcsToBytes_bool : List MoveValue → Option (List MoveValue)
   | [.bool b] => some [bytesToMoveVec (boolBytes b)]
   | _ => none
 
 /-! ## Hash natives
 
-`std::hash::sha3_256` — input `vector<u8>`, output `vector<u8>` (32 bytes). -/
+`std::hash::sha2_256` / `sha3_256` — input `vector<u8>`, output `vector<u8>` (32 bytes). -/
 
-private partial def u8ElemsToByteArrayAux (acc : Array UInt8) : List MoveValue → Option ByteArray
+partial def u8ElemsToByteArrayAux (acc : Array UInt8) : List MoveValue → Option ByteArray
   | [] => some (ByteArray.mk acc)
   | .u8 b :: rest => u8ElemsToByteArrayAux (acc.push b) rest
   | _ :: _ => none
 
-private def u8ElemsToByteArray (elems : List MoveValue) : Option ByteArray :=
+/-- Extract `vector<u8>` element list as `ByteArray` (shared by hash / BCS-style paths). -/
+def u8ElemsToByteArray (elems : List MoveValue) : Option ByteArray :=
   u8ElemsToByteArrayAux #[] elems
+
+def sha2_256_native : List MoveValue → Option (List MoveValue)
+  | [.vector .u8 elems] =>
+    match u8ElemsToByteArray elems with
+    | some ba => some [bytesToMoveVec (sha2_256 ba)]
+    | none => none
+  | _ => none
 
 def sha3_256_native : List MoveValue → Option (List MoveValue)
   | [.vector .u8 elems] =>
@@ -155,7 +179,7 @@ bytecode programs. The index assignments are:
 
 Appended after hand-written bytecode in `Programs.lean` (not in this array):
 
-| (see `Programs`) | `hash::sha3_256` |
+| (see `Programs`) | `hash::sha3_256` (VM↔Lean **`hash` suite** uses `HashCatalog`: `sha2_256`, `sha3_256`) |
 -/
 
 def stdNatives : Array FuncDesc := #[

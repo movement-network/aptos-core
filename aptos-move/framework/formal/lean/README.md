@@ -1,6 +1,6 @@
 # MovementFormal (Lean 4)
 
-Machine-checked definitions and proofs for **Aptos Move framework** behavior, structured for growth
+Machine-checked definitions and proofs for **Movement Move framework** behavior, structured for growth
 beyond a single package.
 
 

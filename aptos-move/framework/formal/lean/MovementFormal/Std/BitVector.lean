@@ -2,6 +2,8 @@ import MovementFormal.MoveModel.Value
 
 /-!
 # Lean specification for `std::bit_vector`
+
+**Source:** `aptos-move/framework/move-stdlib/sources/bit_vector.move`.
 -/
 
 namespace MovementFormal.Std.BitVector

@@ -3,6 +3,8 @@ Copyright (c) Move Industries.
 
 # Move `std::hash::sha3_256` model
 
+**Source:** `aptos-move/framework/move-stdlib/sources/hash.move`; native `aptos-move/framework/move-stdlib/src/natives/hash.rs`.
+
 Pure Lean SHA3-256 (FIPS 202), rate `136` bytes (`200 - 256/4`), matching `tiny-keccak` /
 RustCrypto `sha3::Sha3_256` as used by `aptos-move/framework/move-stdlib/src/natives/hash.rs`.
 

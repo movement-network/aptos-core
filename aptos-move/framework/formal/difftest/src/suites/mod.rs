@@ -1,11 +1,19 @@
+pub mod acl;
 pub mod bcs;
+pub mod cmp;
+pub mod bit_vector;
+pub mod error;
 pub mod confidential_asset;
 pub mod confidential_balance;
 pub mod confidential_elgamal;
 pub mod confidential_proof;
 pub mod fa_stub;
+pub mod fixed_point32;
 pub mod global_resource_smoke;
 pub mod hash;
+pub mod option;
+pub mod signer;
+pub mod string;
 pub mod vector;
 
 use anyhow::Result;
@@ -29,8 +37,16 @@ pub trait DiffTestSuite {
 pub fn all_suites() -> Vec<Box<dyn DiffTestSuite>> {
     vec![
         Box::new(vector::VectorSuite),
+        Box::new(acl::AclSuite),
         Box::new(bcs::BcsSuite),
+        Box::new(bit_vector::BitVectorSuite),
+        Box::new(error::ErrorSuite),
         Box::new(hash::HashSuite),
+        Box::new(signer::SignerSuite),
+        Box::new(string::StringSuite),
+        Box::new(cmp::CmpSuite),
+        Box::new(fixed_point32::FixedPoint32Suite),
+        Box::new(option::OptionSuite),
         Box::new(global_resource_smoke::GlobalResourceSmokeSuite),
         Box::new(confidential_balance::ConfidentialBalanceSuite),
         Box::new(confidential_elgamal::ConfidentialElGamalSuite),
@@ -80,8 +96,16 @@ pub fn suites_filtered(filter: &[String]) -> Result<Vec<Box<dyn DiffTestSuite>>>
     for id in expanded {
         let suite: Box<dyn DiffTestSuite> = match id.as_str() {
             "vector" => Box::new(vector::VectorSuite),
+            "acl" => Box::new(acl::AclSuite),
             "bcs" => Box::new(bcs::BcsSuite),
+            "bit_vector" => Box::new(bit_vector::BitVectorSuite),
+            "error" => Box::new(error::ErrorSuite),
             "hash" => Box::new(hash::HashSuite),
+            "signer" => Box::new(signer::SignerSuite),
+            "string" => Box::new(string::StringSuite),
+            "cmp" => Box::new(cmp::CmpSuite),
+            "fixed_point32" => Box::new(fixed_point32::FixedPoint32Suite),
+            "option" => Box::new(option::OptionSuite),
             "global_resource_smoke" => Box::new(global_resource_smoke::GlobalResourceSmokeSuite),
             "confidential_balance" => Box::new(confidential_balance::ConfidentialBalanceSuite),
             "confidential_elgamal" => Box::new(confidential_elgamal::ConfidentialElGamalSuite),

@@ -5,6 +5,8 @@ import MovementFormal.Experimental.ConfidentialAsset.Registration.Formal
 /-!
 # Functional simulation of `verify_registration_proof` bytecode
 
+**Source:** `aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_proof.move`; bytecode `MovementFormal.MoveModel.Programs.Registration`.
+
 `verifyRegistrationBytecodeResult` computes the same result as `eval` on the
 67-instruction transcribed bytecode, but expressed as a readable Lean function
 on `MoveValue`s. It serves as the intermediary layer in the refinement chain:

@@ -222,6 +222,14 @@ theorem handleNativeResult_ret1 (result : Option (List MoveValue))
   | some [_] => rfl
   | some (_ :: _ :: _) => simp [List.length]
 
+/-- `nativeAbort`: `Except.ok` delegates to `handleNativeResult`; `Except.error` becomes `aborted`. -/
+def handleNativeAbortResult (result : Option (Except UInt64 (List MoveValue))) (numReturns : Nat)
+    (frame : Frame) (cs : List Frame) (rest : List MoveValue) (ms : MachineState) : ExecResult :=
+  match result with
+  | none => .error
+  | some (.error code) => .aborted code
+  | some (.ok vals) => handleNativeResult (some vals) numReturns frame cs rest ms
+
 /-! ## Reference helper: extract RefId from a reference value -/
 
 def getRefId : MoveValue → Option RefId
@@ -348,6 +356,9 @@ def step (env : ModuleEnv) (frame : Frame) (callStack : List Frame)
           match fdesc.body with
           | .native impl =>
             handleNativeResult (impl args) fdesc.numReturns
+              (advance frame) callStack rest (withCG ms containers globals)
+          | .nativeAbort impl =>
+            handleNativeAbortResult (impl args) fdesc.numReturns
               (advance frame) callStack rest (withCG ms containers globals)
           | .nativeRef impl =>
             match impl containers args with
@@ -796,6 +807,11 @@ def eval (env : ModuleEnv) (funcIdx : FuncIndex) (args : List MoveValue)
     | .native impl =>
       match impl args with
       | some results => .returned results MachineState.empty
+      | none => .error
+    | .nativeAbort impl =>
+      match impl args with
+      | some (.ok results) => .returned results MachineState.empty
+      | some (.error code) => .aborted code
       | none => .error
     | .nativeRef impl =>
       match impl initMs.containers args with

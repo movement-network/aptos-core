@@ -4,6 +4,8 @@ import MovementFormal.MoveModel.Value
 /-!
 # JSON test vector parser
 
+**Source:** `aptos-move/framework/formal/difftest/` — JSON schema `schema::TestSuite` / `TestCase` emitted by Rust crate `move-lean-difftest`.
+
 Parses the JSON test vectors produced by `move-lean-difftest` (the Rust
 harness) into Lean structures for comparison with the Move evaluator.
 -/
@@ -68,8 +70,8 @@ private partial def hexCharsToBytes (cs : List Char) : Except String (List UInt8
       pure (u :: t)
   | [_] => throw "odd-length hex in address"
 
-/-- Aptos-style 32-byte account address from `0x…` / `@0x…` hex (left-padded to 64 hex digits). -/
-private def parseAptosAddressHex (s : String) : Except String ByteArray := do
+/-- Movement-style 32-byte account address from `0x…` / `@0x…` hex (left-padded to 64 hex digits). -/
+private def parseMovementAddressHex (s : String) : Except String ByteArray := do
   let s' := if s.startsWith "@" then s.drop 1 else s
   let hex := if s'.startsWith "0x" then s'.drop 2 else s'
   if hex.any (fun c => !isHexChar c) then throw s!"non-hex in address: {s}"
@@ -110,11 +112,47 @@ partial def parseTypedValue (obj : Json) : Except String MoveValue := do
       let n ← val.getNat?
       if h : n < 2 ^ 128 then return .u128 ⟨n, h⟩
       else throw s!"u128 overflow: {n}"
+  | "u256" =>
+    match val with
+    | Json.str s =>
+      match s.toNat? with
+      | some n =>
+        if h : n < 2 ^ 256 then return .u256 ⟨n, h⟩
+        else throw s!"u256 overflow: {n}"
+      | none => throw s!"invalid u256 string: {s}"
+    | _ =>
+      let n ← val.getNat?
+      if h : n < 2 ^ 256 then return .u256 ⟨n, h⟩
+      else throw s!"u256 overflow: {n}"
   | "address" =>
     let s ← val.getStr?
-    match parseAptosAddressHex s with
+    match parseMovementAddressHex s with
     | Except.ok bs => return .address bs
     | Except.error e => throw e
+  | "signer" =>
+    let s ← val.getStr?
+    match parseMovementAddressHex s with
+    | Except.ok bs => return .signer bs
+    | Except.error e => throw e
+  | "option_u64" =>
+    match val with
+    | Json.null => return .struct_ [.vector .u64 []]
+    | _ =>
+      let n ← val.getNat?
+      return .struct_ [.vector .u64 [.u64 n.toUInt64]]
+  | "bit_vector" =>
+    let len ← val.getObjValAs? Nat "length"
+    let bitsArr ← val.getObjValAs? (Array Json) "bits"
+    let bs ← bitsArr.toList.mapM (·.getBool?)
+    return .struct_ [.u64 len.toUInt64, .vector .bool (bs.map MoveValue.bool)]
+  | "acl" =>
+    let arr ← val.getArr?
+    let xs ← arr.toList.mapM fun j => do
+      let s ← j.getStr?
+      match parseMovementAddressHex s with
+      | Except.ok bs => return bs
+      | Except.error e => throw e
+    return .struct_ [.vector .address (xs.map MoveValue.address)]
   | _ =>
     if ty.startsWith "vector<" && ty.endsWith ">" then
       let innerTy := (ty.drop 7).dropRight 1

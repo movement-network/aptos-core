@@ -3,6 +3,8 @@ Copyright (c) Move Industries.
 
 # Ristretto group axioms — bridging `CryptoOracle` to algebraic structures
 
+**Source:** `aptos-move/framework/aptos-stdlib/sources/cryptography/ristretto255.move` (Move native surface for `verify_registration_proof` in `aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_proof.move`).
+
 Packages the assumption that Move's `ristretto255` native operations implement
 a correct prime-order Ristretto255 group with scalar multiplication satisfying
 the `Module RistrettoScalar` laws.

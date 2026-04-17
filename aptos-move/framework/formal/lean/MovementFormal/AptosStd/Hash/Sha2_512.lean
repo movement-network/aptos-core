@@ -1,7 +1,9 @@
 /-
 Copyright (c) Move Industries.
 
-# Aptos `aptos_std::aptos_hash` — SHA2-512 model
+# Movement formalization of `aptos_std::aptos_hash` — SHA2-512 model
+
+**Source:** `aptos-move/framework/aptos-stdlib/sources/hash.move` (`sha2_512`); native implementation via Rust `sha2` crate (see module comments below).
 
 Pure Lean SHA2-512 (FIPS 180-4, §6.4).  Matches the `sha2::Sha512` crate
 used by `aptos_std::aptos_hash::sha2_512` in

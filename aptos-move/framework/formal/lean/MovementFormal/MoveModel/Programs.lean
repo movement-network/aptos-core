@@ -12,6 +12,8 @@ Two environments are provided:
 
 - `stdModuleEnv` — hand-written programs only (used by `rfl` refinement proofs)
 - `realModuleEnv` — adds real compiler-output programs (used by smoke tests)
+
+**Source:** Composed from `MovementFormal.MoveModel.Programs.Core`, `Programs.Vector`, `Programs.GlobalSmoke` (each lists a **Source** anchor); programs modeling stdlib ops align with `aptos-move/framework/move-stdlib/sources/`.
 -/
 
 namespace MovementFormal.MoveModel.Programs

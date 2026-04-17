@@ -6,6 +6,8 @@ import MovementFormal.MoveModel.Native
 Hand-written bytecode programs for basic operations: arithmetic, branching,
 BCS serialization, and reference read/write. These exercise the fundamental
 instruction set without loops or inter-function calls.
+
+**Source:** Move stack machine bytecode as implemented by `MovementFormal.MoveModel` (see `MoveModel/Instr.lean` / `Step.lean`); illustrative micro-programs only (no single `*.move` module).
 -/
 
 namespace MovementFormal.MoveModel.Programs.Core

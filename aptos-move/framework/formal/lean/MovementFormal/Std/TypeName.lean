@@ -4,6 +4,8 @@
 `type_name::TypeName` carries a logical name as raw bytes with each code unit in `0..=127`
 (the range used for on-chain type-name strings in this stack). `get<T>()` is **native** —
 we only model the record shape and accessors `borrow_string` / `into_string`.
+
+**Source:** `aptos-move/framework/move-stdlib/sources/type_name.move`.
 -/
 
 namespace MovementFormal.Std.TypeName

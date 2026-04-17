@@ -4,6 +4,8 @@ import MovementFormal.MoveModel.Programs
 /-!
 # Test helpers
 
+**Source:** `MovementFormal.MoveModel.Programs` (`stdModuleEnv`, `realModuleEnv`); exercised by modules under `MovementFormal.SmokeTests`.
+
 Shared definitions for smoke tests (`native_decide` on concrete inputs).
 -/
 

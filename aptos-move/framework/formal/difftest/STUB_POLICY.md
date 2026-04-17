@@ -26,7 +26,7 @@ For a JSON case to run under `lake exe difftest`, **all** of the following must 
    / `MovementFormal.AptosStd.*` specs, or by a **stub** table documented here).
 
 **Globals:** resource-like behavior is modeled separately (§4); it is **not**
-automatically the same as Aptos `borrow_global` / `move_to` opcodes from the
+automatically the same as the Move VM `borrow_global` / `move_to` opcodes from the
 binary format.
 
 ## 2. Confidential suites: native stubs vs bytecode
@@ -81,7 +81,7 @@ Lean **`caRegistrationHelpersRoundtripNative`** (same as **35**).
 **`test_registration_sha2_512_golden_move_{first,second}`** (Lean **174** / **175**) return the **64**-byte
 **SHA2-512** digest vectors for FS golden **1** / **2** (`ldConst` **47** / **48** + `ret`, matching **`verify-corpora`** hex).
 This is **not**
-Aptos `primary_fungible_store` / `Object` semantics — transactional CA e2e rows remain
+On-chain `primary_fungible_store` / `Object` semantics — transactional CA e2e rows remain
 **witness Lean** until a richer model lands.
 
 ## 4. `GlobalResourceKey` (Lean L4 scaffolding)

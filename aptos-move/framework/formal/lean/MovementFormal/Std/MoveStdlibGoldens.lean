@@ -3,8 +3,8 @@ Copyright (c) Move Industries.
 
 Machine-checked alignment between `MovementFormal` models and **Move stdlib** expectations.
 
-Move anchor tests (unchanged originals): `aptos-move/framework/move-stdlib/tests/hash_tests.move`,
-`bcs_tests.move`. Curated duplicates live in `aptos-move/framework/move-stdlib/tests/formal_goldens_*.move`.
+**Source:** Move stdlib tests `aptos-move/framework/move-stdlib/tests/hash_tests.move`,
+`aptos-move/framework/move-stdlib/tests/bcs_tests.move`; curated copies `aptos-move/framework/move-stdlib/tests/formal_goldens_*.move`.
 -/
 
 import MovementFormal.Std.Bcs.Primitives

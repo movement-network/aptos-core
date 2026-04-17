@@ -62,17 +62,8 @@ theorem EINVALID_RANGE : canonical OUT_OF_RANGE 1 = 0x20001 := rfl
 theorem EINDEX         : canonical OUT_OF_RANGE 0 = 0x20000 := rfl
 theorem ELENGTH        : canonical OUT_OF_RANGE 1 = 0x20001 := rfl
 
--- Monotonicity: same category, different reasons
--- Note: UInt64 arithmetic is modular; left-cancellation of (cat <<< 16)
--- requires that neither sum overflows. This is always true in practice
--- (categories ≤ 0xD, reasons < 2^16), but proving it requires unfolding
--- UInt64.shiftLeft which omega cannot do. Marked sorry; covered by difftests.
-theorem canonical_inj_reason {cat r1 r2 : UInt64}
-    (h : canonical cat r1 = canonical cat r2) :
-    r1 = r2 := by
-  simp only [canonical] at h
-  -- goal: (cat <<< 16) ||| r1 = (cat <<< 16) ||| r2 → r1 = r2
-  -- (when reasons stay in the low 16 bits; cancellation is subtle in UInt64)
-  sorry
+-- See `MovementFormal.Std.ErrorCanonicalMath` for **`canonical_inj_reason`**
+-- (reason injectivity when `cat` and both reasons lie in the low 16 bits — matches real
+-- canonical error layout).
 
 end MovementFormal.Std.Error

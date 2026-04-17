@@ -24,6 +24,8 @@ open MovementFormal.MoveModel
 
 def EOPTION_IS_SET  : UInt64 := 0x40000
 def EOPTION_NOT_SET : UInt64 := 0x40001
+/-- `EOPTION_VEC_TOO_LONG` — `from_vec` when `vector::length > 1`. -/
+def EOPTION_VEC_TOO_LONG : UInt64 := 0x40002
 
 structure MoveOption (α : Type) where
   vec : List α
@@ -69,6 +71,14 @@ def borrowWithDefault (opt : MoveOption MoveValue) (default : MoveValue) : MoveV
     borrowWithDefault none' d = d := rfl
 @[simp] theorem borrowWithDefault_some (v d : MoveValue) :
     borrowWithDefault (some' v) d = v := rfl
+
+/-- `destroy_with_default`: returns the held value or `default` (same output as `borrowWithDefault` on
+well-formed options; Move additionally consumes `self`). -/
+def destroyWithDefault (opt : MoveOption MoveValue) (default : MoveValue) : MoveValue :=
+  borrowWithDefault opt default
+
+@[simp] theorem destroyWithDefault_eq_borrowWithDefault (opt : MoveOption MoveValue) (d : MoveValue) :
+    destroyWithDefault opt d = borrowWithDefault opt d := rfl
 
 -- ── Fill / Extract ───────────────────────────────────────────────────────────
 
@@ -177,10 +187,18 @@ def toVec (opt : MoveOption MoveValue) : List MoveValue := opt.vec
 @[simp] theorem toVec_some (v : MoveValue) : toVec (some' v) = [v] := rfl
 
 def fromVec (xs : List MoveValue) : Except UInt64 (MoveOption MoveValue) :=
-  if h : xs.length ≤ 1 then .ok ⟨xs, h⟩ else .error 0x40002
+  if h : xs.length ≤ 1 then .ok ⟨xs, h⟩ else .error EOPTION_VEC_TOO_LONG
 
 @[simp] theorem fromVec_empty : fromVec [] = .ok none' := rfl
 @[simp] theorem fromVec_singleton (v : MoveValue) : fromVec [v] = .ok (some' v) := rfl
+
+theorem fromVec_vec_too_long {xs : List MoveValue} (h : 1 < xs.length) :
+    fromVec xs = Except.error EOPTION_VEC_TOO_LONG := by
+  unfold fromVec
+  split
+  · rename_i hle
+    exact absurd hle (Nat.not_le_of_gt h)
+  · rfl
 
 -- ── Round-trip lemmas ────────────────────────────────────────────────────────
 

@@ -1,6 +1,8 @@
 /-
 Copyright (c) Move Industries.
 
+**Source:** `aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_proof.move` (registration verify path); fixed trace `0x1::difftest_registration_helpers::registration_roundtrip_vm` from `move-lean-difftest` helpers.
+
 Executable **`CryptoOracleWithBoolEq`** for the fixed VM trace
 `0x1::difftest_registration_helpers::registration_roundtrip_vm`
 (`chain_id=9`, `@0x1`/`@0x2`/`@0x3`, dk=42, k=9999).

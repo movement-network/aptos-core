@@ -1,7 +1,9 @@
 /-
 Copyright (c) Move Industries.
 
-# Aptos `aptos_std::aptos_hash` — SHA3-512 model (stdlib-wide)
+# Movement formalization of `aptos_std::aptos_hash` — SHA3-512 model (stdlib-wide)
+
+**Source:** `aptos-move/framework/aptos-stdlib/sources/hash.move` (`sha3_512`).
 
 Pure Lean SHA3-512 (FIPS 202), sponge layout matching `tiny-keccak` / RustCrypto `sha3::Sha3_512`:
 delimiter `0x06`, rate `72` bytes (`200 - 512/4`). Intended to match **`aptos_std::aptos_hash::sha3_512`**

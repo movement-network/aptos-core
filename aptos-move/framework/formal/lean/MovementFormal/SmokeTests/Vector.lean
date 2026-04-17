@@ -3,6 +3,8 @@ import MovementFormal.SmokeTests.Defs
 /-!
 # Vector smoke tests
 
+**Source:** `aptos-move/framework/move-stdlib/sources/vector.move`; programs `MovementFormal.MoveModel.Programs.Vector`.
+
 Concrete input/output tests for vector bytecode programs using `native_decide`.
 Covers both hand-written (self-contained) and real compiler-output programs.
 -/

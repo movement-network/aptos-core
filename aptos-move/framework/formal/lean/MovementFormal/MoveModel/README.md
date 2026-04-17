@@ -138,7 +138,7 @@ Define `MoveInstr` — a subset of Move bytecode instructions, starting with
 pure operations. **Abstract** global ops (`globalExists` / `globalMoveTo` /
 `globalMoveToSigned` / `mutBorrowGlobal`) model publishing keyed by
 `GlobalResourceKey`; optional `StructTag` bytes live on the key (see `Value.lean`).
-Full Aptos BCS / generic `StructTag`, **`Object<Metadata>`** layout, and VM-accurate
+Full chain-accurate BCS / generic `StructTag`, **`Object<Metadata>`** layout, and VM-accurate
 `BorrowGlobal` from metadata remain future work (see L4 gap below).
 
 - Integer arithmetic: `Add`, `Sub`, `Mul`, `Div`, `Mod`
@@ -195,7 +195,7 @@ Abstract instructions `globalExists`, `globalMoveTo`, `globalMoveToSigned`,
 `file_format.rs` global opcodes yet). Smoke bytecode: `Programs/GlobalSmoke.lean`;
 kernel-checked equalities: `SmokeTests/GlobalSmoke.lean`.
 
-**L4 gap (remaining):** we still do **not** model full Aptos **`StructTag`** BCS
+**L4 gap (remaining):** we still do **not** model full Movement-VM-faithful **`StructTag`** BCS
 (including generic type arguments), real **`Object<Metadata>`** /
 **`primary_fungible_store`** layout, or VM-accurate **`BorrowGlobal`** keyed off
 compiled metadata. `globalMoveToSigned` checks signer address bytes against

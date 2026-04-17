@@ -6,6 +6,8 @@ import MovementFormal.MoveModel.Native
 Tiny programs exercising `globalExists` / `globalMoveTo` / `mutBorrowGlobal` with a
 fixed `GlobalResourceKey`. Used by `Tests/GlobalSmoke.lean` and as a template for
 future CA transcription (see `difftest/STUB_POLICY.md`).
+
+**Source:** Lean-only smoke scaffolding; patterns align with Move global operations as in the Move language spec / `aptos-move/framework/move-stdlib` resource examples (no dedicated `*.move` file in-tree).
 -/
 
 namespace MovementFormal.MoveModel.Programs.GlobalSmoke

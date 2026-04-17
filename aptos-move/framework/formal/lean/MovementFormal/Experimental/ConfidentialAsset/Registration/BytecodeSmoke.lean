@@ -6,6 +6,8 @@ import MovementFormal.Experimental.ConfidentialAsset.Registration.TranscriptAlig
 /-!
 # Eval smoke tests for the **real** `verify_registration_proof` bytecode
 
+**Source:** `aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_proof.move`; bytecode `MovementFormal.MoveModel.Programs.Registration`.
+
 Runs `eval` on the 83-instruction bytecode transcribed from the `movement` v7.4
 compiler output, using a concrete `RegistrationNativeOracle` with symbolic
 integer-tagged `MoveValue.u64` values for points/scalars.

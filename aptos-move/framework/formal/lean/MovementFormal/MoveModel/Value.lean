@@ -86,7 +86,7 @@ def U256.zero : U256 := ⟨0, by omega⟩
 
 abbrev RefId := Nat
 
-/-- Aptos-style `(account, module, struct)` path for globals (L4 slice).
+/-- Movement-style `(account, module, struct)` path for globals (L4 slice).
 
 Real `StructTag` includes generic type arguments; we omit them here. See
 `MoveModel/README.md`. -/

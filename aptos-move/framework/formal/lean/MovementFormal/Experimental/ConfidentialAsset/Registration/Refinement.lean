@@ -3,6 +3,8 @@ Copyright (c) Move Industries.
 
 # Refinement: bytecode `eval` ↔ `verifyRegistrationProofProp`
 
+**Source:** `aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_proof.move`; bytecode `MovementFormal.MoveModel.Programs.Registration`.
+
 Connects the **bytecode-level** execution of the transcribed
 `verify_registration_proof` (via `eval` in `Step.lean`) to the existing
 **spec-level** propositions:

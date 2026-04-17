@@ -1,6 +1,8 @@
 /-
 Copyright (c) Move Industries.
 
+**Source:** `aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_proof.move`.
+
 Machine-checked **completeness** for registration Schnorr verification
 (`confidential_proof.move` — honest prover vs verifier).
 

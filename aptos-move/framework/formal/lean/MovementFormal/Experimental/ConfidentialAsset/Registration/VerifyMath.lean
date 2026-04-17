@@ -1,6 +1,8 @@
 /-
 Copyright (c) Move Industries.
 
+**Source:** `aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_proof.move`.
+
 Mathematical **interface** for `aptos_experimental::confidential_proof::verify_registration_proof`.
 
 Depends on **`MovementFormal.Std`** for hash/scalar types shared with the wider `aptos_framework` story,

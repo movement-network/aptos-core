@@ -7,6 +7,8 @@ import MovementFormal.Std.Vector.Operations
 /-!
 # Vector bytecode refinement
 
+**Source:** `aptos-move/framework/move-stdlib/sources/vector.move`; programs `MovementFormal.MoveModel.Programs.Vector`.
+
 Correctness of hand-written `vector::contains` (index **18** in `stdModuleEnv`) against
 `MovementFormal.Std.Vector.contains`.
 

@@ -6,6 +6,8 @@ import MovementFormal.Std.BitVector
 /-!
 # Refinement: move-stdlib bytecode vs. Lean specs
 
+**Source:** `aptos-move/framework/move-stdlib/sources/error.move`, `aptos-move/framework/move-stdlib/sources/bit_vector.move`; programs `MovementFormal.MoveModel.Programs.StdPrimitives`.
+
 Correctness theorems connecting the bytecode programs in
 `MoveModel.Programs.StdPrimitives` to the Lean specs in `Std.Error`
 and `Std.BitVector`.

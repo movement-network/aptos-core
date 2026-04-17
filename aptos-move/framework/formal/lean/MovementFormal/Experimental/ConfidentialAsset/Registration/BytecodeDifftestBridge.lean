@@ -5,6 +5,8 @@ import MovementFormal.Experimental.ConfidentialAsset.Registration.Operational
 /-!
 # L2 → L1 → L0 concrete refinement chain for the difftest roundtrip trace
 
+**Source:** `aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_proof.move`; difftest `aptos-move/framework/formal/difftest/`.
+
 Imports the `native_decide` eval proof from `BytecodeDifftestEval` (which is
 deliberately kept in a separate file with light imports) and connects it to the
 L1 (`execVerifyRegistrationProof`) and L0 (`verifyRegistrationProofProp`) layers.

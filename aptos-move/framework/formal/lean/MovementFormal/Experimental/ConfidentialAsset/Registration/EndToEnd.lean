@@ -3,6 +3,8 @@ Copyright (c) Move Industries.
 
 # End-to-end registration verification — group axioms ↔ Schnorr equation
 
+**Source:** `aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_proof.move`.
+
 Ties together every Lean module in the registration proof stack:
 
 1. **TranscriptAlignment** — FS message bytes match Move golden (`native_decide`).

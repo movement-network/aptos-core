@@ -5,6 +5,8 @@ import MovementFormal.MoveModel.Programs.Registration
 /-!
 # Bytecode eval ≡ functional simulation (L2 ≡ L1.5)
 
+**Source:** `aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_proof.move`; bytecode `MovementFormal.MoveModel.Programs.Registration`.
+
 Proof that the bytecode evaluator `eval` on the transcribed 83-instruction
 `verify_registration_proof` (reference-semantic, from `movement` v7.4
 compiler output) agrees with the functional simulation
@@ -214,6 +216,7 @@ theorem eval_fuel_ge (env : ModuleEnv) (funcIdx : FuncIndex) (args : List MoveVa
   · simp only [dite_true, hBound] at hne ⊢
     cases hBody : env.functions[funcIdx].body with
     | native impl => rfl
+    | nativeAbort impl => rfl
     | nativeRef impl => rfl
     | bytecode code numLocals =>
       simp only [hBody] at hne ⊢

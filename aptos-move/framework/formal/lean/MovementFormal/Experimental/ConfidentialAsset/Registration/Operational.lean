@@ -3,6 +3,8 @@ Copyright (c) Move Industries.
 
 Operational `Option Unit` runner ↔ `verifyRegistrationProofProp` (first machine-checked control-flow link).
 
+**Source:** `aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_proof.move`; math spec `MovementFormal.Experimental.ConfidentialAsset.Registration.Formal`.
+
 Models `assert!` / `option` success vs abort at the same branching structure as the spec.
 
 See **`execVerifyRegistrationProof_eq_some_iff_pointEqBool_of_parsed`** for the post-parse branch: success

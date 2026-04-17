@@ -3,8 +3,10 @@ import MovementFormal.MoveModel.Step
 /-!
 ## Function name → `FuncMapping` (split for Lean elaboration)
 
+**Source:** JSON `function` strings from `move-lean-difftest` (`aptos-move/framework/formal/difftest/`); catalogs in `MovementFormal.MoveModel.*Catalog` and `MovementFormal.MoveModel.Programs.Confidential`.
+
 Large monolithic `match` in `Runner.lean` hit `maxHeartbeats` / WHNF limits; this module splits the
-oracle name table into five tries (`<|>`). **Do not reorder** arms relative to the original single
+oracle name table into catalog prefixes plus five tries (`<|>`). **Do not reorder** arms relative to the original single
 `match` unless intentionally changing first-match-wins behavior (today each `String` appears at most once).
 -/
 
@@ -18,8 +20,75 @@ structure FuncMapping where
   useRealEnv : Bool := true
   /-- When true, use `confidentialModuleEnv` (indices 0–181; see `Programs/Confidential.lean`). -/
   useConfidentialEnv : Bool := false
-  /-- When true, use `bcsCatalogModuleEnv` (indices 0–17; see `MoveModel/BcsCatalog.lean`). -/
+  /-- When true, use `bcsCatalogModuleEnv` (indices 0–26; see `MoveModel/BcsCatalog.lean`). -/
   useBcsCatalogEnv : Bool := false
+  /-- When true, use `errorCatalogModuleEnv` (indices 0–12; see `MoveModel/ErrorCatalog.lean`). -/
+  useErrorCatalogEnv : Bool := false
+  /-- When true, use `hashCatalogModuleEnv` (indices 0–1; see `MoveModel/HashCatalog.lean`). -/
+  useHashCatalogEnv : Bool := false
+  /-- When true, use `signerCatalogModuleEnv` (indices 0–1; see `MoveModel/SignerCatalog.lean`). -/
+  useSignerCatalogEnv : Bool := false
+  /-- When true, use `fixedPoint32CatalogModuleEnv` (indices 0–11; see `MoveModel/FixedPoint32Catalog.lean`). -/
+  useFixedPoint32CatalogEnv : Bool := false
+  /-- When true, use `optionCatalogModuleEnv` (indices 0–16; see `MoveModel/OptionCatalog.lean`). -/
+  useOptionCatalogEnv : Bool := false
+  /-- When true, use `bitVectorCatalogModuleEnv` (indices 0–4; see `MoveModel/BitVectorCatalog.lean`). -/
+  useBitVectorCatalogEnv : Bool := false
+  /-- When true, use `aclCatalogModuleEnv` (indices 0–4; see `MoveModel/AclCatalog.lean`). -/
+  useAclCatalogEnv : Bool := false
+  /-- When true, use `stringCatalogModuleEnv` (indices 0–3; see `MoveModel/StringCatalog.lean`). -/
+  useStringCatalogEnv : Bool := false
+  /-- When true, use `cmpCatalogModuleEnv` (indices 0–47; see `MoveModel/CmpCatalog.lean`). -/
+  useCmpCatalogEnv : Bool := false
+
+/-- `std::hash` difftest catalog — must stay in sync with `MoveModel/HashCatalog.lean`. -/
+private def funcNameToMappingHashCatalog (base : String) : Option FuncMapping :=
+  match base with
+  | "test_sha2_256" => some { funcIdx := 0, useRealEnv := false, useHashCatalogEnv := true }
+  | "test_sha3_256" => some { funcIdx := 1, useRealEnv := false, useHashCatalogEnv := true }
+  | _ => none
+
+/-- `std::signer` difftest catalog — must stay in sync with `MoveModel/SignerCatalog.lean`. -/
+private def funcNameToMappingSignerCatalog (base : String) : Option FuncMapping :=
+  match base with
+  | "test_signer_borrow_address" => some { funcIdx := 0, useRealEnv := false, useSignerCatalogEnv := true }
+  | "test_signer_address_of" => some { funcIdx := 1, useRealEnv := false, useSignerCatalogEnv := true }
+  | _ => none
+
+/-- `std::fixed_point32` difftest catalog — must stay in sync with `MoveModel/FixedPoint32Catalog.lean`. -/
+private def funcNameToMappingFixedPoint32Catalog (base : String) : Option FuncMapping :=
+  match base with
+  | "test_fp32_create_from_rational" => some { funcIdx := 0, useRealEnv := false, useFixedPoint32CatalogEnv := true }
+  | "test_fp32_create_from_u64" => some { funcIdx := 1, useRealEnv := false, useFixedPoint32CatalogEnv := true }
+  | "test_fp32_create_from_raw_value" => some { funcIdx := 2, useRealEnv := false, useFixedPoint32CatalogEnv := true }
+  | "test_fp32_multiply_u64" => some { funcIdx := 3, useRealEnv := false, useFixedPoint32CatalogEnv := true }
+  | "test_fp32_divide_u64" => some { funcIdx := 4, useRealEnv := false, useFixedPoint32CatalogEnv := true }
+  | "test_fp32_get_raw_value" => some { funcIdx := 5, useRealEnv := false, useFixedPoint32CatalogEnv := true }
+  | "test_fp32_is_zero" => some { funcIdx := 6, useRealEnv := false, useFixedPoint32CatalogEnv := true }
+  | "test_fp32_floor" => some { funcIdx := 7, useRealEnv := false, useFixedPoint32CatalogEnv := true }
+  | "test_fp32_ceil" => some { funcIdx := 8, useRealEnv := false, useFixedPoint32CatalogEnv := true }
+  | "test_fp32_round" => some { funcIdx := 9, useRealEnv := false, useFixedPoint32CatalogEnv := true }
+  | "test_fp32_min" => some { funcIdx := 10, useRealEnv := false, useFixedPoint32CatalogEnv := true }
+  | "test_fp32_max" => some { funcIdx := 11, useRealEnv := false, useFixedPoint32CatalogEnv := true }
+  | _ => none
+
+/-- `std::error` difftest catalog — must stay in sync with `MoveModel/ErrorCatalog.lean`. -/
+private def funcNameToMappingErrorCatalog (base : String) : Option FuncMapping :=
+  match base with
+  | "test_error_canonical" => some { funcIdx := 0, useRealEnv := false, useErrorCatalogEnv := true }
+  | "test_error_invalid_argument" => some { funcIdx := 1, useRealEnv := false, useErrorCatalogEnv := true }
+  | "test_error_out_of_range" => some { funcIdx := 2, useRealEnv := false, useErrorCatalogEnv := true }
+  | "test_error_invalid_state" => some { funcIdx := 3, useRealEnv := false, useErrorCatalogEnv := true }
+  | "test_error_unauthenticated" => some { funcIdx := 4, useRealEnv := false, useErrorCatalogEnv := true }
+  | "test_error_permission_denied" => some { funcIdx := 5, useRealEnv := false, useErrorCatalogEnv := true }
+  | "test_error_not_found" => some { funcIdx := 6, useRealEnv := false, useErrorCatalogEnv := true }
+  | "test_error_aborted" => some { funcIdx := 7, useRealEnv := false, useErrorCatalogEnv := true }
+  | "test_error_already_exists" => some { funcIdx := 8, useRealEnv := false, useErrorCatalogEnv := true }
+  | "test_error_resource_exhausted" => some { funcIdx := 9, useRealEnv := false, useErrorCatalogEnv := true }
+  | "test_error_internal" => some { funcIdx := 10, useRealEnv := false, useErrorCatalogEnv := true }
+  | "test_error_not_implemented" => some { funcIdx := 11, useRealEnv := false, useErrorCatalogEnv := true }
+  | "test_error_unavailable" => some { funcIdx := 12, useRealEnv := false, useErrorCatalogEnv := true }
+  | _ => none
 
 /-- `std::bcs` difftest catalog — must stay in sync with `MoveModel/BcsCatalog.lean`. -/
 private def funcNameToMappingBcsCatalog (base : String) : Option FuncMapping :=
@@ -42,6 +111,120 @@ private def funcNameToMappingBcsCatalog (base : String) : Option FuncMapping :=
   | "test_constant_size_bool" => some { funcIdx := 15, useRealEnv := false, useBcsCatalogEnv := true }
   | "test_constant_size_address" => some { funcIdx := 16, useRealEnv := false, useBcsCatalogEnv := true }
   | "test_constant_size_vec_u8_is_none" => some { funcIdx := 17, useRealEnv := false, useBcsCatalogEnv := true }
+  | "test_bcs_u16" => some { funcIdx := 18, useRealEnv := false, useBcsCatalogEnv := true }
+  | "test_serialized_size_u16" => some { funcIdx := 19, useRealEnv := false, useBcsCatalogEnv := true }
+  | "test_constant_size_u16" => some { funcIdx := 20, useRealEnv := false, useBcsCatalogEnv := true }
+  | "test_bcs_u32" => some { funcIdx := 21, useRealEnv := false, useBcsCatalogEnv := true }
+  | "test_serialized_size_u32" => some { funcIdx := 22, useRealEnv := false, useBcsCatalogEnv := true }
+  | "test_constant_size_u32" => some { funcIdx := 23, useRealEnv := false, useBcsCatalogEnv := true }
+  | "test_bcs_u256" => some { funcIdx := 24, useRealEnv := false, useBcsCatalogEnv := true }
+  | "test_serialized_size_u256" => some { funcIdx := 25, useRealEnv := false, useBcsCatalogEnv := true }
+  | "test_constant_size_u256" => some { funcIdx := 26, useRealEnv := false, useBcsCatalogEnv := true }
+  | _ => none
+
+/-- `std::option` (`Option<u64>`) difftest catalog — must stay in sync with `MoveModel/OptionCatalog.lean`. -/
+private def funcNameToMappingOptionCatalog (base : String) : Option FuncMapping :=
+  match base with
+  | "test_option_is_none" => some { funcIdx := 0, useRealEnv := false, useOptionCatalogEnv := true }
+  | "test_option_is_some" => some { funcIdx := 1, useRealEnv := false, useOptionCatalogEnv := true }
+  | "test_option_contains" => some { funcIdx := 2, useRealEnv := false, useOptionCatalogEnv := true }
+  | "test_option_get_with_default" => some { funcIdx := 3, useRealEnv := false, useOptionCatalogEnv := true }
+  | "test_option_borrow" => some { funcIdx := 4, useRealEnv := false, useOptionCatalogEnv := true }
+  | "test_option_fill" => some { funcIdx := 5, useRealEnv := false, useOptionCatalogEnv := true }
+  | "test_option_extract" => some { funcIdx := 6, useRealEnv := false, useOptionCatalogEnv := true }
+  | "test_option_swap" => some { funcIdx := 7, useRealEnv := false, useOptionCatalogEnv := true }
+  | "test_option_swap_or_fill" => some { funcIdx := 8, useRealEnv := false, useOptionCatalogEnv := true }
+  | "test_option_destroy_none" => some { funcIdx := 9, useRealEnv := false, useOptionCatalogEnv := true }
+  | "test_option_destroy_some" => some { funcIdx := 10, useRealEnv := false, useOptionCatalogEnv := true }
+  | "test_option_borrow_with_default" => some { funcIdx := 11, useRealEnv := false, useOptionCatalogEnv := true }
+  | "test_option_destroy_with_default" => some { funcIdx := 12, useRealEnv := false, useOptionCatalogEnv := true }
+  | "test_option_to_vec" => some { funcIdx := 13, useRealEnv := false, useOptionCatalogEnv := true }
+  | "test_option_from_vec" => some { funcIdx := 14, useRealEnv := false, useOptionCatalogEnv := true }
+  | "test_option_std_none" => some { funcIdx := 15, useRealEnv := false, useOptionCatalogEnv := true }
+  | "test_option_std_some" => some { funcIdx := 16, useRealEnv := false, useOptionCatalogEnv := true }
+  | _ => none
+
+/-- `std::bit_vector` difftest catalog — must stay in sync with `MoveModel/BitVectorCatalog.lean`. -/
+private def funcNameToMappingBitVectorCatalog (base : String) : Option FuncMapping :=
+  match base with
+  | "test_bit_vector_new" => some { funcIdx := 0, useRealEnv := false, useBitVectorCatalogEnv := true }
+  | "test_bit_vector_set" => some { funcIdx := 1, useRealEnv := false, useBitVectorCatalogEnv := true }
+  | "test_bit_vector_unset" => some { funcIdx := 2, useRealEnv := false, useBitVectorCatalogEnv := true }
+  | "test_bit_vector_is_index_set" => some { funcIdx := 3, useRealEnv := false, useBitVectorCatalogEnv := true }
+  | "test_bit_vector_shift_left" => some { funcIdx := 4, useRealEnv := false, useBitVectorCatalogEnv := true }
+  | _ => none
+
+/-- `std::acl` difftest catalog — must stay in sync with `MoveModel/AclCatalog.lean`. -/
+private def funcNameToMappingAclCatalog (base : String) : Option FuncMapping :=
+  match base with
+  | "test_acl_empty" => some { funcIdx := 0, useRealEnv := false, useAclCatalogEnv := true }
+  | "test_acl_contains" => some { funcIdx := 1, useRealEnv := false, useAclCatalogEnv := true }
+  | "test_acl_add" => some { funcIdx := 2, useRealEnv := false, useAclCatalogEnv := true }
+  | "test_acl_remove" => some { funcIdx := 3, useRealEnv := false, useAclCatalogEnv := true }
+  | "test_acl_assert_contains" => some { funcIdx := 4, useRealEnv := false, useAclCatalogEnv := true }
+  | _ => none
+
+/-- `std::string` UTF-8 difftest catalog — must stay in sync with `MoveModel/StringCatalog.lean`. -/
+private def funcNameToMappingStringCatalog (base : String) : Option FuncMapping :=
+  match base with
+  | "test_string_internal_check_utf8" => some { funcIdx := 0, useRealEnv := false, useStringCatalogEnv := true }
+  | "test_string_sub_string" => some { funcIdx := 1, useRealEnv := false, useStringCatalogEnv := true }
+  | "test_string_index_of" => some { funcIdx := 2, useRealEnv := false, useStringCatalogEnv := true }
+  | "test_string_internal_is_char_boundary" =>
+      some { funcIdx := 3, useRealEnv := false, useStringCatalogEnv := true }
+  | _ => none
+
+/-- `std::cmp` (scalars incl. `u256`) — sync with `MoveModel/CmpCatalog.lean`. -/
+private def funcNameToMappingCmpCatalog (base : String) : Option FuncMapping :=
+  match base with
+  | "test_cmp_is_eq" => some { funcIdx := 0, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_is_ne" => some { funcIdx := 1, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_is_lt" => some { funcIdx := 2, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_is_le" => some { funcIdx := 3, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_is_gt" => some { funcIdx := 4, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_is_ge" => some { funcIdx := 5, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_bool_is_eq" => some { funcIdx := 6, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_bool_is_ne" => some { funcIdx := 7, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_bool_is_lt" => some { funcIdx := 8, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_bool_is_le" => some { funcIdx := 9, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_bool_is_gt" => some { funcIdx := 10, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_bool_is_ge" => some { funcIdx := 11, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_u8_is_eq" => some { funcIdx := 12, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_u8_is_ne" => some { funcIdx := 13, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_u8_is_lt" => some { funcIdx := 14, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_u8_is_le" => some { funcIdx := 15, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_u8_is_gt" => some { funcIdx := 16, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_u8_is_ge" => some { funcIdx := 17, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_address_is_eq" => some { funcIdx := 18, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_address_is_ne" => some { funcIdx := 19, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_address_is_lt" => some { funcIdx := 20, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_address_is_le" => some { funcIdx := 21, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_address_is_gt" => some { funcIdx := 22, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_address_is_ge" => some { funcIdx := 23, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_u128_is_eq" => some { funcIdx := 24, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_u128_is_ne" => some { funcIdx := 25, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_u128_is_lt" => some { funcIdx := 26, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_u128_is_le" => some { funcIdx := 27, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_u128_is_gt" => some { funcIdx := 28, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_u128_is_ge" => some { funcIdx := 29, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_u16_is_eq" => some { funcIdx := 30, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_u16_is_ne" => some { funcIdx := 31, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_u16_is_lt" => some { funcIdx := 32, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_u16_is_le" => some { funcIdx := 33, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_u16_is_gt" => some { funcIdx := 34, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_u16_is_ge" => some { funcIdx := 35, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_u32_is_eq" => some { funcIdx := 36, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_u32_is_ne" => some { funcIdx := 37, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_u32_is_lt" => some { funcIdx := 38, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_u32_is_le" => some { funcIdx := 39, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_u32_is_gt" => some { funcIdx := 40, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_u32_is_ge" => some { funcIdx := 41, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_u256_is_eq" => some { funcIdx := 42, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_u256_is_ne" => some { funcIdx := 43, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_u256_is_lt" => some { funcIdx := 44, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_u256_is_le" => some { funcIdx := 45, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_u256_is_gt" => some { funcIdx := 46, useRealEnv := false, useCmpCatalogEnv := true }
+  | "test_cmp_u256_is_ge" => some { funcIdx := 47, useRealEnv := false, useCmpCatalogEnv := true }
   | _ => none
 
 private def funcNameToMappingPart1 (base : String) : Option FuncMapping :=
@@ -55,7 +238,6 @@ private def funcNameToMappingPart1 (base : String) : Option FuncMapping :=
   | "test_singleton"   => some { funcIdx := 33 }
   | "test_is_empty"    => some { funcIdx := 5, useRealEnv := false }
   | "test_length"      => some { funcIdx := 4, useRealEnv := false }
-  | "test_sha3_256"    => some { funcIdx := 20, useRealEnv := false }
   | "test_get_pending_balance_chunks"    => some { funcIdx := 0,  useConfidentialEnv := true, useRealEnv := false }
   | "test_get_actual_balance_chunks"     => some { funcIdx := 1,  useConfidentialEnv := true, useRealEnv := false }
   | "test_get_chunk_size_bits"           => some { funcIdx := 2,  useConfidentialEnv := true, useRealEnv := false }
@@ -684,7 +866,16 @@ private def funcNameToMappingPart5 (base : String) : Option FuncMapping :=
   | _                  => none
 
 def funcNameToMappingFromBase (base : String) : Option FuncMapping :=
+  funcNameToMappingErrorCatalog base <|>
+  funcNameToMappingStringCatalog base <|>
+  funcNameToMappingCmpCatalog base <|>
   funcNameToMappingBcsCatalog base <|>
+  funcNameToMappingHashCatalog base <|>
+  funcNameToMappingSignerCatalog base <|>
+  funcNameToMappingFixedPoint32Catalog base <|>
+  funcNameToMappingOptionCatalog base <|>
+  funcNameToMappingBitVectorCatalog base <|>
+  funcNameToMappingAclCatalog base <|>
   funcNameToMappingPart1 base <|>
   funcNameToMappingPart2 base <|>
   funcNameToMappingPart3 base <|>

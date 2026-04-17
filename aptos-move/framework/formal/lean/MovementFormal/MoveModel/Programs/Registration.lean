@@ -3,6 +3,8 @@ import MovementFormal.MoveModel.Native.Registration
 /-!
 # Transcribed bytecode for `verify_registration_proof`
 
+**Source:** `aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_proof.move` (`verify_registration_proof`); transcribed from **`movement` v7.4.0** disassembly (`movement move disassemble`, `confidential_proof.mv.asm`, def_idx 39, PC 0–82).
+
 Faithful `MoveInstr` array transcribed from the **`movement` v7.4.0**
 disassembly output (`movement move disassemble`) for
 `aptos_experimental::confidential_proof::verify_registration_proof`

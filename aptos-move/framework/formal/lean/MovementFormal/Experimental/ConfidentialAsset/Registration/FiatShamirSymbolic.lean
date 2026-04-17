@@ -3,6 +3,8 @@ Copyright (c) Move Industries.
 
 # Symbolic Fiat–Shamir model for registration Schnorr
 
+**Source:** `aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_proof.move` (abstract hash / challenge model).
+
 Machine-checked proofs that the Fiat–Shamir transform of the registration
 Schnorr protocol inherits the interactive protocol's security properties
 under a symbolic (abstract function) hash model.

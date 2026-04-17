@@ -2,6 +2,8 @@
 
 /-!
 # Lean specification for `std::fixed_point32`
+
+**Source:** `aptos-move/framework/move-stdlib/sources/fixed_point32.move`.
 -/
 
 namespace MovementFormal.Std.FixedPoint32

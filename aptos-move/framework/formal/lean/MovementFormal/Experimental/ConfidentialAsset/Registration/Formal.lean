@@ -3,6 +3,8 @@ Copyright (c) Move Industries.
 
 # Registration Schnorr + Fiat–Shamir (experimental confidential asset)
 
+**Source:** `aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_proof.move`.
+
 Lean **does not** execute Move. This module formalizes the *mathematical intent* of:
 
 `aptos_experimental::confidential_proof::verify_registration_proof`

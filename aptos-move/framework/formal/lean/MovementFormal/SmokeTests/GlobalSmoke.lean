@@ -4,6 +4,8 @@ import MovementFormal.MoveModel.Programs
 /-!
 # Smoke tests for abstract global resources (`GlobalResourceKey`)
 
+**Source:** `MovementFormal.MoveModel.Programs.GlobalSmoke` (see that module’s **Source** anchor).
+
 Indices **21**–**22** in both envs; index **23** (`global_move_signed_borrow_smoke`) only in
 `stdModuleEnv` (and at **34** in `realModuleEnv`); see `Programs.lean`.
 -/

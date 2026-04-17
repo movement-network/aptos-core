@@ -4,7 +4,8 @@ use move_vm_test_utils::InMemoryStorage;
 use crate::compiler::compile_with_aptos_head_bundle;
 use crate::schema::TestCase;
 use crate::typed_value::{
-    make_address_hex, make_bool, make_u128_str, make_u64, make_u8, make_u8_vec,
+    make_address_hex, make_bool, make_u128_str, make_u16, make_u256_str, make_u32, make_u64,
+    make_u8, make_u8_vec,
 };
 use crate::vm::{module_blob, run_test_case, STD_ADDR};
 
@@ -41,6 +42,18 @@ const TEST_SOURCE: &str = r#"
             bcs::to_bytes(&a)
         }
 
+        public fun test_bcs_u16(x: u16): vector<u8> {
+            bcs::to_bytes(&x)
+        }
+
+        public fun test_bcs_u32(x: u32): vector<u8> {
+            bcs::to_bytes(&x)
+        }
+
+        public fun test_bcs_u256(x: u256): vector<u8> {
+            bcs::to_bytes(&x)
+        }
+
         public fun test_serialized_size_u8(x: u8): u64 {
             bcs::serialized_size(&x)
         }
@@ -65,6 +78,18 @@ const TEST_SOURCE: &str = r#"
             bcs::serialized_size(&a)
         }
 
+        public fun test_serialized_size_u16(x: u16): u64 {
+            bcs::serialized_size(&x)
+        }
+
+        public fun test_serialized_size_u32(x: u32): u64 {
+            bcs::serialized_size(&x)
+        }
+
+        public fun test_serialized_size_u256(x: u256): u64 {
+            bcs::serialized_size(&x)
+        }
+
         public fun test_constant_size_u8(): u64 {
             *option::borrow(&bcs::constant_serialized_size<u8>())
         }
@@ -83,6 +108,18 @@ const TEST_SOURCE: &str = r#"
 
         public fun test_constant_size_address(): u64 {
             *option::borrow(&bcs::constant_serialized_size<address>())
+        }
+
+        public fun test_constant_size_u16(): u64 {
+            *option::borrow(&bcs::constant_serialized_size<u16>())
+        }
+
+        public fun test_constant_size_u32(): u64 {
+            *option::borrow(&bcs::constant_serialized_size<u32>())
+        }
+
+        public fun test_constant_size_u256(): u64 {
+            *option::borrow(&bcs::constant_serialized_size<u256>())
         }
 
         public fun test_constant_size_vec_u8_is_none(): bool {
@@ -179,6 +216,39 @@ impl DiffTestSuite for BcsSuite {
             )?;
         }
 
+        for (label, arg) in [
+            ("zero", make_u16(0)),
+            ("fortytwo", make_u16(42)),
+            ("max", make_u16(u16::MAX)),
+        ] {
+            push_case(storage, &mut cases, "test_bcs_u16", label, vec![arg])?;
+        }
+
+        for (label, arg) in [
+            ("zero", make_u32(0)),
+            ("beef", make_u32(0xdeadbeef)),
+            ("max", make_u32(u32::MAX)),
+        ] {
+            push_case(storage, &mut cases, "test_bcs_u32", label, vec![arg])?;
+        }
+
+        for (label, s) in [
+            ("zero", "0"),
+            ("one", "1"),
+            (
+                "large",
+                "123456789012345678901234567890123456789012345678901234567890",
+            ),
+        ] {
+            push_case(
+                storage,
+                &mut cases,
+                "test_bcs_u256",
+                label,
+                vec![make_u256_str(s)],
+            )?;
+        }
+
         // serialized_size mirrors the same inputs
         for (label, arg) in [("one", make_u8(1)), ("max", make_u8(255))] {
             push_case(storage, &mut cases, "test_serialized_size_u8", label, vec![arg])?;
@@ -233,6 +303,34 @@ impl DiffTestSuite for BcsSuite {
             )?;
         }
 
+        for (label, arg) in [("one", make_u16(1)), ("max", make_u16(u16::MAX))] {
+            push_case(
+                storage,
+                &mut cases,
+                "test_serialized_size_u16",
+                label,
+                vec![arg],
+            )?;
+        }
+        for (label, arg) in [("small", make_u32(7)), ("max", make_u32(u32::MAX))] {
+            push_case(
+                storage,
+                &mut cases,
+                "test_serialized_size_u32",
+                label,
+                vec![arg],
+            )?;
+        }
+        for (label, s) in [("one", "1"), ("large", "99999999999999999999999999999999999999")] {
+            push_case(
+                storage,
+                &mut cases,
+                "test_serialized_size_u256",
+                label,
+                vec![make_u256_str(s)],
+            )?;
+        }
+
         // constant_serialized_size — nullary Move functions
         for (name, label) in [
             ("test_constant_size_u8", "fixed1"),
@@ -240,6 +338,9 @@ impl DiffTestSuite for BcsSuite {
             ("test_constant_size_u128", "fixed16"),
             ("test_constant_size_bool", "fixed1"),
             ("test_constant_size_address", "fixed32"),
+            ("test_constant_size_u16", "fixed2"),
+            ("test_constant_size_u32", "fixed4"),
+            ("test_constant_size_u256", "fixed32"),
         ] {
             push_case(storage, &mut cases, name, label, vec![])?;
         }

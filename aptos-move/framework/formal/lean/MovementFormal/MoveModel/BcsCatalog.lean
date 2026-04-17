@@ -2,7 +2,9 @@
 Copyright (c) Move Industries.
 
 Closed catalog of `std::bcs` native behaviors used by `move-lean-difftest` (`bcs` suite) and
-`Refinement/Std/Bcs.lean`. Indices **0–17** are the only definitions in `bcsCatalogModuleEnv`.
+`Refinement/Std/Bcs.lean`. Indices **0–26** (`bcsCatalogNatives`).
+
+**Source:** `aptos-move/framework/move-stdlib/sources/bcs.move` (serialization contract); byte layout `MovementFormal.Std.Bcs.Primitives`.
 -/
 
 import MovementFormal.MoveModel.State
@@ -68,6 +70,18 @@ def bcsSerializedSize_address : List MoveValue → Option (List MoveValue)
   | [.address bs] => some [.u64 (UInt64.ofNat (serializedByteLen (addressBcs bs)))]
   | _ => none
 
+def bcsSerializedSize_u16 : List MoveValue → Option (List MoveValue)
+  | [.u16 x] => some [.u64 (UInt64.ofNat (serializedByteLen (u16Le x)))]
+  | _ => none
+
+def bcsSerializedSize_u32 : List MoveValue → Option (List MoveValue)
+  | [.u32 x] => some [.u64 (UInt64.ofNat (serializedByteLen (u32Le x)))]
+  | _ => none
+
+def bcsSerializedSize_u256 : List MoveValue → Option (List MoveValue)
+  | [.u256 x] => some [.u64 (UInt64.ofNat (serializedByteLen (u256LeNat x.val)))]
+  | _ => none
+
 /-! ## `bcs::constant_serialized_size` (fixed-width types + vector<u8> sentinel) -/
 
 def bcsConstantSize_u8 : List MoveValue → Option (List MoveValue)
@@ -105,6 +119,27 @@ def bcsConstantSize_address : List MoveValue → Option (List MoveValue)
     | none => none
   | _ => none
 
+def bcsConstantSize_u16 : List MoveValue → Option (List MoveValue)
+  | [] =>
+    match constantSerializedSizeU16 with
+    | some n => some [.u64 (UInt64.ofNat n)]
+    | none => none
+  | _ => none
+
+def bcsConstantSize_u32 : List MoveValue → Option (List MoveValue)
+  | [] =>
+    match constantSerializedSizeU32 with
+    | some n => some [.u64 (UInt64.ofNat n)]
+    | none => none
+  | _ => none
+
+def bcsConstantSize_u256 : List MoveValue → Option (List MoveValue)
+  | [] =>
+    match constantSerializedSizeU256 with
+    | some n => some [.u64 (UInt64.ofNat n)]
+    | none => none
+  | _ => none
+
 /-- `option::is_none(bcs::constant_serialized_size<vector<u8>>())` — Lean mirrors VM (`none`). -/
 def bcsConstantVecU8IsNone : List MoveValue → Option (List MoveValue)
   | [] =>
@@ -114,7 +149,7 @@ def bcsConstantVecU8IsNone : List MoveValue → Option (List MoveValue)
   | _ => none
 
 /-!
-## Function table (indices 0–17)
+## Function table (indices 0–26)
 
 | Idx | Role |
 |-----|------|
@@ -123,6 +158,9 @@ def bcsConstantVecU8IsNone : List MoveValue → Option (List MoveValue)
 | 6–11 | `serialized_size` for the same six shapes |
 | 12–16 | `constant_serialized_size` unwrap (`u8`…`address`) |
 | 17 | `vector<u8>` has **no** constant width (`is_none` test) |
+| 18–20 | `u16`: `to_bytes`, `serialized_size`, `constant_serialized_size` |
+| 21–23 | `u32` |
+| 24–26 | `u256` |
 -/
 
 def bcsCatalogNatives : Array FuncDesc := #[
@@ -143,8 +181,19 @@ def bcsCatalogNatives : Array FuncDesc := #[
   { numParams := 0, numReturns := 1, body := .native bcsConstantSize_u128 },
   { numParams := 0, numReturns := 1, body := .native bcsConstantSize_bool },
   { numParams := 0, numReturns := 1, body := .native bcsConstantSize_address },
-  { numParams := 0, numReturns := 1, body := .native bcsConstantVecU8IsNone }
+  { numParams := 0, numReturns := 1, body := .native bcsConstantVecU8IsNone },
+  { numParams := 1, numReturns := 1, body := .native bcsToBytes_u16 },
+  { numParams := 1, numReturns := 1, body := .native bcsSerializedSize_u16 },
+  { numParams := 0, numReturns := 1, body := .native bcsConstantSize_u16 },
+  { numParams := 1, numReturns := 1, body := .native bcsToBytes_u32 },
+  { numParams := 1, numReturns := 1, body := .native bcsSerializedSize_u32 },
+  { numParams := 0, numReturns := 1, body := .native bcsConstantSize_u32 },
+  { numParams := 1, numReturns := 1, body := .native bcsToBytes_u256 },
+  { numParams := 1, numReturns := 1, body := .native bcsSerializedSize_u256 },
+  { numParams := 0, numReturns := 1, body := .native bcsConstantSize_u256 }
 ]
+
+@[simp] theorem bcsCatalogNatives_size : bcsCatalogNatives.size = 27 := by native_decide
 
 def bcsCatalogModuleEnv : ModuleEnv :=
   { constants := #[], functions := bcsCatalogNatives }

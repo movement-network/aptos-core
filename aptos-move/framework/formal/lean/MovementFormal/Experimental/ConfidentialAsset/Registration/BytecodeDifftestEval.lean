@@ -7,6 +7,8 @@ import MovementFormal.Experimental.ConfidentialAsset.Registration.EvalEquiv
 /-!
 # Bytecode eval on real VM wire data (native_decide proofs)
 
+**Source:** `aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_proof.move`; VM wire / JSON `aptos-move/framework/formal/difftest/`.
+
 Isolated file with minimal imports so `native_decide` can build
 the `Decidable` instance without interference from heavy imports
 (Operational/RegistrationDifftestOracle bring in Mathlib ZMod).

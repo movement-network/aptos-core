@@ -4,6 +4,8 @@ import MovementFormal.Experimental.ConfidentialAsset.Registration.Refinement
 /-!
 # L4: `register` entry-point specification stub
 
+**Source:** `aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_asset.move` (`register`); calls `aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_proof.move`.
+
 The Move `register` entry function (`confidential_asset.move`, lines 249–272):
 
 ```move

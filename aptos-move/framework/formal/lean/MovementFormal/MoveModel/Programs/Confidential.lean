@@ -8,6 +8,8 @@ import MovementFormal.MoveModel.Programs.RegistrationDifftestOracle
 /-!
 # Confidential-asset differential stubs (`ModuleEnv`)
 
+**Source:** `aptos-move/framework/aptos-experimental/sources/confidential_asset/` (e.g. `confidential_proof.move`, balance / layer modules); VM JSON oracles `aptos-move/framework/formal/difftest/` (`move-lean-difftest`).
+
 Lean column for `confidential_balance` / `confidential_proof` / layer smoke oracles.
 
 Several **balance** oracle rows use **`FuncBody.bytecode`** in `eval` (real `Step`), not native stubs:

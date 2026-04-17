@@ -14,6 +14,10 @@ const TEST_SOURCE: &str = r#"
     module 0x1::difftest_hash {
         use std::hash;
 
+        public fun test_sha2_256(data: vector<u8>): vector<u8> {
+            hash::sha2_256(data)
+        }
+
         public fun test_sha3_256(data: vector<u8>): vector<u8> {
             hash::sha3_256(data)
         }
@@ -58,14 +62,16 @@ impl DiffTestSuite for HashSuite {
 
         for (bytes, label) in inputs {
             let args = vec![make_u8_vec(bytes)];
-            let result = run_test_case(storage, STD_ADDR, MODULE_NAME, "test_sha3_256", &args)?;
-            cases.push(TestCase {
-                function: format!("test_sha3_256 [{}]", label),
-                type_args: None,
-                args,
-                result,
-                skip_lean: false,
-            });
+            for test_fn in ["test_sha2_256", "test_sha3_256"] {
+                let result = run_test_case(storage, STD_ADDR, MODULE_NAME, test_fn, &args)?;
+                cases.push(TestCase {
+                    function: format!("{test_fn} [{label}]"),
+                    type_args: None,
+                    args: args.clone(),
+                    result,
+                    skip_lean: false,
+                });
+            }
         }
 
         Ok(cases)

@@ -4,6 +4,8 @@ import MovementFormal.MoveModel.Programs
 /-!
 # Core refinement proofs
 
+**Source:** `MovementFormal.MoveModel.Programs.Core` (bytecode micro-programs); see that module’s **Source** anchor.
+
 Universally quantified correctness theorems for basic bytecode programs.
 Each theorem proves that `eval` on a program produces results matching
 the specification **for all inputs**, using `rfl` — Lean's kernel verifies

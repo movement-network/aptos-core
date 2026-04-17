@@ -5,6 +5,8 @@ import MovementFormal.MoveModel.Native.StdPrimitives
 /-!
 # Smoke tests for move-stdlib primitives
 
+**Source:** `aptos-move/framework/move-stdlib/sources/error.move`, `bit_vector.move`, `signer.move`, `fixed_point32.move`, `option.move` (see `MovementFormal.MoveModel.Programs.StdPrimitives`).
+
 Concrete input/output tests using `native_decide`.
 Tests are organized by module; each verifies a specific known input/output pair.
 

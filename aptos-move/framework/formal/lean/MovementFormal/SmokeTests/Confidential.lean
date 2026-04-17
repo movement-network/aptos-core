@@ -4,6 +4,8 @@ import MovementFormal.Refinement.AptosExperimental.Confidential
 /-!
 # Smoke tests for `confidentialModuleEnv` (CA difftest column)
 
+**Source:** `aptos-move/framework/aptos-experimental/sources/confidential_asset/` (CA Move modules); Lean `MovementFormal.MoveModel.Programs.Confidential`; VM oracles `aptos-move/framework/formal/difftest/`.
+
 Definitional links between `Refinement.Confidential.evalCA` and `eval` for selected rows (**40**, **42**, **102**, **176**, **177**, **178**, **179**, **180**, **181**, **182**, **183**, **184**, **185**, **186**, **187**, **188**, **189**, **190**, **191**, **192**, **193**, **169–173**),
 plus machine-checked equality **`evalCA 171` = `evalCA 35`** (helpers vs production registration verify on the
 same fixture — `native_decide` in this file). Index **40** is the merged CA e2e **`bool(true)`** stub used for many

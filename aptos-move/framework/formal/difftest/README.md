@@ -73,7 +73,7 @@ The Move module **`0x1::difftest_vector`** is only the **vector** suite’s wrap
 **`confidential_asset` and globals:** the Lean `MoveModel.*` model has a **minimal global map**
 (`MachineState` + `GlobalResourceKey`; see [`STUB_POLICY.md`](STUB_POLICY.md) and
 [`../lean/MovementFormal/MoveModel/README.md`](../lean/MovementFormal/MoveModel/README.md)). It is **not**
-full Aptos `borrow_global` / FA / signer wiring. The **`confidential_asset`** suite still
+full Move VM `borrow_global` / FA / signer wiring. The **`confidential_asset`** suite still
 follows **Option B** from [`../CONFIDENTIAL_ASSETS_DIFFERENTIAL_TESTING_PLAN.md`](../CONFIDENTIAL_ASSETS_DIFFERENTIAL_TESTING_PLAN.md): only **functions that need no globals**
 stay in the VM↔Lean oracle until bytecode + keys + policy are extended; FA-heavy
 entrypoints stay inventory-**Blocked** or move to Option C (VM-only column).

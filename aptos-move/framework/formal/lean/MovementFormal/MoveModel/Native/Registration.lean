@@ -6,6 +6,8 @@ import MovementFormal.AptosStd.Hash.Sha2_512
 /-!
 # Native function bindings for `verify_registration_proof`
 
+**Source:** `aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_proof.move`; crypto / hash anchors `aptos-move/framework/aptos-stdlib/sources/cryptography/ristretto255.move`, `aptos-move/framework/aptos-stdlib/sources/hash.move`.
+
 Extends the standard native table with the **minimal** set of Ristretto255,
 SHA2-512, and BCS operations needed to `eval` a transcribed
 `verify_registration_proof` bytecode body.
@@ -14,7 +16,7 @@ SHA2-512, and BCS operations needed to `eval` a transcribed
 inherently abstract — we parameterize them via `RegistrationNativeOracle`,
 which aligns with `CryptoOracleWithBoolEq` from `Operational.lean`.
 
-**Hash operations** use the executable Lean SHA2-512 from `AptosStd.Hash.Sha2_512`.
+**Hash operations** use the executable Lean SHA2-512 from `MovementFormal.AptosStd.Hash.Sha2_512`.
 -/
 
 namespace MovementFormal.MoveModel.Native.Registration

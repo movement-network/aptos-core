@@ -784,6 +784,47 @@ def step (env : ModuleEnv) (frame : Frame) (callStack : List Frame)
 
   else .error
 
+/-! ## `brFalse` / `brTrue` helper lemmas
+
+Small reductions for bytecode proofs that specialize `step` without expanding the
+full instruction dispatch. -/
+
+theorem step_brFalse_true_stack
+    (env : ModuleEnv) (frame : Frame) (callStack : List Frame) (offset : Nat)
+    (rest : List MoveValue) (ms : MachineState)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = MoveInstr.brFalse offset) :
+    step env frame callStack (MoveValue.bool true :: rest) ms =
+    ExecResult.ok ({ frame with pc := frame.pc + 1 }) callStack rest ms := by
+  simp [step, dif_pos hpc, hc]
+
+theorem step_brFalse_false_stack
+    (env : ModuleEnv) (frame : Frame) (callStack : List Frame) (offset : Nat)
+    (rest : List MoveValue) (ms : MachineState)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = MoveInstr.brFalse offset) :
+    step env frame callStack (MoveValue.bool false :: rest) ms =
+    ExecResult.ok ({ frame with pc := offset }) callStack rest ms := by
+  simp [step, dif_pos hpc, hc]
+
+theorem step_brTrue_true_stack
+    (env : ModuleEnv) (frame : Frame) (callStack : List Frame) (offset : Nat)
+    (rest : List MoveValue) (ms : MachineState)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = MoveInstr.brTrue offset) :
+    step env frame callStack (MoveValue.bool true :: rest) ms =
+    ExecResult.ok ({ frame with pc := offset }) callStack rest ms := by
+  simp [step, dif_pos hpc, hc]
+
+theorem step_brTrue_false_stack
+    (env : ModuleEnv) (frame : Frame) (callStack : List Frame) (offset : Nat)
+    (rest : List MoveValue) (ms : MachineState)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = MoveInstr.brTrue offset) :
+    step env frame callStack (MoveValue.bool false :: rest) ms =
+    ExecResult.ok ({ frame with pc := frame.pc + 1 }) callStack rest ms := by
+  simp [step, dif_pos hpc, hc]
+
 /-! ## Multi-step evaluation -/
 
 def run (env : ModuleEnv) (frame : Frame) (callStack : List Frame)

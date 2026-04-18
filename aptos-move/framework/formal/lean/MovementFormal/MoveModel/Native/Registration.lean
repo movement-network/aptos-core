@@ -92,6 +92,14 @@ def optionExtractRef : ContainerStore → List MoveValue → Option (List MoveVa
     | _ => none
   | _, _ => none
 
+/-- Reduction of `optionExtractRef` when read/write succeed (for bytecode proofs). -/
+theorem optionExtractRef_mutRef_read_write
+    (cs : ContainerStore) (id : RefId) (val : MoveValue) (rest : List MoveValue) (cs' : ContainerStore)
+    (hread : cs.read id = some (.struct_ (.bool true :: val :: rest)))
+    (hwrite : cs.write id (.struct_ [.bool false]) = some cs') :
+    optionExtractRef cs [.mutRef id] = some ([val], cs') := by
+  simp [optionExtractRef, hread, hwrite]
+
 /-- `vector::append<u8>(&mut vector<u8>, vector<u8>)` — mutates through ref, returns void. -/
 def vectorAppendU8Ref : ContainerStore → List MoveValue → Option (List MoveValue × ContainerStore)
   | cs, [.mutRef id, .vector .u8 appended] =>

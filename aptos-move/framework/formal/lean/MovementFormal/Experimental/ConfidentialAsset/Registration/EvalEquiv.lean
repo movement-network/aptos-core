@@ -420,6 +420,14 @@ theorem run_ok_then_second_errors (env : ModuleEnv) (f₀ f₁ : Frame) (cs : Li
 @[simp] private theorem takeN_two_pair (a b : MoveValue) : takeN [a, b] 2 = some ([b, a], []) := by
   simp [takeN]
 
+@[simp] private theorem takeN_two_cons_cons (a b : MoveValue) (rest : List MoveValue) :
+    takeN (a :: b :: rest) 2 = some ([b, a], rest) := by
+  simp [takeN]
+
+@[simp] private theorem takeN_one_cons (a : MoveValue) (rest : List MoveValue) :
+    takeN (a :: rest) 1 = some ([a], rest) := by
+  simp [takeN]
+
 @[simp] private theorem takeN_two_one (a b : MoveValue) : takeN [a, b] 1 = some ([a], [b]) := by
   simp [takeN]
 
@@ -4288,6 +4296,7 @@ private theorem registrationFramePc55_localRefs_idx15_lt (args : List MoveValue)
     15 < (registrationFramePc55AfterStLoc15 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt).localRefs.size := by
   rw [registrationFramePc55_localRefs_size]; decide
 
+set_option maxHeartbeats 3200000 in
 private theorem registrationFramePc55_locals_idx15_eq (args : List MoveValue) (h : args.length = 7)
     (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt : MoveValue) :
     (registrationFramePc55AfterStLoc15 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt).locals[15]'
@@ -4402,13 +4411,14 @@ private theorem registrationFramePc56_locals_idx14_eq (args : List MoveValue) (h
       (registrationFramePc56_locals_idx14_lt args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt) =
         some ekPt := by
   have hne15 : (15 : Nat) ≠ 14 := by decide
-  have hsz22 := registrationFramePc22_locals_size args h mv rCompressed sOpt sVal
-  have hsz53 := registrationFramePc53_locals_size args h mv rCompressed sOpt sVal eScalar hPoint ekPt
+  have hsz49 : (registrationFramePc49AfterMoveLoc3 args h mv rCompressed sOpt sVal eScalar hPoint).locals.size = 19 := by
+    simp [registrationFramePc49AfterMoveLoc3, Array.size_set,
+      registrationFramePc48_locals_size args h mv rCompressed sOpt sVal eScalar hPoint]
   unfold registrationFramePc56AfterImmBorrow15 registrationFramePc55AfterStLoc15
     registrationFramePc53AfterImmBorrow10 registrationFramePc52AfterImmBorrow13 registrationFramePc51AfterStLoc14
   rw [Array.getElem_set_ne (h := hne15)
-    (pj := by simp [Array.size_set, hsz22])
-    (h' := by simp [Array.size_set, hsz22])]
+    (pj := by simp [Array.size_set, hsz49])
+    (h' := by simp [Array.size_set, hsz49])]
   rw [Array.getElem_set_self]
 
 set_option maxHeartbeats 3200000 in
@@ -4522,24 +4532,23 @@ private theorem registrationFramePc57_locals_idx12_eq (args : List MoveValue) (h
   have hne14 : (14 : Nat) ≠ 12 := by decide
   have hne3 : (3 : Nat) ≠ 12 := by decide
   have hne13 : (13 : Nat) ≠ 12 := by decide
-  have hsz22 := registrationFramePc22_locals_size args h mv rCompressed sOpt sVal
-  have hsz53 := registrationFramePc53_locals_size args h mv rCompressed sOpt sVal eScalar hPoint ekPt
+  have hsz44 := registrationFramePc44_locals_size args h mv rCompressed sOpt sVal
   unfold registrationFramePc57AfterImmBorrow14 registrationFramePc56AfterImmBorrow15
     registrationFramePc55AfterStLoc15 registrationFramePc53AfterImmBorrow10
     registrationFramePc52AfterImmBorrow13 registrationFramePc51AfterStLoc14 registrationFramePc49AfterMoveLoc3
     registrationFramePc48AfterStLoc13 registrationFramePc46AfterStLoc12
   rw [Array.getElem_set_ne (h := hne15)
-    (pj := by simp [Array.size_set, hsz22])
-    (h' := by simp [Array.size_set, hsz22])]
+    (pj := by simp [Array.size_set, hsz44])
+    (h' := by simp [Array.size_set, hsz44])]
   rw [Array.getElem_set_ne (h := hne14)
-    (pj := by simp [Array.size_set, hsz22])
-    (h' := by simp [Array.size_set, hsz22])]
+    (pj := by simp [Array.size_set, hsz44])
+    (h' := by simp [Array.size_set, hsz44])]
   rw [Array.getElem_set_ne (h := hne3)
-    (pj := by simp [Array.size_set, hsz22])
-    (h' := by simp [Array.size_set, hsz22])]
+    (pj := by simp [Array.size_set, hsz44])
+    (h' := by simp [Array.size_set, hsz44])]
   rw [Array.getElem_set_ne (h := hne13)
-    (pj := by simp [Array.size_set, hsz22])
-    (h' := by simp [Array.size_set, hsz22])]
+    (pj := by simp [Array.size_set, hsz44])
+    (h' := by simp [Array.size_set, hsz44])]
   rw [Array.getElem_set_self]
 
 set_option maxHeartbeats 3200000 in
@@ -4616,6 +4625,1267 @@ theorem registration_step_pc57_immBorrowLoc12_generic (o : RegistrationNativeOra
     registrationFramePc57_localRefs_idx12_eq args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt
   simp only [step, dif_pos hpc, hc, dif_pos hlocLt, hlocVal, dif_pos hlocRefLt, hlocRefVal]
   rfl
+
+/-! ### PC 58 (`call 12` = `point_mul` for ekPt * e → eke) -/
+
+@[simp] private theorem verifyRegistrationProofCode_idx58 :
+    verifyRegistrationProofCode[58]'(by rw [verifyRegistrationProofCode_size_val]; decide) = .call 12 := rfl
+
+set_option maxHeartbeats 3200000 in
+theorem registration_step_pc58_call_pointMul_generic (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt : MoveValue) (ms : MachineState)
+    (ridEk ridE : RefId) (ekVal eVal ekePt : MoveValue) (restBelow : List MoveValue)
+    (hreadEk : ms.containers.read ridEk = some ekVal)
+    (hreadE : ms.containers.read ridE = some eVal)
+    (horacle : o.pointMul [ekVal, eVal] = some [ekePt]) :
+    step (registrationModuleEnv o)
+        (registrationFramePc58AfterImmBorrow12 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+          (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa)
+          mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt)
+        [] (.immRef ridE :: .immRef ridEk :: restBelow) ms =
+      ExecResult.ok
+        ({ registrationFramePc58AfterImmBorrow12 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+              (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa)
+              mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt with
+            pc := 59 })
+        [] (ekePt :: restBelow) ms := by
+  have hnative : wrapOracleImmRef2 o.pointMul ms.containers
+        [.immRef ridEk, .immRef ridE] =
+      some ([ekePt], ms.containers) := by
+    show (Option.bind (derefImm ms.containers (.immRef ridEk))
+          (fun v1 => Option.bind (derefImm ms.containers (.immRef ridE))
+            (fun v2 => Option.bind (o.pointMul [v1, v2])
+              (fun results => some (results, ms.containers))))) =
+        some ([ekePt], ms.containers)
+    simp only [derefImm]
+    rw [hreadEk]
+    simp only [Option.bind_some]
+    rw [hreadE]
+    simp only [Option.bind_some]
+    rw [horacle]
+    rfl
+  simp only [step, registrationModuleEnv, registrationFramePc58AfterImmBorrow12,
+    registrationFramePc57AfterImmBorrow14, registrationFramePc56AfterImmBorrow15,
+    registrationFramePc55AfterStLoc15, registrationFramePc53AfterImmBorrow10,
+    registrationFramePc52AfterImmBorrow13, registrationFramePc51AfterStLoc14, registrationFramePc49AfterMoveLoc3,
+    registrationFramePc48AfterStLoc13, registrationFramePc46AfterStLoc12, registrationFramePc44AfterMoveLoc11,
+    registrationFramePc22AfterMoveLoc0, registrationFramePc21AfterMutBorrowMsg,
+    registrationFramePc20AfterStLoc11, registrationFramePc18AfterStLoc10, registrationFramePc16AfterMutBorrow9,
+    registrationFramePc12AfterStLoc9, registrationFramePc11AfterCall3, registrationFramePc10AfterMoveLoc6,
+    registrationFramePc9AfterStLoc8, registrationFramePc7AfterMutBorrowLoc7, registrationFramePc4AfterImmBorrow,
+    registrationFramePc3AfterStLoc, registrationFrameAtPc2, registrationInitFrame, registrationVerifyArgs,
+    verifyRegistrationProofCode, verifyRegistrationProofCode_size_val, verifyRegistrationProofCode_idx58,
+    registrationInitFrame_idx5_lt, registration_locals_after_set5_idx7_lt, registrationVerifyArgs_len,
+    registration_env_funcIdx12_lt, registrationModuleEnv_functions_at12, FuncDesc.body,
+    takeN_two_cons_cons, List.map_cons, List.map_nil, Nat.reduceSub, List.reduceReplicate,
+    List.cons_append, List.nil_append, List.size_toArray, List.length_cons, List.length_nil, zero_add,
+    Nat.reduceAdd, Nat.reduceLT, Nat.one_lt_ofNat, ↓reduceDIte, List.getElem_toArray, List.getElem_cons_succ,
+    List.getElem_cons_zero, Nat.ofNat_pos, Nat.reduceBEq, Bool.false_eq_true, BEq.rfl, List.set_toArray,
+    List.set_cons_succ, List.set_cons_zero, beq_iff_eq]
+  rw [hnative]
+  simp only [handleNativeResult_ret1]
+
+/-! ### PC 59 (`stLoc 16` — store eke into local 16) -/
+
+@[simp] private theorem verifyRegistrationProofCode_idx59 :
+    verifyRegistrationProofCode[59]'(by rw [verifyRegistrationProofCode_size_val]; decide) = .stLoc 16 := rfl
+
+private theorem registrationFramePc58_locals_size (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt : MoveValue) :
+    (registrationFramePc58AfterImmBorrow12 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt).locals.size = 19 :=
+  registrationFramePc57_locals_size args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt
+
+private theorem registrationFramePc58_locals_idx16_lt (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt : MoveValue) :
+    16 < (registrationFramePc58AfterImmBorrow12 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt).locals.size := by
+  rw [registrationFramePc58_locals_size]; decide
+
+/-- Frame after `stLoc 16` (PC 59). -/
+def registrationFramePc60AfterStLoc16 (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt : MoveValue) : Frame :=
+  let fr := registrationFramePc58AfterImmBorrow12 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt
+  { fr with
+      pc := 60
+      locals := fr.locals.set 16 (some ekePt)
+        (registrationFramePc58_locals_idx16_lt args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt) }
+
+set_option maxHeartbeats 3200000 in
+theorem registration_step_pc59_stLoc16_generic (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt : MoveValue) (ms : MachineState)
+    (rest : List MoveValue) :
+    step (registrationModuleEnv o)
+        ({ registrationFramePc58AfterImmBorrow12 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+              (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa)
+              mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt with
+            pc := 59 })
+        [] (ekePt :: rest) ms =
+      ExecResult.ok
+        (registrationFramePc60AfterStLoc16 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+          (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa)
+          mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt)
+        [] rest ms := by
+  simp [step, registrationModuleEnv, registrationFramePc60AfterStLoc16,
+    registrationFramePc58AfterImmBorrow12, registrationFramePc57AfterImmBorrow14, registrationFramePc56AfterImmBorrow15,
+    registrationFramePc55AfterStLoc15, registrationFramePc53AfterImmBorrow10,
+    registrationFramePc52AfterImmBorrow13, registrationFramePc51AfterStLoc14, registrationFramePc49AfterMoveLoc3,
+    registrationFramePc48AfterStLoc13, registrationFramePc46AfterStLoc12, registrationFramePc44AfterMoveLoc11,
+    registrationFramePc22AfterMoveLoc0, registrationFramePc21AfterMutBorrowMsg,
+    registrationFramePc20AfterStLoc11, registrationFramePc18AfterStLoc10, registrationFramePc16AfterMutBorrow9,
+    registrationFramePc12AfterStLoc9, registrationFramePc11AfterCall3, registrationFramePc10AfterMoveLoc6,
+    registrationFramePc9AfterStLoc8, registrationFramePc7AfterMutBorrowLoc7, registrationFramePc4AfterImmBorrow,
+    registrationFramePc3AfterStLoc, registrationFrameAtPc2, registrationInitFrame, registrationVerifyArgs,
+    verifyRegistrationProofCode, verifyRegistrationProofCode_size_val, verifyRegistrationProofCode_idx59,
+    registrationInitFrame_idx5_lt, registration_locals_after_set5_idx7_lt,
+    registration_locals_after_set5_set7_idx8_lt, registrationVerifyArgs_len]
+
+/-! ### localRefs structural identities from Pc44 up to Pc60
+
+Since immBorrowLoc, stLoc, and call instructions don't modify `frame.localRefs`
+in this chain, the localRefs field of every intermediate frame from Pc44 onward
+is definitionally equal to `Pc44AfterMoveLoc11.localRefs`. We prove these via
+`rfl` to avoid deep `whnf` chains. -/
+
+private theorem registrationFramePc46_localRefs_eq (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar : MoveValue) :
+    (registrationFramePc46AfterStLoc12 args h mv rCompressed sOpt sVal eScalar).localRefs =
+      (registrationFramePc44AfterMoveLoc11 args h mv rCompressed sOpt sVal).localRefs := rfl
+
+private theorem registrationFramePc48_localRefs_eq (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint : MoveValue) :
+    (registrationFramePc48AfterStLoc13 args h mv rCompressed sOpt sVal eScalar hPoint).localRefs =
+      (registrationFramePc44AfterMoveLoc11 args h mv rCompressed sOpt sVal).localRefs := rfl
+
+private theorem registrationFramePc49_localRefs_eq (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint : MoveValue) :
+    (registrationFramePc49AfterMoveLoc3 args h mv rCompressed sOpt sVal eScalar hPoint).localRefs =
+      (registrationFramePc44AfterMoveLoc11 args h mv rCompressed sOpt sVal).localRefs := rfl
+
+private theorem registrationFramePc51_localRefs_eq (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt : MoveValue) :
+    (registrationFramePc51AfterStLoc14 args h mv rCompressed sOpt sVal eScalar hPoint ekPt).localRefs =
+      (registrationFramePc44AfterMoveLoc11 args h mv rCompressed sOpt sVal).localRefs := rfl
+
+private theorem registrationFramePc52_localRefs_eq (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt : MoveValue) :
+    (registrationFramePc52AfterImmBorrow13 args h mv rCompressed sOpt sVal eScalar hPoint ekPt).localRefs =
+      (registrationFramePc44AfterMoveLoc11 args h mv rCompressed sOpt sVal).localRefs := rfl
+
+private theorem registrationFramePc53_localRefs_eq (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt : MoveValue) :
+    (registrationFramePc53AfterImmBorrow10 args h mv rCompressed sOpt sVal eScalar hPoint ekPt).localRefs =
+      (registrationFramePc44AfterMoveLoc11 args h mv rCompressed sOpt sVal).localRefs := rfl
+
+private theorem registrationFramePc55_localRefs_eq (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt : MoveValue) :
+    (registrationFramePc55AfterStLoc15 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt).localRefs =
+      (registrationFramePc44AfterMoveLoc11 args h mv rCompressed sOpt sVal).localRefs := rfl
+
+private theorem registrationFramePc56_localRefs_eq (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt : MoveValue) :
+    (registrationFramePc56AfterImmBorrow15 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt).localRefs =
+      (registrationFramePc44AfterMoveLoc11 args h mv rCompressed sOpt sVal).localRefs := rfl
+
+private theorem registrationFramePc57_localRefs_eq (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt : MoveValue) :
+    (registrationFramePc57AfterImmBorrow14 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt).localRefs =
+      (registrationFramePc44AfterMoveLoc11 args h mv rCompressed sOpt sVal).localRefs := rfl
+
+private theorem registrationFramePc58_localRefs_eq (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt : MoveValue) :
+    (registrationFramePc58AfterImmBorrow12 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt).localRefs =
+      (registrationFramePc44AfterMoveLoc11 args h mv rCompressed sOpt sVal).localRefs := rfl
+
+private theorem registrationFramePc60_localRefs_eq (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt : MoveValue) :
+    (registrationFramePc60AfterStLoc16 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt).localRefs =
+      (registrationFramePc44AfterMoveLoc11 args h mv rCompressed sOpt sVal).localRefs := rfl
+
+/-! `Pc44.localRefs = Pc22.localRefs.set 11 none` (PC 43 moveLoc 11 takes the `some`-branch of localRefs[11]). -/
+private theorem registrationFramePc44_localRefs_set_Pc22 (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal : MoveValue) :
+    (registrationFramePc44AfterMoveLoc11 args h mv rCompressed sOpt sVal).localRefs =
+      (registrationFramePc22AfterMoveLoc0 args h mv rCompressed sOpt sVal).localRefs.set 11 none
+        (registrationFramePc22_localRefs_idx11_lt args h mv rCompressed sOpt sVal) := rfl
+
+private theorem registrationFramePc22_locals_idx16_lt (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal : MoveValue) :
+    16 < (registrationFramePc22AfterMoveLoc0 args h mv rCompressed sOpt sVal).locals.size := by
+  rw [registrationFramePc22_locals_size args h mv rCompressed sOpt sVal]; decide
+
+private theorem registrationFramePc22_localRefs_idx16_lt (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal : MoveValue) :
+    16 < (registrationFramePc22AfterMoveLoc0 args h mv rCompressed sOpt sVal).localRefs.size := by
+  rw [registrationFramePc22_localRefs_size args h mv rCompressed sOpt sVal]; decide
+
+private theorem registrationFramePc22_localRefs_idx16_eq (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal : MoveValue) :
+    (registrationFramePc22AfterMoveLoc0 args h mv rCompressed sOpt sVal).localRefs[16]'
+      (registrationFramePc22_localRefs_idx16_lt args h mv rCompressed sOpt sVal) = none := by
+  simp [registrationFramePc22AfterMoveLoc0, registrationFramePc21AfterMutBorrowMsg, registrationFramePc20AfterStLoc11,
+    registrationFramePc18AfterStLoc10, registrationFramePc16AfterMutBorrow9, registrationFramePc12AfterStLoc9,
+    registrationFramePc11AfterCall3, registrationFramePc10AfterMoveLoc6, registrationFramePc9AfterStLoc8,
+    registrationFramePc7AfterMutBorrowLoc7, registrationFramePc4AfterImmBorrow, registrationFramePc3AfterStLoc,
+    registrationFrameAtPc2, registrationInitFrame]
+
+/-! ### PC 60 (`immBorrowLoc 16` — borrow ekePt) -/
+
+@[simp] private theorem verifyRegistrationProofCode_idx60 :
+    verifyRegistrationProofCode[60]'(by rw [verifyRegistrationProofCode_size_val]; decide) =
+      .immBorrowLoc 16 := rfl
+
+set_option maxHeartbeats 1600000 in
+/-- Direct structural equality: `Pc60.locals = Pc58.locals.set 16 (some ekePt) _`. -/
+private theorem registrationFramePc60_locals_eq_set (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt : MoveValue) :
+    (registrationFramePc60AfterStLoc16 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt).locals =
+      (registrationFramePc58AfterImmBorrow12 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt).locals.set 16
+          (some ekePt)
+          (registrationFramePc58_locals_idx16_lt args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt) := rfl
+
+set_option maxHeartbeats 1600000 in
+private theorem registrationFramePc60_locals_size (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt : MoveValue) :
+    (registrationFramePc60AfterStLoc16 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt).locals.size = 19 := by
+  rw [registrationFramePc60_locals_eq_set, Array.size_set, registrationFramePc58_locals_size]
+
+set_option maxHeartbeats 1600000 in
+private theorem registrationFramePc60_localRefs_size (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt : MoveValue) :
+    (registrationFramePc60AfterStLoc16 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt).localRefs.size = 19 := by
+  rw [registrationFramePc60_localRefs_eq, registrationFramePc44_localRefs_set_Pc22, Array.size_set,
+    registrationFramePc22_localRefs_size]
+
+set_option maxHeartbeats 800000 in
+private theorem registrationFramePc60_locals_idx16_lt (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt : MoveValue) :
+    16 < (registrationFramePc60AfterStLoc16 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt).locals.size := by
+  rw [registrationFramePc60_locals_size]; decide
+
+set_option maxHeartbeats 800000 in
+private theorem registrationFramePc60_localRefs_idx16_lt (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt : MoveValue) :
+    16 < (registrationFramePc60AfterStLoc16 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt).localRefs.size := by
+  rw [registrationFramePc60_localRefs_size]; decide
+
+set_option maxHeartbeats 12800000 in
+private theorem registrationFramePc60_locals_idx16_eq (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt : MoveValue) :
+    (registrationFramePc60AfterStLoc16 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt).locals[16]'
+      (registrationFramePc60_locals_idx16_lt args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt) =
+        some ekePt := by
+  unfold registrationFramePc60AfterStLoc16
+  rw [Array.getElem_set_self]
+
+set_option maxHeartbeats 1600000 in
+private theorem registrationFramePc60_localRefs_eq_setPc22 (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt : MoveValue) :
+    (registrationFramePc60AfterStLoc16 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt).localRefs =
+      (registrationFramePc22AfterMoveLoc0 args h mv rCompressed sOpt sVal).localRefs.set 11 none
+        (registrationFramePc22_localRefs_idx11_lt args h mv rCompressed sOpt sVal) := rfl
+
+private theorem registrationFramePc60_localRefs_idx16_eq (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt : MoveValue) :
+    (registrationFramePc60AfterStLoc16 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt).localRefs[16]'
+      (registrationFramePc60_localRefs_idx16_lt args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt) = none := by
+  have hne : (11 : Nat) ≠ 16 := by decide
+  have hpc22 := registrationFramePc22_localRefs_idx16_eq args h mv rCompressed sOpt sVal
+  have heq := registrationFramePc60_localRefs_eq_setPc22 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt
+  simp only [heq, Array.getElem_set_ne (h := hne)]
+  exact hpc22
+
+/-- Frame after `immBorrowLoc 16` (PC 60): same frame, pc := 61. -/
+def registrationFramePc61AfterImmBorrow16 (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt : MoveValue) : Frame :=
+  { registrationFramePc60AfterStLoc16 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt with pc := 61 }
+
+set_option maxHeartbeats 12800000 in
+theorem registration_step_pc60_immBorrowLoc16_generic (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt : MoveValue) (ms : MachineState)
+    (rest : List MoveValue) :
+    step (registrationModuleEnv o)
+        (registrationFramePc60AfterStLoc16 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+          (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa)
+          mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt)
+        [] rest ms =
+      ExecResult.ok
+        (registrationFramePc61AfterImmBorrow16 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+          (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa)
+          mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt)
+        [] (.immRef (ms.containers.alloc ekePt).2 :: rest)
+        { ms with containers := (ms.containers.alloc ekePt).1 } := by
+  let args := registrationVerifyArgs chainId sender contract token ekBa commitBa respBa
+  let hlen : args.length = 7 := registrationVerifyArgs_len _ _ _ _ _ _ _
+  set fr' := registrationFramePc60AfterStLoc16 args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt
+    with hfr'
+  have hpc : fr'.pc < fr'.code.size := by
+    simp [fr', registrationFramePc60AfterStLoc16, registrationFramePc58AfterImmBorrow12,
+      registrationFramePc57AfterImmBorrow14, registrationFramePc56AfterImmBorrow15,
+      registrationFramePc55AfterStLoc15, registrationFramePc53AfterImmBorrow10,
+      registrationFramePc52AfterImmBorrow13, registrationFramePc51AfterStLoc14, registrationFramePc49AfterMoveLoc3,
+      registrationFramePc48AfterStLoc13, registrationFramePc46AfterStLoc12, registrationFramePc44AfterMoveLoc11,
+      registrationFramePc22AfterMoveLoc0, registrationFramePc21AfterMutBorrowMsg,
+      registrationFramePc20AfterStLoc11, registrationFramePc18AfterStLoc10, registrationFramePc16AfterMutBorrow9,
+      registrationFramePc12AfterStLoc9, registrationFramePc11AfterCall3, registrationFramePc10AfterMoveLoc6,
+      registrationFramePc9AfterStLoc8, registrationFramePc7AfterMutBorrowLoc7, registrationFramePc4AfterImmBorrow,
+      registrationFramePc3AfterStLoc, registrationFrameAtPc2, registrationInitFrame,
+      verifyRegistrationProofCode_size_val]
+  have hc : fr'.code[fr'.pc]'hpc = MoveInstr.immBorrowLoc 16 := by
+    simp [fr', registrationFramePc60AfterStLoc16, registrationFramePc58AfterImmBorrow12,
+      registrationFramePc57AfterImmBorrow14, registrationFramePc56AfterImmBorrow15,
+      registrationFramePc55AfterStLoc15, registrationFramePc53AfterImmBorrow10,
+      registrationFramePc52AfterImmBorrow13, registrationFramePc51AfterStLoc14, registrationFramePc49AfterMoveLoc3,
+      registrationFramePc48AfterStLoc13, registrationFramePc46AfterStLoc12, registrationFramePc44AfterMoveLoc11,
+      registrationFramePc22AfterMoveLoc0, registrationFramePc21AfterMutBorrowMsg,
+      registrationFramePc20AfterStLoc11, registrationFramePc18AfterStLoc10, registrationFramePc16AfterMutBorrow9,
+      registrationFramePc12AfterStLoc9, registrationFramePc11AfterCall3, registrationFramePc10AfterMoveLoc6,
+      registrationFramePc9AfterStLoc8, registrationFramePc7AfterMutBorrowLoc7, registrationFramePc4AfterImmBorrow,
+      registrationFramePc3AfterStLoc, registrationFrameAtPc2, registrationInitFrame,
+      verifyRegistrationProofCode_size_val, verifyRegistrationProofCode_idx60]
+  have hlocLt : 16 < fr'.locals.size :=
+    registrationFramePc60_locals_idx16_lt args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt
+  have hlocVal : fr'.locals[16]'hlocLt = some ekePt :=
+    registrationFramePc60_locals_idx16_eq args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt
+  have hlocRefLt : 16 < fr'.localRefs.size :=
+    registrationFramePc60_localRefs_idx16_lt args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt
+  have hlocRefVal : fr'.localRefs[16]'hlocRefLt = none :=
+    registrationFramePc60_localRefs_idx16_eq args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt
+  simp only [step, dif_pos hpc, hc, dif_pos hlocLt, hlocVal, dif_pos hlocRefLt, hlocRefVal]
+  rfl
+
+/-! ### PC 61 (`call 13` = `point_add` for hsPt + ekePt → lhsPt) -/
+
+@[simp] private theorem verifyRegistrationProofCode_idx61 :
+    verifyRegistrationProofCode[61]'(by rw [verifyRegistrationProofCode_size_val]; decide) = .call 13 := rfl
+
+private theorem registration_env_funcIdx13_lt (o : RegistrationNativeOracle) :
+    13 < (registrationModuleEnv o).functions.size := by
+  rw [registration_module_env_size o]; decide
+
+private theorem registrationModuleEnv_functions_at13 (o : RegistrationNativeOracle)
+    (h : 13 < (registrationModuleEnv o).functions.size) :
+    (registrationModuleEnv o).functions[13]'h =
+      { numParams := 2, numReturns := 1, body := .nativeRef (wrapOracleImmRef2 o.pointAdd) } := by
+  simp [registrationModuleEnv]
+
+set_option maxHeartbeats 3200000 in
+theorem registration_step_pc61_call_pointAdd_generic (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt : MoveValue) (ms : MachineState)
+    (ridHs ridEke : RefId) (hsVal ekeVal lhsPt : MoveValue) (restBelow : List MoveValue)
+    (hreadHs : ms.containers.read ridHs = some hsVal)
+    (hreadEke : ms.containers.read ridEke = some ekeVal)
+    (horacle : o.pointAdd [hsVal, ekeVal] = some [lhsPt]) :
+    step (registrationModuleEnv o)
+        (registrationFramePc61AfterImmBorrow16 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+          (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa)
+          mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt)
+        [] (.immRef ridEke :: .immRef ridHs :: restBelow) ms =
+      ExecResult.ok
+        ({ registrationFramePc61AfterImmBorrow16 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+              (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa)
+              mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt with
+            pc := 62 })
+        [] (lhsPt :: restBelow) ms := by
+  have hnative : wrapOracleImmRef2 o.pointAdd ms.containers
+        [.immRef ridHs, .immRef ridEke] =
+      some ([lhsPt], ms.containers) := by
+    show (Option.bind (derefImm ms.containers (.immRef ridHs))
+          (fun v1 => Option.bind (derefImm ms.containers (.immRef ridEke))
+            (fun v2 => Option.bind (o.pointAdd [v1, v2])
+              (fun results => some (results, ms.containers))))) =
+        some ([lhsPt], ms.containers)
+    simp only [derefImm]
+    rw [hreadHs]
+    simp only [Option.bind_some]
+    rw [hreadEke]
+    simp only [Option.bind_some]
+    rw [horacle]
+    rfl
+  simp only [step, registrationModuleEnv, registrationFramePc61AfterImmBorrow16,
+    registrationFramePc60AfterStLoc16, registrationFramePc58AfterImmBorrow12,
+    registrationFramePc57AfterImmBorrow14, registrationFramePc56AfterImmBorrow15,
+    registrationFramePc55AfterStLoc15, registrationFramePc53AfterImmBorrow10,
+    registrationFramePc52AfterImmBorrow13, registrationFramePc51AfterStLoc14, registrationFramePc49AfterMoveLoc3,
+    registrationFramePc48AfterStLoc13, registrationFramePc46AfterStLoc12, registrationFramePc44AfterMoveLoc11,
+    registrationFramePc22AfterMoveLoc0, registrationFramePc21AfterMutBorrowMsg,
+    registrationFramePc20AfterStLoc11, registrationFramePc18AfterStLoc10, registrationFramePc16AfterMutBorrow9,
+    registrationFramePc12AfterStLoc9, registrationFramePc11AfterCall3, registrationFramePc10AfterMoveLoc6,
+    registrationFramePc9AfterStLoc8, registrationFramePc7AfterMutBorrowLoc7, registrationFramePc4AfterImmBorrow,
+    registrationFramePc3AfterStLoc, registrationFrameAtPc2, registrationInitFrame, registrationVerifyArgs,
+    verifyRegistrationProofCode, verifyRegistrationProofCode_size_val, verifyRegistrationProofCode_idx61,
+    registrationInitFrame_idx5_lt, registration_locals_after_set5_idx7_lt, registrationVerifyArgs_len,
+    registration_env_funcIdx13_lt, registrationModuleEnv_functions_at13, FuncDesc.body,
+    takeN_two_cons_cons, List.map_cons, List.map_nil, Nat.reduceSub, List.reduceReplicate,
+    List.cons_append, List.nil_append, List.size_toArray, List.length_cons, List.length_nil, zero_add,
+    Nat.reduceAdd, Nat.reduceLT, Nat.one_lt_ofNat, ↓reduceDIte, List.getElem_toArray, List.getElem_cons_succ,
+    List.getElem_cons_zero, Nat.ofNat_pos, Nat.reduceBEq, Bool.false_eq_true, BEq.rfl, List.set_toArray,
+    List.set_cons_succ, List.set_cons_zero, beq_iff_eq]
+  rw [hnative]
+  simp only [handleNativeResult_ret1]
+
+/-! ### PC 62 (`stLoc 17` — store lhsPt into local 17) -/
+
+@[simp] private theorem verifyRegistrationProofCode_idx62 :
+    verifyRegistrationProofCode[62]'(by rw [verifyRegistrationProofCode_size_val]; decide) = .stLoc 17 := rfl
+
+private theorem registrationFramePc61_locals_size (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt : MoveValue) :
+    (registrationFramePc61AfterImmBorrow16 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt).locals.size = 19 :=
+  registrationFramePc60_locals_size args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt
+
+private theorem registrationFramePc61_locals_idx17_lt (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt : MoveValue) :
+    17 < (registrationFramePc61AfterImmBorrow16 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt).locals.size := by
+  rw [registrationFramePc61_locals_size]; decide
+
+/-- Frame after `stLoc 17` (PC 62): locals[17] = some lhsPt, pc := 63. -/
+def registrationFramePc63AfterStLoc17 (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt : MoveValue) : Frame :=
+  let fr := registrationFramePc61AfterImmBorrow16 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt
+  { fr with
+      pc := 63
+      locals := fr.locals.set 17 (some lhsPt)
+        (registrationFramePc61_locals_idx17_lt args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt) }
+
+set_option maxHeartbeats 3200000 in
+theorem registration_step_pc62_stLoc17_generic (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt : MoveValue) (ms : MachineState)
+    (rest : List MoveValue) :
+    step (registrationModuleEnv o)
+        ({ registrationFramePc61AfterImmBorrow16 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+              (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa)
+              mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt with
+            pc := 62 })
+        [] (lhsPt :: rest) ms =
+      ExecResult.ok
+        (registrationFramePc63AfterStLoc17 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+          (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa)
+          mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt)
+        [] rest ms := by
+  simp [step, registrationModuleEnv, registrationFramePc63AfterStLoc17,
+    registrationFramePc61AfterImmBorrow16, registrationFramePc60AfterStLoc16,
+    registrationFramePc58AfterImmBorrow12, registrationFramePc57AfterImmBorrow14, registrationFramePc56AfterImmBorrow15,
+    registrationFramePc55AfterStLoc15, registrationFramePc53AfterImmBorrow10,
+    registrationFramePc52AfterImmBorrow13, registrationFramePc51AfterStLoc14, registrationFramePc49AfterMoveLoc3,
+    registrationFramePc48AfterStLoc13, registrationFramePc46AfterStLoc12, registrationFramePc44AfterMoveLoc11,
+    registrationFramePc22AfterMoveLoc0, registrationFramePc21AfterMutBorrowMsg,
+    registrationFramePc20AfterStLoc11, registrationFramePc18AfterStLoc10, registrationFramePc16AfterMutBorrow9,
+    registrationFramePc12AfterStLoc9, registrationFramePc11AfterCall3, registrationFramePc10AfterMoveLoc6,
+    registrationFramePc9AfterStLoc8, registrationFramePc7AfterMutBorrowLoc7, registrationFramePc4AfterImmBorrow,
+    registrationFramePc3AfterStLoc, registrationFrameAtPc2, registrationInitFrame, registrationVerifyArgs,
+    verifyRegistrationProofCode, verifyRegistrationProofCode_size_val, verifyRegistrationProofCode_idx62,
+    registrationInitFrame_idx5_lt, registration_locals_after_set5_idx7_lt,
+    registration_locals_after_set5_set7_idx8_lt, registrationVerifyArgs_len]
+
+/-! ### PC 63 (`immBorrowLoc 8` — push `&rCompressed`) -/
+
+@[simp] private theorem verifyRegistrationProofCode_idx63 :
+    verifyRegistrationProofCode[63]'(by rw [verifyRegistrationProofCode_size_val]; decide) = .immBorrowLoc 8 := rfl
+
+/-! `Pc60.locals[8] = some rCompressed`: unchanged since `Pc8.stLoc 8`. The chain from `Pc60`
+back to `Pc22` involves sets at indices 16, 15, 14, 3, 13, 12, 11 — all ≠ 8. -/
+set_option maxHeartbeats 12800000 in
+private theorem registrationFramePc60_locals_idx8_eq (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt : MoveValue) :
+    (registrationFramePc60AfterStLoc16 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt).locals[8]'
+      (by rw [registrationFramePc60_locals_size]; decide) = some rCompressed := by
+  have hne16 : (16 : Nat) ≠ 8 := by decide
+  have hne15 : (15 : Nat) ≠ 8 := by decide
+  have hne14 : (14 : Nat) ≠ 8 := by decide
+  have hne3 : (3 : Nat) ≠ 8 := by decide
+  have hne13 : (13 : Nat) ≠ 8 := by decide
+  have hne12 : (12 : Nat) ≠ 8 := by decide
+  have hne11 : (11 : Nat) ≠ 8 := by decide
+  have hsz22 := registrationFramePc22_locals_size args h mv rCompressed sOpt sVal
+  have hpc22 := registrationFramePc22_locals_idx8_eq args h mv rCompressed sOpt sVal
+  unfold registrationFramePc60AfterStLoc16 registrationFramePc58AfterImmBorrow12
+    registrationFramePc57AfterImmBorrow14 registrationFramePc56AfterImmBorrow15
+    registrationFramePc55AfterStLoc15 registrationFramePc53AfterImmBorrow10
+    registrationFramePc52AfterImmBorrow13 registrationFramePc51AfterStLoc14 registrationFramePc49AfterMoveLoc3
+    registrationFramePc48AfterStLoc13 registrationFramePc46AfterStLoc12 registrationFramePc44AfterMoveLoc11
+  rw [Array.getElem_set_ne (h := hne16)
+    (pj := by simp [Array.size_set, hsz22])
+    (h' := by simp [Array.size_set, hsz22])]
+  rw [Array.getElem_set_ne (h := hne15)
+    (pj := by simp [Array.size_set, hsz22])
+    (h' := by simp [Array.size_set, hsz22])]
+  rw [Array.getElem_set_ne (h := hne14)
+    (pj := by simp [Array.size_set, hsz22])
+    (h' := by simp [Array.size_set, hsz22])]
+  rw [Array.getElem_set_ne (h := hne3)
+    (pj := by simp [Array.size_set, hsz22])
+    (h' := by simp [Array.size_set, hsz22])]
+  rw [Array.getElem_set_ne (h := hne13)
+    (pj := by simp [Array.size_set, hsz22])
+    (h' := by simp [Array.size_set, hsz22])]
+  rw [Array.getElem_set_ne (h := hne12)
+    (pj := by simp [Array.size_set, hsz22])
+    (h' := by simp [Array.size_set, hsz22])]
+  rw [Array.getElem_set_ne (h := hne11)
+    (pj := by rw [hsz22]; decide)
+    (h' := by rw [hsz22]; decide)]
+  exact hpc22
+
+private theorem registrationFramePc60_localRefs_idx8_eq (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt : MoveValue) :
+    (registrationFramePc60AfterStLoc16 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt).localRefs[8]'
+      (by rw [registrationFramePc60_localRefs_size]; decide) = none := by
+  have hne : (11 : Nat) ≠ 8 := by decide
+  have hpc22 := registrationFramePc22_localRefs_idx8_eq args h mv rCompressed sOpt sVal
+  have heq := registrationFramePc60_localRefs_eq_setPc22 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt
+  simp only [heq, Array.getElem_set_ne (h := hne)]
+  exact hpc22
+
+private theorem registrationFramePc63AfterStLoc17_locals_size (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt : MoveValue) :
+    (registrationFramePc63AfterStLoc17 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt).locals.size = 19 := by
+  unfold registrationFramePc63AfterStLoc17
+  rw [Array.size_set, registrationFramePc61_locals_size]
+
+private theorem registrationFramePc63AfterStLoc17_localRefs_size (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt : MoveValue) :
+    (registrationFramePc63AfterStLoc17 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt).localRefs.size = 19 :=
+  registrationFramePc60_localRefs_size args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt
+
+private theorem registrationFramePc63AfterStLoc17_locals_idx8_lt (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt : MoveValue) :
+    8 < (registrationFramePc63AfterStLoc17 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt).locals.size := by
+  rw [registrationFramePc63AfterStLoc17_locals_size]; decide
+
+private theorem registrationFramePc63AfterStLoc17_localRefs_idx8_lt (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt : MoveValue) :
+    8 < (registrationFramePc63AfterStLoc17 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt).localRefs.size := by
+  rw [registrationFramePc63AfterStLoc17_localRefs_size]; decide
+
+set_option maxHeartbeats 12800000 in
+private theorem registrationFramePc63AfterStLoc17_locals_idx8_eq (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt : MoveValue) :
+    (registrationFramePc63AfterStLoc17 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt).locals[8]'
+      (registrationFramePc63AfterStLoc17_locals_idx8_lt args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt) =
+        some rCompressed := by
+  have hne : (17 : Nat) ≠ 8 := by decide
+  have hsz61 := registrationFramePc61_locals_size args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt
+  have hpc60 := registrationFramePc60_locals_idx8_eq args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt
+  unfold registrationFramePc63AfterStLoc17
+  rw [Array.getElem_set_ne (h := hne)
+    (pj := by rw [hsz61]; decide)
+    (h' := by rw [hsz61]; decide)]
+  exact hpc60
+
+private theorem registrationFramePc63AfterStLoc17_localRefs_idx8_eq (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt : MoveValue) :
+    (registrationFramePc63AfterStLoc17 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt).localRefs[8]'
+      (registrationFramePc63AfterStLoc17_localRefs_idx8_lt args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt) =
+        none := by
+  have hpc60 := registrationFramePc60_localRefs_idx8_eq args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt
+  unfold registrationFramePc63AfterStLoc17
+  exact hpc60
+
+/-- Frame after `immBorrowLoc 8` (PC 63): same frame, pc := 64. -/
+def registrationFramePc64AfterImmBorrow8 (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt : MoveValue) : Frame :=
+  { registrationFramePc63AfterStLoc17 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt with pc := 64 }
+
+set_option maxHeartbeats 12800000 in
+theorem registration_step_pc63_immBorrowLoc8_generic (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt : MoveValue) (ms : MachineState)
+    (rest : List MoveValue) :
+    step (registrationModuleEnv o)
+        (registrationFramePc63AfterStLoc17 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+          (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa)
+          mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt)
+        [] rest ms =
+      ExecResult.ok
+        (registrationFramePc64AfterImmBorrow8 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+          (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa)
+          mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt)
+        [] (.immRef (ms.containers.alloc rCompressed).2 :: rest)
+        { ms with containers := (ms.containers.alloc rCompressed).1 } := by
+  let args := registrationVerifyArgs chainId sender contract token ekBa commitBa respBa
+  let hlen : args.length = 7 := registrationVerifyArgs_len _ _ _ _ _ _ _
+  set fr' := registrationFramePc63AfterStLoc17 args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt
+    with hfr'
+  have hpc : fr'.pc < fr'.code.size := by
+    simp [fr', registrationFramePc63AfterStLoc17, registrationFramePc61AfterImmBorrow16,
+      registrationFramePc60AfterStLoc16, registrationFramePc58AfterImmBorrow12,
+      registrationFramePc57AfterImmBorrow14, registrationFramePc56AfterImmBorrow15,
+      registrationFramePc55AfterStLoc15, registrationFramePc53AfterImmBorrow10,
+      registrationFramePc52AfterImmBorrow13, registrationFramePc51AfterStLoc14, registrationFramePc49AfterMoveLoc3,
+      registrationFramePc48AfterStLoc13, registrationFramePc46AfterStLoc12, registrationFramePc44AfterMoveLoc11,
+      registrationFramePc22AfterMoveLoc0, registrationFramePc21AfterMutBorrowMsg,
+      registrationFramePc20AfterStLoc11, registrationFramePc18AfterStLoc10, registrationFramePc16AfterMutBorrow9,
+      registrationFramePc12AfterStLoc9, registrationFramePc11AfterCall3, registrationFramePc10AfterMoveLoc6,
+      registrationFramePc9AfterStLoc8, registrationFramePc7AfterMutBorrowLoc7, registrationFramePc4AfterImmBorrow,
+      registrationFramePc3AfterStLoc, registrationFrameAtPc2, registrationInitFrame,
+      verifyRegistrationProofCode_size_val]
+  have hc : fr'.code[fr'.pc]'hpc = MoveInstr.immBorrowLoc 8 := by
+    simp [fr', registrationFramePc63AfterStLoc17, registrationFramePc61AfterImmBorrow16,
+      registrationFramePc60AfterStLoc16, registrationFramePc58AfterImmBorrow12,
+      registrationFramePc57AfterImmBorrow14, registrationFramePc56AfterImmBorrow15,
+      registrationFramePc55AfterStLoc15, registrationFramePc53AfterImmBorrow10,
+      registrationFramePc52AfterImmBorrow13, registrationFramePc51AfterStLoc14, registrationFramePc49AfterMoveLoc3,
+      registrationFramePc48AfterStLoc13, registrationFramePc46AfterStLoc12, registrationFramePc44AfterMoveLoc11,
+      registrationFramePc22AfterMoveLoc0, registrationFramePc21AfterMutBorrowMsg,
+      registrationFramePc20AfterStLoc11, registrationFramePc18AfterStLoc10, registrationFramePc16AfterMutBorrow9,
+      registrationFramePc12AfterStLoc9, registrationFramePc11AfterCall3, registrationFramePc10AfterMoveLoc6,
+      registrationFramePc9AfterStLoc8, registrationFramePc7AfterMutBorrowLoc7, registrationFramePc4AfterImmBorrow,
+      registrationFramePc3AfterStLoc, registrationFrameAtPc2, registrationInitFrame,
+      verifyRegistrationProofCode_size_val, verifyRegistrationProofCode_idx63]
+  have hlocLt : 8 < fr'.locals.size :=
+    registrationFramePc63AfterStLoc17_locals_idx8_lt args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt
+  have hlocVal : fr'.locals[8]'hlocLt = some rCompressed :=
+    registrationFramePc63AfterStLoc17_locals_idx8_eq args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt
+  have hlocRefLt : 8 < fr'.localRefs.size :=
+    registrationFramePc63AfterStLoc17_localRefs_idx8_lt args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt
+  have hlocRefVal : fr'.localRefs[8]'hlocRefLt = none :=
+    registrationFramePc63AfterStLoc17_localRefs_idx8_eq args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt
+  simp only [step, dif_pos hpc, hc, dif_pos hlocLt, hlocVal, dif_pos hlocRefLt, hlocRefVal]
+  rfl
+
+/-! ### PC 64 (`call 14` = `point_decompress` on `&rCompressed`) -/
+
+@[simp] private theorem verifyRegistrationProofCode_idx64 :
+    verifyRegistrationProofCode[64]'(by rw [verifyRegistrationProofCode_size_val]; decide) = .call 14 := rfl
+
+private theorem registration_env_funcIdx14_lt (o : RegistrationNativeOracle) :
+    14 < (registrationModuleEnv o).functions.size := by
+  rw [registration_module_env_size o]; decide
+
+private theorem registrationModuleEnv_functions_at14 (o : RegistrationNativeOracle)
+    (h : 14 < (registrationModuleEnv o).functions.size) :
+    (registrationModuleEnv o).functions[14]'h =
+      { numParams := 1, numReturns := 1, body := .nativeRef (wrapOracleImmRef1 o.pointDecompress) } := by
+  simp [registrationModuleEnv]
+
+set_option maxHeartbeats 3200000 in
+theorem registration_step_pc64_call_pointDecompress_generic (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt : MoveValue) (ms : MachineState)
+    (ridR : RefId) (rVal rhsPt : MoveValue) (restBelow : List MoveValue)
+    (hreadR : ms.containers.read ridR = some rVal)
+    (horacle : o.pointDecompress [rVal] = some [rhsPt]) :
+    step (registrationModuleEnv o)
+        (registrationFramePc64AfterImmBorrow8 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+          (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa)
+          mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt)
+        [] (.immRef ridR :: restBelow) ms =
+      ExecResult.ok
+        ({ registrationFramePc64AfterImmBorrow8 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+              (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa)
+              mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt with
+            pc := 65 })
+        [] (rhsPt :: restBelow) ms := by
+  have hnative : wrapOracleImmRef1 o.pointDecompress ms.containers
+        [.immRef ridR] =
+      some ([rhsPt], ms.containers) := by
+    show (Option.bind (derefImm ms.containers (.immRef ridR))
+          (fun v => Option.bind (o.pointDecompress [v])
+              (fun results => some (results, ms.containers)))) =
+        some ([rhsPt], ms.containers)
+    simp only [derefImm]
+    rw [hreadR]
+    simp only [Option.bind_some]
+    rw [horacle]
+    rfl
+  simp only [step, registrationModuleEnv, registrationFramePc64AfterImmBorrow8,
+    registrationFramePc63AfterStLoc17, registrationFramePc61AfterImmBorrow16,
+    registrationFramePc60AfterStLoc16, registrationFramePc58AfterImmBorrow12,
+    registrationFramePc57AfterImmBorrow14, registrationFramePc56AfterImmBorrow15,
+    registrationFramePc55AfterStLoc15, registrationFramePc53AfterImmBorrow10,
+    registrationFramePc52AfterImmBorrow13, registrationFramePc51AfterStLoc14, registrationFramePc49AfterMoveLoc3,
+    registrationFramePc48AfterStLoc13, registrationFramePc46AfterStLoc12, registrationFramePc44AfterMoveLoc11,
+    registrationFramePc22AfterMoveLoc0, registrationFramePc21AfterMutBorrowMsg,
+    registrationFramePc20AfterStLoc11, registrationFramePc18AfterStLoc10, registrationFramePc16AfterMutBorrow9,
+    registrationFramePc12AfterStLoc9, registrationFramePc11AfterCall3, registrationFramePc10AfterMoveLoc6,
+    registrationFramePc9AfterStLoc8, registrationFramePc7AfterMutBorrowLoc7, registrationFramePc4AfterImmBorrow,
+    registrationFramePc3AfterStLoc, registrationFrameAtPc2, registrationInitFrame, registrationVerifyArgs,
+    verifyRegistrationProofCode, verifyRegistrationProofCode_size_val, verifyRegistrationProofCode_idx64,
+    registrationInitFrame_idx5_lt, registration_locals_after_set5_idx7_lt, registrationVerifyArgs_len,
+    registration_env_funcIdx14_lt, registrationModuleEnv_functions_at14, FuncDesc.body,
+    takeN_one_cons, List.map_cons, List.map_nil, Nat.reduceSub, List.reduceReplicate,
+    List.cons_append, List.nil_append, List.size_toArray, List.length_cons, List.length_nil, zero_add,
+    Nat.reduceAdd, Nat.reduceLT, Nat.one_lt_ofNat, ↓reduceDIte, List.getElem_toArray, List.getElem_cons_succ,
+    List.getElem_cons_zero, Nat.ofNat_pos, Nat.reduceBEq, Bool.false_eq_true, BEq.rfl, List.set_toArray,
+    List.set_cons_succ, List.set_cons_zero, beq_iff_eq]
+  rw [hnative]
+  simp only [handleNativeResult_ret1]
+
+/-! ### PC 65 (`stLoc 18` — store rhsPt into local 18) -/
+
+@[simp] private theorem verifyRegistrationProofCode_idx65 :
+    verifyRegistrationProofCode[65]'(by rw [verifyRegistrationProofCode_size_val]; decide) = .stLoc 18 := rfl
+
+private theorem registrationFramePc64_locals_size (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt : MoveValue) :
+    (registrationFramePc64AfterImmBorrow8 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt).locals.size = 19 :=
+  registrationFramePc63AfterStLoc17_locals_size args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt
+
+private theorem registrationFramePc64_locals_idx18_lt (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt : MoveValue) :
+    18 < (registrationFramePc64AfterImmBorrow8 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt).locals.size := by
+  rw [registrationFramePc64_locals_size]; decide
+
+/-- Frame after `stLoc 18` (PC 65): locals[18] = some rhsPt, pc := 66. -/
+def registrationFramePc66AfterStLoc18 (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt : MoveValue) : Frame :=
+  let fr := registrationFramePc64AfterImmBorrow8 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt
+  { fr with
+      pc := 66
+      locals := fr.locals.set 18 (some rhsPt)
+        (registrationFramePc64_locals_idx18_lt args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt) }
+
+set_option maxHeartbeats 3200000 in
+theorem registration_step_pc65_stLoc18_generic (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt : MoveValue) (ms : MachineState)
+    (rest : List MoveValue) :
+    step (registrationModuleEnv o)
+        ({ registrationFramePc64AfterImmBorrow8 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+              (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa)
+              mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt with
+            pc := 65 })
+        [] (rhsPt :: rest) ms =
+      ExecResult.ok
+        (registrationFramePc66AfterStLoc18 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+          (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa)
+          mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt)
+        [] rest ms := by
+  simp [step, registrationModuleEnv, registrationFramePc66AfterStLoc18,
+    registrationFramePc64AfterImmBorrow8, registrationFramePc63AfterStLoc17,
+    registrationFramePc61AfterImmBorrow16, registrationFramePc60AfterStLoc16,
+    registrationFramePc58AfterImmBorrow12, registrationFramePc57AfterImmBorrow14, registrationFramePc56AfterImmBorrow15,
+    registrationFramePc55AfterStLoc15, registrationFramePc53AfterImmBorrow10,
+    registrationFramePc52AfterImmBorrow13, registrationFramePc51AfterStLoc14, registrationFramePc49AfterMoveLoc3,
+    registrationFramePc48AfterStLoc13, registrationFramePc46AfterStLoc12, registrationFramePc44AfterMoveLoc11,
+    registrationFramePc22AfterMoveLoc0, registrationFramePc21AfterMutBorrowMsg,
+    registrationFramePc20AfterStLoc11, registrationFramePc18AfterStLoc10, registrationFramePc16AfterMutBorrow9,
+    registrationFramePc12AfterStLoc9, registrationFramePc11AfterCall3, registrationFramePc10AfterMoveLoc6,
+    registrationFramePc9AfterStLoc8, registrationFramePc7AfterMutBorrowLoc7, registrationFramePc4AfterImmBorrow,
+    registrationFramePc3AfterStLoc, registrationFrameAtPc2, registrationInitFrame, registrationVerifyArgs,
+    verifyRegistrationProofCode, verifyRegistrationProofCode_size_val, verifyRegistrationProofCode_idx65,
+    registrationInitFrame_idx5_lt, registration_locals_after_set5_idx7_lt,
+    registration_locals_after_set5_set7_idx8_lt, registrationVerifyArgs_len]
+
+/-! ### PC 66 (`immBorrowLoc 17` — borrow lhsPt) -/
+
+@[simp] private theorem verifyRegistrationProofCode_idx66 :
+    verifyRegistrationProofCode[66]'(by rw [verifyRegistrationProofCode_size_val]; decide) = .immBorrowLoc 17 := rfl
+
+private theorem registrationFramePc66AfterStLoc18_locals_size (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt : MoveValue) :
+    (registrationFramePc66AfterStLoc18 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt).locals.size = 19 := by
+  unfold registrationFramePc66AfterStLoc18
+  rw [Array.size_set, registrationFramePc64_locals_size]
+
+private theorem registrationFramePc66AfterStLoc18_localRefs_size (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt : MoveValue) :
+    (registrationFramePc66AfterStLoc18 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt).localRefs.size = 19 :=
+  registrationFramePc60_localRefs_size args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt
+
+private theorem registrationFramePc66AfterStLoc18_locals_idx17_lt (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt : MoveValue) :
+    17 < (registrationFramePc66AfterStLoc18 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt).locals.size := by
+  rw [registrationFramePc66AfterStLoc18_locals_size]; decide
+
+private theorem registrationFramePc66AfterStLoc18_localRefs_idx17_lt (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt : MoveValue) :
+    17 < (registrationFramePc66AfterStLoc18 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt).localRefs.size := by
+  rw [registrationFramePc66AfterStLoc18_localRefs_size]; decide
+
+private theorem registrationFramePc22_localRefs_idx17_lt (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal : MoveValue) :
+    17 < (registrationFramePc22AfterMoveLoc0 args h mv rCompressed sOpt sVal).localRefs.size := by
+  rw [registrationFramePc22_localRefs_size args h mv rCompressed sOpt sVal]; decide
+
+private theorem registrationFramePc22_localRefs_idx17_eq (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal : MoveValue) :
+    (registrationFramePc22AfterMoveLoc0 args h mv rCompressed sOpt sVal).localRefs[17]'
+      (registrationFramePc22_localRefs_idx17_lt args h mv rCompressed sOpt sVal) = none := by
+  simp [registrationFramePc22AfterMoveLoc0, registrationFramePc21AfterMutBorrowMsg, registrationFramePc20AfterStLoc11,
+    registrationFramePc18AfterStLoc10, registrationFramePc16AfterMutBorrow9, registrationFramePc12AfterStLoc9,
+    registrationFramePc11AfterCall3, registrationFramePc10AfterMoveLoc6, registrationFramePc9AfterStLoc8,
+    registrationFramePc7AfterMutBorrowLoc7, registrationFramePc4AfterImmBorrow, registrationFramePc3AfterStLoc,
+    registrationFrameAtPc2, registrationInitFrame]
+
+/-! Direct: `Pc63.locals[17] = some lhsPt` because `Pc63 = stLoc 17`. -/
+set_option maxHeartbeats 3200000 in
+private theorem registrationFramePc63_locals_idx17_eq (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt : MoveValue) :
+    (registrationFramePc63AfterStLoc17 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt).locals[17]'
+      (by rw [registrationFramePc63AfterStLoc17_locals_size]; decide) = some lhsPt := by
+  unfold registrationFramePc63AfterStLoc17
+  rw [Array.getElem_set_self]
+
+/-! `Pc64.locals = Pc63.locals` since Pc64 only changes `pc`. -/
+set_option maxHeartbeats 3200000 in
+private theorem registrationFramePc64_locals_idx17_eq (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt : MoveValue) :
+    (registrationFramePc64AfterImmBorrow8 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt).locals[17]'
+      (by rw [registrationFramePc64_locals_size]; decide) = some lhsPt :=
+  registrationFramePc63_locals_idx17_eq args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt
+
+set_option maxHeartbeats 25600000 in
+private theorem registrationFramePc66AfterStLoc18_locals_idx17_eq (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt : MoveValue) :
+    (registrationFramePc66AfterStLoc18 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt).locals[17]'
+      (registrationFramePc66AfterStLoc18_locals_idx17_lt args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt) =
+        some lhsPt := by
+  have hne : (18 : Nat) ≠ 17 := by decide
+  have hsz64 := registrationFramePc64_locals_size args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt
+  have hpc64 := registrationFramePc64_locals_idx17_eq args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt
+  unfold registrationFramePc66AfterStLoc18
+  rw [Array.getElem_set_ne (h := hne)
+    (pj := by rw [hsz64]; decide)
+    (h' := by rw [hsz64]; decide)]
+  exact hpc64
+
+set_option maxHeartbeats 3200000 in
+private theorem registrationFramePc66AfterStLoc18_localRefs_idx17_eq (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt : MoveValue) :
+    (registrationFramePc66AfterStLoc18 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt).localRefs[17]'
+      (registrationFramePc66AfterStLoc18_localRefs_idx17_lt args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt) =
+        none := by
+  have hne : (11 : Nat) ≠ 17 := by decide
+  have hpc22 := registrationFramePc22_localRefs_idx17_eq args h mv rCompressed sOpt sVal
+  have heq : (registrationFramePc66AfterStLoc18 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt).localRefs =
+      (registrationFramePc22AfterMoveLoc0 args h mv rCompressed sOpt sVal).localRefs.set 11 none
+        (registrationFramePc22_localRefs_idx11_lt args h mv rCompressed sOpt sVal) := rfl
+  simp only [heq, Array.getElem_set_ne (h := hne)]
+  exact hpc22
+
+/-- Frame after `immBorrowLoc 17` (PC 66): same frame, pc := 67. -/
+def registrationFramePc67AfterImmBorrow17 (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt : MoveValue) : Frame :=
+  { registrationFramePc66AfterStLoc18 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt with pc := 67 }
+
+set_option maxHeartbeats 25600000 in
+theorem registration_step_pc66_immBorrowLoc17_generic (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt : MoveValue) (ms : MachineState)
+    (rest : List MoveValue) :
+    step (registrationModuleEnv o)
+        (registrationFramePc66AfterStLoc18 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+          (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa)
+          mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt)
+        [] rest ms =
+      ExecResult.ok
+        (registrationFramePc67AfterImmBorrow17 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+          (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa)
+          mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt)
+        [] (.immRef (ms.containers.alloc lhsPt).2 :: rest)
+        { ms with containers := (ms.containers.alloc lhsPt).1 } := by
+  let args := registrationVerifyArgs chainId sender contract token ekBa commitBa respBa
+  let hlen : args.length = 7 := registrationVerifyArgs_len _ _ _ _ _ _ _
+  set fr' := registrationFramePc66AfterStLoc18 args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt
+    with hfr'
+  have hpc : fr'.pc < fr'.code.size := by
+    simp [fr', registrationFramePc66AfterStLoc18, registrationFramePc64AfterImmBorrow8,
+      registrationFramePc63AfterStLoc17, registrationFramePc61AfterImmBorrow16,
+      registrationFramePc60AfterStLoc16, registrationFramePc58AfterImmBorrow12,
+      registrationFramePc57AfterImmBorrow14, registrationFramePc56AfterImmBorrow15,
+      registrationFramePc55AfterStLoc15, registrationFramePc53AfterImmBorrow10,
+      registrationFramePc52AfterImmBorrow13, registrationFramePc51AfterStLoc14, registrationFramePc49AfterMoveLoc3,
+      registrationFramePc48AfterStLoc13, registrationFramePc46AfterStLoc12, registrationFramePc44AfterMoveLoc11,
+      registrationFramePc22AfterMoveLoc0, registrationFramePc21AfterMutBorrowMsg,
+      registrationFramePc20AfterStLoc11, registrationFramePc18AfterStLoc10, registrationFramePc16AfterMutBorrow9,
+      registrationFramePc12AfterStLoc9, registrationFramePc11AfterCall3, registrationFramePc10AfterMoveLoc6,
+      registrationFramePc9AfterStLoc8, registrationFramePc7AfterMutBorrowLoc7, registrationFramePc4AfterImmBorrow,
+      registrationFramePc3AfterStLoc, registrationFrameAtPc2, registrationInitFrame,
+      verifyRegistrationProofCode_size_val]
+  have hc : fr'.code[fr'.pc]'hpc = MoveInstr.immBorrowLoc 17 := by
+    simp [fr', registrationFramePc66AfterStLoc18, registrationFramePc64AfterImmBorrow8,
+      registrationFramePc63AfterStLoc17, registrationFramePc61AfterImmBorrow16,
+      registrationFramePc60AfterStLoc16, registrationFramePc58AfterImmBorrow12,
+      registrationFramePc57AfterImmBorrow14, registrationFramePc56AfterImmBorrow15,
+      registrationFramePc55AfterStLoc15, registrationFramePc53AfterImmBorrow10,
+      registrationFramePc52AfterImmBorrow13, registrationFramePc51AfterStLoc14, registrationFramePc49AfterMoveLoc3,
+      registrationFramePc48AfterStLoc13, registrationFramePc46AfterStLoc12, registrationFramePc44AfterMoveLoc11,
+      registrationFramePc22AfterMoveLoc0, registrationFramePc21AfterMutBorrowMsg,
+      registrationFramePc20AfterStLoc11, registrationFramePc18AfterStLoc10, registrationFramePc16AfterMutBorrow9,
+      registrationFramePc12AfterStLoc9, registrationFramePc11AfterCall3, registrationFramePc10AfterMoveLoc6,
+      registrationFramePc9AfterStLoc8, registrationFramePc7AfterMutBorrowLoc7, registrationFramePc4AfterImmBorrow,
+      registrationFramePc3AfterStLoc, registrationFrameAtPc2, registrationInitFrame,
+      verifyRegistrationProofCode_size_val, verifyRegistrationProofCode_idx66]
+  have hlocLt : 17 < fr'.locals.size :=
+    registrationFramePc66AfterStLoc18_locals_idx17_lt args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt
+  have hlocVal : fr'.locals[17]'hlocLt = some lhsPt :=
+    registrationFramePc66AfterStLoc18_locals_idx17_eq args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt
+  have hlocRefLt : 17 < fr'.localRefs.size :=
+    registrationFramePc66AfterStLoc18_localRefs_idx17_lt args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt
+  have hlocRefVal : fr'.localRefs[17]'hlocRefLt = none :=
+    registrationFramePc66AfterStLoc18_localRefs_idx17_eq args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt
+  simp only [step, dif_pos hpc, hc, dif_pos hlocLt, hlocVal, dif_pos hlocRefLt, hlocRefVal]
+  rfl
+
+/-! ### PC 67 (`immBorrowLoc 18` — borrow rhsPt) -/
+
+@[simp] private theorem verifyRegistrationProofCode_idx67 :
+    verifyRegistrationProofCode[67]'(by rw [verifyRegistrationProofCode_size_val]; decide) = .immBorrowLoc 18 := rfl
+
+private theorem registrationFramePc67_locals_size (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt : MoveValue) :
+    (registrationFramePc67AfterImmBorrow17 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt).locals.size = 19 :=
+  registrationFramePc66AfterStLoc18_locals_size args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt
+
+private theorem registrationFramePc67_localRefs_size (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt : MoveValue) :
+    (registrationFramePc67AfterImmBorrow17 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt).localRefs.size = 19 :=
+  registrationFramePc66AfterStLoc18_localRefs_size args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt
+
+private theorem registrationFramePc67_locals_idx18_lt (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt : MoveValue) :
+    18 < (registrationFramePc67AfterImmBorrow17 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt).locals.size := by
+  rw [registrationFramePc67_locals_size]; decide
+
+private theorem registrationFramePc67_localRefs_idx18_lt (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt : MoveValue) :
+    18 < (registrationFramePc67AfterImmBorrow17 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt).localRefs.size := by
+  rw [registrationFramePc67_localRefs_size]; decide
+
+/-- Direct: `Pc66.locals[18] = some rhsPt` because `Pc66 = stLoc 18`. -/
+private theorem registrationFramePc66_locals_idx18_eq (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt : MoveValue) :
+    (registrationFramePc66AfterStLoc18 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt).locals[18]'
+      (by rw [registrationFramePc66AfterStLoc18_locals_size]; decide) = some rhsPt := by
+  unfold registrationFramePc66AfterStLoc18
+  rw [Array.getElem_set_self]
+
+set_option maxHeartbeats 25600000 in
+private theorem registrationFramePc67_locals_idx18_eq (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt : MoveValue) :
+    (registrationFramePc67AfterImmBorrow17 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt).locals[18]'
+      (registrationFramePc67_locals_idx18_lt args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt) =
+        some rhsPt :=
+  registrationFramePc66_locals_idx18_eq args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt
+
+private theorem registrationFramePc22_localRefs_idx18_lt (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal : MoveValue) :
+    18 < (registrationFramePc22AfterMoveLoc0 args h mv rCompressed sOpt sVal).localRefs.size := by
+  rw [registrationFramePc22_localRefs_size args h mv rCompressed sOpt sVal]; decide
+
+private theorem registrationFramePc22_localRefs_idx18_eq (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal : MoveValue) :
+    (registrationFramePc22AfterMoveLoc0 args h mv rCompressed sOpt sVal).localRefs[18]'
+      (registrationFramePc22_localRefs_idx18_lt args h mv rCompressed sOpt sVal) = none := by
+  simp [registrationFramePc22AfterMoveLoc0, registrationFramePc21AfterMutBorrowMsg, registrationFramePc20AfterStLoc11,
+    registrationFramePc18AfterStLoc10, registrationFramePc16AfterMutBorrow9, registrationFramePc12AfterStLoc9,
+    registrationFramePc11AfterCall3, registrationFramePc10AfterMoveLoc6, registrationFramePc9AfterStLoc8,
+    registrationFramePc7AfterMutBorrowLoc7, registrationFramePc4AfterImmBorrow, registrationFramePc3AfterStLoc,
+    registrationFrameAtPc2, registrationInitFrame]
+
+set_option maxHeartbeats 3200000 in
+private theorem registrationFramePc67_localRefs_idx18_eq (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt : MoveValue) :
+    (registrationFramePc67AfterImmBorrow17 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt).localRefs[18]'
+      (registrationFramePc67_localRefs_idx18_lt args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt) =
+        none := by
+  have hne : (11 : Nat) ≠ 18 := by decide
+  have hpc22 := registrationFramePc22_localRefs_idx18_eq args h mv rCompressed sOpt sVal
+  have heq : (registrationFramePc67AfterImmBorrow17 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt).localRefs =
+      (registrationFramePc22AfterMoveLoc0 args h mv rCompressed sOpt sVal).localRefs.set 11 none
+        (registrationFramePc22_localRefs_idx11_lt args h mv rCompressed sOpt sVal) := rfl
+  simp only [heq, Array.getElem_set_ne (h := hne)]
+  exact hpc22
+
+/-- Frame after `immBorrowLoc 18` (PC 67): same frame, pc := 68. -/
+def registrationFramePc68AfterImmBorrow18 (args : List MoveValue) (h : args.length = 7)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt : MoveValue) : Frame :=
+  { registrationFramePc67AfterImmBorrow17 args h mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt with pc := 68 }
+
+set_option maxHeartbeats 25600000 in
+theorem registration_step_pc67_immBorrowLoc18_generic (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt : MoveValue) (ms : MachineState)
+    (rest : List MoveValue) :
+    step (registrationModuleEnv o)
+        (registrationFramePc67AfterImmBorrow17 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+          (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa)
+          mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt)
+        [] rest ms =
+      ExecResult.ok
+        (registrationFramePc68AfterImmBorrow18 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+          (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa)
+          mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt)
+        [] (.immRef (ms.containers.alloc rhsPt).2 :: rest)
+        { ms with containers := (ms.containers.alloc rhsPt).1 } := by
+  let args := registrationVerifyArgs chainId sender contract token ekBa commitBa respBa
+  let hlen : args.length = 7 := registrationVerifyArgs_len _ _ _ _ _ _ _
+  set fr' := registrationFramePc67AfterImmBorrow17 args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt
+    with hfr'
+  have hpc : fr'.pc < fr'.code.size := by
+    simp [fr', registrationFramePc67AfterImmBorrow17, registrationFramePc66AfterStLoc18,
+      registrationFramePc64AfterImmBorrow8, registrationFramePc63AfterStLoc17,
+      registrationFramePc61AfterImmBorrow16, registrationFramePc60AfterStLoc16,
+      registrationFramePc58AfterImmBorrow12, registrationFramePc57AfterImmBorrow14, registrationFramePc56AfterImmBorrow15,
+      registrationFramePc55AfterStLoc15, registrationFramePc53AfterImmBorrow10,
+      registrationFramePc52AfterImmBorrow13, registrationFramePc51AfterStLoc14, registrationFramePc49AfterMoveLoc3,
+      registrationFramePc48AfterStLoc13, registrationFramePc46AfterStLoc12, registrationFramePc44AfterMoveLoc11,
+      registrationFramePc22AfterMoveLoc0, registrationFramePc21AfterMutBorrowMsg,
+      registrationFramePc20AfterStLoc11, registrationFramePc18AfterStLoc10, registrationFramePc16AfterMutBorrow9,
+      registrationFramePc12AfterStLoc9, registrationFramePc11AfterCall3, registrationFramePc10AfterMoveLoc6,
+      registrationFramePc9AfterStLoc8, registrationFramePc7AfterMutBorrowLoc7, registrationFramePc4AfterImmBorrow,
+      registrationFramePc3AfterStLoc, registrationFrameAtPc2, registrationInitFrame,
+      verifyRegistrationProofCode_size_val]
+  have hc : fr'.code[fr'.pc]'hpc = MoveInstr.immBorrowLoc 18 := by
+    simp [fr', registrationFramePc67AfterImmBorrow17, registrationFramePc66AfterStLoc18,
+      registrationFramePc64AfterImmBorrow8, registrationFramePc63AfterStLoc17,
+      registrationFramePc61AfterImmBorrow16, registrationFramePc60AfterStLoc16,
+      registrationFramePc58AfterImmBorrow12, registrationFramePc57AfterImmBorrow14, registrationFramePc56AfterImmBorrow15,
+      registrationFramePc55AfterStLoc15, registrationFramePc53AfterImmBorrow10,
+      registrationFramePc52AfterImmBorrow13, registrationFramePc51AfterStLoc14, registrationFramePc49AfterMoveLoc3,
+      registrationFramePc48AfterStLoc13, registrationFramePc46AfterStLoc12, registrationFramePc44AfterMoveLoc11,
+      registrationFramePc22AfterMoveLoc0, registrationFramePc21AfterMutBorrowMsg,
+      registrationFramePc20AfterStLoc11, registrationFramePc18AfterStLoc10, registrationFramePc16AfterMutBorrow9,
+      registrationFramePc12AfterStLoc9, registrationFramePc11AfterCall3, registrationFramePc10AfterMoveLoc6,
+      registrationFramePc9AfterStLoc8, registrationFramePc7AfterMutBorrowLoc7, registrationFramePc4AfterImmBorrow,
+      registrationFramePc3AfterStLoc, registrationFrameAtPc2, registrationInitFrame,
+      verifyRegistrationProofCode_size_val, verifyRegistrationProofCode_idx67]
+  have hlocLt : 18 < fr'.locals.size :=
+    registrationFramePc67_locals_idx18_lt args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt
+  have hlocVal : fr'.locals[18]'hlocLt = some rhsPt :=
+    registrationFramePc67_locals_idx18_eq args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt
+  have hlocRefLt : 18 < fr'.localRefs.size :=
+    registrationFramePc67_localRefs_idx18_lt args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt
+  have hlocRefVal : fr'.localRefs[18]'hlocRefLt = none :=
+    registrationFramePc67_localRefs_idx18_eq args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt
+  simp only [step, dif_pos hpc, hc, dif_pos hlocLt, hlocVal, dif_pos hlocRefLt, hlocRefVal]
+  rfl
+
+/-! ### PC 68 (`call 15` = `point_equals` for lhsPt = rhsPt) -/
+
+@[simp] private theorem verifyRegistrationProofCode_idx68 :
+    verifyRegistrationProofCode[68]'(by rw [verifyRegistrationProofCode_size_val]; decide) = .call 15 := rfl
+
+private theorem registration_env_funcIdx15_lt (o : RegistrationNativeOracle) :
+    15 < (registrationModuleEnv o).functions.size := by
+  rw [registration_module_env_size o]; decide
+
+private theorem registrationModuleEnv_functions_at15 (o : RegistrationNativeOracle)
+    (h : 15 < (registrationModuleEnv o).functions.size) :
+    (registrationModuleEnv o).functions[15]'h =
+      { numParams := 2, numReturns := 1, body := .nativeRef (wrapOracleImmRef2 o.pointEquals) } := by
+  simp [registrationModuleEnv]
+
+set_option maxHeartbeats 3200000 in
+theorem registration_step_pc68_call_pointEquals_generic (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt : MoveValue) (ms : MachineState)
+    (ridLhs ridRhs : RefId) (lhsVal rhsVal : MoveValue) (b : Bool) (restBelow : List MoveValue)
+    (hreadLhs : ms.containers.read ridLhs = some lhsVal)
+    (hreadRhs : ms.containers.read ridRhs = some rhsVal)
+    (horacle : o.pointEquals [lhsVal, rhsVal] = some [.bool b]) :
+    step (registrationModuleEnv o)
+        (registrationFramePc68AfterImmBorrow18 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+          (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa)
+          mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt)
+        [] (.immRef ridRhs :: .immRef ridLhs :: restBelow) ms =
+      ExecResult.ok
+        ({ registrationFramePc68AfterImmBorrow18 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+              (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa)
+              mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt with
+            pc := 69 })
+        [] (.bool b :: restBelow) ms := by
+  have hnative : wrapOracleImmRef2 o.pointEquals ms.containers
+        [.immRef ridLhs, .immRef ridRhs] =
+      some ([.bool b], ms.containers) := by
+    show (Option.bind (derefImm ms.containers (.immRef ridLhs))
+          (fun v1 => Option.bind (derefImm ms.containers (.immRef ridRhs))
+            (fun v2 => Option.bind (o.pointEquals [v1, v2])
+              (fun results => some (results, ms.containers))))) =
+        some ([.bool b], ms.containers)
+    simp only [derefImm]
+    rw [hreadLhs]
+    simp only [Option.bind_some]
+    rw [hreadRhs]
+    simp only [Option.bind_some]
+    rw [horacle]
+    rfl
+  simp only [step, registrationModuleEnv, registrationFramePc68AfterImmBorrow18,
+    registrationFramePc67AfterImmBorrow17, registrationFramePc66AfterStLoc18,
+    registrationFramePc64AfterImmBorrow8, registrationFramePc63AfterStLoc17,
+    registrationFramePc61AfterImmBorrow16, registrationFramePc60AfterStLoc16,
+    registrationFramePc58AfterImmBorrow12, registrationFramePc57AfterImmBorrow14, registrationFramePc56AfterImmBorrow15,
+    registrationFramePc55AfterStLoc15, registrationFramePc53AfterImmBorrow10,
+    registrationFramePc52AfterImmBorrow13, registrationFramePc51AfterStLoc14, registrationFramePc49AfterMoveLoc3,
+    registrationFramePc48AfterStLoc13, registrationFramePc46AfterStLoc12, registrationFramePc44AfterMoveLoc11,
+    registrationFramePc22AfterMoveLoc0, registrationFramePc21AfterMutBorrowMsg,
+    registrationFramePc20AfterStLoc11, registrationFramePc18AfterStLoc10, registrationFramePc16AfterMutBorrow9,
+    registrationFramePc12AfterStLoc9, registrationFramePc11AfterCall3, registrationFramePc10AfterMoveLoc6,
+    registrationFramePc9AfterStLoc8, registrationFramePc7AfterMutBorrowLoc7, registrationFramePc4AfterImmBorrow,
+    registrationFramePc3AfterStLoc, registrationFrameAtPc2, registrationInitFrame, registrationVerifyArgs,
+    verifyRegistrationProofCode, verifyRegistrationProofCode_size_val, verifyRegistrationProofCode_idx68,
+    registrationInitFrame_idx5_lt, registration_locals_after_set5_idx7_lt, registrationVerifyArgs_len,
+    registration_env_funcIdx15_lt, registrationModuleEnv_functions_at15, FuncDesc.body,
+    takeN_two_cons_cons, List.map_cons, List.map_nil, Nat.reduceSub, List.reduceReplicate,
+    List.cons_append, List.nil_append, List.size_toArray, List.length_cons, List.length_nil, zero_add,
+    Nat.reduceAdd, Nat.reduceLT, Nat.one_lt_ofNat, ↓reduceDIte, List.getElem_toArray, List.getElem_cons_succ,
+    List.getElem_cons_zero, Nat.ofNat_pos, Nat.reduceBEq, Bool.false_eq_true, BEq.rfl, List.set_toArray,
+    List.set_cons_succ, List.set_cons_zero, beq_iff_eq]
+  rw [hnative]
+  simp only [handleNativeResult_ret1]
+
+/-! ### PC 69 (`brFalse 71` — branch on equality result) -/
+
+@[simp] private theorem verifyRegistrationProofCode_idx69 :
+    verifyRegistrationProofCode[69]'(by rw [verifyRegistrationProofCode_size_val]; decide) = .brFalse 71 := rfl
+
+set_option maxHeartbeats 3200000 in
+theorem registration_step_pc69_brFalse_true_generic (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt : MoveValue) (ms : MachineState)
+    (rest : List MoveValue) :
+    step (registrationModuleEnv o)
+        ({ registrationFramePc68AfterImmBorrow18 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+              (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa)
+              mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt with
+            pc := 69 })
+        [] (.bool true :: rest) ms =
+      ExecResult.ok
+        ({ registrationFramePc68AfterImmBorrow18 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+              (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa)
+              mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt with
+            pc := 70 })
+        [] rest ms := by
+  let args := registrationVerifyArgs chainId sender contract token ekBa commitBa respBa
+  let hlen : args.length = 7 := registrationVerifyArgs_len _ _ _ _ _ _ _
+  set fr' := ({ registrationFramePc68AfterImmBorrow18 args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt with pc := 69 })
+    with hfr'
+  have hpc : fr'.pc < fr'.code.size := by
+    simp [fr', registrationFramePc68AfterImmBorrow18, registrationFramePc67AfterImmBorrow17,
+      registrationFramePc66AfterStLoc18, registrationFramePc64AfterImmBorrow8, registrationFramePc63AfterStLoc17,
+      registrationFramePc61AfterImmBorrow16, registrationFramePc60AfterStLoc16,
+      registrationFramePc58AfterImmBorrow12, registrationFramePc57AfterImmBorrow14, registrationFramePc56AfterImmBorrow15,
+      registrationFramePc55AfterStLoc15, registrationFramePc53AfterImmBorrow10,
+      registrationFramePc52AfterImmBorrow13, registrationFramePc51AfterStLoc14, registrationFramePc49AfterMoveLoc3,
+      registrationFramePc48AfterStLoc13, registrationFramePc46AfterStLoc12, registrationFramePc44AfterMoveLoc11,
+      registrationFramePc22AfterMoveLoc0, registrationFramePc21AfterMutBorrowMsg,
+      registrationFramePc20AfterStLoc11, registrationFramePc18AfterStLoc10, registrationFramePc16AfterMutBorrow9,
+      registrationFramePc12AfterStLoc9, registrationFramePc11AfterCall3, registrationFramePc10AfterMoveLoc6,
+      registrationFramePc9AfterStLoc8, registrationFramePc7AfterMutBorrowLoc7, registrationFramePc4AfterImmBorrow,
+      registrationFramePc3AfterStLoc, registrationFrameAtPc2, registrationInitFrame,
+      verifyRegistrationProofCode_size_val]
+  have hc : fr'.code[fr'.pc]'hpc = MoveInstr.brFalse 71 := by
+    simp [fr', registrationFramePc68AfterImmBorrow18, registrationFramePc67AfterImmBorrow17,
+      registrationFramePc66AfterStLoc18, registrationFramePc64AfterImmBorrow8, registrationFramePc63AfterStLoc17,
+      registrationFramePc61AfterImmBorrow16, registrationFramePc60AfterStLoc16,
+      registrationFramePc58AfterImmBorrow12, registrationFramePc57AfterImmBorrow14, registrationFramePc56AfterImmBorrow15,
+      registrationFramePc55AfterStLoc15, registrationFramePc53AfterImmBorrow10,
+      registrationFramePc52AfterImmBorrow13, registrationFramePc51AfterStLoc14, registrationFramePc49AfterMoveLoc3,
+      registrationFramePc48AfterStLoc13, registrationFramePc46AfterStLoc12, registrationFramePc44AfterMoveLoc11,
+      registrationFramePc22AfterMoveLoc0, registrationFramePc21AfterMutBorrowMsg,
+      registrationFramePc20AfterStLoc11, registrationFramePc18AfterStLoc10, registrationFramePc16AfterMutBorrow9,
+      registrationFramePc12AfterStLoc9, registrationFramePc11AfterCall3, registrationFramePc10AfterMoveLoc6,
+      registrationFramePc9AfterStLoc8, registrationFramePc7AfterMutBorrowLoc7, registrationFramePc4AfterImmBorrow,
+      registrationFramePc3AfterStLoc, registrationFrameAtPc2, registrationInitFrame,
+      verifyRegistrationProofCode_size_val, verifyRegistrationProofCode_idx69]
+  exact step_brFalse_true_stack (registrationModuleEnv o) fr' [] 71 rest ms hpc hc
+
+set_option maxHeartbeats 3200000 in
+theorem registration_step_pc69_brFalse_false_generic (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt : MoveValue) (ms : MachineState)
+    (rest : List MoveValue) :
+    step (registrationModuleEnv o)
+        ({ registrationFramePc68AfterImmBorrow18 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+              (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa)
+              mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt with
+            pc := 69 })
+        [] (.bool false :: rest) ms =
+      ExecResult.ok
+        ({ registrationFramePc68AfterImmBorrow18 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+              (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa)
+              mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt with
+            pc := 71 })
+        [] rest ms := by
+  let args := registrationVerifyArgs chainId sender contract token ekBa commitBa respBa
+  let hlen : args.length = 7 := registrationVerifyArgs_len _ _ _ _ _ _ _
+  set fr' := ({ registrationFramePc68AfterImmBorrow18 args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt with pc := 69 })
+    with hfr'
+  have hpc : fr'.pc < fr'.code.size := by
+    simp [fr', registrationFramePc68AfterImmBorrow18, registrationFramePc67AfterImmBorrow17,
+      registrationFramePc66AfterStLoc18, registrationFramePc64AfterImmBorrow8, registrationFramePc63AfterStLoc17,
+      registrationFramePc61AfterImmBorrow16, registrationFramePc60AfterStLoc16,
+      registrationFramePc58AfterImmBorrow12, registrationFramePc57AfterImmBorrow14, registrationFramePc56AfterImmBorrow15,
+      registrationFramePc55AfterStLoc15, registrationFramePc53AfterImmBorrow10,
+      registrationFramePc52AfterImmBorrow13, registrationFramePc51AfterStLoc14, registrationFramePc49AfterMoveLoc3,
+      registrationFramePc48AfterStLoc13, registrationFramePc46AfterStLoc12, registrationFramePc44AfterMoveLoc11,
+      registrationFramePc22AfterMoveLoc0, registrationFramePc21AfterMutBorrowMsg,
+      registrationFramePc20AfterStLoc11, registrationFramePc18AfterStLoc10, registrationFramePc16AfterMutBorrow9,
+      registrationFramePc12AfterStLoc9, registrationFramePc11AfterCall3, registrationFramePc10AfterMoveLoc6,
+      registrationFramePc9AfterStLoc8, registrationFramePc7AfterMutBorrowLoc7, registrationFramePc4AfterImmBorrow,
+      registrationFramePc3AfterStLoc, registrationFrameAtPc2, registrationInitFrame,
+      verifyRegistrationProofCode_size_val]
+  have hc : fr'.code[fr'.pc]'hpc = MoveInstr.brFalse 71 := by
+    simp [fr', registrationFramePc68AfterImmBorrow18, registrationFramePc67AfterImmBorrow17,
+      registrationFramePc66AfterStLoc18, registrationFramePc64AfterImmBorrow8, registrationFramePc63AfterStLoc17,
+      registrationFramePc61AfterImmBorrow16, registrationFramePc60AfterStLoc16,
+      registrationFramePc58AfterImmBorrow12, registrationFramePc57AfterImmBorrow14, registrationFramePc56AfterImmBorrow15,
+      registrationFramePc55AfterStLoc15, registrationFramePc53AfterImmBorrow10,
+      registrationFramePc52AfterImmBorrow13, registrationFramePc51AfterStLoc14, registrationFramePc49AfterMoveLoc3,
+      registrationFramePc48AfterStLoc13, registrationFramePc46AfterStLoc12, registrationFramePc44AfterMoveLoc11,
+      registrationFramePc22AfterMoveLoc0, registrationFramePc21AfterMutBorrowMsg,
+      registrationFramePc20AfterStLoc11, registrationFramePc18AfterStLoc10, registrationFramePc16AfterMutBorrow9,
+      registrationFramePc12AfterStLoc9, registrationFramePc11AfterCall3, registrationFramePc10AfterMoveLoc6,
+      registrationFramePc9AfterStLoc8, registrationFramePc7AfterMutBorrowLoc7, registrationFramePc4AfterImmBorrow,
+      registrationFramePc3AfterStLoc, registrationFrameAtPc2, registrationInitFrame,
+      verifyRegistrationProofCode_size_val, verifyRegistrationProofCode_idx69]
+  exact step_brFalse_false_stack (registrationModuleEnv o) fr' [] 71 rest ms hpc hc
+
+/-! ### PC 70 (`ret` — return from function) -/
+
+@[simp] private theorem verifyRegistrationProofCode_idx70 :
+    verifyRegistrationProofCode[70]'(by rw [verifyRegistrationProofCode_size_val]; decide) = .ret := rfl
+
+set_option maxHeartbeats 3200000 in
+theorem registration_step_pc70_ret_generic (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt : MoveValue) (ms : MachineState)
+    (rest : List MoveValue) :
+    step (registrationModuleEnv o)
+        ({ registrationFramePc68AfterImmBorrow18 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+              (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa)
+              mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt with
+            pc := 70 })
+        [] rest ms =
+      ExecResult.returned rest ms := by
+  let args := registrationVerifyArgs chainId sender contract token ekBa commitBa respBa
+  let hlen : args.length = 7 := registrationVerifyArgs_len _ _ _ _ _ _ _
+  set fr' := ({ registrationFramePc68AfterImmBorrow18 args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt with pc := 70 })
+    with hfr'
+  have hpc : fr'.pc < fr'.code.size := by
+    simp [fr', registrationFramePc68AfterImmBorrow18, registrationFramePc67AfterImmBorrow17,
+      registrationFramePc66AfterStLoc18, registrationFramePc64AfterImmBorrow8, registrationFramePc63AfterStLoc17,
+      registrationFramePc61AfterImmBorrow16, registrationFramePc60AfterStLoc16,
+      registrationFramePc58AfterImmBorrow12, registrationFramePc57AfterImmBorrow14, registrationFramePc56AfterImmBorrow15,
+      registrationFramePc55AfterStLoc15, registrationFramePc53AfterImmBorrow10,
+      registrationFramePc52AfterImmBorrow13, registrationFramePc51AfterStLoc14, registrationFramePc49AfterMoveLoc3,
+      registrationFramePc48AfterStLoc13, registrationFramePc46AfterStLoc12, registrationFramePc44AfterMoveLoc11,
+      registrationFramePc22AfterMoveLoc0, registrationFramePc21AfterMutBorrowMsg,
+      registrationFramePc20AfterStLoc11, registrationFramePc18AfterStLoc10, registrationFramePc16AfterMutBorrow9,
+      registrationFramePc12AfterStLoc9, registrationFramePc11AfterCall3, registrationFramePc10AfterMoveLoc6,
+      registrationFramePc9AfterStLoc8, registrationFramePc7AfterMutBorrowLoc7, registrationFramePc4AfterImmBorrow,
+      registrationFramePc3AfterStLoc, registrationFrameAtPc2, registrationInitFrame,
+      verifyRegistrationProofCode_size_val]
+  have hc : fr'.code[fr'.pc]'hpc = MoveInstr.ret := by
+    simp [fr', registrationFramePc68AfterImmBorrow18, registrationFramePc67AfterImmBorrow17,
+      registrationFramePc66AfterStLoc18, registrationFramePc64AfterImmBorrow8, registrationFramePc63AfterStLoc17,
+      registrationFramePc61AfterImmBorrow16, registrationFramePc60AfterStLoc16,
+      registrationFramePc58AfterImmBorrow12, registrationFramePc57AfterImmBorrow14, registrationFramePc56AfterImmBorrow15,
+      registrationFramePc55AfterStLoc15, registrationFramePc53AfterImmBorrow10,
+      registrationFramePc52AfterImmBorrow13, registrationFramePc51AfterStLoc14, registrationFramePc49AfterMoveLoc3,
+      registrationFramePc48AfterStLoc13, registrationFramePc46AfterStLoc12, registrationFramePc44AfterMoveLoc11,
+      registrationFramePc22AfterMoveLoc0, registrationFramePc21AfterMutBorrowMsg,
+      registrationFramePc20AfterStLoc11, registrationFramePc18AfterStLoc10, registrationFramePc16AfterMutBorrow9,
+      registrationFramePc12AfterStLoc9, registrationFramePc11AfterCall3, registrationFramePc10AfterMoveLoc6,
+      registrationFramePc9AfterStLoc8, registrationFramePc7AfterMutBorrowLoc7, registrationFramePc4AfterImmBorrow,
+      registrationFramePc3AfterStLoc, registrationFrameAtPc2, registrationInitFrame,
+      verifyRegistrationProofCode_size_val, verifyRegistrationProofCode_idx70]
+  simp only [step, dif_pos hpc, hc]
 
 /-- PC 8: `stLoc 8` — pop `rCompressed`, store in local 8, PC→9. -/
 theorem registration_step_pc8_stLoc8 (o : RegistrationNativeOracle)
@@ -4728,6 +5998,332 @@ theorem registration_run_from_entry_to_pc6_somePath
   rw [registration_run_eq_from_pc2_singleton o chainId sender contract token ekBa commitBa respBa mv fuel hf2 hl]
   exact registration_run_from_pc2_to_pc6_somePath o chainId sender contract token ekBa commitBa respBa mv tag rest hmv htag
     fuel hf
+
+/-! ## Run-chain: three-step helper (PC 6 → 7 → 8 → 9 success) -/
+
+theorem run_succ_succ_succ_ok (env : ModuleEnv) (f₀ f₁ f₂ f₃ : Frame) (cs : List Frame)
+    (s₀ s₁ s₂ s₃ : List MoveValue) (ms₀ ms₁ ms₂ ms₃ : MachineState) (n : Nat)
+    (h₀ : step env f₀ cs s₀ ms₀ = ExecResult.ok f₁ cs s₁ ms₁)
+    (h₁ : step env f₁ cs s₁ ms₁ = ExecResult.ok f₂ cs s₂ ms₂)
+    (h₂ : step env f₂ cs s₂ ms₂ = ExecResult.ok f₃ cs s₃ ms₃) :
+    run env f₀ cs s₀ ms₀ n.succ.succ.succ = run env f₃ cs s₃ ms₃ n := by
+  simp only [run, h₀, run, h₁, run, h₂]
+
+/-- From `pc 6` (after PC 5 fall-through) through PCs 6 (mutBorrowLoc 7), 7 (call 2 optionExtract)
+and 8 (stLoc 8) to the start of PC 9. -/
+theorem registration_run_from_pc6_to_pc9_somePath
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (mv rCompressed : MoveValue) (rest : List MoveValue)
+    (hmv : mv = .struct_ (.bool true :: rCompressed :: rest))
+    (fuel : Nat) (_hf : 3 ≤ fuel) :
+    run (registrationModuleEnv o)
+        ({ registrationFramePc4AfterImmBorrow (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+              (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa) mv with pc := 6 })
+        [] [] (registrationMsAfterImmBorrow7 mv) fuel =
+      run (registrationModuleEnv o)
+        (registrationFramePc9AfterStLoc8 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+          (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa) mv rCompressed)
+        [] [] (registrationMsAfterOptionExtractDup1 mv) (fuel - 3) := by
+  let args := registrationVerifyArgs chainId sender contract token ekBa commitBa respBa
+  let hlen := registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa
+  have hfuel : fuel = (fuel - 3) + 3 := by omega
+  rw [hfuel]
+  have hs6 := registration_step_pc6_mutBorrowLoc7 o chainId sender contract token ekBa commitBa respBa mv
+  have hs7 := registration_step_pc7_call_optionExtract o chainId sender contract token ekBa commitBa respBa mv rCompressed rest hmv
+  have hs8 := registration_step_pc8_stLoc8 o chainId sender contract token ekBa commitBa respBa mv rCompressed
+  exact run_succ_succ_succ_ok (registrationModuleEnv o)
+    ({ registrationFramePc4AfterImmBorrow args hlen mv with pc := 6 })
+    (registrationFramePc7AfterMutBorrowLoc7 args hlen mv)
+    ({ registrationFramePc7AfterMutBorrowLoc7 args hlen mv with pc := 8 })
+    (registrationFramePc9AfterStLoc8 args hlen mv rCompressed)
+    []
+    [] [.mutRef 1] [rCompressed] []
+    (registrationMsAfterImmBorrow7 mv)
+    (registrationMsAfterMutBorrowDup7 mv)
+    (registrationMsAfterOptionExtractDup1 mv)
+    (registrationMsAfterOptionExtractDup1 mv)
+    (fuel - 3) hs6 hs7 hs8
+
+/-- From `pc 9` through PCs 9 (moveLoc 6), 10 (call 3 = newScalarFromBytes), 11 (stLoc 9)
+to the start of PC 12, given the singleton `newScalarFromBytes` hypothesis. -/
+theorem registration_run_from_pc9_to_pc12_singletonPath
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (mv rCompressed sOpt : MoveValue)
+    (hs : o.newScalarFromBytes [.vector .u8 (respBa.toList.map .u8)] = some [sOpt])
+    (fuel : Nat) (_hf : 3 ≤ fuel) :
+    run (registrationModuleEnv o)
+        (registrationFramePc9AfterStLoc8 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+          (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa) mv rCompressed)
+        [] [] (registrationMsAfterOptionExtractDup1 mv) fuel =
+      run (registrationModuleEnv o)
+        (registrationFramePc12AfterStLoc9 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+          (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa) mv rCompressed sOpt)
+        [] [] (registrationMsAfterOptionExtractDup1 mv) (fuel - 3) := by
+  let args := registrationVerifyArgs chainId sender contract token ekBa commitBa respBa
+  let hlen := registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa
+  have hfuel : fuel = (fuel - 3) + 3 := by omega
+  rw [hfuel]
+  have hs9 := registration_step_pc9_moveLoc6 o chainId sender contract token ekBa commitBa respBa mv rCompressed
+  have hs10 := registration_step_pc10_call3_singleton o chainId sender contract token ekBa commitBa respBa mv rCompressed sOpt hs
+  have hs11 := registration_step_pc11_stLoc9 o chainId sender contract token ekBa commitBa respBa mv rCompressed sOpt
+  exact run_succ_succ_succ_ok (registrationModuleEnv o)
+    (registrationFramePc9AfterStLoc8 args hlen mv rCompressed)
+    (registrationFramePc10AfterMoveLoc6 args hlen mv rCompressed)
+    (registrationFramePc11AfterCall3 args hlen mv rCompressed)
+    (registrationFramePc12AfterStLoc9 args hlen mv rCompressed sOpt)
+    []
+    [] [.vector .u8 (respBa.toList.map .u8)] [sOpt] []
+    (registrationMsAfterOptionExtractDup1 mv)
+    (registrationMsAfterOptionExtractDup1 mv)
+    (registrationMsAfterOptionExtractDup1 mv)
+    (registrationMsAfterOptionExtractDup1 mv)
+    (fuel - 3) hs9 hs10 hs11
+
+/-- From `pc 12` through PCs 12 (immBorrowLoc 9), 13 (call 1 isSome on &sOpt),
+14 (brFalse 74 fallthrough when stag=true) to `pc := 15`. -/
+theorem registration_run_from_pc12_to_pc15_someSOptPath
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (mv rCompressed sOpt : MoveValue) (stag : Bool) (srest : List MoveValue)
+    (hsOpt : sOpt = .struct_ (.bool stag :: srest)) (hstag : stag = true)
+    (fuel : Nat) (_hf : 3 ≤ fuel) :
+    run (registrationModuleEnv o)
+        (registrationFramePc12AfterStLoc9 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+          (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa) mv rCompressed sOpt)
+        [] [] (registrationMsAfterOptionExtractDup1 mv) fuel =
+      run (registrationModuleEnv o)
+        ({ registrationFramePc12AfterStLoc9 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+              (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa) mv rCompressed sOpt with
+            pc := 15 })
+        [] [] (registrationMsAfterImmBorrow9 mv sOpt) (fuel - 3) := by
+  let args := registrationVerifyArgs chainId sender contract token ekBa commitBa respBa
+  let hlen := registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa
+  have hfuel : fuel = (fuel - 3) + 3 := by omega
+  rw [hfuel]
+  have hs12 := registration_step_pc12_immBorrowLoc9 o chainId sender contract token ekBa commitBa respBa mv rCompressed sOpt
+  have hs13 := registration_step_pc13_call_optionIsSome o chainId sender contract token ekBa commitBa respBa mv rCompressed sOpt stag srest hsOpt
+  have hs14 := registration_step_pc14_brFalse_fallthrough o chainId sender contract token ekBa commitBa respBa mv rCompressed sOpt stag srest hstag
+  exact run_succ_succ_succ_ok (registrationModuleEnv o)
+    (registrationFramePc12AfterStLoc9 args hlen mv rCompressed sOpt)
+    ({ registrationFramePc12AfterStLoc9 args hlen mv rCompressed sOpt with pc := 13 })
+    ({ registrationFramePc12AfterStLoc9 args hlen mv rCompressed sOpt with pc := 14 })
+    ({ registrationFramePc12AfterStLoc9 args hlen mv rCompressed sOpt with pc := 15 })
+    []
+    [] [.immRef 2] [.bool stag] []
+    (registrationMsAfterOptionExtractDup1 mv)
+    (registrationMsAfterImmBorrow9 mv sOpt)
+    (registrationMsAfterImmBorrow9 mv sOpt)
+    (registrationMsAfterImmBorrow9 mv sOpt)
+    (fuel - 3) hs12 hs13 hs14
+
+/-- From `pc 15` through PCs 15 (mutBorrowLoc 9), 16 (call 2 extract on &mut sOpt),
+17 (stLoc 10 for sVal) to pre-PC 18. -/
+theorem registration_run_from_pc15_to_pc18_singletonSomePath
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (mv rCompressed sOpt sVal : MoveValue) (srest' : List MoveValue)
+    (hsOpt : sOpt = .struct_ (.bool true :: sVal :: srest'))
+    (fuel : Nat) (_hf : 3 ≤ fuel) :
+    run (registrationModuleEnv o)
+        ({ registrationFramePc12AfterStLoc9 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+              (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa) mv rCompressed sOpt with
+            pc := 15 })
+        [] [] (registrationMsAfterImmBorrow9 mv sOpt) fuel =
+      run (registrationModuleEnv o)
+        (registrationFramePc18AfterStLoc10 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+          (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa) mv rCompressed sOpt sVal)
+        [] [] (registrationMsAfterOptionExtractDup3 mv sOpt) (fuel - 3) := by
+  let args := registrationVerifyArgs chainId sender contract token ekBa commitBa respBa
+  let hlen := registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa
+  have hfuel : fuel = (fuel - 3) + 3 := by omega
+  rw [hfuel]
+  have hs15 := registration_step_pc15_mutBorrowLoc9 o chainId sender contract token ekBa commitBa respBa mv rCompressed sOpt
+  have hs16 := registration_step_pc16_call_optionExtract o chainId sender contract token ekBa commitBa respBa mv rCompressed sOpt sVal srest' hsOpt
+  have hs17 := registration_step_pc17_stLoc10 o chainId sender contract token ekBa commitBa respBa mv rCompressed sOpt sVal
+  exact run_succ_succ_succ_ok (registrationModuleEnv o)
+    ({ registrationFramePc12AfterStLoc9 args hlen mv rCompressed sOpt with pc := 15 })
+    (registrationFramePc16AfterMutBorrow9 args hlen mv rCompressed sOpt)
+    ({ registrationFramePc16AfterMutBorrow9 args hlen mv rCompressed sOpt with pc := 17 })
+    (registrationFramePc18AfterStLoc10 args hlen mv rCompressed sOpt sVal)
+    []
+    [] [.mutRef 3] [sVal] []
+    (registrationMsAfterImmBorrow9 mv sOpt)
+    (registrationMsAfterMutBorrow9 mv sOpt)
+    (registrationMsAfterOptionExtractDup3 mv sOpt)
+    (registrationMsAfterOptionExtractDup3 mv sOpt)
+    (fuel - 3) hs15 hs16 hs17
+
+/-- From `pc 18` through PCs 18 (ldConst 5 DST), 19 (stLoc 11 for msg) to pre-PC 20. -/
+theorem registration_run_from_pc18_to_pc20_path
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (mv rCompressed sOpt sVal : MoveValue)
+    (fuel : Nat) (_hf : 2 ≤ fuel) :
+    run (registrationModuleEnv o)
+        (registrationFramePc18AfterStLoc10 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+          (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa) mv rCompressed sOpt sVal)
+        [] [] (registrationMsAfterOptionExtractDup3 mv sOpt) fuel =
+      run (registrationModuleEnv o)
+        (registrationFramePc20AfterStLoc11 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+          (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa) mv rCompressed sOpt sVal)
+        [] [] (registrationMsAfterOptionExtractDup3 mv sOpt) (fuel - 2) := by
+  let args := registrationVerifyArgs chainId sender contract token ekBa commitBa respBa
+  let hlen := registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa
+  have hfuel : fuel = (fuel - 2) + 2 := by omega
+  rw [hfuel]
+  have hs18 := registration_step_pc18_ldConst5 o chainId sender contract token ekBa commitBa respBa mv rCompressed sOpt sVal
+  have hs19 := registration_step_pc19_stLoc11 o chainId sender contract token ekBa commitBa respBa mv rCompressed sOpt sVal
+  exact run_succ_succ_ok (registrationModuleEnv o)
+    (registrationFramePc18AfterStLoc10 args hlen mv rCompressed sOpt sVal)
+    ({ registrationFramePc18AfterStLoc10 args hlen mv rCompressed sOpt sVal with pc := 19 })
+    (registrationFramePc20AfterStLoc11 args hlen mv rCompressed sOpt sVal)
+    []
+    [] [fiatShamirRegistrationDstValue] []
+    (registrationMsAfterOptionExtractDup3 mv sOpt)
+    (registrationMsAfterOptionExtractDup3 mv sOpt)
+    (registrationMsAfterOptionExtractDup3 mv sOpt)
+    (fuel - 2) hs18 hs19
+
+/-- From `pc 20` through PCs 20 (mutBorrowLoc 11 alloc msg), 21 (moveLoc 0 push chainId) to pre-PC 22. -/
+theorem registration_run_from_pc20_to_pc22_path
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (mv rCompressed sOpt sVal : MoveValue)
+    (fuel : Nat) (_hf : 2 ≤ fuel) :
+    run (registrationModuleEnv o)
+        (registrationFramePc20AfterStLoc11 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+          (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa) mv rCompressed sOpt sVal)
+        [] [] (registrationMsAfterOptionExtractDup3 mv sOpt) fuel =
+      run (registrationModuleEnv o)
+        (registrationFramePc22AfterMoveLoc0 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+          (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa) mv rCompressed sOpt sVal)
+        [] [.u8 chainId, .mutRef 4] (registrationMsAfterMutBorrowMsg mv sOpt) (fuel - 2) := by
+  let args := registrationVerifyArgs chainId sender contract token ekBa commitBa respBa
+  let hlen := registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa
+  have hfuel : fuel = (fuel - 2) + 2 := by omega
+  rw [hfuel]
+  have hs20 := registration_step_pc20_mutBorrowLoc11 o chainId sender contract token ekBa commitBa respBa mv rCompressed sOpt sVal
+  have hs21 := registration_step_pc21_moveLoc0 o chainId sender contract token ekBa commitBa respBa mv rCompressed sOpt sVal
+  exact run_succ_succ_ok (registrationModuleEnv o)
+    (registrationFramePc20AfterStLoc11 args hlen mv rCompressed sOpt sVal)
+    (registrationFramePc21AfterMutBorrowMsg args hlen mv rCompressed sOpt sVal)
+    (registrationFramePc22AfterMoveLoc0 args hlen mv rCompressed sOpt sVal)
+    []
+    [] [.mutRef 4] [.u8 chainId, .mutRef 4]
+    (registrationMsAfterOptionExtractDup3 mv sOpt)
+    (registrationMsAfterMutBorrowMsg mv sOpt)
+    (registrationMsAfterMutBorrowMsg mv sOpt)
+    (fuel - 2) hs20 hs21
+
+/-- From `pc 22` through PCs 22 (call 4 pushBack chainId), 23 (mutBorrowLoc 11 reuse),
+24 (immBorrowLoc 1 alloc sender) to `Pc25AfterImmBorrow1`. -/
+theorem registration_run_from_pc22_to_pc25_path
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (mv rCompressed sOpt sVal : MoveValue)
+    (fuel : Nat) (_hf : 3 ≤ fuel) :
+    run (registrationModuleEnv o)
+        (registrationFramePc22AfterMoveLoc0 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+          (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa) mv rCompressed sOpt sVal)
+        [] [.u8 chainId, .mutRef 4] (registrationMsAfterMutBorrowMsg mv sOpt) fuel =
+      run (registrationModuleEnv o)
+        (registrationFramePc25AfterImmBorrow1 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+          (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa) mv rCompressed sOpt sVal)
+        [] [.immRef 5, .mutRef 4] (registrationMsAfterImmBorrow1_sender mv sOpt chainId sender) (fuel - 3) := by
+  let args := registrationVerifyArgs chainId sender contract token ekBa commitBa respBa
+  let hlen := registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa
+  have hfuel : fuel = (fuel - 3) + 3 := by omega
+  rw [hfuel]
+  have hs22 := registration_step_pc22_call_pushBackChainId o chainId sender contract token ekBa commitBa respBa mv rCompressed sOpt sVal
+  have hs23 := registration_step_pc23_mutBorrowLoc11 o chainId sender contract token ekBa commitBa respBa mv rCompressed sOpt sVal
+  have hs24 := registration_step_pc24_immBorrowLoc1 o chainId sender contract token ekBa commitBa respBa mv rCompressed sOpt sVal
+  exact run_succ_succ_succ_ok (registrationModuleEnv o)
+    (registrationFramePc22AfterMoveLoc0 args hlen mv rCompressed sOpt sVal)
+    ({ registrationFramePc22AfterMoveLoc0 args hlen mv rCompressed sOpt sVal with pc := 23 })
+    ({ registrationFramePc22AfterMoveLoc0 args hlen mv rCompressed sOpt sVal with pc := 24 })
+    (registrationFramePc25AfterImmBorrow1 args hlen mv rCompressed sOpt sVal)
+    []
+    [.u8 chainId, .mutRef 4] [] [.mutRef 4] [.immRef 5, .mutRef 4]
+    (registrationMsAfterMutBorrowMsg mv sOpt)
+    (registrationMsAfterPushBackChainId mv sOpt chainId)
+    (registrationMsAfterPushBackChainId mv sOpt chainId)
+    (registrationMsAfterImmBorrow1_sender mv sOpt chainId sender)
+    (fuel - 3) hs22 hs23 hs24
+
+/-- From `pc 25` (via `Pc25AfterImmBorrow1`) through PCs 25 (call 5 bcs sender), 26 (call 6 append sender),
+27 (mutBorrowLoc 11 reuse) to `{ Pc22 with pc := 28 }`. -/
+theorem registration_run_from_pc25_to_pc28_path
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (mv rCompressed sOpt sVal : MoveValue)
+    (fuel : Nat) (_hf : 3 ≤ fuel) :
+    run (registrationModuleEnv o)
+        (registrationFramePc25AfterImmBorrow1 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+          (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa) mv rCompressed sOpt sVal)
+        [] [.immRef 5, .mutRef 4] (registrationMsAfterImmBorrow1_sender mv sOpt chainId sender) fuel =
+      run (registrationModuleEnv o)
+        ({ registrationFramePc22AfterMoveLoc0 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+              (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa) mv rCompressed sOpt sVal with
+            pc := 28 })
+        [] [.mutRef 4] (registrationMsAfterAppendSender mv sOpt chainId sender) (fuel - 3) := by
+  let args := registrationVerifyArgs chainId sender contract token ekBa commitBa respBa
+  let hlen := registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa
+  have hfuel : fuel = (fuel - 3) + 3 := by omega
+  rw [hfuel]
+  have hs25 := registration_step_pc25_call_bcsToBytes_sender o chainId sender contract token ekBa commitBa respBa mv rCompressed sOpt sVal
+  have hs26 := registration_step_pc26_call_appendSender o chainId sender contract token ekBa commitBa respBa mv rCompressed sOpt sVal
+  have hs27 := registration_step_pc27_mutBorrowLoc11 o chainId sender contract token ekBa commitBa respBa mv rCompressed sOpt sVal
+  exact run_succ_succ_succ_ok (registrationModuleEnv o)
+    (registrationFramePc25AfterImmBorrow1 args hlen mv rCompressed sOpt sVal)
+    ({ registrationFramePc25AfterImmBorrow1 args hlen mv rCompressed sOpt sVal with pc := 26 })
+    ({ registrationFramePc25AfterImmBorrow1 args hlen mv rCompressed sOpt sVal with pc := 27 })
+    ({ registrationFramePc22AfterMoveLoc0 args hlen mv rCompressed sOpt sVal with pc := 28 })
+    []
+    [.immRef 5, .mutRef 4] [.vector .u8 (sender.toList.map .u8), .mutRef 4] [] [.mutRef 4]
+    (registrationMsAfterImmBorrow1_sender mv sOpt chainId sender)
+    (registrationMsAfterImmBorrow1_sender mv sOpt chainId sender)
+    (registrationMsAfterAppendSender mv sOpt chainId sender)
+    (registrationMsAfterAppendSender mv sOpt chainId sender)
+    (fuel - 3) hs25 hs26 hs27
+
+/-- From `{Pc22 with pc := 28}` through PCs 28 (immBorrowLoc 2 alloc contract),
+29 (call 5 bcs contract), 30 (call 6 append contract) to `{Pc22 with pc := 31}`. -/
+theorem registration_run_from_pc28_to_pc31_path
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (mv rCompressed sOpt sVal : MoveValue)
+    (fuel : Nat) (_hf : 3 ≤ fuel) :
+    run (registrationModuleEnv o)
+        ({ registrationFramePc22AfterMoveLoc0 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+              (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa) mv rCompressed sOpt sVal with
+            pc := 28 })
+        [] [.mutRef 4] (registrationMsAfterAppendSender mv sOpt chainId sender) fuel =
+      run (registrationModuleEnv o)
+        ({ registrationFramePc22AfterMoveLoc0 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+              (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa) mv rCompressed sOpt sVal with
+            pc := 31 })
+        [] [] (registrationMsAfterAppendContract mv sOpt chainId sender contract) (fuel - 3) := by
+  let args := registrationVerifyArgs chainId sender contract token ekBa commitBa respBa
+  let hlen := registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa
+  have hfuel : fuel = (fuel - 3) + 3 := by omega
+  rw [hfuel]
+  have hs28 := registration_step_pc28_immBorrowLoc2 o chainId sender contract token ekBa commitBa respBa mv rCompressed sOpt sVal
+  have hs29 := registration_step_pc29_call_bcsToBytes_contract o chainId sender contract token ekBa commitBa respBa mv rCompressed sOpt sVal
+  have hs30 := registration_step_pc30_call_appendContract o chainId sender contract token ekBa commitBa respBa mv rCompressed sOpt sVal
+  exact run_succ_succ_succ_ok (registrationModuleEnv o)
+    ({ registrationFramePc22AfterMoveLoc0 args hlen mv rCompressed sOpt sVal with pc := 28 })
+    (registrationFramePc29AfterImmBorrow2 args hlen mv rCompressed sOpt sVal)
+    ({ registrationFramePc29AfterImmBorrow2 args hlen mv rCompressed sOpt sVal with pc := 30 })
+    ({ registrationFramePc22AfterMoveLoc0 args hlen mv rCompressed sOpt sVal with pc := 31 })
+    []
+    [.mutRef 4] [.immRef 6, .mutRef 4] [.vector .u8 (contract.toList.map .u8), .mutRef 4] []
+    (registrationMsAfterAppendSender mv sOpt chainId sender)
+    (registrationMsAfterImmBorrow2_contract mv sOpt chainId sender contract)
+    (registrationMsAfterImmBorrow2_contract mv sOpt chainId sender contract)
+    (registrationMsAfterAppendContract mv sOpt chainId sender contract)
+    (fuel - 3) hs28 hs29 hs30
 
 /-! ## Functional sim: same early errors as bytecode -/
 

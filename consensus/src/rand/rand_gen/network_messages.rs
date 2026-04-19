@@ -174,7 +174,7 @@ mod tests {
         },
     };
     use rand::thread_rng;
-    use std::{iter, str::FromStr, sync::Arc};
+    use std::{str::FromStr, sync::Arc};
 
     /// Per-validator key material derived up-front, then handed to the DKG.
     struct ValidatorBundle {
@@ -267,10 +267,8 @@ mod tests {
             WVUF::augment_key_pair(&vuf_pp, decrypted_sk.main, decrypted_pk.main, &mut rng);
 
         // ...and gather every validator's public WVUF share for verification.
-        let pk_shares: Vec<_> = iter::repeat_with(|| ())
-            .take(bundles.len())
-            .enumerate()
-            .map(|(id, _)| {
+        let pk_shares: Vec<_> = (0..bundles.len())
+            .map(|id| {
                 transcript
                     .main
                     .get_public_key_share(&pub_params.pvss_config.wconfig, &Player { id })

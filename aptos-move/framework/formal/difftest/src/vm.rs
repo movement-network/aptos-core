@@ -81,6 +81,20 @@ struct MoveStdFeatures {
 
 /// `std::features::SHA_512_AND_RIPEMD_160_NATIVES` (see `move-stdlib/.../features.move`).
 const SHA_512_AND_RIPEMD_160_FEATURE_ID: u64 = 3;
+/// `std::features::BULLETPROOFS_NATIVES`. Consulted by
+/// `ristretto255::point_clone` and `ristretto255::double_scalar_mul`, both
+/// used inside `confidential_balance::balance_to_points_{c,d}` which is
+/// reached by every `verify_*_sigma_proof` (withdrawal / transfer /
+/// normalization / rotation). Without this bit the sigma MSM setup aborts
+/// with `invalid_state(E_NATIVE_FUN_NOT_AVAILABLE)` = **196613** before it
+/// can check the actual proof.
+const BULLETPROOFS_NATIVES_FEATURE_ID: u64 = 24;
+/// `std::features::BULLETPROOFS_BATCH_NATIVES`. Consulted by
+/// `ristretto255_bulletproofs::verify_batch_range_proof` (used by every
+/// `verify_new_balance_range_proof`). We don't reach the batch verifier in
+/// the Phase D.1 reject-pin rows (sigma aborts first), but we enable it so
+/// later happy-path rows that skip zero-sigma can continue.
+const BULLETPROOFS_BATCH_NATIVES_FEATURE_ID: u64 = 87;
 
 fn merge_move_stdlib_feature_bit(vec: &mut Vec<u8>, feature_id: u64) {
     let byte_index = (feature_id / 8) as usize;
@@ -97,7 +111,9 @@ fn partial_vm_err(err: PartialVMError) -> anyhow::Error {
 
 /// `aptos_hash::sha3_512` consults `std::features::sha_512_and_ripemd_160_enabled()`, which reads
 /// the on-chain `Features` resource at `@std` (`0x1`), not the Rust `Features` passed into
-/// `aptos_natives`. Merge the SHA-512 feature bit into that resource after loading genesis/bundle.
+/// `aptos_natives`. Merge the SHA-512 and Bulletproofs feature bits into that resource after
+/// loading genesis/bundle so confidential-asset verifiers can reach their native primitives
+/// (`point_clone`, `double_scalar_mul`, batch range verify).
 pub fn ensure_sha512_move_stdlib_feature(storage: &mut InMemoryStorage) -> Result<()> {
     let addr = AccountAddress::ONE;
     let tag = StructTag {
@@ -117,6 +133,8 @@ pub fn ensure_sha512_move_stdlib_feature(storage: &mut InMemoryStorage) -> Resul
         MoveStdFeatures { features: vec![] }
     };
     merge_move_stdlib_feature_bit(&mut f.features, SHA_512_AND_RIPEMD_160_FEATURE_ID);
+    merge_move_stdlib_feature_bit(&mut f.features, BULLETPROOFS_NATIVES_FEATURE_ID);
+    merge_move_stdlib_feature_bit(&mut f.features, BULLETPROOFS_BATCH_NATIVES_FEATURE_ID);
     let blob = bcs::to_bytes(&f)?;
     storage.publish_or_overwrite_resource(addr, tag, blob);
     Ok(())

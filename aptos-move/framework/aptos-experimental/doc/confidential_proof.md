@@ -29,6 +29,10 @@ These proofs ensure correctness for operations such as <code>confidential_transf
 -  [Struct `RotationSigmaProof`](#0x7_confidential_proof_RotationSigmaProof)
 -  [Constants](#@Constants_0)
 -  [Function `verify_registration_proof`](#0x7_confidential_proof_verify_registration_proof)
+-  [Function `withdrawal_fs_prefix_for_test`](#0x7_confidential_proof_withdrawal_fs_prefix_for_test)
+-  [Function `transfer_fs_prefix_for_test`](#0x7_confidential_proof_transfer_fs_prefix_for_test)
+-  [Function `normalization_fs_prefix_for_test`](#0x7_confidential_proof_normalization_fs_prefix_for_test)
+-  [Function `rotation_fs_prefix_for_test`](#0x7_confidential_proof_rotation_fs_prefix_for_test)
 -  [Function `registration_fs_message_for_test`](#0x7_confidential_proof_registration_fs_message_for_test)
 -  [Function `prove_registration_deterministic_for_difftest`](#0x7_confidential_proof_prove_registration_deterministic_for_difftest)
 -  [Function `verify_registration_proof_for_difftest`](#0x7_confidential_proof_verify_registration_proof_for_difftest)
@@ -60,9 +64,13 @@ These proofs ensure correctness for operations such as <code>confidential_transf
 -  [Function `get_bulletproofs_dst`](#0x7_confidential_proof_get_bulletproofs_dst)
 -  [Function `get_bulletproofs_num_bits`](#0x7_confidential_proof_get_bulletproofs_num_bits)
 -  [Function `prepend_domain_context`](#0x7_confidential_proof_prepend_domain_context)
+-  [Function `fiat_shamir_withdrawal_sigma_proof_prefix`](#0x7_confidential_proof_fiat_shamir_withdrawal_sigma_proof_prefix)
 -  [Function `fiat_shamir_withdrawal_sigma_proof_challenge`](#0x7_confidential_proof_fiat_shamir_withdrawal_sigma_proof_challenge)
+-  [Function `fiat_shamir_transfer_sigma_proof_prefix`](#0x7_confidential_proof_fiat_shamir_transfer_sigma_proof_prefix)
 -  [Function `fiat_shamir_transfer_sigma_proof_challenge`](#0x7_confidential_proof_fiat_shamir_transfer_sigma_proof_challenge)
+-  [Function `fiat_shamir_normalization_sigma_proof_prefix`](#0x7_confidential_proof_fiat_shamir_normalization_sigma_proof_prefix)
 -  [Function `fiat_shamir_normalization_sigma_proof_challenge`](#0x7_confidential_proof_fiat_shamir_normalization_sigma_proof_challenge)
+-  [Function `fiat_shamir_rotation_sigma_proof_prefix`](#0x7_confidential_proof_fiat_shamir_rotation_sigma_proof_prefix)
 -  [Function `fiat_shamir_rotation_sigma_proof_challenge`](#0x7_confidential_proof_fiat_shamir_rotation_sigma_proof_challenge)
 -  [Function `msm_withdrawal_gammas`](#0x7_confidential_proof_msm_withdrawal_gammas)
 -  [Function `msm_transfer_gammas`](#0x7_confidential_proof_msm_transfer_gammas)
@@ -1126,6 +1134,156 @@ The proof is a Schnorr proof: verifier checks s * H + e * ek == R.
         <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_equals">ristretto255::point_equals</a>(&lhs, &rhs),
         <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="confidential_proof.md#0x7_confidential_proof_ESIGMA_PROTOCOL_VERIFY_FAILED">ESIGMA_PROTOCOL_VERIFY_FAILED</a>)
     );
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x7_confidential_proof_withdrawal_fs_prefix_for_test"></a>
+
+## Function `withdrawal_fs_prefix_for_test`
+
+Byte-for-byte the Fiat–Shamir PREFIX built by <code>fiat_shamir_withdrawal_sigma_proof_challenge</code>
+BEFORE the proof commitment points <code>X_{1..18}</code> are appended. Useful for pinning the transcript
+construction (DST + <code>prepend_domain_context</code> order + public-input layout) byte-for-byte from
+a <code><b>move</b>-lean-difftest</code> harness without requiring access to the private <code><a href="confidential_proof.md#0x7_confidential_proof_WithdrawalSigmaProofXs">WithdrawalSigmaProofXs</a></code>
+commitments. Zero drift risk: shares the same private helper as the real verifier.
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_proof.md#0x7_confidential_proof_withdrawal_fs_prefix_for_test">withdrawal_fs_prefix_for_test</a>(<a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a>: u8, sender: <b>address</b>, contract_address: <b>address</b>, ek: &<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedPubkey">ristretto255_twisted_elgamal::CompressedPubkey</a>, amount_chunks: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_Scalar">ristretto255::Scalar</a>&gt;, current_balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_proof.md#0x7_confidential_proof_withdrawal_fs_prefix_for_test">withdrawal_fs_prefix_for_test</a>(
+    <a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a>: u8,
+    sender: <b>address</b>,
+    contract_address: <b>address</b>,
+    ek: &twisted_elgamal::CompressedPubkey,
+    amount_chunks: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;Scalar&gt;,
+    current_balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
+{
+    <a href="confidential_proof.md#0x7_confidential_proof_fiat_shamir_withdrawal_sigma_proof_prefix">fiat_shamir_withdrawal_sigma_proof_prefix</a>(
+        <a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a>, sender, contract_address, ek, amount_chunks, current_balance)
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x7_confidential_proof_transfer_fs_prefix_for_test"></a>
+
+## Function `transfer_fs_prefix_for_test`
+
+Byte-for-byte the Fiat–Shamir PREFIX for <code>verify_transfer_proof</code> (before <code>X_*</code> and
+<code><a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/bcs.md#0x1_bcs">bcs</a>(sender_auditor_hint)</code> are appended). Same drift guarantee as
+<code>withdrawal_fs_prefix_for_test</code>.
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_proof.md#0x7_confidential_proof_transfer_fs_prefix_for_test">transfer_fs_prefix_for_test</a>(<a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a>: u8, sender: <b>address</b>, contract_address: <b>address</b>, sender_ek: &<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedPubkey">ristretto255_twisted_elgamal::CompressedPubkey</a>, recipient_ek: &<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedPubkey">ristretto255_twisted_elgamal::CompressedPubkey</a>, current_balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>, new_balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>, sender_amount: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>, recipient_amount: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>, auditor_eks: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedPubkey">ristretto255_twisted_elgamal::CompressedPubkey</a>&gt;, auditor_amounts: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>&gt;): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_proof.md#0x7_confidential_proof_transfer_fs_prefix_for_test">transfer_fs_prefix_for_test</a>(
+    <a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a>: u8,
+    sender: <b>address</b>,
+    contract_address: <b>address</b>,
+    sender_ek: &twisted_elgamal::CompressedPubkey,
+    recipient_ek: &twisted_elgamal::CompressedPubkey,
+    current_balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>,
+    new_balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>,
+    sender_amount: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>,
+    recipient_amount: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>,
+    auditor_eks: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;twisted_elgamal::CompressedPubkey&gt;,
+    auditor_amounts: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>&gt;): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
+{
+    <a href="confidential_proof.md#0x7_confidential_proof_fiat_shamir_transfer_sigma_proof_prefix">fiat_shamir_transfer_sigma_proof_prefix</a>(
+        <a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a>, sender, contract_address,
+        sender_ek, recipient_ek,
+        current_balance, new_balance,
+        sender_amount, recipient_amount,
+        auditor_eks, auditor_amounts)
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x7_confidential_proof_normalization_fs_prefix_for_test"></a>
+
+## Function `normalization_fs_prefix_for_test`
+
+Byte-for-byte the Fiat–Shamir PREFIX for <code>verify_normalization_proof</code> (before <code>X_*</code> are
+appended). Same drift guarantee as <code>withdrawal_fs_prefix_for_test</code>.
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_proof.md#0x7_confidential_proof_normalization_fs_prefix_for_test">normalization_fs_prefix_for_test</a>(<a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a>: u8, sender: <b>address</b>, contract_address: <b>address</b>, ek: &<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedPubkey">ristretto255_twisted_elgamal::CompressedPubkey</a>, current_balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>, new_balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_proof.md#0x7_confidential_proof_normalization_fs_prefix_for_test">normalization_fs_prefix_for_test</a>(
+    <a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a>: u8,
+    sender: <b>address</b>,
+    contract_address: <b>address</b>,
+    ek: &twisted_elgamal::CompressedPubkey,
+    current_balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>,
+    new_balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
+{
+    <a href="confidential_proof.md#0x7_confidential_proof_fiat_shamir_normalization_sigma_proof_prefix">fiat_shamir_normalization_sigma_proof_prefix</a>(
+        <a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a>, sender, contract_address, ek, current_balance, new_balance)
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x7_confidential_proof_rotation_fs_prefix_for_test"></a>
+
+## Function `rotation_fs_prefix_for_test`
+
+Byte-for-byte the Fiat–Shamir PREFIX for <code>verify_rotation_proof</code> (before <code>X_*</code> are
+appended). Same drift guarantee as <code>withdrawal_fs_prefix_for_test</code>.
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_proof.md#0x7_confidential_proof_rotation_fs_prefix_for_test">rotation_fs_prefix_for_test</a>(<a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a>: u8, sender: <b>address</b>, contract_address: <b>address</b>, current_ek: &<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedPubkey">ristretto255_twisted_elgamal::CompressedPubkey</a>, new_ek: &<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedPubkey">ristretto255_twisted_elgamal::CompressedPubkey</a>, current_balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>, new_balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_proof.md#0x7_confidential_proof_rotation_fs_prefix_for_test">rotation_fs_prefix_for_test</a>(
+    <a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a>: u8,
+    sender: <b>address</b>,
+    contract_address: <b>address</b>,
+    current_ek: &twisted_elgamal::CompressedPubkey,
+    new_ek: &twisted_elgamal::CompressedPubkey,
+    current_balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>,
+    new_balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
+{
+    <a href="confidential_proof.md#0x7_confidential_proof_fiat_shamir_rotation_sigma_proof_prefix">fiat_shamir_rotation_sigma_proof_prefix</a>(
+        <a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a>, sender, contract_address, current_ek, new_ek, current_balance, new_balance)
 }
 </code></pre>
 
@@ -2863,6 +3021,57 @@ Prepends <code><a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chai
 
 </details>
 
+<a id="0x7_confidential_proof_fiat_shamir_withdrawal_sigma_proof_prefix"></a>
+
+## Function `fiat_shamir_withdrawal_sigma_proof_prefix`
+
+Returns the Fiat-Shamir transcript PREFIX for the withdrawal sigma proof, i.e. everything
+hashed before the proof commitment points <code>X_{1..18}</code> are appended. Factored out so
+<code>withdrawal_fs_prefix_for_test</code> (public) and <code>fiat_shamir_withdrawal_sigma_proof_challenge</code>
+(private, consumed by <code>verify_withdrawal_proof</code>) cannot drift.
+
+
+<pre><code><b>fun</b> <a href="confidential_proof.md#0x7_confidential_proof_fiat_shamir_withdrawal_sigma_proof_prefix">fiat_shamir_withdrawal_sigma_proof_prefix</a>(<a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a>: u8, sender: <b>address</b>, contract_address: <b>address</b>, ek: &<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedPubkey">ristretto255_twisted_elgamal::CompressedPubkey</a>, amount_chunks: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_Scalar">ristretto255::Scalar</a>&gt;, current_balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>fun</b> <a href="confidential_proof.md#0x7_confidential_proof_fiat_shamir_withdrawal_sigma_proof_prefix">fiat_shamir_withdrawal_sigma_proof_prefix</a>(
+    <a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a>: u8,
+    sender: <b>address</b>,
+    contract_address: <b>address</b>,
+    ek: &twisted_elgamal::CompressedPubkey,
+    amount_chunks: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;Scalar&gt;,
+    current_balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
+{
+    // DST || <a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a> || sender || contract || G || H || P || v_{1..4} || (C_cur, D_cur)_{1..8}
+    <b>let</b> bytes = <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>[];
+
+    bytes.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_compressed_point_to_bytes">ristretto255::compressed_point_to_bytes</a>(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_basepoint_compressed">ristretto255::basepoint_compressed</a>()));
+    bytes.append(
+        <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_compressed_point_to_bytes">ristretto255::compressed_point_to_bytes</a>(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_compress">ristretto255::point_compress</a>(&<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_hash_to_point_base">ristretto255::hash_to_point_base</a>()))
+    );
+    bytes.append(twisted_elgamal::pubkey_to_bytes(ek));
+    amount_chunks.for_each_ref(|chunk| {
+        bytes.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_scalar_to_bytes">ristretto255::scalar_to_bytes</a>(chunk));
+    });
+    bytes.append(<a href="confidential_balance.md#0x7_confidential_balance_balance_to_bytes">confidential_balance::balance_to_bytes</a>(current_balance));
+
+    <a href="confidential_proof.md#0x7_confidential_proof_prepend_domain_context">prepend_domain_context</a>(&<b>mut</b> bytes, <a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a>, sender, contract_address);
+    <b>let</b> msg = <a href="confidential_proof.md#0x7_confidential_proof_FIAT_SHAMIR_WITHDRAWAL_SIGMA_DST">FIAT_SHAMIR_WITHDRAWAL_SIGMA_DST</a>;
+    msg.append(bytes);
+    msg
+}
+</code></pre>
+
+
+
+</details>
+
 <a id="0x7_confidential_proof_fiat_shamir_withdrawal_sigma_proof_challenge"></a>
 
 ## Function `fiat_shamir_withdrawal_sigma_proof_challenge`
@@ -2889,30 +3098,85 @@ Derives the Fiat-Shamir challenge for the <code><a href="confidential_proof.md#0
     proof_xs: &<a href="confidential_proof.md#0x7_confidential_proof_WithdrawalSigmaProofXs">WithdrawalSigmaProofXs</a>): Scalar
 {
     // rho = SHA2-512(DST || <a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a> || sender || contract || G || H || P || v_{1..4} || (C_cur, D_cur)_{1..8} || X_{1..18})
+    <b>let</b> msg = <a href="confidential_proof.md#0x7_confidential_proof_fiat_shamir_withdrawal_sigma_proof_prefix">fiat_shamir_withdrawal_sigma_proof_prefix</a>(
+        <a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a>, sender, contract_address, ek, amount_chunks, current_balance);
+    msg.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(&proof_xs.x1));
+    msg.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(&proof_xs.x2));
+    proof_xs.x3s.for_each_ref(|x| {
+        msg.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(x));
+    });
+    proof_xs.x4s.for_each_ref(|x| {
+        msg.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(x));
+    });
+
+    <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_new_scalar_from_sha2_512">ristretto255::new_scalar_from_sha2_512</a>(msg)
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x7_confidential_proof_fiat_shamir_transfer_sigma_proof_prefix"></a>
+
+## Function `fiat_shamir_transfer_sigma_proof_prefix`
+
+Returns the Fiat-Shamir transcript PREFIX for the transfer sigma proof, i.e. everything
+hashed before the proof commitment points (<code>X_1..X_8s</code>) are appended, and also
+before the trailing <code><a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/bcs.md#0x1_bcs">bcs</a>(sender_auditor_hint)</code> tag. Factored out so
+<code>transfer_fs_prefix_for_test</code> (public) and <code>fiat_shamir_transfer_sigma_proof_challenge</code>
+(private) cannot drift.
+
+
+<pre><code><b>fun</b> <a href="confidential_proof.md#0x7_confidential_proof_fiat_shamir_transfer_sigma_proof_prefix">fiat_shamir_transfer_sigma_proof_prefix</a>(<a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a>: u8, sender: <b>address</b>, contract_address: <b>address</b>, sender_ek: &<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedPubkey">ristretto255_twisted_elgamal::CompressedPubkey</a>, recipient_ek: &<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedPubkey">ristretto255_twisted_elgamal::CompressedPubkey</a>, current_balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>, new_balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>, sender_amount: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>, recipient_amount: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>, auditor_eks: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedPubkey">ristretto255_twisted_elgamal::CompressedPubkey</a>&gt;, auditor_amounts: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>&gt;): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>fun</b> <a href="confidential_proof.md#0x7_confidential_proof_fiat_shamir_transfer_sigma_proof_prefix">fiat_shamir_transfer_sigma_proof_prefix</a>(
+    <a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a>: u8,
+    sender: <b>address</b>,
+    contract_address: <b>address</b>,
+    sender_ek: &twisted_elgamal::CompressedPubkey,
+    recipient_ek: &twisted_elgamal::CompressedPubkey,
+    current_balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>,
+    new_balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>,
+    sender_amount: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>,
+    recipient_amount: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>,
+    auditor_eks: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;twisted_elgamal::CompressedPubkey&gt;,
+    auditor_amounts: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>&gt;): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
+{
     <b>let</b> bytes = <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>[];
 
     bytes.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_compressed_point_to_bytes">ristretto255::compressed_point_to_bytes</a>(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_basepoint_compressed">ristretto255::basepoint_compressed</a>()));
     bytes.append(
         <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_compressed_point_to_bytes">ristretto255::compressed_point_to_bytes</a>(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_compress">ristretto255::point_compress</a>(&<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_hash_to_point_base">ristretto255::hash_to_point_base</a>()))
     );
-    bytes.append(twisted_elgamal::pubkey_to_bytes(ek));
-    amount_chunks.for_each_ref(|chunk| {
-        bytes.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_scalar_to_bytes">ristretto255::scalar_to_bytes</a>(chunk));
+    bytes.append(twisted_elgamal::pubkey_to_bytes(sender_ek));
+    bytes.append(twisted_elgamal::pubkey_to_bytes(recipient_ek));
+    auditor_eks.for_each_ref(|ek| {
+        bytes.append(twisted_elgamal::pubkey_to_bytes(ek));
     });
     bytes.append(<a href="confidential_balance.md#0x7_confidential_balance_balance_to_bytes">confidential_balance::balance_to_bytes</a>(current_balance));
-    bytes.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(&proof_xs.x1));
-    bytes.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(&proof_xs.x2));
-    proof_xs.x3s.for_each_ref(|x| {
-        bytes.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(x));
+    bytes.append(<a href="confidential_balance.md#0x7_confidential_balance_balance_to_bytes">confidential_balance::balance_to_bytes</a>(recipient_amount));
+    auditor_amounts.for_each_ref(|balance| {
+        <a href="confidential_balance.md#0x7_confidential_balance_balance_to_points_d">confidential_balance::balance_to_points_d</a>(balance).for_each_ref(|d| {
+            bytes.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_compressed_point_to_bytes">ristretto255::compressed_point_to_bytes</a>(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_compress">ristretto255::point_compress</a>(d)));
+        });
     });
-    proof_xs.x4s.for_each_ref(|x| {
-        bytes.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(x));
+    <a href="confidential_balance.md#0x7_confidential_balance_balance_to_points_d">confidential_balance::balance_to_points_d</a>(sender_amount).for_each_ref(|d| {
+        bytes.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_compressed_point_to_bytes">ristretto255::compressed_point_to_bytes</a>(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_compress">ristretto255::point_compress</a>(d)));
     });
+    bytes.append(<a href="confidential_balance.md#0x7_confidential_balance_balance_to_bytes">confidential_balance::balance_to_bytes</a>(new_balance));
 
     <a href="confidential_proof.md#0x7_confidential_proof_prepend_domain_context">prepend_domain_context</a>(&<b>mut</b> bytes, <a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a>, sender, contract_address);
-    <b>let</b> msg = <a href="confidential_proof.md#0x7_confidential_proof_FIAT_SHAMIR_WITHDRAWAL_SIGMA_DST">FIAT_SHAMIR_WITHDRAWAL_SIGMA_DST</a>;
+    <b>let</b> msg = <a href="confidential_proof.md#0x7_confidential_proof_FIAT_SHAMIR_TRANSFER_SIGMA_DST">FIAT_SHAMIR_TRANSFER_SIGMA_DST</a>;
     msg.append(bytes);
-    <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_new_scalar_from_sha2_512">ristretto255::new_scalar_from_sha2_512</a>(msg)
+    msg
 }
 </code></pre>
 
@@ -2951,58 +3215,87 @@ Derives the Fiat-Shamir challenge for the <code><a href="confidential_proof.md#0
     sender_auditor_hint: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
     proof_xs: &<a href="confidential_proof.md#0x7_confidential_proof_TransferSigmaProofXs">TransferSigmaProofXs</a>): Scalar
 {
-    // rho = SHA2-512(DST || <a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a> || sender || contract || G || H || P_s || P_r || ...)
+    // rho = SHA2-512(DST || <a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a> || sender || contract || G || H || P_s || P_r || ... || X_* || <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/bcs.md#0x1_bcs">bcs</a>(hint))
+    <b>let</b> msg = <a href="confidential_proof.md#0x7_confidential_proof_fiat_shamir_transfer_sigma_proof_prefix">fiat_shamir_transfer_sigma_proof_prefix</a>(
+        <a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a>, sender, contract_address,
+        sender_ek, recipient_ek,
+        current_balance, new_balance,
+        sender_amount, recipient_amount,
+        auditor_eks, auditor_amounts);
+    msg.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(&proof_xs.x1));
+    proof_xs.x2s.for_each_ref(|x| {
+        msg.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(x));
+    });
+    proof_xs.x3s.for_each_ref(|x| {
+        msg.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(x));
+    });
+    proof_xs.x4s.for_each_ref(|x| {
+        msg.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(x));
+    });
+    msg.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(&proof_xs.x5));
+    proof_xs.x6s.for_each_ref(|x| {
+        msg.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(x));
+    });
+    proof_xs.x7s.for_each_ref(|xs| {
+        xs.for_each_ref(|x| {
+            msg.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(x));
+        });
+    });
+    proof_xs.x8s.for_each_ref(|x| {
+        msg.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(x));
+    });
+
+    msg.append(<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/bcs.md#0x1_bcs_to_bytes">bcs::to_bytes</a>(sender_auditor_hint));
+
+    <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_new_scalar_from_sha2_512">ristretto255::new_scalar_from_sha2_512</a>(msg)
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x7_confidential_proof_fiat_shamir_normalization_sigma_proof_prefix"></a>
+
+## Function `fiat_shamir_normalization_sigma_proof_prefix`
+
+Returns the Fiat-Shamir transcript PREFIX for the normalization sigma proof, i.e.
+everything hashed before proof commitment points (<code>X_*</code>) are appended. Factored out so
+<code>normalization_fs_prefix_for_test</code> (public) and <code>fiat_shamir_normalization_sigma_proof_challenge</code>
+(private) cannot drift.
+
+
+<pre><code><b>fun</b> <a href="confidential_proof.md#0x7_confidential_proof_fiat_shamir_normalization_sigma_proof_prefix">fiat_shamir_normalization_sigma_proof_prefix</a>(<a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a>: u8, sender: <b>address</b>, contract_address: <b>address</b>, ek: &<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedPubkey">ristretto255_twisted_elgamal::CompressedPubkey</a>, current_balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>, new_balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>fun</b> <a href="confidential_proof.md#0x7_confidential_proof_fiat_shamir_normalization_sigma_proof_prefix">fiat_shamir_normalization_sigma_proof_prefix</a>(
+    <a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a>: u8,
+    sender: <b>address</b>,
+    contract_address: <b>address</b>,
+    ek: &twisted_elgamal::CompressedPubkey,
+    current_balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>,
+    new_balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
+{
     <b>let</b> bytes = <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>[];
 
     bytes.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_compressed_point_to_bytes">ristretto255::compressed_point_to_bytes</a>(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_basepoint_compressed">ristretto255::basepoint_compressed</a>()));
     bytes.append(
         <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_compressed_point_to_bytes">ristretto255::compressed_point_to_bytes</a>(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_compress">ristretto255::point_compress</a>(&<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_hash_to_point_base">ristretto255::hash_to_point_base</a>()))
     );
-    bytes.append(twisted_elgamal::pubkey_to_bytes(sender_ek));
-    bytes.append(twisted_elgamal::pubkey_to_bytes(recipient_ek));
-    auditor_eks.for_each_ref(|ek| {
-        bytes.append(twisted_elgamal::pubkey_to_bytes(ek));
-    });
+    bytes.append(twisted_elgamal::pubkey_to_bytes(ek));
     bytes.append(<a href="confidential_balance.md#0x7_confidential_balance_balance_to_bytes">confidential_balance::balance_to_bytes</a>(current_balance));
-    bytes.append(<a href="confidential_balance.md#0x7_confidential_balance_balance_to_bytes">confidential_balance::balance_to_bytes</a>(recipient_amount));
-    auditor_amounts.for_each_ref(|balance| {
-        <a href="confidential_balance.md#0x7_confidential_balance_balance_to_points_d">confidential_balance::balance_to_points_d</a>(balance).for_each_ref(|d| {
-            bytes.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_compressed_point_to_bytes">ristretto255::compressed_point_to_bytes</a>(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_compress">ristretto255::point_compress</a>(d)));
-        });
-    });
-    <a href="confidential_balance.md#0x7_confidential_balance_balance_to_points_d">confidential_balance::balance_to_points_d</a>(sender_amount).for_each_ref(|d| {
-        bytes.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_compressed_point_to_bytes">ristretto255::compressed_point_to_bytes</a>(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_compress">ristretto255::point_compress</a>(d)));
-    });
     bytes.append(<a href="confidential_balance.md#0x7_confidential_balance_balance_to_bytes">confidential_balance::balance_to_bytes</a>(new_balance));
-    bytes.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(&proof_xs.x1));
-    proof_xs.x2s.for_each_ref(|x| {
-        bytes.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(x));
-    });
-    proof_xs.x3s.for_each_ref(|x| {
-        bytes.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(x));
-    });
-    proof_xs.x4s.for_each_ref(|x| {
-        bytes.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(x));
-    });
-    bytes.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(&proof_xs.x5));
-    proof_xs.x6s.for_each_ref(|x| {
-        bytes.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(x));
-    });
-    proof_xs.x7s.for_each_ref(|xs| {
-        xs.for_each_ref(|x| {
-            bytes.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(x));
-        });
-    });
-    proof_xs.x8s.for_each_ref(|x| {
-        bytes.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(x));
-    });
-
-    bytes.append(<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/bcs.md#0x1_bcs_to_bytes">bcs::to_bytes</a>(sender_auditor_hint));
 
     <a href="confidential_proof.md#0x7_confidential_proof_prepend_domain_context">prepend_domain_context</a>(&<b>mut</b> bytes, <a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a>, sender, contract_address);
-    <b>let</b> msg = <a href="confidential_proof.md#0x7_confidential_proof_FIAT_SHAMIR_TRANSFER_SIGMA_DST">FIAT_SHAMIR_TRANSFER_SIGMA_DST</a>;
+    <b>let</b> msg = <a href="confidential_proof.md#0x7_confidential_proof_FIAT_SHAMIR_NORMALIZATION_SIGMA_DST">FIAT_SHAMIR_NORMALIZATION_SIGMA_DST</a>;
     msg.append(bytes);
-    <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_new_scalar_from_sha2_512">ristretto255::new_scalar_from_sha2_512</a>(msg)
+    msg
 }
 </code></pre>
 
@@ -3035,29 +3328,69 @@ Derives the Fiat-Shamir challenge for the <code><a href="confidential_proof.md#0
     new_balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>,
     proof_xs: &<a href="confidential_proof.md#0x7_confidential_proof_NormalizationSigmaProofXs">NormalizationSigmaProofXs</a>): Scalar
 {
-    // rho = SHA2-512(DST || <a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a> || sender || contract || G || H || P || ...)
+    // rho = SHA2-512(DST || <a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a> || sender || contract || G || H || P || bal_cur || bal_new || X_*)
+    <b>let</b> msg = <a href="confidential_proof.md#0x7_confidential_proof_fiat_shamir_normalization_sigma_proof_prefix">fiat_shamir_normalization_sigma_proof_prefix</a>(
+        <a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a>, sender, contract_address, ek, current_balance, new_balance);
+    msg.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(&proof_xs.x1));
+    msg.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(&proof_xs.x2));
+    proof_xs.x3s.for_each_ref(|x| {
+        msg.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(x));
+    });
+    proof_xs.x4s.for_each_ref(|x| {
+        msg.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(x));
+    });
+
+    <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_new_scalar_from_sha2_512">ristretto255::new_scalar_from_sha2_512</a>(msg)
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x7_confidential_proof_fiat_shamir_rotation_sigma_proof_prefix"></a>
+
+## Function `fiat_shamir_rotation_sigma_proof_prefix`
+
+Returns the Fiat-Shamir transcript PREFIX for the rotation sigma proof, i.e. everything
+hashed before proof commitment points (<code>X_*</code>) are appended. Factored out so
+<code>rotation_fs_prefix_for_test</code> (public) and <code>fiat_shamir_rotation_sigma_proof_challenge</code>
+(private) cannot drift.
+
+
+<pre><code><b>fun</b> <a href="confidential_proof.md#0x7_confidential_proof_fiat_shamir_rotation_sigma_proof_prefix">fiat_shamir_rotation_sigma_proof_prefix</a>(<a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a>: u8, sender: <b>address</b>, contract_address: <b>address</b>, current_ek: &<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedPubkey">ristretto255_twisted_elgamal::CompressedPubkey</a>, new_ek: &<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedPubkey">ristretto255_twisted_elgamal::CompressedPubkey</a>, current_balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>, new_balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>fun</b> <a href="confidential_proof.md#0x7_confidential_proof_fiat_shamir_rotation_sigma_proof_prefix">fiat_shamir_rotation_sigma_proof_prefix</a>(
+    <a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a>: u8,
+    sender: <b>address</b>,
+    contract_address: <b>address</b>,
+    current_ek: &twisted_elgamal::CompressedPubkey,
+    new_ek: &twisted_elgamal::CompressedPubkey,
+    current_balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>,
+    new_balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
+{
     <b>let</b> bytes = <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>[];
 
     bytes.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_compressed_point_to_bytes">ristretto255::compressed_point_to_bytes</a>(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_basepoint_compressed">ristretto255::basepoint_compressed</a>()));
     bytes.append(
         <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_compressed_point_to_bytes">ristretto255::compressed_point_to_bytes</a>(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_compress">ristretto255::point_compress</a>(&<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_hash_to_point_base">ristretto255::hash_to_point_base</a>()))
     );
-    bytes.append(twisted_elgamal::pubkey_to_bytes(ek));
+    bytes.append(twisted_elgamal::pubkey_to_bytes(current_ek));
+    bytes.append(twisted_elgamal::pubkey_to_bytes(new_ek));
     bytes.append(<a href="confidential_balance.md#0x7_confidential_balance_balance_to_bytes">confidential_balance::balance_to_bytes</a>(current_balance));
     bytes.append(<a href="confidential_balance.md#0x7_confidential_balance_balance_to_bytes">confidential_balance::balance_to_bytes</a>(new_balance));
-    bytes.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(&proof_xs.x1));
-    bytes.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(&proof_xs.x2));
-    proof_xs.x3s.for_each_ref(|x| {
-        bytes.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(x));
-    });
-    proof_xs.x4s.for_each_ref(|x| {
-        bytes.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(x));
-    });
 
     <a href="confidential_proof.md#0x7_confidential_proof_prepend_domain_context">prepend_domain_context</a>(&<b>mut</b> bytes, <a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a>, sender, contract_address);
-    <b>let</b> msg = <a href="confidential_proof.md#0x7_confidential_proof_FIAT_SHAMIR_NORMALIZATION_SIGMA_DST">FIAT_SHAMIR_NORMALIZATION_SIGMA_DST</a>;
+    <b>let</b> msg = <a href="confidential_proof.md#0x7_confidential_proof_FIAT_SHAMIR_ROTATION_SIGMA_DST">FIAT_SHAMIR_ROTATION_SIGMA_DST</a>;
     msg.append(bytes);
-    <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_new_scalar_from_sha2_512">ristretto255::new_scalar_from_sha2_512</a>(msg)
+    msg
 }
 </code></pre>
 
@@ -3091,30 +3424,19 @@ Derives the Fiat-Shamir challenge for the <code><a href="confidential_proof.md#0
     new_balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>,
     proof_xs: &<a href="confidential_proof.md#0x7_confidential_proof_RotationSigmaProofXs">RotationSigmaProofXs</a>): Scalar
 {
-    // rho = SHA2-512(DST || <a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a> || sender || contract || G || H || P_cur || P_new || ...)
-    <b>let</b> bytes = <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>[];
-
-    bytes.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_compressed_point_to_bytes">ristretto255::compressed_point_to_bytes</a>(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_basepoint_compressed">ristretto255::basepoint_compressed</a>()));
-    bytes.append(
-        <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_compressed_point_to_bytes">ristretto255::compressed_point_to_bytes</a>(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_compress">ristretto255::point_compress</a>(&<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_hash_to_point_base">ristretto255::hash_to_point_base</a>()))
-    );
-    bytes.append(twisted_elgamal::pubkey_to_bytes(current_ek));
-    bytes.append(twisted_elgamal::pubkey_to_bytes(new_ek));
-    bytes.append(<a href="confidential_balance.md#0x7_confidential_balance_balance_to_bytes">confidential_balance::balance_to_bytes</a>(current_balance));
-    bytes.append(<a href="confidential_balance.md#0x7_confidential_balance_balance_to_bytes">confidential_balance::balance_to_bytes</a>(new_balance));
-    bytes.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(&proof_xs.x1));
-    bytes.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(&proof_xs.x2));
-    bytes.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(&proof_xs.x3));
+    // rho = SHA2-512(DST || <a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a> || sender || contract || G || H || P_cur || P_new || bal_cur || bal_new || X_*)
+    <b>let</b> msg = <a href="confidential_proof.md#0x7_confidential_proof_fiat_shamir_rotation_sigma_proof_prefix">fiat_shamir_rotation_sigma_proof_prefix</a>(
+        <a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a>, sender, contract_address, current_ek, new_ek, current_balance, new_balance);
+    msg.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(&proof_xs.x1));
+    msg.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(&proof_xs.x2));
+    msg.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(&proof_xs.x3));
     proof_xs.x4s.for_each_ref(|x| {
-        bytes.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(x));
+        msg.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(x));
     });
     proof_xs.x5s.for_each_ref(|x| {
-        bytes.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(x));
+        msg.append(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_to_bytes">ristretto255::point_to_bytes</a>(x));
     });
 
-    <a href="confidential_proof.md#0x7_confidential_proof_prepend_domain_context">prepend_domain_context</a>(&<b>mut</b> bytes, <a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id">chain_id</a>, sender, contract_address);
-    <b>let</b> msg = <a href="confidential_proof.md#0x7_confidential_proof_FIAT_SHAMIR_ROTATION_SIGMA_DST">FIAT_SHAMIR_ROTATION_SIGMA_DST</a>;
-    msg.append(bytes);
     <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_new_scalar_from_sha2_512">ristretto255::new_scalar_from_sha2_512</a>(msg)
 }
 </code></pre>

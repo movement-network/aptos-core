@@ -1907,6 +1907,30 @@ def caE2eAbort196617Desc : FuncDesc :=
   { numParams := 0, numReturns := 0,
     body := .bytecode #[.ldU64 (UInt64.ofNat 196617), .abort_] 0 }
 
+/-- **Phase D.1** shared abort pin for the four new
+`test_verify_{withdrawal,transfer,normalization,rotation}_proof_zero_sigma_aborts`
+rows. The VM feeds an all-zero (but length-correct) sigma proof — which
+deserializes fine (all scalars → zero, all points → identity) — into the
+production `verify_*_sigma_proof`. The final `multi_scalar_mul`
+equality check then fails, so the Move VM aborts with
+`error::invalid_argument(ESIGMA_PROTOCOL_VERIFY_FAILED)` =
+**65537** (`0x10001`). All four rows share the same Lean bytecode
+witness. -/
+def caSigmaVerifyFailedAbortDesc : FuncDesc :=
+  { numParams := 0, numReturns := 0,
+    body := .bytecode #[.ldU64 (UInt64.ofNat 65537), .abort_] 0 }
+
+/-- **Phase F** shared witness for
+`confidential_balance::verify_{pending,actual}_balance_for_test` length-assertion
+aborts. The production code calls `error::internal(EINTERNAL_ERROR = 1)` →
+canonical abort code `720897` (= `0xB_0001`, since `error::INTERNAL` = `0xB`
+per `move-stdlib/sources/error.move`). Two difftest rows share this
+descriptor: `test_bal_verify_actual_rejects_pending_length_aborts` and
+`test_bal_verify_pending_rejects_actual_length_aborts`. -/
+def caBalanceLengthAssertAbortDesc : FuncDesc :=
+  { numParams := 0, numReturns := 0,
+    body := .bytecode #[.ldU64 (UInt64.ofNat 720897), .abort_] 0 }
+
 private def goldenFsConst : ConstPoolEntry where
   type := .vector .u8
   value := u8s registrationFsMsgGoldenMoveBytes
@@ -2430,7 +2454,9 @@ def confidentialModuleEnv : ModuleEnv :=
       caE2eAbort196623Desc, -- 191 second **`disable_allow_list`** (**196623**)
       caE2eAbort393219Desc, -- 192 shared **`not_found`** stub: **`freeze_token`** / **`unfreeze_token`** / **`rollover_pending_balance`** / **`rollover_pending_balance_and_freeze`** without CA store (**393219**)
       caE2eAbort196621Desc, -- 193 second **`disable_token`** (**196621**)
-      { numParams := 0, numReturns := 1, body := .native caRegistrationBytecodeEvalNative } -- 194 registration bytecode eval (L2 honest column)
+      { numParams := 0, numReturns := 1, body := .native caRegistrationBytecodeEvalNative }, -- 194 registration bytecode eval (L2 honest column)
+      caSigmaVerifyFailedAbortDesc, -- 195 Phase D.1 shared `aborted 65537` witness for the 4 `verify_*_proof_zero_sigma_aborts` rows
+      caBalanceLengthAssertAbortDesc -- 196 Phase F shared `aborted 393217` witness for the 2 `verify_{pending,actual}_balance_for_test` length-assertion rows
     ] }
 
 private def evalConfidentialIdx (idx : Nat) (fuel : Nat) : ExecResult :=

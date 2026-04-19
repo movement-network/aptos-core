@@ -44,6 +44,8 @@ directly on encrypted data.
 -  [Function `get_pending_balance_chunks`](#0x7_confidential_balance_get_pending_balance_chunks)
 -  [Function `get_actual_balance_chunks`](#0x7_confidential_balance_get_actual_balance_chunks)
 -  [Function `get_chunk_size_bits`](#0x7_confidential_balance_get_chunk_size_bits)
+-  [Function `verify_actual_balance_for_test`](#0x7_confidential_balance_verify_actual_balance_for_test)
+-  [Function `verify_pending_balance_for_test`](#0x7_confidential_balance_verify_pending_balance_for_test)
 
 
 <pre><code><b>use</b> <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error">0x1::error</a>;
@@ -472,7 +474,7 @@ Serializes a confidential balance into a byte array representation.
 
 ## Function `balance_to_points_c`
 
-Extracts the <code>C</code> value component (<code>a * H + r * G</code>) of each chunk in a confidential balance as a vector of <code>RistrettoPoint</code>s.
+Extracts the <code>C</code> value component (<code>v * G + r * H</code>) of each chunk in a confidential balance as a vector of <code>RistrettoPoint</code>s.
 
 
 <pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_balance_to_points_c">balance_to_points_c</a>(balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_RistrettoPoint">ristretto255::RistrettoPoint</a>&gt;
@@ -578,7 +580,7 @@ The second balance must have fewer or equal chunks compared to the first.
 
     lhs.chunks.enumerate_mut(|i, chunk| {
         <b>if</b> (i &lt; rhs.chunks.length()) {
-            twisted_elgamal::ciphertext_add_assign(chunk, &rhs.chunks[i])
+            twisted_elgamal::ciphertext_sub_assign(chunk, &rhs.chunks[i])
         }
     })
 }
@@ -812,6 +814,95 @@ Returns the number of bits in a single chunk.
 
 <pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_get_chunk_size_bits">get_chunk_size_bits</a>(): u64 {
     <a href="confidential_balance.md#0x7_confidential_balance_CHUNK_SIZE_BITS">CHUNK_SIZE_BITS</a>
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x7_confidential_balance_verify_actual_balance_for_test"></a>
+
+## Function `verify_actual_balance_for_test`
+
+Like [<code>verify_actual_balance</code>] but exposed as a regular <code><b>public</b></code>
+helper (not <code>#[test_only]</code>) so off-chain tooling and
+<code><b>move</b>-lean-difftest</code> harnesses can pin the decryption-consistency
+check without pulling in <code>testing: <b>true</b></code>. Body is byte-for-byte
+identical to the <code>#[test_only]</code> version (same precedent as
+<code><a href="confidential_proof.md#0x7_confidential_proof_registration_fs_message_for_test">confidential_proof::registration_fs_message_for_test</a></code> — a
+pure-function view over already-public types).
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_verify_actual_balance_for_test">verify_actual_balance_for_test</a>(balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>, dk: &<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_Scalar">ristretto255::Scalar</a>, amount: u128): bool
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_verify_actual_balance_for_test">verify_actual_balance_for_test</a>(
+    balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">ConfidentialBalance</a>,
+    dk: &Scalar,
+    amount: u128,
+): bool {
+    <b>assert</b>!(balance.chunks.length() == <a href="confidential_balance.md#0x7_confidential_balance_ACTUAL_BALANCE_CHUNKS">ACTUAL_BALANCE_CHUNKS</a>, <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_internal">error::internal</a>(<a href="confidential_balance.md#0x7_confidential_balance_EINTERNAL_ERROR">EINTERNAL_ERROR</a>));
+
+    <b>let</b> amount_chunks = <a href="confidential_balance.md#0x7_confidential_balance_split_into_chunks_u128">split_into_chunks_u128</a>(amount);
+    <b>let</b> ok = <b>true</b>;
+
+    balance.chunks.zip_ref(&amount_chunks, |balance, amount| {
+        <b>let</b> (balance_c, balance_d) = twisted_elgamal::ciphertext_as_points(balance);
+        <b>let</b> point_amount = <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_sub">ristretto255::point_sub</a>(balance_c, &<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_mul">ristretto255::point_mul</a>(balance_d, dk));
+
+        ok = ok && <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_equals">ristretto255::point_equals</a>(&point_amount, &<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_basepoint_mul">ristretto255::basepoint_mul</a>(amount));
+    });
+
+    ok
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x7_confidential_balance_verify_pending_balance_for_test"></a>
+
+## Function `verify_pending_balance_for_test`
+
+Public-visibility counterpart of [<code>verify_pending_balance</code>] (see
+[<code>verify_actual_balance_for_test</code>] for the rationale).
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_verify_pending_balance_for_test">verify_pending_balance_for_test</a>(balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>, dk: &<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_Scalar">ristretto255::Scalar</a>, amount: u64): bool
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_verify_pending_balance_for_test">verify_pending_balance_for_test</a>(
+    balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">ConfidentialBalance</a>,
+    dk: &Scalar,
+    amount: u64,
+): bool {
+    <b>assert</b>!(balance.chunks.length() == <a href="confidential_balance.md#0x7_confidential_balance_PENDING_BALANCE_CHUNKS">PENDING_BALANCE_CHUNKS</a>, <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_internal">error::internal</a>(<a href="confidential_balance.md#0x7_confidential_balance_EINTERNAL_ERROR">EINTERNAL_ERROR</a>));
+
+    <b>let</b> amount_chunks = <a href="confidential_balance.md#0x7_confidential_balance_split_into_chunks_u64">split_into_chunks_u64</a>(amount);
+    <b>let</b> ok = <b>true</b>;
+
+    balance.chunks.zip_ref(&amount_chunks, |balance, amount| {
+        <b>let</b> (balance_c, balance_d) = twisted_elgamal::ciphertext_as_points(balance);
+        <b>let</b> point_amount = <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_sub">ristretto255::point_sub</a>(balance_c, &<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_mul">ristretto255::point_mul</a>(balance_d, dk));
+
+        ok = ok && <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_equals">ristretto255::point_equals</a>(&point_amount, &<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_basepoint_mul">ristretto255::basepoint_mul</a>(amount));
+    });
+
+    ok
 }
 </code></pre>
 

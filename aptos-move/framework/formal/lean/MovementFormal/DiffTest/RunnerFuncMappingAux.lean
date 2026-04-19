@@ -863,6 +863,861 @@ private def funcNameToMappingPart5 (base : String) : Option FuncMapping :=
       some { funcIdx := 173, useConfidentialEnv := true, useRealEnv := false }
   | "test_registration_bytecode_eval_roundtrip" =>
       some { funcIdx := 194, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase A gap-fill (2026-04-17): public CA fns not previously in the harness.
+  -- All return `bool(true)` on the VM; Lean uses the existing `funcIdx := 40` witness
+  -- (same pattern as the ~65 merged CA e2e `bool(true)` success pins).
+  --
+  -- **Note on excluded Phase A candidates.** `ciphertext_clone`, `balance_to_points_c`,
+  -- and `balance_to_points_d` all transitively call `ristretto255::point_clone`, which is
+  -- **not registered** in the `move-vm-test-utils` harness VM (aborts with
+  -- `E_NATIVE_FUN_NOT_AVAILABLE` / canonical `196613`). That is a harness-environment
+  -- limitation (not real Move semantics): on the real Aptos framework runtime these
+  -- functions work. Matching the harness-VM abort in Lean would add rows that exercise
+  -- only the missing-native path, so those tests are intentionally not included here.
+  -- See `aptos-move/framework/formal/difftest/inventory/confidential_assets.md` §
+  -- "Harness-VM blocked natives" for the full list.
+  | "test_elg_ciphertext_as_points_compress_equals_to_bytes" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_elg_ciphertext_from_compressed_points_roundtrip" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_layer_max_sender_auditor_hint_bytes_eq_256" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase A strong rows (2026-04-17): NON-ZERO-input bug-catching tests.
+  -- These pin `bool(true)` via the Lean `ldTrue` witness (funcIdx := 40). Each one
+  -- exercises a distinguishing property (inequality, algebraic identity on non-zero
+  -- scalars, byte-structure sensitivity) so a regression to a trivial implementation
+  -- on the Move side produces a VM result ≠ `true` → mismatch with Lean → **FAIL**.
+  --
+  -- These rows are deliberately designed to catch real bugs. A latent copy-paste bug
+  -- in `confidential_balance::sub_balances_mut` (using `ciphertext_add_assign` instead
+  -- of `ciphertext_sub_assign`) was surfaced by the `test_bal_sub_u64_one_from_u64_one_is_zero`
+  -- row below and fixed in the same changeset. See `inventory/confidential_assets.md`.
+  | "test_elg_ciphertext_one_not_equal_zero" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_elg_ciphertext_one_bytes_differ_from_zero_bytes" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_elg_ciphertext_add_one_plus_zero_equals_one" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_elg_ciphertext_add_one_plus_two_equals_three" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_elg_ciphertext_sub_one_from_one_is_zero" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_elg_ciphertext_sub_three_minus_two_equals_one" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_elg_ciphertext_sub_assign_on_nonzero_matches_sub" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_elg_compress_decompress_nonzero_ciphertext_roundtrips" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_elg_get_value_component_nonzero_matches_basepoint_mul" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_elg_ciphertext_to_bytes_roundtrip_nonzero" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_different_u64_pending_not_equal" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_different_u64_pending_c_not_equal" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_plain_zero_not_equal_u64_one" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_u64_large_not_zero" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_u64_high_chunk_not_zero" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_u64_one_bytes_differ_from_u64_two_bytes" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_add_u64_one_plus_u64_two_equals_u64_three" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_sub_u64_one_from_u64_one_is_zero" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_sub_u64_three_minus_two_equals_one" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_compress_decompress_nonzero_pending_equals_self" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_pending_u64_one_bytes_roundtrip_equals_self" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_pending_u64_one_bytes_contains_nonzero" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_get_pending_chunks_is_four" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_get_actual_chunks_is_eight" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_get_chunk_bits_is_sixteen" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_split_u64_zero_all_chunks_zero" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_split_u128_zero_all_chunks_zero" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_split_u64_one_only_first_chunk_nonzero" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | _                  => none
+
+-- Phase B strong rows (2026-04-17): additional NON-TRIVIAL bug-catching rows.
+-- All pin `bool(true)` via `ldTrue` (funcIdx := 40). Each exercises a
+-- distinct regression class: operator-precedence in the splitter, chunk-
+-- by-chunk scanning in `is_zero_balance`, the `C`-vs-full equality
+-- discriminator, commutativity / associativity / identity / round-trip
+-- of the homomorphic arithmetic, byte-order sensitivity of serialization,
+-- domain-separation between Fiat-Shamir DSTs (pairwise inequality +
+-- exact-byte literals), and auditor-serialization order preservation.
+-- Split into its own `private def` to keep each match's `isDefEq` work
+-- under the default Lean heartbeat limit (same pattern as Part1..Part5).
+-- See `inventory/bug_fixes_found_by_difftests.md` for the methodology.
+private def funcNameToMappingPart6 (base : String) : Option FuncMapping :=
+  match base with
+  | "test_bal_split_u64_65536_chunk0_is_zero" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_split_u64_65537_chunk0_is_one" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_split_u128_65536_chunk0_is_zero_chunk1_is_one" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_split_u64_0xffff_chunk0_is_0xffff" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_u64_chunk1_only_not_zero" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_u64_chunk2_only_not_zero" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_u64_chunk2_only_not_zero_strict" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_c_equals_but_not_equals_when_only_d_differs" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_add_commutes_nonzero" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_add_associative_nonzero" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_add_zero_rhs_preserves_nonzero_lhs" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_sub_zero_rhs_preserves_nonzero_lhs" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_add_then_sub_recovers_original" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_bytes_chunk_order_matters" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_elg_ciphertext_add_associative_nonzero" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_elg_ciphertext_add_commutative_nonzero" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_elg_ciphertext_sub_assign_self_is_zero_nonzero" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_elg_ciphertext_add_assign_one_plus_two_equals_three" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_elg_ciphertext_add_then_sub_recovers_original_nonzero" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_elg_ciphertext_to_bytes_len_64_nonzero" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_elg_get_value_component_not_identity_when_v_nonzero" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_dst_transfer_not_equal_rotation" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_dst_withdrawal_not_equal_normalization" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_dst_registration_not_equal_normalization" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_dst_withdrawal_not_equal_transfer" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_dst_withdrawal_not_equal_rotation" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_dst_withdrawal_not_equal_registration" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_dst_transfer_not_equal_normalization" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_dst_transfer_not_equal_registration" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_dst_rotation_not_equal_normalization" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_dst_rotation_not_equal_registration" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_dst_bulletproofs_not_equal_any_sigma_dst" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_dst_transfer_bytes_exact" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_dst_rotation_bytes_exact" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_dst_withdrawal_bytes_exact" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_dst_normalization_bytes_exact" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_dst_registration_bytes_exact" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_dst_bulletproofs_bytes_exact" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bulletproofs_num_bits_is_16" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_serialize_auditor_eks_order_matters" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_serialize_auditor_eks_single_a_point_bytes_are_a_point" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_serialize_auditor_amounts_u64_one_differs_from_zero" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_serialize_auditor_amounts_order_matters" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | _                  => none
+
+-- `funcNameToMappingPart7` covers the **Phase B+** difftests that target
+-- operator-swap / operand-swap / algebraic-commutativity bugs in ElGamal
+-- and ConfidentialBalance. Every entry pins `ldTrue` via `funcIdx := 40`;
+-- if the Move VM disagrees with the expected `bool(true)` witness, the
+-- diff-test fails. See `inventory/bug_fixes_found_by_difftests.md`.
+private def funcNameToMappingPart7 (base : String) : Option FuncMapping :=
+  match base with
+  | "test_elg_ciphertext_sub_not_commutative_on_distinct_nonzero" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_elg_ciphertext_sub_five_minus_three_equals_two_nonzero" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_elg_ciphertext_add_assign_accumulates_three_nonzero" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_elg_ciphertext_sub_assign_chain_nonzero" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_elg_ciphertext_add_sub_distinct_nonzero" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_elg_compress_decompress_ciphertext_0xffff_and_len" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_add_vs_sub_distinct_nonzero" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_sub_not_commutative_on_distinct_nonzero" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_split_u64_max_all_chunks_ffff" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_split_u128_top_chunk_ffff_only" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_add_balances_mut_accumulates_three" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_sub_balances_mut_chain_nonzero" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_pending_u64_three_bytes_roundtrip_byte_equals" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_elg_ciphertext_to_bytes_first_32_is_left_basepoint" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_elg_ciphertext_to_bytes_last_32_is_right_identity" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_elg_new_ciphertext_from_bytes_64_zero_is_identity_pair" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_elg_ciphertext_from_bytes_basepoint_left_identity_right_roundtrip_bytes" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_zero_pending_bytes_all_zero" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_zero_actual_bytes_all_zero" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_pending_u64_one_byte_layout" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_pending_from_bytes_invalid_chunk0_left_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_pending_from_bytes_invalid_chunk3_right_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_compressed_pending_no_rand_matches_plain" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_compressed_actual_no_rand_matches_plain" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_new_pending_from_256_zeros_equals_plain_zero" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_new_actual_from_512_zeros_equals_plain_zero" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_compress_decompress_bytes_roundtrip_u64_seven" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_add_zero_plus_nonzero_equals_nonzero" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_c_equals_on_distinct_u64_is_false" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_equals_commutative_distinct" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_elg_ciphertext_from_points_distinguishes_left_right" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_elg_from_compressed_points_preserves_order" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_elg_get_value_component_matches_into_points_left_nonzero" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_elg_ciphertext_equals_reflexive_nonzero" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_elg_ciphertext_equals_commutative_on_distinct_nonzero" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_elg_pubkey_to_bytes_len_is_32" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | _                  => none
+
+-- `funcNameToMappingPart8` covers the **Phase C** deserializer-reject pins
+-- for the four confidential-asset proof types
+-- (`deserialize_{withdrawal,transfer,normalization,rotation}_proof`).
+--
+-- The full prove→verify happy-path round-trip is NOT directly difftestable
+-- because `ristretto255_bulletproofs::prove_batch_range_pedersen` is
+-- `#[test_only]` in the core stdlib and is not callable from a
+-- non-test-only harness module (harness compilation happens with
+-- `testing: true` but a non-`#[test_only]` caller still cannot name a
+-- `#[test_only]` callee). Happy-path coverage therefore remains BLOCKED
+-- until either (a) the bulletproofs prover is promoted out of
+-- `#[test_only]`, or (b) valid proof bytes are baked in as vector
+-- literals. Both are documented in `inventory/confidential_assets.md`
+-- §10 Phase C notes.
+--
+-- The rows wired here pin:
+--   * length-reject paths: short or one-byte-short sigma bytes must
+--     deserialize to `Option::none`.
+--   * structural-accept path: an all-zero sigma of the correct length
+--     (1152 B for normalization) must deserialize to `Option::some` —
+--     any regression that tightens the decoder to reject zero points
+--     would flip this row.
+--
+-- All rows pin `ldTrue` via `funcIdx := 40`.
+private def funcNameToMappingPart8 (base : String) : Option FuncMapping :=
+  match base with
+  | "test_deserialize_withdrawal_proof_short_sigma_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_deserialize_normalization_proof_short_sigma_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_deserialize_rotation_proof_short_sigma_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_deserialize_transfer_proof_short_sigma_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_deserialize_withdrawal_proof_one_byte_short_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_deserialize_normalization_proof_one_byte_short_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_deserialize_rotation_proof_one_byte_short_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_deserialize_normalization_proof_all_zero_sigma_is_some" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | _                  => none
+
+-- `funcNameToMappingPart9` covers the **Phase D.1** direct verify-reject pins
+-- for the four confidential-asset `verify_*_proof` entry points
+-- (withdrawal / normalization / rotation / transfer).
+--
+-- Each row constructs a well-formed-LENGTH, all-zero sigma proof (scalars
+-- → zero, compressed points → identity) and empty ZKRP bytes, then calls
+-- the production `verify_*_proof` on it. Because the algebra is trivially
+-- wrong, `multi_scalar_mul(points_lhs, scalars_lhs)` disagrees with
+-- `multi_scalar_mul(points_rhs, scalars_rhs)` inside
+-- `verify_*_sigma_proof`, so the VM aborts with
+-- `error::invalid_argument(ESIGMA_PROTOCOL_VERIFY_FAILED)` = **65537**.
+--
+-- This is the first direct difftest coverage of the four verifier entry
+-- points. Previously they were only touched transitively by merged
+-- end-to-end rows (Phase A/B) which go through the full txn pipeline and
+-- don't isolate the verify code path. These new rows exercise the full
+-- `verify_*_sigma_proof` → FS transcript → `msm_*_gammas` →
+-- `multi_scalar_mul` → `point_equals` pipeline and fail at the final
+-- equality check.
+--
+-- Implementation note: enabling these rows required setting the on-chain
+-- `BULLETPROOFS_NATIVES` (id 24) feature bit in the difftest storage; see
+-- `vm::ensure_sha512_move_stdlib_feature`. Without it, the verifier
+-- aborts earlier inside `confidential_balance::balance_to_points_{c,d}`
+-- → `ristretto255::point_clone` → `invalid_state(E_NATIVE_FUN_NOT_AVAILABLE)`
+-- = **196613** (harness-level, not a real proof rejection).
+--
+-- All four rows pin the same Lean bytecode witness
+-- `caSigmaVerifyFailedAbortDesc` at `funcIdx := 195` (defined in
+-- `Programs/Confidential.lean`), which evaluates to
+-- `ExecResult.aborted 65537`.
+private def funcNameToMappingPart9 (base : String) : Option FuncMapping :=
+  match base with
+  | "test_verify_withdrawal_proof_zero_sigma_aborts" =>
+      some { funcIdx := 195, useConfidentialEnv := true, useRealEnv := false }
+  | "test_verify_normalization_proof_zero_sigma_aborts" =>
+      some { funcIdx := 195, useConfidentialEnv := true, useRealEnv := false }
+  | "test_verify_rotation_proof_zero_sigma_aborts" =>
+      some { funcIdx := 195, useConfidentialEnv := true, useRealEnv := false }
+  | "test_verify_transfer_proof_zero_sigma_aborts" =>
+      some { funcIdx := 195, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase H — registration-proof NEGATIVE pins. Each test runs the production
+  -- `prove_registration_deterministic_for_difftest` on a fresh fixture,
+  -- mutates exactly ONE argument on the verifier side, and invokes
+  -- `verify_registration_proof_for_difftest`. The mutation breaks the
+  -- Fiat–Shamir challenge (for `chain_id`/`sender`/`contract_address`/
+  -- `token_address`/`ek`/`commitment` mutations) or the final algebraic
+  -- equation `s*H + e*ek == R` (for `response` mutation), causing the verifier
+  -- to abort with `error::invalid_argument(ESIGMA_PROTOCOL_VERIFY_FAILED)` =
+  -- **65537**. A regression that silently drops one of these inputs from the
+  -- transcript would still pass positive roundtrip tests (both sides drop
+  -- identically) but opens up cross-chain replay and other attacks — the
+  -- exact class of "silent" security bug difftests can catch pre-production.
+  | "test_verify_registration_rejects_sender_mutation" =>
+      some { funcIdx := 195, useConfidentialEnv := true, useRealEnv := false }
+  | "test_verify_registration_rejects_contract_mutation" =>
+      some { funcIdx := 195, useConfidentialEnv := true, useRealEnv := false }
+  | "test_verify_registration_rejects_token_mutation" =>
+      some { funcIdx := 195, useConfidentialEnv := true, useRealEnv := false }
+  | "test_verify_registration_rejects_chain_id_mutation" =>
+      some { funcIdx := 195, useConfidentialEnv := true, useRealEnv := false }
+  | "test_verify_registration_rejects_ek_mutation" =>
+      some { funcIdx := 195, useConfidentialEnv := true, useRealEnv := false }
+  | "test_verify_registration_rejects_commitment_mutation" =>
+      some { funcIdx := 195, useConfidentialEnv := true, useRealEnv := false }
+  | "test_verify_registration_rejects_response_mutation" =>
+      some { funcIdx := 195, useConfidentialEnv := true, useRealEnv := false }
+  | _                  => none
+
+-- `funcNameToMappingPart10` covers the **Phase E** rows that pin the
+-- semantics of `ristretto255_twisted_elgamal::ciphertext_clone`,
+-- `confidential_balance::balance_to_points_c`, and
+-- `confidential_balance::balance_to_points_d` — all three were flagged
+-- `BLOCKED(harness)` in the `§8.1` coverage matrix in
+-- `inventory/confidential_assets.md` because they transitively call
+-- `ristretto255::point_clone`, which the difftest harness previously
+-- rejected with `invalid_state(E_NATIVE_FUN_NOT_AVAILABLE)` = **196613**.
+-- Phase D.1 enabled the on-chain `BULLETPROOFS_NATIVES` (24) and
+-- `BULLETPROOFS_BATCH_NATIVES` (87) bits in
+-- `vm::ensure_sha512_move_stdlib_feature`, which unblocks these rows
+-- without any further Lean work.
+--
+-- Each row uses the plain `funcIdx := 40` (`ldTrue`) witness — the VM
+-- column is the substantive side: any semantic regression in
+-- `ciphertext_clone` / `balance_to_points_{c,d}` / their transitive
+-- `point_clone` / `ciphertext_as_points` helpers will flip the VM
+-- result from `bool(true)` to `bool(false)` and mismatch Lean.
+-- Specifically:
+--
+-- * `test_elg_ciphertext_clone_equals_original_nonzero` — clone on a
+--   NON-ZERO plaintext must equal the original (a zero-clone would
+--   flip `ciphertext_equals` under non-zero input).
+-- * `test_elg_ciphertext_clone_bytes_identical_nonzero` — byte-for-byte
+--   serializer match, catches a clone that silently re-encodes.
+-- * `test_elg_ciphertext_clone_is_structurally_independent` — mutating
+--   the source after cloning must NOT leak into the clone; this is the
+--   whole point of `point_clone` as a deep-copy primitive.
+-- * `test_elg_ciphertext_clone_zero_encodes_all_zero` — boundary case
+--   for the identity point.
+-- * `balance_to_points_c` / `balance_to_points_d` length-, all-identity-,
+--   and chunk-placement pins — these are the accessors every
+--   `verify_*_sigma_proof` actually uses at the innermost MSM, so a
+--   regression here would silently break every sigma verify.
+private def funcNameToMappingPart10 (base : String) : Option FuncMapping :=
+  match base with
+  | "test_elg_ciphertext_clone_equals_original_nonzero" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_elg_ciphertext_clone_bytes_identical_nonzero" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_elg_ciphertext_clone_is_structurally_independent" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_elg_ciphertext_clone_zero_encodes_all_zero" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_balance_to_points_c_pending_zero_len_is_4" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_balance_to_points_d_pending_zero_len_is_4" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_balance_to_points_c_actual_zero_len_is_8" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_balance_to_points_d_actual_zero_len_is_8" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_balance_to_points_c_zero_pending_all_identity" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_balance_to_points_d_zero_pending_all_identity" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_balance_to_points_c_zero_actual_all_identity" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_balance_to_points_c_u64_one_chunk0_is_basepoint" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_balance_to_points_d_u64_one_all_identity" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_balance_to_points_c_neq_d_on_u64_one" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_balance_to_points_c_u64_high_chunk_is_basepoint" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase F: `verify_{pending,actual}_balance_for_test` consistency.
+  -- Return-bool rows → `ldTrue` witness at funcIdx 40; the two length-
+  -- assertion abort rows → funcIdx 196 (`aborted 393217`).
+  | "test_bal_verify_pending_zero_with_any_dk_is_true" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_verify_actual_zero_with_any_dk_is_true" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_verify_pending_u64_one_matches" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_verify_pending_u64_one_vs_two_is_false" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_verify_pending_u64_max_chunk0_matches" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_verify_pending_u64_high_chunk_matches" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_verify_actual_u128_cross_u64_chunk4_matches" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_verify_actual_rejects_pending_length_aborts" =>
+      some { funcIdx := 196, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_verify_pending_rejects_actual_length_aborts" =>
+      some { funcIdx := 196, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase F.2: `is_zero_balance` direct rows.
+  | "test_bal_is_zero_balance_pending_zero_is_true" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_is_zero_balance_actual_zero_is_true" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_is_zero_balance_u64_one_is_false" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_is_zero_balance_u64_high_chunk_is_false" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_is_zero_balance_u64_chunk2_is_false" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_is_zero_balance_after_add_sub_roundtrip" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase G: Fiat-Shamir transcript PREFIX pins for the 4 sigma protocols.
+  -- The real VM column builds a byte vector via
+  -- `confidential_proof::{withdrawal,transfer,normalization,rotation}_fs_prefix_for_test`,
+  -- then compares either with the protocol's DST literal (starts_with pin),
+  -- another call's bytes (determinism / chain_id / sender / contract /
+  -- cross-protocol pin), or a related protocol's prefix. Every row returns
+  -- `bool(true)` on pass, so the Lean column is the trivial `ldTrue` stub.
+  -- Lean is intentionally not modelling the transcript byte layout here;
+  -- the VM side is the substantive oracle, and the Lean `ldTrue` ensures a
+  -- regression that flips the transcript pin to `bool(false)` mismatches.
+  | "test_fs_prefix_wd_starts_with_dst" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_wd_deterministic" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_wd_chain_id_matters" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_wd_sender_matters" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_wd_contract_matters" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_wd_vs_norm_distinct" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_norm_starts_with_dst" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_norm_deterministic" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_norm_chain_id_matters" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_norm_sender_matters" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_norm_contract_matters" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_rot_starts_with_dst" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_rot_deterministic" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_rot_chain_id_matters" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_rot_sender_matters" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_rot_contract_matters" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_rot_vs_norm_distinct" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_tr_starts_with_dst" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_tr_deterministic" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_tr_chain_id_matters" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_tr_sender_matters" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_tr_contract_matters" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_tr_auditor_count_matters" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_tr_vs_wd_distinct" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase G.2: FS transcript position-SWAP pins. These catch a class of bug
+  -- that positive prove/verify roundtrip tests cannot catch — a swap at the
+  -- call site of two symmetric arguments (e.g. sender_ek ↔ recipient_ek). In
+  -- production the off-chain prover (without the swap bug) and the on-chain
+  -- verifier (with the swap bug) would compute different challenges and every
+  -- transfer would fail — a bug that bricks the whole protocol but passes
+  -- every in-process roundtrip. Each row here picks two DISTINCT inputs and
+  -- pins that their transcripts differ; a regression flips the pin to
+  -- `bool(false)` and mismatches Lean `ldTrue`.
+  | "test_fs_prefix_two_test_eks_are_distinct" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_wd_sender_vs_contract_swap_matters" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_wd_amount_chunks_matter" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_norm_cur_vs_new_balance_swap_matters" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_rot_cur_vs_new_ek_swap_matters" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_rot_cur_vs_new_balance_swap_matters" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_tr_sender_vs_recipient_ek_swap_matters" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_tr_current_vs_new_balance_swap_matters" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_tr_sender_vs_recipient_amount_swap_matters" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_tr_auditor_eks_order_matters" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase N — individual-field coverage for FS prefixes. Each row pins that
+  -- changing exactly ONE field of one of the four FS prefix helpers yields
+  -- a byte-distinct output, so returns `true`. Same `funcIdx 40` (`ldTrue`)
+  -- model as the swap-matters rows above.
+  | "test_fs_prefix_wd_ek_matters" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_wd_current_balance_matters" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_norm_ek_matters" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_norm_current_balance_matters" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_norm_new_balance_matters" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_rot_current_ek_matters" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_rot_new_ek_matters" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_rot_current_balance_matters" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_rot_new_balance_matters" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_tr_sender_ek_matters" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_tr_recipient_ek_matters" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_tr_current_balance_matters" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_tr_new_balance_matters" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_tr_sender_amount_matters" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_tr_recipient_amount_matters" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_tr_auditor_ek_content_matters" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_tr_auditor_amount_content_matters" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase O — prover-side field-coverage pins for
+  -- `prove_registration_deterministic_for_difftest`. Each row pins an
+  -- invariance (commitment MUST NOT depend on non-k inputs) or a
+  -- variance (commitment MUST change with k; response MUST change with
+  -- every FS-transcript input and with dk) of the deterministic
+  -- registration prover. All return `true` under correct algebra, so
+  -- the Lean descriptor is `ldTrue` (funcIdx 40).
+  | "test_prove_reg_det_commitment_length_is_32" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_prove_reg_det_response_length_is_32" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_prove_reg_det_deterministic_same_inputs" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_prove_reg_det_commitment_invariant_under_chain_id" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_prove_reg_det_commitment_invariant_under_sender" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_prove_reg_det_commitment_invariant_under_contract" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_prove_reg_det_commitment_invariant_under_token" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_prove_reg_det_commitment_invariant_under_ek" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_prove_reg_det_commitment_invariant_under_dk" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_prove_reg_det_commitment_changes_with_k" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_prove_reg_det_response_changes_with_chain_id" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_prove_reg_det_response_changes_with_sender" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_prove_reg_det_response_changes_with_contract" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_prove_reg_det_response_changes_with_token" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_prove_reg_det_response_changes_with_ek" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_prove_reg_det_response_changes_with_dk" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_prove_reg_det_response_changes_with_k" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase Q — golden-vector byte pins for
+  -- `prove_registration_deterministic_for_difftest` on the standard fixture
+  -- (chain_id=9, sender=@0xA, contract=@0xB, token=@0xC, dk=scalar(42),
+  -- ek=pk_from_scalar(42), k=scalar(9999)). These rows assert bit-for-bit
+  -- byte equality against known-good goldens baked into the harness.
+  -- Strictly stronger than Phase O — a symmetric algebraic drift that
+  -- preserves every Phase O (in)equality can still flip these bytes.
+  | "test_prove_reg_det_commitment_matches_golden" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_prove_reg_det_response_matches_golden" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase R — golden-vector byte pins for the four sigma FS prefix helpers
+  -- (`withdrawal_fs_prefix_for_test`, `normalization_fs_prefix_for_test`,
+  -- `rotation_fs_prefix_for_test`, `transfer_fs_prefix_for_test`). Each row
+  -- returns `true` iff the concatenated prefix bytes match a bit-for-bit
+  -- golden extracted from the Move VM oracle on a fixed, simple fixture
+  -- (zero-balance, basepoint/hash-base eks, chain_id = 9, sender = @0xA,
+  -- contract = @0xB, amount = 42 for withdrawal, 0 auditors for transfer).
+  -- Single-bit drift in any transitively-called primitive
+  -- (`compressed_point_to_bytes`, `pubkey_to_bytes`, `scalar_to_bytes`,
+  -- `balance_to_bytes`, `prepend_domain_context`, DST bytes, `bcs::to_bytes`)
+  -- flips the prefix and fails the row.
+  | "test_fs_reg_msg_matches_golden" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_wd_matches_golden" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_norm_matches_golden" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_rot_matches_golden" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_tr_matches_golden" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase S — second transfer FS prefix golden on a 1-auditor fixture. Phase
+  -- R's transfer golden uses 0 auditors, so the `auditor_eks` /
+  -- `auditor_amounts` loops never execute a body and are only pinned at
+  -- "length 0". Phase S pins the auditor-iteration path byte-for-byte on a
+  -- 1-auditor fixture, catching refactors that silently skip or truncate the
+  -- loop (e.g. `.for_each` that returns early on len==0 or an off-by-one
+  -- that hashes only `auditor_eks[0..len-1]`).
+  | "test_fs_prefix_tr_1aud_matches_golden" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase T — boundary / multi-auditor / non-zero-balance FS prefix goldens
+  -- that exercise code paths Phase R/S don't hit:
+  --   * withdrawal with amount = u64::MAX (all 4 amount chunks = 0xffff);
+  --     catches bugs in split_into_chunks_u64 or scalar_to_bytes that only
+  --     manifest on high chunks.
+  --   * transfer with 2 auditors; catches off-by-one / "only hash
+  --     auditor[0]" bugs that pass Phase S's 1-auditor row.
+  --   * normalization with non-zero current balance; catches chunk-concat
+  --     / C-vs-D component swap bugs that pass Phase R's all-zero row.
+  | "test_fs_prefix_wd_u64max_matches_golden" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_tr_2aud_matches_golden" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_norm_nonzero_matches_golden" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase U — pairwise-swap / reorder FS prefix goldens:
+  --   * withdrawal with 4 pairwise-distinct amount chunks (catches any
+  --     chunk-to-chunk swap; Phase R/T's fixtures are symmetric under swap).
+  --   * rotation with two distinct non-zero balances (catches current↔new
+  --     concat-order and reversal bugs; Phase R's zero-zero and Phase T's
+  --     current-zero-vs-zero-new fixtures cannot observe these).
+  | "test_fs_prefix_wd_distinct_chunks_matches_golden" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_prefix_rot_nonzero_both_matches_golden" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase P — `verify_registration_proof_for_difftest` input-byte rejection
+  -- pins. Each row feeds wrong-length or non-canonical commitment/response
+  -- bytes into the verifier; the Move VM aborts with
+  -- `ESIGMA_PROTOCOL_VERIFY_FAILED` (65537), which is modeled in Lean as
+  -- `caSigmaVerifyFailedAbortDesc` (funcIdx := 195). If a regression weakens
+  -- these checks (e.g. accepts 31/33-byte inputs, or skips canonicality
+  -- verification), the Move VM would return `bool(true)` instead of aborting,
+  -- producing a mismatch against the Lean abort stub — the bug alarm.
+  | "test_verify_registration_rejects_commitment_len_31" =>
+      some { funcIdx := 195, useConfidentialEnv := true, useRealEnv := false }
+  | "test_verify_registration_rejects_commitment_len_33" =>
+      some { funcIdx := 195, useConfidentialEnv := true, useRealEnv := false }
+  | "test_verify_registration_rejects_commitment_noncanonical_ff32" =>
+      some { funcIdx := 195, useConfidentialEnv := true, useRealEnv := false }
+  | "test_verify_registration_rejects_response_len_31" =>
+      some { funcIdx := 195, useConfidentialEnv := true, useRealEnv := false }
+  | "test_verify_registration_rejects_response_len_33" =>
+      some { funcIdx := 195, useConfidentialEnv := true, useRealEnv := false }
+  | "test_verify_registration_rejects_response_noncanonical_ff32" =>
+      some { funcIdx := 195, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase J — deserializer length-check regression pins. Every row checks
+  -- that `deserialize_*_proof` returns `None` for a specific invalid length
+  -- — catches regressions that weaken `!=` to `<` (letting longer inputs
+  -- through) or drop the `% 128 != 0` auditor-alignment check. All pins
+  -- return `bool(true)` via `option::is_none(...)`, so Lean stub is `ldTrue`.
+  | "test_deserialize_withdrawal_proof_one_byte_too_long_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_deserialize_normalization_proof_one_byte_too_long_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_deserialize_rotation_proof_one_byte_too_long_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_deserialize_transfer_proof_base_plus_32_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_deserialize_transfer_proof_base_plus_64_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_deserialize_transfer_proof_base_plus_96_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_deserialize_transfer_proof_base_plus_1_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_deserialize_transfer_proof_base_minus_1_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase I — `balance_equals` vs `balance_c_equals` distinction. Pins that
+  -- `balance_equals` compares BOTH C and D components. A regression
+  -- collapsing `balance_equals` to a C-only check (e.g. dropping the D loop
+  -- as a mistaken "optimization") would break decryption-consistency in
+  -- `verify_{pending,actual}_balance` — silent acceptance of any D. All rows
+  -- return `bool(true)` on pass; Lean stub is `ldTrue` (funcIdx 40).
+  | "test_bal_c_equals_true_when_d_differs" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_full_equals_false_when_d_differs" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_full_equals_false_when_d_differs_swapped" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_c_equals_false_when_c_differs" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_full_equals_false_when_c_differs" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase K — non-canonical scalar / point rejection pins for every sigma
+  -- proof deserializer. Each test builds a zero-filled sigma byte vector of
+  -- correct length, overwrites a single 32-byte window with `0xff` (which
+  -- is canonical-rejected for both a ristretto255 Scalar — value
+  -- `2^256 - 1 > L` — and a CompressedRistretto point — high bit set
+  -- violates ristretto255 canonicity), and asserts `is_none`. All rows
+  -- return `bool(true)` on pass; Lean stub is `ldTrue` (funcIdx 40).
+  | "test_deserialize_withdrawal_sigma_bad_first_scalar_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_deserialize_withdrawal_sigma_bad_last_scalar_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_deserialize_withdrawal_sigma_bad_first_point_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_deserialize_withdrawal_sigma_bad_last_point_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_deserialize_normalization_sigma_bad_first_scalar_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_deserialize_normalization_sigma_bad_last_scalar_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_deserialize_normalization_sigma_bad_first_point_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_deserialize_normalization_sigma_bad_last_point_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_deserialize_rotation_sigma_bad_first_scalar_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_deserialize_rotation_sigma_bad_last_scalar_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_deserialize_rotation_sigma_bad_first_point_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_deserialize_rotation_sigma_bad_last_point_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_deserialize_transfer_sigma_bad_first_scalar_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_deserialize_transfer_sigma_bad_last_scalar_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_deserialize_transfer_sigma_bad_first_point_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_deserialize_transfer_sigma_bad_last_point_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_deserialize_transfer_sigma_bad_last_auditor_point_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase K (continued) — `ristretto255_twisted_elgamal` non-canonical
+  -- rejection pins for `new_ciphertext_from_bytes` / `new_pubkey_from_bytes`.
+  -- Each returns `bool(true)` on pass via `option::is_none(&...)`. Lean stub
+  -- is `ldTrue` (funcIdx 40).
+  | "test_elg_ciphertext_from_64_bytes_noncanonical_left_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_elg_ciphertext_from_64_bytes_noncanonical_right_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_elg_ciphertext_from_64_bytes_both_noncanonical_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_elg_pubkey_from_32_bytes_noncanonical_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase L — length-mismatch hard-abort pins for `confidential_balance`'s
+  -- chunk-sensitive helpers. Every row aborts with canonical
+  -- `error::internal(1) = 0x0B_0001 = 720897`. `funcIdx 196` is the Lean
+  -- `FuncDesc` that produces `aborted 720897`, exactly matching the VM.
+  | "test_bal_balance_equals_mismatched_chunks_pending_actual_aborts" =>
+      some { funcIdx := 196, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_balance_equals_mismatched_chunks_actual_pending_aborts" =>
+      some { funcIdx := 196, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_balance_c_equals_mismatched_chunks_pending_actual_aborts" =>
+      some { funcIdx := 196, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_balance_c_equals_mismatched_chunks_actual_pending_aborts" =>
+      some { funcIdx := 196, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_add_balances_mut_pending_plus_actual_aborts" =>
+      some { funcIdx := 196, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bal_sub_balances_mut_pending_minus_actual_aborts" =>
+      some { funcIdx := 196, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase M — cross-type byte-length rejection pins for
+  -- `new_{pending,actual}_balance_from_bytes`. Each row feeds the *other*
+  -- balance-type's canonical serialized length (or direct output of
+  -- `balance_to_bytes`) into the parser and expects `None` — which the
+  -- outer Move test wraps via `std::option::is_none(...)`, so the
+  -- observable return value is `true`. `funcIdx 40` is the Lean
+  -- `FuncDesc` that produces `ldTrue`, matching the VM.
+  | "test_pending_from_actual_size_zeros_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_actual_from_pending_size_zeros_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_pending_from_actual_roundtrip_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_actual_from_pending_roundtrip_is_none" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
   | _                  => none
 
 def funcNameToMappingFromBase (base : String) : Option FuncMapping :=
@@ -880,6 +1735,11 @@ def funcNameToMappingFromBase (base : String) : Option FuncMapping :=
   funcNameToMappingPart2 base <|>
   funcNameToMappingPart3 base <|>
   funcNameToMappingPart4 base <|>
-  funcNameToMappingPart5 base
+  funcNameToMappingPart5 base <|>
+  funcNameToMappingPart6 base <|>
+  funcNameToMappingPart7 base <|>
+  funcNameToMappingPart8 base <|>
+  funcNameToMappingPart9 base <|>
+  funcNameToMappingPart10 base
 
 end MovementFormal.DiffTest

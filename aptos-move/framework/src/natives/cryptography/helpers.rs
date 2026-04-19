@@ -1,6 +1,19 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
+use aptos_native_interface::SafeNativeError;
+
+/// Build a structured abort for an internal crypto-native failure.
+///
+/// The `_msg` argument documents the failure at the call site — Movement's
+/// [`SafeNativeError`] does not yet carry a string, so the message is not
+/// surfaced to the caller. Keeping it here lets grep find the originating site
+/// and makes it trivial to thread through once the interface is extended.
+#[inline]
+pub fn internal_abort(abort_code: u64, _msg: &'static str) -> SafeNativeError {
+    SafeNativeError::Abort { abort_code }
+}
+
 /// For all $n > 0$, returns $\floor{\log_2{n}}$, contained within a `Some`.
 /// For $n = 0$, returns `None`.
 pub fn log2_floor(n: usize) -> Option<usize> {
@@ -41,7 +54,7 @@ pub fn log2_ceil(n: usize) -> Option<usize> {
     match n {
         0 => None,
         1 => Some(0),
-        _ => Some(log2_floor(n - 1).unwrap() + 1),
+        _ => log2_floor(n - 1).map(|v| v + 1),
     }
 }
 

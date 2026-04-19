@@ -1,12 +1,13 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::natives::cryptography::helpers::internal_abort;
 use crate::{
     abort_unless_feature_flag_enabled,
     natives::cryptography::algebra::{
         abort_invariant_violated, AlgebraContext, SerializationFormat, Structure,
-        BLS12381_R_SCALAR, BN254_R_SCALAR, E_TOO_MUCH_MEMORY_USED, MEMORY_LIMIT_IN_BYTES,
-        MOVE_ABORT_CODE_NOT_IMPLEMENTED,
+        BLS12381_R_SCALAR, BN254_R_SCALAR, E_ALGEBRA_BLS12_381_R_SCALAR_UNAVAILABLE,
+        E_TOO_MUCH_MEMORY_USED, MEMORY_LIMIT_IN_BYTES, MOVE_ABORT_CODE_NOT_IMPLEMENTED,
     },
     safe_borrow_element, store_element, structure_from_ty_arg,
 };
@@ -447,13 +448,19 @@ pub fn deserialize_internal(
             if bytes.len() != 576 {
                 return Ok(smallvec![Value::bool(false), Value::u64(0)]);
             }
+            let r = BLS12381_R_SCALAR.as_ref().ok_or_else(|| {
+                internal_abort(
+                    E_ALGEBRA_BLS12_381_R_SCALAR_UNAVAILABLE,
+                    "bls12-381 scalar-field order was not initialized",
+                )
+            })?;
             context.charge(ALGEBRA_ARK_BLS12_381_FQ12_DESER)?;
             match <ark_bls12_381::Fq12>::deserialize_uncompressed(bytes) {
                 Ok(element) => {
                     context.charge(
                         ALGEBRA_ARK_BLS12_381_FQ12_POW_U256 + ALGEBRA_ARK_BLS12_381_FQ12_EQ,
                     )?;
-                    if element.pow(BLS12381_R_SCALAR.0) == ark_bls12_381::Fq12::one() {
+                    if element.pow(r.0) == ark_bls12_381::Fq12::one() {
                         let handle = store_element!(context, element)?;
                         Ok(smallvec![Value::bool(true), Value::u64(handle as u64)])
                     } else {

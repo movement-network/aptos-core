@@ -1,6 +1,7 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::natives::cryptography::helpers::internal_abort;
 #[cfg(feature = "testing")]
 use crate::natives::cryptography::ristretto255::{pop_scalar_from_bytes, pop_scalars_from_bytes};
 use crate::natives::cryptography::ristretto255_point::{
@@ -47,6 +48,14 @@ pub mod abort_codes {
     /// Abort code when the vector lengths of values and blinding factors do not match.
     /// NOTE: This must match the code in the Move implementation
     pub const NFE_VECTOR_LENGTHS_MISMATCH: u64 = 0x01_0005;
+
+    // Structured internal-error codes (namespace 0x0A = std::error::internal).
+    // Previously these paths either panicked (`.expect(...)`) or hit
+    // `unreachable!()` when a Move caller supplied an invalid point handle or a
+    // (batch_size, num_bits) pair that fell off the gas table.
+    pub const NFE_PROVER_SINGLE_FAILED: u64 = 0x0A_0001;
+    pub const NFE_PROVER_BATCH_FAILED: u64 = 0x0A_0002;
+    pub const NFE_VERIFY_BATCH_BITS_UNSUPPORTED: u64 = 0x0A_0003;
 }
 
 /// The Bulletproofs library only seems to support proving [0, 2^{num_bits}) ranges where num_bits is
@@ -91,8 +100,8 @@ fn native_verify_range_proof(
         let point_context = context.extensions().get::<NativeRistrettoPointContext>();
         let point_data = point_context.point_data.borrow_mut();
 
-        let rand_base = point_data.get_point(&rand_base_handle);
-        let val_base = point_data.get_point(&val_base_handle);
+        let rand_base = point_data.get_point(&rand_base_handle)?;
+        let val_base = point_data.get_point(&val_base_handle)?;
 
         // TODO(Perf): Is there a way to avoid this unnecessary cloning here?
         PedersenGens {
@@ -139,8 +148,8 @@ fn native_verify_batch_range_proof(
         let point_context = context.extensions().get::<NativeRistrettoPointContext>();
         let point_data = point_context.point_data.borrow_mut();
 
-        let rand_base = point_data.get_point(&rand_base_handle);
-        let val_base = point_data.get_point(&val_base_handle);
+        let rand_base = point_data.get_point(&rand_base_handle)?;
+        let val_base = point_data.get_point(&val_base_handle)?;
 
         // TODO(Perf): Is there a way to avoid this unnecessary cloning here?
         PedersenGens {
@@ -191,8 +200,8 @@ fn native_test_only_prove_range(
         let point_context = context.extensions().get::<NativeRistrettoPointContext>();
         let point_data = point_context.point_data.borrow_mut();
 
-        let rand_base = point_data.get_point(&rand_base_handle);
-        let val_base = point_data.get_point(&val_base_handle);
+        let rand_base = point_data.get_point(&rand_base_handle)?;
+        let val_base = point_data.get_point(&val_base_handle)?;
 
         // TODO(Perf): Is there a way to avoid this unnecessary cloning here?
         PedersenGens {
@@ -210,7 +219,12 @@ fn native_test_only_prove_range(
         &v_blinding,
         num_bits,
     )
-    .expect("Bulletproofs prover failed unexpectedly");
+    .map_err(|_| {
+        internal_abort(
+            abort_codes::NFE_PROVER_SINGLE_FAILED,
+            "bulletproofs single-range prover failed",
+        )
+    })?;
 
     Ok(smallvec![
         Value::vector_u8(proof.to_bytes()),
@@ -273,8 +287,8 @@ fn native_test_only_batch_prove_range(
         let point_context = context.extensions().get::<NativeRistrettoPointContext>();
         let point_data = point_context.point_data.borrow_mut();
 
-        let rand_base = point_data.get_point(&rand_base_handle);
-        let val_base = point_data.get_point(&val_base_handle);
+        let rand_base = point_data.get_point(&rand_base_handle)?;
+        let val_base = point_data.get_point(&val_base_handle)?;
 
         // TODO(Perf): Is there a way to avoid this unnecessary cloning here?
         PedersenGens {
@@ -292,7 +306,12 @@ fn native_test_only_batch_prove_range(
         &v_blindings,
         num_bits,
     )
-    .expect("Bulletproofs prover failed unexpectedly");
+    .map_err(|_| {
+        internal_abort(
+            abort_codes::NFE_PROVER_BATCH_FAILED,
+            "bulletproofs batch-range prover failed",
+        )
+    })?;
 
     Ok(smallvec![
         Value::vector_u8(proof.to_bytes()),
@@ -415,7 +434,10 @@ fn charge_gas(
         (16, 16) => context.charge(BULLETPROOFS_VERIFY_BASE_BATCH_16_BITS_16),
         (16, 32) => context.charge(BULLETPROOFS_VERIFY_BASE_BATCH_16_BITS_32),
         (16, 64) => context.charge(BULLETPROOFS_VERIFY_BASE_BATCH_16_BITS_64),
-        _ => unreachable!(),
+        _ => Err(internal_abort(
+            abort_codes::NFE_VERIFY_BATCH_BITS_UNSUPPORTED,
+            "unsupported (batch_size, num_bits) pair for bulletproofs gas",
+        )),
     }
 }
 

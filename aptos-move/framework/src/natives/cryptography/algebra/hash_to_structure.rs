@@ -1,12 +1,14 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::natives::cryptography::helpers::internal_abort;
 use crate::{
     abort_unless_feature_flag_enabled,
     natives::cryptography::algebra::{
-        AlgebraContext, HashToStructureSuite, Structure, E_TOO_MUCH_MEMORY_USED,
-        MEMORY_LIMIT_IN_BYTES, MOVE_ABORT_CODE_NOT_IMPLEMENTED,
-        MOVE_ABORT_CODE_TYPE_TAG_CONVERSION_FAILED,
+        AlgebraContext, HashToStructureSuite, Structure, E_ALGEBRA_H2C_G1_MAPPER_INIT_FAILED,
+        E_ALGEBRA_H2C_G1_MAP_FAILED, E_ALGEBRA_H2C_G2_MAPPER_INIT_FAILED,
+        E_ALGEBRA_H2C_G2_MAP_FAILED, E_TOO_MUCH_MEMORY_USED, MEMORY_LIMIT_IN_BYTES,
+        MOVE_ABORT_CODE_NOT_IMPLEMENTED, MOVE_ABORT_CODE_TYPE_TAG_CONVERSION_FAILED,
     },
     store_element, structure_from_ty_arg,
 };
@@ -14,7 +16,7 @@ use aptos_gas_schedule::gas_params::natives::{aptos_framework::*, move_stdlib::*
 use aptos_native_interface::{
     safely_pop_arg, SafeNativeContext, SafeNativeError, SafeNativeResult,
 };
-use aptos_types::on_chain_config::{FeatureFlag, TimedFeatureFlag};
+use aptos_types::on_chain_config::FeatureFlag;
 use ark_ec::hashing::HashToCurve;
 use either::Either;
 use move_core_types::gas_algebra::{InternalGas, NumBytes};
@@ -49,18 +51,12 @@ fn suite_from_ty_arg(
     context: &SafeNativeContext,
     ty: &Type,
 ) -> SafeNativeResult<Option<HashToStructureSuite>> {
-    if context.timed_feature_enabled(TimedFeatureFlag::FixCryptoAlgebraNativesTypeTagConversion) {
-        if let Ok(type_tag) = context.type_to_type_tag(ty) {
-            Ok(HashToStructureSuite::try_from(type_tag).ok())
-        } else {
-            Err(SafeNativeError::Abort {
-                abort_code: MOVE_ABORT_CODE_TYPE_TAG_CONVERSION_FAILED,
-            })
-        }
-    } else {
-        let type_tag = context.type_to_type_tag(ty).unwrap();
-        Ok(HashToStructureSuite::try_from(type_tag).ok())
-    }
+    let type_tag = context
+        .type_to_type_tag(ty)
+        .map_err(|_| SafeNativeError::Abort {
+            abort_code: MOVE_ABORT_CODE_TYPE_TAG_CONVERSION_FAILED,
+        })?;
+    Ok(HashToStructureSuite::try_from(type_tag).ok())
 }
 
 macro_rules! hash_to_bls12381gx_cost {
@@ -120,8 +116,19 @@ pub fn hash_to_internal(
                 ark_ff::fields::field_hashers::DefaultFieldHasher<sha2_0_10_6::Sha256, 128>,
                 ark_ec::hashing::curve_maps::wb::WBMap<ark_bls12_381::g1::Config>,
             >::new(dst)
-            .unwrap();
-            let new_element = <ark_bls12_381::G1Projective>::from(mapper.hash(msg).unwrap());
+            .map_err(|_| {
+                internal_abort(
+                    E_ALGEBRA_H2C_G1_MAPPER_INIT_FAILED,
+                    "failed to build hash-to-curve mapper for bls12-381 G1",
+                )
+            })?;
+            let point = mapper.hash(msg).map_err(|_| {
+                internal_abort(
+                    E_ALGEBRA_H2C_G1_MAP_FAILED,
+                    "hash-to-curve mapping into bls12-381 G1 failed",
+                )
+            })?;
+            let new_element = <ark_bls12_381::G1Projective>::from(point);
             let new_handle = store_element!(context, new_element)?;
             Ok(smallvec![Value::u64(new_handle as u64)])
         },
@@ -139,8 +146,19 @@ pub fn hash_to_internal(
                 ark_ff::fields::field_hashers::DefaultFieldHasher<sha2_0_10_6::Sha256, 128>,
                 ark_ec::hashing::curve_maps::wb::WBMap<ark_bls12_381::g2::Config>,
             >::new(dst)
-            .unwrap();
-            let new_element = <ark_bls12_381::G2Projective>::from(mapper.hash(msg).unwrap());
+            .map_err(|_| {
+                internal_abort(
+                    E_ALGEBRA_H2C_G2_MAPPER_INIT_FAILED,
+                    "failed to build hash-to-curve mapper for bls12-381 G2",
+                )
+            })?;
+            let point = mapper.hash(msg).map_err(|_| {
+                internal_abort(
+                    E_ALGEBRA_H2C_G2_MAP_FAILED,
+                    "hash-to-curve mapping into bls12-381 G2 failed",
+                )
+            })?;
+            let new_element = <ark_bls12_381::G2Projective>::from(point);
             let new_handle = store_element!(context, new_element)?;
             Ok(smallvec![Value::u64(new_handle as u64)])
         },

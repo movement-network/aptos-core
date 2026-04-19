@@ -22,13 +22,6 @@ fn deep_type_tag(harness: &mut MoveHarness) -> TransactionStatus {
 }
 
 #[test]
-#[should_panic]
-fn deep_type_tag_panic_regression() {
-    let mut h = MoveHarness::new();
-    deep_type_tag(&mut h);
-}
-
-#[test]
 fn test_deep_type_tag() {
     let mut h = MoveHarness::new();
     h.new_epoch();

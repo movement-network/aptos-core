@@ -1,6 +1,8 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
+#[allow(unused_imports)]
+use crate::natives::cryptography::helpers::internal_abort;
 #[cfg(feature = "testing")]
 use aptos_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey};
 #[cfg(feature = "testing")]
@@ -25,6 +27,16 @@ use move_vm_types::{loaded_data::runtime_types::Type, values::Value};
 use rand_core::OsRng;
 use smallvec::{smallvec, SmallVec};
 use std::{collections::VecDeque, convert::TryFrom};
+
+// Structured internal-error codes (namespace 0x0A = std::error::internal).
+// The test-only key-generation and signing helpers previously unwrapped
+// constructor/deserialization failures that a caller-supplied input can trigger.
+#[cfg(feature = "testing")]
+const E_MULTI_ED25519_SK_INIT_FAILED: u64 = 0x0A_0001;
+#[cfg(feature = "testing")]
+const E_MULTI_ED25519_PK_INIT_FAILED: u64 = 0x0A_0002;
+#[cfg(feature = "testing")]
+const E_MULTI_ED25519_SIGN_SK_INVALID: u64 = 0x0A_0003;
 
 /// See `public_key_validate_v2_internal` comments in `multi_ed25519.move`.
 fn native_public_key_validate_v2(
@@ -176,8 +188,22 @@ fn native_generate_keys(
         .iter()
         .map(|pair| pair.public_key.clone())
         .collect();
-    let group_sk = multi_ed25519::MultiEd25519PrivateKey::new(private_keys, threshold).unwrap();
-    let group_pk = multi_ed25519::MultiEd25519PublicKey::new(public_keys, threshold).unwrap();
+    let group_sk = multi_ed25519::MultiEd25519PrivateKey::new(private_keys, threshold).map_err(
+        |_| {
+            internal_abort(
+                E_MULTI_ED25519_SK_INIT_FAILED,
+                "multi-ed25519 test-only: failed to assemble threshold secret key",
+            )
+        },
+    )?;
+    let group_pk = multi_ed25519::MultiEd25519PublicKey::new(public_keys, threshold).map_err(
+        |_| {
+            internal_abort(
+                E_MULTI_ED25519_PK_INIT_FAILED,
+                "multi-ed25519 test-only: failed to assemble threshold public key",
+            )
+        },
+    )?;
     Ok(smallvec![
         Value::vector_u8(group_sk.to_bytes()),
         Value::vector_u8(group_pk.to_bytes()),
@@ -192,7 +218,14 @@ fn native_sign(
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     let message = safely_pop_arg!(arguments, Vec<u8>);
     let sk_bytes = safely_pop_arg!(arguments, Vec<u8>);
-    let group_sk = multi_ed25519::MultiEd25519PrivateKey::try_from(sk_bytes.as_slice()).unwrap();
+    let group_sk = multi_ed25519::MultiEd25519PrivateKey::try_from(sk_bytes.as_slice()).map_err(
+        |_| {
+            internal_abort(
+                E_MULTI_ED25519_SIGN_SK_INVALID,
+                "multi-ed25519 test-only signing: invalid secret key bytes",
+            )
+        },
+    )?;
     let sig = group_sk.sign_arbitrary_message(message.as_slice());
     Ok(smallvec![Value::vector_u8(sig.to_bytes()),])
 }

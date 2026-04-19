@@ -1,6 +1,8 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
+#[allow(unused_imports)]
+use crate::natives::cryptography::helpers::internal_abort;
 use aptos_crypto::{bls12381, traits};
 #[cfg(feature = "testing")]
 use aptos_crypto::{
@@ -27,6 +29,13 @@ use move_vm_types::{
 use rand_core::OsRng;
 use smallvec::{smallvec, SmallVec};
 use std::{collections::VecDeque, convert::TryFrom};
+
+// Structured internal-error codes (namespace 0x0A = std::error::internal).
+// Both test-only helpers previously unwrapped a `PrivateKey::try_from` failure.
+#[cfg(feature = "testing")]
+const E_BLS12381_SIGN_SK_INVALID: u64 = 0x0A_0001;
+#[cfg(feature = "testing")]
+const E_BLS12381_POP_SK_INVALID: u64 = 0x0A_0002;
 
 /// Pops a `Vec<T>` off the argument stack and converts it to a `Vec<Vec<u8>>` by reading the first
 /// field of `T`, which is a `Vec<u8>` field named `bytes`.
@@ -628,7 +637,12 @@ pub fn native_sign(
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     let msg = safely_pop_arg!(arguments, Vec<u8>);
     let sk_bytes = safely_pop_arg!(arguments, Vec<u8>);
-    let sk = PrivateKey::try_from(sk_bytes.as_slice()).unwrap();
+    let sk = PrivateKey::try_from(sk_bytes.as_slice()).map_err(|_| {
+        internal_abort(
+            E_BLS12381_SIGN_SK_INVALID,
+            "bls12-381 test-only signing: invalid secret key bytes",
+        )
+    })?;
     let sig = sk.sign_arbitrary_message(msg.as_slice());
     Ok(smallvec![Value::vector_u8(sig.to_bytes()),])
 }
@@ -640,7 +654,12 @@ pub fn native_generate_proof_of_possession(
     mut arguments: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     let sk_bytes = safely_pop_arg!(arguments, Vec<u8>);
-    let sk = PrivateKey::try_from(sk_bytes.as_slice()).unwrap();
+    let sk = PrivateKey::try_from(sk_bytes.as_slice()).map_err(|_| {
+        internal_abort(
+            E_BLS12381_POP_SK_INVALID,
+            "bls12-381 proof-of-possession: invalid secret key bytes",
+        )
+    })?;
     let pop = ProofOfPossession::create(&sk);
     Ok(smallvec![Value::vector_u8(pop.to_bytes()),])
 }

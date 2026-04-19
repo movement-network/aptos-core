@@ -1,8 +1,10 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::natives::cryptography::ristretto255::{
-    pop_32_byte_slice, pop_64_byte_slice, pop_scalar_from_bytes, SCALAR_NUM_BYTES,
+use crate::natives::cryptography::helpers::internal_abort;
+use crate::natives::cryptography::{
+    ristretto255::{pop_32_byte_slice, pop_64_byte_slice, pop_scalar_from_bytes, SCALAR_NUM_BYTES},
+    ristretto255_point::E_RIST_SCALAR_WRONG_LEN,
 };
 use aptos_gas_schedule::gas_params::natives::aptos_framework::*;
 use aptos_native_interface::{
@@ -60,7 +62,14 @@ pub(crate) fn native_scalar_is_canonical(
         return Ok(smallvec![Value::bool(false)]);
     }
 
-    let bytes_slice = <[u8; SCALAR_NUM_BYTES]>::try_from(bytes).unwrap();
+    // The length check above makes `try_from` infallible, but we map the error into a
+    // clean abort so a future refactor that drops the check cannot reintroduce a panic.
+    let bytes_slice = <[u8; SCALAR_NUM_BYTES]>::try_from(bytes.as_slice()).map_err(|_| {
+        internal_abort(
+            E_RIST_SCALAR_WRONG_LEN,
+            "ristretto255 scalar byte length mismatch",
+        )
+    })?;
 
     let s = Scalar::from_canonical_bytes(bytes_slice);
 

@@ -1,6 +1,8 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
+#[allow(unused_imports)]
+use crate::natives::cryptography::helpers::internal_abort;
 #[cfg(feature = "testing")]
 use aptos_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey};
 #[cfg(feature = "testing")]
@@ -26,6 +28,10 @@ use std::{collections::VecDeque, convert::TryFrom};
 pub mod abort_codes {
     pub const E_WRONG_PUBKEY_SIZE: u64 = 1;
     pub const E_WRONG_SIGNATURE_SIZE: u64 = 2;
+
+    /// Structured internal-error (namespace 0x0A). Test-only signing native
+    /// previously unwrapped an `Ed25519PrivateKey::try_from` failure.
+    pub const E_ED25519_SIGN_SK_INVALID: u64 = 0x0A_0001;
 }
 
 /***************************************************************************************************
@@ -200,7 +206,12 @@ fn native_test_only_sign_internal(
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     let msg_bytes = safely_pop_arg!(args, Vec<u8>);
     let sk_bytes = safely_pop_arg!(args, Vec<u8>);
-    let sk = Ed25519PrivateKey::try_from(sk_bytes.as_slice()).unwrap();
+    let sk = Ed25519PrivateKey::try_from(sk_bytes.as_slice()).map_err(|_| {
+        internal_abort(
+            abort_codes::E_ED25519_SIGN_SK_INVALID,
+            "ed25519 test-only signing: invalid secret key bytes",
+        )
+    })?;
     let sig = sk.sign_arbitrary_message(msg_bytes.as_slice());
     Ok(smallvec![Value::vector_u8(sig.to_bytes())])
 }

@@ -344,6 +344,13 @@ theorem run_succ_ok (env : ModuleEnv) (f₀ f₁ : Frame) (cs : List Frame) (s�
     run env f₀ cs s₀ ms₀ n.succ = run env f₁ cs s₁ ms₁ n := by
   simp only [run, h₀]
 
+/-- If a single `step` directly returns, then `run` at any positive fuel also returns. -/
+theorem run_succ_returned (env : ModuleEnv) (f₀ : Frame) (cs : List Frame) (s₀ : List MoveValue)
+    (ms₀ : MachineState) (n : Nat) (vals : List MoveValue) (ms' : MachineState)
+    (h₀ : step env f₀ cs s₀ ms₀ = ExecResult.returned vals ms') :
+    run env f₀ cs s₀ ms₀ n.succ = ExecResult.returned vals ms' := by
+  simp only [run, h₀]
+
 theorem run_error_of_step_error (env : ModuleEnv) (f₀ : Frame) (cs : List Frame) (s₀ : List MoveValue)
     (ms₀ : MachineState) (fuel : Nat) (hf : 0 < fuel)
     (hstep : step env f₀ cs s₀ ms₀ = ExecResult.error) :
@@ -6325,6 +6332,929 @@ theorem registration_run_from_pc28_to_pc31_path
     (registrationMsAfterAppendContract mv sOpt chainId sender contract)
     (fuel - 3) hs28 hs29 hs30
 
+/-! ### Generic alloc / read helper (used to thread the alloc'd ref through PC 31+ chains) -/
+
+private theorem containerStore_read_alloc_new (cs : ContainerStore) (v : MoveValue) :
+    (cs.alloc v).1.read (cs.alloc v).2 = some v := by
+  simp only [ContainerStore.alloc, ContainerStore.read]
+  have hlt : cs.store.size < (cs.store.push v).size := by
+    simp [Array.size_push]
+  rw [dif_pos hlt]
+  congr 1
+  exact Array.getElem_push_eq
+
+/-- Allocating a fresh cell preserves reads at existing (in-bounds) refs. -/
+private theorem containerStore_read_alloc_old (cs : ContainerStore) (v : MoveValue) (rid : RefId)
+    (h : rid < cs.store.size) :
+    (cs.alloc v).1.read rid = cs.read rid := by
+  simp only [ContainerStore.alloc, ContainerStore.read]
+  have hlt' : rid < (cs.store.push v).size := by
+    simp only [Array.size_push]
+    exact Nat.lt_succ_of_lt h
+  rw [dif_pos hlt', dif_pos h]
+  congr 1
+  rw [Array.getElem_push_lt h]
+
+/-- Reading a specific `some`-yielding ref is preserved by a fresh alloc. -/
+private theorem containerStore_read_alloc_of_read_some (cs : ContainerStore) (v : MoveValue)
+    (rid : RefId) (u : MoveValue) (h : cs.read rid = some u) :
+    (cs.alloc v).1.read rid = some u := by
+  have hlt : rid < cs.store.size := by
+    by_contra hnlt
+    push_neg at hnlt
+    simp [ContainerStore.read, Nat.not_lt.mpr hnlt] at h
+  rw [containerStore_read_alloc_old cs v rid hlt, h]
+
+/-! ### PC 31–34 chain: generic-MS threading
+
+Extends the run-level chain from PC 31 to PC 35, absorbing the four instructions:
+`mutBorrowLoc 11` / `immBorrowLoc 4` (alloc token) / `call 5` (`bcs::to_bytes`) / `call 6` (`vector::append`).
+
+Stated with an abstract input `ms : MachineState` plus hypotheses
+(a) `ms1.containers.read 4 = some (.vector .u8 existing)` — current msg at ref 4 (on the
+    *post-alloc* MS, since the alloc at `ms.store.size` is a fresh cell), and
+(b) `ms1.containers.write 4 (existing ++ tokenBytes) = some cs'` — the append succeeds.
+The caller is responsible for discharging (a)/(b) when instantiating; they typically
+hold trivially because `alloc` at a fresh index does not touch the existing ref 4. -/
+
+theorem registration_run_from_pc31_to_pc35_abstractMs
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (mv rCompressed sOpt sVal : MoveValue)
+    (ms : MachineState)
+    (existing : List MoveValue) (csFinal : ContainerStore)
+    (hread4_post_alloc :
+      (ms.containers.alloc (.address token)).1.read 4 = some (.vector .u8 existing))
+    (hwrite4_post_alloc :
+      (ms.containers.alloc (.address token)).1.write 4
+        (.vector .u8 (existing ++ token.toList.map .u8)) = some csFinal)
+    (fuel : Nat) (_hf : 4 ≤ fuel) :
+    run (registrationModuleEnv o)
+        ({ registrationFramePc22AfterMoveLoc0
+              (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+              (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa) mv rCompressed sOpt sVal with
+            pc := 31 })
+        [] [] ms fuel =
+      run (registrationModuleEnv o)
+        ({ registrationFramePc33AfterImmBorrow4
+              (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+              (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa) mv rCompressed sOpt sVal with
+            pc := 35 })
+        [] []
+        { { ms with containers := (ms.containers.alloc (.address token)).1 } with containers := csFinal }
+        (fuel - 4) := by
+  let args := registrationVerifyArgs chainId sender contract token ekBa commitBa respBa
+  let hlen := registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa
+  have hfuel : fuel = (fuel - 4) + 4 := by omega
+  rw [hfuel]
+  have hs31 := registration_step_pc31_mutBorrowLoc11_generic o chainId sender contract token
+    ekBa commitBa respBa mv rCompressed sOpt sVal ms
+  have hs32 := registration_step_pc32_immBorrowLoc4_generic o chainId sender contract token
+    ekBa commitBa respBa mv rCompressed sOpt sVal ms
+  have hread_new :
+      ({ ms with containers := (ms.containers.alloc (.address token)).1 }).containers.read
+        (ms.containers.alloc (.address token)).2 = some (.address token) := by
+    show (ms.containers.alloc (.address token)).1.read (ms.containers.alloc (.address token)).2 = _
+    exact containerStore_read_alloc_new ms.containers (.address token)
+  have hs33 := registration_step_pc33_call_bcsToBytes_generic o chainId sender contract token
+    ekBa commitBa respBa mv rCompressed sOpt sVal
+    { ms with containers := (ms.containers.alloc (.address token)).1 }
+    (ms.containers.alloc (.address token)).2 token hread_new
+  have hs34 := registration_step_pc34_call_append_generic o chainId sender contract token
+    ekBa commitBa respBa mv rCompressed sOpt sVal
+    { ms with containers := (ms.containers.alloc (.address token)).1 }
+    existing (token.toList.map .u8) csFinal hread4_post_alloc hwrite4_post_alloc
+  exact run_succ_succ_succ_succ_ok (registrationModuleEnv o)
+    ({ registrationFramePc22AfterMoveLoc0 args hlen mv rCompressed sOpt sVal with pc := 31 })
+    ({ registrationFramePc22AfterMoveLoc0 args hlen mv rCompressed sOpt sVal with pc := 32 })
+    (registrationFramePc33AfterImmBorrow4 args hlen mv rCompressed sOpt sVal)
+    ({ registrationFramePc33AfterImmBorrow4 args hlen mv rCompressed sOpt sVal with pc := 34 })
+    ({ registrationFramePc33AfterImmBorrow4 args hlen mv rCompressed sOpt sVal with pc := 35 })
+    []
+    [] [.mutRef 4]
+    [.immRef (ms.containers.alloc (.address token)).2, .mutRef 4]
+    [.vector .u8 (token.toList.map .u8), .mutRef 4]
+    []
+    ms ms
+    { ms with containers := (ms.containers.alloc (.address token)).1 }
+    { ms with containers := (ms.containers.alloc (.address token)).1 }
+    { { ms with containers := (ms.containers.alloc (.address token)).1 } with containers := csFinal }
+    (fuel - 4) hs31 hs32 hs33 hs34
+
+/-! ### PC 35–38 chain: generic-MS threading
+
+Extends the run-level chain from PC 35 to PC 39, absorbing four instructions:
+`mutBorrowLoc 11` / `copyLoc 3` / `call 7` (`pubkey_to_bytes`) / `call 6` (`vector::append`).
+
+Unlike the PC 31 → PC 35 chain, there is no fresh `alloc` here (ref 4 already exists);
+only `call 6` at PC 38 mutates the container store. -/
+
+theorem registration_run_from_pc35_to_pc39_abstractMs
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (mv rCompressed sOpt sVal : MoveValue)
+    (ms : MachineState)
+    (ekBytesList existing : List MoveValue) (csFinal : ContainerStore)
+    (horacle : o.pubkeyToBytes [.struct_ [.vector .u8 (ekBa.toList.map .u8)]] =
+      some [.vector .u8 ekBytesList])
+    (hread4 : ms.containers.read 4 = some (.vector .u8 existing))
+    (hwrite4 : ms.containers.write 4 (.vector .u8 (existing ++ ekBytesList)) = some csFinal)
+    (fuel : Nat) (_hf : 4 ≤ fuel) :
+    run (registrationModuleEnv o)
+        ({ registrationFramePc22AfterMoveLoc0
+              (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+              (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa) mv rCompressed sOpt sVal with
+            pc := 35 })
+        [] [] ms fuel =
+      run (registrationModuleEnv o)
+        ({ registrationFramePc22AfterMoveLoc0
+              (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+              (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa) mv rCompressed sOpt sVal with
+            pc := 39 })
+        [] [] { ms with containers := csFinal } (fuel - 4) := by
+  let args := registrationVerifyArgs chainId sender contract token ekBa commitBa respBa
+  let hlen := registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa
+  have hfuel : fuel = (fuel - 4) + 4 := by omega
+  rw [hfuel]
+  have hs35 := registration_step_pc35_mutBorrowLoc11_generic o chainId sender contract token
+    ekBa commitBa respBa mv rCompressed sOpt sVal ms
+  have hs36 := registration_step_pc36_copyLoc3_generic o chainId sender contract token
+    ekBa commitBa respBa mv rCompressed sOpt sVal ms
+  have hs37 := registration_step_pc37_call_pubkeyToBytes_generic o chainId sender contract token
+    ekBa commitBa respBa mv rCompressed sOpt sVal ms (.vector .u8 ekBytesList) horacle
+  have hs38 := registration_step_pc38_call_append_generic o chainId sender contract token
+    ekBa commitBa respBa mv rCompressed sOpt sVal ms existing ekBytesList csFinal hread4 hwrite4
+  exact run_succ_succ_succ_succ_ok (registrationModuleEnv o)
+    ({ registrationFramePc22AfterMoveLoc0 args hlen mv rCompressed sOpt sVal with pc := 35 })
+    ({ registrationFramePc22AfterMoveLoc0 args hlen mv rCompressed sOpt sVal with pc := 36 })
+    ({ registrationFramePc22AfterMoveLoc0 args hlen mv rCompressed sOpt sVal with pc := 37 })
+    ({ registrationFramePc22AfterMoveLoc0 args hlen mv rCompressed sOpt sVal with pc := 38 })
+    ({ registrationFramePc22AfterMoveLoc0 args hlen mv rCompressed sOpt sVal with pc := 39 })
+    []
+    [] [.mutRef 4]
+    [.struct_ [.vector .u8 (ekBa.toList.map .u8)], .mutRef 4]
+    [.vector .u8 ekBytesList, .mutRef 4]
+    []
+    ms ms ms ms { ms with containers := csFinal }
+    (fuel - 4) hs35 hs36 hs37 hs38
+
+/-! ### PC 39–42 chain: generic-MS threading
+
+Extends the chain from PC 39 to PC 43, absorbing:
+`mutBorrowLoc 11` / `copyLoc 8` / `call 8` (`compressed_point_to_bytes`) / `call 6` (`vector::append`).
+
+Same shape as PC 35 → PC 39. -/
+
+theorem registration_run_from_pc39_to_pc43_abstractMs
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (mv rCompressed sOpt sVal : MoveValue)
+    (ms : MachineState)
+    (rcBytesList existing : List MoveValue) (csFinal : ContainerStore)
+    (horacle : o.compressedPointToBytes [rCompressed] = some [.vector .u8 rcBytesList])
+    (hread4 : ms.containers.read 4 = some (.vector .u8 existing))
+    (hwrite4 : ms.containers.write 4 (.vector .u8 (existing ++ rcBytesList)) = some csFinal)
+    (fuel : Nat) (_hf : 4 ≤ fuel) :
+    run (registrationModuleEnv o)
+        ({ registrationFramePc22AfterMoveLoc0
+              (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+              (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa) mv rCompressed sOpt sVal with
+            pc := 39 })
+        [] [] ms fuel =
+      run (registrationModuleEnv o)
+        ({ registrationFramePc22AfterMoveLoc0
+              (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+              (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa) mv rCompressed sOpt sVal with
+            pc := 43 })
+        [] [] { ms with containers := csFinal } (fuel - 4) := by
+  let args := registrationVerifyArgs chainId sender contract token ekBa commitBa respBa
+  let hlen := registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa
+  have hfuel : fuel = (fuel - 4) + 4 := by omega
+  rw [hfuel]
+  have hs39 := registration_step_pc39_mutBorrowLoc11_generic o chainId sender contract token
+    ekBa commitBa respBa mv rCompressed sOpt sVal ms
+  have hs40 := registration_step_pc40_copyLoc8_generic o chainId sender contract token
+    ekBa commitBa respBa mv rCompressed sOpt sVal ms
+  have hs41 := registration_step_pc41_call_compressedPointToBytes_generic o chainId sender contract token
+    ekBa commitBa respBa mv rCompressed sOpt sVal ms (.vector .u8 rcBytesList) horacle
+  have hs42 := registration_step_pc42_call_append_generic o chainId sender contract token
+    ekBa commitBa respBa mv rCompressed sOpt sVal ms existing rcBytesList csFinal hread4 hwrite4
+  exact run_succ_succ_succ_succ_ok (registrationModuleEnv o)
+    ({ registrationFramePc22AfterMoveLoc0 args hlen mv rCompressed sOpt sVal with pc := 39 })
+    ({ registrationFramePc22AfterMoveLoc0 args hlen mv rCompressed sOpt sVal with pc := 40 })
+    ({ registrationFramePc22AfterMoveLoc0 args hlen mv rCompressed sOpt sVal with pc := 41 })
+    ({ registrationFramePc22AfterMoveLoc0 args hlen mv rCompressed sOpt sVal with pc := 42 })
+    ({ registrationFramePc22AfterMoveLoc0 args hlen mv rCompressed sOpt sVal with pc := 43 })
+    []
+    [] [.mutRef 4]
+    [rCompressed, .mutRef 4]
+    [.vector .u8 rcBytesList, .mutRef 4]
+    []
+    ms ms ms ms { ms with containers := csFinal }
+    (fuel - 4) hs39 hs40 hs41 hs42
+
+/-! ### PC 43–45 chain: `moveLoc 11` / `call 9` (SHA2-512) / `stLoc 12`.
+Three steps — the frame transitions from `Pc22AfterMoveLoc0` → `Pc44AfterMoveLoc11`
+(clears locals[11] + localRefs[11]) then to `Pc46AfterStLoc12` (stores `eScalar`). -/
+
+theorem registration_run_from_pc43_to_pc46_abstractMs
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (mv rCompressed sOpt sVal : MoveValue)
+    (ms : MachineState)
+    (msgVal eScalar : MoveValue)
+    (hread4 : ms.containers.read 4 = some msgVal)
+    (hnative : newScalarFromSha2_512 [msgVal] = some [eScalar])
+    (fuel : Nat) (_hf : 3 ≤ fuel) :
+    run (registrationModuleEnv o)
+        ({ registrationFramePc22AfterMoveLoc0
+              (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+              (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa) mv rCompressed sOpt sVal with
+            pc := 43 })
+        [] [] ms fuel =
+      run (registrationModuleEnv o)
+        (registrationFramePc46AfterStLoc12
+            (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+            (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa) mv rCompressed sOpt sVal eScalar)
+        [] [] ms (fuel - 3) := by
+  let args := registrationVerifyArgs chainId sender contract token ekBa commitBa respBa
+  let hlen := registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa
+  have hfuel : fuel = (fuel - 3) + 3 := by omega
+  rw [hfuel]
+  have hs43 := registration_step_pc43_moveLoc11_generic o chainId sender contract token
+    ekBa commitBa respBa mv rCompressed sOpt sVal ms msgVal hread4
+  have hs44 := registration_step_pc44_call_newScalarFromSha2_512_generic o chainId sender contract token
+    ekBa commitBa respBa mv rCompressed sOpt sVal ms msgVal eScalar hnative
+  have hs45 := registration_step_pc45_stLoc12_generic o chainId sender contract token
+    ekBa commitBa respBa mv rCompressed sOpt sVal eScalar ms
+  exact run_succ_succ_succ_ok (registrationModuleEnv o)
+    ({ registrationFramePc22AfterMoveLoc0 args hlen mv rCompressed sOpt sVal with pc := 43 })
+    (registrationFramePc44AfterMoveLoc11 args hlen mv rCompressed sOpt sVal)
+    ({ registrationFramePc44AfterMoveLoc11 args hlen mv rCompressed sOpt sVal with pc := 45 })
+    (registrationFramePc46AfterStLoc12 args hlen mv rCompressed sOpt sVal eScalar)
+    []
+    [] [msgVal] [eScalar] []
+    ms ms ms ms
+    (fuel - 3) hs43 hs44 hs45
+
+/-! ### PC 46–47 chain: `call 10` (`hash_to_point_base`) / `stLoc 13`.
+Two steps; frame transitions `Pc46AfterStLoc12` → `Pc48AfterStLoc13`. -/
+
+theorem registration_run_from_pc46_to_pc48_abstractMs
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (mv rCompressed sOpt sVal eScalar : MoveValue)
+    (ms : MachineState)
+    (hPoint : MoveValue)
+    (horacle : o.hashToPointBase [] = some [hPoint])
+    (fuel : Nat) (_hf : 2 ≤ fuel) :
+    run (registrationModuleEnv o)
+        ({ registrationFramePc46AfterStLoc12
+              (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+              (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa) mv rCompressed sOpt sVal eScalar with
+            pc := 46 })
+        [] [] ms fuel =
+      run (registrationModuleEnv o)
+        (registrationFramePc48AfterStLoc13
+            (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+            (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa)
+            mv rCompressed sOpt sVal eScalar hPoint)
+        [] [] ms (fuel - 2) := by
+  let args := registrationVerifyArgs chainId sender contract token ekBa commitBa respBa
+  let hlen := registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa
+  have hfuel : fuel = (fuel - 2) + 2 := by omega
+  rw [hfuel]
+  have hs46 := registration_step_pc46_call_hashToPointBase_generic o chainId sender contract token
+    ekBa commitBa respBa mv rCompressed sOpt sVal eScalar ms hPoint horacle
+  have hs47 := registration_step_pc47_stLoc13_generic o chainId sender contract token
+    ekBa commitBa respBa mv rCompressed sOpt sVal eScalar hPoint ms
+  exact run_succ_succ_ok (registrationModuleEnv o)
+    ({ registrationFramePc46AfterStLoc12 args hlen mv rCompressed sOpt sVal eScalar with pc := 46 })
+    ({ registrationFramePc46AfterStLoc12 args hlen mv rCompressed sOpt sVal eScalar with pc := 47 })
+    (registrationFramePc48AfterStLoc13 args hlen mv rCompressed sOpt sVal eScalar hPoint)
+    []
+    [] [hPoint] []
+    ms ms ms
+    (fuel - 2) hs46 hs47
+
+/-! ### PC 48–50 chain: `moveLoc 3` / `call 11` (`pubkey_to_point`) / `stLoc 14`.
+Three steps; frame transitions `Pc48AfterStLoc13` → `Pc49AfterMoveLoc3` → `Pc51AfterStLoc14`. -/
+
+theorem registration_run_from_pc48_to_pc51_abstractMs
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (mv rCompressed sOpt sVal eScalar hPoint : MoveValue)
+    (ms : MachineState)
+    (ekPt : MoveValue)
+    (horacle : o.pubkeyToPoint [.struct_ [.vector .u8 (ekBa.toList.map .u8)]] = some [ekPt])
+    (fuel : Nat) (_hf : 3 ≤ fuel) :
+    run (registrationModuleEnv o)
+        ({ registrationFramePc48AfterStLoc13
+              (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+              (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa) mv rCompressed sOpt sVal eScalar hPoint with
+            pc := 48 })
+        [] [] ms fuel =
+      run (registrationModuleEnv o)
+        (registrationFramePc51AfterStLoc14
+            (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+            (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa)
+            mv rCompressed sOpt sVal eScalar hPoint ekPt)
+        [] [] ms (fuel - 3) := by
+  let args := registrationVerifyArgs chainId sender contract token ekBa commitBa respBa
+  let hlen := registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa
+  have hfuel : fuel = (fuel - 3) + 3 := by omega
+  rw [hfuel]
+  have hs48 := registration_step_pc48_moveLoc3_generic o chainId sender contract token
+    ekBa commitBa respBa mv rCompressed sOpt sVal eScalar hPoint ms
+  have hs49 := registration_step_pc49_call_pubkeyToPoint_generic o chainId sender contract token
+    ekBa commitBa respBa mv rCompressed sOpt sVal eScalar hPoint ms ekPt horacle
+  have hs50 := registration_step_pc50_stLoc14_generic o chainId sender contract token
+    ekBa commitBa respBa mv rCompressed sOpt sVal eScalar hPoint ekPt ms
+  exact run_succ_succ_succ_ok (registrationModuleEnv o)
+    ({ registrationFramePc48AfterStLoc13 args hlen mv rCompressed sOpt sVal eScalar hPoint with pc := 48 })
+    (registrationFramePc49AfterMoveLoc3 args hlen mv rCompressed sOpt sVal eScalar hPoint)
+    ({ registrationFramePc49AfterMoveLoc3 args hlen mv rCompressed sOpt sVal eScalar hPoint with pc := 50 })
+    (registrationFramePc51AfterStLoc14 args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt)
+    []
+    [] [.struct_ [.vector .u8 (ekBa.toList.map .u8)]] [ekPt] []
+    ms ms ms ms
+    (fuel - 3) hs48 hs49 hs50
+
+/-! ### PC 51–54 chain: `immBorrowLoc 13` / `immBorrowLoc 10` / `call 12` (`point_mul`) / `stLoc 15`.
+Four steps — two fresh allocs (hPoint and sVal) thread through to `point_mul`. -/
+
+theorem registration_run_from_pc51_to_pc55_abstractMs
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt : MoveValue)
+    (ms : MachineState)
+    (hsPt : MoveValue)
+    (horacle : o.pointMul [hPoint, sVal] = some [hsPt])
+    (fuel : Nat) (_hf : 4 ≤ fuel) :
+    run (registrationModuleEnv o)
+        ({ registrationFramePc51AfterStLoc14
+              (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+              (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa) mv rCompressed sOpt sVal eScalar hPoint ekPt with
+            pc := 51 })
+        [] [] ms fuel =
+      run (registrationModuleEnv o)
+        (registrationFramePc55AfterStLoc15
+            (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+            (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa)
+            mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt)
+        [] []
+        { ms with containers := ((ms.containers.alloc hPoint).1.alloc sVal).1 }
+        (fuel - 4) := by
+  let args := registrationVerifyArgs chainId sender contract token ekBa commitBa respBa
+  let hlen := registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa
+  have hfuel : fuel = (fuel - 4) + 4 := by omega
+  rw [hfuel]
+  -- PC 51: alloc hPoint into ms.containers, getting ref (ms.alloc hPoint).2 and cs1.
+  have hs51 := registration_step_pc51_immBorrowLoc13_generic o chainId sender contract token
+    ekBa commitBa respBa mv rCompressed sOpt sVal eScalar hPoint ekPt ms []
+  -- After PC 51: ms → ms1 = { ms with containers := (ms.alloc hPoint).1 }
+  -- PC 52 on ms1: alloc sVal, getting ref (ms1.alloc sVal).2 = (cs1.alloc sVal).2 and cs2.
+  have hs52 := registration_step_pc52_immBorrowLoc10_generic o chainId sender contract token
+    ekBa commitBa respBa mv rCompressed sOpt sVal eScalar hPoint ekPt
+    { ms with containers := (ms.containers.alloc hPoint).1 }
+    [.immRef (ms.containers.alloc hPoint).2]
+  -- After PC 52: ms → ms2 = { ms with containers := ((ms.alloc hPoint).1.alloc sVal).1 }
+  set cs1 := (ms.containers.alloc hPoint).1 with hcs1
+  set cs2 := (cs1.alloc sVal).1 with hcs2
+  set ms2 : MachineState := { ms with containers := cs2 } with hms2
+  -- At ms2 the two refs read hPoint and sVal respectively.
+  have hreadH_ms2 : ms2.containers.read (ms.containers.alloc hPoint).2 = some hPoint := by
+    show cs2.read (ms.containers.alloc hPoint).2 = _
+    rw [hcs2]
+    rw [containerStore_read_alloc_of_read_some cs1 sVal (ms.containers.alloc hPoint).2 hPoint]
+    show cs1.read _ = _
+    rw [hcs1]
+    exact containerStore_read_alloc_new ms.containers hPoint
+  have hreadS_ms2 : ms2.containers.read (cs1.alloc sVal).2 = some sVal := by
+    show cs2.read (cs1.alloc sVal).2 = _
+    rw [hcs2]
+    exact containerStore_read_alloc_new cs1 sVal
+  -- Specialise PC 53 at ms2 with the two reads.
+  have hs53 := registration_step_pc53_call_pointMul_generic o chainId sender contract token
+    ekBa commitBa respBa mv rCompressed sOpt sVal eScalar hPoint ekPt ms2
+    (ms.containers.alloc hPoint).2 (cs1.alloc sVal).2
+    hPoint sVal hsPt hreadH_ms2 hreadS_ms2 horacle
+  -- PC 54 at ms2.
+  have hs54 := registration_step_pc54_stLoc15_generic o chainId sender contract token
+    ekBa commitBa respBa mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ms2 []
+  exact run_succ_succ_succ_succ_ok (registrationModuleEnv o)
+    ({ registrationFramePc51AfterStLoc14 args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt with pc := 51 })
+    (registrationFramePc52AfterImmBorrow13 args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt)
+    (registrationFramePc53AfterImmBorrow10 args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt)
+    ({ registrationFramePc53AfterImmBorrow10 args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt with pc := 54 })
+    (registrationFramePc55AfterStLoc15 args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt)
+    []
+    []
+    [.immRef (ms.containers.alloc hPoint).2]
+    [.immRef (cs1.alloc sVal).2, .immRef (ms.containers.alloc hPoint).2]
+    [hsPt]
+    []
+    ms
+    { ms with containers := cs1 }
+    ms2 ms2 ms2
+    (fuel - 4) hs51 hs52 hs53 hs54
+
+/-! ### PC 55–58 chain: `immBorrowLoc 15` / `immBorrowLoc 14` / `immBorrowLoc 12` / `call 12` (`point_mul`).
+Four steps — three fresh allocs (hsPt, ekPt, eScalar) then `pointMul(ekPt, eScalar)`. Ends at
+frame `{ Pc58AfterImmBorrow12 with pc := 59 }` with stack `[ekePt, .immRef ridHsPt]`. -/
+
+theorem registration_run_from_pc55_to_pc59_abstractMs
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt : MoveValue)
+    (ms : MachineState)
+    (ekePt : MoveValue)
+    (horacle : o.pointMul [ekPt, eScalar] = some [ekePt])
+    (fuel : Nat) (_hf : 4 ≤ fuel) :
+    run (registrationModuleEnv o)
+        ({ registrationFramePc55AfterStLoc15
+              (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+              (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa) mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt with
+            pc := 55 })
+        [] [] ms fuel =
+      run (registrationModuleEnv o)
+        ({ registrationFramePc58AfterImmBorrow12
+              (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+              (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa) mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt with
+            pc := 59 })
+        [] [ekePt, .immRef (ms.containers.alloc hsPt).2]
+        { ms with containers := (((ms.containers.alloc hsPt).1.alloc ekPt).1.alloc eScalar).1 }
+        (fuel - 4) := by
+  let args := registrationVerifyArgs chainId sender contract token ekBa commitBa respBa
+  let hlen := registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa
+  have hfuel : fuel = (fuel - 4) + 4 := by omega
+  rw [hfuel]
+  set cs1 := (ms.containers.alloc hsPt).1 with hcs1
+  set cs2 := (cs1.alloc ekPt).1 with hcs2
+  set cs3 := (cs2.alloc eScalar).1 with hcs3
+  set ms1 : MachineState := { ms with containers := cs1 } with hms1
+  set ms2 : MachineState := { ms with containers := cs2 } with hms2
+  set ms3 : MachineState := { ms with containers := cs3 } with hms3
+  have hs55 := registration_step_pc55_immBorrowLoc15_generic o chainId sender contract token
+    ekBa commitBa respBa mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ms []
+  have hs56 := registration_step_pc56_immBorrowLoc14_generic o chainId sender contract token
+    ekBa commitBa respBa mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ms1
+    [.immRef (ms.containers.alloc hsPt).2]
+  have hs57 := registration_step_pc57_immBorrowLoc12_generic o chainId sender contract token
+    ekBa commitBa respBa mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ms2
+    [.immRef (cs1.alloc ekPt).2, .immRef (ms.containers.alloc hsPt).2]
+  have hreadEkPt_ms3 : ms3.containers.read (cs1.alloc ekPt).2 = some ekPt := by
+    show cs3.read (cs1.alloc ekPt).2 = _
+    rw [hcs3]
+    rw [containerStore_read_alloc_of_read_some cs2 eScalar (cs1.alloc ekPt).2 ekPt]
+    show cs2.read _ = _
+    rw [hcs2]
+    exact containerStore_read_alloc_new cs1 ekPt
+  have hreadEScalar_ms3 : ms3.containers.read (cs2.alloc eScalar).2 = some eScalar := by
+    show cs3.read (cs2.alloc eScalar).2 = _
+    rw [hcs3]
+    exact containerStore_read_alloc_new cs2 eScalar
+  have hs58 := registration_step_pc58_call_pointMul_generic o chainId sender contract token
+    ekBa commitBa respBa mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ms3
+    (cs1.alloc ekPt).2 (cs2.alloc eScalar).2
+    ekPt eScalar ekePt [.immRef (ms.containers.alloc hsPt).2]
+    hreadEkPt_ms3 hreadEScalar_ms3 horacle
+  exact run_succ_succ_succ_succ_ok (registrationModuleEnv o)
+    ({ registrationFramePc55AfterStLoc15 args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt with pc := 55 })
+    (registrationFramePc56AfterImmBorrow15 args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt)
+    (registrationFramePc57AfterImmBorrow14 args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt)
+    (registrationFramePc58AfterImmBorrow12 args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt)
+    ({ registrationFramePc58AfterImmBorrow12 args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt with pc := 59 })
+    []
+    []
+    [.immRef (ms.containers.alloc hsPt).2]
+    [.immRef (cs1.alloc ekPt).2, .immRef (ms.containers.alloc hsPt).2]
+    [.immRef (cs2.alloc eScalar).2, .immRef (cs1.alloc ekPt).2, .immRef (ms.containers.alloc hsPt).2]
+    [ekePt, .immRef (ms.containers.alloc hsPt).2]
+    ms ms1 ms2 ms3 ms3
+    (fuel - 4) hs55 hs56 hs57 hs58
+
+/-! ### PC 59–62 chain: `stLoc 16` / `immBorrowLoc 16` / `call 13` (`point_add`) / `stLoc 17`.
+Four steps — store ekePt, borrow it, add (hsPt + ekePt → lhsPt), store lhsPt. Ends at frame
+`registrationFramePc63AfterStLoc17` with stack `[]`, and `ms` extended with one alloc of `ekePt`. -/
+
+theorem registration_run_from_pc59_to_pc63_abstractMs
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt : MoveValue)
+    (ms : MachineState)
+    (ridHsPt : RefId)
+    (hreadHsPt : ms.containers.read ridHsPt = some hsPt)
+    (horacle : o.pointAdd [hsPt, ekePt] = some [lhsPt])
+    (fuel : Nat) (_hf : 4 ≤ fuel) :
+    run (registrationModuleEnv o)
+        ({ registrationFramePc58AfterImmBorrow12
+              (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+              (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa) mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt with
+            pc := 59 })
+        [] [ekePt, .immRef ridHsPt] ms fuel =
+      run (registrationModuleEnv o)
+        (registrationFramePc63AfterStLoc17
+            (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+            (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa)
+            mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt)
+        [] []
+        { ms with containers := (ms.containers.alloc ekePt).1 }
+        (fuel - 4) := by
+  let args := registrationVerifyArgs chainId sender contract token ekBa commitBa respBa
+  let hlen := registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa
+  have hfuel : fuel = (fuel - 4) + 4 := by omega
+  rw [hfuel]
+  set cs1 := (ms.containers.alloc ekePt).1 with hcs1
+  set ms1 : MachineState := { ms with containers := cs1 } with hms1
+  have hs59 := registration_step_pc59_stLoc16_generic o chainId sender contract token
+    ekBa commitBa respBa mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt ms
+    [.immRef ridHsPt]
+  have hs60 := registration_step_pc60_immBorrowLoc16_generic o chainId sender contract token
+    ekBa commitBa respBa mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt ms
+    [.immRef ridHsPt]
+  have hreadHs_ms1 : ms1.containers.read ridHsPt = some hsPt := by
+    show cs1.read _ = _
+    rw [hcs1]
+    exact containerStore_read_alloc_of_read_some ms.containers ekePt ridHsPt hsPt hreadHsPt
+  have hreadEke_ms1 : ms1.containers.read (ms.containers.alloc ekePt).2 = some ekePt := by
+    show cs1.read _ = _
+    rw [hcs1]
+    exact containerStore_read_alloc_new ms.containers ekePt
+  have hs61 := registration_step_pc61_call_pointAdd_generic o chainId sender contract token
+    ekBa commitBa respBa mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt ms1
+    ridHsPt (ms.containers.alloc ekePt).2 hsPt ekePt lhsPt []
+    hreadHs_ms1 hreadEke_ms1 horacle
+  have hs62 := registration_step_pc62_stLoc17_generic o chainId sender contract token
+    ekBa commitBa respBa mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt ms1 []
+  exact run_succ_succ_succ_succ_ok (registrationModuleEnv o)
+    ({ registrationFramePc58AfterImmBorrow12 args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt with pc := 59 })
+    (registrationFramePc60AfterStLoc16 args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt)
+    (registrationFramePc61AfterImmBorrow16 args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt)
+    ({ registrationFramePc61AfterImmBorrow16 args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt with pc := 62 })
+    (registrationFramePc63AfterStLoc17 args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt)
+    []
+    [ekePt, .immRef ridHsPt]
+    [.immRef ridHsPt]
+    [.immRef (ms.containers.alloc ekePt).2, .immRef ridHsPt]
+    [lhsPt]
+    []
+    ms ms ms1 ms1 ms1
+    (fuel - 4) hs59 hs60 hs61 hs62
+
+/-! ### PC 63–65 chain: `immBorrowLoc 8` / `call 14` (`point_decompress`) / `stLoc 18`.
+Three steps — borrow rCompressed, decompress to rhsPt, store. Ends at frame
+`registrationFramePc66AfterStLoc18` with stack `[]`, `ms` extended with one alloc of `rCompressed`. -/
+
+theorem registration_run_from_pc63_to_pc66_abstractMs
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt : MoveValue)
+    (ms : MachineState)
+    (horacle : o.pointDecompress [rCompressed] = some [rhsPt])
+    (fuel : Nat) (_hf : 3 ≤ fuel) :
+    run (registrationModuleEnv o)
+        (registrationFramePc63AfterStLoc17
+            (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+            (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa)
+            mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt)
+        [] [] ms fuel =
+      run (registrationModuleEnv o)
+        (registrationFramePc66AfterStLoc18
+            (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+            (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa)
+            mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt)
+        [] []
+        { ms with containers := (ms.containers.alloc rCompressed).1 }
+        (fuel - 3) := by
+  let args := registrationVerifyArgs chainId sender contract token ekBa commitBa respBa
+  let hlen := registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa
+  have hfuel : fuel = (fuel - 3) + 3 := by omega
+  rw [hfuel]
+  set cs1 := (ms.containers.alloc rCompressed).1 with hcs1
+  set ms1 : MachineState := { ms with containers := cs1 } with hms1
+  have hs63 := registration_step_pc63_immBorrowLoc8_generic o chainId sender contract token
+    ekBa commitBa respBa mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt ms []
+  have hreadR_ms1 : ms1.containers.read (ms.containers.alloc rCompressed).2 = some rCompressed := by
+    show cs1.read _ = _
+    rw [hcs1]
+    exact containerStore_read_alloc_new ms.containers rCompressed
+  have hs64 := registration_step_pc64_call_pointDecompress_generic o chainId sender contract token
+    ekBa commitBa respBa mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt ms1
+    (ms.containers.alloc rCompressed).2 rCompressed rhsPt [] hreadR_ms1 horacle
+  have hs65 := registration_step_pc65_stLoc18_generic o chainId sender contract token
+    ekBa commitBa respBa mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt ms1 []
+  exact run_succ_succ_succ_ok (registrationModuleEnv o)
+    (registrationFramePc63AfterStLoc17 args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt)
+    (registrationFramePc64AfterImmBorrow8 args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt)
+    ({ registrationFramePc64AfterImmBorrow8 args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt with pc := 65 })
+    (registrationFramePc66AfterStLoc18 args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt)
+    []
+    []
+    [.immRef (ms.containers.alloc rCompressed).2]
+    [rhsPt]
+    []
+    ms ms1 ms1 ms1
+    (fuel - 3) hs63 hs64 hs65
+
+/-! ### PC 66–70 chain (success/true branch): `immBorrowLoc 17` / `immBorrowLoc 18` / `call 15` (`point_equals`) /
+`brFalse 71` (fall-through) / `ret`. The boolean is `true`, so `brFalse` does not jump; PC 70 is `ret`,
+which terminates with `ExecResult.returned [] ms'`. Five total instructions — four `ok` steps followed by
+a terminal `returned` step. -/
+
+theorem registration_run_from_pc66_to_returned_abstractMs
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt : MoveValue)
+    (ms : MachineState)
+    (horacle : o.pointEquals [lhsPt, rhsPt] = some [.bool true])
+    (fuel : Nat) (_hf : 5 ≤ fuel) :
+    run (registrationModuleEnv o)
+        (registrationFramePc66AfterStLoc18
+            (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+            (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa)
+            mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt)
+        [] [] ms fuel =
+      ExecResult.returned []
+        { ms with containers := ((ms.containers.alloc lhsPt).1.alloc rhsPt).1 } := by
+  let args := registrationVerifyArgs chainId sender contract token ekBa commitBa respBa
+  let hlen := registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa
+  have hfuel : fuel = ((fuel - 5) + 1) + 4 := by omega
+  rw [hfuel]
+  set cs1 := (ms.containers.alloc lhsPt).1 with hcs1
+  set cs2 := (cs1.alloc rhsPt).1 with hcs2
+  set ms1 : MachineState := { ms with containers := cs1 } with hms1
+  set ms2 : MachineState := { ms with containers := cs2 } with hms2
+  have hs66 := registration_step_pc66_immBorrowLoc17_generic o chainId sender contract token
+    ekBa commitBa respBa mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt ms []
+  have hs67 := registration_step_pc67_immBorrowLoc18_generic o chainId sender contract token
+    ekBa commitBa respBa mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt ms1
+    [.immRef (ms.containers.alloc lhsPt).2]
+  have hreadLhs_ms2 : ms2.containers.read (ms.containers.alloc lhsPt).2 = some lhsPt := by
+    show cs2.read _ = _
+    rw [hcs2]
+    rw [containerStore_read_alloc_of_read_some cs1 rhsPt (ms.containers.alloc lhsPt).2 lhsPt]
+    show cs1.read _ = _
+    rw [hcs1]
+    exact containerStore_read_alloc_new ms.containers lhsPt
+  have hreadRhs_ms2 : ms2.containers.read (cs1.alloc rhsPt).2 = some rhsPt := by
+    show cs2.read _ = _
+    rw [hcs2]
+    exact containerStore_read_alloc_new cs1 rhsPt
+  have hs68 := registration_step_pc68_call_pointEquals_generic o chainId sender contract token
+    ekBa commitBa respBa mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt ms2
+    (ms.containers.alloc lhsPt).2 (cs1.alloc rhsPt).2 lhsPt rhsPt true []
+    hreadLhs_ms2 hreadRhs_ms2 horacle
+  have hs69 := registration_step_pc69_brFalse_true_generic o chainId sender contract token
+    ekBa commitBa respBa mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt ms2 []
+  have hs70 := registration_step_pc70_ret_generic o chainId sender contract token
+    ekBa commitBa respBa mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt ms2 []
+  have h4step : run (registrationModuleEnv o)
+      (registrationFramePc66AfterStLoc18 args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt)
+      [] [] ms (((fuel - 5) + 1) + 4) =
+    run (registrationModuleEnv o)
+      ({ registrationFramePc68AfterImmBorrow18 args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt with pc := 70 })
+      [] [] ms2 ((fuel - 5) + 1) :=
+    run_succ_succ_succ_succ_ok (registrationModuleEnv o)
+      (registrationFramePc66AfterStLoc18 args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt)
+      (registrationFramePc67AfterImmBorrow17 args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt)
+      (registrationFramePc68AfterImmBorrow18 args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt)
+      ({ registrationFramePc68AfterImmBorrow18 args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt with pc := 69 })
+      ({ registrationFramePc68AfterImmBorrow18 args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt with pc := 70 })
+      []
+      []
+      [.immRef (ms.containers.alloc lhsPt).2]
+      [.immRef (cs1.alloc rhsPt).2, .immRef (ms.containers.alloc lhsPt).2]
+      [.bool true]
+      []
+      ms ms1 ms2 ms2 ms2
+      ((fuel - 5) + 1) hs66 hs67 hs68 hs69
+  rw [h4step]
+  exact run_succ_returned (registrationModuleEnv o)
+    ({ registrationFramePc68AfterImmBorrow18 args hlen mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt with pc := 70 })
+    [] [] ms2 (fuel - 5) [] ms2 hs70
+
+/-! ## Composed happy-path chain: PC 2 → PC 9
+
+Threads `registration_run_from_pc2_to_pc6_somePath` with `registration_run_from_pc6_to_pc9_somePath`
+to produce a single run-level equality covering the entry-to-`rCompressed`-stored fragment of the
+registration bytecode. This is the smallest meaningful end-to-end composition and is used below to
+build up to the full PC 2 → `returned` chain needed to discharge
+`registration_eval_equiv_singleton_tail`. -/
+
+theorem registration_run_pc2_to_pc9_happyPath
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (mv rCompressed : MoveValue) (rest : List MoveValue)
+    (hmv : mv = .struct_ (.bool true :: rCompressed :: rest))
+    (fuel : Nat) (hf : 9 ≤ fuel) :
+    run (registrationModuleEnv o)
+        (registrationFrameAtPc2 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+          (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa))
+        [] [mv] MachineState.empty (fuel - 2) =
+      run (registrationModuleEnv o)
+        (registrationFramePc9AfterStLoc8 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+          (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa) mv rCompressed)
+        [] [] (registrationMsAfterOptionExtractDup1 mv) (fuel - 9) := by
+  have h1 := registration_run_from_pc2_to_pc6_somePath o chainId sender contract token ekBa commitBa respBa
+    mv true (rCompressed :: rest) hmv rfl fuel (by omega)
+  have h2 := registration_run_from_pc6_to_pc9_somePath o chainId sender contract token ekBa commitBa respBa
+    mv rCompressed rest hmv (fuel - 6) (by omega)
+  rw [h1, h2]
+  have hfuel_eq : (fuel - 6) - 3 = fuel - 9 := by omega
+  rw [hfuel_eq]
+
+/-- Extends `registration_run_pc2_to_pc9_happyPath` through the `newScalarFromBytes` singleton
+branch, the `option::is_some`/`option::extract` of `sOpt`, and the constant-DST `stLoc`
+(`sVal` now in local 10, `msg` buffer in local 11), arriving just before PC 20
+(`mutBorrowLoc 11` to begin appending `chainId`). -/
+theorem registration_run_pc2_to_pc20_happyPath
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (mv rCompressed sOpt sVal : MoveValue) (rest srest' : List MoveValue)
+    (hmv : mv = .struct_ (.bool true :: rCompressed :: rest))
+    (hsOpt : sOpt = .struct_ (.bool true :: sVal :: srest'))
+    (hsc : o.newScalarFromBytes [.vector .u8 (respBa.toList.map .u8)] = some [sOpt])
+    (fuel : Nat) (hf : 20 ≤ fuel) :
+    run (registrationModuleEnv o)
+        (registrationFrameAtPc2 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+          (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa))
+        [] [mv] MachineState.empty (fuel - 2) =
+      run (registrationModuleEnv o)
+        (registrationFramePc20AfterStLoc11 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+          (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa) mv rCompressed sOpt sVal)
+        [] [] (registrationMsAfterOptionExtractDup3 mv sOpt) (fuel - 20) := by
+  have h1 := registration_run_pc2_to_pc9_happyPath o chainId sender contract token ekBa commitBa respBa
+    mv rCompressed rest hmv fuel (by omega)
+  have h2 := registration_run_from_pc9_to_pc12_singletonPath o chainId sender contract token ekBa commitBa respBa
+    mv rCompressed sOpt hsc (fuel - 9) (by omega)
+  have h3 := registration_run_from_pc12_to_pc15_someSOptPath o chainId sender contract token ekBa commitBa respBa
+    mv rCompressed sOpt true (sVal :: srest') hsOpt rfl (fuel - 12) (by omega)
+  have h4 := registration_run_from_pc15_to_pc18_singletonSomePath o chainId sender contract token ekBa commitBa respBa
+    mv rCompressed sOpt sVal srest' hsOpt (fuel - 15) (by omega)
+  have h5 := registration_run_from_pc18_to_pc20_path o chainId sender contract token ekBa commitBa respBa
+    mv rCompressed sOpt sVal (fuel - 18) (by omega)
+  rw [h1, h2]
+  rw [show (fuel - 9) - 3 = fuel - 12 from by omega]
+  rw [h3]
+  rw [show (fuel - 12) - 3 = fuel - 15 from by omega]
+  rw [h4]
+  rw [show (fuel - 15) - 3 = fuel - 18 from by omega]
+  rw [h5]
+  rw [show (fuel - 18) - 2 = fuel - 20 from by omega]
+
+/-- Store size of `registrationMsAfterAppendContract`: the post-append MS has size 7
+(`registrationMsAfterImmBorrow2_contract` already alloced contract at ref 6, and the write at ref 4
+does not change size). -/
+private theorem registrationMsAfterAppendContract_store_size
+    (mv sOpt : MoveValue) (chainId : UInt8) (sender contract : ByteArray) :
+    (registrationMsAfterAppendContract mv sOpt chainId sender contract).containers.store.size = 7 := by
+  have hwrite := registration_write_append_contract_eq mv sOpt chainId sender contract
+  have hlt := registration_contract_lt4 mv sOpt chainId sender contract
+  have hw' :
+      (registrationMsAfterImmBorrow2_contract mv sOpt chainId sender contract).containers.write 4
+        (.vector .u8 (((fiatShamirRegistrationDstBytesList ++ [.u8 chainId]) ++ sender.toList.map .u8)
+          ++ contract.toList.map .u8)) =
+        some ⟨(registrationMsAfterImmBorrow2_contract mv sOpt chainId sender contract).containers.store.set 4
+          (.vector .u8 (((fiatShamirRegistrationDstBytesList ++ [.u8 chainId]) ++ sender.toList.map .u8)
+            ++ contract.toList.map .u8)) hlt⟩ := by
+      simp [ContainerStore.write, hlt]
+  rw [hw'] at hwrite
+  have hstore : (registrationMsAfterAppendContract mv sOpt chainId sender contract).containers.store =
+      (registrationMsAfterImmBorrow2_contract mv sOpt chainId sender contract).containers.store.set 4
+        (.vector .u8 (((fiatShamirRegistrationDstBytesList ++ [.u8 chainId]) ++ sender.toList.map .u8)
+          ++ contract.toList.map .u8)) hlt := by
+    have h := (Option.some.inj hwrite).symm
+    exact congrArg ContainerStore.store h
+  have halloc : (registrationMsAfterImmBorrow2_contract mv sOpt chainId sender contract).containers =
+      ((registrationMsAfterAppendSender mv sOpt chainId sender).containers.alloc (.address contract)).1 := rfl
+  rw [hstore, Array.size_set, halloc]
+  simp [ContainerStore.alloc, Array.size_push, registrationMsAfterAppendSender_store_size]
+
+/-- `registrationMsAfterAppendContract` at ref 4 holds the concrete `DST ++ [chainId] ++ BCS(sender) ++ BCS(contract)` buffer. -/
+private theorem registrationMsAfterAppendContract_read4
+    (mv sOpt : MoveValue) (chainId : UInt8) (sender contract : ByteArray) :
+    (registrationMsAfterAppendContract mv sOpt chainId sender contract).containers.read 4 =
+      some (.vector .u8 (((fiatShamirRegistrationDstBytesList ++ [.u8 chainId]) ++ sender.toList.map .u8)
+        ++ contract.toList.map .u8)) :=
+  ContainerStore.read_of_write
+    (registrationMsAfterImmBorrow2_contract mv sOpt chainId sender contract).containers 4 _
+    (registrationMsAfterAppendContract mv sOpt chainId sender contract).containers
+    (registration_contract_lt4 mv sOpt chainId sender contract)
+    (registration_write_append_contract_eq mv sOpt chainId sender contract)
+
+/-- Allocating `token` on `registrationMsAfterAppendContract` does not disturb the read at ref 4. -/
+private theorem registrationMsAfterAppendContract_alloc_token_read4
+    (mv sOpt : MoveValue) (chainId : UInt8) (sender contract token : ByteArray) :
+    ((registrationMsAfterAppendContract mv sOpt chainId sender contract).containers.alloc
+        (.address token)).1.read 4 =
+      some (.vector .u8 (((fiatShamirRegistrationDstBytesList ++ [.u8 chainId]) ++ sender.toList.map .u8)
+        ++ contract.toList.map .u8)) :=
+  containerStore_read_alloc_of_read_some _ _ 4 _
+    (registrationMsAfterAppendContract_read4 mv sOpt chainId sender contract)
+
+/-- After `alloc token`, ref 4 is still in bounds (size grew from 7 to 8). -/
+private theorem registrationMsAfterAppendContract_alloc_token_lt4
+    (mv sOpt : MoveValue) (chainId : UInt8) (sender contract token : ByteArray) :
+    4 < ((registrationMsAfterAppendContract mv sOpt chainId sender contract).containers.alloc
+        (.address token)).1.store.size := by
+  simp [ContainerStore.alloc, Array.size_push,
+    registrationMsAfterAppendContract_store_size]
+
+/-- Canonical post-PC 34 ContainerStore (after `call 6` appends `BCS(token)` to ref 4). -/
+def registrationCsAfterAppendToken
+    (mv sOpt : MoveValue) (chainId : UInt8) (sender contract token : ByteArray) : ContainerStore :=
+  ⟨((registrationMsAfterAppendContract mv sOpt chainId sender contract).containers.alloc
+      (.address token)).1.store.set 4
+    (.vector .u8 ((((fiatShamirRegistrationDstBytesList ++ [.u8 chainId]) ++ sender.toList.map .u8)
+      ++ contract.toList.map .u8) ++ token.toList.map .u8))
+    (registrationMsAfterAppendContract_alloc_token_lt4 mv sOpt chainId sender contract token)⟩
+
+private theorem registrationMsAfterAppendContract_alloc_token_write4
+    (mv sOpt : MoveValue) (chainId : UInt8) (sender contract token : ByteArray) :
+    ((registrationMsAfterAppendContract mv sOpt chainId sender contract).containers.alloc
+        (.address token)).1.write 4
+      (.vector .u8 ((((fiatShamirRegistrationDstBytesList ++ [.u8 chainId]) ++ sender.toList.map .u8)
+        ++ contract.toList.map .u8) ++ token.toList.map .u8)) =
+      some (registrationCsAfterAppendToken mv sOpt chainId sender contract token) := by
+  simp only [ContainerStore.write,
+    dif_pos (registrationMsAfterAppendContract_alloc_token_lt4 mv sOpt chainId sender contract token)]
+  rfl
+
+/-- Extends `registration_run_pc2_to_pc20_happyPath` through the `msg`-buffer construction
+chain (PC 20–30): alloc `msg` ref 4, push `chainId`, append BCS(sender), append BCS(contract)
+to arrive at PC 31 with stack `[]` and ref 4 holding `DST ++ [chainId] ++ BCS(sender) ++ BCS(contract)`. -/
+theorem registration_run_pc2_to_pc31_happyPath
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (mv rCompressed sOpt sVal : MoveValue) (rest srest' : List MoveValue)
+    (hmv : mv = .struct_ (.bool true :: rCompressed :: rest))
+    (hsOpt : sOpt = .struct_ (.bool true :: sVal :: srest'))
+    (hsc : o.newScalarFromBytes [.vector .u8 (respBa.toList.map .u8)] = some [sOpt])
+    (fuel : Nat) (hf : 31 ≤ fuel) :
+    run (registrationModuleEnv o)
+        (registrationFrameAtPc2 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+          (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa))
+        [] [mv] MachineState.empty (fuel - 2) =
+      run (registrationModuleEnv o)
+        ({ registrationFramePc22AfterMoveLoc0 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+              (registrationVerifyArgs_len chainId sender contract token ekBa commitBa respBa) mv rCompressed sOpt sVal with
+            pc := 31 })
+        [] [] (registrationMsAfterAppendContract mv sOpt chainId sender contract) (fuel - 31) := by
+  have h1 := registration_run_pc2_to_pc20_happyPath o chainId sender contract token ekBa commitBa respBa
+    mv rCompressed sOpt sVal rest srest' hmv hsOpt hsc fuel (by omega)
+  have h2 := registration_run_from_pc20_to_pc22_path o chainId sender contract token ekBa commitBa respBa
+    mv rCompressed sOpt sVal (fuel - 20) (by omega)
+  have h3 := registration_run_from_pc22_to_pc25_path o chainId sender contract token ekBa commitBa respBa
+    mv rCompressed sOpt sVal (fuel - 22) (by omega)
+  have h4 := registration_run_from_pc25_to_pc28_path o chainId sender contract token ekBa commitBa respBa
+    mv rCompressed sOpt sVal (fuel - 25) (by omega)
+  have h5 := registration_run_from_pc28_to_pc31_path o chainId sender contract token ekBa commitBa respBa
+    mv rCompressed sOpt sVal (fuel - 28) (by omega)
+  rw [h1, h2]
+  rw [show (fuel - 20) - 2 = fuel - 22 from by omega]
+  rw [h3]
+  rw [show (fuel - 22) - 3 = fuel - 25 from by omega]
+  rw [h4]
+  rw [show (fuel - 25) - 3 = fuel - 28 from by omega]
+  rw [h5]
+  rw [show (fuel - 28) - 3 = fuel - 31 from by omega]
+
+/-! ### Elaboration-cost wall at the first abstract-MS composition
+
+Attempting to thread `registration_run_pc2_to_pc31_happyPath` through
+`registration_run_from_pc31_to_pc35_abstractMs` into a single `registration_run_pc2_to_pc35_happyPath`
+consistently times out at `whnf` / `isDefEq` even with `maxHeartbeats = 3200000`. The cost is
+concentrated in elaborating the output `MachineState` expression, which in pc31→pc35 is stated as
+`{ { ms with containers := (ms.containers.alloc (.address token)).1 } with containers := csFinal }`
+— a nested record update where both `ms = registrationMsAfterAppendContract …` and
+`csFinal = registrationCsAfterAppendToken …` are themselves defs that unfold into deep
+`match`-on-write chains rooted at `MachineState.empty`. When Lean checks the argument types of
+`registration_run_from_pc31_to_pc35_abstractMs` it apparently tries to reduce the `Array.set …`
+expression inside `registrationCsAfterAppendToken`, which itself carries a compound `store.size`
+proof that unfolds the entire MS chain back through `registrationMsAfterAppendSender`,
+`registrationMsAfterImmBorrow1_sender`, …
+
+Bumping heartbeats to 6.4M did not help in earlier experiments (see `116840.txt` terminal log —
+the file-level compile ran 22 min before the first `whnf` timeout at 6.4M). The helpers
+`registrationMsAfterAppendContract_store_size`, `_read4`, `_alloc_token_read4`, `_alloc_token_lt4`,
+`registrationCsAfterAppendToken`, and `_alloc_token_write4` DO compile (they live above this
+comment); the bottleneck is specifically the composition theorem's argument-checking phase.
+
+**What would actually work** (future work, deferred due to compile budget):
+1. Reformulate the pc31→…→pc66 chain so each step's output MS is stated in terms of
+   `MachineState.ofContainers` against a named `ContainerStore`, avoiding `{ ms with … }` updates.
+2. Or, mark the expensive defs (`registrationMsAfterAppendSender`, `registrationMsAfterImmBorrow2_contract`,
+   `registrationMsAfterAppendContract`, `registrationCsAfterAppendToken`) as `@[irreducible]` and
+   prove their unfolding equations once; downstream proofs then reason only via the equations.
+3. Or, migrate the remaining chain lemmas to a `dropMs`-based statement (since the axiom's
+   conclusion is `(run …).dropMs = func`, tracking full MS is unnecessary from here on).
+
+Each of these is a refactor of 3 000–6 000 lines of existing chain lemmas; the previously
+verified success path through PC 2 → PC 31 is preserved, and the axiom
+`registration_eval_equiv_singleton_tail` below remains the chosen trusted boundary until that
+refactor is undertaken. -/
+
 /-! ## Functional sim: same early errors as bytecode -/
 
 theorem verifyRegistration_func_error_of_compressed_none
@@ -6429,8 +7359,11 @@ theorem signature — each layer roughly doubles elaboration cost, quickly excee
 the generic lemma with the actual MS and read/write hypotheses.
 
 Combinator `registration_run_from_pc2_to_pc6_somePath` / `registration_run_from_entry_to_pc6_somePath`
-chain PC 2 → PC 6. The individual PC 7–42 lemmas exist but are not yet threaded into a
-run-level chain past PC 6.
+chain PC 2 → PC 6. The full concrete-MS block PC 2 → PC 31 is now threaded into single composed
+theorems `registration_run_pc2_to_pc9_happyPath`, `registration_run_pc2_to_pc20_happyPath`, and
+`registration_run_pc2_to_pc31_happyPath`. The abstract-MS block PC 31 → PC 66 remains to be
+composed (each `_abstractMs` chain needs its read/write hypotheses discharged from the prior
+chain's output MS).
 
 Eliminating `registration_eval_equiv_singleton_tail` still requires per-PC (or block) lemmas
 from PC 43 (`moveLoc 11` consumes `msg` via ref 4) through `ret` — SHA2-512 scalar (PCs 43–45),

@@ -1,0 +1,171 @@
+MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquiv.lean:7097:14: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  run (registrationModuleEnv o)
+    (registrationFramePc12AfterStLoc9 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa) ⋯ mv
+      rCompressed sOpt)
+    [] [] (registrationMsAfterOptionExtractDup1 mv) (fuel - 12)
+in the target expression
+  run (registrationModuleEnv o)
+      (registrationFramePc12AfterStLoc9 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa) ⋯ mv
+        rCompressed sOpt)
+      [] [] (registrationMsAfterOptionExtractDup1 mv) (fuel - 9 - 3) =
+    run (registrationModuleEnv o)
+      (registrationFramePc20AfterStLoc11 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa) ⋯
+        mv rCompressed sOpt sVal)
+      [] [] (registrationMsAfterOptionExtractDup3 mv sOpt) (fuel - 20)
+
+o : RegistrationNativeOracle
+chainId : UInt8
+sender contract token ekBa commitBa respBa : ByteArray
+mv rCompressed sOpt sVal : MoveValue
+rest srest' : List MoveValue
+hmv : mv = MoveValue.struct_ (MoveValue.bool true :: rCompressed :: rest)
+hsOpt : sOpt = MoveValue.struct_ (MoveValue.bool true :: sVal :: srest')
+hsc : o.newScalarFromBytes [MoveValue.vector MoveType.u8 (List.map MoveValue.u8 respBa.toList)] = some [sOpt]
+fuel : ℕ
+hf : 20 ≤ fuel
+h1 :
+  run (registrationModuleEnv o)
+      (registrationFrameAtPc2 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa) ⋯) [] [mv]
+      MachineState.empty (fuel - 2) =
+    run (registrationModuleEnv o)
+      (registrationFramePc9AfterStLoc8 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa) ⋯ mv
+        rCompressed)
+      [] [] (registrationMsAfterOptionExtractDup1 mv) (fuel - 9)
+h2 :
+  run (registrationModuleEnv o)
+      (registrationFramePc9AfterStLoc8 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa) ⋯ mv
+        rCompressed)
+      [] [] (registrationMsAfterOptionExtractDup1 mv) (fuel - 9) =
+    run (registrationModuleEnv o)
+      (registrationFramePc12AfterStLoc9 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa) ⋯ mv
+        rCompressed sOpt)
+      [] [] (registrationMsAfterOptionExtractDup1 mv) (fuel - 9 - 3)
+h3 :
+  run (registrationModuleEnv o)
+      (registrationFramePc12AfterStLoc9 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa) ⋯ mv
+        rCompressed sOpt)
+      [] [] (registrationMsAfterOptionExtractDup1 mv) (fuel - 12) =
+    run (registrationModuleEnv o)
+      (have __src :=
+        registrationFramePc12AfterStLoc9 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa) ⋯
+          mv rCompressed sOpt;
+      { code := __src.code, pc := 15, locals := __src.locals, localRefs := __src.localRefs })
+      [] [] (registrationMsAfterImmBorrow9 mv sOpt) (fuel - 12 - 3)
+h4 :
+  run (registrationModuleEnv o)
+      (have __src :=
+        registrationFramePc12AfterStLoc9 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa) ⋯
+          mv rCompressed sOpt;
+      { code := __src.code, pc := 15, locals := __src.locals, localRefs := __src.localRefs })
+      [] [] (registrationMsAfterImmBorrow9 mv sOpt) (fuel - 15) =
+    run (registrationModuleEnv o)
+      (registrationFramePc18AfterStLoc10 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa) ⋯
+        mv rCompressed sOpt sVal)
+      [] [] (registrationMsAfterOptionExtractDup3 mv sOpt) (fuel - 15 - 3)
+h5 :
+  run (registrationModuleEnv o)
+      (registrationFramePc18AfterStLoc10 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa) ⋯
+        mv rCompressed sOpt sVal)
+      [] [] (registrationMsAfterOptionExtractDup3 mv sOpt) (fuel - 18) =
+    run (registrationModuleEnv o)
+      (registrationFramePc20AfterStLoc11 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa) ⋯
+        mv rCompressed sOpt sVal)
+      [] [] (registrationMsAfterOptionExtractDup3 mv sOpt) (fuel - 18 - 2)
+⊢ run (registrationModuleEnv o)
+      (registrationFramePc12AfterStLoc9 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa) ⋯ mv
+        rCompressed sOpt)
+      [] [] (registrationMsAfterOptionExtractDup1 mv) (fuel - 9 - 3) =
+    run (registrationModuleEnv o)
+      (registrationFramePc20AfterStLoc11 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa) ⋯
+        mv rCompressed sOpt sVal)
+      [] [] (registrationMsAfterOptionExtractDup3 mv sOpt) (fuel - 20)
+MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquiv.lean:7134:14: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  run (registrationModuleEnv o)
+    (registrationFramePc22AfterMoveLoc0 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa) ⋯ mv
+      rCompressed sOpt sVal)
+    [] [MoveValue.u8 chainId, MoveValue.mutRef 4] (registrationMsAfterMutBorrowMsg mv sOpt) (fuel - 22)
+in the target expression
+  run (registrationModuleEnv o)
+      (registrationFramePc22AfterMoveLoc0 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa) ⋯
+        mv rCompressed sOpt sVal)
+      [] [MoveValue.u8 chainId, MoveValue.mutRef 4] (registrationMsAfterMutBorrowMsg mv sOpt) (fuel - 20 - 2) =
+    run (registrationModuleEnv o)
+      (let __src :=
+        registrationFramePc22AfterMoveLoc0 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa) ⋯
+          mv rCompressed sOpt sVal;
+      { code := __src.code, pc := 31, locals := __src.locals, localRefs := __src.localRefs })
+      [] [] (registrationMsAfterAppendContract mv sOpt chainId sender contract) (fuel - 31)
+
+o : RegistrationNativeOracle
+chainId : UInt8
+sender contract token ekBa commitBa respBa : ByteArray
+mv rCompressed sOpt sVal : MoveValue
+rest srest' : List MoveValue
+hmv : mv = MoveValue.struct_ (MoveValue.bool true :: rCompressed :: rest)
+hsOpt : sOpt = MoveValue.struct_ (MoveValue.bool true :: sVal :: srest')
+hsc : o.newScalarFromBytes [MoveValue.vector MoveType.u8 (List.map MoveValue.u8 respBa.toList)] = some [sOpt]
+fuel : ℕ
+hf : 31 ≤ fuel
+h1 :
+  run (registrationModuleEnv o)
+      (registrationFrameAtPc2 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa) ⋯) [] [mv]
+      MachineState.empty (fuel - 2) =
+    run (registrationModuleEnv o)
+      (registrationFramePc20AfterStLoc11 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa) ⋯
+        mv rCompressed sOpt sVal)
+      [] [] (registrationMsAfterOptionExtractDup3 mv sOpt) (fuel - 20)
+h2 :
+  run (registrationModuleEnv o)
+      (registrationFramePc20AfterStLoc11 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa) ⋯
+        mv rCompressed sOpt sVal)
+      [] [] (registrationMsAfterOptionExtractDup3 mv sOpt) (fuel - 20) =
+    run (registrationModuleEnv o)
+      (registrationFramePc22AfterMoveLoc0 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa) ⋯
+        mv rCompressed sOpt sVal)
+      [] [MoveValue.u8 chainId, MoveValue.mutRef 4] (registrationMsAfterMutBorrowMsg mv sOpt) (fuel - 20 - 2)
+h3 :
+  run (registrationModuleEnv o)
+      (registrationFramePc22AfterMoveLoc0 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa) ⋯
+        mv rCompressed sOpt sVal)
+      [] [MoveValue.u8 chainId, MoveValue.mutRef 4] (registrationMsAfterMutBorrowMsg mv sOpt) (fuel - 22) =
+    run (registrationModuleEnv o)
+      (registrationFramePc25AfterImmBorrow1 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+        ⋯ mv rCompressed sOpt sVal)
+      [] [MoveValue.immRef 5, MoveValue.mutRef 4] (registrationMsAfterImmBorrow1_sender mv sOpt chainId sender)
+      (fuel - 22 - 3)
+h4 :
+  run (registrationModuleEnv o)
+      (registrationFramePc25AfterImmBorrow1 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa)
+        ⋯ mv rCompressed sOpt sVal)
+      [] [MoveValue.immRef 5, MoveValue.mutRef 4] (registrationMsAfterImmBorrow1_sender mv sOpt chainId sender)
+      (fuel - 25) =
+    run (registrationModuleEnv o)
+      (have __src :=
+        registrationFramePc22AfterMoveLoc0 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa) ⋯
+          mv rCompressed sOpt sVal;
+      { code := __src.code, pc := 28, locals := __src.locals, localRefs := __src.localRefs })
+      [] [MoveValue.mutRef 4] (registrationMsAfterAppendSender mv sOpt chainId sender) (fuel - 25 - 3)
+h5 :
+  run (registrationModuleEnv o)
+      (have __src :=
+        registrationFramePc22AfterMoveLoc0 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa) ⋯
+          mv rCompressed sOpt sVal;
+      { code := __src.code, pc := 28, locals := __src.locals, localRefs := __src.localRefs })
+      [] [MoveValue.mutRef 4] (registrationMsAfterAppendSender mv sOpt chainId sender) (fuel - 28) =
+    run (registrationModuleEnv o)
+      (have __src :=
+        registrationFramePc22AfterMoveLoc0 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa) ⋯
+          mv rCompressed sOpt sVal;
+      { code := __src.code, pc := 31, locals := __src.locals, localRefs := __src.localRefs })
+      [] [] (registrationMsAfterAppendContract mv sOpt chainId sender contract) (fuel - 28 - 3)
+⊢ run (registrationModuleEnv o)
+      (registrationFramePc22AfterMoveLoc0 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa) ⋯
+        mv rCompressed sOpt sVal)
+      [] [MoveValue.u8 chainId, MoveValue.mutRef 4] (registrationMsAfterMutBorrowMsg mv sOpt) (fuel - 20 - 2) =
+    run (registrationModuleEnv o)
+      (let __src :=
+        registrationFramePc22AfterMoveLoc0 (registrationVerifyArgs chainId sender contract token ekBa commitBa respBa) ⋯
+          mv rCompressed sOpt sVal;
+      { code := __src.code, pc := 31, locals := __src.locals, localRefs := __src.localRefs })
+      [] [] (registrationMsAfterAppendContract mv sOpt chainId sender contract) (fuel - 31)
+EXIT=1

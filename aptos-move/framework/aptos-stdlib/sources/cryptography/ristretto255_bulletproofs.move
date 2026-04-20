@@ -1,6 +1,3 @@
-// Copyright (c) Movement Labs
-// SPDX-License-Identifier: Apache-2.0
-
 module aptos_std::ristretto255_bulletproofs {
     use std::error;
     use std::features;

@@ -33,7 +33,6 @@ pub mod abort_codes {
     pub const NFE_RANGE_NOT_SUPPORTED: u64 = 0x01_0003;
     pub const NFE_BATCH_SIZE_NOT_SUPPORTED: u64 = 0x01_0004;
     pub const NFE_VECTOR_LENGTHS_MISMATCH: u64 = 0x01_0005;
-    pub const NFE_INVALID_POINT_HANDLE: u64 = 0x0A_0001;
 }
 
 fn bit_length_is_valid(bits: usize) -> bool {
@@ -55,16 +54,8 @@ fn resolve_pedersen_bases(
     let pt_ctx = ctx.extensions().get::<NativeRistrettoPointContext>();
     let store = pt_ctx.point_data.borrow_mut();
 
-    let val_base = store
-        .try_get_point(val_base_handle)
-        .ok_or(SafeNativeError::Abort {
-            abort_code: abort_codes::NFE_INVALID_POINT_HANDLE,
-        })?;
-    let rand_base = store
-        .try_get_point(rand_base_handle)
-        .ok_or(SafeNativeError::Abort {
-            abort_code: abort_codes::NFE_INVALID_POINT_HANDLE,
-        })?;
+    let val_base = store.get_point(val_base_handle)?;
+    let rand_base = store.get_point(rand_base_handle)?;
 
     Ok(PedersenGens {
         B: *val_base,

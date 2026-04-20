@@ -49,6 +49,13 @@ def registrationDstBytes : ByteArray :=
   ByteArray.mk #[77, 111, 118, 101, 109, 101, 110, 116, 67, 111, 110, 102, 105, 100, 101, 110, 116, 105, 97, 108,
     65, 115, 115, 101, 116, 47, 82, 101, 103, 105, 115, 116, 114, 97, 116, 105, 111, 110]
 
+theorem registrationDstBytes_size : registrationDstBytes.size = 38 := by
+  native_decide
+
+/-- Wire length of the registration FS tag as a `List UInt8` (matches `registrationDstBytes_size`). -/
+theorem registrationDstBytes_toList_length : registrationDstBytes.toList.length = 38 := by
+  native_decide
+
 /-- Concatenation order matches Move: DST || chain_id || sender || contract || token || ek || R. -/
 def registrationFiatShamirMsg (i : RegistrationFiatShamirInputs) : ByteArray :=
   registrationDstBytes ++ ByteArray.mk #[i.chainId] ++ i.senderBcs ++ i.contractBcs ++ i.tokenBcs ++ i.ekBytes

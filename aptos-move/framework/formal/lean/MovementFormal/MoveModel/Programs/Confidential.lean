@@ -2,7 +2,9 @@ import MovementFormal.MoveModel.Native
 import MovementFormal.MoveModel.Step
 import MovementFormal.AptosStd.Hash.Sha3_512
 import MovementFormal.AptosStd.Hash.Sha2_512
+import MovementFormal.Experimental.ConfidentialAsset.Registration.Formal
 import MovementFormal.Experimental.ConfidentialAsset.Registration.TranscriptAlignment
+import MovementFormal.Experimental.ConfidentialAsset.SigmaVerifiers
 import MovementFormal.MoveModel.Programs.RegistrationDifftestOracle
 
 /-!
@@ -72,6 +74,8 @@ open MovementFormal.AptosStd.Hash.Sha2_512
 open RegistrationVerify
 open RegistrationTranscriptAlignment
 open MovementFormal.MoveModel.Programs.RegistrationDifftestOracle
+open MovementFormal.Experimental.ConfidentialAsset.Registration.Formal
+open MovementFormal.Experimental.ConfidentialAsset.SigmaVerifiers
 
 private def u8s (bs : List UInt8) : MoveValue :=
   .vector .u8 (bs.map .u8)
@@ -1952,22 +1956,38 @@ private def bulletSha512Const : ConstPoolEntry where
   type := .vector .u8
   value := u8s bulletproofsDstSha3Bytes
 
-/-- `confidential_proof::FIAT_SHAMIR_*_SIGMA_DST` byte strings (VM `get_fiat_shamir_*` getters). Public so **`Refinement.Confidential`** can state full **`mvU8Wire`** equalities. -/
+/-- `confidential_proof::FIAT_SHAMIR_*_SIGMA_DST` byte strings (VM `get_fiat_shamir_*` getters). Public so **`Refinement.Confidential`** can state full **`mvU8Wire`** equalities.
+
+**Single source of truth:** these lists are `SigmaVerifiers.{withdrawalDst,transferDst,normalizationDst,rotationDst}.toList` — the same `ByteArray` values used in Tier 3 sigma verifier math (`SigmaVerifiers.lean`), so the difftest `ModuleEnv` constants cannot drift from the formal predicates without a deliberate change in both places. -/
 def fiatWithdrawalSigmaDstBytes : List UInt8 :=
-  [77, 111, 118, 101, 109, 101, 110, 116, 67, 111, 110, 102, 105, 100, 101, 110, 116, 105, 97, 108, 65,
-    115, 115, 101, 116, 47, 87, 105, 116, 104, 100, 114, 97, 119, 97, 108]
+  withdrawalDst.toList
 
 def fiatTransferSigmaDstBytes : List UInt8 :=
-  [77, 111, 118, 101, 109, 101, 110, 116, 67, 111, 110, 102, 105, 100, 101, 110, 116, 105, 97, 108, 65,
-    115, 115, 101, 116, 47, 84, 114, 97, 110, 115, 102, 101, 114]
+  transferDst.toList
 
 def fiatNormalizationSigmaDstBytes : List UInt8 :=
-  [77, 111, 118, 101, 109, 101, 110, 116, 67, 111, 110, 102, 105, 100, 101, 110, 116, 105, 97, 108, 65,
-    115, 115, 101, 116, 47, 78, 111, 114, 109, 97, 108, 105, 122, 97, 116, 105, 111, 110]
+  normalizationDst.toList
 
 def fiatRotationSigmaDstBytes : List UInt8 :=
-  [77, 111, 118, 101, 109, 101, 110, 116, 67, 111, 110, 102, 105, 100, 101, 110, 116, 105, 97, 108, 65,
-    115, 115, 101, 116, 47, 82, 111, 116, 97, 116, 105, 111, 110]
+  rotationDst.toList
+
+/-! ### Fiat–Shamir DST wire lengths (checked against `SigmaVerifiers` / `Formal`)
+
+These are **not** numeric guesses: each goal reduces by computation to the matching
+`withdrawalDst_size` / `transferDst_size` / … / `registrationDstBytes` fact. A regression that
+truncates a const-pool vector while leaving the sigma-verifier `ByteArray` unchanged would fail here. -/
+
+theorem fiatWithdrawalSigmaDstBytes_length : fiatWithdrawalSigmaDstBytes.length = 36 := by
+  native_decide
+
+theorem fiatTransferSigmaDstBytes_length : fiatTransferSigmaDstBytes.length = 34 := by
+  native_decide
+
+theorem fiatNormalizationSigmaDstBytes_length : fiatNormalizationSigmaDstBytes.length = 39 := by
+  native_decide
+
+theorem fiatRotationSigmaDstBytes_length : fiatRotationSigmaDstBytes.length = 34 := by
+  native_decide
 
 private def fiatWithdrawalSigmaDstConst : ConstPoolEntry where
   type := .vector .u8
@@ -1998,12 +2018,14 @@ private def caFiatRotationSigmaDstDesc : FuncDesc :=
   { numParams := 0, numReturns := 1, body := .bytecode #[.ldConst 7, .ret] 0 }
 
 def fiatRegistrationSigmaDstBytes : List UInt8 :=
-  [77, 111, 118, 101, 109, 101, 110, 116, 67, 111, 110, 102, 105, 100, 101, 110, 116, 105, 97, 108, 65,
-    115, 115, 101, 116, 47, 82, 101, 103, 105, 115, 116, 114, 97, 116, 105, 111, 110]
+  registrationDstBytes.toList
 
 theorem fiatRegistrationSigmaDstBytes_eq_fiatShamirRegistrationDst_toList :
-    fiatRegistrationSigmaDstBytes = fiatShamirRegistrationDst.toList := by
-  native_decide
+    fiatRegistrationSigmaDstBytes = fiatShamirRegistrationDst.toList :=
+  rfl
+
+theorem fiatRegistrationSigmaDstBytes_length : fiatRegistrationSigmaDstBytes.length = 38 := by
+  simp [fiatRegistrationSigmaDstBytes, registrationDstBytes_toList_length]
 
 private def fiatRegistrationSigmaDstConst : ConstPoolEntry where
   type := .vector .u8

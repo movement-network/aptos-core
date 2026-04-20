@@ -159,16 +159,23 @@ This is verified concretely by `native_decide` in `BytecodeDifftestEval.lean`
 (`buildFSMessageMv_golden_matches_spec`). The abstract version below is stated
 for future proof. -/
 
-/-- The DST bytes as a `List MoveValue` (inner contents of `fiatShamirRegistrationDstValue`). -/
+/-- The DST bytes as `List MoveValue`, derived from the **single** spec source
+`Formal.registrationDstBytes` (same string as Move `FIAT_SHAMIR_REGISTRATION_SIGMA_DST`). This avoids
+duplicating the ASCII literal in multiple Lean modules: any change to `registrationDstBytes`
+automatically updates the functional simulation. -/
 def fiatShamirDstMvU8s : List MoveValue :=
-  [77, 111, 118, 101, 109, 101, 110, 116, 67, 111, 110, 102, 105, 100, 101, 110, 116, 105, 97, 108,
-   65, 115, 115, 101, 116, 47, 82, 101, 103, 105, 115, 116, 114, 97, 116, 105, 111, 110
-  ].map MoveValue.u8
+  registrationDstBytes.toList.map MoveValue.u8
 
-/-- `ByteArray.toList` is `@[irreducible]` in Lean 4.24, so we axiomatize this
-    concrete equality (same pattern as `ByteArray.toList_append` below). -/
-axiom fiatShamirDstMvU8s_eq_registrationDstBytes_toList_map :
-    fiatShamirDstMvU8s = registrationDstBytes.toList.map MoveValue.u8
+/-- Characterization of `fiatShamirDstMvU8s` (definitional unfolding). -/
+theorem fiatShamirDstMvU8s_eq_registrationDstBytes_toList_map :
+    fiatShamirDstMvU8s = registrationDstBytes.toList.map MoveValue.u8 :=
+  rfl
+
+/-- `Programs.Registration.fiatShamirRegistrationDstValue` and `fiatShamirDstMvU8s` are the same
+definition chain (`Formal.registrationDstBytes.toList.map MoveValue.u8`). -/
+theorem fiatShamirRegistrationDstValue_eq_vector_fiatShamirDstMvU8s :
+    fiatShamirRegistrationDstValue = .vector .u8 fiatShamirDstMvU8s :=
+  rfl
 
 /-- Generalized form: works with any `ekMv` and `rMv` that satisfy the oracle
     byte-extraction hypotheses. The message now includes the 38-byte DST prefix. -/

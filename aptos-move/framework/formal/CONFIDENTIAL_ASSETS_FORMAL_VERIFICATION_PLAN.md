@@ -17,6 +17,13 @@ Neither track replaces the other: difftest catches **VM↔model drift** on golde
 
 This document is a **roadmap** for extending the **`MovementFormal`** stack so that **confidential assets** (`aptos_experimental::confidential_*` and dependencies) can be **machine-checked** with a clear statement of what is proved against what. It is written for engineers and proof engineers working in `aptos-move/framework/formal/`.
 
+**Trust model (what “not blindly trusting the code” means here)**
+
+- **Specifications first:** L0 definitions (e.g. `Formal.registrationDstBytes`, transcript layout) are anchored to **named Move sources** and should be the **single source of truth** for duplicated constants in bytecode transcription (`Programs.*`) and functional simulation (`FunctionalSim`) — proved alignment by **`rfl`** where definitions are shared, not by repeating ASCII literals in three places.
+- **Axioms are explicit:** curve group laws (`EdwardsCurve25519`), Ristretto encoding interfaces, Bulletproofs batch-verify boundaries, and any **`registration_eval_equiv_singleton_tail`**-style bridges are **named** and listed for `#print axioms` review; they are **not** “the implementation is right because we say so.”
+- **Independent checks:** SHA-512 / layout **goldens** are cross-checked by Rust corpora (`move-lean-difftest verify-corpora`) and/or `native_decide` where applicable; VM↔Lean difftest is **regression evidence**, not a substitute for ∀-proofs (see differential-testing plan §2.2).
+- **Completion** still means the **§8 checklist** (scope doc, axiom review, difftest for transcribed code) — full CA end-to-end remains phased (§6).
+
 **Related docs**
 
 - Lean build / difftest workflow: [`lean/README.md`](lean/README.md), [`difftest/README.md`](difftest/README.md)

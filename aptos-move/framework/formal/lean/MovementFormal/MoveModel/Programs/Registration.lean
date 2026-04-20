@@ -1,4 +1,5 @@
 import MovementFormal.MoveModel.Native.Registration
+import MovementFormal.Experimental.ConfidentialAsset.Registration.Formal
 
 /-!
 # Transcribed bytecode for `verify_registration_proof`
@@ -43,13 +44,15 @@ namespace MovementFormal.MoveModel.Programs.Registration
 
 open MovementFormal.MoveModel
 open MovementFormal.MoveModel.Native.Registration
+open MovementFormal.Experimental.ConfidentialAsset.Registration.Formal
 
-/-- `FIAT_SHAMIR_REGISTRATION_SIGMA_DST` = `b"MovementConfidentialAsset/Registration"` (38 bytes). -/
+/-- `FIAT_SHAMIR_REGISTRATION_SIGMA_DST` = `b"MovementConfidentialAsset/Registration"` (38 bytes).
+
+**Single source of truth:** `Formal.registrationDstBytes` (aligned to Move `confidential_proof.move`).
+The transcribed `LdConst` pool entry is therefore identical to the CA registration spec, not a second
+copy of the ASCII literal. -/
 def fiatShamirRegistrationDstValue : MoveValue :=
-  .vector .u8 (
-    [77, 111, 118, 101, 109, 101, 110, 116, 67, 111, 110, 102, 105, 100, 101, 110, 116, 105, 97, 108,
-     65, 115, 115, 101, 116, 47, 82, 101, 103, 105, 115, 116, 114, 97, 116, 105, 111, 110
-    ].map MoveValue.u8)
+  .vector .u8 (registrationDstBytes.toList.map MoveValue.u8)
 
 /-- Constant pool entry for `LdConst[5]` — the DST tag:
     `[38, 77, 111, ..., 110]` = length-prefixed

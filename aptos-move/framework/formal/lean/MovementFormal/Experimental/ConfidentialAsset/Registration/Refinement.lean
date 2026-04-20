@@ -25,9 +25,24 @@ L2  eval (bytecode)
 **L2 ≡ L1.5** (`eval_eq_func`): up to `MachineState` (via `.dropMs`), since the real
 83-instruction bytecode populates the `ContainerStore` via references.
 The general `eval ≡ func` step is the theorem `registration_eval_equiv_functional_sim`
-in `EvalEquiv.lean` (case-split). The singleton success path uses the axiom
-`registration_eval_equiv_singleton_tail` (PC 2→`ret` tail vs `blockB`/`blockCDE`).
-Concrete traces remain in `BytecodeDifftestEval.lean` (`native_decide`).
+in `EvalEquiv.lean` (case-split). On the **Schnorr success bundle** with canonical BCS bytes for EK
+and `R`, `registration_eval_equiv_singleton_tail_of_schnorr_hmac_bundle` proves the same `dropMs`
+equality **without** that axiom. The unconditional singleton tail is still the axiom
+`registration_eval_equiv_singleton_tail` (arbitrary oracle; PC 2→`ret` vs `blockB`/`blockCDE`).
+`registration_run_pc2_to_pc35_happyPath` is a proved `run` chain through PC 35 (transitivity of the
+pc2→31 and pc31→35 lemmas); `registration_run_pc2_to_pc39_happyPath` extends through PC 39 with
+`pubkey_to_bytes`, `registration_run_pc2_to_pc43_happyPath` through PC 43 with
+`compressed_point_to_bytes` + append, `registration_run_pc2_to_pc46_happyPath` through PC 46 once
+`newScalarFromSha2_512` matches `registrationMsgBytesForFs`, `registration_run_pc2_to_pc48_happyPath`
+through PC 48 with `hashToPointBase`, `registration_run_pc2_to_pc51_happyPath` through PC 51 with
+`pubkeyToPoint`, and `registration_run_pc2_to_pc55_happyPath` through PC 55 once `pointMul` matches
+`s * H`, and `registration_run_pc2_to_pc59_happyPath` through PC 59 with the second `pointMul`
+(`e * ek`), `registration_run_pc2_to_pc63_happyPath` through PC 63 with `pointAdd` for the Schnorr LHS,
+and `registration_run_pc2_to_returned_happyPath` through `ret` once `pointDecompress` / `pointEquals`
+match; the proved bundle theorem above covers the success case with explicit wire coherence.
+The axiom `registration_eval_equiv_singleton_tail` still covers the fully general oracle case.
+Concrete traces remain in
+`BytecodeDifftestEval.lean` (`native_decide`).
 
 **L1.5 ≡ L1** (`func_success_implies_exec_some`, `func_abort_implies_exec_none`):
 algebraic equivalence under oracle coherence. Both directions proven.
@@ -526,7 +541,9 @@ Composing L2≡L1.5 (`eval_eq_func` with `.dropMs`),
 L1.5→L1 abort (`func_abort_implies_exec_none`), and
 L1↔L0 (`execVerifyRegistrationProof_iff`) gives the end-to-end abort theorem.
 
-**Note:** depends on `eval_eq_func` (via `registration_eval_equiv_functional_sim`; the singleton success path uses the axiom `registration_eval_equiv_singleton_tail` in `EvalEquiv.lean`).
+**Note:** depends on `eval_eq_func` (via `registration_eval_equiv_functional_sim`). The general singleton
+path uses `registration_eval_equiv_singleton_tail`; the Schnorr success bundle with canonical EK/`R`
+bytes is proved separately (`registration_eval_equiv_singleton_tail_of_schnorr_hmac_bundle`).
 The `.aborted` constructor doesn't carry `MachineState`, so `dropMs` is trivial. -/
 
 theorem eval_abort_implies_not_prop

@@ -30,14 +30,11 @@ open MovementFormal.AptosStd.Hash.Sha2_512
 
 namespace RegistrationVerify
 
-def fiatShamirRegistrationDst : ByteArray :=
-  ByteArray.mk #[
-    77, 111, 118, 101, 109, 101, 110, 116, 67, 111, 110, 102, 105, 100, 101, 110, 116, 105, 97, 108,
-    65, 115, 115, 101, 116, 47, 82, 101, 103, 105, 115, 116, 114, 97, 116, 105, 111, 110
-  ]
+/-- Same bytes as `Formal.registrationDstBytes` (single source of truth for the registration FS tag). -/
+abbrev fiatShamirRegistrationDst : ByteArray := registrationDstBytes
 
-theorem fiatShamirRegistrationDst_byte_length : fiatShamirRegistrationDst.size = 38 := by
-  native_decide
+theorem fiatShamirRegistrationDst_byte_length : fiatShamirRegistrationDst.size = 38 :=
+  registrationDstBytes_size
 
 def compressed32? (b : ByteArray) : Option CompressedRistretto32 :=
   if hb : b.size = 32 then

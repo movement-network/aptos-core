@@ -114,8 +114,14 @@ impl TryFrom<TypeTag> for Structure {
 #[macro_export]
 macro_rules! structure_from_ty_arg {
     ($context:expr, $typ:expr) => {{
-        let type_tag = $context.type_to_type_tag($typ)?;
-        Structure::try_from(type_tag).ok()
+        match $context.type_to_type_tag($typ) {
+            Ok(type_tag) => Structure::try_from(type_tag).ok(),
+            Err(_) => {
+                return Err(aptos_native_interface::SafeNativeError::Abort {
+                    abort_code: 0x9_0064, // MOVE_ABORT_CODE_TYPE_TAG_CONVERSION_FAILED
+                })
+            },
+        }
     }};
 }
 

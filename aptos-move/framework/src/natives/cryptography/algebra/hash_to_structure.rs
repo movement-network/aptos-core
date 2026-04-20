@@ -15,7 +15,7 @@ use aptos_gas_schedule::gas_params::natives::{aptos_framework::*, move_stdlib::*
 use aptos_native_interface::{
     safely_pop_arg, SafeNativeContext, SafeNativeError, SafeNativeResult,
 };
-use aptos_types::on_chain_config::{FeatureFlag, TimedFeatureFlag};
+use aptos_types::on_chain_config::FeatureFlag;
 use ark_ec::hashing::HashToCurve;
 use either::Either;
 use move_core_types::gas_algebra::{InternalGas, NumBytes};
@@ -50,19 +50,12 @@ fn suite_from_ty_arg(
     context: &SafeNativeContext,
     ty: &Type,
 ) -> SafeNativeResult<Option<HashToStructureSuite>> {
-    if context.timed_feature_enabled(TimedFeatureFlag::FixCryptoAlgebraNativesTypeTagConversion) {
-        if let Ok(type_tag) = context.type_to_type_tag(ty) {
-            Ok(HashToStructureSuite::try_from(type_tag).ok())
-        } else {
-            Err(SafeNativeError::Abort {
-                abort_code: MOVE_ABORT_CODE_TYPE_TAG_CONVERSION_FAILED,
-            })
-        }
-    } else {
-        let type_tag = context.type_to_type_tag(ty).map_err(|_| SafeNativeError::Abort {
-            abort_code: MOVE_ABORT_CODE_TYPE_TAG_CONVERSION_FAILED,
-        })?;
+    if let Ok(type_tag) = context.type_to_type_tag(ty) {
         Ok(HashToStructureSuite::try_from(type_tag).ok())
+    } else {
+        Err(SafeNativeError::Abort {
+            abort_code: MOVE_ABORT_CODE_TYPE_TAG_CONVERSION_FAILED,
+        })
     }
 }
 

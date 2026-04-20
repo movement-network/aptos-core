@@ -63,8 +63,14 @@ macro_rules! abort_unless_serialization_format_enabled {
 
 macro_rules! format_from_ty_arg {
     ($context:expr, $typ:expr) => {{
-        let type_tag = $context.type_to_type_tag($typ)?;
-        SerializationFormat::try_from(type_tag).ok()
+        match $context.type_to_type_tag($typ) {
+            Ok(type_tag) => SerializationFormat::try_from(type_tag).ok(),
+            Err(_) => {
+                return Err(aptos_native_interface::SafeNativeError::Abort {
+                    abort_code: 0x9_0064, // MOVE_ABORT_CODE_TYPE_TAG_CONVERSION_FAILED
+                })
+            },
+        }
     }};
 }
 

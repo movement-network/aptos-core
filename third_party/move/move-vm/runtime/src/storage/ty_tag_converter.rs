@@ -12,15 +12,14 @@ use move_vm_types::loaded_data::{runtime_types::Type, struct_name_indexing::Stru
 use parking_lot::RwLock;
 use std::hash::{Hash, Hasher};
 
+const MAX_TYPE_TAG_DEPTH: u64 = 32;
+
 struct PseudoGasContext {
-    // Parameters for metering type tag construction:
-    //   - maximum allowed cost,
-    //   - base cost for any type to tag conversion,
-    //   - cost for size of a struct tag.
     max_cost: u64,
     cost: u64,
     cost_base: u64,
     cost_per_byte: u64,
+    depth: u64,
 }
 
 impl PseudoGasContext {
@@ -30,6 +29,7 @@ impl PseudoGasContext {
             cost: 0,
             cost_base: vm_config.type_base_cost,
             cost_per_byte: vm_config.type_byte_cost,
+            depth: 0,
         }
     }
 
@@ -38,6 +38,15 @@ impl PseudoGasContext {
     }
 
     fn charge_base(&mut self) -> PartialVMResult<()> {
+        self.depth += 1;
+        if self.depth > MAX_TYPE_TAG_DEPTH {
+            return Err(
+                PartialVMError::new(StatusCode::TYPE_TAG_LIMIT_EXCEEDED).with_message(format!(
+                    "Exceeded maximum type tag depth of {}",
+                    MAX_TYPE_TAG_DEPTH
+                )),
+            );
+        }
         self.charge(self.cost_base)
     }
 

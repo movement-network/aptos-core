@@ -1041,6 +1041,252 @@ private def funcNameToMappingPart6 (base : String) : Option FuncMapping :=
       some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
   | "test_bulletproofs_num_bits_is_16" =>
       some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ristretto_basepoint_bytes_equals_tier3_golden" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_hash_to_point_base_bytes_equals_tier3_golden" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ristretto_basepoint_ne_hash_base" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_hash_to_point_base_deterministic" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_new_scalar_from_sha2_512_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_new_scalar_from_sha2_512_empty_input_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_new_scalar_from_sha2_512_abc_input_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_new_scalar_from_sha2_512_dst_input_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_new_scalar_from_sha2_512_deterministic" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_new_scalar_from_sha2_512_distinct_inputs" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_add_3_5_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_sub_5_3_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_sub_3_5_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_mul_7_11_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_neg_one_equals_l_minus_one_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_neg_zero_is_zero_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_invert_7_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_invert_2_times_2_is_one_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_invert_zero_is_none_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_empty_input_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_abc_input_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_movement_input_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_112_a_bytes_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_128_b_bytes_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_output_length_is_64" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_distinct_inputs_distinct_outputs" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_from_u64_0_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_from_u64_1_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_from_u64_42_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_from_u64_max_u32_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_from_u64_max_u64_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase W.8 — msm_gamma + scalar-identity bindings.
+  | "test_msm_gamma_1_42_0_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_msm_gamma_1_42_1_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_msm_gamma_1_1_3_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_msm_gamma_2_42_0_5_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_msm_gamma_2_100_7_11_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_add_sub_cancel_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_squared_difference_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_mul_assoc_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_distributivity_lhs_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_distributivity_rhs_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase W.9 — scalar inversion identities + prepend_domain_context bindings.
+  | "test_scalar_double_inverse_7_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_double_inverse_42_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_double_inverse_1001_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_inv_of_product_lhs_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_inv_of_product_rhs_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_inv_of_neg_lhs_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_inv_of_neg_rhs_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_cube_diff_direct_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_cube_diff_factored_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_mul_neg_identity_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_prepend_domain_context_empty_body_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_prepend_domain_context_with_suffix_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_prepend_domain_context_max_chain_id_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase W.10 — Full FS-prefix cross-engine byte equality via SHA-512 digest.
+  | "test_sha2_512_of_wd_fs_prefix_matches_golden_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_norm_fs_prefix_matches_golden_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_rot_fs_prefix_matches_golden_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_tr_fs_prefix_matches_golden_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase W.11 — multi-fixture FS-prefix SHA-512 cross-engine byte equality.
+  | "test_sha2_512_of_wd_v2_fs_prefix_matches_golden_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_wd_v3_fs_prefix_matches_golden_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_norm_v2_fs_prefix_matches_golden_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_rot_v2_fs_prefix_matches_golden_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase W.12: FS CHALLENGE SCALAR cross-engine binding on all 8 FS-prefix fixtures.
+  | "test_fs_challenge_scalar_wd_ref_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_norm_ref_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_rot_ref_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_tr_ref_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_wd_v2_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_wd_v3_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_norm_v2_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_rot_v2_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase W.13: transfer auditor-count FS-prefix + challenge-scalar bindings.
+  | "test_sha2_512_of_tr_1_auditor_fs_prefix_matches_golden_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_tr_2_auditor_fs_prefix_matches_golden_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_tr_3_auditor_fs_prefix_matches_golden_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_tr_2_auditor_swapped_fs_prefix_matches_golden_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_tr_1_auditor_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_tr_2_auditor_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_tr_3_auditor_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_tr_2_auditor_swapped_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase W.14: chain_id BOUNDARY axis coverage for all 4 sigma protocols.
+  | "test_sha2_512_of_wd_cid0_fs_prefix_matches_golden_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_wd_cid0_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_norm_cid0_fs_prefix_matches_golden_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_norm_cid0_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_norm_cidff_fs_prefix_matches_golden_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_norm_cidff_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_rot_cid0_fs_prefix_matches_golden_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_rot_cid0_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_rot_cidff_fs_prefix_matches_golden_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_rot_cidff_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_tr_cid0_fs_prefix_matches_golden_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_tr_cid0_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_tr_cidff_fs_prefix_matches_golden_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_tr_cidff_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase W.15: amount-chunk BOUNDARY axis for withdrawal FS prefix.
+  | "test_sha2_512_of_wd_amt_0_fs_prefix_matches_golden_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_wd_amt_0_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_wd_amt_u32max_fs_prefix_matches_golden_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_wd_amt_u32max_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_wd_amt_2p32_fs_prefix_matches_golden_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_wd_amt_2p32_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_wd_amt_u64max_fs_prefix_matches_golden_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_wd_amt_u64max_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_wd_amt_distinct_fs_prefix_matches_golden_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_wd_amt_distinct_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase W.16: address-BCS BOUNDARY axis for withdrawal FS prefix.
+  | "test_sha2_512_of_wd_addr_swap_fs_prefix_matches_golden_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_wd_addr_swap_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_wd_addr_zero_fs_prefix_matches_golden_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_wd_addr_zero_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_wd_addr_max_fs_prefix_matches_golden_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_wd_addr_max_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_wd_addr_same_fs_prefix_matches_golden_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_wd_addr_same_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase W.17: full FS-MESSAGE axis (prefix || X-point bytes).
+  | "test_sha2_512_of_wd_msg_a_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_wd_msg_a_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_wd_msg_b_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_wd_msg_b_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_wd_msg_c_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_wd_msg_c_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_wd_msg_d_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_wd_msg_d_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
   | "test_serialize_auditor_eks_order_matters" =>
       some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
   | "test_serialize_auditor_eks_single_a_point_bytes_are_a_point" =>
@@ -1720,6 +1966,404 @@ private def funcNameToMappingPart10 (base : String) : Option FuncMapping :=
       some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
   | _                  => none
 
+-- `funcNameToMappingPart11` covers the **Phase W.18–W.22** Tier-3 rows
+-- (full FS-MESSAGE parity, transfer auditor-count × FS-MESSAGE,
+-- and Ristretto / scalar algebraic identities). Split out of Part6 to
+-- keep each `match` within Lean's elaborator heartbeat budget.
+private def funcNameToMappingPart11 (base : String) : Option FuncMapping :=
+  match base with
+  -- Phase W.18: full FS-MESSAGE axis for norm / rot / tr.
+  | "test_sha2_512_of_norm_msg_a_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_norm_msg_a_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_norm_msg_b_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_norm_msg_b_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_rot_msg_a_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_rot_msg_a_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_rot_msg_b_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_rot_msg_b_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_tr_msg_a_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_tr_msg_a_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_tr_msg_b_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_tr_msg_b_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase W.19: 4-shape parity for full FS-MESSAGE axis across
+  -- norm / rot / tr (adds C = G||H, D = 3×G||3×H).
+  | "test_sha2_512_of_norm_msg_c_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_norm_msg_c_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_norm_msg_d_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_norm_msg_d_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_rot_msg_c_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_rot_msg_c_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_rot_msg_d_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_rot_msg_d_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_tr_msg_c_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_tr_msg_c_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_tr_msg_d_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_tr_msg_d_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase W.20: transfer auditor-count × full FS-MESSAGE.
+  | "test_sha2_512_of_tr_1a_msg_a_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_tr_1a_msg_a_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_tr_1a_msg_b_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_tr_1a_msg_b_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_tr_2a_msg_a_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_tr_2a_msg_a_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_tr_2a_msg_b_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_tr_2a_msg_b_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_tr_3a_msg_a_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_tr_3a_msg_a_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_tr_3a_msg_b_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_tr_3a_msg_b_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_tr_2aswap_msg_a_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_tr_2aswap_msg_a_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_sha2_512_of_tr_2aswap_msg_b_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_fs_challenge_scalar_tr_2aswap_msg_b_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase W.21: Ristretto point-arithmetic algebraic identities.
+  | "test_ristretto_identity_is_zero_bytes_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ristretto_basepoint_mul_by_one_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ristretto_basepoint_mul_by_zero_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ristretto_point_add_zero_left_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ristretto_point_add_zero_right_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ristretto_msm_single_element_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ristretto_msm_zero_scalars_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ristretto_point_mul_vs_basepoint_mul_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ristretto_scalar_distributivity_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ristretto_msm_distributive_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ristretto_basepoint_double_mul_equivalence_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ristretto_point_add_commutes_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase W.22: advanced Ristretto + scalar algebraic identities.
+  | "test_ristretto_h_mul_by_one_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ristretto_h_mul_by_zero_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ristretto_h_doubling_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ristretto_msm_mixed_basis_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ristretto_msm_additive_inverse_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ristretto_msm_regrouping_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ristretto_identity_absorbs_mul_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_add_neg_is_zero_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_double_neg_identity_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_zero_absorbs_mul_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_mul_commutes_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_mul_associative_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_one_mul_identity_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase W.23: additional core Ristretto natives (point_neg,
+  -- point_sub, point_clone, double_scalar_mul,
+  -- new_point_from_sha2_512, scalar-bytes roundtrip).
+  | "test_ristretto_point_neg_additive_inverse_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ristretto_point_neg_involution_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ristretto_point_sub_self_is_identity_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ristretto_point_sub_scalar_consistency_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ristretto_point_sub_equals_add_neg_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ristretto_point_clone_equals_source_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ristretto_point_clone_h_equals_h_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ristretto_double_scalar_mul_basic_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ristretto_double_scalar_mul_zero_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ristretto_new_point_from_sha2_512_deterministic_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ristretto_new_point_from_sha2_512_distinct_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_bytes_roundtrip_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase W.24: *_assign vs pure-variant parity.
+  | "test_ristretto_point_add_assign_matches_pure_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ristretto_point_sub_assign_matches_pure_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ristretto_point_mul_assign_matches_pure_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ristretto_point_neg_assign_matches_pure_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_add_assign_matches_pure_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_sub_assign_matches_pure_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_mul_assign_matches_pure_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_neg_assign_matches_pure_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase W.25: scalar constructors (u8/u32/u128) + predicates +
+  -- point_equals + compress/decompress roundtrip + decoding.
+  | "test_scalar_from_u8_matches_u64_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_from_u8_zero_matches_scalar_zero_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_from_u32_matches_u64_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_from_u128_matches_u64_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_is_zero_on_zero_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_is_zero_on_one_is_false_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_is_one_on_one_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_is_one_on_zero_is_false_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_scalar_equals_refl_and_distinct_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_point_equals_refl_and_distinct_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_point_equals_semantic_equivalence_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_point_compress_decompress_roundtrip_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_new_point_from_bytes_basepoint_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_new_compressed_point_from_zero_is_identity_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase W.26: twisted ElGamal ciphertext algebra identities.
+  | "test_ciphertext_add_identity_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ciphertext_add_commutative_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ciphertext_sub_self_is_zero_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ciphertext_add_sub_cancels_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ciphertext_add_assign_matches_pure_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ciphertext_sub_assign_matches_pure_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ciphertext_clone_matches_original_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ciphertext_equals_refl_and_order_sensitive_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ciphertext_compress_decompress_roundtrip_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ciphertext_bytes_roundtrip_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ciphertext_no_randomness_zero_is_identity_ct_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_ciphertext_no_randomness_one_is_G_identity_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase W.27: confidential_balance module bindings.
+  | "test_pending_balance_no_randomness_is_zero_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_actual_balance_no_randomness_is_zero_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_balance_compress_decompress_roundtrip_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_pending_balance_bytes_roundtrip_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_pending_balance_to_points_c_zero_is_identities_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_actual_balance_to_points_d_zero_is_identities_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_balance_add_then_sub_is_noop_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_balance_c_equals_is_weaker_than_balance_equals_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_split_into_chunks_u64_zero_is_zeros_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_split_into_chunks_u64_0xffff_boundary_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_split_into_chunks_u128_mixed_le_ordering_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase W.28: hash-to-scalar / hash-to-point / reduced / uniform constructors.
+  | "test_new_scalar_from_sha512_alias_matches_canonical_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_new_scalar_from_sha2_512_deterministic_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_new_scalar_from_sha2_512_distinct_inputs_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_new_scalar_uniform_from_64_bytes_zero_is_scalar_zero_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_new_scalar_reduced_from_32_bytes_zero_is_scalar_zero_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_new_point_from_64_uniform_bytes_zero_determinism_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_new_point_from_64_uniform_bytes_distinct_inputs_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_new_scalar_uniform_from_64_bytes_distinct_inputs_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase W.29: SHA2-512 -> scalar composition + aptos_hash::sha2_512 pins.
+  | "test_new_scalar_from_sha2_512_eq_uniform_of_sha2_512_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_new_scalar_from_sha2_512_eq_uniform_of_sha2_512_alt_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_aptos_hash_sha2_512_output_len_is_64_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_aptos_hash_sha2_512_deterministic_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_aptos_hash_sha2_512_distinct_inputs_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase W.30: Bulletproofs + Pedersen commitment public surface.
+  | "test_bp_get_max_range_bits_is_64_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bp_range_proof_empty_bytes_roundtrip_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bp_range_proof_nontrivial_bytes_roundtrip_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_pedersen_zero_commitment_is_identity_point_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_pedersen_one_zero_commitment_is_basepoint_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_pedersen_commitment_add_commutative_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_pedersen_commitment_sub_self_is_zero_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_pedersen_commitment_add_matches_scalar_add_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_pedersen_commitment_add_assign_matches_pure_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_pedersen_commitment_sub_assign_matches_pure_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_pedersen_commitment_clone_matches_original_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_pedersen_commitment_equals_reflexive_and_sensitive_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_pedersen_commitment_as_point_vs_compressed_coherent_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_pedersen_randomness_base_matches_hash_to_point_base_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase W.31: remaining Pedersen commitment constructors / byte surface.
+  | "test_pedersen_new_commitment_matches_double_scalar_mul_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_pedersen_bulletproof_commitment_matches_explicit_bases_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_pedersen_commitment_with_basepoint_matches_bulletproof_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_pedersen_commitment_from_point_roundtrip_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_pedersen_commitment_from_compressed_basepoint_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_pedersen_commitment_bytes_roundtrip_nontrivial_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_pedersen_commitment_from_zero_bytes_is_identity_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_pedersen_zero_commitment_to_bytes_is_zeros_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_pedersen_commitment_into_point_matches_as_compressed_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_pedersen_commitment_into_compressed_matches_as_compressed_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase W.32: Bulletproofs verifier reject-branch direct bindings —
+  -- all map to `funcIdx := 195` (`caSigmaVerifyFailedAbortDesc`,
+  -- abort code 65537 = NFE_DESERIALIZE_RANGE_PROOF, numerically
+  -- identical to the Phase D.1 ESIGMA_PROTOCOL_VERIFY_FAILED code
+  -- so the same Lean witness accepts both).
+  | "test_bp_verify_range_proof_pedersen_empty_proof_aborts_tier3_binding" =>
+      some { funcIdx := 195, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bp_verify_range_proof_pedersen_empty_proof_16bit_pc_one_aborts_tier3_binding" =>
+      some { funcIdx := 195, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bp_verify_range_proof_explicit_bases_empty_proof_aborts_tier3_binding" =>
+      some { funcIdx := 195, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bp_verify_range_proof_pedersen_junk_32_bytes_aborts_tier3_binding" =>
+      some { funcIdx := 195, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bp_verify_range_proof_pedersen_zero_31_bytes_aborts_tier3_binding" =>
+      some { funcIdx := 195, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bp_verify_batch_range_proof_pedersen_size1_empty_aborts_tier3_binding" =>
+      some { funcIdx := 195, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bp_verify_batch_range_proof_pedersen_size2_empty_aborts_tier3_binding" =>
+      some { funcIdx := 195, useConfidentialEnv := true, useRealEnv := false }
+  | "test_bp_verify_batch_range_proof_explicit_bases_empty_aborts_tier3_binding" =>
+      some { funcIdx := 195, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase W.33: `aptos_hash` module closure (sha3_512, keccak256,
+  -- ripemd160, blake2b_256) — all map to `ldTrue` (`funcIdx := 40`).
+  | "test_aptos_hash_sha3_512_length_is_64_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_aptos_hash_sha3_512_deterministic_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_aptos_hash_sha3_512_distinct_inputs_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_aptos_hash_sha3_512_vs_sha2_512_differ_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_aptos_hash_keccak256_length_is_32_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_aptos_hash_keccak256_deterministic_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_aptos_hash_keccak256_distinct_inputs_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_aptos_hash_keccak256_vs_sha3_512_prefix_differ_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_aptos_hash_ripemd160_length_is_20_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_aptos_hash_ripemd160_det_and_sensitive_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_aptos_hash_blake2b_256_length_is_32_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_aptos_hash_blake2b_256_distinct_from_keccak_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  -- Phase W.34: `aptos_hash` SipHash — `ldTrue` (`funcIdx := 40`).
+  | "test_aptos_hash_sip_hash_deterministic_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_aptos_hash_sip_hash_distinct_inputs_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | "test_aptos_hash_sip_hash_from_value_matches_bcs_u64_tier3_binding" =>
+      some { funcIdx := 40, useConfidentialEnv := true, useRealEnv := false }
+  | _                  => none
+
 def funcNameToMappingFromBase (base : String) : Option FuncMapping :=
   funcNameToMappingErrorCatalog base <|>
   funcNameToMappingStringCatalog base <|>
@@ -1740,6 +2384,7 @@ def funcNameToMappingFromBase (base : String) : Option FuncMapping :=
   funcNameToMappingPart7 base <|>
   funcNameToMappingPart8 base <|>
   funcNameToMappingPart9 base <|>
-  funcNameToMappingPart10 base
+  funcNameToMappingPart10 base <|>
+  funcNameToMappingPart11 base
 
 end MovementFormal.DiffTest

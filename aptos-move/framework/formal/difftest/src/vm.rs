@@ -39,6 +39,7 @@ pub fn difftest_features() -> Features {
     features.enable(FeatureFlag::SHA_512_AND_RIPEMD_160_NATIVES);
     features.enable(FeatureFlag::BULLETPROOFS_NATIVES);
     features.enable(FeatureFlag::BULLETPROOFS_BATCH_NATIVES);
+    features.enable(FeatureFlag::BLAKE2B_256_NATIVE);
     features
 }
 
@@ -95,6 +96,12 @@ const BULLETPROOFS_NATIVES_FEATURE_ID: u64 = 24;
 /// the Phase D.1 reject-pin rows (sigma aborts first), but we enable it so
 /// later happy-path rows that skip zero-sigma can continue.
 const BULLETPROOFS_BATCH_NATIVES_FEATURE_ID: u64 = 87;
+/// `std::features::BLAKE2B_256_NATIVE`. Consulted by `aptos_hash::blake2b_256`
+/// (via `features::blake2b_256_enabled()`). Needed by Phase W.33 to bind the
+/// `aptos_hash` module's full primitive surface. Without this bit
+/// `blake2b_256` aborts with `invalid_state(E_NATIVE_FUN_NOT_AVAILABLE)` =
+/// **196609** before reaching the native.
+const BLAKE2B_256_NATIVE_FEATURE_ID: u64 = 8;
 
 fn merge_move_stdlib_feature_bit(vec: &mut Vec<u8>, feature_id: u64) {
     let byte_index = (feature_id / 8) as usize;
@@ -135,6 +142,7 @@ pub fn ensure_sha512_move_stdlib_feature(storage: &mut InMemoryStorage) -> Resul
     merge_move_stdlib_feature_bit(&mut f.features, SHA_512_AND_RIPEMD_160_FEATURE_ID);
     merge_move_stdlib_feature_bit(&mut f.features, BULLETPROOFS_NATIVES_FEATURE_ID);
     merge_move_stdlib_feature_bit(&mut f.features, BULLETPROOFS_BATCH_NATIVES_FEATURE_ID);
+    merge_move_stdlib_feature_bit(&mut f.features, BLAKE2B_256_NATIVE_FEATURE_ID);
     let blob = bcs::to_bytes(&f)?;
     storage.publish_or_overwrite_resource(addr, tag, blob);
     Ok(())

@@ -1,6 +1,7 @@
 import MovementFormal.MoveModel.Step
 import MovementFormal.MoveModel.Programs.Registration
 import MovementFormal.Experimental.ConfidentialAsset.Registration.Formal
+import MovementFormal.Std.ByteArrayAppend
 
 /-!
 # Functional simulation of `verify_registration_proof` bytecode
@@ -210,20 +211,22 @@ theorem buildFSMessageMv_list
 
 /-! ## ByteArray.toList distributivity
 
-`ByteArray.toList.loop` is `@[irreducible]` in Lean 4.24, so the proof that
-`ByteArray.toList` distributes over `ByteArray.append` requires a loop-invariant
-argument that is orthogonal to the cryptographic verification.
+`ByteArray.toList` uses `ByteArray.toList.loop` (`@[irreducible]` in Lean 4.24).
+The proofs live in `MovementFormal.Std.ByteArrayAppend` (local `semireducible`
+override for that loop only).  Here we re-export the same names under
+`FunctionalSim.ByteArray` so downstream `simp` lists in `Refinement.lean` keep
+working.  No axioms on this path. -/
 
-We axiomatize `ByteArray.toList_append` here.  It is verified concretely by
-`native_decide` for every concrete `ByteArray` pair and is a well-known property
-of `ByteArray.toList` (matching `Array.toList_append` via `ByteArray.data_append`).
-This is a **library-level obligation**, not a security assumption. -/
+theorem ByteArray.toList_eq_data_toList (b : ByteArray) :
+    b.toList = b.data.toList :=
+  MovementFormal.Std.byteArray_toList_eq_data_toList b
 
-axiom ByteArray.toList_append (a b : ByteArray) :
-    (a ++ b).toList = a.toList ++ b.toList
+theorem ByteArray.toList_append (a b : ByteArray) :
+    (a ++ b).toList = a.toList ++ b.toList :=
+  MovementFormal.Std.byteArray_toList_append a b
 
-axiom ByteArray.toList_mk_singleton (x : UInt8) :
-    (ByteArray.mk #[x]).toList = [x]
+theorem ByteArray.toList_mk_singleton (x : UInt8) : (ByteArray.mk #[x]).toList = [x] :=
+  MovementFormal.Std.byteArray_toList_mk_singleton x
 
 /-! ## Structural properties
 

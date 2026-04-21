@@ -38,7 +38,11 @@ the same high-level shape:
 ## Out of scope here
 
 - Ristretto encoding/decoding internals (`point_decompress`, `point_compress`):
-  those come from `RistrettoEncoding` as opaque functions pinned by roundtrip axioms.
+  those come from `RistrettoEncoding` as opaque functions pinned by roundtrip / injectivity
+  axioms and by the Tier 3 VM↔Lean golden rows (`SigmaVerifiersGoldens`, harness FS-prefix and
+  full-message fixtures).  This file’s predicates **assume** those interfaces agree with the
+  production `aptos_std::ristretto255` implementation; the same boundary is referenced from the
+  registration end-to-end stack (`…Registration.EndToEnd` §6.2a).
 - Completeness/soundness proofs of the sigma protocols: research-level.
 - Bulletproofs range-proof verifier — Layer 9.
 -/

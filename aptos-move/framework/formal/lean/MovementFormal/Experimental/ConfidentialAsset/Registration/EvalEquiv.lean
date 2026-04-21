@@ -8528,7 +8528,14 @@ oracle satisfying only `hl`.
 **Proved replacement on the Schnorr success bundle:** see
 `registration_eval_equiv_singleton_tail_of_schnorr_hmac_bundle` (canonical EK/commitment bytes +
 full oracle equalities + `fuel ≥ 200`). Regression evidence for the general statement lives in
-`BytecodeDifftestEval.lean` (`native_decide`). -/
+`BytecodeDifftestEval.lean` (`native_decide`).
+
+**Why this is the last general axiom.** Early-error paths (`registration_eval_early_error_matches_func`)
+and the full Schnorr success bundle are already separated into proved theorems; what remains for
+a *single* unconditional statement is the arbitrary-oracle singleton tail where `run` still threads
+a deep `MachineState` until `ret` while `verifyRegistrationBytecodeResult` is `MachineState`-free.
+Eliminating the axiom is expected to follow a `dropMs`-nativeRef refactor or `ContainerStore`/`@[irreducible]`
+re-layering (see the elaboration-cost note above this axiom), not a further cryptographic lemma. -/
 axiom registration_eval_equiv_singleton_tail
     (o : RegistrationNativeOracle)
     (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)

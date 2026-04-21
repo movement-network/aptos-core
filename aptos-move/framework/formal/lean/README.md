@@ -84,10 +84,7 @@ This should return **no matches** for the core stdlib specs (`Std.`*, `MoveModel
 > the `vector::contains` and `vector::index_of` refinements are fully kernel-checked (no `sorry`).
 > `Std/FixedPoint32.lean` and `Std/BitVector.lean` have a small number of `sorry` on auxiliary
 > lemmas tracked for future work.
-> `Experimental/ConfidentialAsset/` contains flagged `sorry`s on abstract bytecode stepping
-> — see inline comments for status. (The word "sorry" may appear in comments explaining what
-> *could* be sorry'd; `grep` for `sorry` outside comments if you want to be precise, or run
-> `lake env printPaths` and inspect the `.olean` files for `sorryAx` usage.)
+> **`Experimental/ConfidentialAsset/` + CA companion modules:** CI runs [`../scripts/check_confidential_lean_hygiene.sh`](../scripts/check_confidential_lean_hygiene.sh) — it rejects any **line-start** `sorry` in `Experimental/ConfidentialAsset/` **and** in `AptosStd/Crypto/EdwardsOracle.lean`, `Refinement/AptosExperimental/Confidential.lean`, `MoveModel/Programs/Confidential.lean`, `MoveModel/Programs/Registration.lean`, `MoveModel/Programs/RegistrationDifftestOracle.lean`, `MoveModel/Native/Registration.lean`, `SmokeTests/Confidential.lean`, `DiffTest/Runner.lean`, `DiffTest/RunnerFuncMappingAux.lean`; it allows **exactly one** top-level `axiom` under the Experimental tree (`registration_eval_equiv_singleton_tail` in `Registration/EvalEquiv.lean`) and **zero** axioms in those companion files. The word `sorry` may still appear **inside comments**; use `#print axioms` for dependency review.
 
 You can also check what axioms any theorem depends on. Create a file `_check_axioms.lean`:
 

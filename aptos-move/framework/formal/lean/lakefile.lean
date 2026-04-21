@@ -41,6 +41,7 @@ lean_lib «MovementFormal» where
     `MovementFormal.AptosStd.Hash.Sha3_512,
     `MovementFormal.AptosStd.Hash.Sha2_512,
     `MovementFormal.Std.Bcs.Primitives,
+    `MovementFormal.Std.ByteArrayAppend,
     `MovementFormal.Std.MoveStdlibGoldens,
     `MovementFormal.AptosStd.Crypto.Ristretto255,
     `MovementFormal.AptosStd.Crypto.Curve25519Field,

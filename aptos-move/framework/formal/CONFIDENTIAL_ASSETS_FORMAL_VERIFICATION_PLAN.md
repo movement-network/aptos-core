@@ -20,7 +20,7 @@ This document is a **roadmap** for extending the **`MovementFormal`** stack so t
 **Trust model (what “not blindly trusting the code” means here)**
 
 - **Specifications first:** L0 definitions (e.g. `Formal.registrationDstBytes`, transcript layout) are anchored to **named Move sources** and should be the **single source of truth** for duplicated constants in bytecode transcription (`Programs.*`) and functional simulation (`FunctionalSim`) — proved alignment by **`rfl`** where definitions are shared, not by repeating ASCII literals in three places.
-- **Axioms are explicit:** curve group laws (`EdwardsCurve25519`), Ristretto encoding interfaces, Bulletproofs batch-verify boundaries, and any **`registration_eval_equiv_singleton_tail`**-style bridges are **named** and listed for `#print axioms` review; they are **not** “the implementation is right because we say so.”
+- **Axioms are explicit:** curve group laws (`EdwardsCurve25519`), Ristretto encoding interfaces, Bulletproofs batch-verify boundaries, and **`registration_eval_equiv_singleton_tail`** (bytecode `eval`/`run` singleton tail vs functional sim for arbitrary oracles) are **named** and listed for `#print axioms` review; they are **not** “the implementation is right because we say so.” (`ByteArray.toList` facts are proved in `MovementFormal.Std.ByteArrayAppend` without axioms.)
 - **Independent checks:** SHA-512 / layout **goldens** are cross-checked by Rust corpora (`move-lean-difftest verify-corpora`) and/or `native_decide` where applicable; VM↔Lean difftest is **regression evidence**, not a substitute for ∀-proofs (see differential-testing plan §2.2).
 - **Completion** still means the **§8 checklist** (scope doc, axiom review, difftest for transcribed code) — full CA end-to-end remains phased (§6).
 
@@ -29,7 +29,7 @@ This document is a **roadmap** for extending the **`MovementFormal`** stack so t
 - Lean build / difftest workflow: [`lean/README.md`](lean/README.md), [`difftest/README.md`](difftest/README.md)
 - Bytecode model + roadmap: [`lean/MovementFormal/MoveModel/README.md`](lean/MovementFormal/MoveModel/README.md)
 - Registration **spec-level** review (today’s main CA formal work): [`REGISTRATION_VERIFY_REVIEW.md`](REGISTRATION_VERIFY_REVIEW.md)
-- CA Move **audit notes** (semantics / harness sharp edges while building formal artifacts): [`CONFIDENTIAL_ASSETS_MOVE_AUDIT_NOTES.md`](CONFIDENTIAL_ASSETS_MOVE_AUDIT_NOTES.md)
+- CA Move **audit notes** (semantics / harness sharp edges while building formal artifacts): [`CONFIDENTIAL_ASSETS_MOVE_AUDIT_NOTES.md`](CONFIDENTIAL_ASSETS_MOVE_AUDIT_NOTES.md) — also **FV-*** entries (formal-track proof hygiene, remaining axioms, regression commands). **CI hygiene script:** [`scripts/check_confidential_lean_hygiene.sh`](scripts/check_confidential_lean_hygiene.sh) (**FV-3**).
 
 ---
 

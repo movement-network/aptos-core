@@ -70,6 +70,10 @@ echo "[0] Corpus: registration FS + tagged SHA3-512 + Bulletproofs DST + seriali
 (cd "$REPO_ROOT" && cargo run -p move-lean-difftest -- verify-corpora)
 
 echo ""
+echo "[0a] ConfidentialAsset Lean hygiene (no line-start sorry; single allowlisted axiom)"
+bash "$SCRIPT_DIR/scripts/check_confidential_lean_hygiene.sh"
+
+echo ""
 echo "[1/2] Oracle: real Move VM → $JSON"
 (cd "$REPO_ROOT" && cargo run -p move-lean-difftest -- --quiet "$@")
 

@@ -47,11 +47,19 @@ Ties together every Lean module in the registration proof stack:
 See §6 of `REGISTRATION_VERIFY_REVIEW.md`:
 - §6.1 VM semantics (Move execution matches `verifyRegistrationProofProp`)
 - §6.2 Native correctness (`RistrettoGroupAxioms` holds for this branch's natives)
+- §6.2a **Ristretto wire interfaces** — compress/decompress and SHA-to-scalar paths used by
+  `verify_registration_proof` are shared with Tier 3 sigma work: concrete behavior is pinned in
+  `RistrettoEncoding` / `SigmaVerifiers` by roundtrip and cross-engine goldens (not a full
+  computational model of canonical encoding in pure Lean).
 - §6.3 BCS address encoding
 - §6.4 Cryptographic security (special soundness + HVZK in `CryptoSecurity.lean`, including
   `registrationSchnorr_simulate_lhs_eq` / `registrationSchnorr_simulate_satisfies_schnorr_eq`;
   symbolic Fiat–Shamir in `FiatShamirSymbolic.lean`; forking probability not formalized)
 - §6.5 Primality of ℓ (currently an axiom)
+- §6.6 **Bytecode `eval` bridge** — `EvalEquiv.registration_eval_equiv_singleton_tail` (general
+  oracle, singleton compressed-point tail); see `EvalEquiv` for the proved Schnorr success bundle
+  (`registration_eval_equiv_singleton_tail_of_schnorr_hmac_bundle`). `ByteArray.toList` facts are
+  proved without axioms in `MovementFormal.Std.ByteArrayAppend` and re-exported from `FunctionalSim`.
 -/
 
 import MovementFormal.Experimental.ConfidentialAsset.Registration.Formal

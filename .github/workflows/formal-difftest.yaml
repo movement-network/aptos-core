@@ -13,6 +13,7 @@ on:
       - "aptos-move/framework/formal/difftest/**"
       - "aptos-move/framework/formal/lean/**"
       - "aptos-move/framework/formal/difftest.sh"
+      - "aptos-move/framework/formal/scripts/**"
       - "aptos-move/e2e-move-tests/src/tests/confidential_asset_e2e.rs"
       - "aptos-move/e2e-move-tests/src/tests/confidential_asset_e2e_oracle_impl.rs"
       - "aptos-move/e2e-move-tests/Cargo.toml"
@@ -90,6 +91,9 @@ jobs:
           path: aptos-move/framework/formal/lean/.lake
           key: ${{ runner.os }}-lake-${{ hashFiles('aptos-move/framework/formal/lean/lean-toolchain', 'aptos-move/framework/formal/lean/lakefile.lean', 'aptos-move/framework/formal/lean/lake-manifest.json') }}
           restore-keys: ${{ runner.os }}-lake-
+
+      - name: ConfidentialAsset Lean hygiene (no sorry; axiom allowlist)
+        run: bash aptos-move/framework/formal/scripts/check_confidential_lean_hygiene.sh
 
       - name: Fetch Mathlib cache (precompiled .olean files)
         run: |

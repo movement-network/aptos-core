@@ -29,6 +29,12 @@ pub enum TimedFeatureFlag {
 
     /// Uses full transaction size when computing transaction metadata.
     UseFullTransactionSizeForTransactionMetadata,
+
+    /// Activates strict bounds on module definitions (struct count, field count,
+    /// function count) in the bytecode verifier production config. Before activation,
+    /// the verifier uses permissive limits to avoid breaking replay of historical
+    /// transactions that may contain oversized modules.
+    StrictVerifierBounds,
 }
 
 /// Representation of features that are gated by the block timestamps.
@@ -145,6 +151,12 @@ impl TimedFeatureFlag {
 
             // Irrelevant for us except for testing
             (UseFullTransactionSizeForTransactionMetadata, _) => BEGINNING_OF_TIME,
+
+            // Activate strict verifier bounds immediately for Movement chains to
+            // prevent DoS via oversized module publishing.
+            (StrictVerifierBounds, MOVEMAINNET | MOVETESTNET) => BEGINNING_OF_TIME,
+            // Also activate from the beginning for Aptos chains.
+            (StrictVerifierBounds, MAINNET | TESTNET) => BEGINNING_OF_TIME,
 
             // For chains other than testnet and mainnet, a timed feature is considered enabled from
             // the very beginning, if left unspecified.

@@ -147,55 +147,69 @@ impl<'a> LimitsVerifier<'a> {
     }
 
     fn verify_definitions(&self, config: &VerifierConfig) -> PartialVMResult<()> {
+        // Absolute safety ceilings that apply regardless of configuration.
+        // These prevent resource exhaustion from oversized modules even if the
+        // VerifierConfig limits are accidentally set to None.
+        const HARD_MAX_FUNCTION_DEFINITIONS: usize = 10_000;
+        const HARD_MAX_STRUCT_DEFINITIONS: usize = 2_000;
+        const HARD_MAX_FIELDS_IN_STRUCT: usize = 255;
+        const HARD_MAX_STRUCT_VARIANTS: usize = 255;
+
         if let Some(defs) = self.resolver.function_defs() {
-            if let Some(max_function_definitions) = config.max_function_definitions {
-                if defs.len() > max_function_definitions {
-                    return Err(PartialVMError::new(
-                        StatusCode::MAX_FUNCTION_DEFINITIONS_REACHED,
-                    ));
-                }
+            let limit = config
+                .max_function_definitions
+                .unwrap_or(HARD_MAX_FUNCTION_DEFINITIONS);
+            if defs.len() > limit {
+                return Err(PartialVMError::new(
+                    StatusCode::MAX_FUNCTION_DEFINITIONS_REACHED,
+                ));
             }
         }
         if let Some(defs) = self.resolver.struct_defs() {
-            if let Some(max_struct_definitions) = config.max_struct_definitions {
-                if defs.len() > max_struct_definitions {
+            let struct_limit = config
+                .max_struct_definitions
+                .unwrap_or(HARD_MAX_STRUCT_DEFINITIONS);
+            if defs.len() > struct_limit {
+                return Err(PartialVMError::new(
+                    StatusCode::MAX_STRUCT_DEFINITIONS_REACHED,
+                ));
+            }
+
+            let field_limit = config
+                .max_fields_in_struct
+                .unwrap_or(HARD_MAX_FIELDS_IN_STRUCT);
+            for def in defs {
+                let mut max = 0;
+                match &def.field_information {
+                    StructFieldInformation::Native => {},
+                    StructFieldInformation::Declared(fields) => max += fields.len(),
+                    StructFieldInformation::DeclaredVariants(variants) => {
+                        // Notice we interpret the bound as a maximum of the combined
+                        // size of fields of a given variant, not the
+                        // sum of all fields in all variants. An upper bound for
+                        // overall fields of a variant struct is given by
+                        // `max_fields_in_struct * max_struct_variants`
+                        for variant in variants {
+                            let count = variant.fields.len();
+                            max = cmp::max(max, count)
+                        }
+                    },
+                }
+                if max > field_limit {
                     return Err(PartialVMError::new(
-                        StatusCode::MAX_STRUCT_DEFINITIONS_REACHED,
+                        StatusCode::MAX_FIELD_DEFINITIONS_REACHED,
                     ));
                 }
             }
-            if let Some(max_fields_in_struct) = config.max_fields_in_struct {
-                for def in defs {
-                    let mut max = 0;
-                    match &def.field_information {
-                        StructFieldInformation::Native => {},
-                        StructFieldInformation::Declared(fields) => max += fields.len(),
-                        StructFieldInformation::DeclaredVariants(variants) => {
-                            // Notice we interpret the bound as a maximum of the combined
-                            // size of fields of a given variant, not the
-                            // sum of all fields in all variants. An upper bound for
-                            // overall fields of a variant struct is given by
-                            // `max_fields_in_struct * max_struct_variants`
-                            for variant in variants {
-                                let count = variant.fields.len();
-                                max = cmp::max(max, count)
-                            }
-                        },
-                    }
-                    if max > max_fields_in_struct {
-                        return Err(PartialVMError::new(
-                            StatusCode::MAX_FIELD_DEFINITIONS_REACHED,
-                        ));
-                    }
-                }
-            }
-            if let Some(max_struct_variants) = config.max_struct_variants {
-                for def in defs {
-                    if matches!(&def.field_information,
-                        StructFieldInformation::DeclaredVariants(variants) if variants.len() > max_struct_variants)
-                    {
-                        return Err(PartialVMError::new(StatusCode::MAX_STRUCT_VARIANTS_REACHED));
-                    }
+
+            let variant_limit = config
+                .max_struct_variants
+                .unwrap_or(HARD_MAX_STRUCT_VARIANTS);
+            for def in defs {
+                if matches!(&def.field_information,
+                    StructFieldInformation::DeclaredVariants(variants) if variants.len() > variant_limit)
+                {
+                    return Err(PartialVMError::new(StatusCode::MAX_STRUCT_VARIANTS_REACHED));
                 }
             }
         }

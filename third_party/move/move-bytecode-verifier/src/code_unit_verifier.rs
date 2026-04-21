@@ -92,7 +92,11 @@ impl<'a> CodeUnitVerifier<'a> {
         let resolver = BinaryIndexedView::Script(script);
         let name_def_map = HashMap::new();
 
-        if let Some(limit) = verifier_config.max_basic_blocks_in_script {
+        {
+            const HARD_MAX_BASIC_BLOCKS_IN_SCRIPT: usize = 8_192;
+            let limit = verifier_config
+                .max_basic_blocks_in_script
+                .unwrap_or(HARD_MAX_BASIC_BLOCKS_IN_SCRIPT);
             if function_view.cfg().blocks().len() > limit {
                 return Err(PartialVMError::new(StatusCode::TOO_MANY_BASIC_BLOCKS));
             }
@@ -144,7 +148,11 @@ impl<'a> CodeUnitVerifier<'a> {
             meter,
         )?;
 
-        if let Some(limit) = verifier_config.max_basic_blocks {
+        {
+            const HARD_MAX_BASIC_BLOCKS: usize = 8_192;
+            let limit = verifier_config
+                .max_basic_blocks
+                .unwrap_or(HARD_MAX_BASIC_BLOCKS);
             if function_view.cfg().blocks().len() > limit {
                 return Err(
                     PartialVMError::new(StatusCode::TOO_MANY_BASIC_BLOCKS).at_code_offset(index, 0)

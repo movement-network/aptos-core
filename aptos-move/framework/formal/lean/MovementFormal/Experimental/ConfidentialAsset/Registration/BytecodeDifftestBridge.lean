@@ -7,8 +7,9 @@ import MovementFormal.Experimental.ConfidentialAsset.Registration.Operational
 
 **Source:** `aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_proof.move`; difftest `aptos-move/framework/formal/difftest/`.
 
-Imports the `native_decide` eval proof from `BytecodeDifftestEval` (which is
-deliberately kept in a separate file with light imports) and connects it to the
+Imports the `native_decide` eval proof from `BytecodeDifftestEval` (light imports:
+`Step`, `Programs.Registration`, `FunctionalSim`, `ExecResultDropMs` — not the full
+`EvalEquiv` module) and connects it to the
 L1 (`execVerifyRegistrationProof`) and L0 (`verifyRegistrationProofProp`) layers.
 
 For this specific trace (dk=42, k=9999), all three layers agree:

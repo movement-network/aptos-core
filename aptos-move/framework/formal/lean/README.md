@@ -57,13 +57,63 @@ curl https://elan.dev/install.sh -sSf | sh
 
 ## Building the proofs
 
+### Mathlib cache (**required** for sane build times)
+
+Without precompiled Mathlib **`.olean`** files, Lean will **compile all of Mathlib from source** on
+first use — that is **not** practical (hours, heavy CPU/RAM). You **must** fetch the cache before
+meaningful work (same step CI runs):
+
 ```bash
 cd aptos-move/framework/formal/lean
+lake exe cache get!
+```
+
+Then run `lake build` (or a specific module; see below). **`lake exe cache get!` is not optional**
+for developer machines or CI parity; treat it like `cargo fetch` for a giant dependency.
+
+CI: `.github/workflows/formal-difftest.yaml` (`lean-proofs` job) runs `lake exe cache get!` before
+`lake build`.
+
+### What else is cached?
+
+- **Lake build store (`lean/.lake/`):** after the first successful `lake build`, Lake keeps compiled
+  **project** artifacts (e.g. `MovementFormal.*` `.olean` / `.c` output) under `.lake/`. Incremental
+  rebuilds only recompile what changed. **Back up or reuse this directory** (zip it, copy to
+  another machine with the same `lean-toolchain` + `lake-manifest.json`) to avoid re-proving
+  unchanged modules — there is no separate “Aptos formal proofs CDN”; the cache **is** `.lake` plus
+  Mathlib’s cache from `cache get!`.
+- **CI:** the same workflow caches `aptos-move/framework/formal/lean/.lake` keyed on
+  `lean-toolchain` + `lakefile.lean` + `lake-manifest.json` so PR jobs reuse prior work when those
+  files are unchanged.
+
+There is no additional official “cache everything” knob beyond **Mathlib (`cache get!`)** + **Lake’s
+`.lake/`** (local persistence / CI artifact cache).
+
+```bash
+cd aptos-move/framework/formal/lean
+lake exe cache get!
 lake build
 ```
 
-**First build** downloads the Mathlib toolchain cache (~1 GB) and compiles all modules.
-Subsequent builds are incremental and fast.
+**Expected:** first full build after `cache get!` still compiles all **`MovementFormal`** roots once;
+subsequent builds are incremental and much faster unless you `lake clean` or change toolchain/deps.
+
+**Building specific modules (faster iteration):** `lake build` accepts a **single Lean module** name
+(a root from `lakefile.lean`, or any module Lake can resolve as a build job). Only that module and
+its **missing/outdated** dependencies are built.
+
+```bash
+cd aptos-move/framework/formal/lean
+lake build MovementFormal.MoveModel.ExecResultDropMs
+lake build MovementFormal.Experimental.ConfidentialAsset.Registration.EvalFuelMonotonicity
+lake build MovementFormal.Experimental.ConfidentialAsset.Registration.BytecodeSmoke
+lake build MovementFormal.Experimental.ConfidentialAsset.Registration.BytecodeDifftestEval
+# Large: registration bytecode ↔ functional sim (can take tens of minutes on a laptop)
+lake build MovementFormal.Experimental.ConfidentialAsset.Registration.EvalEquiv
+```
+
+Use this when you changed one area and do not want to wait for the entire `MovementFormal` default
+target (all `lakefile.lean` roots).
 
 **Expected output on success:** no errors, no warnings (other than potential Mathlib `simp` linter
 notes which do not affect soundness). The build exits with code 0.

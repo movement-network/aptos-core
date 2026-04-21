@@ -22,7 +22,7 @@ L2  eval (bytecode)
       ↔  L0  verifyRegistrationProofProp (Prop)
 ```
 
-**L2 ≡ L1.5** (`eval_eq_func`): up to `MachineState` (via `.dropMs`), since the real
+**L2 ≡ L1.5** (`eval_eq_func`): up to `MachineState` (via `.dropMs` from `MovementFormal.MoveModel.ExecResultDropMs`), since the real
 83-instruction bytecode populates the `ContainerStore` via references.
 The general `eval ≡ func` step is the theorem `registration_eval_equiv_functional_sim`
 in `EvalEquiv.lean` (case-split). On the **Schnorr success bundle** with canonical BCS bytes for EK

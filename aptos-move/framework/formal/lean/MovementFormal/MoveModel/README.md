@@ -30,7 +30,7 @@ MovementFormal/
 │       ├── VerifyMath         CryptoOracle, verifyRegistrationProofProp
 │       ├── Operational        execVerifyRegistrationProof (Option Unit model, L1)
 │       ├── FunctionalSim     verifyRegistrationBytecodeResult (L1.5 functional sim)
-│       ├── EvalEquiv          eval_eq_func_100 (L2≡L1.5), ExecResult.dropMs, fuel lemmas
+│       ├── EvalEquiv          eval_eq_func_100 (L2≡L1.5); `ExecResult.dropMs` → `ExecResultDropMs.lean`; fuel lemmas → `EvalFuelMonotonicity.lean`
 │       ├── Refinement         L2≡L1.5≡L1↔L0 refinement chain (eval → prop)
 │       ├── BytecodeSmoke      eval smoke: valid/invalid proof on golden inputs (ref args)
 │       ├── BytecodeDifftestEval  native_decide: eval vs func on 4 oracle traces
@@ -47,6 +47,7 @@ MovementFormal/
 │   ├── Value.lean            MoveValue, MoveType, RefId, GlobalResourceKey
 │   ├── Instr.lean            MoveInstr bytecode instruction set
 │   ├── State.lean            Frame, ContainerStore, MachineState, ExecResult, ModuleEnv
+│   ├── ExecResultDropMs.lean `ExecResult.dropMs` projection (+ simp / iff lemmas)
 │   ├── Step.lean             small-step evaluator (step/run/eval)
 │   ├── Native.lean           native function bindings to Std.* specs
 │   ├── Programs.lean         module env definitions (imports Core + Vector)

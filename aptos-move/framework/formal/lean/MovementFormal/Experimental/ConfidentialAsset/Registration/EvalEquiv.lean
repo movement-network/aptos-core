@@ -1,6 +1,8 @@
 import MovementFormal.Experimental.ConfidentialAsset.Registration.FunctionalSim
+import MovementFormal.MoveModel.ExecResultDropMs
 import MovementFormal.MoveModel.Step
 import MovementFormal.MoveModel.Programs.Registration
+import MovementFormal.Experimental.ConfidentialAsset.Registration.EvalFuelMonotonicity
 
 /-!
 # Bytecode eval ≡ functional simulation (L2 ≡ L1.5)
@@ -19,7 +21,11 @@ return values / abort code).
 The real bytecode uses `immBorrowLoc` / `mutBorrowLoc` / `nativeRef`
 calls, so `eval` returns `.returned [] ms` where `ms` has a populated
 `ContainerStore`. The functional sim returns `.returned [] MachineState.empty`.
-We compare via `ExecResult.dropMs` which projects away the `MachineState`.
+We compare via `ExecResult.dropMs` which projects away the `MachineState`
+(defined in `MovementFormal.MoveModel.ExecResultDropMs`).
+
+**Fuel monotonicity** (`run_fuel_ge`, `eval_fuel_ge`, `eval_fuel_ge_dropMs`) lives in
+`MovementFormal.Experimental.ConfidentialAsset.Registration.EvalFuelMonotonicity` for lightweight imports.
 
 ## Proof architecture
 
@@ -49,66 +55,6 @@ match tree:
 After normalization, `simp`'s congruence closes matching branches.
 Remaining abstract branch splits are handled by `split <;> simp`.
 -/
-
-/-! ## MachineState projection
-
-The real bytecode populates the `ContainerStore` via `immBorrowLoc` /
-`mutBorrowLoc` / `nativeRef` calls, so `eval` returns a non-empty
-`MachineState`. The functional sim returns `MachineState.empty`.
-`dropMs` projects away the `MachineState` to enable comparison.
-
-Defined in the `MovementFormal.MoveModel` namespace so that dot notation
-(`r.dropMs`) resolves for `r : ExecResult`. -/
-
-namespace MovementFormal.MoveModel
-
-def ExecResult.dropMs : ExecResult → ExecResult
-  | .returned vs _ => .returned vs MachineState.empty
-  | r => r
-
-@[simp] theorem ExecResult.dropMs_returned (vs : List MoveValue) (ms : MachineState) :
-    ExecResult.dropMs (.returned vs ms) = .returned vs MachineState.empty := rfl
-
-@[simp] theorem ExecResult.dropMs_aborted (code : UInt64) :
-    ExecResult.dropMs (.aborted code) = .aborted code := rfl
-
-@[simp] theorem ExecResult.dropMs_error :
-    ExecResult.dropMs .error = .error := rfl
-
-theorem ExecResult.dropMs_eq_returned_iff (r : ExecResult) (vs : List MoveValue) :
-    r.dropMs = .returned vs MachineState.empty ↔
-    ∃ ms, r = .returned vs ms := by
-  constructor
-  · intro h; cases r with
-    | returned vs' ms' =>
-      simp [ExecResult.dropMs] at h
-      exact ⟨ms', by obtain ⟨rfl, _⟩ := h; rfl⟩
-    | aborted _ => simp [ExecResult.dropMs] at h
-    | error => simp [ExecResult.dropMs] at h
-    | ok _ _ _ _ => simp [ExecResult.dropMs] at h
-  · rintro ⟨ms, rfl⟩; simp [ExecResult.dropMs]
-
-theorem ExecResult.dropMs_eq_aborted_iff (r : ExecResult) (code : UInt64) :
-    r.dropMs = .aborted code ↔ r = .aborted code := by
-  constructor
-  · intro h; cases r with
-    | returned _ _ => simp [ExecResult.dropMs] at h
-    | aborted c =>
-      simp [ExecResult.dropMs] at h
-      exact congrArg ExecResult.aborted h
-    | error => simp [ExecResult.dropMs] at h
-    | ok _ _ _ _ => simp [ExecResult.dropMs] at h
-  · rintro rfl; rfl
-
-theorem ExecResult.dropMs_ne_error_of_ne_error {r : ExecResult} (h : r ≠ .error) :
-    r.dropMs ≠ .error := by
-  cases r with
-  | returned _ _ => simp [ExecResult.dropMs]
-  | aborted _ => simp [ExecResult.dropMs]
-  | error => exact absurd rfl h
-  | ok _ _ _ _ => simp [ExecResult.dropMs]
-
-end MovementFormal.MoveModel
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.EvalEquiv
 
@@ -186,53 +132,6 @@ def runStep (env : ModuleEnv) (result : ExecResult) (fuel : Nat) : ExecResult :=
 
 @[simp] theorem runStep_aborted (env : ModuleEnv) (fuel : Nat) (code : UInt64) :
     runStep env (.aborted code) fuel = .aborted code := rfl
-
-/-! ## Fuel monotonicity -/
-
-theorem run_fuel_ge (env : ModuleEnv) (frame : Frame) (cs : List Frame)
-    (stack : List MoveValue) (ms : MachineState) :
-    ∀ (fuel₁ fuel₂ : Nat), fuel₁ ≤ fuel₂ →
-      run env frame cs stack ms fuel₁ ≠ .error →
-      run env frame cs stack ms fuel₂ = run env frame cs stack ms fuel₁ := by
-  intro fuel₁
-  induction fuel₁ generalizing frame cs stack ms with
-  | zero => intro _ _ hne; simp [run] at hne
-  | succ n ih =>
-    intro fuel₂ hle hne
-    obtain ⟨m, rfl⟩ : ∃ m, fuel₂ = m + 1 := ⟨fuel₂ - 1, by omega⟩
-    simp only [run]
-    cases hStep : step env frame cs stack ms with
-    | ok frame' cs' stack' ms' =>
-      exact ih frame' cs' stack' ms' m (by omega) (by simp [run, hStep] at hne; exact hne)
-    | returned _ _ => rfl
-    | aborted _ => rfl
-    | error => simp [run, hStep] at hne
-
-theorem eval_fuel_ge (env : ModuleEnv) (funcIdx : FuncIndex) (args : List MoveValue)
-    (fuel₁ fuel₂ : Nat) (ms : MachineState) :
-    fuel₁ ≤ fuel₂ →
-    eval env funcIdx args fuel₁ ms ≠ .error →
-    eval env funcIdx args fuel₂ ms = eval env funcIdx args fuel₁ ms := by
-  intro hle hne
-  simp only [eval] at hne ⊢
-  by_cases hBound : funcIdx < env.functions.size
-  · simp only [dite_true, hBound] at hne ⊢
-    cases hBody : env.functions[funcIdx].body with
-    | native impl => rfl
-    | nativeAbort impl => rfl
-    | nativeRef impl => rfl
-    | bytecode code numLocals =>
-      simp only [hBody] at hne ⊢
-      exact run_fuel_ge _ _ _ _ _ _ _ hle hne
-  · simp only [dite_false, hBound] at hne; exact absurd rfl hne
-
-theorem eval_fuel_ge_dropMs (env : ModuleEnv) (funcIdx : FuncIndex) (args : List MoveValue)
-    (fuel₁ fuel₂ : Nat) (ms : MachineState) :
-    fuel₁ ≤ fuel₂ →
-    eval env funcIdx args fuel₁ ms ≠ .error →
-    (eval env funcIdx args fuel₂ ms).dropMs = (eval env funcIdx args fuel₁ ms).dropMs := by
-  intro hle hne
-  exact congrArg ExecResult.dropMs (eval_fuel_ge env funcIdx args fuel₁ fuel₂ ms hle hne)
 
 /-! ## single? fusion lemmas
 
@@ -7187,6 +7086,7 @@ abbrev registrationMsgBytesAfterToken (mv sOpt : MoveValue) (chainId : UInt8) (s
   (((fiatShamirRegistrationDstBytesList ++ [.u8 chainId]) ++ sender.toList.map .u8) ++ contract.toList.map .u8) ++
     token.toList.map .u8
 
+set_option maxHeartbeats 800000 in
 private theorem registrationCsAfterAppendToken_read4
     (mv sOpt : MoveValue) (chainId : UInt8) (sender contract token : ByteArray) :
     (registrationCsAfterAppendToken mv sOpt chainId sender contract token).read 4 =
@@ -7227,7 +7127,6 @@ private theorem registrationCsAfterAppendPubkeyBytes_write_eq
       some (registrationCsAfterAppendPubkeyBytes mv sOpt chainId sender contract token ekBytesList) := by
   have hlt := registrationCsAfterAppendToken_lt4_store mv sOpt chainId sender contract token
   simp only [registrationCsAfterAppendPubkeyBytes, ContainerStore.write, dif_pos hlt]
-  rfl
 
 private theorem registrationCsAfterAppendPubkeyBytes_read4
     (mv sOpt : MoveValue) (chainId : UInt8) (sender contract token : ByteArray) (ekBytesList : List MoveValue) :
@@ -7270,7 +7169,6 @@ private theorem registrationCsAfterAppendCompressedPointBytes_write_eq
         rcBytesList) := by
   have hlt := registrationCsAfterAppendPubkeyBytes_lt4_store mv sOpt chainId sender contract token ekBytesList
   simp only [registrationCsAfterAppendCompressedPointBytes, ContainerStore.write, dif_pos hlt]
-  rfl
 
 /-- Full Fiat–Shamir `msg` wire at ref 4 after PC 42 (before `moveLoc 11` / SHA2-512 at PC 43–44). -/
 abbrev registrationMsgBytesForFs (mv sOpt : MoveValue) (chainId : UInt8) (sender contract token : ByteArray)
@@ -7305,6 +7203,7 @@ def registrationMsAfterAppendTokenMsg
   { (registrationMsAfterAppendContract mv sOpt chainId sender contract) with
     containers := registrationCsAfterAppendToken mv sOpt chainId sender contract token }
 
+set_option maxHeartbeats 800000 in
 private theorem registration_ms_pc35_nested_record_eq_single
     (mv sOpt : MoveValue) (chainId : UInt8) (sender contract token : ByteArray) :
     { { (registrationMsAfterAppendContract mv sOpt chainId sender contract) with
@@ -7323,8 +7222,9 @@ def registrationMsAfterAppendPubkeyMsg
 
 private theorem registration_ms_pc39_abstract_output_eq_appendPubkey
     (mv sOpt : MoveValue) (chainId : UInt8) (sender contract token : ByteArray) (ekBytesList : List MoveValue) :
-    { (registrationMsAfterAppendTokenMsg mv sOpt chainId sender contract token) with
-      containers := registrationCsAfterAppendPubkeyBytes mv sOpt chainId sender contract token ekBytesList } =
+    { containers := registrationCsAfterAppendPubkeyBytes mv sOpt chainId sender contract token ekBytesList,
+      globals := (registrationMsAfterAppendTokenMsg mv sOpt chainId sender contract token).globals,
+      faBalances := (registrationMsAfterAppendTokenMsg mv sOpt chainId sender contract token).faBalances } =
       registrationMsAfterAppendPubkeyMsg mv sOpt chainId sender contract token ekBytesList := by
   rfl
 
@@ -7338,9 +7238,11 @@ def registrationMsAfterAppendCompressedPointMsg
 
 private theorem registration_ms_pc43_abstract_output_eq_appendCompressed
     (mv sOpt : MoveValue) (chainId : UInt8) (sender contract token : ByteArray) (ekBytesList rcBytesList : List MoveValue) :
-    { (registrationMsAfterAppendPubkeyMsg mv sOpt chainId sender contract token ekBytesList) with
-      containers := registrationCsAfterAppendCompressedPointBytes mv sOpt chainId sender contract token ekBytesList
-        rcBytesList } =
+    { containers :=
+        registrationCsAfterAppendCompressedPointBytes mv sOpt chainId sender contract token ekBytesList rcBytesList,
+      globals := (registrationMsAfterAppendPubkeyMsg mv sOpt chainId sender contract token ekBytesList).globals,
+      faBalances :=
+        (registrationMsAfterAppendPubkeyMsg mv sOpt chainId sender contract token ekBytesList).faBalances } =
       registrationMsAfterAppendCompressedPointMsg mv sOpt chainId sender contract token ekBytesList rcBytesList := by
   rfl
 
@@ -8217,10 +8119,10 @@ theorem registration_run_pc2_to_returned_happyPath
         [] [mv] MachineState.empty (fuel - 2) =
       ExecResult.returned [] (registrationMsAfterRegistrationReturned mv sOpt chainId sender contract token
           ekBytesList rcBytesList rCompressed hPoint sVal hsPt ekPt eScalar ekePt lhsPt rhsPt) := by
-  have hf66 : 66 ≤ fuel := by omega
+  have hf63 : 63 ≤ fuel := by omega
   have h263 := registration_run_pc2_to_pc63_happyPath o chainId sender contract token ekBa commitBa respBa
     mv rCompressed sOpt sVal rest srest' ekBytesList rcBytesList eScalar hPoint ekPt hsPt ekePt lhsPt hmv hsOpt hsc
-    horacle hcompress hnative hhash hekp hmulSH hmulEkE hadd fuel hf66
+    horacle hcompress hnative hhash hekp hmulSH hmulEkE hadd fuel hf63
   have hf6366 : 3 ≤ fuel - 63 := by omega
   have h6366 := registration_run_pc63_to_pc66_afterLhsStored o chainId sender contract token ekBa commitBa respBa
     mv rCompressed sOpt sVal eScalar hPoint ekPt hsPt ekePt lhsPt rhsPt ekBytesList rcBytesList hdec (fuel - 63)
@@ -8292,8 +8194,8 @@ theorem verifyRegistrationBytecodeResult_eq_returned_of_schnorr_hmac_bundle
       rCompressed hpub hcomp2
   -- `buildFSMessageMv_list_gen` concludes with the flattened `fiatShamirDstMvU8s ++ …` wire; re-express as
   -- `registrationMsgBytesForFs` (same bytes as the bytecode/MS chain) for `blockCDE` / `newScalarFromSha2_512`.
-  rw [← registrationMsgBytesForFs_eq_functionalSim_wire mv sOpt chainId sender contract token ekBytesList rcBytesList hek
-      hrc] at hbmv
+  rw [← registrationMsgBytesForFs_eq_functionalSim_wire mv sOpt chainId sender contract token ekBa commitBa ekBytesList
+      rcBytesList hek hrc] at hbmv
   simp only [verifyRegistrationBytecodeResult, verifyRegistrationBytecodeResult.blockB,
     verifyRegistrationBytecodeResult.blockCDE, registrationVerifyArgs, match_single?, single?, hl, hsc, hbmv, hnative,
     hhash, hekp, hmulSH, hmulEkE, hadd, hdec, heq, hmv, hsOpt, optionIsSome, optionExtract, bind, Option.bind]

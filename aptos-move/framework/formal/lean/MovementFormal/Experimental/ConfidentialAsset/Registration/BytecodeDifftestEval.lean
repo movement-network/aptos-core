@@ -1,8 +1,8 @@
 import MovementFormal.MoveModel.Step
+import MovementFormal.MoveModel.ExecResultDropMs
 import MovementFormal.MoveModel.Programs.Registration
 import MovementFormal.Experimental.ConfidentialAsset.Registration.TranscriptAlignment
 import MovementFormal.Experimental.ConfidentialAsset.Registration.FunctionalSim
-import MovementFormal.Experimental.ConfidentialAsset.Registration.EvalEquiv
 
 /-!
 # Bytecode eval on real VM wire data (native_decide proofs)
@@ -10,7 +10,7 @@ import MovementFormal.Experimental.ConfidentialAsset.Registration.EvalEquiv
 **Source:** `aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_proof.move`; VM wire / JSON `aptos-move/framework/formal/difftest/`.
 
 Isolated file with minimal imports so `native_decide` can build
-the `Decidable` instance without interference from heavy imports
+the `Decidable` instance without importing the full `EvalEquiv` proof module
 (Operational/RegistrationDifftestOracle bring in Mathlib ZMod).
 
 Contains three `native_decide` proofs:
@@ -170,7 +170,6 @@ def difftestValArgs : List MoveValue := [
 ]
 
 open MovementFormal.Experimental.ConfidentialAsset.Registration.FunctionalSim in
-open MovementFormal.Experimental.ConfidentialAsset.Registration.EvalEquiv in
 theorem func_eq_eval_difftest_val :
     verifyRegistrationBytecodeResult difftestNativeOracle difftestValArgs ==
       (eval difftestEnv verifyRegistrationProofIdx difftestValArgs 200 MachineState.empty).dropMs := by
@@ -311,7 +310,6 @@ def trace2ValArgs : List MoveValue := [
 ]
 
 open MovementFormal.Experimental.ConfidentialAsset.Registration.FunctionalSim in
-open MovementFormal.Experimental.ConfidentialAsset.Registration.EvalEquiv in
 theorem func_eq_eval_trace2_val :
     verifyRegistrationBytecodeResult trace2NativeOracle trace2ValArgs ==
       (eval trace2Env verifyRegistrationProofIdx trace2ValArgs 200 MachineState.empty).dropMs := by

@@ -77,6 +77,8 @@ lean_lib «MovementFormal» where
     `MovementFormal.Experimental.ConfidentialAsset.Registration.FiatShamirSymbolic,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.BytecodeSmoke,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.FunctionalSim,
+    `MovementFormal.MoveModel.ExecResultDropMs,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.EvalFuelMonotonicity,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.EvalEquiv,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.BytecodeDifftestEval,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.BytecodeDifftestBridge,

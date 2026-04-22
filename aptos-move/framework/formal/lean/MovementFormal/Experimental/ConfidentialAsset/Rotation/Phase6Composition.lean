@@ -7,9 +7,13 @@ Phase 4 Lean work has landed: `Rotation/EvalEquiv.lean` contains:
 - `eval_rotation_eq_run` — entry-point unfolding reducing `eval` to `run`
 - 15 per-PC step theorems (`step_rotation_pc{0..14}`)
 - 2 error-path variants (`pc9_none`, `pc13_none`)
+- `verifyRotationBytecodeResult` — functional simulation definition
+- 3 shape lemmas (sigmaFails, rangeFails, success)
 
-**Outstanding (Phase 6 proper):** the top-level equivalence theorem connecting
-`eval` to a rotation functional simulation via a 15-step composition chain.
+**Outstanding (Phase 6 proper):** the top-level equivalence theorem
+`rotation_eval_equiv_functional_sim` connecting `eval` to `verifyRotationBytecodeResult`
+via a 15-step composition chain. Currently an axiom stub in EvalEquiv.lean; proof requires ~250
+lines chaining PCs with run_succ_ok_of_step and splitting on oracle outcomes.
 -/
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Rotation.Phase6Composition
@@ -27,37 +31,52 @@ open MovementFormal.Experimental.ConfidentialAsset.Rotation.EvalEquiv
 2. **Lean** (bytecode level, `Rotation/EvalEquiv.lean`): the 15 per-PC step theorems
    (`step_rotation_pc{0..14}`) prove that each instruction of `verify_rotation_proof`
    reduces to the expected step-level behavior. `eval_rotation_eq_run` unrolls the entry
-   point. These comprise the bytecode-level Phase 4 proof.
+   point. `rotation_eval_equiv_functional_sim` (axiom stub, to be proved) connects eval
+   to the functional simulation.
 
-3. **Difftest** (VM↔Lean): corpus rows bind VM output byte-for-byte. -/
+3. **Difftest** (VM↔Lean): corpus rows bind VM output byte-for-byte.
+
+The axiom `rotation_eval_equiv_functional_sim` in EvalEquiv.lean is the Phase 6 gap. -/
 axiom rotate_is_formally_verified :
     ∀ (o : RotationModuleOracle)
       (chainId : UInt8) (sender contract : ByteArray)
-      (curEkRef newEkRef curBalRef newBalRef proofRef : MoveValue)
-      (fuel : Nat) (initMs : MachineState),
-      ∃ result,
-        (eval (rotationModuleEnv o) verifyRotationProofIdx
-            [.u8 chainId, .address sender, .address contract,
-             curEkRef, newEkRef, curBalRef, newBalRef, proofRef]
-            fuel initMs).dropMs = result
+      (currentEkRef newEkRef curBalRef newBalRef proofRef : MoveValue)
+      (proofRid : RefId) (proofFields : List MoveValue)
+      (initMs : MachineState)
+      (hFieldCount : 1 < proofFields.length)
+      (hread : initMs.containers.read proofRid = some (.struct_ proofFields))
+      (hproofRef : getRefId proofRef = some proofRid)
+      (fuel : Nat)
+      (hfuel : fuel ≥ 15),
+      let args := [.u8 chainId, .address sender, .address contract,
+                   currentEkRef, newEkRef, curBalRef, newBalRef, proofRef]
+      (eval (rotationModuleEnv o) verifyRotationProofIdx args fuel initMs).dropMs =
+      match verifyRotationBytecodeResult o chainId sender contract currentEkRef newEkRef curBalRef newBalRef
+              proofRid proofFields initMs hFieldCount with
+      | .returned ms => .returned [] ms
+      | .error => .error
 
-/-- Derivation: `eval_rotation_eq_run` proves the entry-point unfolding. -/
+/-- Derivation: `rotate_is_formally_verified` follows directly from
+    `rotation_eval_equiv_functional_sim` (the axiom stub in EvalEquiv.lean).
+    When that axiom is proved, this example will be a proper derivation. -/
 example (o : RotationModuleOracle)
     (chainId : UInt8) (sender contract : ByteArray)
-    (curEkRef newEkRef curBalRef newBalRef proofRef : MoveValue)
-    (fuel : Nat) (initMs : MachineState) :
-    eval (rotationModuleEnv o) verifyRotationProofIdx
-        [.u8 chainId, .address sender, .address contract,
-         curEkRef, newEkRef, curBalRef, newBalRef, proofRef]
-        fuel initMs =
-    run (rotationModuleEnv o)
-        { code := verifyRotationProofCode,
-          pc := 0,
-          locals := ([.u8 chainId, .address sender, .address contract,
-                      curEkRef, newEkRef, curBalRef, newBalRef, proofRef].map some).toArray,
-          localRefs := (List.replicate 8 none).toArray }
-        [] [] initMs fuel :=
-  eval_rotation_eq_run o [.u8 chainId, .address sender, .address contract,
-                           curEkRef, newEkRef, curBalRef, newBalRef, proofRef] fuel initMs
+    (currentEkRef newEkRef curBalRef newBalRef proofRef : MoveValue)
+    (proofRid : RefId) (proofFields : List MoveValue)
+    (initMs : MachineState)
+    (hFieldCount : 1 < proofFields.length)
+    (hread : initMs.containers.read proofRid = some (.struct_ proofFields))
+    (hproofRef : getRefId proofRef = some proofRid)
+    (fuel : Nat)
+    (hfuel : fuel ≥ 15) :
+    let args := [.u8 chainId, .address sender, .address contract,
+                 currentEkRef, newEkRef, curBalRef, newBalRef, proofRef]
+    (eval (rotationModuleEnv o) verifyRotationProofIdx args fuel initMs).dropMs =
+    match verifyRotationBytecodeResult o chainId sender contract currentEkRef newEkRef curBalRef newBalRef
+            proofRid proofFields initMs hFieldCount with
+    | .returned ms => .returned [] ms
+    | .error => .error :=
+  rotation_eval_equiv_functional_sim o chainId sender contract currentEkRef newEkRef curBalRef newBalRef
+    proofRef proofRid proofFields initMs hFieldCount hread hproofRef fuel hfuel
 
 end MovementFormal.Experimental.ConfidentialAsset.Rotation.Phase6Composition

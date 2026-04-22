@@ -461,4 +461,109 @@ def verifyNormalizationBytecodeResult
     | some (_ :: _, _) => .error
   | some (_ :: _, _) => .error
 
+/-! ## Functional simulation shape lemmas -/
+
+/-- Functional simulation shape lemma: sigma failure → .error -/
+theorem verifyNormalizationBytecodeResult_sigmaFails
+    (o : NormalizationModuleOracle)
+    (chainId : UInt8) (sender contract : ByteArray)
+    (ekRef curBalRef newBalRef : MoveValue)
+    (proofRid : RefId) (proofFields : List MoveValue)
+    (initMs : MachineState)
+    (hFieldCount : 1 < proofFields.length)
+    (hsigmaFail : ∀ cs args, o.verifySigmaProof cs args = none) :
+    verifyNormalizationBytecodeResult o chainId sender contract
+        ekRef curBalRef newBalRef proofRid proofFields initMs hFieldCount =
+    .error := by
+  unfold verifyNormalizationBytecodeResult
+  simp [hsigmaFail]
+
+/-- Functional simulation shape lemma: range failure → .error -/
+theorem verifyNormalizationBytecodeResult_rangeFails
+    (o : NormalizationModuleOracle)
+    (chainId : UInt8) (sender contract : ByteArray)
+    (ekRef curBalRef newBalRef : MoveValue)
+    (proofRid : RefId) (proofFields : List MoveValue)
+    (initMs : MachineState)
+    (hFieldCount : 1 < proofFields.length)
+    (sigmaCs : ContainerStore)
+    (sigmaFid : RefId)
+    (halloc0 : initMs.containers.alloc (proofFields[0]'(by omega)) = (sigmaCs, sigmaFid))
+    (hsigmaOk : o.verifySigmaProof sigmaCs
+                    [.u8 chainId, .address sender, .address contract,
+                     ekRef, curBalRef, newBalRef, .immRef sigmaFid] =
+                 some ([], sigmaCs))
+    (hrangeFail : ∀ cs args, o.verifyRangeProof cs args = none) :
+    verifyNormalizationBytecodeResult o chainId sender contract
+        ekRef curBalRef newBalRef proofRid proofFields initMs hFieldCount =
+    .error := by
+  unfold verifyNormalizationBytecodeResult
+  simp only [halloc0, hsigmaOk, hrangeFail]
+
+/-- Functional simulation shape lemma: happy path → .returned -/
+theorem verifyNormalizationBytecodeResult_success
+    (o : NormalizationModuleOracle)
+    (chainId : UInt8) (sender contract : ByteArray)
+    (ekRef curBalRef newBalRef : MoveValue)
+    (proofRid : RefId) (proofFields : List MoveValue)
+    (initMs : MachineState)
+    (hFieldCount : 1 < proofFields.length)
+    (sigmaCs rangeCs : ContainerStore)
+    (sigmaFid : RefId)
+    (halloc0 : initMs.containers.alloc (proofFields[0]'(by omega)) = (sigmaCs, sigmaFid))
+    (hsigmaOk : o.verifySigmaProof sigmaCs
+                    [.u8 chainId, .address sender, .address contract,
+                     ekRef, curBalRef, newBalRef, .immRef sigmaFid] =
+                 some ([], rangeCs))
+    (hrange : o.verifyRangeProof (rangeCs.alloc (proofFields[1]'hFieldCount)).1
+                  [newBalRef, .immRef (rangeCs.alloc (proofFields[1]'hFieldCount)).2] =
+               some ([], (rangeCs.alloc (proofFields[1]'hFieldCount)).1)) :
+    verifyNormalizationBytecodeResult o chainId sender contract
+        ekRef curBalRef newBalRef proofRid proofFields initMs hFieldCount =
+    .returned { initMs with containers := (rangeCs.alloc (proofFields[1]'hFieldCount)).1, globals := initMs.globals } := by
+  unfold verifyNormalizationBytecodeResult
+  simp only [halloc0, hsigmaOk, hrange]
+
+/-! ## Top-level composition theorem (Phase 6)
+
+The full eval↔functional-sim equivalence. Structure:
+1. Unfold eval to run via `eval_normalization_eq_run`
+2. Chain PCs 0-7 (argument marshaling) using individual step theorems
+3. At PC 8, split on sigma oracle outcome
+4. On sigma success, chain PCs 9-11
+5. At PC 12, split on range oracle outcome
+6. On range success, execute PC 13 (ret)
+7. Apply shape lemmas to connect to functional sim
+
+The proof requires ~300 lines of frame manipulation and oracle case splitting.
+Currently structured with sorry placeholders for incremental completion. -/
+
+theorem normalization_eval_equiv_functional_sim
+    (o : NormalizationModuleOracle)
+    (chainId : UInt8) (sender contract : ByteArray)
+    (ekRef curBalRef newBalRef proofRef : MoveValue)
+    (proofRid : RefId) (proofFields : List MoveValue)
+    (initMs : MachineState)
+    (hFieldCount : 1 < proofFields.length)
+    (hread : initMs.containers.read proofRid = some (.struct_ proofFields))
+    (hproofRef : getRefId proofRef = some proofRid)
+    (fuel : Nat)
+    (hfuel : fuel ≥ 14) :
+    let args := normalizationArgs chainId sender contract ekRef curBalRef newBalRef proofRef
+    (eval (normalizationModuleEnv o) verifyNormalizationProofIdx args fuel initMs).dropMs =
+    match verifyNormalizationBytecodeResult o chainId sender contract ekRef curBalRef newBalRef
+            proofRid proofFields initMs hFieldCount with
+    | .returned ms => .returned [] ms
+    | .error => .error := by
+  -- Unfold eval to run
+  show (eval (normalizationModuleEnv o) verifyNormalizationProofIdx
+          (normalizationArgs chainId sender contract ekRef curBalRef newBalRef proofRef)
+          fuel initMs).dropMs = _
+  rw [eval_normalization_eq_run]
+
+  -- TODO Phase 6: Chain all 14 PCs using run_succ_ok_of_step
+  -- Pattern from Registration: apply step theorems sequentially, split on oracle outcomes
+  -- at PC 8 (sigma) and PC 12 (range), apply shape lemmas to connect to functional sim
+  sorry
+
 end MovementFormal.Experimental.ConfidentialAsset.Normalization.EvalEquiv

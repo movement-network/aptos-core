@@ -50,9 +50,9 @@ to `to` is dispatched.
 | Layer | Artifact | Status |
 |---|---|---|
 | Move Prover — store-side | `spec withdraw_to_internal` + `spec withdraw_to`/`spec withdraw` | 🟡 spec landed, verification blocked |
-| Lean — sigma-predicate binding | `Withdrawal/EvalEquiv.lean` (scaffold) + `Withdrawal/FunctionalSim.lean` (oracle + stub sim) | ☐ needs `Programs.Withdrawal` bytecode + real sim |
+| Lean — sigma-predicate binding | `Withdrawal/EvalEquiv.lean` (**Phase 4 complete:** 15 per-PC step theorems + 2 error paths, `eval_withdrawal_eq_run` entry-point, builds in ~0.5s). **Phase 6 progress:** `verifyWithdrawalBytecodeResult` functional simulation + 3 shape lemmas (`_sigmaFails`, `_rangeFails`, `_success`) landed; full composition theorem outstanding. | 🟡 Phase 4 ✅, Phase 6 in progress (functional sim + shape lemmas landed) |
 | Difftest — VM↔Lean | existing `verify_withdrawal_proof_zero_sigma_aborts` negative row | 🟡 negative path bound, happy path deferred |
-| Overall | | 🟡 early stage |
+| Overall | | 🟡 Phase 4 complete, Phase 6 in progress |
 
 ---
 
@@ -68,9 +68,9 @@ parallel.
 | Layer | Artifact | Status |
 |---|---|---|
 | Move Prover — store-side | `spec confidential_transfer_internal` + `spec confidential_transfer` | 🟡 spec landed |
-| Lean — sigma-predicate binding | `Transfer/EvalEquiv.lean` + `Transfer/FunctionalSim.lean` scaffolds | ☐ needs transcription |
+| Lean — sigma-predicate binding | `Transfer/EvalEquiv.lean` (**Phase 4 complete:** 24 per-PC step theorems + 3 error paths covering 3 sub-calls, `eval_transfer_eq_run` entry-point, builds in ~0.7s — most complex dispatcher). **Phase 6 progress:** `verifyTransferBytecodeResult` functional simulation + 3 error-path shape lemmas (`_sigmaFails`, `_newBalanceRangeFails`, `_transferAmountRangeFails`) landed; full composition theorem outstanding. | 🟡 Phase 4 ✅, Phase 6 in progress (functional sim + error-path lemmas landed) |
 | Difftest — VM↔Lean | `verify_transfer_proof_zero_sigma_aborts` negative row | 🟡 negative only |
-| Overall | | 🟡 early stage |
+| Overall | | 🟡 Phase 4 complete, Phase 6 in progress |
 
 ---
 
@@ -84,9 +84,9 @@ bits. Post: actual balance replaced with `new_balance`, `normalized = true`.
 | Layer | Artifact | Status |
 |---|---|---|
 | Move Prover — store-side | `spec normalize_internal` + `spec normalize` | 🟡 spec landed |
-| Lean | `Normalization/EvalEquiv.lean` + `Normalization/FunctionalSim.lean` | ☐ needs transcription |
+| Lean | `Normalization/EvalEquiv.lean` (**Phase 4 complete:** 14 per-PC step theorems + 2 error paths, `eval_normalization_eq_run` entry-point, `verifyNormalizationBytecodeResult` functional sim, builds in ~0.5s). **Phase 6 progress:** 3 functional-simulation shape lemmas landed (`verifyNormalizationBytecodeResult_{sigmaFails,rangeFails,success}`) showing oracle-outcome correspondence; full composition theorem outstanding. | 🟡 Phase 4 ✅, Phase 6 in progress (shape lemmas landed) |
 | Difftest | `verify_normalization_proof_zero_sigma_aborts` | 🟡 negative only |
-| Overall | | 🟡 early stage |
+| Overall | | 🟡 Phase 4 complete, Phase 6 in progress |
 
 ---
 
@@ -103,9 +103,9 @@ The `_and_unfreeze` variant also clears `frozen`.
 | Layer | Artifact | Status |
 |---|---|---|
 | Move Prover — store-side | `spec rotate_encryption_key_internal` + entry specs | 🟡 spec landed |
-| Lean | `Rotation/EvalEquiv.lean` + `Rotation/FunctionalSim.lean` | ☐ needs transcription |
+| Lean | `Rotation/EvalEquiv.lean` (**Phase 4 complete:** 15 per-PC step theorems + 2 error paths, `eval_rotation_eq_run` entry-point, builds in ~0.5s). **Phase 6 progress:** `verifyRotationBytecodeResult` functional simulation + 3 shape lemmas (`_sigmaFails`, `_rangeFails`, `_success`) landed; full composition theorem outstanding. | 🟡 Phase 4 ✅, Phase 6 in progress (functional sim + shape lemmas landed) |
 | Difftest | `verify_rotation_proof_zero_sigma_aborts` | 🟡 negative only |
-| Overall | | 🟡 early stage |
+| Overall | | 🟡 Phase 4 complete, Phase 6 in progress |
 
 ---
 
@@ -155,11 +155,11 @@ flags. Abort if unauthorized or already in target state.
 
 | Operation | MSL | Lean | Difftest | Combined |
 |---|---|---|---|---|
-| register | 🟡 | 🟡 (TEMP AXIOM; 127 PC theorems) | ✅ | 🟡 |
-| withdraw* | 🟡 | ☐ (scaffold only) | 🟡 (negative) | 🟡 |
-| transfer | 🟡 | ☐ (scaffold only) | 🟡 (negative) | 🟡 |
-| normalize | 🟡 | ☐ (scaffold only) | 🟡 (negative) | 🟡 |
-| rotate_* | 🟡 | ☐ (scaffold only) | 🟡 (negative) | 🟡 |
+| register | 🟡 | 🟡 (TEMP AXIOM; **197 PC theorems**, Phase 1 body landed, singleton-some branch outstanding) | ✅ | 🟡 |
+| withdraw* | 🟡 | 🟡 (Phase 4 ✅: 15 PC theorems; **Phase 6 functional sim + 3 shape lemmas**) | 🟡 (negative) | 🟡 |
+| transfer | 🟡 | 🟡 (Phase 4 ✅: 24 PC theorems; **Phase 6 functional sim + 3 error-path lemmas**) | 🟡 (negative) | 🟡 |
+| normalize | 🟡 | 🟡 (Phase 4 ✅: 14 PC theorems; **Phase 6 functional sim + 3 shape lemmas**) | 🟡 (negative) | 🟡 |
+| rotate_* | 🟡 | 🟡 (Phase 4 ✅: 15 PC theorems; **Phase 6 functional sim + 3 shape lemmas**) | 🟡 (negative) | 🟡 |
 | freeze/unfreeze | 🟡 | N/A | ✅ | 🟡 (MSL only) |
 | rollover | 🟡 | N/A | ✅ | 🟡 (MSL only) |
 | governance | 🟡 | N/A | ✅ | 🟡 (MSL only) |

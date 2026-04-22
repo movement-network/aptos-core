@@ -27,12 +27,16 @@ spec aptos_experimental::confidential_balance {
         pragma opaque;
         aborts_if false;
         ensures len(result.chunks) == PENDING_BALANCE_CHUNKS;
+        ensures forall i in 0..len(result.chunks):
+            result.chunks[i].left.handle == 0 && result.chunks[i].right.handle == 0;
     }
 
     spec new_actual_balance_no_randomness {
         pragma opaque;
         aborts_if false;
         ensures len(result.chunks) == ACTUAL_BALANCE_CHUNKS;
+        ensures forall i in 0..len(result.chunks):
+            result.chunks[i].left.handle == 0 && result.chunks[i].right.handle == 0;
     }
 
     spec new_compressed_pending_balance_no_randomness {
@@ -196,5 +200,38 @@ spec aptos_experimental::confidential_balance {
         pragma opaque;
         aborts_if false;
         ensures len(result.chunks) == PENDING_BALANCE_CHUNKS;
+    }
+
+    //
+    // Randomness generation and verification helpers
+    //
+
+    spec generate_balance_randomness {
+        pragma opaque;
+        aborts_if false;
+    }
+
+    spec balance_randomness_as_scalars {
+        aborts_if false;
+    }
+
+    spec verify_actual_balance {
+        aborts_if len(balance.chunks) != ACTUAL_BALANCE_CHUNKS with std::error::INTERNAL;
+        ensures result == true || result == false;
+    }
+
+    spec verify_pending_balance {
+        aborts_if len(balance.chunks) != PENDING_BALANCE_CHUNKS with std::error::INTERNAL;
+        ensures result == true || result == false;
+    }
+
+    spec verify_actual_balance_for_test {
+        aborts_if len(balance.chunks) != ACTUAL_BALANCE_CHUNKS with std::error::INTERNAL;
+        ensures result == true || result == false;
+    }
+
+    spec verify_pending_balance_for_test {
+        aborts_if len(balance.chunks) != PENDING_BALANCE_CHUNKS with std::error::INTERNAL;
+        ensures result == true || result == false;
     }
 }

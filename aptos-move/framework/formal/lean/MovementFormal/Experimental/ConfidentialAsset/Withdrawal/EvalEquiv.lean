@@ -350,4 +350,144 @@ theorem step_withdrawal_pc14 (o : WithdrawalModuleOracle)
   have hc : frame.code[frame.pc]'hpc_lt = .ret := by simp only [hcode, hpc]; exact wdl_code_pc14
   exact StepLemmas.step_ret_top hpc_lt hc
 
+/-! ## Functional simulation — Phase 6
+
+The functional simulation captures the high-level behavior of `verify_withdrawal_proof`:
+wires chain_id, sender, contract, ek, amount, current_balance, new_balance, and the
+proof's sigma_proof field (via ImmBorrowField) to the sigma verifier, then new_balance
+and the proof's zkrp_new_balance field to the range verifier.
+
+The result is `.returned [] ms_final` on success (both sub-calls return `some`) or
+`.error` if either sub-call fails. -/
+
+inductive WithdrawalBytecodeResult where
+  | returned (ms : MachineState)
+  | error
+
+def verifyWithdrawalBytecodeResult
+    (o : WithdrawalModuleOracle) (chainId : UInt8) (sender contract : ByteArray)
+    (ekRef : MoveValue) (amount : UInt64) (curBalRef newBalRef : MoveValue)
+    (_proofRid : RefId) (proofFields : List MoveValue)
+    (initMs : MachineState)
+    (hFieldCount : 1 < proofFields.length) : WithdrawalBytecodeResult :=
+  let (cs1, sigmaFid) := initMs.containers.alloc (proofFields[0]'(by omega))
+  let sigmaArgs := [.u8 chainId, .address sender, .address contract,
+                    ekRef, .u64 amount, curBalRef, newBalRef, .immRef sigmaFid]
+  match o.verifySigmaProof cs1 sigmaArgs with
+  | none => .error
+  | some ([], cs2) =>
+    let (cs3, zkrpFid) := cs2.alloc (proofFields[1]'hFieldCount)
+    let rangeArgs := [newBalRef, .immRef zkrpFid]
+    match o.verifyRangeProof cs3 rangeArgs with
+    | none => .error
+    | some ([], cs4) => .returned { initMs with containers := cs4, globals := initMs.globals }
+    | some (_ :: _, _) => .error
+  | some (_ :: _, _) => .error
+
+/-! ## Functional simulation shape lemmas -/
+
+/-- Functional simulation shape lemma: sigma failure → .error -/
+theorem verifyWithdrawalBytecodeResult_sigmaFails
+    (o : WithdrawalModuleOracle)
+    (chainId : UInt8) (sender contract : ByteArray)
+    (ekRef : MoveValue) (amount : UInt64) (curBalRef newBalRef : MoveValue)
+    (proofRid : RefId) (proofFields : List MoveValue)
+    (initMs : MachineState)
+    (hFieldCount : 1 < proofFields.length)
+    (hsigmaFail : ∀ cs args, o.verifySigmaProof cs args = none) :
+    verifyWithdrawalBytecodeResult o chainId sender contract
+        ekRef amount curBalRef newBalRef proofRid proofFields initMs hFieldCount =
+    .error := by
+  unfold verifyWithdrawalBytecodeResult
+  simp [hsigmaFail]
+
+/-- Functional simulation shape lemma: range failure → .error -/
+theorem verifyWithdrawalBytecodeResult_rangeFails
+    (o : WithdrawalModuleOracle)
+    (chainId : UInt8) (sender contract : ByteArray)
+    (ekRef : MoveValue) (amount : UInt64) (curBalRef newBalRef : MoveValue)
+    (proofRid : RefId) (proofFields : List MoveValue)
+    (initMs : MachineState)
+    (hFieldCount : 1 < proofFields.length)
+    (sigmaCs : ContainerStore)
+    (hsigmaOk : o.verifySigmaProof (initMs.containers.alloc (proofFields[0]'(by omega))).1
+                    [.u8 chainId, .address sender, .address contract,
+                     ekRef, .u64 amount, curBalRef, newBalRef,
+                     .immRef (initMs.containers.alloc (proofFields[0]'(by omega))).2] =
+                 some ([], sigmaCs))
+    (hrangeFail : ∀ cs args, o.verifyRangeProof cs args = none) :
+    verifyWithdrawalBytecodeResult o chainId sender contract
+        ekRef amount curBalRef newBalRef proofRid proofFields initMs hFieldCount =
+    .error := by
+  unfold verifyWithdrawalBytecodeResult
+  simp only [hsigmaOk, hrangeFail]
+
+/-- Functional simulation shape lemma: happy path → .returned -/
+theorem verifyWithdrawalBytecodeResult_success
+    (o : WithdrawalModuleOracle)
+    (chainId : UInt8) (sender contract : ByteArray)
+    (ekRef : MoveValue) (amount : UInt64) (curBalRef newBalRef : MoveValue)
+    (proofRid : RefId) (proofFields : List MoveValue)
+    (initMs : MachineState)
+    (hFieldCount : 1 < proofFields.length)
+    (sigmaCs rangeCs : ContainerStore)
+    (sigmaFid : RefId)
+    (halloc0 : initMs.containers.alloc (proofFields[0]'(by omega)) = (sigmaCs, sigmaFid))
+    (hsigmaOk : o.verifySigmaProof sigmaCs
+                    [.u8 chainId, .address sender, .address contract,
+                     ekRef, .u64 amount, curBalRef, newBalRef, .immRef sigmaFid] =
+                 some ([], rangeCs))
+    (hrange : o.verifyRangeProof (rangeCs.alloc (proofFields[1]'hFieldCount)).1
+                  [newBalRef, .immRef (rangeCs.alloc (proofFields[1]'hFieldCount)).2] =
+               some ([], (rangeCs.alloc (proofFields[1]'hFieldCount)).1)) :
+    verifyWithdrawalBytecodeResult o chainId sender contract
+        ekRef amount curBalRef newBalRef proofRid proofFields initMs hFieldCount =
+    .returned { initMs with containers := (rangeCs.alloc (proofFields[1]'hFieldCount)).1 } := by
+  unfold verifyWithdrawalBytecodeResult
+  simp only [halloc0, hsigmaOk, hrange]
+
+/-! ## Top-level composition theorem (Phase 6)
+
+The full eval↔functional-sim equivalence. Structure:
+1. Unfold eval to run via `eval_withdrawal_eq_run`
+2. Chain PCs 0-8 (argument marshaling) using individual step theorems
+3. At PC 9, split on sigma oracle outcome
+4. On sigma success, chain PCs 10-12
+5. At PC 13, split on range oracle outcome
+6. On range success, execute PC 14 (ret)
+7. Apply shape lemmas to connect to functional sim
+
+The proof requires ~300 lines of frame manipulation and oracle case splitting.
+Currently structured with sorry placeholders for incremental completion. -/
+
+theorem withdrawal_eval_equiv_functional_sim
+    (o : WithdrawalModuleOracle)
+    (chainId : UInt8) (sender contract : ByteArray)
+    (ekRef : MoveValue) (amount : UInt64) (curBalRef newBalRef proofRef : MoveValue)
+    (proofRid : RefId) (proofFields : List MoveValue)
+    (initMs : MachineState)
+    (hFieldCount : 1 < proofFields.length)
+    (hread : initMs.containers.read proofRid = some (.struct_ proofFields))
+    (hproofRef : getRefId proofRef = some proofRid)
+    (fuel : Nat)
+    (hfuel : fuel ≥ 15) :
+    let args := [.u8 chainId, .address sender, .address contract,
+                 ekRef, .u64 amount, curBalRef, newBalRef, proofRef]
+    (eval (withdrawalModuleEnv o) verifyWithdrawalProofIdx args fuel initMs).dropMs =
+    match verifyWithdrawalBytecodeResult o chainId sender contract ekRef amount curBalRef newBalRef
+            proofRid proofFields initMs hFieldCount with
+    | .returned ms => .returned [] ms
+    | .error => .error := by
+  -- Unfold eval to run
+  show (eval (withdrawalModuleEnv o) verifyWithdrawalProofIdx
+          [.u8 chainId, .address sender, .address contract,
+           ekRef, .u64 amount, curBalRef, newBalRef, proofRef]
+          fuel initMs).dropMs = _
+  rw [eval_withdrawal_eq_run]
+
+  -- TODO Phase 6: Chain all 15 PCs using run_succ_ok_of_step
+  -- Pattern: apply step theorems sequentially, split on oracle outcomes
+  -- at PC 9 (sigma) and PC 13 (range), apply shape lemmas to connect to functional sim
+  sorry
+
 end MovementFormal.Experimental.ConfidentialAsset.Withdrawal.EvalEquiv

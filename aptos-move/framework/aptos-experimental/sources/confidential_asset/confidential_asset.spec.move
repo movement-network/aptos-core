@@ -296,6 +296,11 @@ spec aptos_experimental::confidential_asset {
             == old(global<ConfidentialAssetStore>(recipient_store)).normalized;
         ensures global<ConfidentialAssetStore>(recipient_store).ek
             == old(global<ConfidentialAssetStore>(recipient_store)).ek;
+        // Balance length preservation (homomorphic operations preserve chunk counts)
+        ensures len(global<ConfidentialAssetStore>(recipient_store).pending_balance.chunks)
+            == len(old(global<ConfidentialAssetStore>(recipient_store)).pending_balance.chunks);
+        ensures len(global<ConfidentialAssetStore>(recipient_store).actual_balance.chunks)
+            == len(old(global<ConfidentialAssetStore>(recipient_store)).actual_balance.chunks);
 
         modifies global<ConfidentialAssetStore>(recipient_store);
     }
@@ -322,6 +327,11 @@ spec aptos_experimental::confidential_asset {
             == old(global<ConfidentialAssetStore>(sender_store)).pending_balance;
         ensures global<ConfidentialAssetStore>(sender_store).ek
             == old(global<ConfidentialAssetStore>(sender_store)).ek;
+        // Balance length preservation (proof verification doesn't change chunk structure)
+        ensures len(global<ConfidentialAssetStore>(sender_store).pending_balance.chunks)
+            == len(old(global<ConfidentialAssetStore>(sender_store)).pending_balance.chunks);
+        ensures len(global<ConfidentialAssetStore>(sender_store).actual_balance.chunks)
+            == len(old(global<ConfidentialAssetStore>(sender_store)).actual_balance.chunks);
 
         modifies global<ConfidentialAssetStore>(sender_store);
     }
@@ -371,6 +381,11 @@ spec aptos_experimental::confidential_asset {
             == old(global<ConfidentialAssetStore>(store_addr)).pending_counter;
         ensures global<ConfidentialAssetStore>(store_addr).pending_balance
             == old(global<ConfidentialAssetStore>(store_addr)).pending_balance;
+        // Balance length preservation (normalization adds pending to actual, preserves structure)
+        ensures len(global<ConfidentialAssetStore>(store_addr).pending_balance.chunks)
+            == len(old(global<ConfidentialAssetStore>(store_addr)).pending_balance.chunks);
+        ensures len(global<ConfidentialAssetStore>(store_addr).actual_balance.chunks)
+            == len(old(global<ConfidentialAssetStore>(store_addr)).actual_balance.chunks);
 
         modifies global<ConfidentialAssetStore>(store_addr);
     }
@@ -401,8 +416,15 @@ spec aptos_experimental::confidential_asset {
         aborts_if len(sender_auditor_hint) > MAX_SENDER_AUDITOR_HINT_BYTES;
         aborts_if len(auditor_eks) != len(auditor_amounts);
 
+        // Sender's normalized flag set to true after proof verification
+        ensures global<ConfidentialAssetStore>(sender_store).normalized;
+
+        // Recipient's pending_counter incremented
         ensures global<ConfidentialAssetStore>(recipient_store).pending_counter
             == old(global<ConfidentialAssetStore>(recipient_store)).pending_counter + 1;
+        // Recipient's normalized flag preserved
+        ensures global<ConfidentialAssetStore>(recipient_store).normalized
+            == old(global<ConfidentialAssetStore>(recipient_store)).normalized;
 
         // Sender's frozen state unchanged (we only freeze on explicit request).
         ensures global<ConfidentialAssetStore>(sender_store).frozen
@@ -410,11 +432,25 @@ spec aptos_experimental::confidential_asset {
         // Sender's ek unchanged (confidential_transfer doesn't rotate the key).
         ensures global<ConfidentialAssetStore>(sender_store).ek
             == old(global<ConfidentialAssetStore>(sender_store)).ek;
+        // Sender's pending_counter preserved
+        ensures global<ConfidentialAssetStore>(sender_store).pending_counter
+            == old(global<ConfidentialAssetStore>(sender_store)).pending_counter;
+
         // Recipient's frozen / ek preserved.
         ensures global<ConfidentialAssetStore>(recipient_store).frozen
             == old(global<ConfidentialAssetStore>(recipient_store)).frozen;
         ensures global<ConfidentialAssetStore>(recipient_store).ek
             == old(global<ConfidentialAssetStore>(recipient_store)).ek;
+
+        // Balance length preservation for both sender and recipient
+        ensures len(global<ConfidentialAssetStore>(sender_store).pending_balance.chunks)
+            == len(old(global<ConfidentialAssetStore>(sender_store)).pending_balance.chunks);
+        ensures len(global<ConfidentialAssetStore>(sender_store).actual_balance.chunks)
+            == len(old(global<ConfidentialAssetStore>(sender_store)).actual_balance.chunks);
+        ensures len(global<ConfidentialAssetStore>(recipient_store).pending_balance.chunks)
+            == len(old(global<ConfidentialAssetStore>(recipient_store)).pending_balance.chunks);
+        ensures len(global<ConfidentialAssetStore>(recipient_store).actual_balance.chunks)
+            == len(old(global<ConfidentialAssetStore>(recipient_store)).actual_balance.chunks);
 
         modifies global<ConfidentialAssetStore>(sender_store);
         modifies global<ConfidentialAssetStore>(recipient_store);

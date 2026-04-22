@@ -7,10 +7,13 @@ Phase 4 Lean work has landed: `Withdrawal/EvalEquiv.lean` contains:
 - `eval_withdrawal_eq_run` — entry-point unfolding reducing `eval` to `run`
 - 15 per-PC step theorems (`step_withdrawal_pc{0..14}`)
 - 2 error-path variants (`pc9_none`, `pc13_none`)
+- `verifyWithdrawalBytecodeResult` — functional simulation definition
+- 3 shape lemmas (sigmaFails, rangeFails, success)
 
-**Outstanding (Phase 6 proper):** the top-level equivalence theorem connecting
-`eval` to a withdrawal functional simulation via a 15-step composition chain
-threading the `immBorrowField` container-store allocs.
+**Outstanding (Phase 6 proper):** the top-level equivalence theorem
+`withdrawal_eval_equiv_functional_sim` connecting `eval` to `verifyWithdrawalBytecodeResult`
+via a 15-step composition chain. Currently an axiom stub in EvalEquiv.lean; proof requires ~250
+lines chaining PCs with run_succ_ok_of_step and splitting on oracle outcomes.
 -/
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Withdrawal.Phase6Composition
@@ -28,38 +31,52 @@ open MovementFormal.Experimental.ConfidentialAsset.Withdrawal.EvalEquiv
 2. **Lean** (bytecode level, `Withdrawal/EvalEquiv.lean`): the 15 per-PC step theorems
    (`step_withdrawal_pc{0..14}`) prove that each instruction of `verify_withdrawal_proof`
    reduces to the expected step-level behavior. `eval_withdrawal_eq_run` unrolls the entry
-   point. These comprise the bytecode-level Phase 4 proof.
+   point. `withdrawal_eval_equiv_functional_sim` (axiom stub, to be proved) connects eval
+   to the functional simulation.
 
-3. **Difftest** (VM↔Lean): corpus rows bind VM output byte-for-byte. -/
+3. **Difftest** (VM↔Lean): corpus rows bind VM output byte-for-byte.
+
+The axiom `withdrawal_eval_equiv_functional_sim` in EvalEquiv.lean is the Phase 6 gap. -/
 axiom withdraw_is_formally_verified :
     ∀ (o : WithdrawalModuleOracle)
       (chainId : UInt8) (sender contract : ByteArray)
-      (ekRef : MoveValue) (amount : UInt64)
-      (curBalRef newBalRef proofRef : MoveValue)
-      (fuel : Nat) (initMs : MachineState),
-      ∃ result,
-        (eval (withdrawalModuleEnv o) verifyWithdrawalProofIdx
-            [.u8 chainId, .address sender, .address contract,
-             ekRef, .u64 amount, curBalRef, newBalRef, proofRef]
-            fuel initMs).dropMs = result
+      (ekRef : MoveValue) (amount : UInt64) (curBalRef newBalRef proofRef : MoveValue)
+      (proofRid : RefId) (proofFields : List MoveValue)
+      (initMs : MachineState)
+      (hFieldCount : 1 < proofFields.length)
+      (hread : initMs.containers.read proofRid = some (.struct_ proofFields))
+      (hproofRef : getRefId proofRef = some proofRid)
+      (fuel : Nat)
+      (hfuel : fuel ≥ 15),
+      let args := [.u8 chainId, .address sender, .address contract,
+                   ekRef, .u64 amount, curBalRef, newBalRef, proofRef]
+      (eval (withdrawalModuleEnv o) verifyWithdrawalProofIdx args fuel initMs).dropMs =
+      match verifyWithdrawalBytecodeResult o chainId sender contract ekRef amount curBalRef newBalRef
+              proofRid proofFields initMs hFieldCount with
+      | .returned ms => .returned [] ms
+      | .error => .error
 
-/-- Derivation: `eval_withdrawal_eq_run` proves the entry-point unfolding. -/
+/-- Derivation: `withdraw_is_formally_verified` follows directly from
+    `withdrawal_eval_equiv_functional_sim` (the axiom stub in EvalEquiv.lean).
+    When that axiom is proved, this example will be a proper derivation. -/
 example (o : WithdrawalModuleOracle)
     (chainId : UInt8) (sender contract : ByteArray)
     (ekRef : MoveValue) (amount : UInt64) (curBalRef newBalRef proofRef : MoveValue)
-    (fuel : Nat) (initMs : MachineState) :
-    eval (withdrawalModuleEnv o) verifyWithdrawalProofIdx
-        [.u8 chainId, .address sender, .address contract,
-         ekRef, .u64 amount, curBalRef, newBalRef, proofRef]
-        fuel initMs =
-    run (withdrawalModuleEnv o)
-        { code := verifyWithdrawalProofCode,
-          pc := 0,
-          locals := ([.u8 chainId, .address sender, .address contract,
-                      ekRef, .u64 amount, curBalRef, newBalRef, proofRef].map some).toArray,
-          localRefs := (List.replicate 8 none).toArray }
-        [] [] initMs fuel :=
-  eval_withdrawal_eq_run o [.u8 chainId, .address sender, .address contract,
-                             ekRef, .u64 amount, curBalRef, newBalRef, proofRef] fuel initMs
+    (proofRid : RefId) (proofFields : List MoveValue)
+    (initMs : MachineState)
+    (hFieldCount : 1 < proofFields.length)
+    (hread : initMs.containers.read proofRid = some (.struct_ proofFields))
+    (hproofRef : getRefId proofRef = some proofRid)
+    (fuel : Nat)
+    (hfuel : fuel ≥ 15) :
+    let args := [.u8 chainId, .address sender, .address contract,
+                 ekRef, .u64 amount, curBalRef, newBalRef, proofRef]
+    (eval (withdrawalModuleEnv o) verifyWithdrawalProofIdx args fuel initMs).dropMs =
+    match verifyWithdrawalBytecodeResult o chainId sender contract ekRef amount curBalRef newBalRef
+            proofRid proofFields initMs hFieldCount with
+    | .returned ms => .returned [] ms
+    | .error => .error :=
+  withdrawal_eval_equiv_functional_sim o chainId sender contract ekRef amount curBalRef newBalRef
+    proofRef proofRid proofFields initMs hFieldCount hread hproofRef fuel hfuel
 
 end MovementFormal.Experimental.ConfidentialAsset.Withdrawal.Phase6Composition

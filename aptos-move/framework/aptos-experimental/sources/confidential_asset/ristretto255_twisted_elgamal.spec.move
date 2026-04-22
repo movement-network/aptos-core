@@ -138,4 +138,29 @@ spec aptos_experimental::ristretto255_twisted_elgamal {
         pragma opaque;
         aborts_if false;
     }
+
+    //
+    // Keypair generation and ciphertext construction
+    //
+
+    spec generate_twisted_elgamal_keypair {
+        pragma opaque;
+        aborts_if false;
+        ensures std::option::spec_is_some(result.1);
+    }
+
+    spec pubkey_from_secret_key {
+        pragma opaque;
+        aborts_if false;
+    }
+
+    spec new_ciphertext {
+        pragma opaque;
+        aborts_if false;
+    }
+
+    spec new_ciphertext_with_basepoint {
+        pragma opaque;
+        aborts_if false;
+    }
 }

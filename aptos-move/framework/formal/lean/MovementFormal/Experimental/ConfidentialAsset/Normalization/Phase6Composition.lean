@@ -8,10 +8,12 @@ Phase 4 Lean work has landed: `Normalization/EvalEquiv.lean` contains:
 - 14 per-PC step theorems (`step_normalization_pc{0..13}`)
 - 2 error-path variants (`pc8_none`, `pc12_none`)
 - `verifyNormalizationBytecodeResult` — functional simulation definition
+- 3 shape lemmas (sigmaFails, rangeFails, success)
 
-**Outstanding (Phase 6 proper):** the top-level equivalence theorem connecting
-`eval` to `verifyNormalizationBytecodeResult` via a 14-step composition chain
-threading the `immBorrowField` container-store allocs.
+**Outstanding (Phase 6 proper):** the top-level equivalence theorem
+`normalization_eval_equiv_functional_sim` connecting `eval` to `verifyNormalizationBytecodeResult`
+via a 14-step composition chain. Currently an axiom stub in EvalEquiv.lean; proof requires ~250
+lines chaining PCs with run_succ_ok_of_step and splitting on oracle outcomes.
 -/
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Normalization.Phase6Composition
@@ -29,41 +31,52 @@ open MovementFormal.Experimental.ConfidentialAsset.Normalization.EvalEquiv
 2. **Lean** (bytecode level, `Normalization/EvalEquiv.lean`): the 14 per-PC step theorems
    (`step_normalization_pc{0..13}`) prove that each instruction of `verify_normalization_proof`
    reduces to the expected step-level behavior. `eval_normalization_eq_run` unrolls the entry
-   point. Together these comprise the bytecode-level Phase 4 proof.
+   point. `normalization_eval_equiv_functional_sim` (axiom stub, to be proved) connects eval
+   to the functional simulation.
 
 3. **Difftest** (VM↔Lean): corpus rows bind VM output byte-for-byte.
 
-The top-level equivalence `eval ... = verifyNormalizationBytecodeResult ...` is the Phase 6
-composition target; the per-PC building blocks are in place. -/
+The axiom `normalization_eval_equiv_functional_sim` in EvalEquiv.lean is the Phase 6 gap. -/
 axiom normalize_is_formally_verified :
     ∀ (o : NormalizationModuleOracle)
       (chainId : UInt8) (sender contract : ByteArray)
       (ekRef curBalRef newBalRef proofRef : MoveValue)
-      (fuel : Nat) (initMs : MachineState),
-      ∃ result,
-        (eval (normalizationModuleEnv o) verifyNormalizationProofIdx
-            [.u8 chainId, .address sender, .address contract,
-             ekRef, curBalRef, newBalRef, proofRef]
-            fuel initMs).dropMs = result
+      (proofRid : RefId) (proofFields : List MoveValue)
+      (initMs : MachineState)
+      (hFieldCount : 1 < proofFields.length)
+      (hread : initMs.containers.read proofRid = some (.struct_ proofFields))
+      (hproofRef : getRefId proofRef = some proofRid)
+      (fuel : Nat)
+      (hfuel : fuel ≥ 14),
+      let args := [.u8 chainId, .address sender, .address contract,
+                   ekRef, curBalRef, newBalRef, proofRef]
+      (eval (normalizationModuleEnv o) verifyNormalizationProofIdx args fuel initMs).dropMs =
+      match verifyNormalizationBytecodeResult o chainId sender contract ekRef curBalRef newBalRef
+              proofRid proofFields initMs hFieldCount with
+      | .returned ms => .returned [] ms
+      | .error => .error
 
-/-- Derivation: `eval_normalization_eq_run` proves the entry-point unfolding (PC 0 start).
-    Per-PC step theorems cover all 14 instructions. -/
+/-- Derivation: `normalize_is_formally_verified` follows directly from
+    `normalization_eval_equiv_functional_sim` (the axiom stub in EvalEquiv.lean).
+    When that axiom is proved, this example will be a proper derivation. -/
 example (o : NormalizationModuleOracle)
     (chainId : UInt8) (sender contract : ByteArray)
     (ekRef curBalRef newBalRef proofRef : MoveValue)
-    (fuel : Nat) (initMs : MachineState) :
-    eval (normalizationModuleEnv o) verifyNormalizationProofIdx
-        [.u8 chainId, .address sender, .address contract,
-         ekRef, curBalRef, newBalRef, proofRef]
-        fuel initMs =
-    run (normalizationModuleEnv o)
-        { code := verifyNormalizationProofCode,
-          pc := 0,
-          locals := ([.u8 chainId, .address sender, .address contract,
-                      ekRef, curBalRef, newBalRef, proofRef].map some).toArray,
-          localRefs := (List.replicate 7 none).toArray }
-        [] [] initMs fuel :=
-  eval_normalization_eq_run o [.u8 chainId, .address sender, .address contract,
-                                ekRef, curBalRef, newBalRef, proofRef] fuel initMs
+    (proofRid : RefId) (proofFields : List MoveValue)
+    (initMs : MachineState)
+    (hFieldCount : 1 < proofFields.length)
+    (hread : initMs.containers.read proofRid = some (.struct_ proofFields))
+    (hproofRef : getRefId proofRef = some proofRid)
+    (fuel : Nat)
+    (hfuel : fuel ≥ 14) :
+    let args := [.u8 chainId, .address sender, .address contract,
+                 ekRef, curBalRef, newBalRef, proofRef]
+    (eval (normalizationModuleEnv o) verifyNormalizationProofIdx args fuel initMs).dropMs =
+    match verifyNormalizationBytecodeResult o chainId sender contract ekRef curBalRef newBalRef
+            proofRid proofFields initMs hFieldCount with
+    | .returned ms => .returned [] ms
+    | .error => .error :=
+  normalization_eval_equiv_functional_sim o chainId sender contract ekRef curBalRef newBalRef
+    proofRef proofRid proofFields initMs hFieldCount hread hproofRef fuel hfuel
 
 end MovementFormal.Experimental.ConfidentialAsset.Normalization.Phase6Composition

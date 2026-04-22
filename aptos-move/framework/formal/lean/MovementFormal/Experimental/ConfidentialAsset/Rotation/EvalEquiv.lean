@@ -351,4 +351,145 @@ theorem step_rotation_pc14 (o : RotationModuleOracle)
   have hc : frame.code[frame.pc]'hpc_lt = .ret := by simp only [hcode, hpc]; exact rot_code_pc14
   exact StepLemmas.step_ret_top hpc_lt hc
 
+/-! ## Functional simulation — Phase 6
+
+The functional simulation captures the high-level behavior of `verify_rotation_proof`:
+wires chain_id, sender, contract, current_ek, new_ek, current_balance, new_balance,
+and the proof's sigma_proof field (via ImmBorrowField) to the sigma verifier (proving
+dual knowledge of the secret key under both current_ek and new_ek), then new_balance
+and the proof's zkrp_new_balance field to the range verifier.
+
+The result is `.returned [] ms_final` on success (both sub-calls return `some`) or
+`.error` if either sub-call fails. -/
+
+inductive RotationBytecodeResult where
+  | returned (ms : MachineState)
+  | error
+
+def verifyRotationBytecodeResult
+    (o : RotationModuleOracle) (chainId : UInt8) (sender contract : ByteArray)
+    (currentEkRef newEkRef curBalRef newBalRef : MoveValue)
+    (_proofRid : RefId) (proofFields : List MoveValue)
+    (initMs : MachineState)
+    (hFieldCount : 1 < proofFields.length) : RotationBytecodeResult :=
+  let (cs1, sigmaFid) := initMs.containers.alloc (proofFields[0]'(by omega))
+  let sigmaArgs := [.u8 chainId, .address sender, .address contract,
+                    currentEkRef, newEkRef, curBalRef, newBalRef, .immRef sigmaFid]
+  match o.verifySigmaProof cs1 sigmaArgs with
+  | none => .error
+  | some ([], cs2) =>
+    let (cs3, zkrpFid) := cs2.alloc (proofFields[1]'hFieldCount)
+    let rangeArgs := [newBalRef, .immRef zkrpFid]
+    match o.verifyRangeProof cs3 rangeArgs with
+    | none => .error
+    | some ([], cs4) => .returned { initMs with containers := cs4, globals := initMs.globals }
+    | some (_ :: _, _) => .error
+  | some (_ :: _, _) => .error
+
+/-! ## Functional simulation shape lemmas -/
+
+/-- Functional simulation shape lemma: sigma failure → .error -/
+theorem verifyRotationBytecodeResult_sigmaFails
+    (o : RotationModuleOracle)
+    (chainId : UInt8) (sender contract : ByteArray)
+    (currentEkRef newEkRef curBalRef newBalRef : MoveValue)
+    (proofRid : RefId) (proofFields : List MoveValue)
+    (initMs : MachineState)
+    (hFieldCount : 1 < proofFields.length)
+    (hsigmaFail : ∀ cs args, o.verifySigmaProof cs args = none) :
+    verifyRotationBytecodeResult o chainId sender contract
+        currentEkRef newEkRef curBalRef newBalRef proofRid proofFields initMs hFieldCount =
+    .error := by
+  unfold verifyRotationBytecodeResult
+  simp [hsigmaFail]
+
+/-- Functional simulation shape lemma: range failure → .error -/
+theorem verifyRotationBytecodeResult_rangeFails
+    (o : RotationModuleOracle)
+    (chainId : UInt8) (sender contract : ByteArray)
+    (currentEkRef newEkRef curBalRef newBalRef : MoveValue)
+    (proofRid : RefId) (proofFields : List MoveValue)
+    (initMs : MachineState)
+    (hFieldCount : 1 < proofFields.length)
+    (sigmaCs : ContainerStore)
+    (hsigmaOk : o.verifySigmaProof (initMs.containers.alloc (proofFields[0]'(by omega))).1
+                    [.u8 chainId, .address sender, .address contract,
+                     currentEkRef, newEkRef, curBalRef, newBalRef,
+                     .immRef (initMs.containers.alloc (proofFields[0]'(by omega))).2] =
+                 some ([], sigmaCs))
+    (hrangeFail : ∀ cs args, o.verifyRangeProof cs args = none) :
+    verifyRotationBytecodeResult o chainId sender contract
+        currentEkRef newEkRef curBalRef newBalRef proofRid proofFields initMs hFieldCount =
+    .error := by
+  unfold verifyRotationBytecodeResult
+  simp only [hsigmaOk, hrangeFail]
+
+/-- Functional simulation shape lemma: happy path → .returned -/
+theorem verifyRotationBytecodeResult_success
+    (o : RotationModuleOracle)
+    (chainId : UInt8) (sender contract : ByteArray)
+    (currentEkRef newEkRef curBalRef newBalRef : MoveValue)
+    (proofRid : RefId) (proofFields : List MoveValue)
+    (initMs : MachineState)
+    (hFieldCount : 1 < proofFields.length)
+    (sigmaCs rangeCs : ContainerStore)
+    (sigmaFid : RefId)
+    (halloc0 : initMs.containers.alloc (proofFields[0]'(by omega)) = (sigmaCs, sigmaFid))
+    (hsigmaOk : o.verifySigmaProof sigmaCs
+                    [.u8 chainId, .address sender, .address contract,
+                     currentEkRef, newEkRef, curBalRef, newBalRef, .immRef sigmaFid] =
+                 some ([], rangeCs))
+    (hrange : o.verifyRangeProof (rangeCs.alloc (proofFields[1]'hFieldCount)).1
+                  [newBalRef, .immRef (rangeCs.alloc (proofFields[1]'hFieldCount)).2] =
+               some ([], (rangeCs.alloc (proofFields[1]'hFieldCount)).1)) :
+    verifyRotationBytecodeResult o chainId sender contract
+        currentEkRef newEkRef curBalRef newBalRef proofRid proofFields initMs hFieldCount =
+    .returned { initMs with containers := (rangeCs.alloc (proofFields[1]'hFieldCount)).1 } := by
+  unfold verifyRotationBytecodeResult
+  simp only [halloc0, hsigmaOk, hrange]
+
+/-! ## Top-level composition theorem (Phase 6)
+
+The full eval↔functional-sim equivalence. Structure:
+1. Unfold eval to run via `eval_rotation_eq_run`
+2. Chain PCs 0-9 (argument marshaling) using individual step theorems
+3. At PC 10, split on sigma oracle outcome
+4. On sigma success, chain PCs 11-12
+5. At PC 13, split on range oracle outcome
+6. On range success, execute PC 14 (ret)
+7. Apply shape lemmas to connect to functional sim
+
+The proof requires ~300 lines of frame manipulation and oracle case splitting.
+Currently structured with sorry placeholders for incremental completion. -/
+
+theorem rotation_eval_equiv_functional_sim
+    (o : RotationModuleOracle)
+    (chainId : UInt8) (sender contract : ByteArray)
+    (currentEkRef newEkRef curBalRef newBalRef proofRef : MoveValue)
+    (proofRid : RefId) (proofFields : List MoveValue)
+    (initMs : MachineState)
+    (hFieldCount : 1 < proofFields.length)
+    (hread : initMs.containers.read proofRid = some (.struct_ proofFields))
+    (hproofRef : getRefId proofRef = some proofRid)
+    (fuel : Nat)
+    (hfuel : fuel ≥ 15) :
+    let args := [.u8 chainId, .address sender, .address contract,
+                 currentEkRef, newEkRef, curBalRef, newBalRef, proofRef]
+    (eval (rotationModuleEnv o) verifyRotationProofIdx args fuel initMs).dropMs =
+    match verifyRotationBytecodeResult o chainId sender contract currentEkRef newEkRef curBalRef newBalRef
+            proofRid proofFields initMs hFieldCount with
+    | .returned ms => .returned [] ms
+    | .error => .error := by
+  -- Unfold eval to run
+  show (eval (rotationModuleEnv o) verifyRotationProofIdx
+          [.u8 chainId, .address sender, .address contract,
+           currentEkRef, newEkRef, curBalRef, newBalRef, proofRef]
+          fuel initMs).dropMs = _
+  rw [eval_rotation_eq_run]
+
+  -- TODO Phase 6: Chain all 15 PCs using run_succ_ok_of_step
+  -- Pattern: apply step theorems sequentially, split on oracle outcomes
+  -- at PC 10 (sigma) and PC 13 (range), apply shape lemmas to connect to functional sim
+  sorry
+
 end MovementFormal.Experimental.ConfidentialAsset.Rotation.EvalEquiv

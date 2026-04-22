@@ -534,4 +534,196 @@ theorem step_transfer_pc23 (o : TransferModuleOracle)
   have hc : frame.code[frame.pc]'hpc_lt = .ret := by simp only [hcode, hpc]; exact tr_code_pc23
   exact StepLemmas.step_ret_top hpc_lt hc
 
+/-! ## Functional simulation — Phase 6
+
+The functional simulation captures the high-level behavior of `verify_transfer_proof`:
+wires chain_id, sender, contract, sender_ek, recipient_ek, current_balance, new_balance,
+sender_amount, recipient_amount, auditor_eks, auditor_amounts, sender_auditor_hint,
+and the proof's sigma_proof field (via ImmBorrowField) to the sigma verifier, then
+dispatches two range proofs: new_balance range proof and transfer_amount range proof.
+
+Transfer is the most complex verifier with 13 params and 3 sub-calls.
+
+The result is `.returned [] ms_final` on success (all three sub-calls return `some`) or
+`.error` if any sub-call fails. -/
+
+inductive TransferBytecodeResult where
+  | returned (ms : MachineState)
+  | error
+
+def verifyTransferBytecodeResult
+    (o : TransferModuleOracle) (chainId : UInt8) (sender contract : ByteArray)
+    (senderEkRef recipientEkRef curBalRef newBalRef : MoveValue)
+    (senderAmountRef recipientAmountRef : MoveValue)
+    (auditorEksRef auditorAmountsRef senderAuditorHintRef : MoveValue)
+    (_proofRid : RefId) (proofFields : List MoveValue)
+    (initMs : MachineState)
+    (hFieldCount : 2 < proofFields.length) : TransferBytecodeResult :=
+  let (cs1, sigmaFid) := initMs.containers.alloc (proofFields[0]'(by omega))
+  let sigmaArgs := [.u8 chainId, .address sender, .address contract,
+                    senderEkRef, recipientEkRef, curBalRef, newBalRef,
+                    senderAmountRef, recipientAmountRef,
+                    auditorEksRef, auditorAmountsRef, senderAuditorHintRef,
+                    .immRef sigmaFid]
+  match o.verifySigmaProof cs1 sigmaArgs with
+  | none => .error
+  | some ([], cs2) =>
+    let (cs3, zkrpNewBalFid) := cs2.alloc (proofFields[1]'(by omega))
+    let newBalRangeArgs := [newBalRef, .immRef zkrpNewBalFid]
+    match o.verifyNewBalanceRangeProof cs3 newBalRangeArgs with
+    | none => .error
+    | some ([], cs4) =>
+      let (cs5, zkrpTransferFid) := cs4.alloc (proofFields[2]'hFieldCount)
+      let transferRangeArgs := [recipientAmountRef, .immRef zkrpTransferFid]
+      match o.verifyTransferAmountRangeProof cs5 transferRangeArgs with
+      | none => .error
+      | some ([], cs6) => .returned { initMs with containers := cs6, globals := initMs.globals }
+      | some (_ :: _, _) => .error
+    | some (_ :: _, _) => .error
+  | some (_ :: _, _) => .error
+
+/-! ## Functional simulation shape lemmas -/
+
+/-- Functional simulation shape lemma: sigma failure → .error -/
+theorem verifyTransferBytecodeResult_sigmaFails
+    (o : TransferModuleOracle)
+    (chainId : UInt8) (sender contract : ByteArray)
+    (senderEkRef recipientEkRef curBalRef newBalRef : MoveValue)
+    (senderAmountRef recipientAmountRef : MoveValue)
+    (auditorEksRef auditorAmountsRef senderAuditorHintRef : MoveValue)
+    (proofRid : RefId) (proofFields : List MoveValue)
+    (initMs : MachineState)
+    (hFieldCount : 2 < proofFields.length)
+    (hsigmaFail : ∀ cs args, o.verifySigmaProof cs args = none) :
+    verifyTransferBytecodeResult o chainId sender contract
+        senderEkRef recipientEkRef curBalRef newBalRef
+        senderAmountRef recipientAmountRef
+        auditorEksRef auditorAmountsRef senderAuditorHintRef
+        proofRid proofFields initMs hFieldCount =
+    .error := by
+  unfold verifyTransferBytecodeResult
+  simp [hsigmaFail]
+
+/-- Functional simulation shape lemma: new balance range failure → .error -/
+theorem verifyTransferBytecodeResult_newBalanceRangeFails
+    (o : TransferModuleOracle)
+    (chainId : UInt8) (sender contract : ByteArray)
+    (senderEkRef recipientEkRef curBalRef newBalRef : MoveValue)
+    (senderAmountRef recipientAmountRef : MoveValue)
+    (auditorEksRef auditorAmountsRef senderAuditorHintRef : MoveValue)
+    (proofRid : RefId) (proofFields : List MoveValue)
+    (initMs : MachineState)
+    (hFieldCount : 2 < proofFields.length)
+    (sigmaCs : ContainerStore)
+    (hsigmaOk : o.verifySigmaProof (initMs.containers.alloc (proofFields[0]'(by omega))).1
+                    [.u8 chainId, .address sender, .address contract,
+                     senderEkRef, recipientEkRef, curBalRef, newBalRef,
+                     senderAmountRef, recipientAmountRef,
+                     auditorEksRef, auditorAmountsRef, senderAuditorHintRef,
+                     .immRef (initMs.containers.alloc (proofFields[0]'(by omega))).2] =
+                 some ([], sigmaCs))
+    (hNewBalRangeFail : ∀ cs args, o.verifyNewBalanceRangeProof cs args = none) :
+    verifyTransferBytecodeResult o chainId sender contract
+        senderEkRef recipientEkRef curBalRef newBalRef
+        senderAmountRef recipientAmountRef
+        auditorEksRef auditorAmountsRef senderAuditorHintRef
+        proofRid proofFields initMs hFieldCount =
+    .error := by
+  unfold verifyTransferBytecodeResult
+  simp only [hsigmaOk, hNewBalRangeFail]
+
+/-- Functional simulation shape lemma: transfer amount range failure → .error -/
+theorem verifyTransferBytecodeResult_transferAmountRangeFails
+    (o : TransferModuleOracle)
+    (chainId : UInt8) (sender contract : ByteArray)
+    (senderEkRef recipientEkRef curBalRef newBalRef : MoveValue)
+    (senderAmountRef recipientAmountRef : MoveValue)
+    (auditorEksRef auditorAmountsRef senderAuditorHintRef : MoveValue)
+    (proofRid : RefId) (proofFields : List MoveValue)
+    (initMs : MachineState)
+    (hFieldCount : 2 < proofFields.length)
+    (sigmaCs newBalRangeCs : ContainerStore)
+    (hsigmaOk : o.verifySigmaProof (initMs.containers.alloc (proofFields[0]'(by omega))).1
+                    [.u8 chainId, .address sender, .address contract,
+                     senderEkRef, recipientEkRef, curBalRef, newBalRef,
+                     senderAmountRef, recipientAmountRef,
+                     auditorEksRef, auditorAmountsRef, senderAuditorHintRef,
+                     .immRef (initMs.containers.alloc (proofFields[0]'(by omega))).2] =
+                 some ([], sigmaCs))
+    (hNewBalRangeOk : o.verifyNewBalanceRangeProof (sigmaCs.alloc (proofFields[1]'(by omega))).1
+                         [newBalRef, .immRef (sigmaCs.alloc (proofFields[1]'(by omega))).2] =
+                       some ([], newBalRangeCs))
+    (hTransferRangeFail : ∀ cs args, o.verifyTransferAmountRangeProof cs args = none) :
+    verifyTransferBytecodeResult o chainId sender contract
+        senderEkRef recipientEkRef curBalRef newBalRef
+        senderAmountRef recipientAmountRef
+        auditorEksRef auditorAmountsRef senderAuditorHintRef
+        proofRid proofFields initMs hFieldCount =
+    .error := by
+  unfold verifyTransferBytecodeResult
+  simp only [hsigmaOk, hNewBalRangeOk, hTransferRangeFail]
+
+/-! Happy-path success lemma deferred: the 3-call nested allocation chain makes
+the statement complex. The error-path lemmas (sigma/newBalanceRange/transferAmountRange fails)
+capture the key oracle-outcome correspondences. Success-path composition will be handled
+in the full 24-PC eval-to-run theorem. -/
+
+/-! ## Top-level composition theorem (Phase 6)
+
+The full eval↔functional-sim equivalence. Structure:
+1. Unfold eval to run via `eval_transfer_eq_run`
+2. Chain PCs 0-13 (argument marshaling) using individual step theorems
+3. At PC 14, split on sigma oracle outcome
+4. On sigma success, chain PCs 15-17
+5. At PC 18, split on new balance range oracle outcome
+6. On new balance range success, chain PCs 19-21
+7. At PC 22, split on transfer amount range oracle outcome
+8. On transfer amount range success, execute PC 23 (ret)
+9. Apply shape lemmas to connect to functional sim
+
+Transfer is the most complex dispatcher with 13 params and 3 sub-calls (sigma + new balance
+range + transfer amount range). The proof requires ~400 lines of frame manipulation and
+triple oracle case splitting. Currently structured with sorry placeholders for incremental
+completion. -/
+
+theorem transfer_eval_equiv_functional_sim
+    (o : TransferModuleOracle)
+    (chainId : UInt8) (sender contract : ByteArray)
+    (senderEkRef recipientEkRef curBalRef newBalRef : MoveValue)
+    (senderAmountRef recipientAmountRef : MoveValue)
+    (auditorEksRef auditorAmountsRef senderAuditorHintRef proofRef : MoveValue)
+    (proofRid : RefId) (proofFields : List MoveValue)
+    (initMs : MachineState)
+    (hFieldCount : 2 < proofFields.length)
+    (hread : initMs.containers.read proofRid = some (.struct_ proofFields))
+    (hproofRef : getRefId proofRef = some proofRid)
+    (fuel : Nat)
+    (hfuel : fuel ≥ 24) :
+    let args := [.u8 chainId, .address sender, .address contract,
+                 senderEkRef, recipientEkRef, curBalRef, newBalRef,
+                 senderAmountRef, recipientAmountRef,
+                 auditorEksRef, auditorAmountsRef, senderAuditorHintRef, proofRef]
+    (eval (transferModuleEnv o) verifyTransferProofIdx args fuel initMs).dropMs =
+    match verifyTransferBytecodeResult o chainId sender contract
+            senderEkRef recipientEkRef curBalRef newBalRef
+            senderAmountRef recipientAmountRef
+            auditorEksRef auditorAmountsRef senderAuditorHintRef
+            proofRid proofFields initMs hFieldCount with
+    | .returned ms => .returned [] ms
+    | .error => .error := by
+  -- Unfold eval to run
+  show (eval (transferModuleEnv o) verifyTransferProofIdx
+          [.u8 chainId, .address sender, .address contract,
+           senderEkRef, recipientEkRef, curBalRef, newBalRef,
+           senderAmountRef, recipientAmountRef,
+           auditorEksRef, auditorAmountsRef, senderAuditorHintRef, proofRef]
+          fuel initMs).dropMs = _
+  rw [eval_transfer_eq_run]
+
+  -- TODO Phase 6: Chain all 24 PCs using run_succ_ok_of_step
+  -- Pattern: apply step theorems sequentially, split on three oracle outcomes
+  -- at PC 14 (sigma), PC 18 (new balance range), and PC 22 (transfer amount range),
+  -- apply shape lemmas to connect to functional sim
+  sorry
+
 end MovementFormal.Experimental.ConfidentialAsset.Transfer.EvalEquiv

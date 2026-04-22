@@ -92,6 +92,32 @@ def optionExtractRef : ContainerStore → List MoveValue → Option (List MoveVa
     | _ => none
   | _, _ => none
 
+/-- Reduction of `optionIsSomeRef` when the container-store read succeeds with a tagged struct.
+Exposes the tag directly so bytecode-proof compositions can match on bool true / false. -/
+theorem optionIsSomeRef_immRef_read
+    (cs : ContainerStore) (id : RefId) (tag : Bool) (rest : List MoveValue)
+    (hread : cs.read id = some (.struct_ (.bool tag :: rest))) :
+    optionIsSomeRef cs [.immRef id] = some ([.bool tag], cs) := by
+  simp [optionIsSomeRef, hread]
+
+/-- Reduction of `optionIsSomeRef` when the container read returns something other than a
+tagged struct — produces `none` (error). -/
+theorem optionIsSomeRef_immRef_malformed
+    (cs : ContainerStore) (id : RefId) (v : MoveValue)
+    (hread : cs.read id = some v)
+    (hmal : ∀ b rest, v ≠ .struct_ (.bool b :: rest)) :
+    optionIsSomeRef cs [.immRef id] = none := by
+  simp only [optionIsSomeRef, hread]
+  cases v with
+  | struct_ fs =>
+    cases fs with
+    | nil => rfl
+    | cons h t =>
+      cases h with
+      | bool b => exact absurd rfl (hmal b t)
+      | _ => rfl
+  | _ => rfl
+
 /-- Reduction of `optionExtractRef` when read/write succeed (for bytecode proofs). -/
 theorem optionExtractRef_mutRef_read_write
     (cs : ContainerStore) (id : RefId) (val : MoveValue) (rest : List MoveValue) (cs' : ContainerStore)

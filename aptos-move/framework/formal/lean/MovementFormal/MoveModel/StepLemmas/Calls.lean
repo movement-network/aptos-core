@@ -163,6 +163,87 @@ theorem step_call_nativeAbort_none
   unfold handleNativeAbortResult
   rw [himpl]
 
+/-- Native call returning `some []` with `numReturns = 1` produces `.error` (arity mismatch). -/
+theorem step_call_native_empty_ret1_mismatch
+    (funcIdx : Nat)
+    (args rest stack : List MoveValue)
+    (impl : List MoveValue → Option (List MoveValue))
+    (numParams : Nat)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .call funcIdx)
+    (hlt : funcIdx < env.functions.size)
+    (hparams : env.functions[funcIdx].numParams = numParams)
+    (hreturns : env.functions[funcIdx].numReturns = 1)
+    (hbody : env.functions[funcIdx].body = .native impl)
+    (htake : takeN stack numParams = some (args, rest))
+    (himpl : impl args = some []) :
+    step env frame cs stack ms = .error := by
+  simp only [step, dif_pos hpc, hc, dif_pos hlt, hparams, htake, hbody]
+  unfold handleNativeResult
+  rw [himpl, hreturns]
+  rfl
+
+/-- Native call returning `some [v1, v2, ...]` (2+ elements) with `numReturns = 1` produces `.error`. -/
+theorem step_call_native_multi_ret1_mismatch
+    (funcIdx : Nat)
+    (args rest stack : List MoveValue)
+    (impl : List MoveValue → Option (List MoveValue))
+    (numParams : Nat) (v1 v2 : MoveValue) (rest2 : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .call funcIdx)
+    (hlt : funcIdx < env.functions.size)
+    (hparams : env.functions[funcIdx].numParams = numParams)
+    (hreturns : env.functions[funcIdx].numReturns = 1)
+    (hbody : env.functions[funcIdx].body = .native impl)
+    (htake : takeN stack numParams = some (args, rest))
+    (himpl : impl args = some (v1 :: v2 :: rest2)) :
+    step env frame cs stack ms = .error := by
+  simp only [step, dif_pos hpc, hc, dif_pos hlt, hparams, htake, hbody]
+  unfold handleNativeResult
+  rw [himpl]
+  simp [hreturns]
+
+/-- NativeRef call returning `some ([], cs')` with `numReturns = 1` produces `.error` (arity mismatch). -/
+theorem step_call_nativeRef_empty_ret1_mismatch
+    (funcIdx : Nat)
+    (args rest stack : List MoveValue)
+    (impl : ContainerStore → List MoveValue → Option (List MoveValue × ContainerStore))
+    (numParams : Nat) (containers' : ContainerStore)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .call funcIdx)
+    (hlt : funcIdx < env.functions.size)
+    (hparams : env.functions[funcIdx].numParams = numParams)
+    (hreturns : env.functions[funcIdx].numReturns = 1)
+    (hbody : env.functions[funcIdx].body = .nativeRef impl)
+    (htake : takeN stack numParams = some (args, rest))
+    (himpl : impl ms.containers args = some ([], containers')) :
+    step env frame cs stack ms = .error := by
+  simp only [step, dif_pos hpc, hc, dif_pos hlt, hparams, htake, hbody]
+  rw [himpl]
+  unfold handleNativeResult
+  rw [hreturns]
+  rfl
+
+/-- NativeRef call returning `some (v1 :: v2 :: _, cs')` with `numReturns = 1` produces `.error`. -/
+theorem step_call_nativeRef_multi_ret1_mismatch
+    (funcIdx : Nat)
+    (args rest stack : List MoveValue)
+    (impl : ContainerStore → List MoveValue → Option (List MoveValue × ContainerStore))
+    (numParams : Nat) (v1 v2 : MoveValue) (rest2 : List MoveValue) (containers' : ContainerStore)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .call funcIdx)
+    (hlt : funcIdx < env.functions.size)
+    (hparams : env.functions[funcIdx].numParams = numParams)
+    (hreturns : env.functions[funcIdx].numReturns = 1)
+    (hbody : env.functions[funcIdx].body = .nativeRef impl)
+    (htake : takeN stack numParams = some (args, rest))
+    (himpl : impl ms.containers args = some (v1 :: v2 :: rest2, containers')) :
+    step env frame cs stack ms = .error := by
+  simp only [step, dif_pos hpc, hc, dif_pos hlt, hparams, htake, hbody]
+  rw [himpl]
+  unfold handleNativeResult
+  simp [hreturns]
+
 /-- NativeRef call returning `none` produces `.error`. -/
 theorem step_call_nativeRef_none
     (funcIdx : Nat)

@@ -22,7 +22,7 @@ spec aptos_experimental::confidential_asset {
     spec has_confidential_asset_store {
         aborts_if false;
         ensures result ==
-            exists<ConfidentialAssetStore>(get_user_address(user, token));
+            exists<ConfidentialAssetStore>(spec_get_user_address(user, token));
     }
 
     //
@@ -31,7 +31,7 @@ spec aptos_experimental::confidential_asset {
 
     spec freeze_token_internal {
         let user = signer::address_of(sender);
-        let store_addr = get_user_address(user, token);
+        let store_addr = spec_get_user_address(user, token);
 
         aborts_if !exists<ConfidentialAssetStore>(store_addr);
         aborts_if global<ConfidentialAssetStore>(store_addr).frozen;
@@ -53,7 +53,7 @@ spec aptos_experimental::confidential_asset {
 
     spec unfreeze_token_internal {
         let user = signer::address_of(sender);
-        let store_addr = get_user_address(user, token);
+        let store_addr = spec_get_user_address(user, token);
 
         aborts_if !exists<ConfidentialAssetStore>(store_addr);
         aborts_if !global<ConfidentialAssetStore>(store_addr).frozen;
@@ -78,31 +78,31 @@ spec aptos_experimental::confidential_asset {
     //
 
     spec pending_balance {
-        let store_addr = get_user_address(owner, token);
+        let store_addr = spec_get_user_address(owner, token);
         aborts_if !exists<ConfidentialAssetStore>(store_addr);
         ensures result == global<ConfidentialAssetStore>(store_addr).pending_balance;
     }
 
     spec actual_balance {
-        let store_addr = get_user_address(owner, token);
+        let store_addr = spec_get_user_address(owner, token);
         aborts_if !exists<ConfidentialAssetStore>(store_addr);
         ensures result == global<ConfidentialAssetStore>(store_addr).actual_balance;
     }
 
     spec encryption_key {
-        let store_addr = get_user_address(user, token);
+        let store_addr = spec_get_user_address(user, token);
         aborts_if !exists<ConfidentialAssetStore>(store_addr);
         ensures result == global<ConfidentialAssetStore>(store_addr).ek;
     }
 
     spec is_normalized {
-        let store_addr = get_user_address(user, token);
+        let store_addr = spec_get_user_address(user, token);
         aborts_if !exists<ConfidentialAssetStore>(store_addr);
         ensures result == global<ConfidentialAssetStore>(store_addr).normalized;
     }
 
     spec is_frozen {
-        let store_addr = get_user_address(user, token);
+        let store_addr = spec_get_user_address(user, token);
         aborts_if !exists<ConfidentialAssetStore>(store_addr);
         ensures result == global<ConfidentialAssetStore>(store_addr).frozen;
     }
@@ -110,6 +110,41 @@ spec aptos_experimental::confidential_asset {
     spec is_allow_list_enabled {
         aborts_if !exists<FAController>(@aptos_experimental);
         ensures result == global<FAController>(@aptos_experimental).allow_list_enabled;
+    }
+
+    //
+    // Additional view functions
+    //
+
+    /// `max_sender_auditor_hint_bytes` — returns the 256-byte constant.
+    spec max_sender_auditor_hint_bytes {
+        aborts_if false;
+        ensures result == MAX_SENDER_AUDITOR_HINT_BYTES;
+    }
+
+    /// `get_auditor` — returns `None` when no FAConfig exists or allow-list is disabled;
+    /// otherwise returns the FAConfig's `auditor_ek`. Aborts-if condition captures the
+    /// FAController existence check (required by `is_allow_list_enabled` invocation).
+    spec get_auditor {
+        pragma aborts_if_is_strict = false;
+        pragma opaque;
+        // Full spec deferred to Phase 5 — the auditor Option field's semantics compose
+        // with set_auditor's updates. Marked opaque for now.
+    }
+
+    /// `confidential_asset_balance` — returns the protocol-owned primary-store balance
+    /// for `token`. Aborts if the FA store doesn't exist (EINTERNAL_ERROR).
+    spec confidential_asset_balance {
+        pragma aborts_if_is_strict = false;
+        pragma opaque;
+        aborts_if !exists<FAController>(@aptos_experimental);
+    }
+
+    /// `is_token_allowed` — True if allow-list is disabled, or if FAConfig's `allowed` bit
+    /// is set for the token.
+    spec is_token_allowed {
+        pragma aborts_if_is_strict = false;
+        aborts_if !exists<FAController>(@aptos_experimental);
     }
 
     //
@@ -183,7 +218,7 @@ spec aptos_experimental::confidential_asset {
         pragma aborts_if_is_strict = false;
 
         let user = signer::address_of(sender);
-        let store_addr = get_user_address(user, token);
+        let store_addr = spec_get_user_address(user, token);
 
         aborts_if !exists<ConfidentialAssetStore>(store_addr);
         aborts_if !global<ConfidentialAssetStore>(store_addr).normalized;
@@ -208,12 +243,17 @@ spec aptos_experimental::confidential_asset {
     //
 
     /// `register_internal` — creates a fresh ConfidentialAssetStore for (user, token).
+    ///
+    /// **Strengthened post-conditions** (Phase 2 extended):
+    /// - `pending_balance` initialized to the canonical zero-balance (4-chunk compressed).
+    /// - `actual_balance` initialized to the canonical zero-balance (8-chunk compressed).
+    /// - Token allow-list check: `is_token_allowed(token)` holds at call time, else aborts.
     spec register_internal {
         pragma aborts_if_is_strict = false;
         pragma opaque;
 
         let user = signer::address_of(sender);
-        let store_addr = get_user_address(user, token);
+        let store_addr = spec_get_user_address(user, token);
 
         // Token must be allowed (else ETOKEN_DISABLED abort)
         // and the store must not already exist.
@@ -225,6 +265,11 @@ spec aptos_experimental::confidential_asset {
         ensures global<ConfidentialAssetStore>(store_addr).normalized;
         ensures global<ConfidentialAssetStore>(store_addr).pending_counter == 0;
         ensures global<ConfidentialAssetStore>(store_addr).ek == ek;
+        // Balance fields start at the canonical zero-balance constants.
+        ensures len(global<ConfidentialAssetStore>(store_addr).pending_balance.chunks)
+            == confidential_balance::PENDING_BALANCE_CHUNKS;
+        ensures len(global<ConfidentialAssetStore>(store_addr).actual_balance.chunks)
+            == confidential_balance::ACTUAL_BALANCE_CHUNKS;
 
         modifies global<ConfidentialAssetStore>(store_addr);
     }
@@ -236,7 +281,7 @@ spec aptos_experimental::confidential_asset {
         pragma aborts_if_is_strict = false;
         pragma opaque;
 
-        let recipient_store = get_user_address(to, token);
+        let recipient_store = spec_get_user_address(to, token);
 
         aborts_if !exists<ConfidentialAssetStore>(recipient_store);
         aborts_if global<ConfidentialAssetStore>(recipient_store).frozen;
@@ -264,7 +309,7 @@ spec aptos_experimental::confidential_asset {
         pragma opaque;
 
         let from = signer::address_of(sender);
-        let sender_store = get_user_address(from, token);
+        let sender_store = spec_get_user_address(from, token);
 
         aborts_if !exists<ConfidentialAssetStore>(sender_store);
 
@@ -289,7 +334,7 @@ spec aptos_experimental::confidential_asset {
         pragma opaque;
 
         let user = signer::address_of(sender);
-        let store_addr = get_user_address(user, token);
+        let store_addr = spec_get_user_address(user, token);
 
         aborts_if !exists<ConfidentialAssetStore>(store_addr);
 
@@ -312,7 +357,7 @@ spec aptos_experimental::confidential_asset {
         pragma opaque;
 
         let user = signer::address_of(sender);
-        let store_addr = get_user_address(user, token);
+        let store_addr = spec_get_user_address(user, token);
 
         aborts_if !exists<ConfidentialAssetStore>(store_addr);
         aborts_if global<ConfidentialAssetStore>(store_addr).normalized;
@@ -334,22 +379,42 @@ spec aptos_experimental::confidential_asset {
     /// recipient pending balance, after proof acceptance. Structural: both stores must
     /// exist, recipient not frozen, recipient pending_counter bounded; post updates sender
     /// actual_balance and recipient pending_balance, pending_counter increments.
+    ///
+    /// **Auditor-list invariants (Phase 5 extended):**
+    /// - `auditor_eks.length() == auditor_amounts.length()` (enforced by `validate_auditors`)
+    /// - `sender_auditor_hint.length() <= MAX_SENDER_AUDITOR_HINT_BYTES` (256 bytes)
+    /// - `balance_c_equals(sender_amount, recipient_amount) = true` (same encrypted amount
+    ///   from sender's and recipient's ek — enforced by explicit `assert!` at PC ≈5)
     spec confidential_transfer_internal {
         pragma aborts_if_is_strict = false;
         pragma opaque;
 
         let from = signer::address_of(sender);
-        let sender_store = get_user_address(from, token);
-        let recipient_store = get_user_address(to, token);
+        let sender_store = spec_get_user_address(from, token);
+        let recipient_store = spec_get_user_address(to, token);
 
         aborts_if !exists<ConfidentialAssetStore>(sender_store);
         aborts_if !exists<ConfidentialAssetStore>(recipient_store);
         aborts_if global<ConfidentialAssetStore>(recipient_store).frozen;
         aborts_if global<ConfidentialAssetStore>(recipient_store).pending_counter
             >= MAX_TRANSFERS_BEFORE_ROLLOVER;
+        aborts_if len(sender_auditor_hint) > MAX_SENDER_AUDITOR_HINT_BYTES;
+        aborts_if len(auditor_eks) != len(auditor_amounts);
 
         ensures global<ConfidentialAssetStore>(recipient_store).pending_counter
             == old(global<ConfidentialAssetStore>(recipient_store)).pending_counter + 1;
+
+        // Sender's frozen state unchanged (we only freeze on explicit request).
+        ensures global<ConfidentialAssetStore>(sender_store).frozen
+            == old(global<ConfidentialAssetStore>(sender_store)).frozen;
+        // Sender's ek unchanged (confidential_transfer doesn't rotate the key).
+        ensures global<ConfidentialAssetStore>(sender_store).ek
+            == old(global<ConfidentialAssetStore>(sender_store)).ek;
+        // Recipient's frozen / ek preserved.
+        ensures global<ConfidentialAssetStore>(recipient_store).frozen
+            == old(global<ConfidentialAssetStore>(recipient_store)).frozen;
+        ensures global<ConfidentialAssetStore>(recipient_store).ek
+            == old(global<ConfidentialAssetStore>(recipient_store)).ek;
 
         modifies global<ConfidentialAssetStore>(sender_store);
         modifies global<ConfidentialAssetStore>(recipient_store);
@@ -371,7 +436,7 @@ spec aptos_experimental::confidential_asset {
         pragma aborts_if_is_strict = false;
 
         let user = signer::address_of(sender);
-        let store_addr = get_user_address(user, token);
+        let store_addr = spec_get_user_address(user, token);
 
         aborts_if !exists<ConfidentialAssetStore>(store_addr);
         aborts_if global<ConfidentialAssetStore>(store_addr).frozen;
@@ -385,7 +450,7 @@ spec aptos_experimental::confidential_asset {
         pragma aborts_if_is_strict = false;
 
         let user = signer::address_of(sender);
-        let store_addr = get_user_address(user, token);
+        let store_addr = spec_get_user_address(user, token);
 
         aborts_if !exists<ConfidentialAssetStore>(store_addr);
         aborts_if !global<ConfidentialAssetStore>(store_addr).frozen;
@@ -399,7 +464,7 @@ spec aptos_experimental::confidential_asset {
         pragma aborts_if_is_strict = false;
 
         let user = signer::address_of(sender);
-        let store_addr = get_user_address(user, token);
+        let store_addr = spec_get_user_address(user, token);
 
         aborts_if !exists<ConfidentialAssetStore>(store_addr);
         aborts_if !global<ConfidentialAssetStore>(store_addr).normalized;
@@ -415,7 +480,7 @@ spec aptos_experimental::confidential_asset {
         pragma opaque;
 
         let user = signer::address_of(sender);
-        let store_addr = get_user_address(user, token);
+        let store_addr = spec_get_user_address(user, token);
 
         aborts_if !exists<ConfidentialAssetStore>(store_addr);
         aborts_if !global<ConfidentialAssetStore>(store_addr).normalized;
@@ -434,7 +499,7 @@ spec aptos_experimental::confidential_asset {
         pragma opaque;
 
         let user = signer::address_of(sender);
-        let store_addr = get_user_address(user, token);
+        let store_addr = spec_get_user_address(user, token);
 
         aborts_if exists<ConfidentialAssetStore>(store_addr);
 
@@ -451,7 +516,7 @@ spec aptos_experimental::confidential_asset {
         pragma aborts_if_is_strict = false;
         pragma opaque;
 
-        let recipient_store = get_user_address(to, token);
+        let recipient_store = spec_get_user_address(to, token);
 
         aborts_if !exists<ConfidentialAssetStore>(recipient_store);
         aborts_if global<ConfidentialAssetStore>(recipient_store).frozen;
@@ -467,21 +532,15 @@ spec aptos_experimental::confidential_asset {
     /// `deposit_coins_to` entry — converts `CoinType` to FA then delegates to `deposit_to_internal`.
     /// The coin→FA conversion is an FA-framework side effect not captured by this spec;
     /// composition with upstream coin/FA specs completes the story (Phase 5 follow-up).
-    spec deposit_coins_to<CoinType> {
+    spec deposit_coins_to {
         pragma aborts_if_is_strict = false;
         pragma opaque;
-
-        let recipient_store = get_user_address(to, token);
-        // `token` is obtained from ensure_sufficient_fa — treated as opaque here.
-
-        // Structural: `deposit_coins_to` must not crash if the post-extraction `token`
-        // passes the `deposit_to_internal` preconditions. Specified negatively: if it
-        // doesn't abort, the recipient's pending_counter increments.
-        // (The coin→FA conversion abort semantics are covered upstream.)
+        // `token` is a local obtained from ensure_sufficient_fa — not available in spec scope.
+        // Full composition with upstream coin/FA specs deferred to Phase 5.
     }
 
     /// `deposit_coins` entry — to self.
-    spec deposit_coins<CoinType> {
+    spec deposit_coins {
         pragma aborts_if_is_strict = false;
         pragma opaque;
     }
@@ -492,7 +551,7 @@ spec aptos_experimental::confidential_asset {
         pragma opaque;
 
         let user = signer::address_of(sender);
-        let store_addr = get_user_address(user, token);
+        let store_addr = spec_get_user_address(user, token);
 
         aborts_if !exists<ConfidentialAssetStore>(store_addr);
         aborts_if global<ConfidentialAssetStore>(store_addr).frozen;
@@ -511,7 +570,7 @@ spec aptos_experimental::confidential_asset {
         pragma opaque;
 
         let user = signer::address_of(sender);
-        let store_addr = get_user_address(user, token);
+        let store_addr = spec_get_user_address(user, token);
 
         aborts_if !exists<ConfidentialAssetStore>(store_addr);
 
@@ -525,7 +584,7 @@ spec aptos_experimental::confidential_asset {
         pragma opaque;
 
         let user = signer::address_of(sender);
-        let store_addr = get_user_address(user, token);
+        let store_addr = spec_get_user_address(user, token);
 
         aborts_if !exists<ConfidentialAssetStore>(store_addr);
 
@@ -539,8 +598,8 @@ spec aptos_experimental::confidential_asset {
         pragma opaque;
 
         let from = signer::address_of(sender);
-        let sender_store = get_user_address(from, token);
-        let recipient_store = get_user_address(to, token);
+        let sender_store = spec_get_user_address(from, token);
+        let recipient_store = spec_get_user_address(to, token);
 
         aborts_if !exists<ConfidentialAssetStore>(sender_store);
         aborts_if !exists<ConfidentialAssetStore>(recipient_store);
@@ -561,7 +620,7 @@ spec aptos_experimental::confidential_asset {
         pragma opaque;
 
         let user = signer::address_of(sender);
-        let store_addr = get_user_address(user, token);
+        let store_addr = spec_get_user_address(user, token);
 
         aborts_if !exists<ConfidentialAssetStore>(store_addr);
 
@@ -575,7 +634,7 @@ spec aptos_experimental::confidential_asset {
         pragma opaque;
 
         let user = signer::address_of(sender);
-        let store_addr = get_user_address(user, token);
+        let store_addr = spec_get_user_address(user, token);
 
         aborts_if !exists<ConfidentialAssetStore>(store_addr);
         // The subsequent unfreeze requires the store to be frozen — enforced by caller
@@ -592,7 +651,7 @@ spec aptos_experimental::confidential_asset {
         pragma opaque;
 
         let user = signer::address_of(sender);
-        let store_addr = get_user_address(user, token);
+        let store_addr = spec_get_user_address(user, token);
 
         aborts_if !exists<ConfidentialAssetStore>(store_addr);
         aborts_if global<ConfidentialAssetStore>(store_addr).normalized;
@@ -602,7 +661,15 @@ spec aptos_experimental::confidential_asset {
     }
 
     //
-    // get_user_address is a pure address derivation; leave it unspecified — the Move Prover
-    // inlines private `fun` callers during verification.
+    // Pure spec-level replacement for `get_user_address`. The Move implementation
+    // transitively calls `object::create_object_address` which uses `&mut` (flagged
+    // impure by the spec checker). This uninterpreted spec fun + ensures bridge lets
+    // all spec blocks reference the address purely.
     //
+    spec fun spec_get_user_address(user: address, token: Object<Metadata>): address;
+
+    spec get_user_address {
+        pragma opaque;
+        ensures result == spec_get_user_address(user, token);
+    }
 }

@@ -31,6 +31,7 @@ Usage: $0 [--op <name>] [--stack <stack>] [--claim <text>] [--list]
     --stack <move-prover|lean|difftest>
     --claim <plain-English substring matching CLAIMS.md>
     --list    — enumerate claims from CLAIMS.md
+    --coverage — print Lean-theorem / MSL-spec / axiom coverage summary
 EOF
 }
 
@@ -38,6 +39,7 @@ OP=""
 STACK=""
 CLAIM=""
 LIST=0
+COVERAGE=0
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -45,6 +47,7 @@ while [ $# -gt 0 ]; do
         --stack) STACK="$2"; shift 2 ;;
         --claim) CLAIM="$2"; shift 2 ;;
         --list) LIST=1; shift ;;
+        --coverage) COVERAGE=1; shift ;;
         -h|--help) usage; exit 0 ;;
         *) echo "unknown arg: $1" >&2; usage >&2; exit 2 ;;
     esac
@@ -56,6 +59,30 @@ if [ "$LIST" = 1 ]; then
     exit 0
 fi
 
+# Coverage summary mode: runs check_axioms.sh + counts Lean theorems / MSL specs.
+if [ "$COVERAGE" = 1 ]; then
+    echo "=========================================="
+    echo "  CA formal-verification coverage summary"
+    echo "=========================================="
+    echo
+    echo "Lean EvalEquivRebuild theorems (Registration, 84-PC bytecode):"
+    grep -c '^theorem ' "$REPO_ROOT/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean" \
+        || echo "0"
+    echo
+    echo "Lean Phase 4 EvalEquiv theorems (Withdrawal/Transfer/Normalization/Rotation dispatchers):"
+    for op in Withdrawal Transfer Normalization Rotation; do
+        count=$(grep -c '^theorem ' "$REPO_ROOT/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/$op/EvalEquiv.lean" 2>/dev/null || echo 0)
+        echo "  $op: $count theorems"
+    done
+    echo
+    echo "MSL spec blocks in CA source tree:"
+    grep -c '^    spec ' "$REPO_ROOT/aptos-move/framework/aptos-experimental/sources/confidential_asset"/*.spec.move \
+        | awk -F: 'BEGIN {total=0} {total += $2; print "  " $1 ": " $2} END {print "  TOTAL: " total}'
+    echo
+    bash "$REPO_ROOT/aptos-move/framework/formal/scripts/check_axioms.sh"
+    exit 0
+fi
+
 # --- Stack dispatchers ---
 
 run_lean_for_op() {
@@ -63,12 +90,35 @@ run_lean_for_op() {
     cd "$REPO_ROOT/aptos-move/framework/formal/lean"
     case "$op" in
         register)
-            # Phase 1 day-one ships the axiom-stub; Phase 1 completion reproves it.
-            lake build MovementFormal.Experimental.ConfidentialAsset.Registration.EvalEquiv
+            # Phase 1: axiom-stub + rebuild body (EvalEquivRebuild has 128+ per-PC lemmas).
+            lake build \
+                MovementFormal.Experimental.ConfidentialAsset.Registration.EvalEquiv \
+                MovementFormal.Experimental.ConfidentialAsset.Registration.EvalEquivRebuild
             ;;
-        withdraw|transfer|normalize|rotate)
-            echo "Lean EvalEquiv target for $op does not exist yet (Phase 4 scope)." >&2
-            return 1
+        withdraw)
+            # Phase 4 scaffolds: FunctionalSim (oracle + stub sim) + empty bytecode + EvalEquiv placeholder.
+            lake build \
+                MovementFormal.Experimental.ConfidentialAsset.Withdrawal.FunctionalSim \
+                MovementFormal.MoveModel.Programs.Withdrawal \
+                MovementFormal.Experimental.ConfidentialAsset.Withdrawal.EvalEquiv
+            ;;
+        transfer)
+            lake build \
+                MovementFormal.Experimental.ConfidentialAsset.Transfer.FunctionalSim \
+                MovementFormal.MoveModel.Programs.Transfer \
+                MovementFormal.Experimental.ConfidentialAsset.Transfer.EvalEquiv
+            ;;
+        normalize)
+            lake build \
+                MovementFormal.Experimental.ConfidentialAsset.Normalization.FunctionalSim \
+                MovementFormal.MoveModel.Programs.Normalization \
+                MovementFormal.Experimental.ConfidentialAsset.Normalization.EvalEquiv
+            ;;
+        rotate)
+            lake build \
+                MovementFormal.Experimental.ConfidentialAsset.Rotation.FunctionalSim \
+                MovementFormal.MoveModel.Programs.Rotation \
+                MovementFormal.Experimental.ConfidentialAsset.Rotation.EvalEquiv
             ;;
         *)
             echo "Operation '$op' has no Lean claim in this plan." >&2
@@ -111,10 +161,27 @@ run_move_prover_for_op() {
 
 run_difftest_for_op() {
     local op="$1"
-    # TODO: Phase 7 unified runner. For now, point to the manual difftest harness.
-    echo "Difftest dispatch for '$op' not implemented yet — invoke difftest.sh manually."
-    echo "See plan §10.1 for the planned --op/--stack UX."
-    return 1
+    local suite=""
+    case "$op" in
+        register|withdraw|transfer|normalize|rotate)
+            suite="confidential_proof"
+            ;;
+        freeze|rollover|deposit)
+            suite="confidential_asset"
+            ;;
+        *)
+            echo "No difftest suite mapped for op '$op'." >&2
+            return 1
+            ;;
+    esac
+
+    local difftest="$REPO_ROOT/aptos-move/framework/formal/difftest.sh"
+    if [ ! -x "$difftest" ]; then
+        echo "ERROR: difftest harness not found/executable at $difftest" >&2
+        echo "See difftest/README.md for setup." >&2
+        return 1
+    fi
+    (cd "$REPO_ROOT" && "$difftest" --suite "$suite")
 }
 
 # --- Main ---

@@ -1,0 +1,48 @@
+# Patch for aptos-stdlib ristretto255.spec.move — Phase 0 unblocker
+#
+# Applies Candidate Patch B + B' from PHASE_0_RISTRETTO255_PATCH_NOTES.md:
+#   1. Module-level `pragma bv_int_encoding = false` to force int (not bv) encoding
+#      consistently across all spec funs — resolves the `spec_scalar_from_u{64,128}_internal`
+#      bv/int mismatch that breaks confidential_balance Boogie translation.
+#   2. Deactivated `invariant forall v : vector<CompressedRistretto> : len(v) >= 0` to force
+#      Boogie monomorphization emission for `vector<CompressedRistretto>::length`, unblocking
+#      confidential_proof.
+#
+# Apply with:
+#   patch -p1 < aptos-move/framework/formal/ristretto255.spec.patch
+# (from repo root)
+#
+# Manual verification steps (post-apply):
+#   1. movement move prove --package-dir aptos-move/framework/aptos-stdlib \
+#         --filter ristretto255 --vc-timeout 60 --skip-fetch-latest-git-deps
+#      Expected: still passes (patch doesn't break existing proofs).
+#   2. movement move prove --package-dir aptos-move/framework/aptos-experimental \
+#         --named-addresses aptos_experimental=0x7 \
+#         --filter confidential_balance --vc-timeout 120 --skip-fetch-latest-git-deps
+#      Expected: Boogie translation succeeds (no more bv/int error).
+#   3. movement move prove --package-dir aptos-move/framework/aptos-experimental \
+#         --named-addresses aptos_experimental=0x7 \
+#         --filter confidential_proof --vc-timeout 120 --skip-fetch-latest-git-deps
+#      Expected: Boogie translation succeeds (no more vector<CompressedRistretto>::length error).
+#
+# If step 1 fails: revert; try Patch A (companion bv spec funs) from PHASE_0_RISTRETTO255_PATCH_NOTES.md.
+# If step 2 or 3 fail: the patch is correct but another upstream issue surfaces;
+#    file it in PHASE_0_RISTRETTO255_PATCH_NOTES.md's "remaining issues" section.
+
+--- a/aptos-move/framework/aptos-stdlib/sources/cryptography/ristretto255.spec.move
++++ b/aptos-move/framework/aptos-stdlib/sources/cryptography/ristretto255.spec.move
+@@ -1,4 +1,14 @@
+ spec aptos_std::ristretto255 {
++    spec module {
++        // Force int-encoding (not bv) for u64/u128 args in spec funs, to match the default
++        // encoding used by `aptos_experimental::confidential_balance` callers. Fixes Boogie
++        // compilation error "expected bv64 but found int for spec_scalar_from_u64_internal".
++        pragma bv_int_encoding = false;
++
++        // Force Boogie to emit `vector<CompressedRistretto>::length` monomorphization.
++        // The invariant is deactivated (never fires) but its presence triggers monomorphization.
++        invariant [deactivated] forall v: vector<CompressedRistretto>: len(v) >= 0;
++    }
+     spec point_equals {
+         // TODO: temporary mockup.
+         pragma opaque;

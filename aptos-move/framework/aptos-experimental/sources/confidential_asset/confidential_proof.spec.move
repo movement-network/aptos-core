@@ -20,28 +20,39 @@ spec aptos_experimental::confidential_proof {
     }
 
     //
-    // Verification entry points — opaque crypto boundary
+    // Abort codes documented in the Move source:
+    //   const ESIGMA_PROTOCOL_VERIFY_FAILED: u64 = 1;     → error::invalid_argument(1) = 0x10001 = 65537
+    //   const ERANGE_PROOF_VERIFICATION_FAILED: u64 = 2;  → error::invalid_argument(2) = 0x10002 = 65538
+    //
+
+    //
+    // Verification entry points — opaque crypto boundary + abort-code discipline
+    //
+    // Each verify_*_proof either succeeds (the caller continues) or aborts with one of the
+    // two error codes above. The acceptance semantics (proof verifies iff sigma predicate
+    // holds on honest oracle) is pinned by the Lean theorem for the respective bytecode
+    // (Phase 4). MSL treats the predicate as opaque; but the aborts_with discipline pins
+    // the failure-mode contract.
     //
 
     spec verify_withdrawal_proof {
         pragma opaque;
-        // Aborts on proof rejection; proof acceptance semantics are pinned by the Lean
-        // theorem for the bytecode of `verify_withdrawal_proof` (Phase 4).
+        aborts_with 65537, 65538;
     }
 
     spec verify_transfer_proof {
         pragma opaque;
-        // See `verify_withdrawal_proof` note.
+        aborts_with 65537, 65538;
     }
 
     spec verify_normalization_proof {
         pragma opaque;
-        // See `verify_withdrawal_proof` note.
+        aborts_with 65537, 65538;
     }
 
     spec verify_rotation_proof {
         pragma opaque;
-        // See `verify_withdrawal_proof` note.
+        aborts_with 65537, 65538;
     }
 
     //

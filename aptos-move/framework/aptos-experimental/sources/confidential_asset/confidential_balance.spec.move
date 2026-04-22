@@ -107,4 +107,94 @@ spec aptos_experimental::confidential_balance {
         aborts_if false;
         ensures result == CHUNK_SIZE_BITS;
     }
+
+    //
+    // Deserialization — Option-valued, never abort
+    //
+
+    spec new_pending_balance_from_bytes {
+        pragma opaque;
+        aborts_if false;
+    }
+
+    spec new_actual_balance_from_bytes {
+        pragma opaque;
+        aborts_if false;
+    }
+
+    //
+    // is_zero_balance — pure bool predicate, never aborts
+    //
+
+    spec is_zero_balance {
+        pragma opaque;
+        aborts_if false;
+    }
+
+    //
+    // compress/decompress — pure transformations; length-preserving
+    //
+
+    spec compress_balance {
+        pragma opaque;
+        aborts_if false;
+        ensures len(result.chunks) == len(balance.chunks);
+    }
+
+    spec decompress_balance {
+        pragma opaque;
+        aborts_if false;
+        ensures len(result.chunks) == len(balance.chunks);
+    }
+
+    //
+    // balance_to_bytes — serializer, never aborts
+    //
+
+    spec balance_to_bytes {
+        pragma opaque;
+        aborts_if false;
+    }
+
+    //
+    // balance_to_points_{c,d} — extractors. Return length = balance length.
+    //
+
+    spec balance_to_points_c {
+        pragma opaque;
+        aborts_if false;
+        ensures len(result) == len(balance.chunks);
+    }
+
+    spec balance_to_points_d {
+        pragma opaque;
+        aborts_if false;
+        ensures len(result) == len(balance.chunks);
+    }
+
+    //
+    // Amount-initialized constructors (no randomness variants)
+    //
+
+    spec new_pending_balance_u64_no_randonmess {
+        pragma opaque;
+        aborts_if false;
+        ensures len(result.chunks) == PENDING_BALANCE_CHUNKS;
+    }
+
+    //
+    // Randomness-backed constructors (test-only helpers; left opaque)
+    //
+
+    spec new_actual_balance_from_u128 {
+        pragma opaque;
+        aborts_if false;
+        ensures len(result.chunks) == ACTUAL_BALANCE_CHUNKS;
+    }
+
+    spec new_pending_balance_from_u64 {
+        pragma opaque;
+        aborts_if false;
+        ensures len(result.chunks) == PENDING_BALANCE_CHUNKS;
+    }
 }

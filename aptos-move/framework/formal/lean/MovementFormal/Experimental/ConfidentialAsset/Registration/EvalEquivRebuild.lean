@@ -3,6 +3,7 @@ import MovementFormal.MoveModel.StepLemmas.Locals
 import MovementFormal.MoveModel.StepLemmas.Refs
 import MovementFormal.MoveModel.StepLemmas.Calls
 import MovementFormal.MoveModel.StepLemmas.Run
+import MovementFormal.MoveModel.ExecResultDropMs
 import MovementFormal.Experimental.ConfidentialAsset.Registration.FunctionalSim
 
 /-!
@@ -1516,6 +1517,244 @@ theorem registrationModuleEnv_fn16_body (o : RegistrationNativeOracle) :
       .native errorInvalidArgument := by
   unfold registrationModuleEnv; rfl
 
+/-! Fn2 = optionExtractRefDesc (nativeRef optionExtractRef, 1→1) -/
+theorem registrationModuleEnv_fn2_numParams (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[2]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).numParams = 1 := by
+  unfold registrationModuleEnv; rfl
+
+theorem registrationModuleEnv_fn2_numReturns (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[2]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).numReturns = 1 := by
+  unfold registrationModuleEnv; rfl
+
+theorem registrationModuleEnv_fn2_body (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[2]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).body =
+      .nativeRef optionExtractRef := by
+  unfold registrationModuleEnv; rfl
+
+/-! Fn3 = newScalarFromBytes (native, 1→1) -/
+theorem registrationModuleEnv_fn3_numParams (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[3]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).numParams = 1 := by
+  unfold registrationModuleEnv; rfl
+
+theorem registrationModuleEnv_fn3_numReturns (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[3]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).numReturns = 1 := by
+  unfold registrationModuleEnv; rfl
+
+theorem registrationModuleEnv_fn3_body (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[3]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).body =
+      .native o.newScalarFromBytes := by
+  unfold registrationModuleEnv; rfl
+
+/-! Fn4 = vectorPushBackU8RefDesc (nativeRef vectorPushBackU8Ref, 2→0) -/
+theorem registrationModuleEnv_fn4_numParams (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[4]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).numParams = 2 := by
+  unfold registrationModuleEnv; rfl
+
+theorem registrationModuleEnv_fn4_numReturns (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[4]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).numReturns = 0 := by
+  unfold registrationModuleEnv; rfl
+
+theorem registrationModuleEnv_fn4_body (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[4]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).body =
+      .nativeRef vectorPushBackU8Ref := by
+  unfold registrationModuleEnv; rfl
+
+/-! Fn5 = bcsToBytesAddressRefDesc (nativeRef bcsToBytesAddressRef, 1→1) -/
+theorem registrationModuleEnv_fn5_numParams (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[5]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).numParams = 1 := by
+  unfold registrationModuleEnv; rfl
+
+theorem registrationModuleEnv_fn5_numReturns (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[5]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).numReturns = 1 := by
+  unfold registrationModuleEnv; rfl
+
+theorem registrationModuleEnv_fn5_body (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[5]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).body =
+      .nativeRef bcsToBytesAddressRef := by
+  unfold registrationModuleEnv; rfl
+
+/-! Fn6 = vectorAppendU8RefDesc (nativeRef vectorAppendU8Ref, 2→0) -/
+theorem registrationModuleEnv_fn6_numParams (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[6]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).numParams = 2 := by
+  unfold registrationModuleEnv; rfl
+
+theorem registrationModuleEnv_fn6_numReturns (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[6]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).numReturns = 0 := by
+  unfold registrationModuleEnv; rfl
+
+theorem registrationModuleEnv_fn6_body (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[6]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).body =
+      .nativeRef vectorAppendU8Ref := by
+  unfold registrationModuleEnv; rfl
+
+/-! Fn7 = pubkeyToBytes wrapper (nativeRef, 1→1) -/
+theorem registrationModuleEnv_fn7_numParams (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[7]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).numParams = 1 := by
+  unfold registrationModuleEnv; rfl
+
+theorem registrationModuleEnv_fn7_numReturns (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[7]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).numReturns = 1 := by
+  unfold registrationModuleEnv; rfl
+
+theorem registrationModuleEnv_fn7_body (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[7]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).body =
+      .nativeRef (wrapOracleImmRef1 o.pubkeyToBytes) := by
+  unfold registrationModuleEnv; rfl
+
+/-! Fn8 = compressedPointToBytes (native, 1→1) -/
+theorem registrationModuleEnv_fn8_numParams (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[8]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).numParams = 1 := by
+  unfold registrationModuleEnv; rfl
+
+theorem registrationModuleEnv_fn8_numReturns (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[8]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).numReturns = 1 := by
+  unfold registrationModuleEnv; rfl
+
+theorem registrationModuleEnv_fn8_body (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[8]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).body =
+      .native o.compressedPointToBytes := by
+  unfold registrationModuleEnv; rfl
+
+/-! Fn9 = newScalarFromSha2_512Desc (native, 1→1) -/
+theorem registrationModuleEnv_fn9_numParams (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[9]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).numParams = 1 := by
+  unfold registrationModuleEnv; rfl
+
+theorem registrationModuleEnv_fn9_numReturns (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[9]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).numReturns = 1 := by
+  unfold registrationModuleEnv; rfl
+
+theorem registrationModuleEnv_fn9_body (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[9]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).body =
+      .native newScalarFromSha2_512 := by
+  unfold registrationModuleEnv; rfl
+
+/-! Fn10 = hashToPointBase (native, 0→1) -/
+theorem registrationModuleEnv_fn10_numParams (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[10]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).numParams = 0 := by
+  unfold registrationModuleEnv; rfl
+
+theorem registrationModuleEnv_fn10_numReturns (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[10]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).numReturns = 1 := by
+  unfold registrationModuleEnv; rfl
+
+theorem registrationModuleEnv_fn10_body (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[10]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).body =
+      .native o.hashToPointBase := by
+  unfold registrationModuleEnv; rfl
+
+/-! Fn11 = pubkeyToPoint wrapper (nativeRef, 1→1) -/
+theorem registrationModuleEnv_fn11_numParams (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[11]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).numParams = 1 := by
+  unfold registrationModuleEnv; rfl
+
+theorem registrationModuleEnv_fn11_numReturns (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[11]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).numReturns = 1 := by
+  unfold registrationModuleEnv; rfl
+
+theorem registrationModuleEnv_fn11_body (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[11]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).body =
+      .nativeRef (wrapOracleImmRef1 o.pubkeyToPoint) := by
+  unfold registrationModuleEnv; rfl
+
+/-! Fn12 = pointMul wrapper (nativeRef, 2→1) -/
+theorem registrationModuleEnv_fn12_numParams (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[12]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).numParams = 2 := by
+  unfold registrationModuleEnv; rfl
+
+theorem registrationModuleEnv_fn12_numReturns (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[12]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).numReturns = 1 := by
+  unfold registrationModuleEnv; rfl
+
+theorem registrationModuleEnv_fn12_body (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[12]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).body =
+      .nativeRef (wrapOracleImmRef2 o.pointMul) := by
+  unfold registrationModuleEnv; rfl
+
+/-! Fn13 = pointAdd wrapper (nativeRef, 2→1) -/
+theorem registrationModuleEnv_fn13_numParams (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[13]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).numParams = 2 := by
+  unfold registrationModuleEnv; rfl
+
+theorem registrationModuleEnv_fn13_numReturns (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[13]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).numReturns = 1 := by
+  unfold registrationModuleEnv; rfl
+
+theorem registrationModuleEnv_fn13_body (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[13]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).body =
+      .nativeRef (wrapOracleImmRef2 o.pointAdd) := by
+  unfold registrationModuleEnv; rfl
+
+/-! Fn14 = pointDecompress wrapper (nativeRef, 1→1) -/
+theorem registrationModuleEnv_fn14_numParams (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[14]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).numParams = 1 := by
+  unfold registrationModuleEnv; rfl
+
+theorem registrationModuleEnv_fn14_numReturns (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[14]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).numReturns = 1 := by
+  unfold registrationModuleEnv; rfl
+
+theorem registrationModuleEnv_fn14_body (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[14]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).body =
+      .nativeRef (wrapOracleImmRef1 o.pointDecompress) := by
+  unfold registrationModuleEnv; rfl
+
+/-! Fn15 = pointEquals wrapper (nativeRef, 2→1) -/
+theorem registrationModuleEnv_fn15_numParams (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[15]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).numParams = 2 := by
+  unfold registrationModuleEnv; rfl
+
+theorem registrationModuleEnv_fn15_numReturns (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[15]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).numReturns = 1 := by
+  unfold registrationModuleEnv; rfl
+
+theorem registrationModuleEnv_fn15_body (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[15]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).body =
+      .nativeRef (wrapOracleImmRef2 o.pointEquals) := by
+  unfold registrationModuleEnv; rfl
+
 /-! ### PC 4 / 13 — `.call 1` (option::is_some<T>, nativeRef, 1→1) -/
 
 theorem step_registration_pc4 (env_orig : RegistrationNativeOracle)
@@ -2481,6 +2720,31 @@ theorem registration_early_error_compressedPoint_none
   unfold run
   rw [step1_none]
 
+/-! ## Fuel-exhaustion corollaries -/
+
+/-- With fuel = 0, `run` trivially returns `.error`. -/
+@[simp] theorem run_registration_fuel_zero (o : RegistrationNativeOracle) (args : List MoveValue) :
+    run (registrationModuleEnv o) (registrationInitFrame args) [] [] MachineState.empty 0 = .error := rfl
+
+/-- Consequence of `eval_registration_eq_run`: `eval` at fuel 0 is `.error`. -/
+theorem eval_registration_fuel_zero (o : RegistrationNativeOracle) (args : List MoveValue) :
+    eval (registrationModuleEnv o) verifyRegistrationProofIdx args 0 MachineState.empty = .error := by
+  rw [eval_registration_eq_run]
+  rfl
+
+/-! ## Smoke: `registrationInitFrame` field-access sanity
+
+Quick sanity theorems ensuring that basic projections on `registrationInitFrame` compute as
+expected — useful as `simp`-warm lemmas for future composition work. -/
+
+@[simp] theorem registrationInitFrame_code_size_eq (args : List MoveValue) :
+    (registrationInitFrame args).code.size = 84 :=
+  registrationInitFrame_code_size args
+
+@[simp] theorem registrationInitFrame_locals_size_eq (args : List MoveValue) :
+    (registrationInitFrame args).locals.size = args.length + 12 :=
+  registrationInitFrame_locals_size args
+
 /-- `eval` form of the early-error composition — combines `eval_registration_eq_run` with
 `registration_early_error_compressedPoint_none` so callers can see the top-level statement. -/
 theorem eval_registration_early_error_compressedPoint_none
@@ -2496,9 +2760,696 @@ theorem eval_registration_early_error_compressedPoint_none
   exact registration_early_error_compressedPoint_none o chainId sender contract token
     ekBa commitBa respBa fuel hfuel hnone
 
+/-- `.dropMs` form — this is the shape `registration_eval_equiv_functional_sim` requires on its
+LHS. Closing this case on the `none` branch matches `verifyRegistrationBytecodeResult`'s
+early-error match (which reduces to `.error`). -/
+theorem eval_registration_early_error_compressedPoint_none_dropMs
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (fuel : Nat) (hfuel : 2 ≤ fuel)
+    (hnone : o.newCompressedPointFromBytes
+        [.vector .u8 (commitBa.toList.map .u8)] = none) :
+    (eval (registrationModuleEnv o) verifyRegistrationProofIdx
+        (registrationArgs chainId sender contract token ekBa commitBa respBa)
+        fuel MachineState.empty).dropMs = .error := by
+  rw [eval_registration_early_error_compressedPoint_none o chainId sender contract token
+      ekBa commitBa respBa fuel hfuel hnone]
+  simp
+
+/-! ## Functional-sim side of the early-error case
+
+When `o.newCompressedPointFromBytes [...] = none`, the functional-sim `verifyRegistrationBytecodeResult`
+returns `.error` (its first pattern-match branch on `single?` gives `none`, falling through to
+the `| _ => .error` case). -/
+
+theorem verifyRegistrationBytecodeResult_compressedPoint_none
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (hnone : o.newCompressedPointFromBytes
+        [.vector .u8 (commitBa.toList.map .u8)] = none) :
+    verifyRegistrationBytecodeResult o
+        (registrationArgs chainId sender contract token ekBa commitBa respBa) = .error := by
+  unfold verifyRegistrationBytecodeResult
+  simp [single?, hnone]
+
+/-! ## Partial `registration_eval_equiv_functional_sim` — `compressedPoint = none` case
+
+Closes the `newCompressedPointFromBytes = none` branch of the top-level functional-sim
+equivalence. Both sides reduce to `.error`. This is the first complete branch of the final
+theorem — the `some` branch remains open (threads all 84 PCs). -/
+
+theorem registration_eval_equiv_functional_sim_compressedPoint_none
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (fuel : Nat) (hfuel : 2 ≤ fuel)
+    (hnone : o.newCompressedPointFromBytes
+        [.vector .u8 (commitBa.toList.map .u8)] = none) :
+    (eval (registrationModuleEnv o) verifyRegistrationProofIdx
+        (registrationArgs chainId sender contract token ekBa commitBa respBa)
+        fuel MachineState.empty).dropMs =
+    verifyRegistrationBytecodeResult o
+        (registrationArgs chainId sender contract token ekBa commitBa respBa) := by
+  rw [eval_registration_early_error_compressedPoint_none_dropMs o chainId sender contract token
+      ekBa commitBa respBa fuel hfuel hnone]
+  rw [verifyRegistrationBytecodeResult_compressedPoint_none o chainId sender contract token
+      ekBa commitBa respBa hnone]
+
+/-! ## Second complete branch — `compressedPoint` returns empty or multi-element list
+
+When `o.newCompressedPointFromBytes` returns `some []` or `some (_ :: _ :: _)` (not a singleton),
+both sides of the top-level theorem reduce to `.error`. On the Lean side, the step at PC 1
+produces `.error` because `handleNativeResult` sees `numReturns = 1` but the impl returned a
+wrong-arity list. On the functional-sim side, `single?` returns `none` on non-singletons,
+triggering the same `.error` fallthrough as the full-none case. -/
+
+/-- Eval-side closure for empty-list oracle: `eval` returns `.error`. -/
+theorem eval_registration_early_error_compressedPoint_empty
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (fuel : Nat) (hfuel : 2 ≤ fuel)
+    (hempty : o.newCompressedPointFromBytes
+        [.vector .u8 (commitBa.toList.map .u8)] = some []) :
+    eval (registrationModuleEnv o) verifyRegistrationProofIdx
+        (registrationArgs chainId sender contract token ekBa commitBa respBa)
+        fuel MachineState.empty = .error := by
+  rw [eval_registration_eq_run]
+  -- Fuel ≥ 2: peel PC 0 then invoke arity-mismatch lemma on PC 1.
+  have hf : ∃ f2, fuel = f2 + 2 := by
+    rcases fuel with _ | _ | f2
+    · omega
+    · omega
+    · exact ⟨f2, by omega⟩
+  obtain ⟨f2, rfl⟩ := hf
+  have step0 := step_registration_pc0_7args (registrationModuleEnv o) [] [] MachineState.empty
+    chainId sender contract token ekBa commitBa respBa
+  let f1 : Frame :=
+    { code := verifyRegistrationProofCode, pc := 1,
+      locals := (((registrationArgs chainId sender contract token ekBa commitBa respBa).map some ++
+                  List.replicate 12 none).toArray).set 5 none (by
+        show 5 < ((registrationArgs chainId sender contract token ekBa commitBa respBa).map some ++
+                  List.replicate 12 none).length
+        simp [registrationArgs]),
+      localRefs := (List.replicate 19 none).toArray }
+  have hf1_code : f1.code = verifyRegistrationProofCode := rfl
+  have hf1_pc : f1.pc = 1 := rfl
+  -- Use step_call_native_empty_ret1_mismatch to show step at PC 1 returns .error.
+  have hpc_lt : f1.pc < f1.code.size := by
+    rw [hf1_pc, hf1_code]; unfold verifyRegistrationProofCode; decide
+  have hc : f1.code[f1.pc]'hpc_lt = .call 0 := by
+    simp only [hf1_code, hf1_pc]; rfl
+  have hlt : (0 : Nat) < (registrationModuleEnv o).functions.size := by
+    rw [registrationModuleEnv_functions_size]; decide
+  have htake : takeN [.vector .u8 (commitBa.toList.map .u8)] 1 =
+      some ([.vector .u8 (commitBa.toList.map .u8)], []) := by
+    unfold takeN; simp
+  have step1_err := StepLemmas.step_call_native_empty_ret1_mismatch
+    (env := registrationModuleEnv o) (frame := f1) (cs := []) (ms := MachineState.empty)
+    0 [.vector .u8 (commitBa.toList.map .u8)] [] [.vector .u8 (commitBa.toList.map .u8)]
+    o.newCompressedPointFromBytes 1
+    hpc_lt hc hlt
+    (registrationModuleEnv_fn0_numParams o)
+    (registrationModuleEnv_fn0_numReturns o)
+    (registrationModuleEnv_fn0_body o)
+    htake hempty
+  rw [show f2 + 2 = (f2 + 1) + 1 from rfl]
+  rw [StepLemmas.run_succ_ok_of_step (f2 + 1) _ _ _ _ step0]
+  change run _ f1 _ _ _ _ = _
+  exact StepLemmas.run_succ_error_of_step f2 step1_err
+
+/-- Same for multi-element oracle. -/
+theorem eval_registration_early_error_compressedPoint_multi
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (fuel : Nat) (hfuel : 2 ≤ fuel)
+    (v1 v2 : MoveValue) (rest : List MoveValue)
+    (hmulti : o.newCompressedPointFromBytes
+        [.vector .u8 (commitBa.toList.map .u8)] = some (v1 :: v2 :: rest)) :
+    eval (registrationModuleEnv o) verifyRegistrationProofIdx
+        (registrationArgs chainId sender contract token ekBa commitBa respBa)
+        fuel MachineState.empty = .error := by
+  rw [eval_registration_eq_run]
+  have hf : ∃ f2, fuel = f2 + 2 := by
+    rcases fuel with _ | _ | f2
+    · omega
+    · omega
+    · exact ⟨f2, by omega⟩
+  obtain ⟨f2, rfl⟩ := hf
+  have step0 := step_registration_pc0_7args (registrationModuleEnv o) [] [] MachineState.empty
+    chainId sender contract token ekBa commitBa respBa
+  let f1 : Frame :=
+    { code := verifyRegistrationProofCode, pc := 1,
+      locals := (((registrationArgs chainId sender contract token ekBa commitBa respBa).map some ++
+                  List.replicate 12 none).toArray).set 5 none (by
+        show 5 < ((registrationArgs chainId sender contract token ekBa commitBa respBa).map some ++
+                  List.replicate 12 none).length
+        simp [registrationArgs]),
+      localRefs := (List.replicate 19 none).toArray }
+  have hf1_code : f1.code = verifyRegistrationProofCode := rfl
+  have hf1_pc : f1.pc = 1 := rfl
+  have hpc_lt : f1.pc < f1.code.size := by
+    rw [hf1_pc, hf1_code]; unfold verifyRegistrationProofCode; decide
+  have hc : f1.code[f1.pc]'hpc_lt = .call 0 := by
+    simp only [hf1_code, hf1_pc]; rfl
+  have hlt : (0 : Nat) < (registrationModuleEnv o).functions.size := by
+    rw [registrationModuleEnv_functions_size]; decide
+  have htake : takeN [.vector .u8 (commitBa.toList.map .u8)] 1 =
+      some ([.vector .u8 (commitBa.toList.map .u8)], []) := by
+    unfold takeN; simp
+  have step1_err := StepLemmas.step_call_native_multi_ret1_mismatch
+    (env := registrationModuleEnv o) (frame := f1) (cs := []) (ms := MachineState.empty)
+    0 [.vector .u8 (commitBa.toList.map .u8)] [] [.vector .u8 (commitBa.toList.map .u8)]
+    o.newCompressedPointFromBytes 1 v1 v2 rest
+    hpc_lt hc hlt
+    (registrationModuleEnv_fn0_numParams o)
+    (registrationModuleEnv_fn0_numReturns o)
+    (registrationModuleEnv_fn0_body o)
+    htake hmulti
+  rw [show f2 + 2 = (f2 + 1) + 1 from rfl]
+  rw [StepLemmas.run_succ_ok_of_step (f2 + 1) _ _ _ _ step0]
+  change run _ f1 _ _ _ _ = _
+  exact StepLemmas.run_succ_error_of_step f2 step1_err
+
+/-- Functional-sim side: `verifyRegistrationBytecodeResult` returns `.error` on empty oracle. -/
+theorem verifyRegistrationBytecodeResult_compressedPoint_empty
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (hempty : o.newCompressedPointFromBytes
+        [.vector .u8 (commitBa.toList.map .u8)] = some []) :
+    verifyRegistrationBytecodeResult o
+        (registrationArgs chainId sender contract token ekBa commitBa respBa) = .error := by
+  unfold verifyRegistrationBytecodeResult
+  simp [single?, hempty]
+
+/-- Functional-sim side: `verifyRegistrationBytecodeResult` returns `.error` on multi-element oracle. -/
+theorem verifyRegistrationBytecodeResult_compressedPoint_multi
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (v1 v2 : MoveValue) (rest : List MoveValue)
+    (hmulti : o.newCompressedPointFromBytes
+        [.vector .u8 (commitBa.toList.map .u8)] = some (v1 :: v2 :: rest)) :
+    verifyRegistrationBytecodeResult o
+        (registrationArgs chainId sender contract token ekBa commitBa respBa) = .error := by
+  unfold verifyRegistrationBytecodeResult
+  simp [single?, hmulti]
+
+/-- Second complete branch of the top-level theorem — empty oracle case. -/
+theorem registration_eval_equiv_functional_sim_compressedPoint_empty
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (fuel : Nat) (hfuel : 2 ≤ fuel)
+    (hempty : o.newCompressedPointFromBytes
+        [.vector .u8 (commitBa.toList.map .u8)] = some []) :
+    (eval (registrationModuleEnv o) verifyRegistrationProofIdx
+        (registrationArgs chainId sender contract token ekBa commitBa respBa)
+        fuel MachineState.empty).dropMs =
+    verifyRegistrationBytecodeResult o
+        (registrationArgs chainId sender contract token ekBa commitBa respBa) := by
+  rw [eval_registration_early_error_compressedPoint_empty o chainId sender contract token
+      ekBa commitBa respBa fuel hfuel hempty]
+  rw [verifyRegistrationBytecodeResult_compressedPoint_empty o chainId sender contract token
+      ekBa commitBa respBa hempty]
+  simp
+
+/-- Third complete branch — multi-element oracle case. -/
+theorem registration_eval_equiv_functional_sim_compressedPoint_multi
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (fuel : Nat) (hfuel : 2 ≤ fuel)
+    (v1 v2 : MoveValue) (rest : List MoveValue)
+    (hmulti : o.newCompressedPointFromBytes
+        [.vector .u8 (commitBa.toList.map .u8)] = some (v1 :: v2 :: rest)) :
+    (eval (registrationModuleEnv o) verifyRegistrationProofIdx
+        (registrationArgs chainId sender contract token ekBa commitBa respBa)
+        fuel MachineState.empty).dropMs =
+    verifyRegistrationBytecodeResult o
+        (registrationArgs chainId sender contract token ekBa commitBa respBa) := by
+  rw [eval_registration_early_error_compressedPoint_multi o chainId sender contract token
+      ekBa commitBa respBa fuel hfuel v1 v2 rest hmulti]
+  rw [verifyRegistrationBytecodeResult_compressedPoint_multi o chainId sender contract token
+      ekBa commitBa respBa v1 v2 rest hmulti]
+  simp
+
+/-! ## Unified non-singleton branch
+
+All three "arity mismatch" cases combined: whenever `single? (oracle result) = none`, both
+sides reduce to `.error`. This captures the entire non-singleton case of the top-level
+theorem in a single statement. -/
+
+/-! ## Functional-sim singleton reduction lemmas
+
+Concrete full-reduction lemmas for specific singleton-sub-case oracle shapes. Each proves
+that `verifyRegistrationBytecodeResult` reduces to a specific `.error` / `.aborted code` /
+`blockB …` result for a given concrete oracle output shape. -/
+
+/-- When `newCompressedPointFromBytes` returns `some [.struct_ [.bool false]]` (wrapped None),
+the functional sim aborts with `ESIGMA_PROTOCOL_VERIFY_FAILED_ABORT_CODE` (= 65537).
+
+The proof unfolds `verifyRegistrationBytecodeResult` + inlines `single?` / `optionIsSome`
+matches via `simp only`. The `.struct_ [.bool false]` shape makes `optionIsSome` return
+`.bool false`, taking the abort branch. -/
+theorem verifyRegistrationBytecodeResult_rOpt_wrappedNone
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (hsome : o.newCompressedPointFromBytes
+        [.vector .u8 (commitBa.toList.map .u8)] = some [.struct_ [.bool false]]) :
+    verifyRegistrationBytecodeResult o
+        (registrationArgs chainId sender contract token ekBa commitBa respBa) =
+    .aborted ESIGMA_PROTOCOL_VERIFY_FAILED_ABORT_CODE := by
+  unfold verifyRegistrationBytecodeResult
+  simp only [single?, hsome, optionIsSome]
+
+/-- When `rOpt = .struct_ (.bool true :: rCompressed :: rest)` (wrapped-Some), the functional
+sim dispatches to `blockB` with `rCompressed` extracted. -/
+theorem verifyRegistrationBytecodeResult_rOpt_wrappedSome
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (rCompressed : MoveValue) (rest : List MoveValue)
+    (hsome : o.newCompressedPointFromBytes
+        [.vector .u8 (commitBa.toList.map .u8)] = some [.struct_ (.bool true :: rCompressed :: rest)]) :
+    verifyRegistrationBytecodeResult o
+        (registrationArgs chainId sender contract token ekBa commitBa respBa) =
+    verifyRegistrationBytecodeResult.blockB o chainId sender contract token
+      (.struct_ [.vector .u8 (ekBa.toList.map .u8)]) rCompressed
+      (.vector .u8 (respBa.toList.map .u8)) := by
+  unfold verifyRegistrationBytecodeResult
+  simp only [single?, hsome, optionIsSome, optionExtract]
+
+/-! ## blockB shape reductions
+
+`blockB`'s outer match is on `single? (o.newScalarFromBytes [respBytes])`. The following
+lemmas close each outcome of that match in the same pattern as the outer `verifyRegistrationBytecodeResult`
+reductions above. -/
+
+/-- `blockB` with `newScalarFromBytes = none` reduces to `.error`. -/
+theorem verifyRegistrationBytecodeResult_blockB_scalarNone
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token : ByteArray)
+    (ek rCompressed : MoveValue) (respBytes : MoveValue)
+    (hnone : o.newScalarFromBytes [respBytes] = none) :
+    verifyRegistrationBytecodeResult.blockB o chainId sender contract token
+      ek rCompressed respBytes = .error := by
+  unfold verifyRegistrationBytecodeResult.blockB
+  simp only [single?, hnone]
+
+/-- `blockB` with `newScalarFromBytes = some []` reduces to `.error`. -/
+theorem verifyRegistrationBytecodeResult_blockB_scalarEmpty
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token : ByteArray)
+    (ek rCompressed : MoveValue) (respBytes : MoveValue)
+    (hempty : o.newScalarFromBytes [respBytes] = some []) :
+    verifyRegistrationBytecodeResult.blockB o chainId sender contract token
+      ek rCompressed respBytes = .error := by
+  unfold verifyRegistrationBytecodeResult.blockB
+  simp only [single?, hempty]
+
+/-- `blockB` with `newScalarFromBytes = some [sOpt]` where `sOpt = .struct_ [.bool false]`
+aborts with `ESIGMA_PROTOCOL_VERIFY_FAILED_ABORT_CODE`. -/
+theorem verifyRegistrationBytecodeResult_blockB_sOpt_wrappedNone
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token : ByteArray)
+    (ek rCompressed : MoveValue) (respBytes : MoveValue)
+    (hsome : o.newScalarFromBytes [respBytes] = some [.struct_ [.bool false]]) :
+    verifyRegistrationBytecodeResult.blockB o chainId sender contract token
+      ek rCompressed respBytes = .aborted ESIGMA_PROTOCOL_VERIFY_FAILED_ABORT_CODE := by
+  unfold verifyRegistrationBytecodeResult.blockB
+  simp only [single?, hsome, optionIsSome]
+
+/-- `blockB` with scalar-parse success dispatches to `blockCDE`. -/
+theorem verifyRegistrationBytecodeResult_blockB_sOpt_wrappedSome
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token : ByteArray)
+    (ek rCompressed : MoveValue) (respBytes : MoveValue)
+    (s : MoveValue) (sRest : List MoveValue)
+    (hsome : o.newScalarFromBytes [respBytes] = some [.struct_ (.bool true :: s :: sRest)]) :
+    verifyRegistrationBytecodeResult.blockB o chainId sender contract token
+      ek rCompressed respBytes =
+    verifyRegistrationBytecodeResult.blockCDE o chainId sender contract token
+      ek rCompressed s := by
+  unfold verifyRegistrationBytecodeResult.blockB
+  simp only [single?, hsome, optionIsSome, optionExtract]
+
+/-- `blockB` with multi-element scalar-parse result reduces to `.error`. -/
+theorem verifyRegistrationBytecodeResult_blockB_scalarMulti
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token : ByteArray)
+    (ek rCompressed : MoveValue) (respBytes : MoveValue)
+    (v1 v2 : MoveValue) (rest : List MoveValue)
+    (hmulti : o.newScalarFromBytes [respBytes] = some (v1 :: v2 :: rest)) :
+    verifyRegistrationBytecodeResult.blockB o chainId sender contract token
+      ek rCompressed respBytes = .error := by
+  unfold verifyRegistrationBytecodeResult.blockB
+  simp only [single?, hmulti]
+
+/-! ## blockCDE shape reductions
+
+`blockCDE` first runs `buildFSMessageMv` (pure, no oracle case-split). If that returns `none`,
+the whole block fails to `.error`. Each subsequent oracle native is dispatched similarly. -/
+
+/-- `blockCDE` with `buildFSMessageMv = none` reduces to `.error`. -/
+theorem verifyRegistrationBytecodeResult_blockCDE_fsMsgNone
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token : ByteArray)
+    (ek rCompressed s : MoveValue)
+    (hnone : buildFSMessageMv o chainId sender contract token ek rCompressed = none) :
+    verifyRegistrationBytecodeResult.blockCDE o chainId sender contract token
+      ek rCompressed s = .error := by
+  unfold verifyRegistrationBytecodeResult.blockCDE
+  simp only [hnone]
+
+/-- `blockCDE` with FS-message success, FS-challenge native returning `none` → `.error`. -/
+theorem verifyRegistrationBytecodeResult_blockCDE_eNone
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token : ByteArray)
+    (ek rCompressed s : MoveValue) (msgVal : MoveValue)
+    (hfs : buildFSMessageMv o chainId sender contract token ek rCompressed = some msgVal)
+    (hnone : newScalarFromSha2_512 [msgVal] = none) :
+    verifyRegistrationBytecodeResult.blockCDE o chainId sender contract token
+      ek rCompressed s = .error := by
+  unfold verifyRegistrationBytecodeResult.blockCDE
+  simp only [hfs, single?, hnone]
+
+/-- `blockCDE` with FS-challenge success, `hashToPointBase` returning `none` → `.error`. -/
+theorem verifyRegistrationBytecodeResult_blockCDE_hNone
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token : ByteArray)
+    (ek rCompressed s : MoveValue) (msgVal e : MoveValue)
+    (hfs : buildFSMessageMv o chainId sender contract token ek rCompressed = some msgVal)
+    (he : newScalarFromSha2_512 [msgVal] = some [e])
+    (hnone : o.hashToPointBase [] = none) :
+    verifyRegistrationBytecodeResult.blockCDE o chainId sender contract token
+      ek rCompressed s = .error := by
+  unfold verifyRegistrationBytecodeResult.blockCDE
+  simp only [hfs, single?, he, hnone]
+
+/-- `blockCDE` success path through `pointEquals = some [.bool true]` → `.returned [] MachineState.empty`.
+This is the full-success case — the registration proof verifies and the function returns
+cleanly. Threads through 7 nested oracle-result hypotheses. -/
+theorem verifyRegistrationBytecodeResult_blockCDE_success
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token : ByteArray)
+    (ek rCompressed s : MoveValue)
+    (msgVal e h ekPt hs eke lhs rhs : MoveValue)
+    (hfs : buildFSMessageMv o chainId sender contract token ek rCompressed = some msgVal)
+    (he : newScalarFromSha2_512 [msgVal] = some [e])
+    (hh : o.hashToPointBase [] = some [h])
+    (hek : o.pubkeyToPoint [ek] = some [ekPt])
+    (hhs : o.pointMul [h, s] = some [hs])
+    (heke : o.pointMul [ekPt, e] = some [eke])
+    (hadd : o.pointAdd [hs, eke] = some [lhs])
+    (hdec : o.pointDecompress [rCompressed] = some [rhs])
+    (heq : o.pointEquals [lhs, rhs] = some [.bool true]) :
+    verifyRegistrationBytecodeResult.blockCDE o chainId sender contract token
+      ek rCompressed s = .returned [] MachineState.empty := by
+  unfold verifyRegistrationBytecodeResult.blockCDE
+  simp only [hfs, single?, he, hh, hek, hhs, heke, hadd, hdec, heq]
+
+/-- `blockCDE` fail-verify path — oracle pointEquals returns `.bool false` → aborted. -/
+theorem verifyRegistrationBytecodeResult_blockCDE_verifyFailed
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token : ByteArray)
+    (ek rCompressed s : MoveValue)
+    (msgVal e h ekPt hs eke lhs rhs : MoveValue)
+    (hfs : buildFSMessageMv o chainId sender contract token ek rCompressed = some msgVal)
+    (he : newScalarFromSha2_512 [msgVal] = some [e])
+    (hh : o.hashToPointBase [] = some [h])
+    (hek : o.pubkeyToPoint [ek] = some [ekPt])
+    (hhs : o.pointMul [h, s] = some [hs])
+    (heke : o.pointMul [ekPt, e] = some [eke])
+    (hadd : o.pointAdd [hs, eke] = some [lhs])
+    (hdec : o.pointDecompress [rCompressed] = some [rhs])
+    (heq : o.pointEquals [lhs, rhs] = some [.bool false]) :
+    verifyRegistrationBytecodeResult.blockCDE o chainId sender contract token
+      ek rCompressed s = .aborted ESIGMA_PROTOCOL_VERIFY_FAILED_ABORT_CODE := by
+  unfold verifyRegistrationBytecodeResult.blockCDE
+  simp only [hfs, single?, he, hh, hek, hhs, heke, hadd, hdec, heq]
+
+/-! ## Abort code constants
+
+`ESIGMA_PROTOCOL_VERIFY_FAILED_ABORT_CODE` is `error::invalid_argument(1) = (1 << 16) + 1 = 65537`. -/
+
+/-- Numeric value of the sigma-verify-failed abort code. Useful for reviewers who want to see
+the concrete u64 value without chasing the definition. -/
+theorem ESIGMA_PROTOCOL_VERIFY_FAILED_ABORT_CODE_value :
+    ESIGMA_PROTOCOL_VERIFY_FAILED_ABORT_CODE = (65537 : UInt64) := rfl
+
+/-- Alternative form: `65537 = 1 + 2^16` showing the `error::invalid_argument(1)` structure. -/
+theorem ESIGMA_PROTOCOL_VERIFY_FAILED_ABORT_CODE_structured :
+    ESIGMA_PROTOCOL_VERIFY_FAILED_ABORT_CODE = ((1 : UInt64) <<< 16) + 1 := by
+  unfold ESIGMA_PROTOCOL_VERIFY_FAILED_ABORT_CODE; rfl
+
+/-- Bridges `errorInvalidArgument [.u64 1]` (the Lean oracle native) to the abort code —
+useful when threading through PC 72/77/82. -/
+theorem errorInvalidArgument_one_eq_abortCode :
+    errorInvalidArgument [.u64 1] = some [.u64 ESIGMA_PROTOCOL_VERIFY_FAILED_ABORT_CODE] := rfl
+
+/-- `errorInvalidArgument [.u64 2]` maps to `ERANGE_PROOF_VERIFICATION_FAILED`'s ordinal:
+`(1 << 16) + 2 = 65538`. -/
+theorem errorInvalidArgument_two :
+    errorInvalidArgument [.u64 2] = some [.u64 65538] := rfl
+
+/-! ## Additional blockCDE intermediate-failure shape reductions
+
+Complete coverage of every oracle-failure point in `blockCDE` so every branch has a
+reduction lemma. Each follows the same `unfold + simp only [hfs, single?, ...]` pattern. -/
+
+/-- `blockCDE` with `pubkeyToPoint` returning `none` (ek decode fails) → `.error`. -/
+theorem verifyRegistrationBytecodeResult_blockCDE_ekPtNone
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token : ByteArray)
+    (ek rCompressed s : MoveValue) (msgVal e h : MoveValue)
+    (hfs : buildFSMessageMv o chainId sender contract token ek rCompressed = some msgVal)
+    (he : newScalarFromSha2_512 [msgVal] = some [e])
+    (hh : o.hashToPointBase [] = some [h])
+    (hnone : o.pubkeyToPoint [ek] = none) :
+    verifyRegistrationBytecodeResult.blockCDE o chainId sender contract token
+      ek rCompressed s = .error := by
+  unfold verifyRegistrationBytecodeResult.blockCDE
+  simp only [hfs, single?, he, hh, hnone]
+
+/-- `blockCDE` with first `pointMul` (h · s) returning `none` → `.error`. -/
+theorem verifyRegistrationBytecodeResult_blockCDE_hsNone
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token : ByteArray)
+    (ek rCompressed s : MoveValue) (msgVal e h ekPt : MoveValue)
+    (hfs : buildFSMessageMv o chainId sender contract token ek rCompressed = some msgVal)
+    (he : newScalarFromSha2_512 [msgVal] = some [e])
+    (hh : o.hashToPointBase [] = some [h])
+    (hek : o.pubkeyToPoint [ek] = some [ekPt])
+    (hnone : o.pointMul [h, s] = none) :
+    verifyRegistrationBytecodeResult.blockCDE o chainId sender contract token
+      ek rCompressed s = .error := by
+  unfold verifyRegistrationBytecodeResult.blockCDE
+  simp only [hfs, single?, he, hh, hek, hnone]
+
+/-- `blockCDE` with second `pointMul` (ek · e) returning `none` → `.error`. -/
+theorem verifyRegistrationBytecodeResult_blockCDE_ekeNone
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token : ByteArray)
+    (ek rCompressed s : MoveValue) (msgVal e h ekPt hs : MoveValue)
+    (hfs : buildFSMessageMv o chainId sender contract token ek rCompressed = some msgVal)
+    (he : newScalarFromSha2_512 [msgVal] = some [e])
+    (hh : o.hashToPointBase [] = some [h])
+    (hek : o.pubkeyToPoint [ek] = some [ekPt])
+    (hhs : o.pointMul [h, s] = some [hs])
+    (hnone : o.pointMul [ekPt, e] = none) :
+    verifyRegistrationBytecodeResult.blockCDE o chainId sender contract token
+      ek rCompressed s = .error := by
+  unfold verifyRegistrationBytecodeResult.blockCDE
+  simp only [hfs, single?, he, hh, hek, hhs, hnone]
+
+/-- `blockCDE` with `pointAdd` returning `none` → `.error`. -/
+theorem verifyRegistrationBytecodeResult_blockCDE_addNone
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token : ByteArray)
+    (ek rCompressed s : MoveValue) (msgVal e h ekPt hs eke : MoveValue)
+    (hfs : buildFSMessageMv o chainId sender contract token ek rCompressed = some msgVal)
+    (he : newScalarFromSha2_512 [msgVal] = some [e])
+    (hh : o.hashToPointBase [] = some [h])
+    (hek : o.pubkeyToPoint [ek] = some [ekPt])
+    (hhs : o.pointMul [h, s] = some [hs])
+    (heke : o.pointMul [ekPt, e] = some [eke])
+    (hnone : o.pointAdd [hs, eke] = none) :
+    verifyRegistrationBytecodeResult.blockCDE o chainId sender contract token
+      ek rCompressed s = .error := by
+  unfold verifyRegistrationBytecodeResult.blockCDE
+  simp only [hfs, single?, he, hh, hek, hhs, heke, hnone]
+
+/-- `blockCDE` with `pointDecompress` returning `none` → `.error`. -/
+theorem verifyRegistrationBytecodeResult_blockCDE_decNone
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token : ByteArray)
+    (ek rCompressed s : MoveValue) (msgVal e h ekPt hs eke lhs : MoveValue)
+    (hfs : buildFSMessageMv o chainId sender contract token ek rCompressed = some msgVal)
+    (he : newScalarFromSha2_512 [msgVal] = some [e])
+    (hh : o.hashToPointBase [] = some [h])
+    (hek : o.pubkeyToPoint [ek] = some [ekPt])
+    (hhs : o.pointMul [h, s] = some [hs])
+    (heke : o.pointMul [ekPt, e] = some [eke])
+    (hadd : o.pointAdd [hs, eke] = some [lhs])
+    (hnone : o.pointDecompress [rCompressed] = none) :
+    verifyRegistrationBytecodeResult.blockCDE o chainId sender contract token
+      ek rCompressed s = .error := by
+  unfold verifyRegistrationBytecodeResult.blockCDE
+  simp only [hfs, single?, he, hh, hek, hhs, heke, hadd, hnone]
+
+/-- `blockCDE` with `pointEquals` returning `none` → `.error`. -/
+theorem verifyRegistrationBytecodeResult_blockCDE_eqNone
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token : ByteArray)
+    (ek rCompressed s : MoveValue)
+    (msgVal e h ekPt hs eke lhs rhs : MoveValue)
+    (hfs : buildFSMessageMv o chainId sender contract token ek rCompressed = some msgVal)
+    (he : newScalarFromSha2_512 [msgVal] = some [e])
+    (hh : o.hashToPointBase [] = some [h])
+    (hek : o.pubkeyToPoint [ek] = some [ekPt])
+    (hhs : o.pointMul [h, s] = some [hs])
+    (heke : o.pointMul [ekPt, e] = some [eke])
+    (hadd : o.pointAdd [hs, eke] = some [lhs])
+    (hdec : o.pointDecompress [rCompressed] = some [rhs])
+    (hnone : o.pointEquals [lhs, rhs] = none) :
+    verifyRegistrationBytecodeResult.blockCDE o chainId sender contract token
+      ek rCompressed s = .error := by
+  unfold verifyRegistrationBytecodeResult.blockCDE
+  simp only [hfs, single?, he, hh, hek, hhs, heke, hadd, hdec, hnone]
+
+/-! ## PC 3 (immBorrowLoc 7) composition — deferred
+
+Extending the PC-threading through PC 3 requires capturing the `ContainerStore.alloc` side-effect,
+and Lean's dependent typing on `Array.get]'<bound>` recurs through the composition chain. The
+step lemma `StepLemmas.Refs.step_immBorrowLoc_fresh` is in place; the composition wiring
+requires more careful frame-threading than the straightforward stLoc / moveLoc compositions
+above. Parked as future work — not blocking the non-singleton closure below. -/
+
+theorem registration_eval_equiv_functional_sim_compressedPoint_nonSingleton
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (fuel : Nat) (hfuel : 2 ≤ fuel)
+    (hns : single? (o.newCompressedPointFromBytes
+        [.vector .u8 (commitBa.toList.map .u8)]) = none) :
+    (eval (registrationModuleEnv o) verifyRegistrationProofIdx
+        (registrationArgs chainId sender contract token ekBa commitBa respBa)
+        fuel MachineState.empty).dropMs =
+    verifyRegistrationBytecodeResult o
+        (registrationArgs chainId sender contract token ekBa commitBa respBa) := by
+  match horacle : o.newCompressedPointFromBytes [.vector .u8 (commitBa.toList.map .u8)] with
+  | none =>
+    exact registration_eval_equiv_functional_sim_compressedPoint_none o chainId sender
+      contract token ekBa commitBa respBa fuel hfuel horacle
+  | some [] =>
+    exact registration_eval_equiv_functional_sim_compressedPoint_empty o chainId sender
+      contract token ekBa commitBa respBa fuel hfuel horacle
+  | some [v] =>
+    -- Contradiction: hns says single? returns none, but single? (some [v]) = some v.
+    exfalso
+    simp [single?, horacle] at hns
+  | some (v1 :: v2 :: rest') =>
+    exact registration_eval_equiv_functional_sim_compressedPoint_multi o chainId sender
+      contract token ekBa commitBa respBa fuel hfuel v1 v2 rest' horacle
+
 /-! The `Run` helpers (`run_succ_ok_of_step`, `run_succ_error_of_step`, etc.) in
 `StepLemmas/Run.lean` provide a cleaner pattern for future compositions. Each PC becomes a
 one-line `rw` rather than manual `unfold run`. See the PC-0/1 inline proof above for the manual
 form; future composition theorems should prefer the `Run` helpers. -/
+
+/-! ## Happy-path 2-PC composition — PC 0 + PC 1 some
+
+When the commitment oracle returns `some [mv]`, after 2 steps the `run` equals `run` on a frame
+at PC 2 (with locals[5] cleared) and `mv` on the operand stack. Stated with `fuel = extraFuel + 2`
+so the subtraction doesn't complicate the proof. -/
+
+theorem registration_run_through_pc1_some
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (mv : MoveValue) (extraFuel : Nat)
+    (horacle : o.newCompressedPointFromBytes
+        [.vector .u8 (commitBa.toList.map .u8)] = some [mv]) :
+    run (registrationModuleEnv o)
+        (registrationInitFrame
+          (registrationArgs chainId sender contract token ekBa commitBa respBa))
+        [] [] MachineState.empty (extraFuel + 2) =
+    run (registrationModuleEnv o)
+        { code := verifyRegistrationProofCode,
+          pc := 2,
+          locals := (((registrationArgs chainId sender contract token ekBa commitBa respBa).map some ++
+                      List.replicate 12 none).toArray).set 5 none (by
+            show 5 < ((registrationArgs chainId sender contract token ekBa commitBa respBa).map some ++
+                      List.replicate 12 none).length
+            simp [registrationArgs]),
+          localRefs := (List.replicate 19 none).toArray }
+        [] [mv] MachineState.empty extraFuel := by
+  have step0 := step_registration_pc0_7args (registrationModuleEnv o) [] [] MachineState.empty
+    chainId sender contract token ekBa commitBa respBa
+  -- Frame after PC 0: the one described on the RHS of step0.
+  let f1 : Frame :=
+    { code := verifyRegistrationProofCode, pc := 1,
+      locals := (((registrationArgs chainId sender contract token ekBa commitBa respBa).map some ++
+                  List.replicate 12 none).toArray).set 5 none (by
+        show 5 < ((registrationArgs chainId sender contract token ekBa commitBa respBa).map some ++
+                  List.replicate 12 none).length
+        simp [registrationArgs]),
+      localRefs := (List.replicate 19 none).toArray }
+  have hf1_code : f1.code = verifyRegistrationProofCode := rfl
+  have hf1_pc : f1.pc = 1 := rfl
+  have step1 := step_registration_pc1_some o [] (.vector .u8 (commitBa.toList.map .u8))
+    [] MachineState.empty f1 mv hf1_code hf1_pc horacle
+  -- Use `run_succ_ok_of_step` to peel off PC 0 and PC 1 in two lines, leaving `run ... extraFuel` on both sides.
+  rw [show extraFuel + 2 = (extraFuel + 1) + 1 from rfl]
+  rw [StepLemmas.run_succ_ok_of_step (extraFuel + 1) _ _ _ _ step0]
+  change run _ f1 _ _ _ _ = _
+  rw [show extraFuel + 1 = extraFuel + 1 from rfl]
+  rw [StepLemmas.run_succ_ok_of_step extraFuel _ _ _ _ step1]
+
+/-! ## Happy-path 3-PC composition — extends to PC 2 (stLoc 7)
+
+Stores the commitment oracle result `mv` into locals[7]. After 3 steps, stack is empty and
+locals[7] = some mv. -/
+
+theorem registration_run_through_pc2
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (mv : MoveValue) (extraFuel : Nat)
+    (horacle : o.newCompressedPointFromBytes
+        [.vector .u8 (commitBa.toList.map .u8)] = some [mv]) :
+    run (registrationModuleEnv o)
+        (registrationInitFrame
+          (registrationArgs chainId sender contract token ekBa commitBa respBa))
+        [] [] MachineState.empty (extraFuel + 3) =
+    run (registrationModuleEnv o)
+        { code := verifyRegistrationProofCode,
+          pc := 3,
+          locals := ((((registrationArgs chainId sender contract token ekBa commitBa respBa).map some ++
+                        List.replicate 12 none).toArray).set 5 none (by
+            show 5 < ((registrationArgs chainId sender contract token ekBa commitBa respBa).map some ++
+                      List.replicate 12 none).length
+            simp [registrationArgs])).set 7 (some mv) (by
+              show 7 < (((registrationArgs chainId sender contract token ekBa commitBa respBa).map some ++
+                         List.replicate 12 none).toArray).size
+              simp [registrationArgs]),
+          localRefs := (List.replicate 19 none).toArray }
+        [] [] MachineState.empty extraFuel := by
+  -- Bridge through pc1_some at fuel = (extraFuel + 1) + 2 = extraFuel + 3.
+  rw [show extraFuel + 3 = (extraFuel + 1) + 2 from by omega]
+  rw [registration_run_through_pc1_some o chainId sender contract token ekBa commitBa respBa
+      mv (extraFuel + 1) horacle]
+  -- Now we're at PC 2 with fuel (extraFuel + 1); apply PC 2 step lemma.
+  let f2 : Frame :=
+    { code := verifyRegistrationProofCode, pc := 2,
+      locals := (((registrationArgs chainId sender contract token ekBa commitBa respBa).map some ++
+                  List.replicate 12 none).toArray).set 5 none (by
+        show 5 < ((registrationArgs chainId sender contract token ekBa commitBa respBa).map some ++
+                  List.replicate 12 none).length
+        simp [registrationArgs]),
+      localRefs := (List.replicate 19 none).toArray }
+  have hf2_code : f2.code = verifyRegistrationProofCode := rfl
+  have hf2_pc : f2.pc = 2 := rfl
+  have hf2_locals : 7 < f2.locals.size := by
+    show 7 < Array.size (Array.set ((List.map some (registrationArgs chainId sender contract token
+                 ekBa commitBa respBa) ++ List.replicate 12 none).toArray) 5 none ?_)
+    · simp [registrationArgs]
+    · simp [registrationArgs]
+  have step2 := step_registration_pc2 (registrationModuleEnv o) [] mv [] MachineState.empty f2
+    hf2_code hf2_pc hf2_locals
+  change run _ f2 _ _ _ _ = _
+  rw [StepLemmas.run_succ_ok_of_step extraFuel _ _ _ _ step2]
 
 end MovementFormal.Experimental.ConfidentialAsset.Registration.EvalEquivRebuild

@@ -1,59 +1,60 @@
-import MovementFormal.Experimental.ConfidentialAsset.Registration.EvalEquiv.Part4
+import MovementFormal.Experimental.ConfidentialAsset.Registration.FunctionalSim
+import MovementFormal.MoveModel.ExecResultDropMs
+import MovementFormal.MoveModel.Programs.Registration
 
 /-!
-# Bytecode eval ≡ functional simulation (L2 ≡ L1.5)
+# Bytecode eval ≡ functional simulation (L2 ≡ L1.5) — axiom-only stub
 
-**Source:** `aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_proof.move`; bytecode `MovementFormal.MoveModel.Programs.Registration`.
+**Phase 1 day-one commit of the Lean architectural revision.**
 
-Proof that the bytecode evaluator `eval` on the transcribed 83-instruction
-`verify_registration_proof` (reference-semantic, from `movement` v7.4
-compiler output) agrees with the functional simulation
-`verifyRegistrationBytecodeResult` for any oracle — up to MachineState
-(the container store is non-empty after execution but irrelevant to the
-return values / abort code).
+The previous proof of this file (the ~8,600-line `EvalEquiv/Part1.lean` … `Part4.lean` chain)
+has been deleted. It is being rebuilt on the new architecture described in
+[`CONFIDENTIAL_ASSETS_UNIFIED_VERIFICATION_PLAN.md`](../../../../../CONFIDENTIAL_ASSETS_UNIFIED_VERIFICATION_PLAN.md) §4:
+symbolic state, `@[irreducible]` frame definitions, `Array.get?` in statements, and the
+per-instruction-class step lemmas now in `MovementFormal.MoveModel.StepLemmas.*`.
 
-## MachineState note
+## What this stub declares
 
-The real bytecode uses `immBorrowLoc` / `mutBorrowLoc` / `nativeRef`
-calls, so `eval` returns `.returned [] ms` where `ms` has a populated
-`ContainerStore`. The functional sim returns `.returned [] MachineState.empty`.
-We compare via `ExecResult.dropMs` which projects away the `MachineState`
-(defined in `MovementFormal.MoveModel.ExecResultDropMs`).
+- `registration_eval_equiv_functional_sim` — the only name `Refinement.lean` applies as a term.
+  Exported here as a **TEMPORARY AXIOM**, reproved in the Phase 1 completion commit.
 
-**Fuel monotonicity** (`run_fuel_ge`, `eval_fuel_ge`, `eval_fuel_ge_dropMs`) lives in
-`MovementFormal.Experimental.ConfidentialAsset.Registration.EvalFuelMonotonicity` for lightweight imports.
+## What this stub does *not* declare
 
-## Proof architecture
+The old `Part4.lean` exported two additional public theorems that were internal machinery for
+the old chain-based proof: `registration_eval_equiv_singleton_tail` and
+`registration_eval_equiv_singleton_tail_of_schnorr_hmac_bundle`. Nothing outside the deleted
+`EvalEquiv/Part*.lean` applies them as terms (grep of Refinement/EndToEnd/BytecodeDifftestBridge
+shows only doc-comment mentions). The rebuilt proof is free to introduce fresh internal lemmas
+with different names and shapes, so these two names do not need stubs here.
 
-The proof uses `@[simp]` lemmas to normalize both sides to the same
-match tree:
-
-**Eval side:**
-1. `run_succ_runStep` rewrites `run env frame cs stack ms (n+1)` →
-   `runStep env (step env frame cs stack ms) n`
-2. `step` unfolds to `handleNativeResult (impl args) numReturns ...`
-   (or `nativeRef` dispatch for ref-aware functions)
-3. `runStep_handleNativeResult_ret1` collapses to
-   `match oracleResult with | some [v] => run env ... | _ => .error`
-
-**Func side:**
-4. `match_single?` rewrites `match (single? x) with | some v => f v | _ => g`
-   to `match x with | some [v] => f v | _ => g`
-5. `bind_single?` rewrites `single? x >>= f` to
-   `match x with | some [v] => f v | _ => none`
-
-**Bridging:**
-6. `match_match_some_single_none` fuses
-   `match (match x with | some [v] => f v | _ => none) with | some w => g w | none => h`
-   into `match x with | some [v] => match f v with | some w => g w | none => h | _ => h`
-   (needed for `buildFSMessageMv`'s `Option MoveValue` boundary in `blockCDE`)
-
-After normalization, `simp`'s congruence closes matching branches.
-Remaining abstract branch splits are handled by `split <;> simp`.
-
-## Module split
-
-The proof body is split across `Registration/EvalEquiv/Part1.lean` … `Part4.lean` (same
-`MovementFormal.Experimental.ConfidentialAsset.Registration.EvalEquiv` namespace) so
-`lake build` can compile them incrementally. Import this file for the full module.
+Historical copies of the old `Part*.lean` files are available via git history; see the PR
+landing this day-one commit for the exact SHA.
 -/
+
+namespace MovementFormal.Experimental.ConfidentialAsset.Registration.EvalEquiv
+
+open MovementFormal.MoveModel
+open MovementFormal.MoveModel.Native.Registration
+open MovementFormal.MoveModel.Programs.Registration
+open MovementFormal.Experimental.ConfidentialAsset.Registration.FunctionalSim
+
+/-- TEMPORARY AXIOM: reproved in the Phase 1 completion commit (rebuild on new architecture). -/
+axiom registration_eval_equiv_functional_sim
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (fuel : Nat) (hfuel : fuel ≥ 200) :
+    (eval (registrationModuleEnv o) verifyRegistrationProofIdx
+        [.u8 chainId, .address sender, .address contract,
+         .struct_ [.vector .u8 (ekBa.toList.map .u8)],
+         .address token,
+         .vector .u8 (commitBa.toList.map .u8),
+         .vector .u8 (respBa.toList.map .u8)]
+        fuel MachineState.empty).dropMs =
+    verifyRegistrationBytecodeResult o
+        [.u8 chainId, .address sender, .address contract,
+         .struct_ [.vector .u8 (ekBa.toList.map .u8)],
+         .address token,
+         .vector .u8 (commitBa.toList.map .u8),
+         .vector .u8 (respBa.toList.map .u8)]
+
+end MovementFormal.Experimental.ConfidentialAsset.Registration.EvalEquiv

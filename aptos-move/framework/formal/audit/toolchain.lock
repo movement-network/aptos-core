@@ -1,0 +1,38 @@
+# CA formal-verification toolchain pin (audit/toolchain.lock)
+#
+# Phase 7 deliverable (plan §10.4). A reviewer who installs these exact versions
+# gets the same red/green from ./verify-ca.sh as the author's machine.
+#
+# Format: NAME=VERSION, one per line. Comments start with `#`. Not YAML/JSON — easy to grep.
+# Enforcement: CI in .github/workflows/move-prover-ca.yaml pins the same versions via
+# the Movement CLI installer; any drift is visible as a CI env-setup diff.
+#
+# **Status:** scaffold. Fill in the `unpinned` values once Phase 7 locks a Docker image
+# or Nix flake. Measure once and update.
+
+# Lean
+lean-toolchain=leanprover/lean4:v4.24.0
+# (source of truth: aptos-move/framework/formal/lean/lean-toolchain)
+
+# Movement CLI
+# Pinned version of the `movement` binary used to install the prover toolchain.
+movement-cli=unpinned
+# (plan §5.1 says `movement update prover-dependencies` installs Boogie 3.5.1 / Z3 4.11.2 / CVC5 0.0.3)
+
+# Move Prover toolchain (installed by Movement CLI)
+boogie=3.5.1
+z3=4.11.2
+cvc5=0.0.3
+
+# Rust (difftest lane)
+# (source of truth: .github/workflows/formal-difftest.yaml)
+rust-toolchain=1.86.0
+
+# Base image (for reproducibility container)
+# Once Phase 7 lands a Docker image, pin its digest here.
+docker-base=unpinned
+docker-digest=unpinned
+
+# Host architecture
+# CI runs on ubuntu-latest (x86_64). ARM64 support is Phase 7 stretch goal.
+architecture=x86_64-linux

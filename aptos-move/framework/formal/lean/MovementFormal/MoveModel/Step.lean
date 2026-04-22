@@ -20,7 +20,7 @@ namespace MovementFormal.MoveModel
 Binary operations on same-width integer values. Returns `none` on type
 mismatch or arithmetic error (overflow, underflow, division by zero). -/
 
-private def intAdd : MoveValue → MoveValue → Option MoveValue
+def intAdd : MoveValue → MoveValue → Option MoveValue
   | .u8  a, .u8  b => some (.u8  (a + b))
   | .u16 a, .u16 b => some (.u16 (a + b))
   | .u32 a, .u32 b => some (.u32 (a + b))
@@ -29,7 +29,7 @@ private def intAdd : MoveValue → MoveValue → Option MoveValue
   | .u256 a, .u256 b => (U256.add a b).map .u256
   | _, _ => none
 
-private def intSub : MoveValue → MoveValue → Option MoveValue
+def intSub : MoveValue → MoveValue → Option MoveValue
   | .u8  a, .u8  b => some (.u8  (a - b))
   | .u16 a, .u16 b => some (.u16 (a - b))
   | .u32 a, .u32 b => some (.u32 (a - b))
@@ -38,7 +38,7 @@ private def intSub : MoveValue → MoveValue → Option MoveValue
   | .u256 a, .u256 b => (U256.sub a b).map .u256
   | _, _ => none
 
-private def intMul : MoveValue → MoveValue → Option MoveValue
+def intMul : MoveValue → MoveValue → Option MoveValue
   | .u8  a, .u8  b => some (.u8  (a * b))
   | .u16 a, .u16 b => some (.u16 (a * b))
   | .u32 a, .u32 b => some (.u32 (a * b))
@@ -47,7 +47,7 @@ private def intMul : MoveValue → MoveValue → Option MoveValue
   | .u256 a, .u256 b => (U256.mul a b).map .u256
   | _, _ => none
 
-private def intDiv : MoveValue → MoveValue → Option MoveValue
+def intDiv : MoveValue → MoveValue → Option MoveValue
   | .u8  _, .u8  0 => none
   | .u8  a, .u8  b => some (.u8  (a / b))
   | .u16 _, .u16 0 => none
@@ -60,7 +60,7 @@ private def intDiv : MoveValue → MoveValue → Option MoveValue
   | .u256 a, .u256 b => (U256.div a b).map .u256
   | _, _ => none
 
-private def intMod : MoveValue → MoveValue → Option MoveValue
+def intMod : MoveValue → MoveValue → Option MoveValue
   | .u8  _, .u8  0 => none
   | .u8  a, .u8  b => some (.u8  (a % b))
   | .u16 _, .u16 0 => none
@@ -75,21 +75,21 @@ private def intMod : MoveValue → MoveValue → Option MoveValue
 
 /-! ## Bitwise helpers -/
 
-private def intBitOr : MoveValue → MoveValue → Option MoveValue
+def intBitOr : MoveValue → MoveValue → Option MoveValue
   | .u8  a, .u8  b => some (.u8  (a ||| b))
   | .u16 a, .u16 b => some (.u16 (a ||| b))
   | .u32 a, .u32 b => some (.u32 (a ||| b))
   | .u64 a, .u64 b => some (.u64 (a ||| b))
   | _, _ => none
 
-private def intBitAnd : MoveValue → MoveValue → Option MoveValue
+def intBitAnd : MoveValue → MoveValue → Option MoveValue
   | .u8  a, .u8  b => some (.u8  (a &&& b))
   | .u16 a, .u16 b => some (.u16 (a &&& b))
   | .u32 a, .u32 b => some (.u32 (a &&& b))
   | .u64 a, .u64 b => some (.u64 (a &&& b))
   | _, _ => none
 
-private def intXor : MoveValue → MoveValue → Option MoveValue
+def intXor : MoveValue → MoveValue → Option MoveValue
   | .u8  a, .u8  b => some (.u8  (a ^^^ b))
   | .u16 a, .u16 b => some (.u16 (a ^^^ b))
   | .u32 a, .u32 b => some (.u32 (a ^^^ b))
@@ -110,24 +110,24 @@ def intLt : MoveValue → MoveValue → Option Bool
 /-- Exposed for refinement proofs that relate `lt` on the operand stack to `UInt64` ordering. -/
 theorem intLt_u64 (a b : UInt64) : intLt (.u64 a) (.u64 b) = some (decide (a < b)) := rfl
 
-private def intGt (a b : MoveValue) : Option Bool := intLt b a
+def intGt (a b : MoveValue) : Option Bool := intLt b a
 
-private def intLe (a b : MoveValue) : Option Bool := do
+def intLe (a b : MoveValue) : Option Bool := do
   let r ← intLt b a; return !r
 
-private def intGe (a b : MoveValue) : Option Bool := do
+def intGe (a b : MoveValue) : Option Bool := do
   let r ← intLt a b; return !r
 
 /-! ## Shift helpers -/
 
-private def intShl : MoveValue → UInt8 → Option MoveValue
+def intShl : MoveValue → UInt8 → Option MoveValue
   | .u8  a, n => if n.toNat ≥ 8   then none else some (.u8  (a <<< n))
   | .u16 a, n => if n.toNat ≥ 16  then none else some (.u16 (a <<< n.toUInt16))
   | .u32 a, n => if n.toNat ≥ 32  then none else some (.u32 (a <<< n.toUInt32))
   | .u64 a, n => if n.toNat ≥ 64  then none else some (.u64 (a <<< n.toUInt64))
   | _, _ => none
 
-private def intShr : MoveValue → UInt8 → Option MoveValue
+def intShr : MoveValue → UInt8 → Option MoveValue
   | .u8  a, n => if n.toNat ≥ 8   then none else some (.u8  (a >>> n))
   | .u16 a, n => if n.toNat ≥ 16  then none else some (.u16 (a >>> n.toUInt16))
   | .u32 a, n => if n.toNat ≥ 32  then none else some (.u32 (a >>> n.toUInt32))
@@ -136,7 +136,7 @@ private def intShr : MoveValue → UInt8 → Option MoveValue
 
 /-! ## Casting helpers -/
 
-private def intToNat : MoveValue → Option Nat
+def intToNat : MoveValue → Option Nat
   | .u8  n => some n.toNat
   | .u16 n => some n.toNat
   | .u32 n => some n.toNat
@@ -145,27 +145,27 @@ private def intToNat : MoveValue → Option Nat
   | .u256 n => some n.val
   | _ => none
 
-private def castToU8 (v : MoveValue) : Option MoveValue := do
+def castToU8 (v : MoveValue) : Option MoveValue := do
   let n ← intToNat v
   if n < 2 ^ 8 then some (.u8 n.toUInt8) else none
 
-private def castToU16 (v : MoveValue) : Option MoveValue := do
+def castToU16 (v : MoveValue) : Option MoveValue := do
   let n ← intToNat v
   if n < 2 ^ 16 then some (.u16 n.toUInt16) else none
 
-private def castToU32 (v : MoveValue) : Option MoveValue := do
+def castToU32 (v : MoveValue) : Option MoveValue := do
   let n ← intToNat v
   if n < 2 ^ 32 then some (.u32 n.toUInt32) else none
 
-private def castToU64 (v : MoveValue) : Option MoveValue := do
+def castToU64 (v : MoveValue) : Option MoveValue := do
   let n ← intToNat v
   if n < 2 ^ 64 then some (.u64 n.toUInt64) else none
 
-private def castToU128 (v : MoveValue) : Option MoveValue := do
+def castToU128 (v : MoveValue) : Option MoveValue := do
   let n ← intToNat v
   U128.ofNat? n |>.map .u128
 
-private def castToU256 (v : MoveValue) : Option MoveValue := do
+def castToU256 (v : MoveValue) : Option MoveValue := do
   let n ← intToNat v
   U256.ofNat? n |>.map .u256
 

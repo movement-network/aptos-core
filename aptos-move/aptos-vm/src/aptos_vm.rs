@@ -1320,7 +1320,7 @@ impl AptosVM {
         &self,
         resolver: &'r impl AptosMoveResolver,
         module_storage: &impl AptosModuleStorage,
-        session: UserSession<'r>,
+        mut session: UserSession<'r>,
         serialized_signers: &SerializedSigners,
         prologue_session_change_set: &SystemSessionChangeSet,
         gas_meter: &mut impl AptosGasMeter,
@@ -1349,25 +1349,101 @@ impl AptosVM {
                 .finish(Location::Undefined)
         };
 
-        // Timelock execution always uses the payload included in the outer timelock transaction.
-        // For hash-only proposals, the proposal stores only the table key; the executor must still
-        // provide the concrete payload here so the prologue can derive the same hash.
         let deserialization_error = || {
             VMStatus::error(
                 StatusCode::FAILED_TO_DESERIALIZE_ARGUMENT,
                 Some("Failed to deserialize timelock payload".to_string()),
             )
         };
-        let (entry_function, payload_bytes) = match executable {
+
+        // The executor may omit the payload when it is already stored on-chain.
+        // In that case the executor must supply hash = keccak256(bcs(payload) || salt),
+        // which is the transaction table key.  The VM uses this hash to call
+        // get_transaction(timelock_address, hash) and retrieves the stored payload.
+        // For hash-only proposals (no on-chain payload) the executor must always
+        // provide the payload explicitly; omitting it is an error.
+        let (entry_function, payload_bytes, effective_salt) = match executable {
             TransactionExecutableRef::EntryFunction(entry_function) => {
                 let payload_bytes =
                     bcs::to_bytes(&TimelockTransactionPayload::EntryFunction(
                         entry_function.clone(),
                     ))
                     .map_err(|_| invariant_violation_error())?;
-                (entry_function.clone(), payload_bytes)
+                (entry_function.clone(), payload_bytes, timelock.salt.clone())
             },
-            TransactionExecutableRef::Empty => return Err(deserialization_error()),
+            TransactionExecutableRef::Empty => {
+                // The executor provided hash = keccak256(bcs(payload) || salt) instead
+                // of the payload itself.  Use it to retrieve the on-chain transaction.
+                #[derive(serde::Deserialize)]
+                struct TimelockTransactionResult {
+                    payload: Option<Vec<u8>>,
+                    #[allow(dead_code)]
+                    creator: AccountAddress,
+                    #[allow(dead_code)]
+                    creation_time_secs: u64,
+                    #[allow(dead_code)]
+                    num_seconds_execute: u64,
+                    // Original salt stored in the proposal (may differ from timelock.salt).
+                    salt: Vec<u8>,
+                    #[allow(dead_code)]
+                    executed: bool,
+                }
+
+                // hash = keccak256(bcs(payload) || salt) is the table key; use it to
+                // fetch the stored TimelockTransaction from on-chain storage.
+                let tx_return: Vec<Vec<u8>> = session
+                    .execute(|session| {
+                        session.execute_function_bypass_visibility(
+                            &TIMELOCK_MODULE,
+                            GET_TRANSACTION,
+                            vec![],
+                            serialize_values(&vec![
+                                MoveValue::Address(timelock.timelock_address),
+                                MoveValue::vector_u8(timelock.hash.clone()),
+                            ]),
+                            gas_meter,
+                            traversal_context,
+                            module_storage,
+                        )
+                    })?
+                    .return_values
+                    .into_iter()
+                    .map(|(bytes, _ty)| bytes)
+                    .collect();
+
+                let tx_bytes = tx_return
+                    .first()
+                    .ok_or_else(|| invariant_violation_error())?;
+
+                let on_chain_tx = bcs::from_bytes::<TimelockTransactionResult>(tx_bytes)
+                    .map_err(|_| invariant_violation_error())?;
+
+                // payload field is None for hash-only proposals; the executor must
+                // provide the payload explicitly in that case.
+                let payload_bytes = on_chain_tx.payload.ok_or_else(|| {
+                    VMStatus::error(
+                        StatusCode::FAILED_TO_DESERIALIZE_ARGUMENT,
+                        Some(
+                            "Timelock transaction has no on-chain payload; \
+                             provide the payload explicitly"
+                                .to_string(),
+                        ),
+                    )
+                })?;
+
+                let payload =
+                    bcs::from_bytes::<TimelockTransactionPayload>(&payload_bytes)
+                        .map_err(|_| deserialization_error())?;
+
+                let entry_function = match payload {
+                    TimelockTransactionPayload::EntryFunction(ef) => ef,
+                };
+
+                // Use the salt stored in the on-chain transaction for cleanup so that
+                // get_transaction_hash(payload, salt) = keccak256(payload || salt)
+                // recomputes the original table key correctly.
+                (entry_function, payload_bytes, on_chain_tx.salt)
+            },
             TransactionExecutableRef::Script(_) => {
                 return Err(VMStatus::error(
                     StatusCode::FEATURE_UNDER_GATING,
@@ -1389,10 +1465,12 @@ impl AptosVM {
         );
 
         // Cleanup args: (executor_addr, timelock_addr, salt, payload_bytes)
+        // effective_salt is the original proposal salt; when payload was fetched from chain it
+        // comes from the stored TimelockTransaction rather than the outer transaction.
         let cleanup_args = serialize_values(&vec![
             MoveValue::Address(txn_data.sender),
             MoveValue::Address(timelock.timelock_address),
-            MoveValue::vector_u8(timelock.salt.clone()),
+            MoveValue::vector_u8(effective_salt),
             MoveValue::vector_u8(payload_bytes),
         ]);
 
@@ -2697,6 +2775,7 @@ impl AptosVM {
                     executable,
                     timelock.timelock_address,
                     timelock.salt.clone(),
+                    timelock.hash.clone(),
                     log_context,
                     traversal_context,
                 )?

@@ -12,11 +12,21 @@ use serde::{Deserialize, Serialize};
 pub struct Timelock {
     pub timelock_address: AccountAddress,
 
-    /// Salt that uniquely identifies this transaction within the timelock account.
+    /// Salt used together with the payload to derive the transaction hash.
+    /// The table key (hash) is `keccak256(bcs(payload) || salt)`.
     pub salt: Vec<u8>,
 
-    // Transaction payload is optional if already stored on chain.
+    /// Transaction payload. When `None` the VM fetches the payload from on-chain storage
+    /// using `hash` as the table key. The executor must have computed
+    /// `hash = keccak256(bcs(payload) || salt)` off-chain in that case.
     pub transaction_payload: Option<TimelockTransactionPayload>,
+
+    /// Transaction table key: `keccak256(bcs(payload) || salt)`.
+    /// Required when `transaction_payload` is `None` so the VM can look up the stored
+    /// payload via `timelock::get_transaction(timelock_address, hash)`.
+    /// When `transaction_payload` is `Some`, the VM derives the hash itself and this
+    /// field is ignored.
+    pub hash: Vec<u8>,
 }
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]

@@ -1604,6 +1604,10 @@ Validates that:
     <a href="timelock.md#0x1_timelock_assert_is_executor">assert_is_executor</a>(executor, timelock_account);
 
     <b>let</b> <a href="timelock.md#0x1_timelock">timelock</a> = <b>borrow_global</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(timelock_account);
+    // <a href="../../aptos-stdlib/../move-stdlib/doc/hash.md#0x1_hash">hash</a> = keccak256(payload || salt) is the transaction <a href="../../aptos-stdlib/doc/table.md#0x1_table">table</a> key.
+    // The VM always supplies a non-empty payload here: either the executor provided it
+    // directly, or the VM fetched it from on-chain storage via <a href="timelock.md#0x1_timelock_get_transaction">get_transaction</a>(<a href="../../aptos-stdlib/../move-stdlib/doc/hash.md#0x1_hash">hash</a>)
+    // before calling this function.
     <b>let</b> <a href="../../aptos-stdlib/../move-stdlib/doc/hash.md#0x1_hash">hash</a> = <a href="timelock.md#0x1_timelock_get_transaction_hash">get_transaction_hash</a>(payload, salt);
     <b>assert</b>!(
         <a href="timelock.md#0x1_timelock">timelock</a>.transactions.contains(<a href="../../aptos-stdlib/../move-stdlib/doc/hash.md#0x1_hash">hash</a>),
@@ -1615,8 +1619,8 @@ Validates that:
         now_seconds() &gt;= transaction.creation_time_secs + transaction.num_seconds_execute,
         <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_state">error::invalid_state</a>(<a href="timelock.md#0x1_timelock_ETIMELOCK_NOT_EXPIRED">ETIMELOCK_NOT_EXPIRED</a>),
     );
-    // If a payload is stored on-chain and a non-empty payload is provided, verify they match.
-    <b>if</b> (transaction.payload.is_some() && !payload.is_empty()) {
+    // If a payload is stored on-chain, verify it matches the provided payload.
+    <b>if</b> (transaction.payload.is_some()) {
         <b>assert</b>!(payload == *transaction.payload.borrow(), <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="timelock.md#0x1_timelock_EPAYLOAD_DOES_NOT_MATCH">EPAYLOAD_DOES_NOT_MATCH</a>));
     };
 }

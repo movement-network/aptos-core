@@ -375,6 +375,7 @@ impl<'a, S: StateView> MoveConverter<'a, S> {
                 TransactionPayload::TimelockPayload(TimelockPayload {
                     timelock_address: timelock.timelock_address.into(),
                     salt: timelock.salt.into(),
+                    hash: timelock.hash.into(),
                     transaction_payload,
                 })
             },
@@ -872,6 +873,7 @@ impl<'a, S: StateView> MoveConverter<'a, S> {
                 Target::Timelock(Timelock {
                     timelock_address: timelock.timelock_address.into(),
                     salt: timelock.salt.0,
+                    hash: timelock.hash.0,
                     transaction_payload,
                 })
             },

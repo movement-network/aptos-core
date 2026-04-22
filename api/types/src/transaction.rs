@@ -1079,10 +1079,18 @@ pub enum TimelockTransactionPayload {
 pub struct TimelockPayload {
     pub timelock_address: Address,
 
-    /// Salt that uniquely identifies this transaction within the timelock account.
+    /// Salt used together with the payload to derive the transaction hash.
+    /// The table key (hash) is `keccak256(bcs(payload) || salt)`.
     pub salt: HexEncodedBytes,
 
-    /// Transaction payload is optional if already stored on chain.
+    /// Transaction table key: `keccak256(bcs(payload) || salt)`.
+    /// Required when `transaction_payload` is absent so the VM can look up the
+    /// stored payload via `timelock::get_transaction(timelock_address, hash)`.
+    /// When `transaction_payload` is present the VM derives the hash itself.
+    pub hash: HexEncodedBytes,
+
+    /// Transaction payload. Optional when the payload is already stored on-chain;
+    /// the executor must supply `hash` in that case.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub transaction_payload: Option<TimelockTransactionPayload>,

@@ -568,6 +568,10 @@ module aptos_framework::timelock {
         assert_is_executor(executor, timelock_account);
 
         let timelock = borrow_global<TimelockAccount>(timelock_account);
+        // hash = keccak256(payload || salt) is the transaction table key.
+        // The VM always supplies a non-empty payload here: either the executor provided it
+        // directly, or the VM fetched it from on-chain storage via get_transaction(hash)
+        // before calling this function.
         let hash = get_transaction_hash(payload, salt);
         assert!(
             timelock.transactions.contains(hash),
@@ -579,8 +583,8 @@ module aptos_framework::timelock {
             now_seconds() >= transaction.creation_time_secs + transaction.num_seconds_execute,
             error::invalid_state(ETIMELOCK_NOT_EXPIRED),
         );
-        // If a payload is stored on-chain and a non-empty payload is provided, verify they match.
-        if (transaction.payload.is_some() && !payload.is_empty()) {
+        // If a payload is stored on-chain, verify it matches the provided payload.
+        if (transaction.payload.is_some()) {
             assert!(payload == *transaction.payload.borrow(), error::invalid_argument(EPAYLOAD_DOES_NOT_MATCH));
         };
     }

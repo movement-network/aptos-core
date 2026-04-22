@@ -77,6 +77,7 @@ pub static TIMELOCK_MODULE: Lazy<ModuleId> = Lazy::new(|| {
     )
 });
 pub const VALIDATE_TIMELOCK_TRANSACTION: &IdentStr = ident_str!("validate_timelock_transaction");
+pub const GET_TRANSACTION: &IdentStr = ident_str!("get_transaction");
 
 pub static TRANSACTION_FEE_MODULE: Lazy<ModuleId> = Lazy::new(|| {
     ModuleId::new(

@@ -2507,4 +2507,3 @@ theorem registration_step_pc30_call_appendContract (o : RegistrationNativeOracle
   rw [hnative]
   simp only [handleNativeResult_ret0]
   rfl
-

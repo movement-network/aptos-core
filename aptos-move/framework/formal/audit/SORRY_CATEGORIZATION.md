@@ -1,17 +1,23 @@
 # Sorry Categorization - Confidential Assets Phase 6
 
 **Generated:** 2026-04-23  
+**Updated:** 2026-04-23 04:00 AM (accurate recount)  
 **Purpose:** Systematic categorization of all `sorry` placeholders to guide completion work
 
 ## Summary Statistics
 
+**⚠️ UPDATED COUNTS (2026-04-23):** Actual file scan reveals 23 sorries, not 11 previously documented.
+
 | Operation | Total Sorries | Array Blocked | Match Simplify | Unreachable |
 |-----------|---------------|---------------|----------------|-------------|
-| Normalization | 3 | 2 | 1 | 0 |
-| Withdrawal | 5 | 2 | 1 | 2 |
-| Rotation | 1 | 1 | 0 | 0 |
-| Transfer | 2 | 1 | 1 | 0 |
-| **TOTAL** | **11** | **6** | **3** | **2** |
+| Registration | 0 | 0 | 0 | 0 |
+| Normalization | 2 | TBD | TBD | 0 |
+| Withdrawal | **16** | TBD | TBD | TBD |
+| Rotation | 2 | TBD | TBD | 0 |
+| Transfer | 3 | TBD | TBD | 0 |
+| **TOTAL** | **23** | **TBD** | **TBD** | **TBD** |
+
+**⚠️ ACTION REQUIRED:** Withdrawal count increased from 5 → 16 (220% increase). Requires detailed audit to categorize these additional sorries.
 
 ## Blocker Type Definitions
 

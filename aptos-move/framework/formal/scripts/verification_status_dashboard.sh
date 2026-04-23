@@ -103,7 +103,7 @@ MSL_SPEC_COUNT=$(grep -c '^    spec ' "$REPO_ROOT/aptos-move/framework/aptos-exp
 # Axiom count (from check_axioms.sh)
 if [ -f "$FORMAL_ROOT/scripts/check_axioms.sh" ]; then
     AXIOM_OUTPUT=$("$FORMAL_ROOT/scripts/check_axioms.sh" 2>/dev/null || echo "error")
-    AXIOM_COUNT=$(echo "$AXIOM_OUTPUT" | grep -oP 'Total:\s+\K\d+' || echo "?")
+    AXIOM_COUNT=$(echo "$AXIOM_OUTPUT" | sed -n 's/.*Total:[[:space:]]*\([0-9]*\).*/\1/p' | head -1)
     AXIOM_TEMPORARY=$(echo "$AXIOM_OUTPUT" | grep -c 'TEMPORARY' || echo "?")
 else
     AXIOM_COUNT="?"

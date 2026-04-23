@@ -119,7 +119,7 @@ get_current_axiom_count() {
         local output
         output=$("$FORMAL_ROOT/scripts/check_axioms.sh" 2>/dev/null || echo "error")
 
-        total=$(echo "$output" | grep -oP 'Total:\s+\K\d+' || echo "0")
+        total=$(echo "$output" | sed -n 's/.*Total:[[:space:]]*\([0-9]*\).*/\1/p' | head -1)
         temporary=$(echo "$output" | grep -c 'TEMPORARY' || echo "0")
         crypto=$(echo "$output" | grep -c 'CRYPTO' || echo "0")
         kernel=$(echo "$output" | grep -c 'KERNEL' || echo "0")
@@ -149,7 +149,7 @@ get_axiom_count_at_ref() {
     local total=0
     if [ -f "$temp_dir/aptos-move/framework/formal/scripts/check_axioms.sh" ]; then
         cd "$temp_dir/aptos-move/framework/formal"
-        total=$(bash scripts/check_axioms.sh 2>/dev/null | grep -oP 'Total:\s+\K\d+' || echo "0")
+        total=$(bash scripts/check_axioms.sh 2>/dev/null | sed -n 's/.*Total:[[:space:]]*\([0-9]*\).*/\1/p' | head -1)
         cd "$FORMAL_ROOT"
     fi
 

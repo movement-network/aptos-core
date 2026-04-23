@@ -89,7 +89,7 @@ jobs:
         run: |
           cd ${{ env.FORMAL_ROOT }}
           SORRY_COUNT=$(grep -r "sorry" lean/MovementFormal/Experimental/ConfidentialAsset/ --include="*.lean" | grep -v "SORRY" | wc -l)
-          BASELINE=32  # Updated 2026-04-23: 32 sorries (27 Phase 4, 1 Phase 1, 4 others)
+          BASELINE=12  # Updated 2026-04-23 05:41: 12 sorries (down from 32, 62.5% reduction)
           echo "Current sorry count: $SORRY_COUNT"
           echo "Baseline: $BASELINE"
           if [ $SORRY_COUNT -gt $BASELINE ]; then

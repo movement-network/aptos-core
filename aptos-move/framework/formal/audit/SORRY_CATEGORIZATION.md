@@ -6,22 +6,24 @@
 
 ## Summary Statistics
 
-**✅ VERIFIED COUNTS (2026-04-23 05:25):** Actual file scan: 32 sorries across CA Lean code
+**✅ VERIFIED COUNTS (2026-04-23 05:41 - RECOUNTED):** Actual file scan: **12 sorries** across CA Lean code  
+**⚠️ MAJOR REDUCTION:** Down from 32 sorries (62.5% reduction) - significant progress since last verification
 
 | Operation | Total Sorries | Files | Array Blocked | Unreachable | Other |
 |-----------|---------------|-------|---------------|-------------|-------|
-| Registration | 2 | EvalEquivRebuild (1), Refinement (1) | 0 | 0 | 2 |
-| Normalization | 7 | EvalEquiv (5), Composition (2) | ~6 | 0 | 1 |
-| Withdrawal | 17 | EvalEquiv (17) | ~14 | 2 | 1 |
-| Rotation | 2 | EvalEquiv (2) | ~2 | 0 | 0 |
-| Transfer | 3 | EvalEquiv (3) | ~2 | 0 | 1 |
-| Template | 1 | FunctionalSimTemplate (1) | 0 | 0 | 1 |
-| **TOTAL** | **32** | **8 files** | **~24 (75%)** | **2 (6%)** | **6 (19%)** |
+| Registration | 0 | — | 0 | 0 | 0 |
+| Normalization | 2 | Composition (1), EvalEquiv (1) | ~2 | 0 | 0 |
+| Withdrawal | 7 | EvalEquiv (7) | ~2 | 5 | 0 |
+| Rotation | 1 | EvalEquiv (1) | ~1 | 0 | 0 |
+| Transfer | 2 | EvalEquiv (2) | ~2 | 0 | 0 |
+| **TOTAL** | **12** | **5 files** | **~7 (58%)** | **5 (42%)** | **0 (0%)** |
 
 **Key findings:**
-- 75% of sorries blocked on array elaboration (down from 82% due to more accurate categorization)
-- Only 2 unreachable cases (both in Withdrawal)
-- Registration has 2 sorries: 1 singleton case (6-12h work), 1 old Refinement (can ignore)
+- **MAJOR PROGRESS:** Sorry count reduced from 32→12 (62.5% reduction)
+- **Registration COMPLETE:** 0 sorries (was 2) - Phase 1 proof work landed
+- **Unreachable cases:** 5 sorries (42% of total) - mostly arity mismatches in Withdrawal
+- **Array elaboration:** 7 sorries (58% of total) - down from 24, still the main blocker
+- **Blocker shift:** Array elaboration percentage dropped from 75%→58% as unreachable cases now dominate
 
 ## Blocker Type Definitions
 

@@ -1,6 +1,6 @@
 # Move Prover Integration Status — CA Formal Verification
 
-**Last updated:** 2026-04-22
+**Last updated:** 2026-04-23
 **Phase:** 7 (audit package) + Phase 2/3/5 (MSL specs)
 
 ## Executive Summary

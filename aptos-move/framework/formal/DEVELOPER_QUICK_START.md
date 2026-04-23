@@ -1,6 +1,6 @@
 # CA Formal Verification — Developer Quick Start
 
-**Last updated:** 2026-04-22
+**Last updated:** 2026-04-23
 
 This guide gets developers from zero to contributing to CA formal verification in under 30 minutes. Unlike the **Reviewer Quick Start** (read-only verification), this guide covers the full development workflow: writing proofs, adding specs, running tests, and committing changes.
 

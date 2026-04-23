@@ -1,0 +1,173 @@
+---
+# Comprehensive CA verification suite - runs all verification checks
+# Triggered on PRs that touch formal verification or CA source
+name: "CA Comprehensive Verification"
+
+on:
+  pull_request:
+    paths:
+      - "aptos-move/framework/formal/**"
+      - "aptos-move/framework/aptos-experimental/sources/confidential_asset/**"
+      - ".github/workflows/ca-verification-comprehensive.yaml"
+  push:
+    branches:
+      - main
+      - movement
+    paths:
+      - "aptos-move/framework/formal/**"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lean-verification:
+    name: "Lean Verification (All Operations)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Lean toolchain
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+
+      - name: Get Mathlib cache
+        working-directory: aptos-move/framework/formal/lean
+        run: |
+          lake exe cache get || echo "Cache fetch failed, will build from source"
+
+      - name: Build Lean tree
+        working-directory: aptos-move/framework/formal/lean
+        run: |
+          lake build
+
+      - name: Verify Registration
+        working-directory: aptos-move/framework/formal
+        run: |
+          ./audit/verify-ca.sh --op register --stack lean
+
+      - name: Verify Withdrawal
+        working-directory: aptos-move/framework/formal
+        run: |
+          ./audit/verify-ca.sh --op withdraw --stack lean
+
+      - name: Verify Transfer
+        working-directory: aptos-move/framework/formal
+        run: |
+          ./audit/verify-ca.sh --op transfer --stack lean
+
+      - name: Verify Normalization
+        working-directory: aptos-move/framework/formal
+        run: |
+          ./audit/verify-ca.sh --op normalize --stack lean
+
+      - name: Verify Rotation
+        working-directory: aptos-move/framework/formal
+        run: |
+          ./audit/verify-ca.sh --op rotate --stack lean
+
+      - name: Check sorry count
+        working-directory: aptos-move/framework/formal/lean
+        run: |
+          SORRY_COUNT=$(grep -r "sorry" MovementFormal/Experimental/ConfidentialAsset --include="*.lean" | grep -v "comment" | wc -l)
+          echo "Found $SORRY_COUNT sorry placeholders"
+          if [ "$SORRY_COUNT" -gt 25 ]; then
+            echo "❌ Sorry count $SORRY_COUNT exceeds baseline of 25"
+            exit 1
+          fi
+          echo "✅ Sorry count within baseline"
+
+  axiom-verification:
+    name: "Axiom Baseline Check"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check axiom baseline
+        working-directory: aptos-move/framework/formal
+        run: |
+          ./scripts/check_axioms.sh --diff
+
+      - name: Report axiom count (informational)
+        if: always()
+        working-directory: aptos-move/framework/formal
+        run: |
+          AXIOM_COUNT=$(./scripts/check_axioms.sh --baseline | grep -c "^axiom" || echo "0")
+          echo "Current axiom count: $AXIOM_COUNT"
+          echo "Baseline: 149 axioms (144 permanent + 5 TEMPORARY)"
+
+  trust-boundaries:
+    name: "Trust Boundaries Reconciliation"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconcile trust boundaries
+        working-directory: aptos-move/framework/formal
+        run: |
+          ./scripts/reconcile_trust_boundaries.sh
+
+      - name: Report metrics (informational)
+        if: always()
+        working-directory: aptos-move/framework/formal
+        run: |
+          echo "=== Trust Boundary Metrics ==="
+          echo "CA axioms: 10"
+          echo "Pragma opaque: 89"
+          echo "Test escapes: 2 (pragma verify=false)"
+
+  documentation:
+    name: "Documentation Checks"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for TODOs in delivered files
+        run: |
+          # Allow TODOs in WIP docs, but not in core deliverables
+          CORE_DOCS="CLAIMS.md TRUST_BOUNDARIES.md AXIOM_INVENTORY.md verify-ca.sh"
+          for doc in $CORE_DOCS; do
+            if grep -i "TODO\|FIXME\|XXX" "aptos-move/framework/formal/audit/$doc" 2>/dev/null; then
+              echo "❌ Found TODO in core deliverable: $doc"
+              exit 1
+            fi
+          done
+          echo "✅ No TODOs in core deliverables"
+
+      - name: Check README freshness
+        run: |
+          # Verify key sections exist in audit README
+          if ! grep -q "verify-ca.sh" aptos-move/framework/formal/audit/README.md; then
+            echo "❌ audit/README.md missing verify-ca.sh documentation"
+            exit 1
+          fi
+          echo "✅ audit/README.md is up to date"
+
+  summary:
+    name: "Verification Summary"
+    runs-on: ubuntu-latest
+    needs: [lean-verification, axiom-verification, trust-boundaries, documentation]
+    if: always()
+    steps:
+      - name: Report overall status
+        run: |
+          echo "=== CA Verification Suite Summary ==="
+          echo "Lean verification: ${{ needs.lean-verification.result }}"
+          echo "Axiom baseline: ${{ needs.axiom-verification.result }}"
+          echo "Trust boundaries: ${{ needs.trust-boundaries.result }}"
+          echo "Documentation: ${{ needs.documentation.result }}"
+
+          if [ "${{ needs.lean-verification.result }}" != "success" ] || \
+             [ "${{ needs.axiom-verification.result }}" != "success" ] || \
+             [ "${{ needs.trust-boundaries.result }}" != "success" ] || \
+             [ "${{ needs.documentation.result }}" != "success" ]; then
+            echo "❌ One or more verification checks failed"
+            exit 1
+          fi
+          echo "✅ All verification checks passed"

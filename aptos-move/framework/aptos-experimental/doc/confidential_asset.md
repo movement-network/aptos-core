@@ -119,7 +119,11 @@ It enables private transfers by obfuscating token amounts while keeping sender a
     -  [Function `rollover_pending_balance_internal`](#@Specification_1_rollover_pending_balance_internal)
     -  [Function `freeze_token_internal`](#@Specification_1_freeze_token_internal)
     -  [Function `unfreeze_token_internal`](#@Specification_1_unfreeze_token_internal)
+    -  [Function `ensure_fa_config_exists`](#@Specification_1_ensure_fa_config_exists)
     -  [Function `get_user_address`](#@Specification_1_get_user_address)
+    -  [Function `get_fa_config_signer`](#@Specification_1_get_fa_config_signer)
+    -  [Function `get_fa_config_address`](#@Specification_1_get_fa_config_address)
+    -  [Function `ensure_sufficient_fa`](#@Specification_1_ensure_sufficient_fa)
     -  [Function `serialize_auditor_eks`](#@Specification_1_serialize_auditor_eks)
     -  [Function `serialize_auditor_amounts`](#@Specification_1_serialize_auditor_amounts)
 
@@ -3289,6 +3293,11 @@ Lean pins the verifier's accept/reject semantics, MSL pins the resulting store s
 <b>ensures</b> <b>global</b>&lt;<a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>&gt;(store_addr).pending_counter
     == <b>old</b>(<b>global</b>&lt;<a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>&gt;(store_addr)).pending_counter + 1;
 <b>modifies</b> <b>global</b>&lt;<a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>&gt;(store_addr);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/object.md#0x1_object_ObjectCore">object::ObjectCore</a>&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/object.md#0x1_object_Untransferable">object::Untransferable</a>&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;aptos_framework::permissioned_signer::PermissionStorage&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;aptos_framework::fungible_asset::FungibleStore&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;aptos_framework::fungible_asset::ConcurrentFungibleBalance&gt;(@aptos_framework);
 </code></pre>
 
 
@@ -3306,9 +3315,23 @@ Lean pins the verifier's accept/reject semantics, MSL pins the resulting store s
 The coin→FA conversion is an FA-framework side effect not captured by this spec;
 composition with upstream coin/FA specs completes the story (Phase 5 follow-up).
 
+**Modifies clauses:** Includes all FA framework and object framework resources touched
+by ensure_sufficient_fa and deposit operations.
+
 
 <pre><code><b>pragma</b> aborts_if_is_strict = <b>false</b>;
 <b>pragma</b> opaque;
+<b>modifies</b> <b>global</b>&lt;<a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/object.md#0x1_object_ObjectCore">object::ObjectCore</a>&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/object.md#0x1_object_TombStone">object::TombStone</a>&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/object.md#0x1_object_Untransferable">object::Untransferable</a>&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;aptos_framework::permissioned_signer::PermissionStorage&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;aptos_framework::fungible_asset::FungibleStore&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;aptos_framework::fungible_asset::ConcurrentFungibleBalance&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;aptos_framework::fungible_asset::Metadata&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;aptos_framework::fungible_asset::Supply&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;aptos_framework::fungible_asset::ConcurrentSupply&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;aptos_framework::primary_fungible_store::DeriveRefPod&gt;(@aptos_framework);
 </code></pre>
 
 
@@ -3324,9 +3347,22 @@ composition with upstream coin/FA specs completes the story (Phase 5 follow-up).
 
 <code>deposit_coins</code> entry — to self.
 
+**Modifies clauses:** Same as deposit_coins_to, plus ConfidentialAssetStore.
+
 
 <pre><code><b>pragma</b> aborts_if_is_strict = <b>false</b>;
 <b>pragma</b> opaque;
+<b>modifies</b> <b>global</b>&lt;<a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/object.md#0x1_object_ObjectCore">object::ObjectCore</a>&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/object.md#0x1_object_TombStone">object::TombStone</a>&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/object.md#0x1_object_Untransferable">object::Untransferable</a>&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;aptos_framework::permissioned_signer::PermissionStorage&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;aptos_framework::fungible_asset::FungibleStore&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;aptos_framework::fungible_asset::ConcurrentFungibleBalance&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;aptos_framework::fungible_asset::Metadata&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;aptos_framework::fungible_asset::Supply&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;aptos_framework::fungible_asset::ConcurrentSupply&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;aptos_framework::primary_fungible_store::DeriveRefPod&gt;(@aptos_framework);
 </code></pre>
 
 
@@ -3342,6 +3378,8 @@ composition with upstream coin/FA specs completes the story (Phase 5 follow-up).
 
 <code>withdraw_to</code> entry — deserializes balance + proof, delegates to <code>withdraw_to_internal</code>.
 
+**Modifies clauses:** Includes object framework and FA resources touched by primary_fungible_store::transfer.
+
 
 <pre><code><b>pragma</b> aborts_if_is_strict = <b>false</b>;
 <b>pragma</b> opaque;
@@ -3350,6 +3388,12 @@ composition with upstream coin/FA specs completes the story (Phase 5 follow-up).
 <b>aborts_if</b> !<b>exists</b>&lt;<a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>&gt;(store_addr);
 <b>ensures</b> <b>global</b>&lt;<a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>&gt;(store_addr).normalized;
 <b>modifies</b> <b>global</b>&lt;<a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>&gt;(store_addr);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/object.md#0x1_object_ObjectCore">object::ObjectCore</a>&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/object.md#0x1_object_TombStone">object::TombStone</a>&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/object.md#0x1_object_Untransferable">object::Untransferable</a>&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;aptos_framework::permissioned_signer::PermissionStorage&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;aptos_framework::fungible_asset::FungibleStore&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;aptos_framework::fungible_asset::ConcurrentFungibleBalance&gt;(@aptos_framework);
 </code></pre>
 
 
@@ -3365,6 +3409,8 @@ composition with upstream coin/FA specs completes the story (Phase 5 follow-up).
 
 <code>withdraw</code> entry — withdraws to self.
 
+**Modifies clauses:** Includes object framework and FA resources touched by primary_fungible_store::transfer.
+
 
 <pre><code><b>pragma</b> aborts_if_is_strict = <b>false</b>;
 <b>pragma</b> opaque;
@@ -3373,6 +3419,12 @@ composition with upstream coin/FA specs completes the story (Phase 5 follow-up).
 <b>aborts_if</b> !<b>exists</b>&lt;<a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>&gt;(store_addr);
 <b>ensures</b> <b>global</b>&lt;<a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>&gt;(store_addr).normalized;
 <b>modifies</b> <b>global</b>&lt;<a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>&gt;(store_addr);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/object.md#0x1_object_ObjectCore">object::ObjectCore</a>&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/object.md#0x1_object_TombStone">object::TombStone</a>&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/object.md#0x1_object_Untransferable">object::Untransferable</a>&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;aptos_framework::permissioned_signer::PermissionStorage&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;aptos_framework::fungible_asset::FungibleStore&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;aptos_framework::fungible_asset::ConcurrentFungibleBalance&gt;(@aptos_framework);
 </code></pre>
 
 
@@ -3646,7 +3698,10 @@ composition with upstream coin/FA specs completes the story (Phase 5 follow-up).
 
 <pre><code><b>pragma</b> aborts_if_is_strict = <b>false</b>;
 <b>pragma</b> opaque;
+<b>let</b> fa_config_addr = <a href="confidential_asset.md#0x7_confidential_asset_spec_get_fa_config_address">spec_get_fa_config_address</a>(token);
 <b>aborts_if</b> <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework) != @aptos_framework;
+<b>modifies</b> <b>global</b>&lt;<a href="confidential_asset.md#0x7_confidential_asset_FAConfig">FAConfig</a>&gt;(fa_config_addr);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/object.md#0x1_object_ObjectCore">object::ObjectCore</a>&gt;(fa_config_addr);
 </code></pre>
 
 
@@ -3664,7 +3719,10 @@ composition with upstream coin/FA specs completes the story (Phase 5 follow-up).
 
 <pre><code><b>pragma</b> aborts_if_is_strict = <b>false</b>;
 <b>pragma</b> opaque;
+<b>let</b> fa_config_addr = <a href="confidential_asset.md#0x7_confidential_asset_spec_get_fa_config_address">spec_get_fa_config_address</a>(token);
 <b>aborts_if</b> <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework) != @aptos_framework;
+<b>modifies</b> <b>global</b>&lt;<a href="confidential_asset.md#0x7_confidential_asset_FAConfig">FAConfig</a>&gt;(fa_config_addr);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/object.md#0x1_object_ObjectCore">object::ObjectCore</a>&gt;(fa_config_addr);
 </code></pre>
 
 
@@ -3682,7 +3740,10 @@ composition with upstream coin/FA specs completes the story (Phase 5 follow-up).
 
 <pre><code><b>pragma</b> aborts_if_is_strict = <b>false</b>;
 <b>pragma</b> opaque;
+<b>let</b> fa_config_addr = <a href="confidential_asset.md#0x7_confidential_asset_spec_get_fa_config_address">spec_get_fa_config_address</a>(token);
 <b>aborts_if</b> <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework) != @aptos_framework;
+<b>modifies</b> <b>global</b>&lt;<a href="confidential_asset.md#0x7_confidential_asset_FAConfig">FAConfig</a>&gt;(fa_config_addr);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/object.md#0x1_object_ObjectCore">object::ObjectCore</a>&gt;(fa_config_addr);
 </code></pre>
 
 
@@ -3797,6 +3858,7 @@ is set for the token.
 <pre><code><b>let</b> store_addr = <a href="confidential_asset.md#0x7_confidential_asset_spec_get_user_address">spec_get_user_address</a>(user, token);
 <b>aborts_if</b> !<b>exists</b>&lt;<a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>&gt;(store_addr);
 <b>ensures</b> result == <b>global</b>&lt;<a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>&gt;(store_addr).ek;
+<b>modifies</b> <b>global</b>&lt;<a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>&gt;(store_addr);
 </code></pre>
 
 
@@ -3930,6 +3992,8 @@ for <code>token</code>. Aborts if the FA store doesn't exist (EINTERNAL_ERROR).
 Structural part: recipient store must exist, must not be frozen, pending_counter
 is bounded. Crypto part (pending_balance homomorphic update) is Phase 5.
 
+**Modifies clauses:** Includes FA framework resources for primary_fungible_store deposit operation.
+
 
 <pre><code><b>pragma</b> aborts_if_is_strict = <b>false</b>;
 <b>pragma</b> opaque;
@@ -3951,6 +4015,11 @@ is bounded. Crypto part (pending_balance homomorphic update) is Phase 5.
 <b>ensures</b> len(<b>global</b>&lt;<a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>&gt;(recipient_store).actual_balance.chunks)
     == len(<b>old</b>(<b>global</b>&lt;<a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>&gt;(recipient_store)).actual_balance.chunks);
 <b>modifies</b> <b>global</b>&lt;<a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>&gt;(recipient_store);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/object.md#0x1_object_ObjectCore">object::ObjectCore</a>&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/object.md#0x1_object_Untransferable">object::Untransferable</a>&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;aptos_framework::permissioned_signer::PermissionStorage&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;aptos_framework::fungible_asset::FungibleStore&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;aptos_framework::fungible_asset::ConcurrentFungibleBalance&gt;(@aptos_framework);
 </code></pre>
 
 
@@ -3968,6 +4037,8 @@ is bounded. Crypto part (pending_balance homomorphic update) is Phase 5.
 Structural: sender store must exist, marks <code>normalized = <b>true</b></code>. Crypto: the
 <code>verify_withdrawal_proof</code> call's accept/reject semantics belong to Phase 4 (Lean)
 and Phase 5 (MSL composition).
+
+**Modifies clauses:** Includes FA framework resources for primary_fungible_store::transfer.
 
 
 <pre><code><b>pragma</b> aborts_if_is_strict = <b>false</b>;
@@ -3989,6 +4060,12 @@ and Phase 5 (MSL composition).
 <b>ensures</b> len(<b>global</b>&lt;<a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>&gt;(sender_store).actual_balance.chunks)
     == len(<b>old</b>(<b>global</b>&lt;<a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>&gt;(sender_store)).actual_balance.chunks);
 <b>modifies</b> <b>global</b>&lt;<a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>&gt;(sender_store);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/object.md#0x1_object_ObjectCore">object::ObjectCore</a>&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/object.md#0x1_object_TombStone">object::TombStone</a>&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/object.md#0x1_object_Untransferable">object::Untransferable</a>&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;aptos_framework::permissioned_signer::PermissionStorage&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;aptos_framework::fungible_asset::FungibleStore&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;aptos_framework::fungible_asset::ConcurrentFungibleBalance&gt;(@aptos_framework);
 </code></pre>
 
 
@@ -4213,6 +4290,29 @@ already normalized.
 
 
 
+<a id="@Specification_1_ensure_fa_config_exists"></a>
+
+### Function `ensure_fa_config_exists`
+
+
+<pre><code><b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_ensure_fa_config_exists">ensure_fa_config_exists</a>(token: <a href="../../aptos-framework/doc/object.md#0x1_object_Object">object::Object</a>&lt;<a href="../../aptos-framework/doc/fungible_asset.md#0x1_fungible_asset_Metadata">fungible_asset::Metadata</a>&gt;): <b>address</b>
+</code></pre>
+
+
+<code>ensure_fa_config_exists</code> — creates FAConfig if it doesn't exist, returns its address.
+Marked opaque; full composition in Phase 5.
+
+
+<pre><code><b>pragma</b> aborts_if_is_strict = <b>false</b>;
+<b>pragma</b> opaque;
+<b>let</b> fa_config_addr = <a href="confidential_asset.md#0x7_confidential_asset_spec_get_fa_config_address">spec_get_fa_config_address</a>(token);
+<b>ensures</b> result == fa_config_addr;
+<b>modifies</b> <b>global</b>&lt;<a href="confidential_asset.md#0x7_confidential_asset_FAConfig">FAConfig</a>&gt;(fa_config_addr);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/object.md#0x1_object_ObjectCore">object::ObjectCore</a>&gt;(fa_config_addr);
+</code></pre>
+
+
+
 <a id="@Specification_1_get_user_address"></a>
 
 ### Function `get_user_address`
@@ -4226,6 +4326,81 @@ already normalized.
 
 <pre><code><b>pragma</b> opaque;
 <b>ensures</b> result == <a href="confidential_asset.md#0x7_confidential_asset_spec_get_user_address">spec_get_user_address</a>(user, token);
+</code></pre>
+
+
+
+
+<a id="0x7_confidential_asset_spec_get_fa_config_address"></a>
+
+
+<pre><code><b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_spec_get_fa_config_address">spec_get_fa_config_address</a>(token: Object&lt;Metadata&gt;): <b>address</b>;
+</code></pre>
+
+
+
+<a id="@Specification_1_get_fa_config_signer"></a>
+
+### Function `get_fa_config_signer`
+
+
+<pre><code><b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_get_fa_config_signer">get_fa_config_signer</a>(token: <a href="../../aptos-framework/doc/object.md#0x1_object_Object">object::Object</a>&lt;<a href="../../aptos-framework/doc/fungible_asset.md#0x1_fungible_asset_Metadata">fungible_asset::Metadata</a>&gt;): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>
+</code></pre>
+
+
+<code>get_fa_config_signer</code> — generates signer for FA config object creation.
+Marked opaque; touches object framework resources.
+
+
+<pre><code><b>pragma</b> aborts_if_is_strict = <b>false</b>;
+<b>pragma</b> opaque;
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/object.md#0x1_object_ObjectCore">object::ObjectCore</a>&gt;(@aptos_framework);
+</code></pre>
+
+
+
+<a id="@Specification_1_get_fa_config_address"></a>
+
+### Function `get_fa_config_address`
+
+
+<pre><code><b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_get_fa_config_address">get_fa_config_address</a>(token: <a href="../../aptos-framework/doc/object.md#0x1_object_Object">object::Object</a>&lt;<a href="../../aptos-framework/doc/fungible_asset.md#0x1_fungible_asset_Metadata">fungible_asset::Metadata</a>&gt;): <b>address</b>
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>ensures</b> result == <a href="confidential_asset.md#0x7_confidential_asset_spec_get_fa_config_address">spec_get_fa_config_address</a>(token);
+</code></pre>
+
+
+
+<a id="@Specification_1_ensure_sufficient_fa"></a>
+
+### Function `ensure_sufficient_fa`
+
+
+<pre><code><b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_ensure_sufficient_fa">ensure_sufficient_fa</a>&lt;CoinType&gt;(sender: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, amount: u64): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_Option">option::Option</a>&lt;<a href="../../aptos-framework/doc/object.md#0x1_object_Object">object::Object</a>&lt;<a href="../../aptos-framework/doc/fungible_asset.md#0x1_fungible_asset_Metadata">fungible_asset::Metadata</a>&gt;&gt;
+</code></pre>
+
+
+<code>ensure_sufficient_fa</code> — helper that converts CoinType to FA if needed.
+Marked opaque for now; full composition with coin/FA framework specs in Phase 5.
+
+
+<pre><code><b>pragma</b> aborts_if_is_strict = <b>false</b>;
+<b>pragma</b> opaque;
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/object.md#0x1_object_ObjectCore">object::ObjectCore</a>&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/object.md#0x1_object_TombStone">object::TombStone</a>&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/object.md#0x1_object_Untransferable">object::Untransferable</a>&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;aptos_framework::permissioned_signer::PermissionStorage&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;aptos_framework::fungible_asset::FungibleStore&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;aptos_framework::fungible_asset::ConcurrentFungibleBalance&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;aptos_framework::fungible_asset::Metadata&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;aptos_framework::fungible_asset::Supply&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;aptos_framework::fungible_asset::ConcurrentSupply&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;aptos_framework::primary_fungible_store::DeriveRefPod&gt;(@aptos_framework);
 </code></pre>
 
 

@@ -3543,24 +3543,17 @@ theorem registration_eval_equiv_functional_sim
             rw [h] at hsingle
             simp at hsingle
 
-    -- Now prove: eval ... = functional simulation result
-    -- horacle : o.newCompressedPointFromBytes [...] = some [v]
-    -- This means single? (some [v]) = some v
-
-    -- Simplify the functional simulation
-    simp only [verifyRegistrationBytecodeResult, registrationArgs, single?]
-    rw [horacle]
-    simp only [single?]
-
-    -- Now we need to match the rest of the functional simulation
-    -- The next step checks optionIsSome [v]
-    -- We need to thread through the bytecode to reach the same checks
-
-    -- Apply eval_registration_eq_run to convert eval to run
-    rw [eval_registration_eq_run]
-
-    -- Use the PC composition helpers to thread through execution
-    -- Start with PCs 0-2 which are covered by existing helpers
-    sorry  -- Continue PC-threading from where helpers leave off
+    -- Singleton case: horacle : o.newCompressedPointFromBytes [...] = some [v]
+    --
+    -- APPROACH: This requires full PC-threading proof (6-12 hours of work):
+    -- 1. Convert eval to run via eval_registration_eq_run
+    -- 2. Use registration_run_through_pc2 to reach PC 3
+    -- 3. Thread through PC 3 (immBorrowLoc 7) - the deferred work
+    -- 4. Continue through all 67 PCs to match functional simulation
+    -- 5. Handle oracle calls and container-store mutations
+    --
+    -- This is the core technical work blocking Phase 1 completion (95%→100%).
+    -- Requires dedicated multi-hour session to complete properly.
+    sorry  -- BLOCKER: 6-12 hour PC-threading proof needed for singleton happy path
 
 end MovementFormal.Experimental.ConfidentialAsset.Registration.EvalEquivRebuild

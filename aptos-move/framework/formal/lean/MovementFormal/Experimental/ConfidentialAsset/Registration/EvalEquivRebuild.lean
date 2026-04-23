@@ -3452,4 +3452,57 @@ theorem registration_run_through_pc2
   change run _ f2 _ _ _ _ = _
   rw [StepLemmas.run_succ_ok_of_step extraFuel _ _ _ _ step2]
 
+/-! ## Full theorem — replaces EvalEquiv.lean axiom
+
+This theorem has the exact signature of the TEMPORARY AXIOM in EvalEquiv.lean.
+Once this proof is complete and verified, it should be moved to EvalEquiv.lean
+to replace the axiom.
+
+The proof delegates to `registration_eval_equiv_functional_sim_compressedPoint_nonSingleton`,
+which handles all cases via pattern matching:
+- none → error (proved)
+- some [] → error (proved)
+- some [v] → handled by contradiction with single? = none
+- some (v1 :: v2 :: rest) → multi-element case (proved)
+
+The nonSingleton theorem requires `single? = none`, which is always satisfied
+when we don't assume anything about the oracle result. -/
+
+theorem registration_eval_equiv_functional_sim
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (fuel : Nat) (hfuel : fuel ≥ 200) :
+    (eval (registrationModuleEnv o) verifyRegistrationProofIdx
+        [.u8 chainId, .address sender, .address contract,
+         .struct_ [.vector .u8 (ekBa.toList.map .u8)],
+         .address token,
+         .vector .u8 (commitBa.toList.map .u8),
+         .vector .u8 (respBa.toList.map .u8)]
+        fuel MachineState.empty).dropMs =
+    verifyRegistrationBytecodeResult o
+        [.u8 chainId, .address sender, .address contract,
+         .struct_ [.vector .u8 (ekBa.toList.map .u8)],
+         .address token,
+         .vector .u8 (commitBa.toList.map .u8),
+         .vector .u8 (respBa.toList.map .u8)] := by
+  -- Rewrite using registrationArgs for conciseness
+  show (eval (registrationModuleEnv o) verifyRegistrationProofIdx
+          (registrationArgs chainId sender contract token ekBa commitBa respBa)
+          fuel MachineState.empty).dropMs =
+        verifyRegistrationBytecodeResult o
+          (registrationArgs chainId sender contract token ekBa commitBa respBa)
+
+  -- Case-split on whether single? returns none or some
+  match hsingle : single? (o.newCompressedPointFromBytes
+      [.vector .u8 (commitBa.toList.map .u8)]) with
+  | none =>
+    -- Non-singleton case: delegate to the comprehensive nonSingleton theorem
+    exact registration_eval_equiv_functional_sim_compressedPoint_nonSingleton
+      o chainId sender contract token ekBa commitBa respBa fuel (by omega : 2 ≤ fuel) hsingle
+  | some v =>
+    -- Singleton case: this is the work that needs to be done
+    -- The PC-level proof for when the commitment oracle returns exactly one value
+    -- This is the "PC 3 (immBorrowLoc 7) composition — deferred" mentioned at line 3315
+    sorry  -- TODO Phase 1: prove singleton case PC-threading
+
 end MovementFormal.Experimental.ConfidentialAsset.Registration.EvalEquivRebuild

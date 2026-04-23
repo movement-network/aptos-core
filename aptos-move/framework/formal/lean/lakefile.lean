@@ -154,6 +154,7 @@ lean_lib «MovementFormal» where
     `MovementFormal.Experimental.ConfidentialAsset.Registration.CryptoCorrectnessProperties,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.InvariantMaintenance,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.MemorySafetyProperties,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.PhaseTransitionTheorems,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.Phase6Composition,
     `MovementFormal.MoveModel.Programs.Withdrawal,
     `MovementFormal.MoveModel.Programs.Transfer,

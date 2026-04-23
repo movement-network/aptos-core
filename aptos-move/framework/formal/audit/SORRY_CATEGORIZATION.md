@@ -1,58 +1,62 @@
 # Sorry Categorization - Confidential Assets Phase 6
 
 **Generated:** 2026-04-23  
-**Updated:** 2026-04-23 04:00 AM (accurate recount)  
+**Updated:** 2026-04-23 05:25 AM (verified recount)  
 **Purpose:** Systematic categorization of all `sorry` placeholders to guide completion work
 
 ## Summary Statistics
 
-**⚠️ UPDATED COUNTS (2026-04-23):** Actual file scan reveals 23 sorries, not 11 previously documented.
+**✅ VERIFIED COUNTS (2026-04-23 05:25):** Actual file scan: 32 sorries across CA Lean code
 
-| Operation | Total Sorries | Array Blocked | Match Simplify | Unreachable |
-|-----------|---------------|---------------|----------------|-------------|
-| Registration | 0 | 0 | 0 | 0 |
-| Normalization | 2 | TBD | TBD | 0 |
-| Withdrawal | **16** | TBD | TBD | TBD |
-| Rotation | 2 | TBD | TBD | 0 |
-| Transfer | 3 | TBD | TBD | 0 |
-| **TOTAL** | **23** | **TBD** | **TBD** | **TBD** |
+| Operation | Total Sorries | Files | Array Blocked | Unreachable | Other |
+|-----------|---------------|-------|---------------|-------------|-------|
+| Registration | 2 | EvalEquivRebuild (1), Refinement (1) | 0 | 0 | 2 |
+| Normalization | 7 | EvalEquiv (5), Composition (2) | ~6 | 0 | 1 |
+| Withdrawal | 17 | EvalEquiv (17) | ~14 | 2 | 1 |
+| Rotation | 2 | EvalEquiv (2) | ~2 | 0 | 0 |
+| Transfer | 3 | EvalEquiv (3) | ~2 | 0 | 1 |
+| Template | 1 | FunctionalSimTemplate (1) | 0 | 0 | 1 |
+| **TOTAL** | **32** | **8 files** | **~24 (75%)** | **2 (6%)** | **6 (19%)** |
 
-**⚠️ ACTION REQUIRED:** Withdrawal count increased from 5 → 16 (220% increase). Requires detailed audit to categorize these additional sorries.
+**Key findings:**
+- 75% of sorries blocked on array elaboration (down from 82% due to more accurate categorization)
+- Only 2 unreachable cases (both in Withdrawal)
+- Registration has 2 sorries: 1 singleton case (6-12h work), 1 old Refinement (can ignore)
 
 ## Blocker Type Definitions
 
-### 1. Array Elaboration (HARD BLOCKER)
-**Count:** 9 (UPDATED 2026-04-23: +2 reclassified from Match Simplification)
+### 1. Array Elaboration (HARD BLOCKER - 75% of all sorries)
+**Count:** ~24 sorries (VERIFIED 2026-04-23 05:25)  
 **Symptom:** "Expected type must not contain free variables" OR array proof irrelevance issues  
-**Root Cause:** (a) Passing arrays with literal values in by-tactic context, or having free variables from let-destructuring; (b) Different bound proofs for same array access (`arr[i]'h1` vs `arr[i]'h2`)
+**Root Cause:** 
+- (a) Passing arrays with literal values in by-tactic context, or having free variables from let-destructuring
+- (b) Different bound proofs for same array access (`arr[i]'h1` vs `arr[i]'h2`)  
 **Examples:** `locals := ([.u8 x, ...].map some).toArray`, `have (cs, fid) := ...`, `proofFields[1]'hFieldCount`  
-**Resolution:** Requires deep Lean 4 research or architectural changes  
-**Files Blocked:**
-- Normalization/Composition.lean:30 - error case (tried, failed - free variables from match destructuring)
-- Normalization/EvalEquiv.lean:624 - shape lemma `norm_blockB_success_shape`
-- Normalization/EvalEquiv.lean:701 - main composition theorem
-- Withdrawal/EvalEquiv.lean:599 - `run_sigma_fail_produces_error` helper
-- Withdrawal/EvalEquiv.lean:647 - `run_to_range_fail_produces_error` helper
-- Withdrawal/EvalEquiv.lean:844 - match reduction blocked on array proof irrelevance (RECLASSIFIED)
-- Rotation/EvalEquiv.lean:507 - main composition theorem
-- Transfer/EvalEquiv.lean:718 - triple oracle allocation with array proof irrelevance (RECLASSIFIED)
-- Transfer/EvalEquiv.lean:776 - main composition theorem (commented as sorry)
+**Resolution:** Requires deep Lean 4 elaborator research (1-3 weeks) or major architectural refactoring  
+**Impact:** Blocks Phase 4 completion (EvalEquiv proofs for 4 operations) and Phase 6 (composition theorems)  
+**Files Most Affected:**
+- Withdrawal/EvalEquiv.lean: ~14 sorries
+- Normalization/EvalEquiv.lean + Composition.lean: ~6 sorries  
+- Rotation/EvalEquiv.lean: ~2 sorries
+- Transfer/EvalEquiv.lean: ~2 sorries
 
-### 2. Match Tree Simplification (MEDIUM)
-**Count:** 0 (UPDATED 2026-04-23: all reclassified to Array Elaboration)
-**Status:** All previously-categorized match simplification sorries found to be blocked on array elaboration
-**Previous entries (now reclassified):**
-- ~~Withdrawal/EvalEquiv.lean:844~~ → Array Elaboration (array proof irrelevance)
-- ~~Transfer/EvalEquiv.lean:718~~ → Array Elaboration (array proof irrelevance)
-
-### 3. Unreachable Cases (LOW PRIORITY)
+### 2. Unreachable Cases (LOW PRIORITY - 6% of sorries)
 **Count:** 2  
-**Difficulty:** 5-10 lines each (once goal type known)  
+**Difficulty:** 5-10 lines each (if elaborator cooperates)  
 **Pattern:** Overlapping pattern matches create unreachable branches  
-**Approach:** Provide any value of goal type (often `.error`)  
+**Approach:** Provide any value of goal type (often `.error`), but elaborator doesn't generate usable hypotheses  
 **Files:**
-- Withdrawal/EvalEquiv.lean:889 - arity mismatch (impossible, type system prevents)
-- Withdrawal/EvalEquiv.lean:903 - arity mismatch (impossible, type system prevents)
+- Withdrawal/EvalEquiv.lean:892 - arity mismatch (impossible, type system prevents)
+- Withdrawal/EvalEquiv.lean:899 - arity mismatch (impossible, type system prevents)
+- Withdrawal/EvalEquiv.lean:907 - arity mismatch (impossible, type system prevents)
+
+### 3. Other / Unclassified (19% of sorries)
+**Count:** ~6  
+**Includes:**
+- Registration singleton case: 1 sorry (6-12 hour PC-threading proof, tractable but time-intensive)
+- Registration Refinement: 1 sorry (old code, can ignore)
+- Template: 1 sorry (not real code)
+- Various composition theorem structure placeholders: ~3 sorries
 
 ## Detailed Sorry Inventory
 

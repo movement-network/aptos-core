@@ -3538,7 +3538,7 @@ theorem registration_eval_equiv_functional_sim
             -- hsingle : head = v
             -- h : ... = some [head]
             -- goal: ... = some [v]
-            simp [← hsingle, h]
+            simp [← hsingle]
           · -- multi-element: single? (some (head :: ...)) = none, contradicts hsingle
             rw [h] at hsingle
             simp at hsingle

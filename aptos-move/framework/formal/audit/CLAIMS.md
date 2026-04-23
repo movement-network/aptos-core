@@ -6,16 +6,28 @@ Scaffold for the Phase 7 reviewer-facing audit package described in
 
 Each claim row has: plain-English property, tool (Move Prover / Lean / difftest), file + theorem/spec location, rerun command, and a `Relies on:` line back-pointing to axioms / pragma opaque boundaries in [`TRUST_BOUNDARIES.md`](TRUST_BOUNDARIES.md).
 
-**Status:** scaffold. Entries will fill in as each phase lands. A phase is not "done" (§0 tracker) until its claims have a row here with a working rerun command.
+**Status (updated 2026-04-22):** Lean rerun commands ✅ functional via `verify-ca.sh`. All 5 operations (register, withdraw, transfer, normalize, rotate) can be verified in 1-2s each. Move Prover commands blocked on Z3_EXE setup. Difftest commands pending unified runner.
+
+**Quick verification:**
+```bash
+# Verify all Lean claims in ~6s:
+./verify-ca.sh --stack lean
+
+# Verify single operation:
+./verify-ca.sh --op {register|withdraw|transfer|normalize|rotate} --stack lean
+
+# See coverage summary (310 theorems total):
+./verify-ca.sh --coverage
+```
 
 ## Registration
 
 | Claim | Tool | Location | Rerun | Relies on |
 |---|---|---|---|---|
-| `verify_registration_proof` bytecode matches the functional sigma predicate on the honest oracle (up to MachineState) | Lean | `lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquiv.lean` → `registration_eval_equiv_functional_sim` | `./verify-ca.sh --op register --stack lean` | TEMPORARY AXIOM `registration_eval_equiv_functional_sim` (reproved in Phase 1 completion) |
-| `eval (registrationModuleEnv o) verifyRegistrationProofIdx args fuel initMs` reduces to `run` on the initial frame (entry-point unfolding) | Lean | `Registration/EvalEquivRebuild.lean` → `eval_registration_eq_run` | `cd lean && lake build MovementFormal.Experimental.ConfidentialAsset.Registration.EvalEquivRebuild` | — (no axioms) |
-| All 55 non-native PC step theorems — every `stLoc`/`moveLoc`/`copyLoc`/`immBorrowLoc`/`mutBorrowLoc`/`brFalse`/`ldConst`/`ldU64`/`pop`/`ret`/`abort` instruction in the 84-PC registration bytecode | Lean | `EvalEquivRebuild.lean` → `step_registration_pc{0,2,3,5,5_notTaken,6,8,9,11,12,14,14_notTaken,15,17,18,19,20,21,23,24,27,28,31,32,35,36,39,40,43,45,47,48,50,51,52,54,55,56,57,59,60,62,63,65,66,67,69,69_notTaken,70,71,73,74,75,76,78,79,80,81,83}` | same | — |
-| All 28 native-call PC step theorems (happy paths) — every `.call N` dispatches to the concrete stdlib/oracle native with the right arity and return count | Lean | `EvalEquivRebuild.lean` → `step_registration_pc{1,4,7,10,13,16,22,25,26,29,30,33,34,37,38,41,42,44,46,49,53,58,61,64,68,72,77,82}` | same | oracle coherence (RegistrationNativeOracle) |
+| `verify_registration_proof` bytecode matches the functional sigma predicate on the honest oracle (up to MachineState) | Lean | `lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquiv.lean` → `registration_eval_equiv_functional_sim` | `./verify-ca.sh --op register --stack lean` (completes in ~1s) | TEMPORARY AXIOM `registration_eval_equiv_functional_sim` (reproved in Phase 1 completion) |
+| `eval (registrationModuleEnv o) verifyRegistrationProofIdx args fuel initMs` reduces to `run` on the initial frame (entry-point unfolding) | Lean | `Registration/EvalEquivRebuild.lean` → `eval_registration_eq_run` | `./verify-ca.sh --op register --stack lean` | — (no axioms) |
+| All 55 non-native PC step theorems — every `stLoc`/`moveLoc`/`copyLoc`/`immBorrowLoc`/`mutBorrowLoc`/`brFalse`/`ldConst`/`ldU64`/`pop`/`ret`/`abort` instruction in the 84-PC registration bytecode | Lean | `EvalEquivRebuild.lean` → `step_registration_pc{0,2,3,5,5_notTaken,6,8,9,11,12,14,14_notTaken,15,17,18,19,20,21,23,24,27,28,31,32,35,36,39,40,43,45,47,48,50,51,52,54,55,56,57,59,60,62,63,65,66,67,69,69_notTaken,70,71,73,74,75,76,78,79,80,81,83}` | `./verify-ca.sh --op register --stack lean` | — |
+| All 28 native-call PC step theorems (happy paths) — every `.call N` dispatches to the concrete stdlib/oracle native with the right arity and return count | Lean | `EvalEquivRebuild.lean` → `step_registration_pc{1,4,7,10,13,16,22,25,26,29,30,33,34,37,38,41,42,44,46,49,53,58,61,64,68,72,77,82}` | `./verify-ca.sh --op register --stack lean` | oracle coherence (RegistrationNativeOracle) |
 | 10 native-call `_none` error-path variants — oracle returning `none` produces `.error` at PCs 1, 10, 41, 44, 46, 49, 53, 61, 64, 68 | Lean | `EvalEquivRebuild.lean` → `step_registration_pc{1,10,41,44,46,49,53,61,64,68}_none` | same | — |
 | Early-error composition: commitment-bytes oracle `none` ⇒ `eval` and `run` produce `.error` (two-step run unfolding) | Lean | `EvalEquivRebuild.lean` → `registration_early_error_compressedPoint_none`, `eval_registration_early_error_compressedPoint_none` | same | — |
 | Happy-path 2-PC composition: `run` on initial frame at fuel `extraFuel + 2` reduces to `run` at PC 2 with `mv` on stack (after PC 0 + PC 1-some) | Lean | `EvalEquivRebuild.lean` → `registration_run_through_pc1_some` | same | oracle coherence + `StepLemmas.Run.run_succ_ok_of_step` |
@@ -40,7 +52,7 @@ Each claim row has: plain-English property, tool (Move Prover / Lean / difftest)
 
 | Claim | Tool | Location | Rerun | Relies on |
 |---|---|---|---|---|
-| `verify_withdrawal_proof` bytecode dispatcher correctly wires sigma proof + range proof sub-calls via `ImmBorrowField` | Lean | `Programs/Withdrawal.lean` (15 instrs transcribed), `Withdrawal/EvalEquiv.lean` → `eval_withdrawal_eq_run` + 15 per-PC step theorems (`step_withdrawal_pc{0..14}`) + 2 error-path variants (`pc9_none`, `pc13_none`) | `lake build MovementFormal.Experimental.ConfidentialAsset.Withdrawal.EvalEquiv` | `WithdrawalModuleOracle` (opaque sigma + range proof oracles) |
+| `verify_withdrawal_proof` bytecode dispatcher correctly wires sigma proof + range proof sub-calls via `ImmBorrowField` | Lean | `Programs/Withdrawal.lean` (15 instrs transcribed), `Withdrawal/EvalEquiv.lean` → `eval_withdrawal_eq_run` + 15 per-PC step theorems (`step_withdrawal_pc{0..14}`) + 2 error-path variants (`pc9_none`, `pc13_none`) | `./verify-ca.sh --op withdraw --stack lean` (completes in ~1s, 27 theorems) | `WithdrawalModuleOracle` (opaque sigma + range proof oracles) |
 | `withdraw_to_internal` preserves `ConfidentialAssetStore` frame conditions (normalized = true, balance actually updated, no mutation of frozen/ek/pending_counter) | Move Prover | `aptos-experimental/sources/confidential_asset/confidential_asset.spec.move` → `spec withdraw_to_internal` | `movement move prove --filter withdraw_to_internal` | *blocked on Phase 0 ristretto255 patches* |
 | `withdraw_to` / `withdraw` entry points set `normalized = true` on sender store; delegate to `_internal` | Move Prover | same file → `spec withdraw_to`, `spec withdraw` | `movement move prove --filter 'withdraw_to\|^withdraw$'` | *blocked on Phase 0* |
 
@@ -48,7 +60,7 @@ Each claim row has: plain-English property, tool (Move Prover / Lean / difftest)
 
 | Claim | Tool | Location | Rerun | Relies on |
 |---|---|---|---|---|
-| `verify_transfer_proof` bytecode dispatcher correctly wires sigma proof + new-balance range proof + transfer-amount range proof via `ImmBorrowField` | Lean | `Programs/Transfer.lean` (24 instrs transcribed), `Transfer/EvalEquiv.lean` → `eval_transfer_eq_run` + 24 per-PC step theorems (`step_transfer_pc{0..23}`) + 3 error-path variants (`pc14_none`, `pc18_none`, `pc22_none`) | `lake build MovementFormal.Experimental.ConfidentialAsset.Transfer.EvalEquiv` | `TransferModuleOracle` (opaque sigma + 2 range proof oracles) |
+| `verify_transfer_proof` bytecode dispatcher correctly wires sigma proof + new-balance range proof + transfer-amount range proof via `ImmBorrowField` | Lean | `Programs/Transfer.lean` (24 instrs transcribed), `Transfer/EvalEquiv.lean` → `eval_transfer_eq_run` + 24 per-PC step theorems (`step_transfer_pc{0..23}`) + 3 error-path variants (`pc14_none`, `pc18_none`, `pc22_none`) | `./verify-ca.sh --op transfer --stack lean` (completes in ~2s, 33 theorems) | `TransferModuleOracle` (opaque sigma + 2 range proof oracles) |
 | `confidential_transfer_internal` increments recipient `pending_counter` by 1, respects freeze gate on recipient | Move Prover | `aptos-experimental/sources/confidential_asset/confidential_asset.spec.move` → `spec confidential_transfer_internal` | `movement move prove --filter confidential_transfer_internal` | *blocked on Phase 0* |
 | `confidential_transfer` entry composes `_internal` spec with FA transfer | Move Prover | same file → `spec confidential_transfer` | `movement move prove --filter confidential_transfer` | *blocked on Phase 0* |
 | `deposit_to` / `deposit` entry points increment recipient pending_counter, require store exists + not frozen | Move Prover | same file → `spec deposit_to`, `spec deposit` | `movement move prove --filter 'deposit_to\|^deposit$'` | *blocked on Phase 0* |
@@ -57,14 +69,14 @@ Each claim row has: plain-English property, tool (Move Prover / Lean / difftest)
 
 | Claim | Tool | Location | Rerun | Relies on |
 |---|---|---|---|---|
-| `verify_normalization_proof` bytecode dispatcher correctly wires sigma proof + range proof sub-calls via `ImmBorrowField` | Lean | `Programs/Normalization.lean` (14 instrs transcribed), `Normalization/EvalEquiv.lean` → `eval_normalization_eq_run` + 14 per-PC step theorems (`step_normalization_pc{0..13}`) + 2 error-path variants (`pc8_none`, `pc12_none`) | `lake build MovementFormal.Experimental.ConfidentialAsset.Normalization.EvalEquiv` | `NormalizationModuleOracle` (opaque sigma + range proof oracles) |
+| `verify_normalization_proof` bytecode dispatcher correctly wires sigma proof + range proof sub-calls via `ImmBorrowField` | Lean | `Programs/Normalization.lean` (14 instrs transcribed), `Normalization/EvalEquiv.lean` → `eval_normalization_eq_run` + 14 per-PC step theorems (`step_normalization_pc{0..13}`) + 2 error-path variants (`pc8_none`, `pc12_none`) | `./verify-ca.sh --op normalize --stack lean` (completes in ~1s, 22 theorems) | `NormalizationModuleOracle` (opaque sigma + range proof oracles) |
 | `normalize_internal` sets `normalized = true`, aborts if already normalized, preserves `ek`/`frozen`/`pending_counter`/`pending_balance` | Move Prover | `confidential_asset.spec.move` → `spec normalize_internal` | `movement move prove --filter normalize_internal` | *blocked on Phase 0 ristretto255 patches* |
 
 ## Rotation
 
 | Claim | Tool | Location | Rerun | Relies on |
 |---|---|---|---|---|
-| `verify_rotation_proof` bytecode dispatcher correctly wires sigma proof + range proof sub-calls via `ImmBorrowField` | Lean | `Programs/Rotation.lean` (15 instrs transcribed), `Rotation/EvalEquiv.lean` → `eval_rotation_eq_run` + 15 per-PC step theorems (`step_rotation_pc{0..14}`) + 2 error-path variants (`pc9_none`, `pc13_none`) | `lake build MovementFormal.Experimental.ConfidentialAsset.Rotation.EvalEquiv` | `RotationModuleOracle` (opaque sigma + range proof oracles) |
+| `verify_rotation_proof` bytecode dispatcher correctly wires sigma proof + range proof sub-calls via `ImmBorrowField` | Lean | `Programs/Rotation.lean` (15 instrs transcribed), `Rotation/EvalEquiv.lean` → `eval_rotation_eq_run` + 15 per-PC step theorems (`step_rotation_pc{0..14}`) + 2 error-path variants (`pc9_none`, `pc13_none`) | `./verify-ca.sh --op rotate --stack lean` (completes in ~1s, 22 theorems) | `RotationModuleOracle` (opaque sigma + range proof oracles) |
 | `rotate_encryption_key_internal` updates `ek` to the new key, sets `normalized = true`, preserves `frozen`/`pending_counter`/`pending_balance` | Move Prover | `confidential_asset.spec.move` → `spec rotate_encryption_key_internal` | `movement move prove --filter rotate_encryption_key_internal` | *blocked on Phase 0* |
 
 ## Freeze / unfreeze

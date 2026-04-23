@@ -13,6 +13,34 @@ spec aptos_experimental::confidential_asset {
     spec module {
         pragma verify = true;
         pragma aborts_if_is_strict;
+
+        // Global module invariants (Phase 2/3 strengthening)
+        //
+        // These invariants state properties that must hold across all functions in the module.
+        // They strengthen the verification by ensuring structural consistency is maintained.
+
+        // Invariant 1: Pending counter never exceeds MAX_TRANSFERS_BEFORE_ROLLOVER
+        // This prevents counter overflow and ensures rollover is enforced
+        invariant forall addr: address, token: Object<Metadata>:
+            exists<ConfidentialAssetStore>(spec_get_user_address(addr, token)) ==>
+                global<ConfidentialAssetStore>(spec_get_user_address(addr, token)).pending_counter
+                    <= MAX_TRANSFERS_BEFORE_ROLLOVER;
+
+        // Invariant 2: Balance chunk counts are always correct
+        // Pending balances have 4 chunks, actual balances have 8 chunks
+        invariant forall addr: address, token: Object<Metadata>:
+            exists<ConfidentialAssetStore>(spec_get_user_address(addr, token)) ==>
+                (len(global<ConfidentialAssetStore>(spec_get_user_address(addr, token)).pending_balance.chunks)
+                    == confidential_balance::PENDING_BALANCE_CHUNKS &&
+                 len(global<ConfidentialAssetStore>(spec_get_user_address(addr, token)).actual_balance.chunks)
+                    == confidential_balance::ACTUAL_BALANCE_CHUNKS);
+
+        // Invariant 3: If normalized flag is false, pending_counter > 0
+        // This ensures normalized flag accurately reflects whether pending balance has been rolled over
+        invariant forall addr: address, token: Object<Metadata>:
+            exists<ConfidentialAssetStore>(spec_get_user_address(addr, token)) ==>
+                (!global<ConfidentialAssetStore>(spec_get_user_address(addr, token)).normalized ==>
+                 global<ConfidentialAssetStore>(spec_get_user_address(addr, token)).pending_counter > 0);
     }
 
     //
@@ -145,6 +173,66 @@ spec aptos_experimental::confidential_asset {
     spec is_token_allowed {
         pragma aborts_if_is_strict = false;
         aborts_if !exists<FAController>(@aptos_experimental);
+    }
+
+    //
+    // Balance verification helpers (test/audit utilities)
+    //
+
+    /// `verify_pending_balance` — Decrypts and verifies the pending balance matches expected amount.
+    /// This is a testing/audit utility that allows external verification of encrypted balances.
+    /// The function decompresses the stored balance and delegates to the confidential_balance
+    /// module's verification logic.
+    spec verify_pending_balance {
+        pragma opaque;
+        pragma aborts_if_is_strict = false;
+
+        let store_addr = spec_get_user_address(user, token);
+        aborts_if !exists<ConfidentialAssetStore>(store_addr);
+
+        // Result semantics: returns true iff the pending balance decrypts to the expected amount
+        // under the provided decryption key. Detailed verification logic is opaque (delegated
+        // to confidential_balance module).
+    }
+
+    /// `verify_actual_balance` — Decrypts and verifies the actual balance matches expected amount.
+    /// Test-only utility for validating encrypted actual balance correctness. Marked test_only
+    /// in source to prevent production use of decryption keys.
+    spec verify_actual_balance {
+        pragma opaque;
+        pragma aborts_if_is_strict = false;
+
+        let store_addr = spec_get_user_address(user, token);
+        aborts_if !exists<ConfidentialAssetStore>(store_addr);
+
+        // Returns true iff actual balance decrypts to expected amount. Test-only guard ensures
+        // decryption keys are never exposed in production code paths.
+    }
+
+    //
+    // Serialization helpers (difftest/testing support)
+    //
+
+    /// `serialize_auditor_eks` — Pure serialization of auditor encryption key vector to bytes.
+    /// No store access, no abort conditions. Used by difftest and testing infrastructure to
+    /// produce canonical byte representations for cross-environment validation.
+    spec serialize_auditor_eks {
+        aborts_if false;
+        // Result is the concatenation of pubkey_to_bytes for each auditor key in the vector.
+        // Length: |auditor_eks| * COMPRESSED_PUBKEY_SIZE bytes (32 bytes per pubkey).
+        // TODO: Re-enable once COMPRESSED_PUBKEY_SIZE constant is defined in ristretto255_twisted_elgamal
+        // ensures len(result) == len(auditor_eks) * 32;
+    }
+
+    /// `serialize_auditor_amounts` — Pure serialization of confidential balance vector to bytes.
+    /// No store access, no abort conditions. Produces canonical byte encoding for auditor
+    /// amount commitments in cross-environment testing.
+    spec serialize_auditor_amounts {
+        aborts_if false;
+        // Result is the concatenation of balance_to_bytes for each balance in the vector.
+        // Each balance serializes to a fixed size determined by chunk count.
+        // Length: |auditor_amounts| * (per-balance serialized size).
+        // Exact per-balance size depends on chunk count (pending: 4 chunks, actual: 8 chunks).
     }
 
     //
@@ -536,6 +624,7 @@ spec aptos_experimental::confidential_asset {
 
         let user = signer::address_of(sender);
         let store_addr = spec_get_user_address(user, token);
+        let token_addr = object::object_address(token);
 
         aborts_if exists<ConfidentialAssetStore>(store_addr);
 
@@ -543,6 +632,11 @@ spec aptos_experimental::confidential_asset {
         ensures !global<ConfidentialAssetStore>(store_addr).frozen;
         ensures global<ConfidentialAssetStore>(store_addr).normalized;
         ensures global<ConfidentialAssetStore>(store_addr).pending_counter == 0;
+
+        // Event emission: Registered event with user address, token address, and ek
+        // Note: event emission specs require std::event framework support (Phase 5 extended)
+        // Placeholder for when event spec support is available:
+        // emits Registered { addr: user, asset_type: token_addr, ek: ... } to sender;
 
         modifies global<ConfidentialAssetStore>(store_addr);
     }
@@ -694,6 +788,141 @@ spec aptos_experimental::confidential_asset {
 
         ensures global<ConfidentialAssetStore>(store_addr).normalized;
         modifies global<ConfidentialAssetStore>(store_addr);
+    }
+
+    //
+    // Test-only event assertion helpers
+    //
+    // These functions are used by tests to verify that events were emitted with correct
+    // content. They check the most recent emitted event of each type and assert field values
+    // match expectations. All abort with custom codes (100-102) on mismatch or no events.
+    //
+
+    /// `assert_last_registered_event` — Verifies most recent Registered event matches expectations.
+    /// Test-only utility for validating registration event emission.
+    spec assert_last_registered_event {
+        pragma aborts_if_is_strict = false;
+        // Aborts if no Registered events have been emitted (custom code 100)
+        // Aborts if most recent event's addr doesn't match expected_addr (code 101)
+        // Aborts if most recent event's asset_type doesn't match token address (code 102)
+    }
+
+    /// `assert_last_deposited_event_matches_state` — Verifies Deposited event matches store state.
+    /// Checks that the most recent deposit event's values align with current store state.
+    spec assert_last_deposited_event_matches_state {
+        pragma aborts_if_is_strict = false;
+        let store_addr = spec_get_user_address(to, token);
+        aborts_if !exists<ConfidentialAssetStore>(store_addr);
+        // Additional aborts from event checks (custom codes 100-102)
+    }
+
+    /// `assert_last_withdrawn_event_matches_state` — Verifies Withdrawn event correctness.
+    /// Test utility for validating withdrawal event emission and field values.
+    spec assert_last_withdrawn_event_matches_state {
+        pragma aborts_if_is_strict = false;
+        let store_addr = spec_get_user_address(from, token);
+        aborts_if !exists<ConfidentialAssetStore>(store_addr);
+        // Additional aborts from event checks (custom codes 100-102)
+    }
+
+    /// `assert_last_transferred_event_matches_state` — Verifies Transferred event correctness.
+    /// Checks sender and recipient event fields against current store states.
+    spec assert_last_transferred_event_matches_state {
+        pragma aborts_if_is_strict = false;
+        let sender_store = spec_get_user_address(from, token);
+        let recipient_store = spec_get_user_address(to, token);
+        aborts_if !exists<ConfidentialAssetStore>(sender_store);
+        aborts_if !exists<ConfidentialAssetStore>(recipient_store);
+        // Additional aborts from event checks (custom codes 100-102)
+    }
+
+    /// `assert_last_key_rotated_event_matches_state` — Verifies KeyRotated event correctness.
+    /// Test utility for validating encryption key rotation event emission.
+    spec assert_last_key_rotated_event_matches_state {
+        pragma aborts_if_is_strict = false;
+        let store_addr = spec_get_user_address(user, token);
+        aborts_if !exists<ConfidentialAssetStore>(store_addr);
+        // Additional aborts from event checks (custom codes 100-102)
+    }
+
+    /// `assert_last_normalized_event_matches_state` — Verifies Normalized event correctness.
+    /// Checks that normalization event reflects current store state.
+    spec assert_last_normalized_event_matches_state {
+        pragma aborts_if_is_strict = false;
+        let store_addr = spec_get_user_address(user, token);
+        aborts_if !exists<ConfidentialAssetStore>(store_addr);
+        // Additional aborts from event checks (custom codes 100-102)
+    }
+
+    /// `assert_last_rolled_over_event_matches_state` — Verifies RolledOver event correctness.
+    /// Test utility for validating pending balance rollover event emission.
+    spec assert_last_rolled_over_event_matches_state {
+        pragma aborts_if_is_strict = false;
+        let store_addr = spec_get_user_address(user, token);
+        aborts_if !exists<ConfidentialAssetStore>(store_addr);
+        // Additional aborts from event checks (custom codes 100-102)
+    }
+
+    /// `assert_last_freeze_changed_event` — Verifies FreezeChanged event correctness.
+    /// Test utility for validating freeze state change events.
+    spec assert_last_freeze_changed_event {
+        pragma aborts_if_is_strict = false;
+        let store_addr = spec_get_user_address(user, token);
+        aborts_if !exists<ConfidentialAssetStore>(store_addr);
+        // Additional aborts from event checks (custom codes 100-102)
+    }
+
+    /// `assert_last_allow_list_changed_event` — Verifies AllowListChanged event correctness.
+    /// Test utility for validating allow-list toggle events.
+    spec assert_last_allow_list_changed_event {
+        pragma aborts_if_is_strict = false;
+        aborts_if !exists<FAController>(@aptos_experimental);
+        // Additional aborts from event checks (custom codes 100-102)
+    }
+
+    /// `assert_last_token_allow_changed_event` — Verifies TokenAllowChanged event correctness.
+    /// Test utility for validating per-token allow-list events.
+    spec assert_last_token_allow_changed_event {
+        pragma aborts_if_is_strict = false;
+        aborts_if !exists<FAController>(@aptos_experimental);
+        // Additional aborts from event checks (custom codes 100-102)
+    }
+
+    /// `assert_last_auditor_changed_event` — Verifies AuditorChanged event correctness.
+    /// Test utility for validating auditor configuration change events.
+    spec assert_last_auditor_changed_event {
+        pragma aborts_if_is_strict = false;
+        aborts_if !exists<FAController>(@aptos_experimental);
+        // Additional aborts from event checks (custom codes 100-102)
+    }
+
+    //
+    // Test-only setup helpers
+    //
+
+    /// `init_module_for_testing` — Test-only module initialization.
+    /// Creates FAController resource for testing environments. Only callable in tests.
+    spec init_module_for_testing {
+        aborts_if exists<FAController>(@aptos_experimental);
+        ensures exists<FAController>(@aptos_experimental);
+    }
+
+    /// `register_for_testing` — Test-only registration helper with direct ek/balance provision.
+    /// Bypasses proof verification for test setup. Allows tests to create accounts with
+    /// predetermined encryption keys and balances without needing to generate valid proofs.
+    spec register_for_testing {
+        pragma aborts_if_is_strict = false;
+
+        let user = signer::address_of(sender);
+        let store_addr = spec_get_user_address(user, token);
+
+        aborts_if exists<ConfidentialAssetStore>(store_addr);
+        aborts_if !exists<FAController>(@aptos_experimental);
+
+        ensures exists<ConfidentialAssetStore>(store_addr);
+        ensures global<ConfidentialAssetStore>(store_addr).frozen == false;
+        ensures global<ConfidentialAssetStore>(store_addr).normalized == true;
+        ensures global<ConfidentialAssetStore>(store_addr).pending_counter == 0;
     }
 
     //

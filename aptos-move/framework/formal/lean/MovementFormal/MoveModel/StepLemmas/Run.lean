@@ -109,4 +109,119 @@ theorem run_succ_ok_then_aborted
   rw [run_succ_ok_of_step (fuel + 1) frame2 cs2 stack2 ms2 hstep1]
   exact run_succ_aborted_of_step fuel code hstep2
 
+/-! ## Extended multi-step bundle helpers
+
+Additional bundled helpers for 4, 5, 6, 7, and 8 consecutive OK steps. These reduce boilerplate
+in PC-chaining proofs for longer instruction sequences, particularly useful for the Phase 4
+verifier operations that chain 5+ moveLoc/copyLoc instructions before reaching native calls.
+
+The pattern follows run_succ_three_ok: decompose fuel arithmetic, apply first step, then
+delegate to the (n-1)-step helper. -/
+
+/-- Four consecutive OK steps. -/
+theorem run_succ_four_ok
+    (fuel : Nat)
+    (frame2 frame3 frame4 frame5 : Frame)
+    (cs2 cs3 cs4 cs5 : List Frame)
+    (stack2 stack3 stack4 stack5 : List MoveValue)
+    (ms2 ms3 ms4 ms5 : MachineState)
+    (hstep1 : step env frame cs stack ms = .ok frame2 cs2 stack2 ms2)
+    (hstep2 : step env frame2 cs2 stack2 ms2 = .ok frame3 cs3 stack3 ms3)
+    (hstep3 : step env frame3 cs3 stack3 ms3 = .ok frame4 cs4 stack4 ms4)
+    (hstep4 : step env frame4 cs4 stack4 ms4 = .ok frame5 cs5 stack5 ms5) :
+    run env frame cs stack ms (fuel + 4) =
+      run env frame5 cs5 stack5 ms5 fuel := by
+  rw [show fuel + 4 = (fuel + 3) + 1 from by omega]
+  rw [run_succ_ok_of_step (fuel + 3) frame2 cs2 stack2 ms2 hstep1]
+  exact run_succ_three_ok (env := env) (frame := frame2) (cs := cs2) (stack := stack2) (ms := ms2)
+    fuel frame3 frame4 frame5 cs3 cs4 cs5 stack3 stack4 stack5 ms3 ms4 ms5 hstep2 hstep3 hstep4
+
+/-- Five consecutive OK steps. -/
+theorem run_succ_five_ok
+    (fuel : Nat)
+    (frame2 frame3 frame4 frame5 frame6 : Frame)
+    (cs2 cs3 cs4 cs5 cs6 : List Frame)
+    (stack2 stack3 stack4 stack5 stack6 : List MoveValue)
+    (ms2 ms3 ms4 ms5 ms6 : MachineState)
+    (hstep1 : step env frame cs stack ms = .ok frame2 cs2 stack2 ms2)
+    (hstep2 : step env frame2 cs2 stack2 ms2 = .ok frame3 cs3 stack3 ms3)
+    (hstep3 : step env frame3 cs3 stack3 ms3 = .ok frame4 cs4 stack4 ms4)
+    (hstep4 : step env frame4 cs4 stack4 ms4 = .ok frame5 cs5 stack5 ms5)
+    (hstep5 : step env frame5 cs5 stack5 ms5 = .ok frame6 cs6 stack6 ms6) :
+    run env frame cs stack ms (fuel + 5) =
+      run env frame6 cs6 stack6 ms6 fuel := by
+  rw [show fuel + 5 = (fuel + 4) + 1 from by omega]
+  rw [run_succ_ok_of_step (fuel + 4) frame2 cs2 stack2 ms2 hstep1]
+  exact run_succ_four_ok (env := env) (frame := frame2) (cs := cs2) (stack := stack2) (ms := ms2)
+    fuel frame3 frame4 frame5 frame6 cs3 cs4 cs5 cs6
+    stack3 stack4 stack5 stack6 ms3 ms4 ms5 ms6 hstep2 hstep3 hstep4 hstep5
+
+/-- Six consecutive OK steps. -/
+theorem run_succ_six_ok
+    (fuel : Nat)
+    (frame2 frame3 frame4 frame5 frame6 frame7 : Frame)
+    (cs2 cs3 cs4 cs5 cs6 cs7 : List Frame)
+    (stack2 stack3 stack4 stack5 stack6 stack7 : List MoveValue)
+    (ms2 ms3 ms4 ms5 ms6 ms7 : MachineState)
+    (hstep1 : step env frame cs stack ms = .ok frame2 cs2 stack2 ms2)
+    (hstep2 : step env frame2 cs2 stack2 ms2 = .ok frame3 cs3 stack3 ms3)
+    (hstep3 : step env frame3 cs3 stack3 ms3 = .ok frame4 cs4 stack4 ms4)
+    (hstep4 : step env frame4 cs4 stack4 ms4 = .ok frame5 cs5 stack5 ms5)
+    (hstep5 : step env frame5 cs5 stack5 ms5 = .ok frame6 cs6 stack6 ms6)
+    (hstep6 : step env frame6 cs6 stack6 ms6 = .ok frame7 cs7 stack7 ms7) :
+    run env frame cs stack ms (fuel + 6) =
+      run env frame7 cs7 stack7 ms7 fuel := by
+  rw [show fuel + 6 = (fuel + 5) + 1 from by omega]
+  rw [run_succ_ok_of_step (fuel + 5) frame2 cs2 stack2 ms2 hstep1]
+  exact run_succ_five_ok (env := env) (frame := frame2) (cs := cs2) (stack := stack2) (ms := ms2)
+    fuel frame3 frame4 frame5 frame6 frame7 cs3 cs4 cs5 cs6 cs7
+    stack3 stack4 stack5 stack6 stack7 ms3 ms4 ms5 ms6 ms7 hstep2 hstep3 hstep4 hstep5 hstep6
+
+/-- Seven consecutive OK steps. -/
+theorem run_succ_seven_ok
+    (fuel : Nat)
+    (frame2 frame3 frame4 frame5 frame6 frame7 frame8 : Frame)
+    (cs2 cs3 cs4 cs5 cs6 cs7 cs8 : List Frame)
+    (stack2 stack3 stack4 stack5 stack6 stack7 stack8 : List MoveValue)
+    (ms2 ms3 ms4 ms5 ms6 ms7 ms8 : MachineState)
+    (hstep1 : step env frame cs stack ms = .ok frame2 cs2 stack2 ms2)
+    (hstep2 : step env frame2 cs2 stack2 ms2 = .ok frame3 cs3 stack3 ms3)
+    (hstep3 : step env frame3 cs3 stack3 ms3 = .ok frame4 cs4 stack4 ms4)
+    (hstep4 : step env frame4 cs4 stack4 ms4 = .ok frame5 cs5 stack5 ms5)
+    (hstep5 : step env frame5 cs5 stack5 ms5 = .ok frame6 cs6 stack6 ms6)
+    (hstep6 : step env frame6 cs6 stack6 ms6 = .ok frame7 cs7 stack7 ms7)
+    (hstep7 : step env frame7 cs7 stack7 ms7 = .ok frame8 cs8 stack8 ms8) :
+    run env frame cs stack ms (fuel + 7) =
+      run env frame8 cs8 stack8 ms8 fuel := by
+  rw [show fuel + 7 = (fuel + 6) + 1 from by omega]
+  rw [run_succ_ok_of_step (fuel + 6) frame2 cs2 stack2 ms2 hstep1]
+  exact run_succ_six_ok (env := env) (frame := frame2) (cs := cs2) (stack := stack2) (ms := ms2)
+    fuel frame3 frame4 frame5 frame6 frame7 frame8 cs3 cs4 cs5 cs6 cs7 cs8
+    stack3 stack4 stack5 stack6 stack7 stack8 ms3 ms4 ms5 ms6 ms7 ms8
+    hstep2 hstep3 hstep4 hstep5 hstep6 hstep7
+
+/-- Eight consecutive OK steps. -/
+theorem run_succ_eight_ok
+    (fuel : Nat)
+    (frame2 frame3 frame4 frame5 frame6 frame7 frame8 frame9 : Frame)
+    (cs2 cs3 cs4 cs5 cs6 cs7 cs8 cs9 : List Frame)
+    (stack2 stack3 stack4 stack5 stack6 stack7 stack8 stack9 : List MoveValue)
+    (ms2 ms3 ms4 ms5 ms6 ms7 ms8 ms9 : MachineState)
+    (hstep1 : step env frame cs stack ms = .ok frame2 cs2 stack2 ms2)
+    (hstep2 : step env frame2 cs2 stack2 ms2 = .ok frame3 cs3 stack3 ms3)
+    (hstep3 : step env frame3 cs3 stack3 ms3 = .ok frame4 cs4 stack4 ms4)
+    (hstep4 : step env frame4 cs4 stack4 ms4 = .ok frame5 cs5 stack5 ms5)
+    (hstep5 : step env frame5 cs5 stack5 ms5 = .ok frame6 cs6 stack6 ms6)
+    (hstep6 : step env frame6 cs6 stack6 ms6 = .ok frame7 cs7 stack7 ms7)
+    (hstep7 : step env frame7 cs7 stack7 ms7 = .ok frame8 cs8 stack8 ms8)
+    (hstep8 : step env frame8 cs8 stack8 ms8 = .ok frame9 cs9 stack9 ms9) :
+    run env frame cs stack ms (fuel + 8) =
+      run env frame9 cs9 stack9 ms9 fuel := by
+  rw [show fuel + 8 = (fuel + 7) + 1 from by omega]
+  rw [run_succ_ok_of_step (fuel + 7) frame2 cs2 stack2 ms2 hstep1]
+  exact run_succ_seven_ok (env := env) (frame := frame2) (cs := cs2) (stack := stack2) (ms := ms2)
+    fuel frame3 frame4 frame5 frame6 frame7 frame8 frame9 cs3 cs4 cs5 cs6 cs7 cs8 cs9
+    stack3 stack4 stack5 stack6 stack7 stack8 stack9 ms3 ms4 ms5 ms6 ms7 ms8 ms9
+    hstep2 hstep3 hstep4 hstep5 hstep6 hstep7 hstep8
+
 end MovementFormal.MoveModel.StepLemmas

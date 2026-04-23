@@ -1,0 +1,100 @@
+{
+  "test_id": "rotation_happy_path_001",
+  "operation": "rotate_encryption_key_internal",
+  "description": "Happy path: successful encryption key rotation with re-encryption proof",
+  "inputs": {
+    "owner_address": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+    "old_encryption_pubkey": "0x5566778899aabbccddeeff00112233445566778899aabbccddeeff0011223344",
+    "new_encryption_pubkey": "0xaabbccddeeff00112233445566778899aabbccddeeff00112233445566778899",
+    "balance_before": {
+      "pending_balance": [
+        {
+          "compressed_commitment": "0x1a2b3c4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "opening": {
+            "value": "3000",
+            "randomness": "0xaabbccdd11223344556677889900aabbccdd11223344556677889900aabbccdd"
+          },
+          "encrypted_under_key": "0x5566778899aabbccddeeff00112233445566778899aabbccddeeff0011223344"
+        }
+      ],
+      "actual_balance": [],
+      "encryption_pubkey": "0x5566778899aabbccddeeff00112233445566778899aabbccddeeff0011223344",
+      "frozen": false,
+      "allow_list_enabled": false
+    },
+    "rotation_proof": {
+      "public_inputs": {
+        "old_pubkey": "0x5566778899aabbccddeeff00112233445566778899aabbccddeeff0011223344",
+        "new_pubkey": "0xaabbccddeeff00112233445566778899aabbccddeeff00112233445566778899",
+        "old_encrypted_balance": "0x1a2b3c4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890",
+        "new_encrypted_balance": "0x9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba"
+      },
+      "nizk_proof": "0xfedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+      "re_encryption_proof": {
+        "commitment": "0x9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba",
+        "proof_bytes": "0x0011223344556677889900112233445566778899001122334455667788990011223344556677889900112233445566778899001122334455667788990011"
+      }
+    }
+  },
+  "expected_output": {
+    "status": "success",
+    "balance_after": {
+      "pending_balance": [
+        {
+          "compressed_commitment": "0x9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba",
+          "opening": {
+            "value": "3000",
+            "randomness": "0xbbccdd11223344556677889900aabbccdd11223344556677889900aabbccddee"
+          },
+          "encrypted_under_key": "0xaabbccddeeff00112233445566778899aabbccddeeff00112233445566778899"
+        }
+      ],
+      "actual_balance": [],
+      "encryption_pubkey": "0xaabbccddeeff00112233445566778899aabbccddeeff00112233445566778899",
+      "frozen": false,
+      "allow_list_enabled": false
+    },
+    "events": [
+      {
+        "type": "KeyRotationEvent",
+        "owner": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+        "old_pubkey": "0x5566778899aabbccddeeff00112233445566778899aabbccddeeff0011223344",
+        "new_pubkey": "0xaabbccddeeff00112233445566778899aabbccddeeff00112233445566778899"
+      }
+    ]
+  },
+  "vm_execution_trace": {
+    "gas_used": "195000",
+    "num_instructions": 58,
+    "num_native_calls": 2,
+    "native_calls": [
+      "verify_rotation_proof",
+      "verify_re_encryption_proof"
+    ]
+  },
+  "lean_model_trace": {
+    "eval_result": "returned",
+    "num_steps": 58,
+    "oracle_calls": [
+      {
+        "name": "verifyRotationProof",
+        "result": "some"
+      },
+      {
+        "name": "verifyReEncryptionProof",
+        "result": "some"
+      }
+    ]
+  },
+  "test_purpose": "Validates that encryption key rotation correctly updates the pubkey and re-encrypts all balance chunks under the new key",
+  "coverage_tags": ["happy_path", "rotation", "key_update", "re_encryption"],
+  "related_theorems": [
+    "rotation_eval_equiv_functional_sim",
+    "rotation_key_update_correctness",
+    "rotation_balance_preservation",
+    "rotation_re_encryption_soundness"
+  ],
+  "related_msl_specs": [
+    "spec rotate_encryption_key_internal { ensures store.encryption_pubkey == new_pubkey; ensures sum_balance(store.pending_balance) == sum_balance(old(store.pending_balance)); }"
+  ]
+}

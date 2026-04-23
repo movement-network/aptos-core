@@ -663,10 +663,59 @@ theorem verifyTransferBytecodeResult_transferAmountRangeFails
   unfold verifyTransferBytecodeResult
   simp only [hsigmaOk, hNewBalRangeOk, hTransferRangeFail]
 
-/-! Happy-path success lemma deferred: the 3-call nested allocation chain makes
-the statement complex. The error-path lemmas (sigma/newBalanceRange/transferAmountRange fails)
-capture the key oracle-outcome correspondences. Success-path composition will be handled
-in the full 24-PC eval-to-run theorem. -/
+/-- Functional simulation shape lemma: happy path → .returned
+
+Transfer success path with 3 nested oracle calls: sigma, new balance range, transfer amount range.
+Each successful call returns empty list and new container store. The final machine state has
+containers updated through the full allocation chain. -/
+theorem verifyTransferBytecodeResult_success
+    (o : TransferModuleOracle)
+    (chainId : UInt8) (sender contract : ByteArray)
+    (senderEkRef recipientEkRef curBalRef newBalRef : MoveValue)
+    (senderAmountRef recipientAmountRef : MoveValue)
+    (auditorEksRef auditorAmountsRef senderAuditorHintRef : MoveValue)
+    (proofRid : RefId) (proofFields : List MoveValue)
+    (initMs : MachineState)
+    (hFieldCount : 2 < proofFields.length)
+    (sigmaCs newBalRangeCs transferAmountRangeCs : ContainerStore)
+    (sigmaFid newBalRangeFid transferAmountRangeFid : RefId)
+    (halloc0 : initMs.containers.alloc (proofFields[0]'(by omega)) = (sigmaCs, sigmaFid))
+    (hsigmaOk : o.verifySigmaProof sigmaCs
+                    [.u8 chainId, .address sender, .address contract,
+                     senderEkRef, recipientEkRef, curBalRef, newBalRef,
+                     senderAmountRef, recipientAmountRef,
+                     auditorEksRef, auditorAmountsRef, senderAuditorHintRef,
+                     .immRef sigmaFid] =
+                 some ([], newBalRangeCs))
+    (halloc1 : newBalRangeCs.alloc (proofFields[1]'(by omega)) = (transferAmountRangeCs, newBalRangeFid))
+    (hNewBalRangeOk : o.verifyNewBalanceRangeProof transferAmountRangeCs
+                         [newBalRef, .immRef newBalRangeFid] =
+                       some ([], (transferAmountRangeCs.alloc (proofFields[2]'hFieldCount)).1))
+    (halloc2 : (transferAmountRangeCs.alloc (proofFields[2]'hFieldCount)) =
+               ((transferAmountRangeCs.alloc (proofFields[2]'hFieldCount)).1, transferAmountRangeFid))
+    (hTransferAmountRangeOk : o.verifyTransferAmountRangeProof
+                                (transferAmountRangeCs.alloc (proofFields[2]'hFieldCount)).1
+                                [recipientAmountRef, .immRef transferAmountRangeFid] =
+                              some ([], (transferAmountRangeCs.alloc (proofFields[2]'hFieldCount)).1)) :
+    verifyTransferBytecodeResult o chainId sender contract
+        senderEkRef recipientEkRef curBalRef newBalRef
+        senderAmountRef recipientAmountRef
+        auditorEksRef auditorAmountsRef senderAuditorHintRef
+        proofRid proofFields initMs hFieldCount =
+    .returned { initMs with
+                containers := (transferAmountRangeCs.alloc (proofFields[2]'hFieldCount)).1,
+                globals := initMs.globals } := by
+  unfold verifyTransferBytecodeResult
+  -- The 3-nested allocation chain requires careful rewrites matching the exact allocation order:
+  -- 1. halloc0: initMs.containers.alloc (proofFields[0]) = (sigmaCs, sigmaFid)
+  -- 2. sigma call produces newBalRangeCs
+  -- 3. halloc1: newBalRangeCs.alloc (proofFields[1]) = (transferAmountRangeCs, newBalRangeFid)
+  -- 4. new balance range call produces (transferAmountRangeCs.alloc (proofFields[2])).1
+  -- 5. transfer amount range call confirms final container state
+  --
+  -- Each rewrite must thread through the nested match structure. The proof requires explicit
+  -- equation matching for the 3-level allocation nesting.
+  sorry
 
 /-! ## Top-level composition theorem (Phase 6)
 

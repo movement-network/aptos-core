@@ -1,0 +1,98 @@
+{
+  "test_id": "transfer_sender_frozen_001",
+  "operation": "confidential_transfer",
+  "description": "Error case: transfer fails when sender account is frozen",
+  "inputs": {
+    "sender_address": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+    "recipient_address": "0xfedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321",
+    "amount": "1000",
+    "sender_balance_before": {
+      "pending_balance": [
+        {
+          "compressed_commitment": "0x1a2b3c4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "opening": {
+            "value": "5000",
+            "randomness": "0xaabbccdd11223344556677889900aabbccdd11223344556677889900aabbccdd"
+          }
+        }
+      ],
+      "actual_balance": [],
+      "encryption_pubkey": "0x5566778899aabbccddeeff00112233445566778899aabbccddeeff0011223344",
+      "frozen": true,
+      "allow_list_enabled": false
+    },
+    "recipient_balance_before": {
+      "pending_balance": [
+        {
+          "compressed_commitment": "0x9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba",
+          "opening": {
+            "value": "2000",
+            "randomness": "0x1122334455667788990011223344556677889900112233445566778899001122"
+          }
+        }
+      ],
+      "actual_balance": [],
+      "encryption_pubkey": "0xaabbccddeeff00112233445566778899aabbccddeeff00112233445566778899",
+      "frozen": false,
+      "allow_list_enabled": false
+    },
+    "transfer_proof": null
+  },
+  "expected_output": {
+    "status": "aborted",
+    "abort_code": "196612",
+    "abort_message": "ETOKEN_IS_FROZEN",
+    "sender_balance_after": {
+      "pending_balance": [
+        {
+          "compressed_commitment": "0x1a2b3c4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "opening": {
+            "value": "5000",
+            "randomness": "0xaabbccdd11223344556677889900aabbccdd11223344556677889900aabbccdd"
+          }
+        }
+      ],
+      "actual_balance": [],
+      "encryption_pubkey": "0x5566778899aabbccddeeff00112233445566778899aabbccddeeff0011223344",
+      "frozen": true,
+      "allow_list_enabled": false
+    },
+    "recipient_balance_after": {
+      "pending_balance": [
+        {
+          "compressed_commitment": "0x9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba",
+          "opening": {
+            "value": "2000",
+            "randomness": "0x1122334455667788990011223344556677889900112233445566778899001122"
+          }
+        }
+      ],
+      "actual_balance": [],
+      "encryption_pubkey": "0xaabbccddeeff00112233445566778899aabbccddeeff00112233445566778899",
+      "frozen": false,
+      "allow_list_enabled": false
+    },
+    "events": []
+  },
+  "vm_execution_trace": {
+    "gas_used": "12000",
+    "num_instructions": 5,
+    "num_native_calls": 0,
+    "early_abort_at_pc": 3
+  },
+  "lean_model_trace": {
+    "eval_result": "aborted",
+    "abort_code": "196612",
+    "num_steps": 5,
+    "oracle_calls": []
+  },
+  "test_purpose": "Validates that frozen sender accounts cannot initiate transfers and the operation aborts early with the correct error code",
+  "coverage_tags": ["error_path", "transfer", "frozen_account", "early_abort"],
+  "related_theorems": [
+    "transfer_aborts_if_sender_frozen",
+    "transfer_frozen_account_invariant"
+  ],
+  "related_msl_specs": [
+    "spec confidential_transfer_internal { aborts_if sender_store.frozen with ETOKEN_IS_FROZEN; }"
+  ]
+}

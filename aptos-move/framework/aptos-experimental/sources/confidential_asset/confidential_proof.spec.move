@@ -73,4 +73,9 @@ spec aptos_experimental::confidential_proof {
         pragma opaque;
         aborts_if false;
     }
+
+    spec deserialize_rotation_proof {
+        pragma opaque;
+        aborts_if false;
+    }
 }

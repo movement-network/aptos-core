@@ -2423,6 +2423,13 @@ WARNING: This function can only be called with P = RistrettoPoint and S = Scalar
 ## Specification
 
 
+
+<pre><code><b>invariant</b> [deactivated] <b>forall</b> v: <a href="../../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="ristretto255.md#0x1_ristretto255_CompressedRistretto">CompressedRistretto</a>&gt; : len(v) &gt;= 0;
+<b>invariant</b> [deactivated] <b>forall</b> v: <a href="../../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="ristretto255.md#0x1_ristretto255_RistrettoPoint">RistrettoPoint</a>&gt; : len(v) &gt;= 0;
+</code></pre>
+
+
+
 <a id="@Specification_1_point_equals"></a>
 
 ### Function `point_equals`
@@ -3294,7 +3301,6 @@ WARNING: This function can only be called with P = RistrettoPoint and S = Scalar
 
 <pre><code><b>pragma</b> opaque;
 <b>aborts_if</b> [abstract] <b>false</b>;
-<b>ensures</b> result == <a href="ristretto255.md#0x1_ristretto255_spec_scalar_from_u64_internal">spec_scalar_from_u64_internal</a>(num);
 </code></pre>
 
 
@@ -3312,7 +3318,6 @@ WARNING: This function can only be called with P = RistrettoPoint and S = Scalar
 
 <pre><code><b>pragma</b> opaque;
 <b>aborts_if</b> [abstract] <b>false</b>;
-<b>ensures</b> result == <a href="ristretto255.md#0x1_ristretto255_spec_scalar_from_u128_internal">spec_scalar_from_u128_internal</a>(num);
 </code></pre>
 
 

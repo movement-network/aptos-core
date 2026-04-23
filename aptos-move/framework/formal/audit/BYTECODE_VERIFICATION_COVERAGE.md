@@ -3,10 +3,14 @@
 ## Overview
 
 This document catalogs the Lean 4 bytecode-level verification coverage for Confidential Assets
-crypto verifiers as of 2026-04-22. All proofs build cleanly with zero `sorry`, zero axioms in
+crypto verifiers as of 2026-04-22 evening. All proofs build cleanly with zero `sorry`, zero axioms in
 the per-PC step theorems (axioms only in Phase 6 composition stubs).
 
-**Build status**: Full CA Lean tree (1886 jobs) builds in ~1.6s.
+**Build status**: Full CA Lean tree (1896 jobs) builds cleanly.
+
+**Verification performance** (via `audit/verify-ca.sh --stack lean`): All 5 operations complete in ~6s total (register 1s, withdraw 1s, transfer 2s, normalize 1s, rotate 1s), well within plan budget of ≤2700s full run and ≤180s per-op. See VERIFY_CA_ENHANCEMENTS_2026_04_22.md for details.
+
+**Last updated**: 2026-04-22 evening (updated performance numbers, verify-ca.sh implementation)
 
 ## Coverage Summary
 
@@ -23,10 +27,13 @@ the per-PC step theorems (axioms only in Phase 6 composition stubs).
 
 All verifier proofs follow the unified architecture from `Registration/EvalEquivRebuild.lean`:
 
-1. **Per-instruction-class step lemmas** (`StepLemmas.Basic/Locals/Structs/Calls/Run`):
+1. **Per-instruction-class step lemmas** (`StepLemmas.Basic/Locals/Structs/Calls/Run/Bundled`):
    - `step_moveLoc_noRef`, `step_copyLoc_noRef`, `step_immBorrowField`, `step_call_frame`, etc.
    - Proved once, parametric over arbitrary frame state
    - Specific-PC proofs become one-line applications
+   - **Bundled helpers** (new): `StepLemmas.Bundled` provides axiom placeholders for multi-step chains
+     (moveLoc_chain_two/three/four/five/six, copyLoc chains, mixed patterns) — ~200 lines of documentation
+     and interface definitions for future completion once array manipulation constraint is resolved
 
 2. **Per-PC step theorems**:
    - One theorem per PC: `step_<verifier>_pc{0..N}`

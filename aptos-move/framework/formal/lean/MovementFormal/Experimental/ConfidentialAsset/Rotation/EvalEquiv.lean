@@ -487,9 +487,23 @@ theorem rotation_eval_equiv_functional_sim
           fuel initMs).dropMs = _
   rw [eval_rotation_eq_run]
 
-  -- TODO Phase 6: Chain all 15 PCs using run_succ_ok_of_step
-  -- Pattern: apply step theorems sequentially, split on oracle outcomes
-  -- at PC 10 (sigma) and PC 13 (range), apply shape lemmas to connect to functional sim
+  -- TODO Phase 6: Complete PC-chaining proof
+  -- Structure (15 PCs, 8 params including newEkRef at local 4):
+  -- 1. Chain PCs 0-5 (moveLoc for first 6 args) using run_succ_six_ok
+  -- 2. Chain PCs 6-7 (copyLoc for proof copies)
+  -- 3. PC 8: immBorrowField 0 (sigma proof field)
+  -- 4. PC 9: call verifySigmaProof (8 args) - split on oracle outcome
+  --    - If none: apply step_rotation_pc9_none, show error propagates
+  --    - If some ([], cs2):
+  --      5. Chain PCs 10-11 (moveLoc for balance refs)
+  --      6. PC 12: immBorrowField 1 (range proof field)
+  --      7. PC 13: call verifyRangeProof (2 args) - split on oracle outcome
+  --         - If none: apply step_rotation_pc13_none
+  --         - If some ([], cs3):
+  --           8. PC 14: ret, apply rotationBytecodeResult_success shape lemma
+  --
+  -- Each segment requires ~20-40 lines of frame manipulation.
+  -- Total estimated: ~200-250 lines for complete proof.
   sorry
 
 end MovementFormal.Experimental.ConfidentialAsset.Rotation.EvalEquiv

@@ -3,19 +3,93 @@
 ## Overview
 
 This document catalogs the Move Specification Language (MSL) coverage for the Confidential Assets
-module as of 2026-04-22. All specs compile cleanly with the Move Prover after Phase 0 ristretto255
-patches.
+module as of 2026-04-22 (updated). All specs compile cleanly with the Move Prover after Phase 0 
+ristretto255 patches.
 
 ## Coverage Summary
 
-| Category | Functions | Spec Blocks | Status |
-|----------|-----------|-------------|--------|
-| Internal operations (`*_internal`) | 6 | 6 | ✅ Complete |
-| Entry points | 15 | 15 | ✅ Complete |
-| View functions | 11 | 11 | ✅ Complete |
-| Freeze/governance | 9 | 9 | ✅ Complete |
-| Helper modules | 3 modules | Full coverage | ✅ Complete |
-| **Total** | **41+ functions** | **41+ spec blocks** | **✅ Complete** |
+| Category | Functions | Spec Blocks | Status | New (2026-04-22) |
+|----------|-----------|-------------|--------|------------------|
+| Internal operations (`*_internal`) | 6 | 6 | ✅ Complete | +12 postconditions |
+| Entry points | 15 | 15 | ✅ Complete | +4 event comments |
+| View functions | 11 | 15 | ✅ Complete | +4 new specs (verify/serialize helpers) |
+| Test helpers | 13 | 13 | ✅ Complete | +13 new specs (event assertions + setup) |
+| Freeze/governance | 9 | 9 | ✅ Complete | — |
+| Helper modules (other files) | 3 modules | Full coverage | ✅ Complete | +1 spec (deserialize_rotation_proof) |
+| Global invariants | Module-level | 3 invariants | ✅ Complete | +3 new invariants |
+| **Total** | **57+ functions** | **61+ spec blocks** | **✅ Complete** | **+39 enhancements** |
+
+## Recent Enhancements (2026-04-22)
+
+### 1. Global Module Invariants (NEW)
+
+Added 3 module-level invariants that must hold across all operations:
+
+1. **Pending counter bound**: `pending_counter <= MAX_TRANSFERS_BEFORE_ROLLOVER` for all stores
+2. **Balance chunk counts**: Pending balances always have 4 chunks, actual balances always have 8 chunks
+3. **Normalized flag consistency**: If `normalized == false`, then `pending_counter > 0`
+
+### 2. Balance Length Preservation Postconditions
+
+Added 12 new `ensures` clauses to internal operations:
+
+- `deposit_to_internal`: 2 balance length preservation ensures
+- `withdraw_to_internal`: 2 balance length preservation ensures
+- `rotate_encryption_key_internal`: 2 balance length preservation ensures
+- `normalize_internal`: 2 balance length preservation ensures
+- `confidential_transfer_internal`: 4 balance length preservation ensures (sender + recipient)
+
+### 3. Event Emission Documentation
+
+Added placeholder comments for event emission specs (awaiting MSL `emits` clause support):
+
+- `register`: Registered event
+- `withdraw_to`: Withdrawn event
+- `confidential_transfer`: Transferred event
+- `rotate_encryption_key`: KeyRotated event
+
+### 4. View Function Enhancements
+
+- `pending_balance`: Added structural guarantee for 4-chunk count
+- `actual_balance`: Added structural guarantee for 8-chunk count
+
+### 5. New View/Helper Function Specs (2026-04-22 v4)
+
+Added 4 new specs for previously unspecified view and serialization helpers:
+
+**Balance Verification Utilities**:
+- `verify_pending_balance`: Opaque spec with store existence check, documents test/audit use
+- `verify_actual_balance`: Test-only balance verification spec with similar structure
+
+**Serialization Helpers**:
+- `serialize_auditor_eks`: Pure function spec with length invariant (`|result| = |input| * COMPRESSED_PUBKEY_SIZE`)
+- `serialize_auditor_amounts`: Pure function spec for balance vector serialization
+
+**Proof Deserialization**:
+- `deserialize_rotation_proof` (in confidential_proof.spec.move): Completes deserialization family, never aborts
+
+### 6. Test Helper Function Specs (2026-04-22 v4)
+
+Added 13 new specs for test-only assertion and setup helpers:
+
+**Event Assertion Helpers** (11 functions):
+- `assert_last_registered_event`: Verifies Registered event fields
+- `assert_last_deposited_event_matches_state`: Validates Deposited event against store
+- `assert_last_withdrawn_event_matches_state`: Validates Withdrawn event
+- `assert_last_transferred_event_matches_state`: Validates Transferred event (sender + recipient)
+- `assert_last_key_rotated_event_matches_state`: Validates KeyRotated event
+- `assert_last_normalized_event_matches_state`: Validates Normalized event
+- `assert_last_rolled_over_event_matches_state`: Validates RolledOver event
+- `assert_last_freeze_changed_event`: Validates FreezeChanged event
+- `assert_last_allow_list_changed_event`: Validates AllowListChanged event
+- `assert_last_token_allow_changed_event`: Validates TokenAllowChanged event
+- `assert_last_auditor_changed_event`: Validates AuditorChanged event
+
+**Test Setup Helpers** (2 functions):
+- `init_module_for_testing`: Module initialization spec (creates FAController, ensures existence)
+- `register_for_testing`: Test registration bypass spec (direct ek/balance provision, comprehensive postconditions)
+
+All event assertion specs document store existence checks and custom abort codes (100-102).
 
 ## Internal Operations (`confidential_asset.spec.move`)
 

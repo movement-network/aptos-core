@@ -1,0 +1,113 @@
+{
+  "test_id": "normalization_happy_path_001",
+  "operation": "normalize_internal",
+  "description": "Happy path: successful balance normalization with valid proof",
+  "inputs": {
+    "owner_address": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+    "balance_before": {
+      "pending_balance": [
+        {
+          "compressed_commitment": "0x1111111111111111111111111111111111111111111111111111111111111111",
+          "opening": {
+            "value": "1000",
+            "randomness": "0xaaaa0000aaaa0000aaaa0000aaaa0000aaaa0000aaaa0000aaaa0000aaaa0000"
+          }
+        },
+        {
+          "compressed_commitment": "0x2222222222222222222222222222222222222222222222222222222222222222",
+          "opening": {
+            "value": "500",
+            "randomness": "0xbbbb0000bbbb0000bbbb0000bbbb0000bbbb0000bbbb0000bbbb0000bbbb0000"
+          }
+        },
+        {
+          "compressed_commitment": "0x3333333333333333333333333333333333333333333333333333333333333333",
+          "opening": {
+            "value": "2500",
+            "randomness": "0xcccc0000cccc0000cccc0000cccc0000cccc0000cccc0000cccc0000cccc0000"
+          }
+        }
+      ],
+      "actual_balance": [],
+      "encryption_pubkey": "0x5566778899aabbccddeeff00112233445566778899aabbccddeeff0011223344",
+      "frozen": false,
+      "allow_list_enabled": false
+    },
+    "normalization_proof": {
+      "public_inputs": {
+        "old_commitments": [
+          "0x1111111111111111111111111111111111111111111111111111111111111111",
+          "0x2222222222222222222222222222222222222222222222222222222222222222",
+          "0x3333333333333333333333333333333333333333333333333333333333333333"
+        ],
+        "new_commitment": "0x4444444444444444444444444444444444444444444444444444444444444444",
+        "total_value": "4000"
+      },
+      "nizk_proof": "0x1111222233334444555566667777888899990000aaabbbbcccdddeeefff0000111122223333444455556666777788889999000011112222333344445555",
+      "range_proof": {
+        "commitment": "0x4444444444444444444444444444444444444444444444444444444444444444",
+        "proof_bytes": "0xcafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe"
+      }
+    }
+  },
+  "expected_output": {
+    "status": "success",
+    "balance_after": {
+      "pending_balance": [
+        {
+          "compressed_commitment": "0x4444444444444444444444444444444444444444444444444444444444444444",
+          "opening": {
+            "value": "4000",
+            "randomness": "0xdddd0000dddd0000dddd0000dddd0000dddd0000dddd0000dddd0000dddd0000"
+          }
+        }
+      ],
+      "actual_balance": [],
+      "encryption_pubkey": "0x5566778899aabbccddeeff00112233445566778899aabbccddeeff0011223344",
+      "frozen": false,
+      "allow_list_enabled": false
+    },
+    "events": [
+      {
+        "type": "NormalizationEvent",
+        "owner": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+        "old_chunks": 3,
+        "new_chunks": 1,
+        "total_value": "4000"
+      }
+    ]
+  },
+  "vm_execution_trace": {
+    "gas_used": "165000",
+    "num_instructions": 45,
+    "num_native_calls": 2,
+    "native_calls": [
+      "verify_normalization_proof",
+      "verify_range_proof"
+    ]
+  },
+  "lean_model_trace": {
+    "eval_result": "returned",
+    "num_steps": 45,
+    "oracle_calls": [
+      {
+        "name": "verifyNormalizationProof",
+        "result": "some"
+      },
+      {
+        "name": "verifyRangeProof",
+        "result": "some"
+      }
+    ]
+  },
+  "test_purpose": "Validates that normalization correctly compacts multiple balance chunks into a single chunk while preserving the total value",
+  "coverage_tags": ["happy_path", "normalization", "balance_compaction", "sum_preservation"],
+  "related_theorems": [
+    "normalization_eval_equiv_functional_sim",
+    "normalization_sum_preservation",
+    "normalization_chunk_reduction"
+  ],
+  "related_msl_specs": [
+    "spec normalize_internal { ensures sum_balance(store.pending_balance) == sum_balance(old(store.pending_balance)); ensures len(store.pending_balance) <= len(old(store.pending_balance)); }"
+  ]
+}

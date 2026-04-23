@@ -6,7 +6,16 @@ Complete enumeration of `axiom` declarations in the CA Lean tree (`MovementForma
 grep -rn "^axiom " aptos-move/framework/formal/lean/MovementFormal/
 ```
 
-Count as of 2026-04-22: **23 axioms** across 5 files, organized into 4 categories below.
+Count as of 2026-04-22: **27 axioms** across 6 files, organized into 4 categories below.
+
+**Update 2026-04-22 (Phase 6 work - morning):** Added 4 PC-chaining helper axioms for withdrawal composition proof.
+
+**Update 2026-04-22 (Phase 6 work - afternoon):** Refactored all 4 withdrawal PC-chaining axioms to use explicit parameter signatures instead of generic `initFrame`. Changes:
+- `run_to_sigma_fail_produces_error`: Now takes explicit `chainId`, `sender`, `contract`, `ekRef`, `amount`, `curBalRef`, `newBalRef`, `proofRef` parameters plus container state `(cs1, sigmaFid)`. Proof structure documented, body has sorry.
+- `run_to_range_fail_produces_error`: Extended signature with 3 container states (cs1, cs2, cs3) and 2 field IDs (sigmaFid, zkrpFid) to track both sigma and range oracle state.
+- `run_sigma_arity_mismatch_produces_error` and `run_range_arity_mismatch_produces_error`: Refactored for consistency, documented as low-priority impossible cases.
+- All usage sites updated in `withdrawal_eval_equiv_functional_sim` composition theorem.
+- Full Lean tree builds cleanly (1896 jobs).
 
 ---
 
@@ -17,6 +26,10 @@ These are stubs for theorems we intend to prove. Each should have a documented e
 | Axiom | File:line | Target | Status |
 |---|---|---|---|
 | `registration_eval_equiv_functional_sim` | `…/Registration/EvalEquiv.lean:42` | Reprove via `EvalEquivRebuild.lean`: **184 theorems**, including all 83 per-PC step lemmas + 4 complete non-singleton branches (`_compressedPoint_{none,empty,multi,nonSingleton}`). Singleton branch remaining — see [`../SINGLETON_BRANCH_ROADMAP.md`](../SINGLETON_BRANCH_ROADMAP.md). | 🟡 in progress — non-singleton case closed; singleton case is the last blocker |
+| `run_to_sigma_fail_produces_error` | `…/Withdrawal/EvalEquiv.lean:568` | **REFACTORED (2026-04-22)**: Signature improved from generic `initFrame` to explicit parameters (`chainId`, `sender`, `contract`, etc.) + container state (`cs1`, `sigmaFid`). Proof body has sorry. Requires PC chain 0-9: PCs 0-5 moveLoc, 6-7 copyLoc, 8 immBorrowField, 9 call → .error. Estimated ~80 lines. Blocker: elaborator constraint on frame construction. | 🟡 refactored signature, proof pending |
+| `run_to_range_fail_produces_error` | `…/Withdrawal/EvalEquiv.lean:615` | **REFACTORED (2026-04-22)**: Signature improved with explicit parameters + 3 container states (cs1, cs2, cs3) + 2 field IDs (sigmaFid, zkrpFid). Proof body has sorry. Requires PC chain 0-13 through both sigma success and range failure. Estimated ~100 lines. Same elaborator blocker. | 🟡 refactored signature, proof pending |
+| `run_sigma_arity_mismatch_produces_error` | `…/Withdrawal/EvalEquiv.lean:656` | **REFACTORED (2026-04-22)**: Signature improved to match other axioms. Handles impossible case where sigma oracle returns non-empty list. Low priority (type system prevents this case). | 🟡 refactored, low priority |
+| `run_range_arity_mismatch_produces_error` | `…/Withdrawal/EvalEquiv.lean:687` | **REFACTORED (2026-04-22)**: Signature improved. Handles impossible case where range oracle returns non-empty list. Low priority (type system prevents this case). | 🟡 refactored, low priority |
 
 ## Category 1a: Phase 6 composition axioms (textual, discharged in same file)
 
@@ -88,13 +101,13 @@ Bulletproofs is the Bünz et al. 2017 range-proof system. Implementing and verif
 
 | Category | Count | Status |
 |---|---|---|
-| TEMPORARY (Phase 1 scope) | 1 | 🟡 elimination in progress |
+| TEMPORARY (Phase 1 & 6 scope) | 5 | 🟡 elimination in progress (1 from Phase 1 + 4 from Phase 6 withdrawal) |
 | Group theory | 12 | ✅ accepted (textbook crypto) |
 | Ristretto encoding | 4 | ✅ accepted (anchored by difftest corpus) |
 | Bulletproofs | 5 | ✅ accepted (external audit scope) |
-| **TOTAL** | **22** | 21 "permanent" + 1 temporary |
+| **TOTAL** | **26** | 21 "permanent" + 5 temporary |
 
-(The `grep` reports 23 because `registration_eval_equiv_functional_sim` is counted once at its `axiom` declaration and once in doc-comment references; the one declaration is the authoritative count.)
+**Note:** The 4 new Phase 6 axioms (`run_to_sigma_fail_produces_error`, `run_to_range_fail_produces_error`, and 2 arity mismatch axioms) are PC-chaining helpers for the withdrawal composition theorem. They represent ~280 lines of proof work that needs to be completed to fully discharge the withdrawal eval↔functional-sim equivalence.
 
 ## Acceptance criteria for Phase 8 closure
 

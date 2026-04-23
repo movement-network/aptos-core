@@ -1,0 +1,156 @@
+name: Formal Verification - Full Suite
+
+on:
+  push:
+    branches: [lean-fv, main, movement]
+    paths:
+      - 'aptos-move/framework/formal/**'
+      - 'aptos-move/framework/aptos-experimental/**'
+      - 'move-lean-difftest/**'
+  pull_request:
+    paths:
+      - 'aptos-move/framework/formal/**'
+      - 'aptos-move/framework/aptos-experimental/**'
+  schedule:
+    - cron: '0 0 * * 0'  # Weekly on Sunday
+
+jobs:
+  lean-verification:
+    name: Lean Proofs (${{ matrix.operation }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        operation: [registration, normalization, withdrawal, transfer, rotation]
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Lean
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+      
+      - name: Get Mathlib cache
+        run: |
+          cd aptos-move/framework/formal/lean
+          lake exe cache get || true
+      
+      - name: Build Lean proof
+        run: |
+          cd aptos-move/framework/formal/lean
+          case ${{ matrix.operation }} in
+            registration) lake build MovementFormal.Experimental.ConfidentialAsset.Registration.EvalEquivRebuild ;;
+            normalization) lake build MovementFormal.Experimental.ConfidentialAsset.Normalization.EvalEquiv ;;
+            withdrawal) lake build MovementFormal.Experimental.ConfidentialAsset.Withdrawal.EvalEquiv ;;
+            transfer) lake build MovementFormal.Experimental.ConfidentialAsset.Transfer.EvalEquiv ;;
+            rotation) lake build MovementFormal.Experimental.ConfidentialAsset.Rotation.EvalEquiv ;;
+          esac
+      
+      - name: Check axioms
+        run: |
+          cd aptos-move/framework/formal
+          ./scripts/check_axioms.sh
+
+  move-prover-verification:
+    name: Move Prover (${{ matrix.module }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [confidential_asset, confidential_balance, confidential_proof]
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Movement CLI
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/movementlabsxyz/movement/main/scripts/install.sh | bash
+          echo "$HOME/.movement/bin" >> $GITHUB_PATH
+      
+      - name: Install Move Prover dependencies
+        run: movement update prover-dependencies --assume-yes
+      
+      - name: Run Move Prover
+        run: |
+          cd aptos-move/framework/aptos-experimental
+          movement move prove --filter ${{ matrix.module }} --vc-timeout 120
+
+  difftest-verification:
+    name: Difftest (${{ matrix.operation }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        operation: [register, transfer, withdraw, normalize, rotation]
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      
+      - name: Run difftest
+        run: |
+          cd move-lean-difftest
+          ./difftest.sh --suite confidential_asset --filter ${{ matrix.operation }}
+
+  performance-check:
+    name: Performance Regression Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Lean
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+      
+      - name: Get Mathlib cache
+        run: |
+          cd aptos-move/framework/formal/lean
+          lake exe cache get || true
+      
+      - name: Run performance check
+        run: |
+          cd aptos-move/framework/formal
+          ./scripts/detect_performance_regression.sh --ci
+
+  trust-boundaries-check:
+    name: Trust Boundaries Reconciliation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Reconcile trust boundaries
+        run: |
+          cd aptos-move/framework/formal
+          ./scripts/reconcile_trust_boundaries.sh
+
+  full-report:
+    name: Generate Verification Report
+    runs-on: ubuntu-latest
+    needs: [lean-verification, move-prover-verification, difftest-verification]
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Collect metrics
+        run: |
+          cd aptos-move/framework/formal
+          ./scripts/collect_all_metrics.sh --store
+      
+      - name: Generate report
+        run: |
+          cd aptos-move/framework/formal
+          ./scripts/generate_verification_report.sh --format markdown --output verification-report.md
+      
+      - name: Upload report
+        uses: actions/upload-artifact@v3
+        with:
+          name: verification-report
+          path: aptos-move/framework/formal/verification-report.md

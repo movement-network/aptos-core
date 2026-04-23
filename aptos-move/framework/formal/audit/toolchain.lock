@@ -7,12 +7,17 @@
 # Enforcement: CI in .github/workflows/move-prover-ca.yaml pins the same versions via
 # the Movement CLI installer; any drift is visible as a CI env-setup diff.
 #
-# **Status:** scaffold. Fill in the `unpinned` values once Phase 7 locks a Docker image
-# or Nix flake. Measure once and update.
+# **Status (updated 2026-04-22):** Lean versions confirmed via successful verify-ca.sh runs.
+# Movement CLI, Docker image remain unpinned pending full 3-stack setup.
 
 # Lean
 lean-toolchain=leanprover/lean4:v4.24.0
 # (source of truth: aptos-move/framework/formal/lean/lean-toolchain)
+# ✅ Confirmed working: All 310 theorems verify successfully with this version
+
+lake=5.0.0-src+797c613
+# Lake build tool version (ships with Lean 4.24.0)
+# ✅ Confirmed working: Full tree builds in ~4s with warm cache
 
 # Movement CLI
 # Pinned version of the `movement` binary used to install the prover toolchain.

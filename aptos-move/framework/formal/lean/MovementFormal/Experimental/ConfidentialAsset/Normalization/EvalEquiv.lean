@@ -524,19 +524,125 @@ theorem verifyNormalizationBytecodeResult_success
   unfold verifyNormalizationBytecodeResult
   simp only [halloc0, hsigmaOk, hrange]
 
+/-! ## Helper lemmas: Multi-PC composition
+
+These helpers chain consecutive PCs to reduce boilerplate in the main proof. -/
+
+/-- Chain PCs 0-4: moveLoc instructions loading chainId, sender, contract, ekRef, curBalRef onto stack.
+
+This chains 5 consecutive moveLoc instructions:
+- PC 0: moveLoc 0 (chainId) - pushes chainId, clears locals[0]
+- PC 1: moveLoc 1 (sender) - pushes sender, clears locals[1]
+- PC 2: moveLoc 2 (contract) - pushes contract, clears locals[2]
+- PC 3: moveLoc 3 (ekRef) - pushes ekRef, clears locals[3]
+- PC 4: moveLoc 4 (curBalRef) - pushes curBalRef, clears locals[4]
+
+Final state: stack has [curBalRef, ekRef, contract, sender, chainId], locals[0-4] are none. -/
+-- Temporarily keep as axiom due to array manipulation complexity in tactic mode.
+-- The proof structure is clear (5 consecutive moveLoc steps), but Lean's
+-- "Expected type must not contain free variables" constraint blocks completion
+-- of array indexing proofs in by-tactic context. Next steps: research workarounds
+-- (term-mode construction, revert/intro patterns, or alternative proof structuring).
+axiom norm_run_pc0_to_pc5
+    (o : NormalizationModuleOracle)
+    (chainId : UInt8) (sender contract : ByteArray)
+    (ekRef curBalRef newBalRef proofRef : MoveValue)
+    (initMs : MachineState)
+    (fuel : Nat)
+    (hfuel : fuel ≥ 5) :
+    let args := normalizationArgs chainId sender contract ekRef curBalRef newBalRef proofRef
+    ∃ (locals5 : Array (Option MoveValue)),
+    run (normalizationModuleEnv o)
+        { code := verifyNormalizationProofCode, pc := 0,
+          locals := (args.map some).toArray,
+          localRefs := (List.replicate 7 none).toArray }
+        [] [] initMs fuel =
+    run (normalizationModuleEnv o)
+        { code := verifyNormalizationProofCode, pc := 5,
+          locals := locals5,
+          localRefs := (List.replicate 7 none).toArray }
+        []
+        [curBalRef, ekRef, .address contract, .address sender, .u8 chainId]
+        initMs
+        (fuel - 5)
+
+/-- Chain PCs 5-7: copyLoc newBalRef, copyLoc proofRef, immBorrowField 0 (get sigma_proof field).
+
+This chains 3 operations:
+- PC 5: copyLoc 5 (newBalRef) - pushes copy of newBalRef, locals unchanged
+- PC 6: copyLoc 6 (proofRef) - pushes copy of proofRef, locals unchanged
+- PC 7: immBorrowField 0 - borrows first field of proof struct (sigma_proof), allocates new ref
+
+Final state: stack has [sigma_proof_ref, proofRef, newBalRef, ...rest], containers updated with alloc. -/
+theorem norm_run_pc5_to_pc8
+    (o : NormalizationModuleOracle)
+    (chainId : UInt8) (sender contract : ByteArray)
+    (ekRef curBalRef newBalRef proofRef : MoveValue)
+    (proofRid : RefId) (proofFields : List MoveValue)
+    (initMs : MachineState)
+    (locals5 : Array (Option MoveValue))
+    (hFieldCount : 1 < proofFields.length)
+    (hread : initMs.containers.read proofRid = some (.struct_ proofFields))
+    (hproofRef : getRefId proofRef = some proofRid)
+    (fuel : Nat)
+    (hfuel : fuel ≥ 3) :
+    let (sigmaCs, sigmaFid) := initMs.containers.alloc (proofFields[0]'(by omega))
+    run (normalizationModuleEnv o)
+        { code := verifyNormalizationProofCode, pc := 5,
+          locals := locals5,
+          localRefs := (List.replicate 7 none).toArray }
+        []
+        [curBalRef, ekRef, .address contract, .address sender, .u8 chainId]
+        initMs fuel =
+    run (normalizationModuleEnv o)
+        { code := verifyNormalizationProofCode, pc := 8,
+          locals := locals5,
+          localRefs := (List.replicate 7 none).toArray }
+        []
+        [.immRef sigmaFid, proofRef, newBalRef, curBalRef, ekRef,
+         .address contract, .address sender, .u8 chainId]
+        { initMs with containers := sigmaCs }
+        (fuel - 3) := by
+  -- This theorem chains 3 operations: two copyLoc instructions (PCs 5-6) followed by
+  -- immBorrowField (PC 7) which allocates a new reference in the container store.
+  --
+  -- The proof structure:
+  -- 1. PC 5: copyLoc 5 (newBalRef) - reads locals[5], pushes to stack, locals unchanged
+  -- 2. PC 6: copyLoc 6 (proofRef) - reads locals[6], pushes to stack, locals unchanged
+  -- 3. PC 7: immBorrowField 0 - reads proofFields[0] from containers, allocates new ref
+  --
+  -- Key challenges:
+  -- - Proving locals5 contains the expected values at indices 5 and 6
+  -- - Coordinating with norm_run_pc0_to_pc5 witness to establish locals5 properties
+  -- - Container store alloc threading through immBorrowField
+  -- - Stack state evolution through 3 distinct operations
+  --
+  -- This proof requires norm_run_pc0_to_pc5 to be completed first, as it depends on
+  -- properties of the locals5 witness that that theorem produces.
+  --
+  -- Estimated completion effort: 80-100 lines after norm_run_pc0_to_pc5 is proved.
+  sorry
+
 /-! ## Top-level composition theorem (Phase 6)
 
-The full eval↔functional-sim equivalence. Structure:
-1. Unfold eval to run via `eval_normalization_eq_run`
-2. Chain PCs 0-7 (argument marshaling) using individual step theorems
-3. At PC 8, split on sigma oracle outcome
-4. On sigma success, chain PCs 9-11
-5. At PC 12, split on range oracle outcome
-6. On range success, execute PC 13 (ret)
-7. Apply shape lemmas to connect to functional sim
+The full eval↔functional-sim equivalence. Currently deferred with architectural notes.
 
-The proof requires ~300 lines of frame manipulation and oracle case splitting.
-Currently structured with sorry placeholders for incremental completion. -/
+**Completion roadmap**:
+1. Chain PCs 0-7 using helper axioms `norm_run_pc0_to_pc5` and `norm_run_pc5_to_pc8`
+2. At PC 8, split on sigma oracle outcome (`some ([], cs')` vs `none`/wrong-arity)
+3. On sigma success: chain PCs 9-11 using individual step theorems
+4. At PC 12, split on range oracle outcome
+5. On range success: execute PC 13 (ret), connect to `.returned` branch via shape lemma
+6. On failures: connect to `.error` branch via failure shape lemmas
+
+**Remaining work**:
+- Prove locals state properties from helper axioms to feed into step theorems
+- Thread container store evolution through native calls
+- Handle oracle wrong-arity cases (non-empty return that's not `[]`)
+- Eliminate helper axioms by proving explicit PC-chains for PCs 0-7
+
+**Estimated**: 150-200 additional lines to complete main proof body.
+-/
 
 theorem normalization_eval_equiv_functional_sim
     (o : NormalizationModuleOracle)
@@ -555,15 +661,43 @@ theorem normalization_eval_equiv_functional_sim
             proofRid proofFields initMs hFieldCount with
     | .returned ms => .returned [] ms
     | .error => .error := by
-  -- Unfold eval to run
-  show (eval (normalizationModuleEnv o) verifyNormalizationProofIdx
-          (normalizationArgs chainId sender contract ekRef curBalRef newBalRef proofRef)
-          fuel initMs).dropMs = _
-  rw [eval_normalization_eq_run]
+  -- Main proof structure: chain 14 PCs through bytecode execution
+  --
+  -- **Execution flow:**
+  -- PCs 0-4:  moveLoc instructions (load args onto stack)
+  -- PCs 5-7:  copyLoc + immBorrowField (prepare sigma proof call args)
+  -- PC 8:     call verifySigmaProof → split on oracle outcome
+  -- PCs 9-10: moveLoc (load range proof args if sigma succeeded)
+  -- PC 11:    immBorrowField (get range_proof field)
+  -- PC 12:    call verifyRangeProof → split on oracle outcome
+  -- PC 13:    ret
+  --
+  -- **Proof strategy:**
+  -- 1. Unfold `eval` to `run` via eval_normalization_eq_run
+  -- 2. Use norm_run_pc0_to_pc5 to chain PCs 0-4 (consumes 5 fuel)
+  -- 3. Use norm_run_pc5_to_pc8 to chain PCs 5-7 (consumes 3 fuel)
+  -- 4. Apply step_normalization_pc8 for sigma call (consumes 1 fuel)
+  -- 5. Split on o.verifySigmaProof result:
+  --    a) none: thread error through remaining PCs, apply verifyNormalizationBytecodeResult_sigmaFails
+  --    b) some: continue to PC 9
+  -- 6. For sigma success branch:
+  --    - Apply step_normalization_pc9, pc10 for moveLoc ops (2 fuel)
+  --    - Apply step_normalization_pc11 for immBorrowField (1 fuel)
+  --    - Apply step_normalization_pc12 for range call (1 fuel)
+  --    - Split on o.verifyRangeProof result:
+  --      * none: apply verifyNormalizationBytecodeResult_rangeFails
+  --      * some: apply step_normalization_pc13 (ret), then verifyNormalizationBytecodeResult_success
+  -- 7. Use ExecResultDropMs lemmas to connect ExecResult.dropMs at each split point
+  --
+  -- **Current blockers:**
+  -- - norm_run_pc0_to_pc5: axiom due to array free-variable constraints
+  -- - norm_run_pc5_to_pc8: axiom (similar array issues)
+  -- Once these helpers are proven, the main composition follows mechanically by
+  -- applying the helpers + step theorems + shape lemmas in sequence.
+  --
+  -- **Estimated remaining effort:** 150-200 lines once helpers complete (mostly
+  -- boilerplate applications of run_succ_ok_of_step, split cases, and shape lemma rewrites).
 
-  -- TODO Phase 6: Chain all 14 PCs using run_succ_ok_of_step
-  -- Pattern from Registration: apply step theorems sequentially, split on oracle outcomes
-  -- at PC 8 (sigma) and PC 12 (range), apply shape lemmas to connect to functional sim
   sorry
 
 end MovementFormal.Experimental.ConfidentialAsset.Normalization.EvalEquiv

@@ -1,0 +1,354 @@
+name: CA Verification Suite
+
+# Comprehensive verification workflow running all checks (Lean, Move Prover,
+# trust boundaries, axioms, documentation). Runs on every PR and main push.
+#
+# This is the authoritative CI verification - if this passes, the verification
+# is in good health.
+
+on:
+  push:
+    branches: [main, movement, lean-fv]
+    paths:
+      - 'aptos-move/framework/formal/**'
+      - 'aptos-move/framework/aptos-experimental/sources/confidential_asset/**'
+      - '.github/workflows/ca-verification-suite.yaml'
+  pull_request:
+    paths:
+      - 'aptos-move/framework/formal/**'
+      - 'aptos-move/framework/aptos-experimental/sources/confidential_asset/**'
+      - '.github/workflows/ca-verification-suite.yaml'
+  workflow_dispatch:  # Allow manual trigger
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FORMAL_ROOT: aptos-move/framework/formal
+
+jobs:
+  # Quick sanity check (~2 min) - fails fast if basics broken
+  quick-check:
+    name: Quick Sanity Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Lean
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y --default-toolchain v4.24.0
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+
+      - name: Fetch mathlib cache
+        run: |
+          cd ${{ env.FORMAL_ROOT }}/lean
+          lake exe cache get || echo "Cache fetch failed, continuing..."
+
+      - name: Run quick check
+        run: |
+          cd ${{ env.FORMAL_ROOT }}
+          ./scripts/run_verification_suite.sh --quick
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: quick-check-logs
+          path: /tmp/*.log
+          retention-days: 7
+
+  # Lean verification (~5 min with cache)
+  lean-verification:
+    name: Lean Verification (All 5 Operations)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: quick-check
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Lean
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y --default-toolchain v4.24.0
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+
+      - name: Fetch mathlib cache
+        run: |
+          cd ${{ env.FORMAL_ROOT }}/lean
+          lake exe cache get || echo "Cache fetch failed, will build from source (slow)"
+
+      - name: Build Lean tree
+        run: |
+          cd ${{ env.FORMAL_ROOT }}/lean
+          lake build
+
+      - name: Check for sorry
+        run: |
+          cd ${{ env.FORMAL_ROOT }}
+          SORRY_COUNT=$(grep -r "sorry" lean/MovementFormal/Experimental/ConfidentialAsset/ --include="*.lean" | wc -l)
+          if [ $SORRY_COUNT -ne 0 ]; then
+            echo "❌ Found $SORRY_COUNT sorry placeholders"
+            exit 1
+          fi
+          echo "✅ Zero sorry in all theorems"
+
+      - name: Verify all operations
+        run: |
+          cd ${{ env.FORMAL_ROOT }}
+          for op in register withdraw transfer normalize rotate; do
+            echo "Verifying $op..."
+            ./audit/verify-ca.sh --op $op --stack lean
+          done
+
+      - name: Report coverage
+        run: |
+          cd ${{ env.FORMAL_ROOT }}
+          ./audit/verify-ca.sh --coverage
+
+  # Move Prover verification (~5 min)
+  move-prover-verification:
+    name: Move Prover Verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: quick-check
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Movement CLI
+        run: |
+          curl -fsSL https://install.movementlabs.xyz/install.sh | bash
+          echo "$HOME/.movement/bin" >> $GITHUB_PATH
+
+      - name: Install Move Prover dependencies
+        run: |
+          movement update prover-dependencies --assume-yes
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Verify Z3 version
+        run: |
+          Z3_VERSION=$(${Z3_EXE:-z3} --version | grep -oP 'version \K[0-9.]+')
+          EXPECTED="4.11.2"
+          if [ "$Z3_VERSION" != "$EXPECTED" ]; then
+            echo "❌ Wrong Z3 version: $Z3_VERSION (expected $EXPECTED)"
+            exit 1
+          fi
+          echo "✅ Z3 version $Z3_VERSION"
+
+      - name: Compile Move specs
+        run: |
+          cd aptos-move/framework/aptos-experimental
+          movement move compile --skip-fetch-latest-git-deps
+
+      - name: Run Move Prover
+        run: |
+          cd ${{ env.FORMAL_ROOT }}
+          for op in register withdraw transfer normalize rotate; do
+            echo "Verifying $op..."
+            ./audit/verify-ca.sh --op $op --stack move-prover
+          done
+
+      - name: Check for verification escapes
+        run: |
+          cd aptos-move/framework/aptos-experimental/sources/confidential_asset
+          VERIFY_FALSE=$(grep -r "pragma verify = false" . --include="*.spec.move" | wc -l)
+          # Expect 1 (test-only module confidential_gas_e2e_helpers)
+          if [ $VERIFY_FALSE -gt 1 ]; then
+            echo "❌ Found $VERIFY_FALSE 'pragma verify = false' (expected ≤1)"
+            exit 1
+          fi
+          echo "✅ Only test-only module has pragma verify = false"
+
+  # Trust boundaries and axioms check (~1 min)
+  trust-boundaries-check:
+    name: Trust Boundaries & Axioms
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: quick-check
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Lean
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y --default-toolchain v4.24.0
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+
+      - name: Fetch mathlib cache
+        run: |
+          cd ${{ env.FORMAL_ROOT }}/lean
+          lake exe cache get || true
+
+      - name: Build Lean (for axiom check)
+        run: |
+          cd ${{ env.FORMAL_ROOT }}/lean
+          lake build
+
+      - name: Check axiom count
+        run: |
+          cd ${{ env.FORMAL_ROOT }}
+          AXIOM_COUNT=$(./scripts/check_axioms.sh 2>/dev/null | grep "^/" | grep ":axiom " | wc -l)
+          MAX_AXIOMS=30
+          if [ $AXIOM_COUNT -gt $MAX_AXIOMS ]; then
+            echo "❌ Found $AXIOM_COUNT axioms (expected ≤$MAX_AXIOMS)"
+            exit 1
+          fi
+          echo "✅ Axiom count: $AXIOM_COUNT (within budget)"
+
+      - name: Check axiom drift
+        run: |
+          cd ${{ env.FORMAL_ROOT }}
+          ./scripts/check_axioms.sh --diff
+
+      - name: Reconcile trust boundaries
+        run: |
+          cd ${{ env.FORMAL_ROOT }}
+          ./scripts/reconcile_trust_boundaries.sh
+
+  # Documentation checks (~2 min)
+  documentation-check:
+    name: Documentation Completeness
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: quick-check
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check CLAIMS.md complete
+        run: |
+          cd ${{ env.FORMAL_ROOT }}
+          CLAIMS=$(grep -c "**Claim:" audit/CLAIMS.md || echo 0)
+          if [ $CLAIMS -lt 20 ]; then
+            echo "❌ Only $CLAIMS claims in CLAIMS.md (expected ≥20)"
+            exit 1
+          fi
+          echo "✅ CLAIMS.md has $CLAIMS claims"
+
+      - name: Check for stale docs
+        run: |
+          cd ${{ env.FORMAL_ROOT }}
+          # Check if any doc has "Last updated" more than 180 days old (6 months)
+          STALE=0
+          for doc in audit/*.md *.md; do
+            if [ -f "$doc" ]; then
+              if grep -q "Last updated:" "$doc"; then
+                DATE=$(grep "Last updated:" "$doc" | grep -oP '\d{4}-\d{2}-\d{2}' || echo "")
+                if [ -n "$DATE" ]; then
+                  DATE_UNIX=$(date -d "$DATE" +%s 2>/dev/null || echo 0)
+                  NOW_UNIX=$(date +%s)
+                  DIFF_DAYS=$(( (NOW_UNIX - DATE_UNIX) / 86400 ))
+                  if [ $DIFF_DAYS -gt 180 ]; then
+                    echo "⚠️  $doc is $DIFF_DAYS days old"
+                    STALE=$((STALE + 1))
+                  fi
+                fi
+              fi
+            fi
+          done
+          if [ $STALE -gt 3 ]; then
+            echo "❌ $STALE docs are stale (>180 days old)"
+            exit 1
+          fi
+          echo "✅ Documentation dates are current"
+
+      - name: Check TRUST_BOUNDARIES.md reconciles
+        run: |
+          cd ${{ env.FORMAL_ROOT }}
+          # Verify pragma opaque count matches documentation
+          PRAGMA_COUNT=$(grep -rn "pragma opaque" ../aptos-experimental/sources/confidential_asset/ --include="*.spec.move" | wc -l)
+          # TRUST_BOUNDARIES.md documents 89 pragma opaque
+          if [ $PRAGMA_COUNT -lt 80 ] || [ $PRAGMA_COUNT -gt 100 ]; then
+            echo "⚠️  Pragma opaque count: $PRAGMA_COUNT (expected ~89)"
+          else
+            echo "✅ Pragma opaque count: $PRAGMA_COUNT (within expected range)"
+          fi
+
+  # Performance check (~3 min)
+  performance-check:
+    name: Performance Budget Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [lean-verification, move-prover-verification]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Lean
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y --default-toolchain v4.24.0
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+
+      - name: Fetch mathlib cache
+        run: |
+          cd ${{ env.FORMAL_ROOT }}/lean
+          lake exe cache get || true
+
+      - name: Install Movement CLI
+        run: |
+          curl -fsSL https://install.movementlabs.xyz/install.sh | bash
+          echo "$HOME/.movement/bin" >> $GITHUB_PATH
+
+      - name: Install Move Prover dependencies
+        run: |
+          movement update prover-dependencies --assume-yes
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Check per-operation budget (≤3 min)
+        run: |
+          cd ${{ env.FORMAL_ROOT }}
+          BUDGET=180  # 3 min in seconds
+          for op in register withdraw transfer normalize rotate; do
+            echo "Timing $op..."
+            START=$(date +%s)
+            ./audit/verify-ca.sh --op $op || true
+            END=$(date +%s)
+            ELAPSED=$((END - START))
+            echo "$op: ${ELAPSED}s"
+            if [ $ELAPSED -gt $BUDGET ]; then
+              echo "❌ $op exceeded budget (${ELAPSED}s > ${BUDGET}s)"
+              exit 1
+            fi
+          done
+          echo "✅ All operations within budget"
+
+      - name: Check full-run budget (≤45 min)
+        run: |
+          cd ${{ env.FORMAL_ROOT }}
+          BUDGET=2700  # 45 min in seconds
+          START=$(date +%s)
+          ./audit/verify-ca.sh || true
+          END=$(date +%s)
+          ELAPSED=$((END - START))
+          echo "Full run: ${ELAPSED}s"
+          if [ $ELAPSED -gt $BUDGET ]; then
+            echo "⚠️  Full run exceeded budget (${ELAPSED}s > ${BUDGET}s)"
+            # Warning only, not failure (difftest pending may cause this)
+          else
+            echo "✅ Full run within budget"
+          fi
+
+  # Summary job - all checks passed
+  verification-complete:
+    name: ✅ All Checks Passed
+    runs-on: ubuntu-latest
+    needs: [lean-verification, move-prover-verification, trust-boundaries-check, documentation-check, performance-check]
+    steps:
+      - name: Summary
+        run: |
+          echo "=========================================="
+          echo "  ✅ CA Verification Suite: PASSED"
+          echo "=========================================="
+          echo ""
+          echo "All checks completed successfully:"
+          echo "  ✅ Lean verification (5 operations)"
+          echo "  ✅ Move Prover verification"
+          echo "  ✅ Trust boundaries reconciled"
+          echo "  ✅ Axiom count within budget"
+          echo "  ✅ Documentation complete"
+          echo "  ✅ Performance within budget"
+          echo ""
+          echo "CA formal verification is in good health."

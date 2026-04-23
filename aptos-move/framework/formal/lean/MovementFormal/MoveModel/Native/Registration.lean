@@ -199,6 +199,73 @@ def optionExtract : List MoveValue → Option (List MoveValue)
   | [.struct_ (.bool true :: val :: _)] => some [val]
   | _ => none
 
+/-! ### Ref/value correspondence lemmas
+
+These lemmas relate nativeRef oracles (which operate on ContainerStore)
+to their pure value-level counterparts. Needed for Challenge 2 of the
+singleton branch proof in Registration/EvalEquivRebuild.lean.
+
+Pattern: if container store reads successfully, the Ref oracle behaves
+like the pure oracle applied to the dereferenced value. -/
+
+/-- optionIsSomeRef corresponds to optionIsSome when reading through a valid reference.
+
+For singleton branch: after `containers.alloc v` at PC 3, we have `containers'.read rid = some v`.
+At PC 4, `optionIsSomeRef containers' [.immRef rid]` should produce the same result
+as `optionIsSome [v]` (modulo wrapping in the (result, cs) pair). -/
+theorem optionIsSomeRef_eq_optionIsSome_on_read
+    (cs : ContainerStore) (id : RefId) (v : MoveValue)
+    (hread : cs.read id = some v) :
+    optionIsSomeRef cs [.immRef id] =
+      (optionIsSome [v]).map (fun result => (result, cs)) := by
+  unfold optionIsSomeRef optionIsSome
+  simp [hread]
+  cases v with
+  | struct_ fields =>
+    cases fields with
+    | nil => rfl
+    | cons h t =>
+      cases h with
+      | bool b => rfl
+      | _ => rfl
+  | _ => rfl
+
+/-- optionExtractRef result corresponds to optionExtract (mutation aside).
+
+Note: optionExtractRef mutates the store (sets option to None), so full
+correspondence requires both read and write. This lemma shows the result
+value matches optionExtract on the original dereferenced value. -/
+theorem optionExtractRef_result_eq_optionExtract_on_read
+    (cs : ContainerStore) (id : RefId) (v : MoveValue) (result : List MoveValue) (cs' : ContainerStore)
+    (hread : cs.read id = some v)
+    (hextract : optionExtractRef cs [.mutRef id] = some (result, cs')) :
+    optionExtract [v] = some result := by
+  unfold optionExtractRef at hextract
+  unfold optionExtract
+  simp [hread] at hextract
+  cases v with
+  | struct_ fields =>
+    cases fields with
+    | nil => simp at hextract
+    | cons h t =>
+      cases h with
+      | bool b =>
+        cases b
+        · -- false case: optionExtractRef returns none
+          simp at hextract
+        · -- true case: optionExtractRef extracts the value
+          cases t with
+          | nil => simp at hextract
+          | cons val rest =>
+            simp at hextract ⊢
+            cases hwrite : cs.write id (.struct_ [.bool false]) with
+            | none => simp [hwrite] at hextract
+            | some cs'' =>
+              simp [hwrite] at hextract
+              rw [hextract.1]
+      | _ => simp at hextract
+  | _ => simp at hextract
+
 /-- `vector::singleton<u8>(byte)` -/
 def vectorSingletonU8 : List MoveValue → Option (List MoveValue)
   | [.u8 b] => some [.vector .u8 [.u8 b]]

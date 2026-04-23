@@ -6,7 +6,7 @@ Scaffold for the Phase 7 reviewer-facing audit package described in
 
 Each claim row has: plain-English property, tool (Move Prover / Lean / difftest), file + theorem/spec location, rerun command, and a `Relies on:` line back-pointing to axioms / pragma opaque boundaries in [`TRUST_BOUNDARIES.md`](TRUST_BOUNDARIES.md).
 
-**Status (updated 2026-04-22):** Lean rerun commands ✅ functional via `verify-ca.sh`. All 5 operations (register, withdraw, transfer, normalize, rotate) can be verified in 1-2s each. Move Prover commands blocked on Z3_EXE setup. Difftest commands pending unified runner.
+**Status (updated 2026-04-23):** Lean rerun commands ✅ functional via `verify-ca.sh`. All 5 operations (register, withdraw, transfer, normalize, rotate) can be verified in 1-2s each. Move Prover ✅ toolchain setup complete (Z3 4.11.2, Boogie 3.5.1), all CA specs compile with 33 remaining errors (all upstream framework functions, not CA issues). Difftest commands ✅ functional via `verify-ca.sh --stack difftest`.
 
 **Quick verification:**
 ```bash

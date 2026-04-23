@@ -268,6 +268,25 @@ spec aptos_experimental::confidential_asset {
     // unwinding `ensure_fa_config_exists` here. Phase 5 will refine these as the FA
     // side-effect composition lands.
 
+    /// `get_fa_config_signer` — generates signer for FA config object creation.
+    /// Marked opaque; touches object framework resources.
+    spec get_fa_config_signer {
+        pragma aborts_if_is_strict = false;
+        pragma opaque;
+        modifies global<object::ObjectCore>(@aptos_framework);
+    }
+
+    /// `ensure_fa_config_exists` — creates FAConfig if it doesn't exist, returns its address.
+    /// Marked opaque; full composition in Phase 5.
+    spec ensure_fa_config_exists {
+        pragma aborts_if_is_strict = false;
+        pragma opaque;
+        let fa_config_addr = spec_get_fa_config_address(token);
+        ensures result == fa_config_addr;
+        modifies global<FAConfig>(fa_config_addr);
+        modifies global<object::ObjectCore>(fa_config_addr);
+    }
+
     spec enable_token {
         pragma aborts_if_is_strict = false;
         pragma opaque;
@@ -437,6 +456,8 @@ spec aptos_experimental::confidential_asset {
     /// Structural: sender store must exist, marks `normalized = true`. Crypto: the
     /// `verify_withdrawal_proof` call's accept/reject semantics belong to Phase 4 (Lean)
     /// and Phase 5 (MSL composition).
+    ///
+    /// **Modifies clauses:** Includes FA framework resources for primary_fungible_store::transfer.
     spec withdraw_to_internal {
         pragma aborts_if_is_strict = false;
         pragma opaque;
@@ -462,6 +483,12 @@ spec aptos_experimental::confidential_asset {
             == len(old(global<ConfidentialAssetStore>(sender_store)).actual_balance.chunks);
 
         modifies global<ConfidentialAssetStore>(sender_store);
+        modifies global<object::ObjectCore>(@aptos_framework);
+        modifies global<object::TombStone>(@aptos_framework);
+        modifies global<object::Untransferable>(@aptos_framework);
+        modifies global<aptos_framework::permissioned_signer::PermissionStorage>(@aptos_framework);
+        modifies global<aptos_framework::fungible_asset::FungibleStore>(@aptos_framework);
+        modifies global<aptos_framework::fungible_asset::ConcurrentFungibleBalance>(@aptos_framework);
     }
 
     /// `rotate_encryption_key_internal` — updates `ek` and `actual_balance`, re-normalizes.

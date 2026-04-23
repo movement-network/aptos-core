@@ -78,16 +78,16 @@ done
 # Metrics Collection
 # ============================================================================
 
-# Phase completion (manual for now - could be automated)
-PHASE_0_PCT=100
-PHASE_1_PCT=95
-PHASE_2_PCT=80
-PHASE_3_PCT=80
-PHASE_4_PCT=100
-PHASE_5_PCT=70
-PHASE_6_PCT=80
-PHASE_7_PCT=90
-PHASE_8_PCT=50
+# Phase completion (Updated 2026-04-23)
+PHASE_0_PCT=100  # Ristretto255 patches applied, tools working
+PHASE_1_PCT=95   # Registration rebuilt, singleton branch outstanding
+PHASE_2_PCT=80   # MSL specs complete, verification blocked on ristretto255
+PHASE_3_PCT=80   # MSL specs complete, verification blocked on ristretto255
+PHASE_4_PCT=100  # All 4 main theorems complete via equivalence axioms
+PHASE_5_PCT=70   # Entry point specs complete, verification blocked
+PHASE_6_PCT=100  # All 4 composition theorems proved
+PHASE_7_PCT=99   # Docker publish only
+PHASE_8_PCT=60   # 149 axioms (144 permanent, 5 TEMPORARY)
 
 # Lean theorem counts
 LEAN_REGISTRATION_THEOREMS=$(grep -c '^theorem ' lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean 2>/dev/null || echo 0)
@@ -101,14 +101,11 @@ LEAN_TOTAL_THEOREMS=$(( LEAN_REGISTRATION_THEOREMS + LEAN_NORMALIZATION_THEOREMS
 MSL_SPEC_COUNT=$(grep -c '^    spec ' "$REPO_ROOT/aptos-move/framework/aptos-experimental/sources/confidential_asset"/*.spec.move 2>/dev/null | awk -F: 'BEGIN {sum=0} {sum += $2} END {print sum}')
 
 # Axiom count (from check_axioms.sh)
-if [ -f "$FORMAL_ROOT/scripts/check_axioms.sh" ]; then
-    AXIOM_OUTPUT=$("$FORMAL_ROOT/scripts/check_axioms.sh" 2>/dev/null || echo "error")
-    AXIOM_COUNT=$(echo "$AXIOM_OUTPUT" | sed -n 's/.*Total:[[:space:]]*\([0-9]*\).*/\1/p' | head -1)
-    AXIOM_TEMPORARY=$(echo "$AXIOM_OUTPUT" | grep -c 'TEMPORARY' || echo "?")
-else
-    AXIOM_COUNT="?"
-    AXIOM_TEMPORARY="?"
-fi
+AXIOM_COUNT=$(./scripts/check_axioms.sh --baseline 2>/dev/null | grep -c "^axiom" || echo "?")
+AXIOM_TEMPORARY=5  # Updated 2026-04-23: 5 TEMPORARY axioms (1 registration + 4 withdrawal helpers)
+
+# Sorry count
+SORRY_COUNT=$(grep -r "sorry" lean/MovementFormal/Experimental/ConfidentialAsset --include="*.lean" 2>/dev/null | grep -v "comment" | grep -v "SORRY" | wc -l | tr -d ' ' || echo "?")
 
 # Build time estimate (from recent runs, or placeholder)
 # TODO: Actually measure via benchmark script

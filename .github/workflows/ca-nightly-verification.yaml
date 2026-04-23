@@ -1,0 +1,311 @@
+name: "CA Nightly Verification"
+
+# Comprehensive nightly verification run for all CA operations across all stacks.
+# Runs comprehensive suite (15 min target), generates detailed reports, tracks metrics.
+# Alerts on failures via GitHub issues.
+
+on:
+  schedule:
+    # Run at 2 AM UTC daily
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Verification mode'
+        required: false
+        default: 'comprehensive'
+        type: choice
+        options:
+          - quick
+          - standard
+          - comprehensive
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  nightly-verification:
+    name: "Nightly comprehensive verification"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install Lean toolchain
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y --default-toolchain v4.24.0
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+
+      - name: Verify Lean installation
+        run: |
+          lean --version
+          lake --version
+
+      - name: Fetch mathlib cache
+        working-directory: aptos-move/framework/formal/lean
+        run: |
+          lake exe cache get || echo "Warning: cache fetch failed, proceeding anyway"
+
+      - name: Install Z3 4.11.2
+        run: |
+          wget https://github.com/Z3Prover/z3/releases/download/z3-4.11.2/z3-4.11.2-x64-glibc-2.35.zip
+          unzip z3-4.11.2-x64-glibc-2.35.zip
+          sudo mv z3-4.11.2-x64-glibc-2.35/bin/z3 /usr/local/bin/
+          rm -rf z3-4.11.2-x64-glibc-2.35*
+          z3 --version
+
+      - name: Install Boogie 3.5.1
+        run: |
+          dotnet tool install --global Boogie --version 3.5.1
+          echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
+
+      - name: Verify Move Prover tools
+        run: |
+          z3 --version
+          boogie -version
+
+      - name: Run comprehensive verification suite
+        id: verification
+        working-directory: aptos-move/framework/formal
+        env:
+          Z3_EXE: z3
+          BOOGIE_EXE: boogie
+        run: |
+          MODE="${{ github.event.inputs.mode || 'comprehensive' }}"
+          echo "Running verification suite in $MODE mode..."
+
+          # Run verification suite
+          if ./scripts/run_verification_suite.sh --$MODE; then
+            echo "status=success" >> $GITHUB_OUTPUT
+          else
+            echo "status=failure" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      - name: Generate JSON report
+        if: always()
+        working-directory: aptos-move/framework/formal
+        run: |
+          # Generate JSON report using verify_with_json_output.sh
+          mkdir -p reports
+          ./scripts/verify_with_json_output.sh --coverage > reports/nightly-$(date +%Y-%m-%d).json || true
+
+          # Generate status dashboard
+          ./scripts/verification_status_dashboard.sh > reports/status-$(date +%Y-%m-%d).txt || true
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-verification-reports-${{ github.run_number }}
+          path: |
+            aptos-move/framework/formal/reports/*.json
+            aptos-move/framework/formal/reports/*.txt
+          retention-days: 90
+
+      - name: Benchmark performance
+        if: always()
+        working-directory: aptos-move/framework/formal
+        run: |
+          ./scripts/benchmark_verification.sh --output json > reports/benchmark-$(date +%Y-%m-%d).json || true
+
+      - name: Check for performance regressions
+        if: always()
+        working-directory: aptos-move/framework/formal
+        run: |
+          # Compare with previous benchmarks if available
+          if [ -f reports/benchmark-baseline.json ]; then
+            ./scripts/detect_performance_regression.sh \
+              reports/benchmark-baseline.json \
+              reports/benchmark-$(date +%Y-%m-%d).json || true
+          fi
+
+      - name: Create issue on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issueTitle = `Nightly verification failed on ${new Date().toISOString().split('T')[0]}`;
+            const issueBody = `
+            ## Nightly Verification Failure
+
+            The nightly comprehensive verification suite failed.
+
+            **Run:** [${context.runId}](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})
+            **Date:** ${new Date().toISOString()}
+            **Mode:** ${{ github.event.inputs.mode || 'comprehensive' }}
+
+            ### Next Steps
+
+            1. Review the workflow logs: [View logs](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})
+            2. Check downloaded artifacts for detailed reports
+            3. Run locally: \`./scripts/run_verification_suite.sh --comprehensive\`
+
+            ### Common Causes
+
+            - Mathlib cache fetch failure → Re-run workflow
+            - Z3/Boogie version mismatch → Check tool installation
+            - New axioms introduced → Run \`./scripts/check_axioms.sh --diff\`
+            - Proof timeout → Increase timeout or optimize proof
+
+            **Auto-generated by:** \`ca-nightly-verification.yaml\`
+            `;
+
+            // Check if issue already exists for today
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: ['formal-verification', 'nightly-failure']
+            });
+
+            const today = new Date().toISOString().split('T')[0];
+            const existingIssue = issues.data.find(issue =>
+              issue.title.includes(today)
+            );
+
+            if (!existingIssue) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: issueTitle,
+                body: issueBody,
+                labels: ['formal-verification', 'nightly-failure', 'automated']
+              });
+            }
+
+      - name: Comment on PR if triggered from PR
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `
+              ## ⚠️ Nightly Verification Failed
+
+              The comprehensive verification suite failed on this PR.
+
+              **View logs:** [Run ${context.runId}](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})
+
+              Please review the verification failures and address them before merging.
+              `
+            });
+
+  axiom-drift-check:
+    name: "Axiom baseline drift detection"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install Lean toolchain
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y --default-toolchain v4.24.0
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+
+      - name: Fetch mathlib cache
+        working-directory: aptos-move/framework/formal/lean
+        run: |
+          lake exe cache get || echo "Warning: cache fetch failed"
+
+      - name: Build Lean tree
+        working-directory: aptos-move/framework/formal/lean
+        run: |
+          lake build
+
+      - name: Check axiom drift
+        working-directory: aptos-move/framework/formal
+        run: |
+          if ! ./scripts/check_axioms.sh --diff; then
+            echo "::error::Axiom drift detected - new axioms without baseline update"
+            exit 1
+          fi
+
+      - name: Generate axiom report
+        if: always()
+        working-directory: aptos-move/framework/formal
+        run: |
+          mkdir -p reports
+          ./scripts/check_axioms.sh > reports/axioms-$(date +%Y-%m-%d).txt
+
+      - name: Upload axiom report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: axiom-report-${{ github.run_number }}
+          path: aptos-move/framework/formal/reports/axioms-*.txt
+          retention-days: 90
+
+  sorry-count-tracking:
+    name: "Sorry count baseline check"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Count sorries
+        working-directory: aptos-move/framework/formal
+        run: |
+          SORRY_COUNT=$(grep -r "sorry" lean/MovementFormal/Experimental/ConfidentialAsset/ --include="*.lean" | grep -v "SORRY" | grep -v "comment" | wc -l | tr -d ' ')
+          BASELINE=21
+          echo "Current sorry count: $SORRY_COUNT"
+          echo "Baseline: $BASELINE"
+
+          if [ "$SORRY_COUNT" -gt "$BASELINE" ]; then
+            echo "::error::Sorry count increased from $BASELINE to $SORRY_COUNT"
+            echo "::error::New sorry placeholders added - this is a regression"
+            exit 1
+          elif [ "$SORRY_COUNT" -lt "$BASELINE" ]; then
+            echo "::notice::Sorry count decreased from $BASELINE to $SORRY_COUNT - progress!"
+          fi
+
+  documentation-freshness:
+    name: "Documentation freshness check"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check documentation dates
+        working-directory: aptos-move/framework/formal
+        run: |
+          STALE=0
+          for doc in audit/*.md *.md; do
+            if [ -f "$doc" ]; then
+              if grep -q "Last updated:" "$doc"; then
+                DATE=$(grep "Last updated:" "$doc" | sed -n 's/.*\([0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}\).*/\1/p' | head -1)
+                if [ -n "$DATE" ]; then
+                  DATE_UNIX=$(date -d "$DATE" +%s 2>/dev/null || echo 0)
+                  NOW_UNIX=$(date +%s)
+                  DIFF_DAYS=$(( (NOW_UNIX - DATE_UNIX) / 86400 ))
+                  if [ $DIFF_DAYS -gt 90 ]; then
+                    echo "::warning::$doc is stale (last updated $DIFF_DAYS days ago)"
+                    STALE=$((STALE + 1))
+                  fi
+                fi
+              fi
+            fi
+          done
+
+          if [ $STALE -gt 5 ]; then
+            echo "::error::$STALE documents are stale (>90 days old)"
+            echo "::error::Please review and update documentation"
+            exit 1
+          fi

@@ -150,6 +150,8 @@ lean_lib «MovementFormal» where
     `MovementFormal.Experimental.ConfidentialAsset.Registration.StackInvariantPreservation,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.LocalsEvolutionTracking,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.CompleteSingletonBranchProof,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.ValueTypePreservation,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.CryptoCorrectnessProperties,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.Phase6Composition,
     `MovementFormal.MoveModel.Programs.Withdrawal,
     `MovementFormal.MoveModel.Programs.Transfer,

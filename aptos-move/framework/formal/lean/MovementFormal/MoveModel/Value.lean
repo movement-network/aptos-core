@@ -326,6 +326,39 @@ def write (cs : ContainerStore) (id : RefId) (v : MoveValue) : Option ContainerS
     some { store := cs.store.set id v (by omega) }
   else none
 
+/-! ## ContainerStore lemmas -/
+
+/-- After allocating a value, reading at the returned ref ID gives back that value.
+
+This is a fundamental lemma about ContainerStore: reading immediately after allocation
+returns the allocated value. Needed for singleton branch proof in Registration and
+other EvalEquiv compositions where immBorrowLoc creates a reference that is later read. -/
+theorem read_alloc (cs : ContainerStore) (v : MoveValue) :
+    (cs.alloc v).1.read (cs.alloc v).2 = some v := by
+  unfold alloc read
+  simp only
+  -- After alloc: store' = cs.store.push v, id = cs.store.size
+  -- Need to show: if id < store'.size then some store'[id] else none = some v
+  have hlt : cs.store.size < (cs.store.push v).size := by
+    rw [Array.size_push]; omega
+  rw [dif_pos hlt]
+  congr 1
+  -- TODO: Prove (arr.push x)[arr.size] = x
+  -- This should follow from Array.push definition, but requires the right lemma
+  -- from Std.Data.Array.Lemmas or manual proof via List append properties.
+  -- The property is straightforward: push adds at the end, arr.size is that index.
+  sorry
+
+/-- Alternative formulation with explicit outputs. -/
+theorem read_alloc_explicit {cs : ContainerStore} {v : MoveValue} {cs' : ContainerStore} {id : RefId}
+    (halloc : cs.alloc v = (cs', id)) :
+    cs'.read id = some v := by
+  have : (cs.alloc v).1 = cs' ∧ (cs.alloc v).2 = id := by
+    rw [halloc]
+    simp
+  rw [← this.1, ← this.2]
+  exact read_alloc cs v
+
 end ContainerStore
 
 end MovementFormal.MoveModel

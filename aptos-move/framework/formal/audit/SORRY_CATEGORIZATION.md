@@ -22,10 +22,10 @@
 ## Blocker Type Definitions
 
 ### 1. Array Elaboration (HARD BLOCKER)
-**Count:** 6  
-**Symptom:** "Expected type must not contain free variables"  
-**Root Cause:** Passing arrays with literal values in by-tactic context, or having free variables from let-destructuring  
-**Examples:** `locals := ([.u8 x, ...].map some).toArray`, `have (cs, fid) := ...`  
+**Count:** 9 (UPDATED 2026-04-23: +2 reclassified from Match Simplification)
+**Symptom:** "Expected type must not contain free variables" OR array proof irrelevance issues  
+**Root Cause:** (a) Passing arrays with literal values in by-tactic context, or having free variables from let-destructuring; (b) Different bound proofs for same array access (`arr[i]'h1` vs `arr[i]'h2`)
+**Examples:** `locals := ([.u8 x, ...].map some).toArray`, `have (cs, fid) := ...`, `proofFields[1]'hFieldCount`  
 **Resolution:** Requires deep Lean 4 research or architectural changes  
 **Files Blocked:**
 - Normalization/Composition.lean:30 - error case (tried, failed - free variables from match destructuring)
@@ -33,17 +33,17 @@
 - Normalization/EvalEquiv.lean:701 - main composition theorem
 - Withdrawal/EvalEquiv.lean:599 - `run_sigma_fail_produces_error` helper
 - Withdrawal/EvalEquiv.lean:647 - `run_to_range_fail_produces_error` helper
+- Withdrawal/EvalEquiv.lean:844 - match reduction blocked on array proof irrelevance (RECLASSIFIED)
 - Rotation/EvalEquiv.lean:507 - main composition theorem
+- Transfer/EvalEquiv.lean:718 - triple oracle allocation with array proof irrelevance (RECLASSIFIED)
 - Transfer/EvalEquiv.lean:776 - main composition theorem (commented as sorry)
 
 ### 2. Match Tree Simplification (MEDIUM)
-**Count:** 3  
-**Difficulty:** 20-40 lines each  
-**Pattern:** Unfold let-bindings, rewrite with hypotheses, prove structural equality  
-**Approach:** `rw [hsigma, hrange]`, `unfold`, `simp`, `rfl`  
-**Files:**
-- Withdrawal/EvalEquiv.lean:844 - let-bound `cs3`, `rangeArgs` (goal is to show match reduces to `.error`)
-- Transfer/EvalEquiv.lean:718 - triple oracle allocation (shape lemma, commented as sorry)
+**Count:** 0 (UPDATED 2026-04-23: all reclassified to Array Elaboration)
+**Status:** All previously-categorized match simplification sorries found to be blocked on array elaboration
+**Previous entries (now reclassified):**
+- ~~Withdrawal/EvalEquiv.lean:844~~ → Array Elaboration (array proof irrelevance)
+- ~~Transfer/EvalEquiv.lean:718~~ → Array Elaboration (array proof irrelevance)
 
 ### 3. Unreachable Cases (LOW PRIORITY)
 **Count:** 2  
@@ -98,11 +98,11 @@
    - **Estimated Effort:** 80-100 lines (architecture change needed)
 
 6. **Line 844** - Inside `withdrawal_eval_equiv_functional_sim`
-   - **Type:** Match Simplification
+   - **Type:** Array Elaboration (RECLASSIFIED 2026-04-23)
    - **Description:** Show functional sim reduces to `.error` using `hrange`
-   - **Challenge:** Let-bound `cs3`, `rangeArgs` need unfolding to match hypothesis
-   - **Approach:** Use `MatchSimplification.withdrawal_range_pattern` lemma
-   - **Estimated Effort:** 25-35 lines (can attempt with new utilities)
+   - **Blocker:** Array proof irrelevance - `proofFields[1]'h1` vs `proofFields[1]'h2` access same element but aren't definitionally equal
+   - **Comment in code:** "This blocks on the same array elaboration issue affecting other sorries"
+   - **Estimated Effort:** 30-40 lines post-array-elaboration resolution
 
 7. **Line 889** - Arity mismatch (unreachable)
    - **Type:** Unreachable
@@ -131,11 +131,11 @@
 
 #### EvalEquiv.lean
 10. **Line 718** - `transferBytecodeResult_success_shape`
-    - **Type:** Match Simplification  
+    - **Type:** Array Elaboration (RECLASSIFIED 2026-04-23)
     - **Description:** Shape lemma for triple oracle success
-    - **Challenge:** 3-level allocation nesting in match structure
-    - **Approach:** Use `MatchSimplification.triple_alloc_let_unfold`
-    - **Estimated Effort:** 35-45 lines (can attempt with new utilities)
+    - **Blocker:** Array proof irrelevance in 3-level allocation nesting (`halloc0`, `halloc1` pattern)
+    - **Challenge:** Must thread through `proofFields[0]`, `proofFields[1]`, `proofFields[2]` with different bound proofs
+    - **Estimated Effort:** 50-70 lines post-array-elaboration resolution
 
 11. **Line 776** - `transfer_eval_equiv_functional_sim`
     - **Type:** Array Elaboration (main composition - most complex)
@@ -152,19 +152,16 @@
 **Files:** Withdrawal/EvalEquiv.lean (889, 903)  
 **Status:** Ready to attempt
 
-### Phase 2: Match Simplification
-**Target:** 2 shape/match lemmas  
-**Time:** 1-2 days  
-**Dependencies:** MatchSimplification module (✅ created 2026-04-23)  
-**Files:** 
-- Withdrawal/EvalEquiv.lean:844 (25-35 lines) - use `withdrawal_range_pattern`
-- Transfer/EvalEquiv.lean:718 (35-45 lines) - use `triple_alloc_let_unfold`  
-**Status:** Can attempt with new utilities
+### Phase 2: Match Simplification (DEPRECATED - SKIP)
+**UPDATED 2026-04-23:** All match simplification sorries reclassified as Array Elaboration.  
+**Previous target:** 2 sorries (Withdrawal:844, Transfer:718)  
+**Reclassification reason:** Both blocked on array proof irrelevance, not pure match tree simplification  
+**Impact:** Phase 2 is now empty; proceed directly to Phase 3  
 
 ### Phase 3: Array Elaboration Research (CRITICAL BLOCKER)
 **Target:** Solve or work around the core blocker  
 **Time:** 1-3 weeks (research-heavy)  
-**Impact:** Unblocks 7 of 11 remaining sorries (64%)  
+**Impact:** Unblocks 9 of 11 remaining sorries (82% - UPDATED from 64%)  
 **Approaches:**
 1. Term-mode witness construction
 2. Alternative proof architecture (avoid let-destructuring with free variables)
@@ -185,16 +182,20 @@
 - Transfer/EvalEquiv.lean:776 (main composition, 300-450 lines)
 - Total: ~900-1200 lines of PC-chaining proofs
 
-## Total Effort Estimate
+## Total Effort Estimate (UPDATED 2026-04-23)
 
-- **Phase 1:** 1-2 hours → 2 sorries removed (18% of total)
-- **Phase 2:** 1-2 days → 2 sorries removed (18% of total)
-- **Phase 3:** 1-3 weeks → Core blocker resolution
-- **Phase 4:** 4-8 weeks → 7 sorries removed (64% of total - all array-blocked items)
+- **Phase 1:** 1-2 hours → 2 sorries removed (18% of total) - unreachable cases
+- **Phase 2:** ~~1-2 days → 2 sorries~~ → DEPRECATED (reclassified to array elaboration)
+- **Phase 3:** 1-3 weeks → Core blocker resolution (array elaboration)
+- **Phase 4:** 4-8 weeks → 9 sorries removed (82% of total - all array-blocked items)
 
 **Total:** 5-11 weeks for complete Phase 6 closure
 
-**Critical Path:** Array elaboration blocker gates 7 of 11 sorries (64%)
+**Critical Path:** Array elaboration blocker gates 9 of 11 sorries (82% - UPDATED from 64%)
+
+**Key Finding (2026-04-23):** The array elaboration blocker is more pervasive than initially categorized.
+Two sorries previously thought to be "match simplification" (medium difficulty, 1-2 days) are actually
+blocked on the same array proof irrelevance issue. This increases array-blocked percentage from 64%→82%.
 
 ---
 

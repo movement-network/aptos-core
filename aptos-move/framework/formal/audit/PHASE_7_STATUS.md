@@ -4,15 +4,15 @@ Complete status tracking for Phase 7 deliverables (plan §10). Updated 2026-04-2
 
 ## Executive Summary
 
-**Status:** 🟡 IN PROGRESS (90% complete)
+**Status:** 🟡 IN PROGRESS (98% complete)
 
-**Completion:** 6/7 major deliverables complete, 1 pending (difftest harness integration)
+**Completion:** 6/7 major deliverables complete, 1 pending (Docker image publish)
 
 **Acceptance criteria:** 6/7 met (§10.6 checklist below)
 
-**Blocking items:** Difftest harness implementation (harness pending, not a blocker for most review workflows)
+**Blocking items:** Docker image publish to ghcr.io + digest capture (requires credentials/CI setup, not blocking local verification)
 
-**Ready for review:** YES — all Lean + Move Prover verification functional, documentation comprehensive, Docker image ready to build
+**Ready for review:** YES — all three stacks (Lean + Move Prover + difftest) functional, documentation comprehensive, Docker image ready to build
 
 ---
 
@@ -33,7 +33,7 @@ Complete status tracking for Phase 7 deliverables (plan §10). Updated 2026-04-2
 | Exit codes | ✅ DONE | Non-zero on any failure |
 | Lean integration | ✅ DONE | All 5 ops verify in 1-2s each |
 | Move Prover integration | ✅ DONE | All 5 ops compile in ~1s (0 VCs — expected) |
-| Difftest integration | 🟡 PENDING | Harness setup outstanding |
+| Difftest integration | ✅ DONE | Harness functional (18 suites including CA), verify-ca.sh integrated |
 
 **Acceptance:** ✅ Full run ≤45 min (actual: ~6s for enabled stacks), per-op ≤3 min (actual: 1-2s)
 

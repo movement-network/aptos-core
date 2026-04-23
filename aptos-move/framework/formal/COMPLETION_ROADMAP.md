@@ -14,7 +14,7 @@ Complete roadmap from current state (2026-04-22) to "done" per plan §9 definiti
 - Phase 4: ✅ COMPLETE (100%)
 - Phase 5: 🟡 IN PROGRESS (70% — verification blocked on ristretto255)
 - Phase 6: 🟡 IN PROGRESS (80% — PC-chaining proofs outstanding)
-- Phase 7: 🟡 IN PROGRESS (90% — difftest harness + Docker publish)
+- Phase 7: 🟡 IN PROGRESS (98% — Docker image publish)
 - Phase 8: 🟡 IN PROGRESS (50% — TEMPORARY axiom elimination ongoing)
 
 **Quantitative progress:**
@@ -54,7 +54,7 @@ Plus:
 │ 1. Phase 0 ristretto255 patches applied upstream     [0d]  │ ✅ DONE
 │ 2. Phase 1 singleton branch                          [5-7d] │ 🟡 IN PROGRESS
 │ 3. Phase 6 PC-chaining proofs (4 ops)                [8-12d]│ 🟡 BLOCKED (elaborator)
-│ 4. Phase 7 difftest harness                          [1d]   │ ☐ PENDING
+│ 4. Phase 7 Docker image publish                      [0.5d] │ 🟡 IN PROGRESS (build running)
 │ 5. Phase 2/3/5 Move Prover verification              [2-3d] │ ⚠️ BLOCKED (ristretto255)
 │ 6. Phase 8 TEMPORARY axiom elimination               [2-3d] │ ☐ PENDING (after #2)
 └─────────────────────────────────────────────────────────────┘

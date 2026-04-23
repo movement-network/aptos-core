@@ -36,7 +36,7 @@ A claim like "transfer is formally verified" means all three stacks pass on that
 - **Phase 0** (tooling): ✅ 100%
 - **Phase 1** (Registration): 🟡 95% (singleton branch outstanding)
 - **Phase 4** (other crypto verifiers): ✅ 100% (all 4 EvalEquiv proofs done)
-- **Phase 7** (reproducibility): 🟡 90% (difftest harness + Docker publish pending)
+- **Phase 7** (reproducibility): 🟡 98% (Docker image publish pending)
 
 See `COMPLETION_ROADMAP.md` for detailed status and critical path to 100%.
 

@@ -115,13 +115,13 @@ cd aptos-core/aptos-move/framework/formal
 
 ### Difftest Stack (VM Fidelity)
 
-**Status:** 87+ corpus rows defined, harness integration pending
+**Status:** 87+ corpus rows defined, harness complete and functional (18 test suites)
 
 **What it proves:**
 
 - **VM output matches Lean eval** on concrete inputs (byte-for-byte)
 - **Covers:** Registration, withdrawal, transfer, normalize, rotate, freeze/unfreeze, allow-list, Ristretto operations, Bulletproofs, serialization, Fiat-Shamir DST
-- **Current:** Corpus defined, harness implementation pending (estimated 1 day)
+- **Current:** Harness functional, integrated with verify-ca.sh --stack difftest
 
 **Purpose:** Binds Lean and Move Prover results to the real VM — the ∀-guarantees from proofs only matter if the model matches the VM, which difftest checks.
 

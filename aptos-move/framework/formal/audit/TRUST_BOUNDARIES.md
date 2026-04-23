@@ -43,7 +43,7 @@ Each row: the Move native → Lean opaque def → MSL pragma opaque pair, with d
 
 ## Residual Lean axioms
 
-**Last reconciled:** 2026-04-22 (via `scripts/check_axioms.sh`)
+**Last reconciled:** 2026-04-23 (via `scripts/check_axioms.sh`)
 
 **Total count:** 27 axioms across 6 files (10 in CA code, 17 in crypto dependencies)
 
@@ -85,7 +85,7 @@ Each row: the Move native → Lean opaque def → MSL pragma opaque pair, with d
 
 ## MSL escapes (pragma opaque / pragma deactivated / pragma verify = false / pragma aborts_if_is_partial)
 
-**Last reconciled:** 2026-04-22 (via `scripts/check_axioms.sh`)
+**Last reconciled:** 2026-04-23 (via `scripts/check_axioms.sh`)
 
 Run the following on a fresh CA tree to enumerate:
 
@@ -96,14 +96,14 @@ grep -RHn --include='*.spec.move' --include='*.move' \
   aptos-move/framework/aptos-stdlib/sources/cryptography
 ```
 
-**Current state (2026-04-22):**
+**Current state (2026-04-23):**
 
-**CA sources (89 pragma opaque):**
-- `confidential_asset.spec.move`: 26 entry points and internal functions
+**CA sources (93 pragma opaque):**
+- `confidential_asset.spec.move`: 28 entry points and internal functions (updated from recent modifies clause additions)
 - `confidential_balance.spec.move`: 23 balance operations
 - `ristretto255_twisted_elgamal.spec.move`: 25 crypto operations (Lean oracle boundary)
 - `confidential_proof.spec.move`: 9 proof verifier functions (verified in Lean)
-- `confidential_gas_e2e_helpers.spec.move`: 6 testing helpers
+- `confidential_gas_e2e_helpers.spec.move`: 8 testing helpers
 
 All `pragma opaque` declarations documented — crypto functions verified in Lean, state functions await strengthening.
 

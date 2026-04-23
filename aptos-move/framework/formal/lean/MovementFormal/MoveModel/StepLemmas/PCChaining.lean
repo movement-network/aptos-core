@@ -431,7 +431,7 @@ axiom two_oracle_composition_pattern
         ∃ n : Nat, run env frame cs stack ms (fuel + n) = ExecResult.error
     | (some _, none) =>
         ∃ n : Nat, run env frame cs stack ms (fuel + n) = ExecResult.error
-    | (some ([], cs1), some ([], cs2)) =>
+    | (some ([], _cs1), some ([], cs2)) =>
         ∃ n : Nat, ∃ frame' : Frame, ∃ ms' : MachineState,
           run env frame cs stack ms (fuel + n) =
             run env frame' cs [] ms' fuel ∧
@@ -469,7 +469,7 @@ axiom complete_verifier_pattern
       match (sigmaResult, rangeResult) with
       | (none, _) => ExecResult.error
       | (some _, none) => ExecResult.error
-      | (some ([], cs1), some ([], cs2)) =>
+      | (some ([], _cs1), some ([], cs2)) =>
           ExecResult.returned [] { ms with containers := cs2 }
       | _ => ExecResult.error
 

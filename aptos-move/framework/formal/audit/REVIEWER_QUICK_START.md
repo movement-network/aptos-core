@@ -24,7 +24,7 @@ lake build --help
 
 ### 2. Move Prover Stack (optional — only if verifying MSL specs)
 
-**Status (2026-04-22):** ✅ Toolchain ready. ⚠️ Verification blocked on ristretto255 patches (0 VCs expected).
+**Status (2026-04-23):** ✅ Toolchain ready. ⚠️ Verification blocked on ristretto255 patches (0 VCs expected).
 
 ```bash
 # Install prover dependencies
@@ -38,6 +38,15 @@ export CVC5_EXE=$HOME/.local/bin/cvc5
 # Verify
 $Z3_EXE --version    # expect: Z3 version 4.11.2
 $BOOGIE_EXE -version # expect: Boogie program verifier version 3.5.1.0
+
+# Smoke test end-to-end
+cd aptos-move/framework
+movement move prove \
+  --package-dir move-stdlib \
+  --filter vector \
+  --vc-timeout 20 \
+  --skip-fetch-latest-git-deps
+# expect: { "Result": "Success" } in under 5 seconds
 ```
 
 **Note:** Specs currently compile but generate 0 VCs (verification conditions). This is expected — verification is blocked on upstream ristretto255 patches. Toolchain infrastructure is ready for when blocker clears. See `../MOVE_PROVER_INTEGRATION_STATUS.md` for details.

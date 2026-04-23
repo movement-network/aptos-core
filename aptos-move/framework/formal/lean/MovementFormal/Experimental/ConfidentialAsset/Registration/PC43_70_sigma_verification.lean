@@ -58,23 +58,166 @@ theorem thread_pc43_to_pc50_challenge_and_base
     (s43 : SigmaVerificationState o)
     (challenge : MoveValue)  -- The computed challenge e
     (basePoint : MoveValue)  -- The base point h
-    (horacle_challenge : o.newScalarFromSha2_512 s43.containers [s43.msgBuf] =
-                         some ([challenge], s43.containers))
-    (horacle_base : o.hashToPointBase s43.containers [] =
-                    some ([basePoint], s43.containers)) :
+    (ekAsPoint : MoveValue)  -- The encryption key as a point
+    (rid_ek : RefId)
+    (horacle_challenge : newScalarFromSha2_512 [s43.msgBuf] =
+                         some [challenge])
+    (horacle_base : o.hashToPointBase [] =
+                    some [basePoint])
+    (hread_ek : s43.containers.read rid_ek = some s43.ekPoint)
+    (horacle_ek_to_point : o.pubkeyToPoint [s43.ekPoint] =
+                           some [ekAsPoint]) :
     ∃ (s50 : SigmaVerificationState o),
-      -- Challenge e and base point h are now in locals
+      -- Challenge e and base point h are now in locals, ek converted to point
       s50.containers = s43.containers ∧
-      s50.fuel = s43.fuel - 7 := by
+      s50.fuel = s43.fuel - 8 := by
 
-  -- PC 43: moveLoc 11 (push message buffer)
-  -- PC 44: call newScalarFromSha2_512 (compute challenge e = H(msg))
-  -- PC 45: stLoc 12 (store e)
+  -- PC 43: moveLoc 11 (push message buffer from local 11)
+  let frame_pc43 : Frame := {
+    code := verifyRegistrationProofCode,
+    pc := 43,
+    locals := buildSigmaLocals s43,
+    localRefs := (List.replicate 19 none).toArray
+  }
+
+  let locals_after_pc43 := frame_pc43.locals.set! 11 none
+
+  have step43 : step (registrationModuleEnv o) [] frame_pc43 []
+                     { MachineState.empty with containers := s43.containers } =
+               .ok [] {
+                 code := verifyRegistrationProofCode, pc := 44,
+                 locals := locals_after_pc43, localRefs := frame_pc43.localRefs }
+               [s43.msgBuf]
+               { MachineState.empty with containers := s43.containers } := by
+    sorry  -- TODO: Apply step lemma for moveLoc
+
+  -- PC 44: call newScalarFromSha2_512 (compute Fiat-Shamir challenge)
+  let frame_pc44 : Frame := {
+    code := verifyRegistrationProofCode,
+    pc := 44,
+    locals := locals_after_pc43,
+    localRefs := frame_pc43.localRefs
+  }
+
+  have step44 : step (registrationModuleEnv o) [] frame_pc44 [s43.msgBuf]
+                     { MachineState.empty with containers := s43.containers } =
+               .ok [] {
+                 code := verifyRegistrationProofCode, pc := 45,
+                 locals := frame_pc44.locals, localRefs := frame_pc44.localRefs }
+               [challenge]
+               { MachineState.empty with containers := s43.containers } := by
+    sorry  -- TODO: Apply step lemma for native call to newScalarFromSha2_512
+
+  -- PC 45: stLoc 12 (store challenge in local 12)
+  let frame_pc45 : Frame := {
+    code := verifyRegistrationProofCode,
+    pc := 45,
+    locals := frame_pc44.locals,
+    localRefs := frame_pc44.localRefs
+  }
+
+  let locals_after_pc45 := frame_pc45.locals.set! 12 (some challenge)
+
+  have step45 : step (registrationModuleEnv o) [] frame_pc45 [challenge]
+                     { MachineState.empty with containers := s43.containers } =
+               .ok [] {
+                 code := verifyRegistrationProofCode, pc := 46,
+                 locals := locals_after_pc45, localRefs := frame_pc45.localRefs }
+               []
+               { MachineState.empty with containers := s43.containers } := by
+    sorry  -- TODO: Apply step lemma for stLoc
+
   -- PC 46: call hashToPointBase (get base point h)
-  -- PC 47: stLoc 13 (store h)
+  let frame_pc46 : Frame := {
+    code := verifyRegistrationProofCode,
+    pc := 46,
+    locals := locals_after_pc45,
+    localRefs := frame_pc45.localRefs
+  }
+
+  have step46 : step (registrationModuleEnv o) [] frame_pc46 []
+                     { MachineState.empty with containers := s43.containers } =
+               .ok [] {
+                 code := verifyRegistrationProofCode, pc := 47,
+                 locals := frame_pc46.locals, localRefs := frame_pc46.localRefs }
+               [basePoint]
+               { MachineState.empty with containers := s43.containers } := by
+    sorry  -- TODO: Apply step lemma for native call to hashToPointBase
+
+  -- PC 47: stLoc 13 (store base point in local 13)
+  let frame_pc47 : Frame := {
+    code := verifyRegistrationProofCode,
+    pc := 47,
+    locals := frame_pc46.locals,
+    localRefs := frame_pc46.localRefs
+  }
+
+  let locals_after_pc47 := frame_pc47.locals.set! 13 (some basePoint)
+
+  have step47 : step (registrationModuleEnv o) [] frame_pc47 [basePoint]
+                     { MachineState.empty with containers := s43.containers } =
+               .ok [] {
+                 code := verifyRegistrationProofCode, pc := 48,
+                 locals := locals_after_pc47, localRefs := frame_pc47.localRefs }
+               []
+               { MachineState.empty with containers := s43.containers } := by
+    sorry  -- TODO: Apply step lemma for stLoc
+
   -- PC 48: immBorrowLoc 3 (borrow ek_point)
+  let frame_pc48 : Frame := {
+    code := verifyRegistrationProofCode,
+    pc := 48,
+    locals := locals_after_pc47,
+    localRefs := frame_pc47.localRefs
+  }
+
+  let containers_after_ek_alloc := s43.containers
+
+  have step48 : step (registrationModuleEnv o) [] frame_pc48 []
+                     { MachineState.empty with containers := s43.containers } =
+               .ok [] {
+                 code := verifyRegistrationProofCode, pc := 49,
+                 locals := frame_pc48.locals,
+                 localRefs := frame_pc48.localRefs.set! 3 (some rid_ek) }
+               [MoveValue.immRef rid_ek]
+               { MachineState.empty with containers := containers_after_ek_alloc } := by
+    sorry  -- TODO: Apply step lemma for immBorrowLoc with alloc
+
   -- PC 49: call pubkeyToPoint (convert ek to point)
-  -- PC 50: stLoc 14 (store ek as point)
+  let frame_pc49 : Frame := {
+    code := verifyRegistrationProofCode,
+    pc := 49,
+    locals := frame_pc48.locals,
+    localRefs := frame_pc48.localRefs.set! 3 (some rid_ek)
+  }
+
+  have step49 : step (registrationModuleEnv o) [] frame_pc49 [MoveValue.immRef rid_ek]
+                     { MachineState.empty with containers := containers_after_ek_alloc } =
+               .ok [] {
+                 code := verifyRegistrationProofCode, pc := 50,
+                 locals := frame_pc49.locals, localRefs := frame_pc49.localRefs }
+               [ekAsPoint]
+               { MachineState.empty with containers := containers_after_ek_alloc } := by
+    sorry  -- TODO: Apply step lemma for native call to pubkeyToPoint
+
+  -- PC 50: stLoc 14 (store ek as point in local 14)
+  let frame_pc50 : Frame := {
+    code := verifyRegistrationProofCode,
+    pc := 50,
+    locals := frame_pc49.locals,
+    localRefs := frame_pc49.localRefs
+  }
+
+  let locals_after_pc50 := frame_pc50.locals.set! 14 (some ekAsPoint)
+
+  have step50 : step (registrationModuleEnv o) [] frame_pc50 [ekAsPoint]
+                     { MachineState.empty with containers := containers_after_ek_alloc } =
+               .ok [] {
+                 code := verifyRegistrationProofCode, pc := 51,
+                 locals := locals_after_pc50, localRefs := frame_pc50.localRefs }
+               []
+               { MachineState.empty with containers := containers_after_ek_alloc } := by
+    sorry  -- TODO: Apply step lemma for stLoc
 
   use {
     rCompressed := s43.rCompressed,
@@ -82,11 +225,38 @@ theorem thread_pc43_to_pc50_challenge_and_base
     ekPoint := s43.ekPoint,
     msgBuf := s43.msgBuf,
     rid_msg := s43.rid_msg,
-    containers := s43.containers,
-    fuel := s43.fuel - 7,
+    containers := containers_after_ek_alloc,
+    fuel := s43.fuel - 8,
     hfuel := by omega
   }
-  constructor <;> rfl
+  constructor
+  · rfl
+  · rfl
+
+where
+  buildSigmaLocals (s : SigmaVerificationState o) : Array (Option MoveValue) :=
+    -- Locals array at PC 43 (after Phase 2 completion)
+    #[
+      none,                                                               -- 0: chainId (consumed)
+      none,                                                               -- 1: sender (consumed)
+      none,                                                               -- 2: contract (consumed)
+      some s.ekPoint,                                                     -- 3: ek_point
+      none,                                                               -- 4: ek_ba (consumed)
+      none,                                                               -- 5: commit_ba (consumed)
+      none,                                                               -- 6: resp_ba (consumed)
+      none,                                                               -- 7: v (consumed)
+      some s.rCompressed,                                                 -- 8: r_compressed
+      none,                                                               -- 9: s_opt (consumed)
+      some s.scalar,                                                      -- 10: scalar
+      some s.msgBuf,                                                      -- 11: message buffer (complete)
+      none,                                                               -- 12: challenge_e (to be filled)
+      none,                                                               -- 13: base_point_h (to be filled)
+      none,                                                               -- 14: ek_as_point (to be filled)
+      none,                                                               -- 15: h_times_s (to be filled)
+      none,                                                               // 16: ek_times_e (to be filled)
+      none,                                                               -- 17: lhs (to be filled)
+      none                                                                -- 18: rhs (to be filled)
+    ]
 
 /-! ### PC 50-58: Point multiplications h*s and ek*e
 
@@ -99,19 +269,173 @@ theorem thread_pc50_to_pc58_point_multiplications
     (s50 : SigmaVerificationState o)
     (h s e ek_as_point : MoveValue)  -- Inputs
     (hs_product ek_e_product : MoveValue)  -- Outputs
-    (horacle_hs : o.pointMul s50.containers [h, s] =
-                  some ([hs_product], s50.containers))
-    (horacle_ek_e : o.pointMul s50.containers [ek_as_point, e] =
-                    some ([ek_e_product], s50.containers)) :
+    (rid_h rid_s rid_ek rid_e : RefId)
+    (hread_h : s50.containers.read rid_h = some h)
+    (hread_s : s50.containers.read rid_s = some s)
+    (hread_ek : s50.containers.read rid_ek = some ek_as_point)
+    (hread_e : s50.containers.read rid_e = some e)
+    (horacle_hs : o.pointMul [h, s] =
+                  some [hs_product])
+    (horacle_ek_e : o.pointMul [ek_as_point, e] =
+                    some [ek_e_product]) :
     ∃ (s58 : SigmaVerificationState o),
       -- Both products computed and stored
       s58.containers = s50.containers ∧
-      s58.fuel = s50.fuel - 8 := by
+      s58.fuel = s50.fuel - 16 := by
 
-  -- PC 50-53: point_mul(h, s) with intermediate stLocs
+  -- PC 51: immBorrowLoc 13 (borrow base point h)
+  let frame_pc51 : Frame := {
+    code := verifyRegistrationProofCode,
+    pc := 51,
+    locals := buildPointMulLocals s50 h e ek_as_point,
+    localRefs := (List.replicate 19 none).toArray
+  }
+
+  let containers_after_h_alloc := s50.containers
+
+  have step51 : step (registrationModuleEnv o) [] frame_pc51 []
+                     { MachineState.empty with containers := s50.containers } =
+               .ok [] {
+                 code := verifyRegistrationProofCode, pc := 52,
+                 locals := frame_pc51.locals,
+                 localRefs := frame_pc51.localRefs.set! 13 (some rid_h) }
+               [MoveValue.immRef rid_h]
+               { MachineState.empty with containers := containers_after_h_alloc } := by
+    sorry  -- TODO: Apply step lemma for immBorrowLoc
+
+  -- PC 52: immBorrowLoc 10 (borrow scalar s)
+  let frame_pc52 : Frame := {
+    code := verifyRegistrationProofCode,
+    pc := 52,
+    locals := frame_pc51.locals,
+    localRefs := frame_pc51.localRefs.set! 13 (some rid_h)
+  }
+
+  let containers_after_s_alloc := containers_after_h_alloc
+
+  have step52 : step (registrationModuleEnv o) [] frame_pc52 [MoveValue.immRef rid_h]
+                     { MachineState.empty with containers := containers_after_h_alloc } =
+               .ok [] {
+                 code := verifyRegistrationProofCode, pc := 53,
+                 locals := frame_pc52.locals,
+                 localRefs := frame_pc52.localRefs.set! 10 (some rid_s) }
+               [MoveValue.immRef rid_h, MoveValue.immRef rid_s]
+               { MachineState.empty with containers := containers_after_s_alloc } := by
+    sorry  -- TODO: Apply step lemma for immBorrowLoc
+
+  -- PC 53: call pointMul (compute h * s)
+  let frame_pc53 : Frame := {
+    code := verifyRegistrationProofCode,
+    pc := 53,
+    locals := frame_pc52.locals,
+    localRefs := frame_pc52.localRefs.set! 10 (some rid_s)
+  }
+
+  have step53 : step (registrationModuleEnv o) [] frame_pc53
+                     [MoveValue.immRef rid_h, MoveValue.immRef rid_s]
+                     { MachineState.empty with containers := containers_after_s_alloc } =
+               .ok [] {
+                 code := verifyRegistrationProofCode, pc := 54,
+                 locals := frame_pc53.locals, localRefs := frame_pc53.localRefs }
+               [hs_product]
+               { MachineState.empty with containers := containers_after_s_alloc } := by
+    sorry  -- TODO: Apply step lemma for native call to pointMul
+
   -- PC 54: stLoc 15 (store h*s result)
-  -- PC 55-58: point_mul(ek, e) with intermediate stLocs
-  -- PC 59: (implicit stLoc for ek*e result)
+  let frame_pc54 : Frame := {
+    code := verifyRegistrationProofCode,
+    pc := 54,
+    locals := frame_pc53.locals,
+    localRefs := frame_pc53.localRefs
+  }
+
+  let locals_after_pc54 := frame_pc54.locals.set! 15 (some hs_product)
+
+  have step54 : step (registrationModuleEnv o) [] frame_pc54 [hs_product]
+                     { MachineState.empty with containers := containers_after_s_alloc } =
+               .ok [] {
+                 code := verifyRegistrationProofCode, pc := 55,
+                 locals := locals_after_pc54, localRefs := frame_pc54.localRefs }
+               []
+               { MachineState.empty with containers := containers_after_s_alloc } := by
+    sorry  -- TODO: Apply step lemma for stLoc
+
+  -- PC 55: immBorrowLoc 14 (borrow ek as point)
+  let frame_pc55 : Frame := {
+    code := verifyRegistrationProofCode,
+    pc := 55,
+    locals := locals_after_pc54,
+    localRefs := frame_pc54.localRefs
+  }
+
+  let containers_after_ek_alloc := containers_after_s_alloc
+
+  have step55 : step (registrationModuleEnv o) [] frame_pc55 []
+                     { MachineState.empty with containers := containers_after_s_alloc } =
+               .ok [] {
+                 code := verifyRegistrationProofCode, pc := 56,
+                 locals := frame_pc55.locals,
+                 localRefs := frame_pc55.localRefs.set! 14 (some rid_ek) }
+               [MoveValue.immRef rid_ek]
+               { MachineState.empty with containers := containers_after_ek_alloc } := by
+    sorry  -- TODO: Apply step lemma for immBorrowLoc
+
+  -- PC 56: immBorrowLoc 12 (borrow challenge e)
+  let frame_pc56 : Frame := {
+    code := verifyRegistrationProofCode,
+    pc := 56,
+    locals := frame_pc55.locals,
+    localRefs := frame_pc55.localRefs.set! 14 (some rid_ek)
+  }
+
+  let containers_after_e_alloc := containers_after_ek_alloc
+
+  have step56 : step (registrationModuleEnv o) [] frame_pc56 [MoveValue.immRef rid_ek]
+                     { MachineState.empty with containers := containers_after_ek_alloc } =
+               .ok [] {
+                 code := verifyRegistrationProofCode, pc := 57,
+                 locals := frame_pc56.locals,
+                 localRefs := frame_pc56.localRefs.set! 12 (some rid_e) }
+               [MoveValue.immRef rid_ek, MoveValue.immRef rid_e]
+               { MachineState.empty with containers := containers_after_e_alloc } := by
+    sorry  -- TODO: Apply step lemma for immBorrowLoc
+
+  -- PC 57: call pointMul (compute ek * e)
+  let frame_pc57 : Frame := {
+    code := verifyRegistrationProofCode,
+    pc := 57,
+    locals := frame_pc56.locals,
+    localRefs := frame_pc56.localRefs.set! 12 (some rid_e)
+  }
+
+  have step57 : step (registrationModuleEnv o) [] frame_pc57
+                     [MoveValue.immRef rid_ek, MoveValue.immRef rid_e]
+                     { MachineState.empty with containers := containers_after_e_alloc } =
+               .ok [] {
+                 code := verifyRegistrationProofCode, pc := 58,
+                 locals := frame_pc57.locals, localRefs := frame_pc57.localRefs }
+               [ek_e_product]
+               { MachineState.empty with containers := containers_after_e_alloc } := by
+    sorry  -- TODO: Apply step lemma for native call to pointMul
+
+  -- PC 58: stLoc 16 (store ek*e result)
+  let frame_pc58 : Frame := {
+    code := verifyRegistrationProofCode,
+    pc := 58,
+    locals := frame_pc57.locals,
+    localRefs := frame_pc57.localRefs
+  }
+
+  let locals_after_pc58 := frame_pc58.locals.set! 16 (some ek_e_product)
+
+  have step58 : step (registrationModuleEnv o) [] frame_pc58 [ek_e_product]
+                     { MachineState.empty with containers := containers_after_e_alloc } =
+               .ok [] {
+                 code := verifyRegistrationProofCode, pc := 59,
+                 locals := locals_after_pc58, localRefs := frame_pc58.localRefs }
+               []
+               { MachineState.empty with containers := containers_after_e_alloc } := by
+    sorry  -- TODO: Apply step lemma for stLoc
 
   use {
     rCompressed := s50.rCompressed,
@@ -119,11 +443,37 @@ theorem thread_pc50_to_pc58_point_multiplications
     ekPoint := s50.ekPoint,
     msgBuf := s50.msgBuf,
     rid_msg := s50.rid_msg,
-    containers := s50.containers,
-    fuel := s50.fuel - 8,
+    containers := containers_after_e_alloc,
+    fuel := s50.fuel - 16,  -- 8 steps for first mul, 8 for second mul
     hfuel := by omega
   }
-  constructor <;> rfl
+  constructor
+  · rfl
+  · rfl
+
+where
+  buildPointMulLocals (s : SigmaVerificationState o) (h e ek : MoveValue) : Array (Option MoveValue) :=
+    #[
+      none,                    -- 0
+      none,                    -- 1
+      none,                    -- 2
+      some s.ekPoint,          -- 3
+      none,                    -- 4
+      none,                    -- 5
+      none,                    -- 6
+      none,                    -- 7
+      some s.rCompressed,      // 8
+      none,                    -- 9
+      some s.scalar,           -- 10
+      some s.msgBuf,           -- 11
+      some e,                  -- 12: challenge
+      some h,                  -- 13: base point
+      some ek,                 -- 14: ek as point
+      none,                    -- 15: h*s (to be filled)
+      none,                    -- 16: ek*e (to be filled)
+      none,                    -- 17
+      none                     -- 18
+    ]
 
 /-! ### PC 58-64: Point addition and decompression
 

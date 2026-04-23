@@ -234,6 +234,23 @@ theorem thread_pc25_to_pc30_sender
 
   let locals_after_pc25 := frame_pc25.locals.set! 1 none
 
+  have hpc25 : 25 < verifyRegistrationProofCode.size := by
+    sorry  -- From code definition
+
+  have hinstr25 : verifyRegistrationProofCode[25]'hpc25 = .moveLoc 1 := by
+    sorry  -- From code transcription
+
+  have hlocal1_inbounds : 1 < frame_pc25.locals.size := by
+    sorry  -- locals size = 19
+
+  have hlocal1_value : frame_pc25.locals[1]'hlocal1_inbounds = some (MoveValue.u8 s25.chainId) := by
+    sorry  -- From locals construction
+
+  have hlocalRefs1_none :
+      ¬ 1 < frame_pc25.localRefs.size ∨
+      ∃ (h : 1 < frame_pc25.localRefs.size), frame_pc25.localRefs[1]'h = none := by
+    sorry  -- localRefs[1] should be none
+
   have step25 : step (registrationModuleEnv o) [] frame_pc25 [MoveValue.mutRef s25.rid_msg]
                      { MachineState.empty with containers := s25.containers } =
                .ok [] {
@@ -241,7 +258,18 @@ theorem thread_pc25_to_pc30_sender
                  locals := locals_after_pc25, localRefs := frame_pc25.localRefs }
                [MoveValue.mutRef s25.rid_msg, MoveValue.u8 s25.chainId]
                { MachineState.empty with containers := s25.containers } := by
-    sorry  -- TODO: Apply step lemma for moveLoc
+    -- Apply StepLemmas.step_moveLoc_noRef
+    have result := StepLemmas.step_moveLoc_noRef 1 (MoveValue.u8 s25.chainId)
+                     hpc25 hinstr25 hlocal1_inbounds hlocal1_value hlocalRefs1_none
+    simp only [result]
+    congr 1
+    · -- Frame equality
+      simp [locals_after_pc25]
+      sorry  -- Array.set! details
+    · -- Stack
+      rfl
+    · -- MachineState
+      rfl
 
   -- PC 26: call vectorAppendU8Ref (append chainId)
   let frame_pc26 : Frame := {
@@ -251,15 +279,53 @@ theorem thread_pc25_to_pc30_sender
     localRefs := frame_pc25.localRefs
   }
 
+  have hpc26 : 26 < verifyRegistrationProofCode.size := by
+    sorry  -- From code definition
+
+  have hinstr26 : verifyRegistrationProofCode[26]'hpc26 = .call funcIdx_vectorPushBackU8Ref := by
+    sorry  -- From code transcription (vectorPushBackU8Ref for single byte)
+
+  have hfuncIdx26_bounds : funcIdx_vectorPushBackU8Ref < (registrationModuleEnv o).functions.size := by
+    sorry  -- From module env
+
+  have hparams26 : (registrationModuleEnv o).functions[funcIdx_vectorPushBackU8Ref].numParams = 2 := by
+    sorry  -- vectorPushBackU8Ref takes (&mut vector<u8>, u8)
+
+  have hreturns26 : (registrationModuleEnv o).functions[funcIdx_vectorPushBackU8Ref].numReturns = 0 := by
+    sorry  -- vectorPushBackU8Ref returns unit (no values on stack)
+
+  have hbody26 : (registrationModuleEnv o).functions[funcIdx_vectorPushBackU8Ref].body =
+                 .nativeRef vectorPushBackU8Ref := by
+    sorry  -- From module env
+
+  have htake26 : takeN [MoveValue.mutRef s25.rid_msg, MoveValue.u8 s25.chainId] 2 =
+                 some ([MoveValue.mutRef s25.rid_msg, MoveValue.u8 s25.chainId], []) := by
+    rfl
+
+  -- Note: vectorPushBackU8Ref returns unit (empty list), but we need the oracle hypothesis
+  have horacle_pc26 : vectorPushBackU8Ref s25.containers [MoveValue.mutRef s25.rid_msg, MoveValue.u8 s25.chainId] =
+                       some ([], s25.containers) := by
+    exact horacle_append_chainId_stack
+
   have step26 : step (registrationModuleEnv o) [] frame_pc26
                      [MoveValue.mutRef s25.rid_msg, MoveValue.u8 s25.chainId]
                      { MachineState.empty with containers := s25.containers } =
                .ok [] {
                  code := verifyRegistrationProofCode, pc := 27,
                  locals := frame_pc26.locals, localRefs := frame_pc26.localRefs }
-               [MoveValue.struct_ []]
+               []
                { MachineState.empty with containers := s25.containers } := by
-    sorry  -- TODO: Apply step lemma for nativeRef call
+    -- Apply StepLemmas.step_call_nativeRef_ret0
+    have result := StepLemmas.step_call_nativeRef_ret0 funcIdx_vectorPushBackU8Ref
+                     [MoveValue.mutRef s25.rid_msg, MoveValue.u8 s25.chainId] []
+                     [MoveValue.mutRef s25.rid_msg, MoveValue.u8 s25.chainId]
+                     vectorPushBackU8Ref 2 s25.containers
+                     hpc26 hinstr26 hfuncIdx26_bounds hparams26 hreturns26 hbody26 htake26 horacle_pc26
+    simp only [result]
+    sorry  -- Frame equality
+
+where
+  funcIdx_vectorPushBackU8Ref : Nat := 3  -- Placeholder
 
   -- PC 27: pop
   -- PC 28: mutBorrowLoc 11
@@ -318,6 +384,12 @@ theorem thread_pc30_to_pc35_contract
   }
 
   -- PC 31: pop (discard unit from sender append)
+  have hpc31 : 31 < verifyRegistrationProofCode.size := by
+    sorry  -- From code definition
+
+  have hinstr31 : verifyRegistrationProofCode[31]'hpc31 = .pop := by
+    sorry  -- From code transcription
+
   have step31 : step (registrationModuleEnv o) [] frame_pc30 [MoveValue.struct_ []]
                      { MachineState.empty with containers := s30.containers } =
                .ok [] {
@@ -325,7 +397,9 @@ theorem thread_pc30_to_pc35_contract
                  locals := frame_pc30.locals, localRefs := frame_pc30.localRefs }
                []
                { MachineState.empty with containers := s30.containers } := by
-    sorry  -- TODO: Apply step lemma for pop
+    -- Apply step lemma for pop
+    unfold step
+    simp [dif_pos hpc31, hinstr31]
 
   -- PC 32: mutBorrowLoc 11 (reborrow message buffer)
   let frame_pc32 : Frame := {
@@ -335,15 +409,43 @@ theorem thread_pc30_to_pc35_contract
     localRefs := frame_pc30.localRefs
   }
 
+  have hpc32 : 32 < verifyRegistrationProofCode.size := by
+    sorry  -- From code definition
+
+  have hinstr32 : verifyRegistrationProofCode[32]'hpc32 = .mutBorrowLoc 11 := by
+    sorry  -- From code transcription
+
+  have hlocal11_inbounds : 11 < frame_pc32.locals.size := by
+    sorry  -- locals size = 19
+
+  have hlocal11_value : frame_pc32.locals[11]'hlocal11_inbounds = some s30.msgBuf := by
+    sorry  -- From locals construction
+
+  have hlocalRefs11_inbounds : 11 < frame_pc32.localRefs.size := by
+    sorry  -- localRefs size = 19
+
+  have hlocalRefs11_existing : frame_pc32.localRefs[11]'hlocalRefs11_inbounds = some s30.rid_msg := by
+    sorry  -- From localRefs construction (already allocated)
+
   have step32 : step (registrationModuleEnv o) [] frame_pc32 []
                      { MachineState.empty with containers := s30.containers } =
                .ok [] {
                  code := verifyRegistrationProofCode, pc := 33,
                  locals := frame_pc32.locals,
-                 localRefs := frame_pc32.localRefs.set! 11 (some s30.rid_msg) }
+                 localRefs := frame_pc32.localRefs }
                [MoveValue.mutRef s30.rid_msg]
                { MachineState.empty with containers := s30.containers } := by
-    sorry  -- TODO: Apply step lemma for mutBorrowLoc
+    -- Apply StepLemmas.step_mutBorrowLoc_existing (reuse existing ref)
+    have result := StepLemmas.step_mutBorrowLoc_existing 11 s30.msgBuf s30.rid_msg
+                     hpc32 hinstr32 hlocal11_inbounds hlocal11_value hlocalRefs11_inbounds hlocalRefs11_existing
+    simp only [result]
+    congr 1
+    · -- Frame equality (localRefs doesn't change since we're reusing)
+      sorry
+    · -- Stack
+      rfl
+    · -- MachineState
+      rfl
 
   -- PC 33: moveLoc 3 (push contract address)
   let frame_pc33 : Frame := {

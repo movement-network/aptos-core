@@ -331,6 +331,39 @@ theorem thread_pc50_to_pc58_point_multiplications
     localRefs := frame_pc52.localRefs.set! 10 (some rid_s)
   }
 
+  have hpc53 : 53 < verifyRegistrationProofCode.size := by
+    sorry  -- From code definition
+
+  have hinstr53 : verifyRegistrationProofCode[53]'hpc53 = .call funcIdx_pointMul := by
+    sorry  -- From code transcription
+
+  have hfuncIdx53_bounds : funcIdx_pointMul < (registrationModuleEnv o).functions.size := by
+    sorry  -- From module env
+
+  have hparams53 : (registrationModuleEnv o).functions[funcIdx_pointMul].numParams = 2 := by
+    sorry  -- pointMul takes (point, scalar)
+
+  have hreturns53 : (registrationModuleEnv o).functions[funcIdx_pointMul].numReturns = 1 := by
+    sorry  -- pointMul returns point
+
+  have hbody53 : (registrationModuleEnv o).functions[funcIdx_pointMul].body =
+                 .native o.pointMul := by
+    sorry  -- From module env
+
+  have htake53 : takeN [MoveValue.immRef rid_h, MoveValue.immRef rid_s] 2 =
+                 some ([MoveValue.immRef rid_h, MoveValue.immRef rid_s], []) := by
+    rfl
+
+  -- Oracle hypothesis for pointMul
+  have hread_h : containers_after_s_alloc.read rid_h = some h_base := by
+    sorry  -- From alloc
+
+  have hread_s : containers_after_s_alloc.read rid_s = some s50.scalar := by
+    sorry  -- From alloc
+
+  have horacle_pc53 : o.pointMul [h_base, s50.scalar] = some [hs_product] := by
+    sorry  -- From pointMul closure
+
   have step53 : step (registrationModuleEnv o) [] frame_pc53
                      [MoveValue.immRef rid_h, MoveValue.immRef rid_s]
                      { MachineState.empty with containers := containers_after_s_alloc } =
@@ -339,7 +372,16 @@ theorem thread_pc50_to_pc58_point_multiplications
                  locals := frame_pc53.locals, localRefs := frame_pc53.localRefs }
                [hs_product]
                { MachineState.empty with containers := containers_after_s_alloc } := by
-    sorry  -- TODO: Apply step lemma for native call to pointMul
+    -- Apply StepLemmas.step_call_native_ret1
+    have result := StepLemmas.step_call_native_ret1 funcIdx_pointMul
+                     [h_base, s50.scalar] [] [h_base, s50.scalar]
+                     o.pointMul 2 hs_product
+                     hpc53 hinstr53 hfuncIdx53_bounds hparams53 hreturns53 hbody53 htake53 horacle_pc53
+    sorry  -- Need to convert immRef reads to actual values
+           -- Would need intermediate lemma: step with refs on stack → step with dereferenced values
+
+where
+  funcIdx_pointMul : Nat := 4  -- Placeholder
 
   -- PC 54: stLoc 15 (store h*s result)
   let frame_pc54 : Frame := {
@@ -351,6 +393,15 @@ theorem thread_pc50_to_pc58_point_multiplications
 
   let locals_after_pc54 := frame_pc54.locals.set! 15 (some hs_product)
 
+  have hpc54 : 54 < verifyRegistrationProofCode.size := by
+    sorry  -- From code definition
+
+  have hinstr54 : verifyRegistrationProofCode[54]'hpc54 = .stLoc 15 := by
+    sorry  -- From code transcription
+
+  have hlocal15_inbounds : 15 < frame_pc54.locals.size := by
+    sorry  -- locals size = 19
+
   have step54 : step (registrationModuleEnv o) [] frame_pc54 [hs_product]
                      { MachineState.empty with containers := containers_after_s_alloc } =
                .ok [] {
@@ -358,7 +409,18 @@ theorem thread_pc50_to_pc58_point_multiplications
                  locals := locals_after_pc54, localRefs := frame_pc54.localRefs }
                []
                { MachineState.empty with containers := containers_after_s_alloc } := by
-    sorry  -- TODO: Apply step lemma for stLoc
+    -- Apply StepLemmas.step_stLoc
+    have result := StepLemmas.step_stLoc 15 hs_product []
+                     hpc54 hinstr54 hlocal15_inbounds
+    simp only [result]
+    congr 1
+    · -- Frame equality
+      simp [locals_after_pc54]
+      sorry  -- Array.set! massage
+    · -- Empty list
+      rfl
+    · -- MachineState
+      rfl
 
   -- PC 55: immBorrowLoc 14 (borrow ek as point)
   let frame_pc55 : Frame := {
@@ -408,6 +470,26 @@ theorem thread_pc50_to_pc58_point_multiplications
     localRefs := frame_pc56.localRefs.set! 12 (some rid_e)
   }
 
+  have hpc57 : 57 < verifyRegistrationProofCode.size := by
+    sorry  -- From code definition
+
+  have hinstr57 : verifyRegistrationProofCode[57]'hpc57 = .call funcIdx_pointMul := by
+    sorry  -- From code transcription
+
+  have htake57 : takeN [MoveValue.immRef rid_ek, MoveValue.immRef rid_e] 2 =
+                 some ([MoveValue.immRef rid_ek, MoveValue.immRef rid_e], []) := by
+    rfl
+
+  -- Oracle hypothesis for pointMul (ek * e)
+  have hread_ek : containers_after_e_alloc.read rid_ek = some s50.ekPoint := by
+    sorry  -- From alloc
+
+  have hread_e : containers_after_e_alloc.read rid_e = some challenge_e := by
+    sorry  -- From alloc
+
+  have horacle_pc57 : o.pointMul [s50.ekPoint, challenge_e] = some [ek_e_product] := by
+    sorry  -- From pointMul closure
+
   have step57 : step (registrationModuleEnv o) [] frame_pc57
                      [MoveValue.immRef rid_ek, MoveValue.immRef rid_e]
                      { MachineState.empty with containers := containers_after_e_alloc } =
@@ -416,7 +498,12 @@ theorem thread_pc50_to_pc58_point_multiplications
                  locals := frame_pc57.locals, localRefs := frame_pc57.localRefs }
                [ek_e_product]
                { MachineState.empty with containers := containers_after_e_alloc } := by
-    sorry  -- TODO: Apply step lemma for native call to pointMul
+    -- Apply StepLemmas.step_call_native_ret1
+    have result := StepLemmas.step_call_native_ret1 funcIdx_pointMul
+                     [s50.ekPoint, challenge_e] [] [s50.ekPoint, challenge_e]
+                     o.pointMul 2 ek_e_product
+                     hpc57 hinstr57 hfuncIdx53_bounds hparams53 hreturns53 hbody53 htake57 horacle_pc57
+    sorry  -- Need to convert immRef reads to actual values
 
   -- PC 58: stLoc 16 (store ek*e result)
   let frame_pc58 : Frame := {
@@ -428,6 +515,15 @@ theorem thread_pc50_to_pc58_point_multiplications
 
   let locals_after_pc58 := frame_pc58.locals.set! 16 (some ek_e_product)
 
+  have hpc58 : 58 < verifyRegistrationProofCode.size := by
+    sorry  -- From code definition
+
+  have hinstr58 : verifyRegistrationProofCode[58]'hpc58 = .stLoc 16 := by
+    sorry  -- From code transcription
+
+  have hlocal16_inbounds : 16 < frame_pc58.locals.size := by
+    sorry  -- locals size = 19
+
   have step58 : step (registrationModuleEnv o) [] frame_pc58 [ek_e_product]
                      { MachineState.empty with containers := containers_after_e_alloc } =
                .ok [] {
@@ -435,7 +531,18 @@ theorem thread_pc50_to_pc58_point_multiplications
                  locals := locals_after_pc58, localRefs := frame_pc58.localRefs }
                []
                { MachineState.empty with containers := containers_after_e_alloc } := by
-    sorry  -- TODO: Apply step lemma for stLoc
+    -- Apply StepLemmas.step_stLoc
+    have result := StepLemmas.step_stLoc 16 ek_e_product []
+                     hpc58 hinstr58 hlocal16_inbounds
+    simp only [result]
+    congr 1
+    · -- Frame equality
+      simp [locals_after_pc58]
+      sorry  -- Array.set! massage
+    · -- Empty list
+      rfl
+    · -- MachineState
+      rfl
 
   use {
     rCompressed := s50.rCompressed,

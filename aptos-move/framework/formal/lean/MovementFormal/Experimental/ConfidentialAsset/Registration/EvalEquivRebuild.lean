@@ -5986,6 +5986,243 @@ theorem newScalarFromSha2_512_produces_scalar
       sorry  -- TODO: Extract structure from SHA2-512 computation
     | _ => simp at h
   | _ => simp at h
+
+/-! ### Additional Native Call Correspondence Lemmas
+
+These lemmas establish correspondence between native function calls and their
+execution semantics in the step relation.
+-/
+
+/-- Native call to newScalarFromSha2_512 succeeds and produces scalar. -/
+theorem step_native_newScalarFromSha2_512
+    (env : ModuleEnv)
+    (frame : Frame)
+    (msg result : MoveValue)
+    (h_pc : frame.code.get? frame.pc = some (MoveInstr.call 9))  -- Function index 9
+    (h_oracle : newScalarFromSha2_512 [msg] = some [result])
+    (ms : MachineState) :
+    step env [] frame [msg] ms =
+    .ok [] { frame with pc := frame.pc + 1 } [result] ms := by
+  sorry  -- TODO: Apply native call step lemma
+
+/-- Native call to hashToPointBase succeeds. -/
+theorem step_native_hashToPointBase
+    (o : RegistrationNativeOracle)
+    (env : ModuleEnv)
+    (frame : Frame)
+    (result : MoveValue)
+    (h_pc : frame.code.get? frame.pc = some (MoveInstr.call 10))  -- Function index 10
+    (h_oracle : o.hashToPointBase [] = some [result])
+    (ms : MachineState) :
+    step env [] frame [] ms =
+    .ok [] { frame with pc := frame.pc + 1 } [result] ms := by
+  sorry  -- TODO: Apply native call step lemma
+
+/-- Native call to pubkeyToPoint through ref succeeds. -/
+theorem step_native_pubkeyToPoint_ref
+    (o : RegistrationNativeOracle)
+    (env : ModuleEnv)
+    (frame : Frame)
+    (rid : RefId)
+    (pubkey result : MoveValue)
+    (h_pc : frame.code.get? frame.pc = some (MoveInstr.call 11))  -- Function index 11
+    (h_read : ms.containers.read rid = some pubkey)
+    (h_oracle : o.pubkeyToPoint [pubkey] = some [result])
+    (ms : MachineState) :
+    step env [] frame [.immRef rid] ms =
+    .ok [] { frame with pc := frame.pc + 1 } [result] ms := by
+  sorry  -- TODO: Apply nativeRef call step lemma with wrapOracleImmRef1
+
+/-- Native call to pointMul through refs succeeds. -/
+theorem step_native_pointMul_ref
+    (o : RegistrationNativeOracle)
+    (env : ModuleEnv)
+    (frame : Frame)
+    (rid1 rid2 : RefId)
+    (point scalar result : MoveValue)
+    (h_pc : frame.code.get? frame.pc = some (MoveInstr.call 12))  -- Function index 12
+    (h_read1 : ms.containers.read rid1 = some point)
+    (h_read2 : ms.containers.read rid2 = some scalar)
+    (h_oracle : o.pointMul [point, scalar] = some [result])
+    (ms : MachineState) :
+    step env [] frame [.immRef rid1, .immRef rid2] ms =
+    .ok [] { frame with pc := frame.pc + 1 } [result] ms := by
+  sorry  -- TODO: Apply nativeRef call step lemma with wrapOracleImmRef2
+
+/-- Native call to pointAdd through refs succeeds. -/
+theorem step_native_pointAdd_ref
+    (o : RegistrationNativeOracle)
+    (env : ModuleEnv)
+    (frame : Frame)
+    (rid1 rid2 : RefId)
+    (point1 point2 result : MoveValue)
+    (h_pc : frame.code.get? frame.pc = some (MoveInstr.call 13))  -- Function index 13
+    (h_read1 : ms.containers.read rid1 = some point1)
+    (h_read2 : ms.containers.read rid2 = some point2)
+    (h_oracle : o.pointAdd [point1, point2] = some [result])
+    (ms : MachineState) :
+    step env [] frame [.immRef rid1, .immRef rid2] ms =
+    .ok [] { frame with pc := frame.pc + 1 } [result] ms := by
+  sorry  -- TODO: Apply nativeRef call step lemma with wrapOracleImmRef2
+
+/-- Native call to pointDecompress through ref succeeds. -/
+theorem step_native_pointDecompress_ref
+    (o : RegistrationNativeOracle)
+    (env : ModuleEnv)
+    (frame : Frame)
+    (rid : RefId)
+    (compressed result : MoveValue)
+    (h_pc : frame.code.get? frame.pc = some (MoveInstr.call 14))  -- Function index 14
+    (h_read : ms.containers.read rid = some compressed)
+    (h_oracle : o.pointDecompress [compressed] = some [result])
+    (ms : MachineState) :
+    step env [] frame [.immRef rid] ms =
+    .ok [] { frame with pc := frame.pc + 1 } [result] ms := by
+  sorry  -- TODO: Apply nativeRef call step lemma with wrapOracleImmRef1
+
+/-- Native call to pointEquals through refs succeeds. -/
+theorem step_native_pointEquals_ref
+    (o : RegistrationNativeOracle)
+    (env : ModuleEnv)
+    (frame : Frame)
+    (rid1 rid2 : RefId)
+    (point1 point2 : MoveValue)
+    (result_bool : Bool)
+    (h_pc : frame.code.get? frame.pc = some (MoveInstr.call 15))  -- Function index 15
+    (h_read1 : ms.containers.read rid1 = some point1)
+    (h_read2 : ms.containers.read rid2 = some point2)
+    (h_oracle : o.pointEquals [point1, point2] = some [.bool result_bool])
+    (ms : MachineState) :
+    step env [] frame [.immRef rid1, .immRef rid2] ms =
+    .ok [] { frame with pc := frame.pc + 1 } [.bool result_bool] ms := by
+  sorry  -- TODO: Apply nativeRef call step lemma with wrapOracleImmRef2
+
+/-! ### Ref Wrapper Correspondence
+
+These lemmas relate the ref-aware wrappers to their underlying oracles.
+-/
+
+/-- wrapOracleImmRef1 dereferences and applies oracle. -/
+theorem wrapOracleImmRef1_correspondence
+    (oracle : List MoveValue → Option (List MoveValue))
+    (containers : ContainerStore)
+    (rid : RefId)
+    (v result : MoveValue)
+    (h_read : containers.read rid = some v)
+    (h_oracle : oracle [v] = some [result]) :
+    wrapOracleImmRef1 oracle containers [.immRef rid] =
+    some ([result], containers) := by
+  unfold wrapOracleImmRef1
+  simp [derefImm, h_read, h_oracle]
+
+/-- wrapOracleImmRef2 dereferences both args and applies oracle. -/
+theorem wrapOracleImmRef2_correspondence
+    (oracle : List MoveValue → Option (List MoveValue))
+    (containers : ContainerStore)
+    (rid1 rid2 : RefId)
+    (v1 v2 result : MoveValue)
+    (h_read1 : containers.read rid1 = some v1)
+    (h_read2 : containers.read rid2 = some v2)
+    (h_oracle : oracle [v1, v2] = some [result]) :
+    wrapOracleImmRef2 oracle containers [.immRef rid1, .immRef rid2] =
+    some ([result], containers) := by
+  unfold wrapOracleImmRef2
+  simp [derefImm, h_read1, h_read2, h_oracle]
+
+/-! ### BCS Serialization Correspondences
+
+BCS (Binary Canonical Serialization) for Move types.
+-/
+
+/-- bcsToBytesAddressRef serializes address to bytes. -/
+theorem step_native_bcsToBytesAddressRef
+    (env : ModuleEnv)
+    (frame : Frame)
+    (rid : RefId)
+    (addr : ByteArray)
+    (h_pc : frame.code.get? frame.pc = some (MoveInstr.call 5))  -- Function index 5
+    (h_read : ms.containers.read rid = some (.address addr))
+    (ms : MachineState) :
+    step env [] frame [.immRef rid] ms =
+    .ok [] { frame with pc := frame.pc + 1 }
+        [.vector .u8 (addr.toList.map .u8)] ms := by
+  sorry  -- TODO: Apply nativeRef call step lemma with bcsToBytesAddressRef
+
+/-! ### Vector Operation Correspondences
+
+Vector operations (append, push_back, etc.) through refs.
+-/
+
+/-- vectorAppendU8Ref appends to vector through mut ref. -/
+theorem step_native_vectorAppendU8Ref
+    (env : ModuleEnv)
+    (frame : Frame)
+    (rid : RefId)
+    (existing appended : List MoveValue)
+    (containers containers' : ContainerStore)
+    (h_pc : frame.code.get? frame.pc = some (MoveInstr.call 6))  -- Function index 6
+    (h_read : containers.read rid = some (.vector .u8 existing))
+    (h_write : containers.write rid (.vector .u8 (existing ++ appended)) = some containers')
+    (ms : MachineState) :
+    step env [] frame [.mutRef rid, .vector .u8 appended]
+         { ms with containers := containers } =
+    .ok [] { frame with pc := frame.pc + 1 } [.struct_ []]
+        { ms with containers := containers' } := by
+  sorry  -- TODO: Apply nativeRef call step lemma with vectorAppendU8Ref
+
+/-- vectorPushBackU8Ref pushes single byte through mut ref. -/
+theorem step_native_vectorPushBackU8Ref
+    (env : ModuleEnv)
+    (frame : Frame)
+    (rid : RefId)
+    (existing : List MoveValue)
+    (byte : UInt8)
+    (containers containers' : ContainerStore)
+    (h_pc : frame.code.get? frame.pc = some (MoveInstr.call 4))  -- Function index 4
+    (h_read : containers.read rid = some (.vector .u8 existing))
+    (h_write : containers.write rid (.vector .u8 (existing ++ [.u8 byte])) = some containers')
+    (ms : MachineState) :
+    step env [] frame [.mutRef rid, .u8 byte]
+         { ms with containers := containers } =
+    .ok [] { frame with pc := frame.pc + 1 } [.struct_ []]
+        { ms with containers := containers' } := by
+  sorry  -- TODO: Apply nativeRef call step lemma with vectorPushBackU8Ref
+
+/-! ### Option Operation Correspondences
+
+Option operations (is_some, extract) through refs.
+-/
+
+/-- optionIsSomeRef returns tag through immRef. -/
+theorem step_native_optionIsSomeRef
+    (env : ModuleEnv)
+    (frame : Frame)
+    (rid : RefId)
+    (tag : Bool)
+    (rest : List MoveValue)
+    (h_pc : frame.code.get? frame.pc = some (MoveInstr.call 1))  -- Function index 1
+    (h_read : ms.containers.read rid = some (.struct_ (.bool tag :: rest)))
+    (ms : MachineState) :
+    step env [] frame [.immRef rid] ms =
+    .ok [] { frame with pc := frame.pc + 1 } [.bool tag] ms := by
+  sorry  -- TODO: Apply nativeRef call step lemma with optionIsSomeRef
+
+/-- optionExtractRef extracts value through mutRef. -/
+theorem step_native_optionExtractRef
+    (env : ModuleEnv)
+    (frame : Frame)
+    (rid : RefId)
+    (extracted rest : List MoveValue)
+    (containers containers' : ContainerStore)
+    (h_pc : frame.code.get? frame.pc = some (MoveInstr.call 2))  -- Function index 2
+    (h_read : containers.read rid = some (.struct_ (.bool true :: extracted :: rest)))
+    (h_write : containers.write rid (.struct_ [.bool false]) = some containers')
+    (ms : MachineState) :
+    step env [] frame [.mutRef rid]
+         { ms with containers := containers } =
+    .ok [] { frame with pc := frame.pc + 1 } [extracted]
+        { ms with containers := containers' } := by
+  sorry  -- TODO: Apply nativeRef call step lemma with optionExtractRef
   sorry  -- TODO: Prove vector structure
 
 /-- newScalarFromSha2_512 on a message returns a scalar. -/
@@ -7663,6 +7900,216 @@ theorem pc73_abort_has_correct_code
     ∃ (result : EvalResult),
       result = .aborted 65537 := by
   sorry  -- TODO: Execute abort instruction at PC 73
+
+/-! ## Comprehensive Frame Construction Helpers
+
+These helpers construct frame states at specific PCs with proper locals and localRefs.
+-/
+
+/-- Construct frame at PC 0 (entry point). -/
+def buildFramePC0 (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray) : Frame :=
+  {
+    code := verifyRegistrationProofCode,
+    pc := 0,
+    locals := #[
+      some (.u8 chainId),
+      some (.address sender),
+      some (.address contract),
+      some (.address token),
+      some (.vector .u8 (ekBa.toList.map .u8)),
+      some (.vector .u8 (commitBa.toList.map .u8)),
+      some (.vector .u8 (respBa.toList.map .u8))
+    ] ++ Array.mkArray 12 none,  -- 19 total locals
+    localRefs := Array.mkArray 19 none
+  }
+
+/-- Construct frame after PC 3 (after allocating commit option). -/
+def buildFramePC4 (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray) (v : MoveValue) (rid_v : RefId) : Frame :=
+  {
+    code := verifyRegistrationProofCode,
+    pc := 4,
+    locals := buildRegistrationLocals chainId sender contract token ekBa commitBa respBa v,
+    localRefs := (Array.mkArray 19 none).set! 7 (some rid_v)
+  }
+
+/-- Construct frame at PC 20 (start of message assembly). -/
+def buildFramePC20
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (rCompressed scalar : MoveValue) : Frame :=
+  {
+    code := verifyRegistrationProofCode,
+    pc := 20,
+    locals := (buildRegistrationLocals chainId sender contract token ekBa commitBa respBa (.struct_ []))
+                .set! 8 (some rCompressed)
+                .set! 10 (some scalar),
+    localRefs := Array.mkArray 19 none
+  }
+
+/-- Construct frame at PC 43 (start of sigma verification). -/
+def buildFramePC43
+    (rCompressed scalar msgBuf ekPoint : MoveValue) : Frame :=
+  {
+    code := verifyRegistrationProofCode,
+    pc := 43,
+    locals := (Array.mkArray 19 none)
+                .set! 3 (some ekPoint)
+                .set! 8 (some rCompressed)
+                .set! 10 (some scalar)
+                .set! 11 (some msgBuf),
+    localRefs := Array.mkArray 19 none
+  }
+
+/-! ## Stack Management Helpers
+
+Helpers for reasoning about stack operations.
+-/
+
+/-- Pushing to stack maintains other elements. -/
+theorem stack_push_preserves_tail
+    (stack : List MoveValue)
+    (v : MoveValue) :
+    (v :: stack).tail? = some stack := by
+  rfl
+
+/-- Stack head after push is the pushed value. -/
+theorem stack_head_after_push
+    (stack : List MoveValue)
+    (v : MoveValue) :
+    (v :: stack).head? = some v := by
+  rfl
+
+/-- Popping twice is tail of tail. -/
+theorem stack_pop_twice
+    (stack : List MoveValue)
+    (v1 v2 : MoveValue)
+    (h : stack = v1 :: v2 :: rest) :
+    rest = stack.tail!.tail! := by
+  sorry  -- TODO: List.tail arithmetic
+
+/-! ## Locals Update Helpers
+
+Comprehensive helpers for locals array updates during execution.
+-/
+
+/-- Setting multiple locals preserves independence. -/
+theorem locals_set_multiple_independent
+    (locals : Array (Option MoveValue))
+    (idx1 idx2 : Nat)
+    (v1 v2 : MoveValue)
+    (hne : idx1 ≠ idx2)
+    (h1 : idx1 < locals.size)
+    (h2 : idx2 < locals.size) :
+    ((locals.set! idx1 (some v1)).set! idx2 (some v2))[idx1]? = some (some v1) ∧
+    ((locals.set! idx1 (some v1)).set! idx2 (some v2))[idx2]? = some (some v2) := by
+  sorry  -- TODO: Array.set composition
+
+/-- Clearing a local sets it to none. -/
+theorem locals_clear
+    (locals : Array (Option MoveValue))
+    (idx : Nat)
+    (h : idx < locals.size) :
+    (locals.set! idx none)[idx]? = some none := by
+  sorry  -- TODO: Array.get_set
+
+/-- Locals size preserved by set. -/
+theorem locals_set_preserves_size
+    (locals : Array (Option MoveValue))
+    (idx : Nat)
+    (v : Option MoveValue)
+    (h : idx < locals.size) :
+    (locals.set! idx v).size = locals.size := by
+  sorry  -- TODO: Array.set preserves size
+
+/-! ## Fuel Arithmetic Helpers
+
+Advanced fuel management for multi-PC compositions.
+-/
+
+/-- Fuel for sequence of N steps. -/
+theorem fuel_for_n_steps
+    (fuel n : Nat)
+    (h : n ≤ fuel) :
+    ∃ fuel', fuel' = fuel - n ∧ fuel' + n = fuel := by
+  use (fuel - n)
+  constructor
+  · rfl
+  · omega
+
+/-- Fuel composition for three phases. -/
+theorem fuel_three_phase_composition
+    (fuel n1 n2 n3 : Nat)
+    (h : n1 + n2 + n3 ≤ fuel) :
+    fuel - n1 - n2 - n3 = fuel - (n1 + n2 + n3) := by
+  omega
+
+/-- Fuel sufficient for all sub-phases. -/
+theorem fuel_sufficient_for_sub_phases
+    (fuel total n1 n2 n3 : Nat)
+    (h_total : total = n1 + n2 + n3)
+    (h_fuel : total ≤ fuel) :
+    n1 ≤ fuel ∧ n2 ≤ fuel - n1 ∧ n3 ≤ fuel - n1 - n2 := by
+  omega
+
+/-! ## MachineState Update Helpers
+
+Helpers for updating MachineState components.
+-/
+
+/-- Updating containers preserves other components. -/
+theorem machineState_update_containers_preserves
+    (ms : MachineState)
+    (containers' : ContainerStore) :
+    { ms with containers := containers' }.callStack = ms.callStack ∧
+    { ms with containers := containers' }.gasUsed = ms.gasUsed := by
+  constructor <;> rfl
+
+/-- MachineState.empty has empty containers. -/
+theorem machineState_empty_containers :
+    MachineState.empty.containers = ContainerStore.empty := by
+  rfl
+
+/-! ## Comprehensive PC Range Lemmas
+
+Large-scale PC range composition helpers.
+-/
+
+/-- Running from PC i to PC j consumes j-i fuel. -/
+theorem fuel_consumed_equals_pc_difference
+    (fuel_before fuel_after : Nat)
+    (pc_start pc_end : Nat)
+    (h_fuel : fuel_after = fuel_before - (pc_end - pc_start))
+    (h_pc : pc_start < pc_end) :
+    fuel_before - fuel_after = pc_end - pc_start := by
+  omega
+
+/-- Successful execution preserves determinism. -/
+theorem execution_deterministic
+    (env : ModuleEnv)
+    (cs : List Frame)
+    (frame : Frame)
+    (stack : List MoveValue)
+    (ms : MachineState)
+    (result1 result2 : StepResult)
+    (h1 : step env cs frame stack ms = result1)
+    (h2 : step env cs frame stack ms = result2) :
+    result1 = result2 := by
+  rw [h1] at h2
+  exact h2
+
+/-- Run preserves determinism. -/
+theorem run_deterministic
+    (env : ModuleEnv)
+    (cs : List Frame)
+    (frame : Frame)
+    (stack : List MoveValue)
+    (ms : MachineState)
+    (fuel : Nat)
+    (result1 result2 : EvalResult)
+    (h1 : run env cs frame stack ms fuel = result1)
+    (h2 : run env cs frame stack ms fuel = result2) :
+    result1 = result2 := by
+  rw [h1] at h2
+  exact h2
 
 end MovementFormal.Experimental.ConfidentialAsset.Registration.EvalEquivRebuild
 /-! ## Comprehensive PC Range Helpers for Singleton Branch

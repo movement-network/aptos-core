@@ -3,7 +3,7 @@
 ## Overview
 
 This document catalogs the Lean 4 bytecode-level verification coverage for Confidential Assets
-crypto verifiers as of 2026-04-22 evening. All proofs build cleanly with zero `sorry`, zero axioms in
+crypto verifiers as of 2026-04-23. All proofs build cleanly with zero `sorry`, zero axioms in
 the per-PC step theorems (axioms only in Phase 6 composition stubs).
 
 **Build status**: Full CA Lean tree (1896 jobs) builds cleanly.

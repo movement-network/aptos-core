@@ -1,6 +1,6 @@
 # CA Formal Verification — Reviewer Quick Start
 
-**Last updated:** 2026-04-22
+**Last updated:** 2026-04-23
 
 This guide gets you from zero to running verification in under 10 minutes.
 

@@ -1,6 +1,6 @@
 # CI Integration Guide — CA Formal Verification
 
-**Last updated:** 2026-04-22
+**Last updated:** 2026-04-23
 
 This guide shows how to integrate CA formal verification into CI pipelines.
 

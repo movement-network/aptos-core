@@ -1,6 +1,6 @@
 # CA Formal Verification — Performance Benchmarking Guide
 
-**Last updated:** 2026-04-22
+**Last updated:** 2026-04-23
 
 This guide explains how to measure, track, and optimize verification performance for the CA formal verification suite.
 

@@ -1,6 +1,6 @@
 # CA Formal Verification — Testing & Validation Guide
 
-**Last updated:** 2026-04-22
+**Last updated:** 2026-04-23
 
 This guide covers all testing and validation procedures for the CA formal verification suite across all three stacks (Lean, Move Prover, difftest).
 

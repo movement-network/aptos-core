@@ -28,7 +28,7 @@ See [`../CONFIDENTIAL_ASSETS_UNIFIED_VERIFICATION_PLAN.md`](../CONFIDENTIAL_ASSE
 ./verify-ca.sh --claim "transfer preserves balance sum"
 ```
 
-## Current status (updated 2026-04-22 evening)
+## Current status (updated 2026-04-23)
 
 **Lean stack: ✅ FUNCTIONAL**
 

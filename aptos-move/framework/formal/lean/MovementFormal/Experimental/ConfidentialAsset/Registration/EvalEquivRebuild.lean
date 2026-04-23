@@ -3500,9 +3500,52 @@ theorem registration_eval_equiv_functional_sim
     exact registration_eval_equiv_functional_sim_compressedPoint_nonSingleton
       o chainId sender contract token ekBa commitBa respBa fuel (by omega : 2 ≤ fuel) hsingle
   | some v =>
-    -- Singleton case: this is the work that needs to be done
-    -- The PC-level proof for when the commitment oracle returns exactly one value
-    -- This is the "PC 3 (immBorrowLoc 7) composition — deferred" mentioned at line 3315
-    sorry  -- TODO Phase 1: prove singleton case PC-threading
+    -- Singleton case: oracle returned exactly one value
+    -- single? (some [v]) = some v, so we have hsingle : single? ... = some v
+    -- This means o.newCompressedPointFromBytes [...] = some [v]
+
+    -- The functional simulation will take the blockB path for this value
+    -- We need to show the bytecode execution matches this
+
+    -- Strategy: unfold the definitions and show they match
+    unfold verifyRegistrationBytecodeResult
+    simp only [registrationArgs]
+
+    -- The oracle call is wrapped in single?, which extracts the singleton value
+    -- hsingle tells us single? (o.newCompressedPointFromBytes ...) = some v
+    -- This means the oracle must have returned some [v]
+
+    -- By definition of single?, if single? x = some v, then x = some [v]
+    have horacle : o.newCompressedPointFromBytes [.vector .u8 (commitBa.toList.map .u8)]
+                   = some [v] := by
+      unfold single? at hsingle
+      cases h : o.newCompressedPointFromBytes [.vector .u8 (commitBa.toList.map .u8)]
+      · -- none case: single? none = none, contradicts hsingle : ... = some v
+        rw [h] at hsingle
+        simp at hsingle
+      · -- some case
+        rename_i retVals
+        cases retVals
+        · -- empty list: single? (some []) = none, contradicts hsingle
+          rw [h] at hsingle
+          simp at hsingle
+        · -- non-empty list
+          rename_i head tail
+          cases tail
+          · -- singleton: single? (some [head]) = some head
+            rw [h] at hsingle
+            simp at hsingle
+            -- hsingle : head = v
+            -- h : ... = some [head]
+            -- goal: ... = some [v]
+            simp [← hsingle, h]
+          · -- multi-element: single? (some (head :: ...)) = none, contradicts hsingle
+            rw [h] at hsingle
+            simp at hsingle
+
+    -- Now we can use horacle to drive the functional simulation
+    -- But we still need to prove the bytecode execution matches
+    -- This requires PC-threading through the full verification
+    sorry  -- TODO: complete bytecode PC-threading for singleton happy path
 
 end MovementFormal.Experimental.ConfidentialAsset.Registration.EvalEquivRebuild

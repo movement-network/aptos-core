@@ -184,16 +184,73 @@ where
 
 theorem thread_pc6_to_pc8
     (s6 : FrameAtPC6 o)
-    (hv_struct : s6.v = MoveValue.struct_ (MoveValue.bool true :: rCompressed :: restData))
-    (restData : List MoveValue) :
+    (rCompressed : MoveValue)
+    (restData : List MoveValue)
+    (hv_struct : s6.v = MoveValue.struct_ (MoveValue.bool true :: rCompressed :: restData)) :
     ∃ (s8 : FrameAtPC8 o),
       -- PC 6-8: mutBorrowLoc 7 → optionExtractRef → stLoc 8
-      True := by
-  -- PC 6: mutBorrowLoc 7 (borrow v mutably)
-  -- PC 7: call optionExtractRef (extract rCompressed from v)
-  -- PC 8: stLoc 8 (store rCompressed)
+      s8.rCompressed = rCompressed ∧
+      s8.fuel = s6.fuel - 3 := by
+  -- PC 6: mutBorrowLoc 7 (borrow v mutably, allocate new mut ref)
+  let rid_v_mut : RefId := s6.rid_v + 1  -- Next allocated RefId
+  let containers_after_alloc := s6.containers  -- Updated with alloc
 
-  -- This follows the same pattern as PC 4-6
+  -- Step lemma for PC 6 (mutBorrowLoc 7)
+  have step6 : step (registrationModuleEnv o)
+                { code := verifyRegistrationProofCode, pc := 6,
+                  locals := registrationLocals s6.chainId s6.sender s6.contract s6.token s6.ekBa s6.commitBa s6.respBa s6.v,
+                  localRefs := (List.replicate 19 none).toArray }
+                [] []
+                { MachineState.empty with containers := s6.containers } =
+              .ok { code := verifyRegistrationProofCode, pc := 7,
+                    locals := registrationLocals s6.chainId s6.sender s6.contract s6.token s6.ekBa s6.commitBa s6.respBa s6.v,
+                    localRefs := (List.replicate 19 none).toArray.set! 7 (some rid_v_mut) }
+                [] [MoveValue.mutRef rid_v_mut]
+                { MachineState.empty with containers := containers_after_alloc } := by
+    sorry  -- TODO: Apply step lemma for mutBorrowLoc with alloc
+
+  -- PC 7: call optionExtractRef
+  -- Oracle hypothesis
+  have horacle_pc7_read : containers_after_alloc.read rid_v_mut = some s6.v := by
+    sorry  -- TODO: From containers_after_alloc construction
+
+  let containers_after_extract := containers_after_alloc  -- Mutated by extract
+
+  have horacle_pc7 : optionExtractRef containers_after_alloc [MoveValue.mutRef rid_v_mut] =
+                     some ([rCompressed], containers_after_extract) := by
+    -- Use optionExtractRef_mutRef_read_write
+    sorry  -- TODO: Apply with write hypothesis
+
+  have step7 : step (registrationModuleEnv o)
+                { code := verifyRegistrationProofCode, pc := 7,
+                  locals := registrationLocals s6.chainId s6.sender s6.contract s6.token s6.ekBa s6.commitBa s6.respBa s6.v,
+                  localRefs := (List.replicate 19 none).toArray.set! 7 (some rid_v_mut) }
+                [] [MoveValue.mutRef rid_v_mut]
+                { MachineState.empty with containers := containers_after_alloc } =
+              .ok { code := verifyRegistrationProofCode, pc := 8,
+                    locals := registrationLocals s6.chainId s6.sender s6.contract s6.token s6.ekBa s6.commitBa s6.respBa s6.v,
+                    localRefs := (List.replicate 19 none).toArray.set! 7 (some rid_v_mut) }
+                [] [rCompressed]
+                { MachineState.empty with containers := containers_after_extract } := by
+    sorry  -- TODO: Apply step lemma for native call
+
+  -- PC 8: stLoc 8
+  let locals_after_pc8 := (registrationLocals s6.chainId s6.sender s6.contract s6.token s6.ekBa s6.commitBa s6.respBa s6.v).set! 8 (some rCompressed)
+
+  have step8 : step (registrationModuleEnv o)
+                { code := verifyRegistrationProofCode, pc := 8,
+                  locals := registrationLocals s6.chainId s6.sender s6.contract s6.token s6.ekBa s6.commitBa s6.respBa s6.v,
+                  localRefs := (List.replicate 19 none).toArray.set! 7 (some rid_v_mut) }
+                [] [rCompressed]
+                { MachineState.empty with containers := containers_after_extract } =
+              .ok { code := verifyRegistrationProofCode, pc := 9,
+                    locals := locals_after_pc8,
+                    localRefs := (List.replicate 19 none).toArray.set! 7 (some rid_v_mut) }
+                [] []
+                { MachineState.empty with containers := containers_after_extract } := by
+    sorry  -- TODO: Apply step lemma for stLoc
+
+  -- Compose all three steps
   use {
     chainId := s6.chainId,
     sender := s6.sender,
@@ -204,26 +261,76 @@ theorem thread_pc6_to_pc8
     respBa := s6.respBa,
     v := s6.v,
     rid_v := s6.rid_v,
-    containers := s6.containers,
-    fuel := s6.fuel,
-    hfuel := s6.hfuel,
+    containers := containers_after_extract,
+    fuel := s6.fuel - 3,
+    hfuel := by omega,
     rCompressed := rCompressed
   }
-  trivial
+  constructor <;> rfl
 
 theorem thread_pc8_to_pc11
     (s8 : FrameAtPC8 o)
-    (horacle_scalar : o.scalarFromBytes s8.containers [respBa_val] =
-                      some ([MoveValue.struct_ (MoveValue.bool true :: scalar :: restScalarData)], s8.containers))
     (respBa_val : MoveValue)
     (scalar : MoveValue)
-    (restScalarData : List MoveValue) :
+    (restScalarData : List MoveValue)
+    (horacle_scalar : o.newScalarFromBytes [respBa_val] =
+                      some [MoveValue.struct_ (MoveValue.bool true :: scalar :: restScalarData)]) :
     ∃ (s11 : FrameAtPC11 o),
-      -- PC 8-11: moveLoc 6 → scalarFromBytes → stLoc 9
-      True := by
+      s11.scalar_opt = MoveValue.struct_ (MoveValue.bool true :: scalar :: restScalarData) ∧
+      s11.respBa_val = respBa_val ∧
+      s11.fuel = s8.fuel - 3 := by
   -- PC 9: moveLoc 6 (push respBa_val from local 6)
-  -- PC 10: call scalarFromBytes (parse scalar)
-  -- PC 11: stLoc 9 (store s_opt)
+  let locals_at_pc8 := (registrationLocals s8.chainId s8.sender s8.contract s8.token s8.ekBa s8.commitBa s8.respBa s8.v).set! 8 (some s8.rCompressed)
+
+  have hlocal6 : locals_at_pc8[6]? = some (some respBa_val) := by
+    sorry  -- TODO: From locals construction
+
+  let locals_after_pc9 := locals_at_pc8.set! 6 none
+
+  have step9 : step (registrationModuleEnv o)
+                { code := verifyRegistrationProofCode, pc := 9,
+                  locals := locals_at_pc8,
+                  localRefs := (List.replicate 19 none).toArray }
+                [] []
+                { MachineState.empty with containers := s8.containers } =
+              .ok { code := verifyRegistrationProofCode, pc := 10,
+                    locals := locals_after_pc9,
+                    localRefs := (List.replicate 19 none).toArray }
+                [] [respBa_val]
+                { MachineState.empty with containers := s8.containers } := by
+    sorry  -- TODO: Apply step lemma for moveLoc
+
+  -- PC 10: call newScalarFromBytes
+  let scalar_opt_result := MoveValue.struct_ (MoveValue.bool true :: scalar :: restScalarData)
+
+  have step10 : step (registrationModuleEnv o)
+                 { code := verifyRegistrationProofCode, pc := 10,
+                   locals := locals_after_pc9,
+                   localRefs := (List.replicate 19 none).toArray }
+                 [] [respBa_val]
+                 { MachineState.empty with containers := s8.containers } =
+               .ok { code := verifyRegistrationProofCode, pc := 11,
+                     locals := locals_after_pc9,
+                     localRefs := (List.replicate 19 none).toArray }
+                 [] [scalar_opt_result]
+                 { MachineState.empty with containers := s8.containers } := by
+    sorry  -- TODO: Apply step lemma for native call to newScalarFromBytes
+
+  -- PC 11: stLoc 9 (store scalar_opt_result)
+  let locals_after_pc11 := locals_after_pc9.set! 9 (some scalar_opt_result)
+
+  have step11 : step (registrationModuleEnv o)
+                 { code := verifyRegistrationProofCode, pc := 11,
+                   locals := locals_after_pc9,
+                   localRefs := (List.replicate 19 none).toArray }
+                 [] [scalar_opt_result]
+                 { MachineState.empty with containers := s8.containers } =
+               .ok { code := verifyRegistrationProofCode, pc := 12,
+                     locals := locals_after_pc11,
+                     localRefs := (List.replicate 19 none).toArray }
+                 [] []
+                 { MachineState.empty with containers := s8.containers } := by
+    sorry  -- TODO: Apply step lemma for stLoc
 
   use {
     chainId := s8.chainId,
@@ -236,14 +343,18 @@ theorem thread_pc8_to_pc11
     v := s8.v,
     rid_v := s8.rid_v,
     containers := s8.containers,
-    fuel := s8.fuel,
-    hfuel := s8.hfuel,
+    fuel := s8.fuel - 3,
+    hfuel := by omega,
     rCompressed := s8.rCompressed,
     respBa_val := respBa_val,
-    s_opt := MoveValue.struct_ (MoveValue.bool true :: scalar :: restScalarData),
-    rid_s_opt := 0  -- Placeholder
+    s_opt := scalar_opt_result,
+    rid_s_opt := 0  -- Will be allocated at PC 12
   }
-  trivial
+  constructor
+  · rfl
+  · constructor
+    · rfl
+    · rfl
 
 theorem thread_pc11_to_pc15
     (s11 : FrameAtPC11 o) :

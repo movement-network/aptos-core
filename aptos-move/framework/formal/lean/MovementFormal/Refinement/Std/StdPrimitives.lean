@@ -56,16 +56,16 @@ the bytecode trace is a finite unrolling with no branching.
 theorem errorCanonical_refines (cat reason : UInt64) :
     evalSingle errorCanonicalDesc [.u64 cat, .u64 reason] 20 =
     .returned [.u64 ((cat <<< 16) ||| reason)] MachineState.empty := by
-  simp only [evalSingle, singleEnv, singleIdx, eval, List.length, Array.size,
-             stdNatives, FuncDesc.body, errorCanonicalDesc, errorCanonicalCode]
+  simp only [evalSingle, singleEnv, singleIdx, eval, Array.size,
+             stdNatives, errorCanonicalDesc, errorCanonicalCode]
   rfl
 
 /-- All 13 category wrappers refine `canonical`. -/
 theorem errorCategory_refines (cat reason : UInt64) :
     evalSingle (mkErrDesc cat) [.u64 reason] 20 =
     .returned [.u64 ((cat <<< 16) ||| reason)] MachineState.empty := by
-  simp only [evalSingle, singleEnv, singleIdx, eval, List.length, Array.size,
-             stdNatives, FuncDesc.body, mkErrDesc, mkErrCode]
+  simp only [evalSingle, singleEnv, singleIdx, eval, Array.size,
+             stdNatives, mkErrDesc, mkErrCode]
   rfl
 
 -- Concrete instances matching the Lean spec functions
@@ -149,8 +149,8 @@ Note: `MoveValue.struct_` not `MoveValue.struct` — check exact constructor.
 theorem bitVectorLength_refines (len : UInt64) (bits : List MoveValue) :
     evalSingle bitVectorLengthDesc [.struct_ [.u64 len, .vector .bool bits]] 10 =
     .returned [.u64 len] MachineState.empty := by
-  simp only [evalSingle, singleEnv, singleIdx, eval, List.length, Array.size,
-             stdNatives, FuncDesc.body, bitVectorLengthDesc, bitVectorLengthCode]
+  simp only [evalSingle, singleEnv, singleIdx, eval, Array.size,
+             stdNatives, bitVectorLengthDesc, bitVectorLengthCode]
   rfl
 
 end MovementFormal.Refinement.Std.StdPrimitives

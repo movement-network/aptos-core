@@ -1645,7 +1645,7 @@ theorem vectorReverse_returnValues_singleton (x : UInt64) :
   -- control flow is concrete (determined only by length=1, not by x's value).
   -- We run the 15 setup steps + branch + readRef + ret symbolically.
   simp only [evalProg, eval, stdModuleEnv, vectorReverseDesc, vectorReverseCode,
-    List.length, returnValues]
+    returnValues]
   sorry
 
 theorem vectorReverse_returnValues (xs : List UInt64)

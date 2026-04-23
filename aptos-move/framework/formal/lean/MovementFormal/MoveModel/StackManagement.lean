@@ -153,11 +153,11 @@ theorem stack_after_oracle_call_matches_initial
     (numMarshal : Nat) (numOracleParams : Nat)
     {frameMarshal : Frame} {csMarshal : List Frame}
     {stackMarshal : List MoveValue} {msMarshal : MachineState}
-    (hMarshal : run env frame cs initStack ms numMarshal = .ok frameMarshal csMarshal stackMarshal msMarshal)
+    (_hMarshal : run env frame cs initStack ms numMarshal = .ok frameMarshal csMarshal stackMarshal msMarshal)
     (hMarshalSize : stackMarshal.length = initStack.length + numMarshal)
     {frameCall : Frame} {csCall : List Frame}
     {stackCall : List MoveValue} {msCall : MachineState}
-    (hCall : step env frameMarshal csMarshal stackMarshal msMarshal = .ok frameCall csCall stackCall msCall)
+    (_hCall : step env frameMarshal csMarshal stackMarshal msMarshal = .ok frameCall csCall stackCall msCall)
     (hCallConsumes : numOracleParams = numMarshal)
     (hCallReturns : stackCall.length = stackMarshal.length - numOracleParams) :
     stackCall.length = initStack.length := by
@@ -168,7 +168,7 @@ theorem stack_after_oracle_call_matches_initial
 /-- ret doesn't modify the stack - it returns it as-is. -/
 theorem stack_preserved_by_ret
     {env : ModuleEnv} {frame : Frame} {stack : List MoveValue} {ms : MachineState}
-    (hStep : step env frame [] stack ms = .returned stack ms) :
+    (_hStep : step env frame [] stack ms = .returned stack ms) :
     True := by
   trivial -- ret returns stack unchanged by definition
 

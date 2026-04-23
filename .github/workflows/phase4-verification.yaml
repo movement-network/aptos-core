@@ -1,0 +1,328 @@
+name: Phase 4 Verification — Crypto Verifier Bytecode Proofs
+
+on:
+  push:
+    branches: [main, lean-fv, movement]
+    paths:
+      - 'aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/**'
+      - 'aptos-move/framework/formal/lean/MovementFormal/MoveModel/StepLemmas/**'
+      - 'aptos-move/framework/formal/lean/lakefile.lean'
+      - '.github/workflows/phase4-verification.yaml'
+  pull_request:
+    paths:
+      - 'aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/**'
+      - 'aptos-move/framework/formal/lean/MovementFormal/MoveModel/StepLemmas/**'
+      - 'aptos-move/framework/formal/lean/lakefile.lean'
+
+jobs:
+  build-phase4:
+    name: Build Phase 4 Files
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Lean 4
+        run: |
+          curl -sSfL https://github.com/leanprover/elan/releases/download/v3.0.0/elan-x86_64-unknown-linux-gnu.tar.gz | tar xz
+          ./elan-init -y --default-toolchain leanprover/lean4:v4.24.0
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+
+      - name: Cache Lean dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.elan
+            ~/.cache/mathlib4
+            aptos-move/framework/formal/lean/.lake
+          key: ${{ runner.os }}-lean-${{ hashFiles('aptos-move/framework/formal/lean/lean-toolchain', 'aptos-move/framework/formal/lean/lakefile.lean') }}
+          restore-keys: |
+            ${{ runner.os }}-lean-
+
+      - name: Fetch mathlib cache
+        working-directory: aptos-move/framework/formal/lean
+        run: lake exe cache get || true
+
+      - name: Build ConcreteHelpers
+        working-directory: aptos-move/framework/formal/lean
+        run: |
+          echo "Building Normalization ConcreteHelpers..."
+          lake build MovementFormal.Experimental.ConfidentialAsset.Normalization.ConcreteHelpers
+
+          echo "Building Rotation ConcreteHelpers..."
+          lake build MovementFormal.Experimental.ConfidentialAsset.Rotation.ConcreteHelpers
+
+          echo "Building Withdrawal ConcreteHelpers..."
+          lake build MovementFormal.Experimental.ConfidentialAsset.Withdrawal.ConcreteHelpers
+
+          echo "Building Transfer ConcreteHelpers..."
+          lake build MovementFormal.Experimental.ConfidentialAsset.Transfer.ConcreteHelpers
+
+      - name: Build EvalEquiv Files
+        working-directory: aptos-move/framework/formal/lean
+        run: |
+          echo "Building Normalization EvalEquiv..."
+          lake build MovementFormal.Experimental.ConfidentialAsset.Normalization.EvalEquiv
+
+          echo "Building Rotation EvalEquiv..."
+          lake build MovementFormal.Experimental.ConfidentialAsset.Rotation.EvalEquiv
+
+          echo "Building Withdrawal EvalEquiv..."
+          lake build MovementFormal.Experimental.ConfidentialAsset.Withdrawal.EvalEquiv
+
+          echo "Building Transfer EvalEquiv..."
+          lake build MovementFormal.Experimental.ConfidentialAsset.Transfer.EvalEquiv
+
+      - name: Build Full Tree
+        working-directory: aptos-move/framework/formal/lean
+        run: lake build
+
+  check-sorries:
+    name: Check Sorry Count
+    runs-on: ubuntu-latest
+    needs: build-phase4
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Count sorries in Phase 4
+        id: sorry-count
+        working-directory: aptos-move/framework/formal/lean
+        run: |
+          SORRY_COUNT=$(find MovementFormal/Experimental/ConfidentialAsset \
+            \( -path "*/Normalization/EvalEquiv.lean" -o \
+               -path "*/Rotation/EvalEquiv.lean" -o \
+               -path "*/Withdrawal/EvalEquiv.lean" -o \
+               -path "*/Transfer/EvalEquiv.lean" \) \
+            -exec grep -c "sorry" {} + | awk '{sum+=$1} END {print sum}')
+
+          echo "sorry_count=$SORRY_COUNT" >> $GITHUB_OUTPUT
+          echo "Found $SORRY_COUNT sorries in Phase 4 EvalEquiv files"
+
+          # Baseline: 7 sorries as of 2026-04-23
+          if [ "$SORRY_COUNT" -gt 7 ]; then
+            echo "::warning::Sorry count increased: $SORRY_COUNT (baseline: 7)"
+          elif [ "$SORRY_COUNT" -lt 7 ]; then
+            echo "::notice::Sorry count decreased: $SORRY_COUNT (baseline: 7) 🎉"
+          else
+            echo "::notice::Sorry count stable at baseline: $SORRY_COUNT"
+          fi
+
+      - name: Fail if sorry count increased
+        if: steps.sorry-count.outputs.sorry_count > 7
+        run: |
+          echo "::error::Sorry count regression detected: ${{ steps.sorry-count.outputs.sorry_count }} > 7"
+          exit 1
+
+  check-axioms:
+    name: Check Axiom Count
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Count ConcreteHelpers axioms
+        working-directory: aptos-move/framework/formal/lean
+        run: |
+          echo "Counting axioms in ConcreteHelpers files..."
+
+          NORM_AXIOMS=$(grep -c "^axiom " \
+            MovementFormal/Experimental/ConfidentialAsset/Normalization/ConcreteHelpers.lean || echo 0)
+          echo "Normalization.ConcreteHelpers: $NORM_AXIOMS axioms"
+
+          ROT_AXIOMS=$(grep -c "^axiom " \
+            MovementFormal/Experimental/ConfidentialAsset/Rotation/ConcreteHelpers.lean || echo 0)
+          echo "Rotation.ConcreteHelpers: $ROT_AXIOMS axioms"
+
+          WITH_AXIOMS=$(grep -c "^axiom " \
+            MovementFormal/Experimental/ConfidentialAsset/Withdrawal/ConcreteHelpers.lean || echo 0)
+          echo "Withdrawal.ConcreteHelpers: $WITH_AXIOMS axioms"
+
+          TRANS_AXIOMS=$(grep -c "^axiom " \
+            MovementFormal/Experimental/ConfidentialAsset/Transfer/ConcreteHelpers.lean || echo 0)
+          echo "Transfer.ConcreteHelpers: $TRANS_AXIOMS axioms"
+
+          TOTAL=$((NORM_AXIOMS + ROT_AXIOMS + WITH_AXIOMS + TRANS_AXIOMS))
+          echo "Total ConcreteHelpers axioms: $TOTAL"
+
+          # Expected: 24 axioms (5 + 6 + 7 + 8) - updated based on actual counts
+          if [ "$TOTAL" -ne 24 ]; then
+            echo "::warning::Axiom count changed: $TOTAL (expected 24)"
+          fi
+
+  check-imports:
+    name: Verify Imports
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check ConcreteHelpers imports in EvalEquiv files
+        working-directory: aptos-move/framework/formal/lean
+        run: |
+          echo "Verifying ConcreteHelpers imports..."
+
+          FAILED=0
+
+          if ! grep -q "import.*Normalization.ConcreteHelpers" \
+              MovementFormal/Experimental/ConfidentialAsset/Normalization/EvalEquiv.lean; then
+            echo "::error::Normalization/EvalEquiv.lean missing ConcreteHelpers import"
+            FAILED=1
+          fi
+
+          if ! grep -q "import.*Rotation.ConcreteHelpers" \
+              MovementFormal/Experimental/ConfidentialAsset/Rotation/EvalEquiv.lean; then
+            echo "::error::Rotation/EvalEquiv.lean missing ConcreteHelpers import"
+            FAILED=1
+          fi
+
+          if ! grep -q "import.*Withdrawal.ConcreteHelpers" \
+              MovementFormal/Experimental/ConfidentialAsset/Withdrawal/EvalEquiv.lean; then
+            echo "::error::Withdrawal/EvalEquiv.lean missing ConcreteHelpers import"
+            FAILED=1
+          fi
+
+          if ! grep -q "import.*Transfer.ConcreteHelpers" \
+              MovementFormal/Experimental/ConfidentialAsset/Transfer/EvalEquiv.lean; then
+            echo "::error::Transfer/EvalEquiv.lean missing ConcreteHelpers import"
+            FAILED=1
+          fi
+
+          if [ $FAILED -eq 0 ]; then
+            echo "✅ All ConcreteHelpers imports present"
+          else
+            exit 1
+          fi
+
+  performance:
+    name: Performance Check
+    runs-on: ubuntu-latest
+    needs: build-phase4
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Lean 4
+        run: |
+          curl -sSfL https://github.com/leanprover/elan/releases/download/v3.0.0/elan-x86_64-unknown-linux-gnu.tar.gz | tar xz
+          ./elan-init -y --default-toolchain leanprover/lean4:v4.24.0
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+
+      - name: Cache Lean dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.elan
+            ~/.cache/mathlib4
+            aptos-move/framework/formal/lean/.lake
+          key: ${{ runner.os }}-lean-${{ hashFiles('aptos-move/framework/formal/lean/lean-toolchain', 'aptos-move/framework/formal/lean/lakefile.lean') }}
+
+      - name: Fetch mathlib cache
+        working-directory: aptos-move/framework/formal/lean
+        run: lake exe cache get || true
+
+      - name: Measure build times
+        working-directory: aptos-move/framework/formal/lean
+        run: |
+          echo "Measuring individual file build times..."
+
+          time_file() {
+            local file=$1
+            local start=$(date +%s%N)
+            lake build "$file" > /dev/null 2>&1
+            local end=$(date +%s%N)
+            echo $(((end - start) / 1000000)) # milliseconds
+          }
+
+          NORM_TIME=$(time_file MovementFormal.Experimental.ConfidentialAsset.Normalization.EvalEquiv)
+          echo "Normalization: ${NORM_TIME}ms"
+          if [ $NORM_TIME -gt 2000 ]; then
+            echo "::warning::Normalization build time: ${NORM_TIME}ms (target: ≤1000ms)"
+          fi
+
+          ROT_TIME=$(time_file MovementFormal.Experimental.ConfidentialAsset.Rotation.EvalEquiv)
+          echo "Rotation: ${ROT_TIME}ms"
+          if [ $ROT_TIME -gt 2000 ]; then
+            echo "::warning::Rotation build time: ${ROT_TIME}ms (target: ≤1000ms)"
+          fi
+
+          WITH_TIME=$(time_file MovementFormal.Experimental.ConfidentialAsset.Withdrawal.EvalEquiv)
+          echo "Withdrawal: ${WITH_TIME}ms"
+          if [ $WITH_TIME -gt 2000 ]; then
+            echo "::warning::Withdrawal build time: ${WITH_TIME}ms (target: ≤1000ms)"
+          fi
+
+          TRANS_TIME=$(time_file MovementFormal.Experimental.ConfidentialAsset.Transfer.EvalEquiv)
+          echo "Transfer: ${TRANS_TIME}ms"
+          if [ $TRANS_TIME -gt 2000 ]; then
+            echo "::warning::Transfer build time: ${TRANS_TIME}ms (target: ≤1000ms)"
+          fi
+
+          # Full tree build
+          echo "Measuring full tree build time..."
+          START=$(date +%s)
+          lake build > /dev/null 2>&1
+          END=$(date +%s)
+          TREE_TIME=$((END - START))
+          echo "Full tree: ${TREE_TIME}s"
+          if [ $TREE_TIME -gt 20 ]; then
+            echo "::warning::Full tree build time: ${TREE_TIME}s (target: ≤10s)"
+          fi
+
+  documentation:
+    name: Documentation Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify Phase 4 documentation
+        working-directory: aptos-move/framework/formal/lean
+        run: |
+          echo "Checking Phase 4 documentation..."
+
+          DOCS=(
+            "CONCRETEHELPERS_USAGE_GUIDE.md"
+            "PHASE_4_COMPLETION_ROADMAP.md"
+            "PHASE_4_VERIFICATION_CHECKLIST.md"
+          )
+
+          MISSING=0
+          for doc in "${DOCS[@]}"; do
+            if [ -f "$doc" ]; then
+              LINES=$(wc -l < "$doc")
+              echo "✅ $doc ($LINES lines)"
+            else
+              echo "::warning::Missing documentation: $doc"
+              MISSING=1
+            fi
+          done
+
+          if [ $MISSING -ne 0 ]; then
+            echo "::notice::Some Phase 4 documentation files are missing"
+          fi
+
+  summary:
+    name: Phase 4 Summary
+    runs-on: ubuntu-latest
+    needs: [build-phase4, check-sorries, check-axioms, check-imports, performance, documentation]
+    if: always()
+
+    steps:
+      - name: Report summary
+        run: |
+          echo "## Phase 4 Verification Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- Build: ${{ needs.build-phase4.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Sorry Count: ${{ needs.check-sorries.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Axiom Count: ${{ needs.check-axioms.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Imports: ${{ needs.check-imports.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Performance: ${{ needs.performance.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Documentation: ${{ needs.documentation.result }}" >> $GITHUB_STEP_SUMMARY

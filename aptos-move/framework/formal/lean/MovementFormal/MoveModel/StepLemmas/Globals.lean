@@ -61,7 +61,20 @@ theorem step_globalMoveTo_exists
 /-! ## `globalMoveToSigned k` — signer-authenticated variant
 
 TODO: the happy-path lemma is temporarily omitted pending a `BEq ByteArray`-aware simp set.
-The wrong-signer and already-exists error paths are covered below. -/
+The wrong-signer and already-exists error paths are covered below.
+
+The happy path would state:
+```
+theorem step_globalMoveToSigned_fresh
+    (hsig : sig == k.address)
+    (hfresh : MachineState.hasGlobal ms k = false) :
+    step ... = .ok { frame with pc := frame.pc + 1 } cs rest { ms with ... }
+```
+The proof requires showing `(sig != k.address) = false` from `(sig == k.address) = true`,
+which needs either (a) a BNe-to-BEq bridge lemma for ByteArray, or (b) a dedicated
+simp set for ByteArray boolean operations. Without these, the proof gets stuck on
+boolean algebra that should be automatic.
+-/
 
 /-- `globalMoveToSigned` aborts when the signer doesn't match `k.address`. -/
 theorem step_globalMoveToSigned_wrongSigner

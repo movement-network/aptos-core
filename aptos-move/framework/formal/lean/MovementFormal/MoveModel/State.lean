@@ -197,6 +197,33 @@ theorem MachineState.lookupFaBalance_eq_of_faBalances_eq {ms ms' : MachineState}
     ms'.lookupFaBalance metadataId owner = ms.lookupFaBalance metadataId owner := by
   simp [lookupFaBalance, h]
 
+/-! ## Additional MachineState helper lemmas -/
+
+/-- Two MachineStates are equal if all fields match -/
+theorem MachineState.ext {ms1 ms2 : MachineState}
+    (h_containers : ms1.containers = ms2.containers)
+    (h_globals : ms1.globals = ms2.globals)
+    (h_fa : ms1.faBalances = ms2.faBalances) :
+    ms1 = ms2 := by
+  cases ms1; cases ms2
+  simp_all
+
+/-- MachineState.empty has empty globals -/
+@[simp] theorem MachineState.empty_globals :
+    MachineState.empty.globals = [] := rfl
+
+/-- MachineState.empty has empty faBalances -/
+@[simp] theorem MachineState.empty_faBalances :
+    MachineState.empty.faBalances = [] := rfl
+
+/-- Updating containers preserves globals -/
+theorem MachineState.with_containers_preserves_globals (ms : MachineState) (cs : ContainerStore) :
+    ({ ms with containers := cs } : MachineState).globals = ms.globals := rfl
+
+/-- Updating containers preserves faBalances -/
+theorem MachineState.with_containers_preserves_faBalances (ms : MachineState) (cs : ContainerStore) :
+    ({ ms with containers := cs } : MachineState).faBalances = ms.faBalances := rfl
+
 /-- On **`MachineState.empty`**, the FA stub map is empty — every **`lookupFaBalance`** reads **0**. -/
 theorem MachineState.lookupFaBalance_empty (metadataId owner : UInt64) :
     MachineState.empty.lookupFaBalance metadataId owner = 0 := by

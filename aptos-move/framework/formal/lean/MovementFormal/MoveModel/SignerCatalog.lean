@@ -32,7 +32,31 @@ def signerCatalogFunctions : Array FuncDesc := #[
 
 @[simp] theorem signerCatalogFunctions_size : signerCatalogFunctions.size = 2 := by native_decide
 
+@[simp] theorem signerCatalogFunctions_0_numParams :
+    (signerCatalogFunctions[0]'(by decide : 0 < 2)).numParams = 1 :=
+  rfl
+
+@[simp] theorem signerCatalogFunctions_0_numReturns :
+    (signerCatalogFunctions[0]'(by decide : 0 < 2)).numReturns = 1 :=
+  rfl
+
+@[simp] theorem signerCatalogFunctions_1_numParams :
+    (signerCatalogFunctions[1]'(by decide : 1 < 2)).numParams = 1 :=
+  rfl
+
+@[simp] theorem signerCatalogFunctions_1_numReturns :
+    (signerCatalogFunctions[1]'(by decide : 1 < 2)).numReturns = 1 :=
+  rfl
+
 def signerCatalogModuleEnv : ModuleEnv :=
   { constants := #[], functions := signerCatalogFunctions }
+
+@[simp] theorem signerCatalogModuleEnv_constants_size :
+    signerCatalogModuleEnv.constants.size = 0 :=
+  rfl
+
+@[simp] theorem signerCatalogModuleEnv_functions_size :
+    signerCatalogModuleEnv.functions.size = 2 :=
+  rfl
 
 end MovementFormal.MoveModel.SignerCatalog

@@ -4,7 +4,6 @@ import MovementFormal.MoveModel.StepLemmas.PCChaining
 import MovementFormal.MoveModel.StepLemmas.OraclePatterns
 import MovementFormal.MoveModel.FrameInvariants
 import MovementFormal.MoveModel.StackManagement
-import MovementFormal.MoveModel.ContainerStoreTracking
 
 /-!
 # Composition proof guide — How to prove Phase 6 theorems
@@ -140,7 +139,6 @@ theorem verifyWithdrawalBytecodeResult_success ... :
 - `StepLemmas/Run.lean`: run_succ_N_ok helpers
 - `FrameInvariants.lean`: Frame state tracking
 - `StackManagement.lean`: Stack evolution tracking
-- `ContainerStoreTracking.lean`: Container threading
 - `StepLemmas/OraclePatterns.lean`: Oracle splitting helpers
 - `StepLemmas/PCChaining.lean`: Multi-step composition patterns
 

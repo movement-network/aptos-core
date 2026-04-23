@@ -195,7 +195,39 @@ def bcsCatalogNatives : Array FuncDesc := #[
 
 @[simp] theorem bcsCatalogNatives_size : bcsCatalogNatives.size = 27 := by native_decide
 
+@[simp] theorem bcsCatalogNatives_0_numParams :
+    (bcsCatalogNatives[0]'(by decide : 0 < 27)).numParams = 1 :=
+  rfl
+
+@[simp] theorem bcsCatalogNatives_0_numReturns :
+    (bcsCatalogNatives[0]'(by decide : 0 < 27)).numReturns = 1 :=
+  rfl
+
+@[simp] theorem bcsCatalogNatives_12_numParams :
+    (bcsCatalogNatives[12]'(by decide : 12 < 27)).numParams = 0 :=
+  rfl
+
+@[simp] theorem bcsCatalogNatives_12_numReturns :
+    (bcsCatalogNatives[12]'(by decide : 12 < 27)).numReturns = 1 :=
+  rfl
+
+@[simp] theorem bcsCatalogNatives_17_numParams :
+    (bcsCatalogNatives[17]'(by decide : 17 < 27)).numParams = 0 :=
+  rfl
+
+@[simp] theorem bcsCatalogNatives_17_numReturns :
+    (bcsCatalogNatives[17]'(by decide : 17 < 27)).numReturns = 1 :=
+  rfl
+
 def bcsCatalogModuleEnv : ModuleEnv :=
   { constants := #[], functions := bcsCatalogNatives }
+
+@[simp] theorem bcsCatalogModuleEnv_constants_size :
+    bcsCatalogModuleEnv.constants.size = 0 :=
+  rfl
+
+@[simp] theorem bcsCatalogModuleEnv_functions_size :
+    bcsCatalogModuleEnv.functions.size = 27 :=
+  rfl
 
 end MovementFormal.MoveModel.BcsCatalog

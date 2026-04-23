@@ -52,7 +52,47 @@ def fixedPoint32CatalogFunctions : Array FuncDesc := #[
 
 @[simp] theorem fixedPoint32CatalogFunctions_size : fixedPoint32CatalogFunctions.size = 12 := by native_decide
 
+@[simp] theorem fixedPoint32CatalogFunctions_0_numParams :
+    (fixedPoint32CatalogFunctions[0]'(by decide : 0 < 12)).numParams = 2 :=
+  rfl
+
+@[simp] theorem fixedPoint32CatalogFunctions_0_numReturns :
+    (fixedPoint32CatalogFunctions[0]'(by decide : 0 < 12)).numReturns = 1 :=
+  rfl
+
+@[simp] theorem fixedPoint32CatalogFunctions_1_numParams :
+    (fixedPoint32CatalogFunctions[1]'(by decide : 1 < 12)).numParams = 1 :=
+  rfl
+
+@[simp] theorem fixedPoint32CatalogFunctions_1_numReturns :
+    (fixedPoint32CatalogFunctions[1]'(by decide : 1 < 12)).numReturns = 1 :=
+  rfl
+
+@[simp] theorem fixedPoint32CatalogFunctions_3_numParams :
+    (fixedPoint32CatalogFunctions[3]'(by decide : 3 < 12)).numParams = 2 :=
+  rfl
+
+@[simp] theorem fixedPoint32CatalogFunctions_3_numReturns :
+    (fixedPoint32CatalogFunctions[3]'(by decide : 3 < 12)).numReturns = 1 :=
+  rfl
+
+@[simp] theorem fixedPoint32CatalogFunctions_5_numParams :
+    (fixedPoint32CatalogFunctions[5]'(by decide : 5 < 12)).numParams = 1 :=
+  rfl
+
+@[simp] theorem fixedPoint32CatalogFunctions_5_numReturns :
+    (fixedPoint32CatalogFunctions[5]'(by decide : 5 < 12)).numReturns = 1 :=
+  rfl
+
 def fixedPoint32CatalogModuleEnv : ModuleEnv :=
   { constants := #[], functions := fixedPoint32CatalogFunctions }
+
+@[simp] theorem fixedPoint32CatalogModuleEnv_constants_size :
+    fixedPoint32CatalogModuleEnv.constants.size = 0 :=
+  rfl
+
+@[simp] theorem fixedPoint32CatalogModuleEnv_functions_size :
+    fixedPoint32CatalogModuleEnv.functions.size = 12 :=
+  rfl
 
 end MovementFormal.MoveModel.FixedPoint32Catalog

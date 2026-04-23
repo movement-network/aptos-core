@@ -63,7 +63,47 @@ def optionCatalogFunctions : Array FuncDesc := #[
 
 @[simp] theorem optionCatalogFunctions_size : optionCatalogFunctions.size = 17 := by native_decide
 
+@[simp] theorem optionCatalogFunctions_0_numParams :
+    (optionCatalogFunctions[0]'(by decide : 0 < 17)).numParams = 2 :=
+  rfl
+
+@[simp] theorem optionCatalogFunctions_0_numReturns :
+    (optionCatalogFunctions[0]'(by decide : 0 < 17)).numReturns = 1 :=
+  rfl
+
+@[simp] theorem optionCatalogFunctions_1_numParams :
+    (optionCatalogFunctions[1]'(by decide : 1 < 17)).numParams = 2 :=
+  rfl
+
+@[simp] theorem optionCatalogFunctions_1_numReturns :
+    (optionCatalogFunctions[1]'(by decide : 1 < 17)).numReturns = 1 :=
+  rfl
+
+@[simp] theorem optionCatalogFunctions_15_numParams :
+    (optionCatalogFunctions[15]'(by decide : 15 < 17)).numParams = 0 :=
+  rfl
+
+@[simp] theorem optionCatalogFunctions_15_numReturns :
+    (optionCatalogFunctions[15]'(by decide : 15 < 17)).numReturns = 1 :=
+  rfl
+
+@[simp] theorem optionCatalogFunctions_16_numParams :
+    (optionCatalogFunctions[16]'(by decide : 16 < 17)).numParams = 1 :=
+  rfl
+
+@[simp] theorem optionCatalogFunctions_16_numReturns :
+    (optionCatalogFunctions[16]'(by decide : 16 < 17)).numReturns = 1 :=
+  rfl
+
 def optionCatalogModuleEnv : ModuleEnv :=
   { constants := #[], functions := optionCatalogFunctions }
+
+@[simp] theorem optionCatalogModuleEnv_constants_size :
+    optionCatalogModuleEnv.constants.size = 0 :=
+  rfl
+
+@[simp] theorem optionCatalogModuleEnv_functions_size :
+    optionCatalogModuleEnv.functions.size = 17 :=
+  rfl
 
 end MovementFormal.MoveModel.OptionCatalog

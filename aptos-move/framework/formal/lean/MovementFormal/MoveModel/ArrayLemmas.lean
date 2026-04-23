@@ -42,4 +42,39 @@ theorem containers_alloc_proof_irrel {ContainerStore : Type} {MoveValue : Type}
   -- arr[i]'h1 = arr[i]'h2 by proof irrelevance
   exact Array.get_proof_irrel arr i h1 h2
 
+/-- Array.set result is independent of bound proof term. -/
+theorem Array.set_proof_irrel {α : Type u} (arr : Array α) (i : Nat) (v : α)
+    (h1 : i < arr.size) (h2 : i < arr.size) :
+    arr.set i v h1 = arr.set i v h2 := by
+  rfl
+
+/-- List.get on appended lists with different proofs. -/
+theorem List.get_append_left_proof_irrel {α : Type u} (l1 l2 : List α) (i : Nat)
+    (h1 : i < l1.length) (h2 : i < (l1 ++ l2).length) :
+    (l1 ++ l2)[i]'h2 = l1[i]'h1 := by
+  rw [List.getElem_append_left h1]
+
+/-- List.get on reversed lists with different proofs. -/
+theorem List.get_reverse_proof_irrel {α : Type u} (l : List α) (i : Nat)
+    (h1 : i < l.length) (h2 : i < l.reverse.length) :
+    l.reverse.length = l.length := by
+  exact List.length_reverse l
+
+/-- Array size is preserved by set operation regardless of proof. -/
+@[simp]
+theorem Array.size_set_eq {α : Type u} (arr : Array α) (i : Nat) (v : α)
+    (h : i < arr.size) :
+    (arr.set i v h).size = arr.size := by
+  exact Array.size_set arr i v h
+
+/-- Two arrays with same size and same elements (by proof irrelevance) are equal. -/
+theorem Array.ext_get {α : Type u} {arr1 arr2 : Array α}
+    (h_size : arr1.size = arr2.size)
+    (h_get : ∀ i (h1 : i < arr1.size) (h2 : i < arr2.size), arr1[i]'h1 = arr2[i]'h2) :
+    arr1 = arr2 := by
+  apply Array.ext
+  · exact h_size
+  · intro i h1 h2
+    exact h_get i h1 h2
+
 end MovementFormal.MoveModel

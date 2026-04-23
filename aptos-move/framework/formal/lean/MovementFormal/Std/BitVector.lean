@@ -132,10 +132,10 @@ theorem unset_ok_length {bv bv' : MvBitVector} {i : UInt64}
   · simp only [if_neg h]
 
 theorem shift_left_zero (bv : MvBitVector) : shift_left bv 0 = bv := by
-  -- Proof sketch:
-  -- Case bv.length = 0: both sides have empty bit_field (size 0 by inv)
-  -- Case bv.length > 0: ofFn with amount=0 recovers original array; each
-  --   element i maps to bv.bit_field[i+0] = bv.bit_field[i]
-  sorry
+  sorry -- Complex proof requiring Array extensionality and UInt64 reasoning
+  -- Proof sketch works but elaboration is challenging:
+  -- Case 1 (bv.length = 0): Both sides have empty arrays
+  -- Case 2 (bv.length > 0): Array.ofFn with amount=0 recovers original
+  --   because i + 0 = i for all indices
 
 end MovementFormal.Std.BitVector

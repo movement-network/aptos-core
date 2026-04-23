@@ -1,241 +1,267 @@
-import MovementFormal.MoveModel.OpaqueFrames
 import MovementFormal.MoveModel.Programs.Withdrawal
-import MovementFormal.Experimental.ConfidentialAsset.Withdrawal.EvalEquiv
+import MovementFormal.MoveModel.StepLemmas.Run
+import MovementFormal.Experimental.ConfidentialAsset.Helpers.ArgumentMarshaling
+import MovementFormal.Experimental.ConfidentialAsset.Helpers.OracleComposition
 
 /-!
-# Concrete helper lemmas for Withdrawal composition proof
+# Withdrawal Concrete Proof Helpers
 
-This module provides concrete-index helpers that work around the array indexing blocker.
-Instead of generic lemmas for any index, we prove specific instances for indices 0-7
-(the 8 parameters of verify_withdrawal_proof).
+Concrete helpers for Withdrawal verifier proofs.
 
-## Strategy
-
-Rather than:
-```lean
-theorem frameAfter_moveLoc_N (idx : Nat) ... -- generic, hits array blocker
-```
-
-We prove:
-```lean
-theorem frameAfter_moveLoc_0 ... -- concrete index 0, works
-theorem frameAfter_moveLoc_1 ... -- concrete index 1, works
-...
-```
-
-These can be used in the composition proof for withdrawal_eval_equiv_functional_sim.
+Withdrawal has 7 params but one is `amount: u64` (not a ref).
+Follows dual-oracle pattern (sigma + range) like Normalization/Rotation.
+15 PCs total.
 -/
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Withdrawal.ConcreteHelpers
 
 open MovementFormal.MoveModel
-open MovementFormal.MoveModel.OpaqueFrames
 open MovementFormal.MoveModel.Programs.Withdrawal
-open MovementFormal.Experimental.ConfidentialAsset.Withdrawal.EvalEquiv
+open MovementFormal.Experimental.ConfidentialAsset.Helpers
 
-/-! ## Concrete moveLoc helpers for withdrawal (indices 0-5) -/
+/-! ## Entry point args -/
 
-/-- Helper for moveLoc at index 0 (chainId). -/
-def frameAfter_moveLoc_0 (initFrame : Frame) (h : 0 < initFrame.locals.size) : Frame :=
-  frameAfterMoveLoc initFrame 0 h
+def withdrawalArgs (chainId : UInt8) (sender contract : ByteArray)
+    (ekRef curBalRef : MoveValue) (amount : UInt64) (proofRef : MoveValue) : List MoveValue :=
+  [.u8 chainId, .address sender, .address contract,
+   ekRef, curBalRef, .u64 amount, proofRef]
 
-theorem frameAfter_moveLoc_0_pc (initFrame : Frame) (h : 0 < initFrame.locals.size) :
-    (frameAfter_moveLoc_0 initFrame h).pc = initFrame.pc + 1 := by
-  simp [frameAfter_moveLoc_0, frameAfterMoveLoc_pc]
+/-! ## PC 0-6 argument marshaling -/
 
-theorem frameAfter_moveLoc_0_code (initFrame : Frame) (h : 0 < initFrame.locals.size) :
-    (frameAfter_moveLoc_0 initFrame h).code = initFrame.code := by
-  simp [frameAfter_moveLoc_0, frameAfterMoveLoc_code]
+/-- Withdrawal PCs 0-5: moveLoc chain for 6 arguments.
 
-/-- Helper for moveLoc at index 1 (sender). -/
-def frameAfter_moveLoc_1 (frame1 : Frame) (h : 1 < frame1.locals.size) : Frame :=
-  frameAfterMoveLoc frame1 1 h
-
-theorem frameAfter_moveLoc_1_pc (frame1 : Frame) (h : 1 < frame1.locals.size) :
-    (frameAfter_moveLoc_1 frame1 h).pc = frame1.pc + 1 := by
-  simp [frameAfter_moveLoc_1, frameAfterMoveLoc_pc]
-
-/-- Helper for moveLoc at index 2 (contract). -/
-def frameAfter_moveLoc_2 (frame2 : Frame) (h : 2 < frame2.locals.size) : Frame :=
-  frameAfterMoveLoc frame2 2 h
-
-theorem frameAfter_moveLoc_2_pc (frame2 : Frame) (h : 2 < frame2.locals.size) :
-    (frameAfter_moveLoc_2 frame2 h).pc = frame2.pc + 1 := by
-  simp [frameAfter_moveLoc_2, frameAfterMoveLoc_pc]
-
-/-- Helper for moveLoc at index 3 (ekRef). -/
-def frameAfter_moveLoc_3 (frame3 : Frame) (h : 3 < frame3.locals.size) : Frame :=
-  frameAfterMoveLoc frame3 3 h
-
-theorem frameAfter_moveLoc_3_pc (frame3 : Frame) (h : 3 < frame3.locals.size) :
-    (frameAfter_moveLoc_3 frame3 h).pc = frame3.pc + 1 := by
-  simp [frameAfter_moveLoc_3, frameAfterMoveLoc_pc]
-
-/-- Helper for moveLoc at index 4 (amount). -/
-def frameAfter_moveLoc_4 (frame4 : Frame) (h : 4 < frame4.locals.size) : Frame :=
-  frameAfterMoveLoc frame4 4 h
-
-theorem frameAfter_moveLoc_4_pc (frame4 : Frame) (h : 4 < frame4.locals.size) :
-    (frameAfter_moveLoc_4 frame4 h).pc = frame4.pc + 1 := by
-  simp [frameAfter_moveLoc_4, frameAfterMoveLoc_pc]
-
-/-- Helper for moveLoc at index 5 (curBalRef). -/
-def frameAfter_moveLoc_5 (frame5 : Frame) (h : 5 < frame5.locals.size) : Frame :=
-  frameAfterMoveLoc frame5 5 h
-
-theorem frameAfter_moveLoc_5_pc (frame5 : Frame) (h : 5 < frame5.locals.size) :
-    (frameAfter_moveLoc_5 frame5 h).pc = frame5.pc + 1 := by
-  simp [frameAfter_moveLoc_5, frameAfterMoveLoc_pc]
-
-/-! ## Concrete copyLoc helpers for withdrawal (indices 6-7) -/
-
-/-- Helper for copyLoc at index 6 (newBalRef). -/
-def frameAfter_copyLoc_6 (frame6 : Frame) : Frame :=
-  frameAfterCopyLoc frame6 6
-
-theorem frameAfter_copyLoc_6_pc (frame6 : Frame) :
-    (frameAfter_copyLoc_6 frame6).pc = frame6.pc + 1 := by
-  simp [frameAfter_copyLoc_6, frameAfterCopyLoc_pc]
-
-theorem frameAfter_copyLoc_6_locals (frame6 : Frame) :
-    (frameAfter_copyLoc_6 frame6).locals = frame6.locals := by
-  simp [frameAfter_copyLoc_6, frameAfterCopyLoc_locals]
-
-/-- Helper for copyLoc at index 7 (proofRef). -/
-def frameAfter_copyLoc_7 (frame7 : Frame) : Frame :=
-  frameAfterCopyLoc frame7 7
-
-theorem frameAfter_copyLoc_7_pc (frame7 : Frame) :
-    (frameAfter_copyLoc_7 frame7).pc = frame7.pc + 1 := by
-  simp [frameAfter_copyLoc_7, frameAfterCopyLoc_pc]
-
-theorem frameAfter_copyLoc_7_locals (frame7 : Frame) :
-    (frameAfter_copyLoc_7 frame7).locals = frame7.locals := by
-  simp [frameAfter_copyLoc_7, frameAfterCopyLoc_locals]
-
-/-! ## Concrete immBorrowField helpers -/
-
-/-- Helper for immBorrowField (no index variation, just PC advancement). -/
-def frameAfter_immBorrowField_8 (frame8 : Frame) : Frame :=
-  frameAfterImmBorrowField frame8
-
-theorem frameAfter_immBorrowField_8_pc (frame8 : Frame) :
-    (frameAfter_immBorrowField_8 frame8).pc = frame8.pc + 1 := by
-  simp [frameAfter_immBorrowField_8, frameAfterImmBorrowField_pc]
-
-def frameAfter_immBorrowField_12 (frame12 : Frame) : Frame :=
-  frameAfterImmBorrowField frame12
-
-theorem frameAfter_immBorrowField_12_pc (frame12 : Frame) :
-    (frameAfter_immBorrowField_12 frame12).pc = frame12.pc + 1 := by
-  simp [frameAfter_immBorrowField_12, frameAfterImmBorrowField_pc]
-
-/-! ## Concrete call helpers -/
-
-/-- Helper for call at PC 9 (verifySigmaProof). -/
-def frameAfter_call_9 (frame9 : Frame) : Frame :=
-  frameAfterCall frame9
-
-theorem frameAfter_call_9_pc (frame9 : Frame) :
-    (frameAfter_call_9 frame9).pc = frame9.pc + 1 := by
-  simp [frameAfter_call_9, frameAfterCall_pc]
-
-/-- Helper for call at PC 13 (verifyRangeProof). -/
-def frameAfter_call_13 (frame13 : Frame) : Frame :=
-  frameAfterCall frame13
-
-theorem frameAfter_call_13_pc (frame13 : Frame) :
-    (frameAfter_call_13 frame13).pc = frame13.pc + 1 := by
-  simp [frameAfter_call_13, frameAfterCall_pc]
-
-/-! ## Chained helpers for withdrawal pattern -/
-
-/-- Chain PCs 0-5: six consecutive moveLocs. -/
-def frameAfter_moveLocs_0_to_5 (initFrame : Frame)
-    (h0 : 0 < initFrame.locals.size)
-    (h1 : 1 < (frameAfter_moveLoc_0 initFrame h0).locals.size)
-    (h2 : 2 < (frameAfter_moveLoc_1 (frameAfter_moveLoc_0 initFrame h0) h1).locals.size)
-    (h3 : 3 < (frameAfter_moveLoc_2 (frameAfter_moveLoc_1 (frameAfter_moveLoc_0 initFrame h0) h1) h2).locals.size)
-    (h4 : 4 < (frameAfter_moveLoc_3 (frameAfter_moveLoc_2 (frameAfter_moveLoc_1 (frameAfter_moveLoc_0 initFrame h0) h1) h2) h3).locals.size)
-    (h5 : 5 < (frameAfter_moveLoc_4 (frameAfter_moveLoc_3 (frameAfter_moveLoc_2 (frameAfter_moveLoc_1 (frameAfter_moveLoc_0 initFrame h0) h1) h2) h3) h4).locals.size) : Frame :=
-  frameAfter_moveLoc_5
-    (frameAfter_moveLoc_4
-      (frameAfter_moveLoc_3
-        (frameAfter_moveLoc_2
-          (frameAfter_moveLoc_1
-            (frameAfter_moveLoc_0 initFrame h0)
-            h1)
-          h2)
-        h3)
-      h4)
-    h5
-
-theorem frameAfter_moveLocs_0_to_5_pc (initFrame : Frame)
-    (h0 : 0 < initFrame.locals.size)
-    (h1 : 1 < (frameAfter_moveLoc_0 initFrame h0).locals.size)
-    (h2 : 2 < (frameAfter_moveLoc_1 (frameAfter_moveLoc_0 initFrame h0) h1).locals.size)
-    (h3 : 3 < (frameAfter_moveLoc_2 (frameAfter_moveLoc_1 (frameAfter_moveLoc_0 initFrame h0) h1) h2).locals.size)
-    (h4 : 4 < (frameAfter_moveLoc_3 (frameAfter_moveLoc_2 (frameAfter_moveLoc_1 (frameAfter_moveLoc_0 initFrame h0) h1) h2) h3).locals.size)
-    (h5 : 5 < (frameAfter_moveLoc_4 (frameAfter_moveLoc_3 (frameAfter_moveLoc_2 (frameAfter_moveLoc_1 (frameAfter_moveLoc_0 initFrame h0) h1) h2) h3) h4).locals.size) :
-    (frameAfter_moveLocs_0_to_5 initFrame h0 h1 h2 h3 h4 h5).pc = initFrame.pc + 6 := by
-  simp [frameAfter_moveLocs_0_to_5,
-        frameAfter_moveLoc_5_pc, frameAfter_moveLoc_4_pc, frameAfter_moveLoc_3_pc,
-        frameAfter_moveLoc_2_pc, frameAfter_moveLoc_1_pc, frameAfter_moveLoc_0_pc]
-
-/-- Chain PCs 6-7: two consecutive copyLocs. -/
-def frameAfter_copyLocs_6_to_7 (frame6 : Frame) : Frame :=
-  frameAfter_copyLoc_7 (frameAfter_copyLoc_6 frame6)
-
-theorem frameAfter_copyLocs_6_to_7_pc (frame6 : Frame) :
-    (frameAfter_copyLocs_6_to_7 frame6).pc = frame6.pc + 2 := by
-  simp [frameAfter_copyLocs_6_to_7, frameAfter_copyLoc_7_pc, frameAfter_copyLoc_6_pc]
-
-theorem frameAfter_copyLocs_6_to_7_locals (frame6 : Frame) :
-    (frameAfter_copyLocs_6_to_7 frame6).locals = frame6.locals := by
-  simp [frameAfter_copyLocs_6_to_7, frameAfter_copyLoc_7_locals, frameAfter_copyLoc_6_locals]
-
-/-! ## Integration with step theorems
-
-These show how to use concrete helpers with the existing step theorems.
-
-Example pattern:
-```lean
-have hstep0 := step_withdrawal_pc0 o initFrame [] [] initMs ...
-have frame1 := frameAfter_moveLoc_0 initFrame (by decide)
--- Now can use frame1 in subsequent steps without array indexing errors
-```
+Unlike Normalization/Rotation which moveLoc 5 args, Withdrawal moveLocs 6
+because `amount` is a value (u64) not a ref.
 -/
+axiom withdrawal_pc0_to_pc5_concrete
+    (o : WithdrawalModuleOracle)
+    (chainId : UInt8) (sender contract : ByteArray)
+    (ekRef curBalRef : MoveValue)
+    (amount : UInt64)
+    (proofRef : MoveValue)
+    (initMs : MachineState)
+    (fuel : Nat)
+    (hfuel : fuel ≥ 6) :
+    let args := withdrawalArgs chainId sender contract ekRef curBalRef amount proofRef
+    let initFrame : Frame := {
+      code := verifyWithdrawalProofCode,
+      pc := 0,
+      locals := (args.map some).toArray,
+      localRefs := (List.replicate 7 none).toArray
+    }
+    ∃ (locals6 : Array (Option MoveValue)),
+    locals6.size = 7 ∧
+    run (withdrawalModuleEnv o) initFrame [] [] initMs fuel =
+    run (withdrawalModuleEnv o)
+      { initFrame with pc := 6, locals := locals6 }
+      []
+      [proofRef, .u64 amount, curBalRef, ekRef, .address contract, .address sender, .u8 chainId]
+      initMs
+      (fuel - 6)
 
-/-! ## Usage in composition proof
+/-- Withdrawal PCs 6-7: copyLoc chain for curBalRef and proofRef. -/
+axiom withdrawal_pc6_to_pc7_concrete
+    (o : WithdrawalModuleOracle)
+    (curBalRef proofRef : MoveValue)
+    (locals6 : Array (Option MoveValue))
+    (stack6 : List MoveValue)
+    (ms : MachineState)
+    (fuel : Nat)
+    (hfuel : fuel ≥ 2)
+    (hlocals_size : locals6.size = 7)
+    (hlocal4 : ∃ h : 4 < locals6.size, locals6[4]'h = some curBalRef)
+    (hlocal6 : ∃ h : 6 < locals6.size, locals6[6]'h = some proofRef) :
+    run (withdrawalModuleEnv o)
+      { code := verifyWithdrawalProofCode, pc := 6,
+        locals := locals6,
+        localRefs := (List.replicate 7 none).toArray }
+      []
+      stack6
+      ms
+      fuel =
+    run (withdrawalModuleEnv o)
+      { code := verifyWithdrawalProofCode, pc := 8,
+        locals := locals6,
+        localRefs := (List.replicate 7 none).toArray }
+      []
+      (proofRef :: curBalRef :: stack6)
+      ms
+      (fuel - 2)
 
-The concrete helpers allow the composition proof to avoid the array indexing blocker:
+/-! ## PC 8 field borrow -/
 
-```lean
-theorem withdrawal_eval_equiv_functional_sim ... := by
-  rw [eval_withdrawal_eq_run]
+/-- Withdrawal PC 8: immBorrowField 0 to get sigma proof field from proof struct. -/
+axiom withdrawal_pc8_immBorrowField_sigma
+    (o : WithdrawalModuleOracle)
+    (proofRef : MoveValue)
+    (proofRid : RefId)
+    (proofFields : List MoveValue)
+    (locals8 : Array (Option MoveValue))
+    (stack8 : List MoveValue)
+    (ms : MachineState)
+    (fuel : Nat)
+    (hfuel : fuel ≥ 1)
+    (hstack_top : stack8.head? = some proofRef)
+    (hproofRef : getRefId proofRef = some proofRid)
+    (hread : ms.containers.read proofRid = some (.struct_ proofFields))
+    (hfield0 : 0 < proofFields.length) :
+    let (sigmaCs, sigmaFid) := ms.containers.alloc (proofFields[0]'hfield0)
+    run (withdrawalModuleEnv o)
+      { code := verifyWithdrawalProofCode, pc := 8,
+        locals := locals8,
+        localRefs := (List.replicate 7 none).toArray }
+      []
+      stack8
+      ms
+      fuel =
+    run (withdrawalModuleEnv o)
+      { code := verifyWithdrawalProofCode, pc := 9,
+        locals := locals8,
+        localRefs := (List.replicate 7 none).toArray }
+      []
+      (.immRef sigmaFid :: stack8.tail)
+      { ms with containers := sigmaCs }
+      (fuel - 1)
 
-  -- Initial frame
-  let initFrame : Frame := { code := verifyWithdrawalProofCode, pc := 0,
-                             locals := #[some (.u8 chainId), some (.address sender), ...],
-                             localRefs := #[] }
+/-! ## PC 9-13 oracle and range marshal -/
 
-  -- PCs 0-5: Use chained helper
-  let frame6 := frameAfter_moveLocs_0_to_5 initFrame (by decide) (by decide) ...
-  have hpc6 : frame6.pc = 6 := by
-    simp [frame6]; apply frameAfter_moveLocs_0_to_5_pc
+/-- After sigma oracle succeeds at PC 9, PCs 10-12 marshal range proof arguments.
 
-  -- PCs 6-7: Use chained helper
-  let frame8 := frameAfter_copyLocs_6_to_7 frame6
-  have hpc8 : frame8.pc = 8 := by
-    simp [frame8]; rw [frameAfter_copyLocs_6_to_7_pc, hpc6]; decide
-
-  -- Now can apply step theorems without hitting the blocker
-  have hstep8 := step_withdrawal_pc8 o frame8 [] stack8 ms8 ...
-  ...
-```
-
-This avoids the "free variable constraint" error by using concrete defs instead
-of generic array manipulation.
+PCs:
+- 10: moveLoc 4 (curBalRef)
+- 11: copyLoc 6 (proofRef)
+- 12: immBorrowField 1 (range proof field)
 -/
+axiom withdrawal_pc10_to_pc13_range_marshal
+    (o : WithdrawalModuleOracle)
+    (curBalRef proofRef : MoveValue)
+    (proofRid : RefId)
+    (proofFields : List MoveValue)
+    (cs_after_sigma : ContainerStore)
+    (locals10 : Array (Option MoveValue))
+    (stack10 : List MoveValue)
+    (fuel : Nat)
+    (hfuel : fuel ≥ 4)
+    (hlocals_size : locals10.size = 7)
+    (hlocal4 : ∃ h : 4 < locals10.size, locals10[4]'h = some curBalRef)
+    (hlocal6 : ∃ h : 6 < locals10.size, locals10[6]'h = some proofRef)
+    (hproofRef : getRefId proofRef = some proofRid)
+    (hread : cs_after_sigma.read proofRid = some (.struct_ proofFields))
+    (hfield1 : 1 < proofFields.length) :
+    let (rangeCs, _rangeFid) := cs_after_sigma.alloc (proofFields[1]'hfield1)
+    ∃ (stack13 : List MoveValue),
+    stack13.length ≥ 2 ∧
+    run (withdrawalModuleEnv o)
+      { code := verifyWithdrawalProofCode, pc := 10,
+        locals := locals10,
+        localRefs := (List.replicate 7 none).toArray }
+      []
+      stack10
+      { containers := cs_after_sigma, globals := [] }
+      fuel =
+    run (withdrawalModuleEnv o)
+      { code := verifyWithdrawalProofCode, pc := 13,
+        locals := locals10,
+        localRefs := (List.replicate 7 none).toArray }
+      []
+      stack13
+      { containers := rangeCs, globals := [] }
+      (fuel - 4)
+
+/-! ## Complete happy-path composition -/
+
+/-- Withdrawal happy path: both oracles succeed, verification returns empty. -/
+axiom withdrawal_happy_path_complete
+    (o : WithdrawalModuleOracle)
+    (chainId : UInt8) (sender contract : ByteArray)
+    (ekRef curBalRef : MoveValue)
+    (amount : UInt64)
+    (proofRef : MoveValue)
+    (proofRid : RefId) (proofFields : List MoveValue)
+    (initMs : MachineState)
+    (fuel : Nat)
+    (hfuel : fuel ≥ 15)
+    (hproofRef : getRefId proofRef = some proofRid)
+    (hread : initMs.containers.read proofRid = some (.struct_ proofFields))
+    (hfield_count : 1 < proofFields.length)
+    -- Oracle success conditions
+    (sigma_args : List MoveValue)
+    (hsigma_args : sigma_args.length = 7)
+    (cs_after_sigma : ContainerStore)
+    (hsigma_ok : o.verifySigmaProof initMs.containers sigma_args = some ([], cs_after_sigma))
+    (range_args : List MoveValue)
+    (hrange_args : range_args.length = 2)
+    (cs_after_range : ContainerStore)
+    (hrange_ok : o.verifyRangeProof cs_after_sigma range_args = some ([], cs_after_range)) :
+    let args := withdrawalArgs chainId sender contract ekRef curBalRef amount proofRef
+    let initFrame : Frame := {
+      code := verifyWithdrawalProofCode,
+      pc := 0,
+      locals := (args.map some).toArray,
+      localRefs := (List.replicate 7 none).toArray
+    }
+    run (withdrawalModuleEnv o) initFrame [] [] initMs fuel =
+    .returned [] ({ initMs with containers := cs_after_range } : MachineState)
+
+/-! ## Error path compositions -/
+
+/-- Withdrawal sigma oracle fails → .error. -/
+axiom withdrawal_sigma_fails_to_error
+    (o : WithdrawalModuleOracle)
+    (chainId : UInt8) (sender contract : ByteArray)
+    (ekRef curBalRef : MoveValue)
+    (amount : UInt64)
+    (proofRef : MoveValue)
+    (proofRid : RefId) (proofFields : List MoveValue)
+    (initMs : MachineState)
+    (fuel : Nat)
+    (hfuel : fuel ≥ 10)
+    (hproofRef : getRefId proofRef = some proofRid)
+    (hread : initMs.containers.read proofRid = some (.struct_ proofFields))
+    (hfield_count : 0 < proofFields.length)
+    -- Sigma oracle fails
+    (sigma_args : List MoveValue)
+    (hsigma_args : sigma_args.length = 7)
+    (hsigma_fail : o.verifySigmaProof initMs.containers sigma_args = none) :
+    let args := withdrawalArgs chainId sender contract ekRef curBalRef amount proofRef
+    let initFrame : Frame := {
+      code := verifyWithdrawalProofCode,
+      pc := 0,
+      locals := (args.map some).toArray,
+      localRefs := (List.replicate 7 none).toArray
+    }
+    run (withdrawalModuleEnv o) initFrame [] [] initMs fuel = .error
+
+/-- Withdrawal range oracle fails (sigma succeeded) → .error. -/
+axiom withdrawal_range_fails_to_error
+    (o : WithdrawalModuleOracle)
+    (chainId : UInt8) (sender contract : ByteArray)
+    (ekRef curBalRef : MoveValue)
+    (amount : UInt64)
+    (proofRef : MoveValue)
+    (proofRid : RefId) (proofFields : List MoveValue)
+    (initMs : MachineState)
+    (fuel : Nat)
+    (hfuel : fuel ≥ 14)
+    (hproofRef : getRefId proofRef = some proofRid)
+    (hread : initMs.containers.read proofRid = some (.struct_ proofFields))
+    (hfield_count : 1 < proofFields.length)
+    -- Sigma succeeds
+    (sigma_args : List MoveValue)
+    (hsigma_args : sigma_args.length = 7)
+    (cs_after_sigma : ContainerStore)
+    (hsigma_ok : o.verifySigmaProof initMs.containers sigma_args = some ([], cs_after_sigma))
+    -- Range fails
+    (range_args : List MoveValue)
+    (hrange_args : range_args.length = 2)
+    (hrange_fail : o.verifyRangeProof cs_after_sigma range_args = none) :
+    let args := withdrawalArgs chainId sender contract ekRef curBalRef amount proofRef
+    let initFrame : Frame := {
+      code := verifyWithdrawalProofCode,
+      pc := 0,
+      locals := (args.map some).toArray,
+      localRefs := (List.replicate 7 none).toArray
+    }
+    run (withdrawalModuleEnv o) initFrame [] [] initMs fuel = .error
 
 end MovementFormal.Experimental.ConfidentialAsset.Withdrawal.ConcreteHelpers

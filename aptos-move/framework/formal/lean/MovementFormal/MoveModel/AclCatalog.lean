@@ -37,7 +37,39 @@ def aclCatalogFunctions : Array FuncDesc := #[
 
 @[simp] theorem aclCatalogFunctions_size : aclCatalogFunctions.size = 5 := by native_decide
 
+@[simp] theorem aclCatalogFunctions_0_numParams :
+    (aclCatalogFunctions[0]'(by decide : 0 < 5)).numParams = 0 :=
+  rfl
+
+@[simp] theorem aclCatalogFunctions_0_numReturns :
+    (aclCatalogFunctions[0]'(by decide : 0 < 5)).numReturns = 1 :=
+  rfl
+
+@[simp] theorem aclCatalogFunctions_1_numParams :
+    (aclCatalogFunctions[1]'(by decide : 1 < 5)).numParams = 2 :=
+  rfl
+
+@[simp] theorem aclCatalogFunctions_1_numReturns :
+    (aclCatalogFunctions[1]'(by decide : 1 < 5)).numReturns = 1 :=
+  rfl
+
+@[simp] theorem aclCatalogFunctions_4_numParams :
+    (aclCatalogFunctions[4]'(by decide : 4 < 5)).numParams = 2 :=
+  rfl
+
+@[simp] theorem aclCatalogFunctions_4_numReturns :
+    (aclCatalogFunctions[4]'(by decide : 4 < 5)).numReturns = 0 :=
+  rfl
+
 def aclCatalogModuleEnv : ModuleEnv :=
   { constants := #[], functions := aclCatalogFunctions }
+
+@[simp] theorem aclCatalogModuleEnv_constants_size :
+    aclCatalogModuleEnv.constants.size = 0 :=
+  rfl
+
+@[simp] theorem aclCatalogModuleEnv_functions_size :
+    aclCatalogModuleEnv.functions.size = 5 :=
+  rfl
 
 end MovementFormal.MoveModel.AclCatalog

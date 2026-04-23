@@ -61,9 +61,9 @@ CA_PRAGMA_COUNT=$(grep -rn "pragma opaque" \
     ../aptos-experimental/sources/confidential_asset/ \
     2>/dev/null | grep "\.spec\.move:" | wc -l | tr -d ' ')
 
-EXPECTED_CA_PRAGMA=89  # Per TRUST_BOUNDARIES.md as of 2026-04-22
+EXPECTED_CA_PRAGMA=93  # Per TRUST_BOUNDARIES.md as of 2026-04-23 (updated from 89 due to modifies clause additions)
 
-if [ "$CA_PRAGMA_COUNT" -lt 80 ] || [ "$CA_PRAGMA_COUNT" -gt 100 ]; then
+if [ "$CA_PRAGMA_COUNT" -lt 85 ] || [ "$CA_PRAGMA_COUNT" -gt 105 ]; then
     echo "⚠️  CA pragma opaque count: $CA_PRAGMA_COUNT (expected ~$EXPECTED_CA_PRAGMA)"
     echo "   This may indicate new/removed specs. Review audit/TRUST_BOUNDARIES.md"
     # Don't fail - just warn (exact count varies as specs evolve)

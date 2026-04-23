@@ -4420,6 +4420,7 @@ produce canonical byte representations for cross-environment validation.
 
 
 <pre><code><b>aborts_if</b> <b>false</b>;
+<b>ensures</b> len(result) == len(auditor_eks) * 32;
 </code></pre>
 
 

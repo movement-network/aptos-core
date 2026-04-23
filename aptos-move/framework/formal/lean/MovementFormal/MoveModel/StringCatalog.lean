@@ -36,7 +36,35 @@ def stringCatalogFunctions : Array FuncDesc := #[
 
 @[simp] theorem stringCatalogFunctions_size : stringCatalogFunctions.size = 4 := by native_decide
 
+@[simp] theorem stringCatalogFunctions_0_numParams :
+    (stringCatalogFunctions[0]'(by decide : 0 < 4)).numParams = 1 :=
+  rfl
+
+@[simp] theorem stringCatalogFunctions_0_numReturns :
+    (stringCatalogFunctions[0]'(by decide : 0 < 4)).numReturns = 1 :=
+  rfl
+
+@[simp] theorem stringCatalogFunctions_1_numParams :
+    (stringCatalogFunctions[1]'(by decide : 1 < 4)).numParams = 3 :=
+  rfl
+
+@[simp] theorem stringCatalogFunctions_1_numReturns :
+    (stringCatalogFunctions[1]'(by decide : 1 < 4)).numReturns = 1 :=
+  rfl
+
+@[simp] theorem stringCatalogFunctions_2_numParams :
+    (stringCatalogFunctions[2]'(by decide : 2 < 4)).numParams = 2 :=
+  rfl
+
 def stringCatalogModuleEnv : ModuleEnv :=
   { constants := #[], functions := stringCatalogFunctions }
+
+@[simp] theorem stringCatalogModuleEnv_constants_size :
+    stringCatalogModuleEnv.constants.size = 0 :=
+  rfl
+
+@[simp] theorem stringCatalogModuleEnv_functions_size :
+    stringCatalogModuleEnv.functions.size = 4 :=
+  rfl
 
 end MovementFormal.MoveModel.StringCatalog

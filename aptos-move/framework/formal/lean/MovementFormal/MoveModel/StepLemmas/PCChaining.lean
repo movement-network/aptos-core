@@ -3,7 +3,6 @@ import MovementFormal.MoveModel.StepLemmas.Run
 import MovementFormal.MoveModel.StepLemmas.Locals
 import MovementFormal.MoveModel.FrameInvariants
 import MovementFormal.MoveModel.StackManagement
-import MovementFormal.MoveModel.ContainerStoreTracking
 import MovementFormal.MoveModel.ExecResultDropMs
 
 /-!
@@ -14,7 +13,6 @@ in Phase 6 composition theorems. It builds on top of:
 - `StepLemmas.Run`: Basic run_succ_N_ok helpers
 - `FrameInvariants`: Frame state tracking through execution
 - `StackManagement`: Stack evolution tracking
-- `ContainerStoreTracking`: Container store threading
 
 ## Problem: Composition proof boilerplate
 
@@ -192,7 +190,6 @@ open MovementFormal.MoveModel
 open MovementFormal.MoveModel.StepLemmas
 open MovementFormal.MoveModel.FrameInvariants
 open MovementFormal.MoveModel.StackManagement
-open MovementFormal.MoveModel.ContainerStoreTracking
 
 /-! ## Pattern 1: moveLoc chains -/
 
@@ -511,7 +508,7 @@ Each pattern will be proved by:
 1. Induction on the instruction count (for chain patterns)
 2. Composition of smaller patterns (marshal_borrow_call uses moveLoc_chain + immBorrowField + oracle_call)
 3. Case splits on oracle outcomes (match on Option)
-4. Application of FrameInvariant/StackManagement/ContainerStoreTracking lemmas
+4. Application of FrameInvariant/StackManagement lemmas
 
 The proofs are mechanical but blocked by the array indexing issue.
 Once the blocker is resolved, completing all patterns is estimated at ~600-800 lines.
@@ -522,7 +519,6 @@ Once the blocker is resolved, completing all patterns is estimated at ~600-800 l
 - `StepLemmas/Bundled.lean`: Provides bundled instruction helpers (also blocked)
 - `FrameInvariants.lean`: Tracks frame.code, frame.locals.size, frame.pc through execution
 - `StackManagement.lean`: Tracks stack.length and stack contents through execution
-- `ContainerStoreTracking.lean`: Tracks ms.containers through immBorrowField and oracle calls
 - `OraclePatterns.lean`: Provides oracle-specific helpers (SigmaArgsOnStack, OracleSucceeded, etc.)
 
 Together, these modules form a complete library for Phase 6 composition proofs.

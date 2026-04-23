@@ -220,9 +220,8 @@ spec aptos_experimental::confidential_asset {
     spec serialize_auditor_eks {
         aborts_if false;
         // Result is the concatenation of pubkey_to_bytes for each auditor key in the vector.
-        // Length: |auditor_eks| * COMPRESSED_PUBKEY_SIZE bytes (32 bytes per pubkey).
-        // TODO: Re-enable once COMPRESSED_PUBKEY_SIZE constant is defined in ristretto255_twisted_elgamal
-        // ensures len(result) == len(auditor_eks) * 32;
+        // Length: |auditor_eks| * 32 bytes (compressed Ristretto255 point size, per aptos_std::ristretto255::MAX_POINT_NUM_BYTES)
+        ensures len(result) == len(auditor_eks) * 32;
     }
 
     /// `serialize_auditor_amounts` — Pure serialization of confidential balance vector to bytes.

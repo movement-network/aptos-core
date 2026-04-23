@@ -20,7 +20,9 @@ theorem size_array7 {α : Type u} (a b c d e f g : α) :
     #[a, b, c, d, e, f, g].size = 7 := by
   rfl
 
-/-! ## Array element access for 7-element arrays -/
+/-! ## Array element access for 7-element arrays
+
+These lemmas are commonly used in verifier proofs with 7 locals (e.g., Registration). -/
 
 @[simp]
 theorem get_array7_0 {α : Type u} (a b c d e f g : α) (h : 0 < 7) :
@@ -49,6 +51,47 @@ theorem get_array7_5 {α : Type u} (a b c d e f g : α) (h : 5 < 7) :
 @[simp]
 theorem get_array7_6 {α : Type u} (a b c d e f g : α) (h : 6 < 7) :
     #[a, b, c, d, e, f, g][6]'h = g := by rfl
+
+/-! ## Array element access for 8-element arrays
+
+These lemmas are commonly used in verifier proofs with 8 locals (e.g., Withdrawal). -/
+
+/-- Size of an 8-element array literal -/
+@[simp]
+theorem size_array8 {α : Type u} (a b c d e f g h : α) :
+    #[a, b, c, d, e, f, g, h].size = 8 := by rfl
+
+@[simp]
+theorem get_array8_0 {α : Type u} (a b c d e f g h : α) (h' : 0 < 8) :
+    #[a, b, c, d, e, f, g, h][0]'h' = a := by rfl
+
+@[simp]
+theorem get_array8_1 {α : Type u} (a b c d e f g h : α) (h' : 1 < 8) :
+    #[a, b, c, d, e, f, g, h][1]'h' = b := by rfl
+
+@[simp]
+theorem get_array8_2 {α : Type u} (a b c d e f g h : α) (h' : 2 < 8) :
+    #[a, b, c, d, e, f, g, h][2]'h' = c := by rfl
+
+@[simp]
+theorem get_array8_3 {α : Type u} (a b c d e f g h : α) (h' : 3 < 8) :
+    #[a, b, c, d, e, f, g, h][3]'h' = d := by rfl
+
+@[simp]
+theorem get_array8_4 {α : Type u} (a b c d e f g h : α) (h' : 4 < 8) :
+    #[a, b, c, d, e, f, g, h][4]'h' = e := by rfl
+
+@[simp]
+theorem get_array8_5 {α : Type u} (a b c d e f g h : α) (h' : 5 < 8) :
+    #[a, b, c, d, e, f, g, h][5]'h' = f := by rfl
+
+@[simp]
+theorem get_array8_6 {α : Type u} (a b c d e f g h : α) (h' : 6 < 8) :
+    #[a, b, c, d, e, f, g, h][6]'h' = g := by rfl
+
+@[simp]
+theorem get_array8_7 {α : Type u} (a b c d e f g h_ : α) (h' : 7 < 8) :
+    #[a, b, c, d, e, f, g, h_][7]'h' = h_ := by rfl
 
 /-! ## Array set operations
 

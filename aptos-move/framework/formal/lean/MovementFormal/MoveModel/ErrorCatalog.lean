@@ -57,7 +57,31 @@ def errorCatalogFunctions : Array FuncDesc := #[
 
 @[simp] theorem errorCatalogFunctions_size : errorCatalogFunctions.size = 13 := by native_decide
 
+@[simp] theorem errorCatalogFunctions_0_numParams :
+    (errorCatalogFunctions[0]'(by decide : 0 < 13)).numParams = 2 :=
+  rfl
+
+@[simp] theorem errorCatalogFunctions_0_numReturns :
+    (errorCatalogFunctions[0]'(by decide : 0 < 13)).numReturns = 1 :=
+  rfl
+
+@[simp] theorem errorCatalogFunctions_1_numParams :
+    (errorCatalogFunctions[1]'(by decide : 1 < 13)).numParams = 1 :=
+  rfl
+
+@[simp] theorem errorCatalogFunctions_1_numReturns :
+    (errorCatalogFunctions[1]'(by decide : 1 < 13)).numReturns = 1 :=
+  rfl
+
 def errorCatalogModuleEnv : ModuleEnv :=
   { constants := #[], functions := errorCatalogFunctions }
+
+@[simp] theorem errorCatalogModuleEnv_constants_size :
+    errorCatalogModuleEnv.constants.size = 0 :=
+  rfl
+
+@[simp] theorem errorCatalogModuleEnv_functions_size :
+    errorCatalogModuleEnv.functions.size = 13 :=
+  rfl
 
 end MovementFormal.MoveModel.ErrorCatalog

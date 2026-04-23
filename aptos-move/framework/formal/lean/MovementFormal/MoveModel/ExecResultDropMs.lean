@@ -61,4 +61,39 @@ theorem ExecResult.dropMs_ne_error_of_ne_error {r : ExecResult} (h : r ≠ .erro
   | error => exact absurd rfl h
   | ok _ _ _ _ => simp [ExecResult.dropMs]
 
+/-- dropMs is idempotent -/
+@[simp] theorem ExecResult.dropMs_dropMs (r : ExecResult) :
+    r.dropMs.dropMs = r.dropMs := by
+  cases r with
+  | returned vs ms => rfl
+  | aborted code => rfl
+  | error => rfl
+  | ok _ _ _ _ => rfl
+
+/-- dropMs preserves .error -/
+theorem ExecResult.dropMs_eq_error_iff (r : ExecResult) :
+    r.dropMs = .error ↔ r = .error := by
+  constructor
+  · intro h
+    cases r with
+    | returned _ _ => simp [ExecResult.dropMs] at h
+    | aborted _ => simp [ExecResult.dropMs] at h
+    | error => rfl
+    | ok _ _ _ _ => simp [ExecResult.dropMs] at h
+  · rintro rfl; rfl
+
+/-- If dropMs produces .returned, the original must have been .returned -/
+theorem ExecResult.returned_of_dropMs_returned (r : ExecResult) (vs : List MoveValue) :
+    r.dropMs = .returned vs MachineState.empty →
+    ∃ ms, r = .returned vs ms := by
+  intro h
+  exact (ExecResult.dropMs_eq_returned_iff r vs).mp h
+
+/-- If dropMs produces .aborted, the original must have been .aborted -/
+theorem ExecResult.aborted_of_dropMs_aborted (r : ExecResult) (code : UInt64) :
+    r.dropMs = .aborted code →
+    r = .aborted code := by
+  intro h
+  exact (ExecResult.dropMs_eq_aborted_iff r code).mp h
+
 end MovementFormal.MoveModel

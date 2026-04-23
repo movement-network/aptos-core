@@ -84,7 +84,23 @@ def cmpCatalogFunctions : Array FuncDesc := #[
 
 @[simp] theorem cmpCatalogFunctions_size : cmpCatalogFunctions.size = 48 := by native_decide
 
+@[simp] theorem cmpCatalogFunctions_0_numParams :
+    (cmpCatalogFunctions[0]'(by decide : 0 < 48)).numParams = 2 :=
+  rfl
+
+@[simp] theorem cmpCatalogFunctions_0_numReturns :
+    (cmpCatalogFunctions[0]'(by decide : 0 < 48)).numReturns = 1 :=
+  rfl
+
 def cmpCatalogModuleEnv : ModuleEnv :=
   { constants := #[], functions := cmpCatalogFunctions }
+
+@[simp] theorem cmpCatalogModuleEnv_constants_size :
+    cmpCatalogModuleEnv.constants.size = 0 :=
+  rfl
+
+@[simp] theorem cmpCatalogModuleEnv_functions_size :
+    cmpCatalogModuleEnv.functions.size = 48 :=
+  rfl
 
 end MovementFormal.MoveModel.CmpCatalog

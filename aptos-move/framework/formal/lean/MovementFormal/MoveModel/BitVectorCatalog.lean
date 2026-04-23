@@ -37,7 +37,35 @@ def bitVectorCatalogFunctions : Array FuncDesc := #[
 
 @[simp] theorem bitVectorCatalogFunctions_size : bitVectorCatalogFunctions.size = 5 := by native_decide
 
+@[simp] theorem bitVectorCatalogFunctions_0_numParams :
+    (bitVectorCatalogFunctions[0]'(by decide : 0 < 5)).numParams = 1 :=
+  rfl
+
+@[simp] theorem bitVectorCatalogFunctions_0_numReturns :
+    (bitVectorCatalogFunctions[0]'(by decide : 0 < 5)).numReturns = 1 :=
+  rfl
+
+@[simp] theorem bitVectorCatalogFunctions_1_numParams :
+    (bitVectorCatalogFunctions[1]'(by decide : 1 < 5)).numParams = 2 :=
+  rfl
+
+@[simp] theorem bitVectorCatalogFunctions_2_numParams :
+    (bitVectorCatalogFunctions[2]'(by decide : 2 < 5)).numParams = 2 :=
+  rfl
+
+@[simp] theorem bitVectorCatalogFunctions_3_numParams :
+    (bitVectorCatalogFunctions[3]'(by decide : 3 < 5)).numParams = 2 :=
+  rfl
+
+@[simp] theorem bitVectorCatalogFunctions_4_numParams :
+    (bitVectorCatalogFunctions[4]'(by decide : 4 < 5)).numParams = 2 :=
+  rfl
+
 def bitVectorCatalogModuleEnv : ModuleEnv :=
   { constants := #[], functions := bitVectorCatalogFunctions }
+
+@[simp] theorem bitVectorCatalogModuleEnv_functions_size :
+    bitVectorCatalogModuleEnv.functions.size = 5 :=
+  rfl
 
 end MovementFormal.MoveModel.BitVectorCatalog

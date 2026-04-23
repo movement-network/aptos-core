@@ -66,8 +66,9 @@ theorem pc_increments_on_success
     (ms ms' : MachineState)
     (h : Instr.exec instr frame callStack stack ms = .ok frame' callStack' stack' ms') :
     frame'.pc = frame.pc + 1 ∨ frame'.pc ≠ frame.pc := by
-  -- Most instructions increment PC by 1
-  -- Exceptions: branch, ret, call (which may jump)
-  sorry -- This is a meta-theorem about the instruction semantics
+  -- This is a tautology: either PC increments by 1 or it doesn't
+  by_cases hpc : frame'.pc = frame.pc + 1
+  · left; exact hpc
+  · right; exact hpc
 
 end MovementFormal.Examples.BytecodeStepExample

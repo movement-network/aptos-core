@@ -328,4 +328,31 @@ have hstep0_opaque := step_result_moveLoc_to_opaque 0 (by decide) step_withdrawa
 ```
 -/
 
+/-! ## Additional helper lemmas -/
+
+/-- frameAfterMoveLoc preserves localRefs. -/
+theorem frameAfterMoveLoc_localRefs (frame : Frame) (idx : Nat) (h : idx < frame.locals.size) :
+    (frameAfterMoveLoc frame idx h).localRefs = frame.localRefs := by
+  rfl
+
+/-- frameAfterStLoc preserves localRefs. -/
+theorem frameAfterStLoc_localRefs (frame : Frame) (idx : Nat) (v : MoveValue) (h : idx < frame.locals.size) :
+    (frameAfterStLoc frame idx v h).localRefs = frame.localRefs := by
+  rfl
+
+/-- frameAfterCopyLoc preserves localRefs. -/
+theorem frameAfterCopyLoc_localRefs (frame : Frame) (idx : Nat) :
+    (frameAfterCopyLoc frame idx).localRefs = frame.localRefs := by
+  rfl
+
+/-- frameAfterImmBorrowField preserves localRefs. -/
+theorem frameAfterImmBorrowField_localRefs (frame : Frame) :
+    (frameAfterImmBorrowField frame).localRefs = frame.localRefs := by
+  rfl
+
+/-- frameAfterCall preserves localRefs. -/
+theorem frameAfterCall_localRefs (frame : Frame) :
+    (frameAfterCall frame).localRefs = frame.localRefs := by
+  rfl
+
 end MovementFormal.MoveModel.OpaqueFrames

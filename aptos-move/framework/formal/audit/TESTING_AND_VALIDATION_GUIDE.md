@@ -135,7 +135,7 @@ cd audit
 
 ## Move Prover Stack Testing
 
-**Status (2026-04-22):** ✅ Toolchain installed and integrated. ⚠️ Verification blocked on ristretto255 patches (Phase 0).
+**Status (2026-04-23):** ✅ Toolchain installed and integrated. ✅ All CA specs compile cleanly. ⚠️ Meaningful verification (VC generation) blocked on upstream framework modifies clauses - 33 errors remain in aptos-framework functions (`object::create_named_object`, `primary_fungible_store::transfer`, etc.). All CA-local spec issues resolved.
 
 ### Prerequisites
 

@@ -31,7 +31,31 @@ def hashCatalogFunctions : Array FuncDesc := #[
 
 @[simp] theorem hashCatalogFunctions_size : hashCatalogFunctions.size = 2 := by native_decide
 
+@[simp] theorem hashCatalogFunctions_0_numParams :
+    (hashCatalogFunctions[0]'(by decide : 0 < 2)).numParams = 1 :=
+  rfl
+
+@[simp] theorem hashCatalogFunctions_0_numReturns :
+    (hashCatalogFunctions[0]'(by decide : 0 < 2)).numReturns = 1 :=
+  rfl
+
+@[simp] theorem hashCatalogFunctions_1_numParams :
+    (hashCatalogFunctions[1]'(by decide : 1 < 2)).numParams = 1 :=
+  rfl
+
+@[simp] theorem hashCatalogFunctions_1_numReturns :
+    (hashCatalogFunctions[1]'(by decide : 1 < 2)).numReturns = 1 :=
+  rfl
+
 def hashCatalogModuleEnv : ModuleEnv :=
   { constants := #[], functions := hashCatalogFunctions }
+
+@[simp] theorem hashCatalogModuleEnv_constants_size :
+    hashCatalogModuleEnv.constants.size = 0 :=
+  rfl
+
+@[simp] theorem hashCatalogModuleEnv_functions_size :
+    hashCatalogModuleEnv.functions.size = 2 :=
+  rfl
 
 end MovementFormal.MoveModel.HashCatalog

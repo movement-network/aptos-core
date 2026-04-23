@@ -19,7 +19,7 @@ theorem normalization_eval_error_sigmaFails
     (fuel : Nat) (hfuel : 8 ≤ fuel)
     (proofRid : RefId) (proofFields : List MoveValue)
     (hProofRef : getRefId proofRef = some proofRid)
-    (hProofRead : MachineState.empty.containers.read proofRid = 
+    (hProofRead : MachineState.empty.containers.read proofRid =
                    some (.struct_ proofFields))
     (hFieldCount : 1 < proofFields.length)
     -- Critical: sigma verifier returns none
@@ -27,6 +27,19 @@ theorem normalization_eval_error_sigmaFails
     (eval (normalizationModuleEnv o) verifyNormalizationProofIdx
         (normalizationArgs chainId sender contract ekRef curBalRef newBalRef proofRef)
         fuel MachineState.empty).dropMs = .error := by
+  -- Strategy: This proof is blocked by the array elaboration issue.
+  -- The structure is clear: chain PCs 0→5→8 using the helper axioms,
+  -- then apply step_normalization_pc8_none at PC 8 to get .error.
+  -- However, the intermediate `have (sigmaCs, sigmaFid) := ...` binding
+  -- introduces free variables that Lean's elaborator rejects.
+  --
+  -- This is the same "Expected type must not contain free variables" blocker
+  -- documented in norm_run_pc0_to_pc5. Completion requires either:
+  -- 1. Term-mode witness construction
+  -- 2. Alternative proof architecture that avoids array indexing in theorem statements
+  -- 3. Deep Lean 4 elaborator workarounds
+  --
+  -- Estimated effort: 40-60 lines once elaboration blocker is solved.
   sorry
 
 end MovementFormal.Experimental.ConfidentialAsset.Normalization.Composition

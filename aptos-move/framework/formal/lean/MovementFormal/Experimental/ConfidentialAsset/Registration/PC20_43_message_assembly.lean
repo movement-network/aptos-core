@@ -1,3 +1,11 @@
+import MovementFormal.MoveModel.Value
+import MovementFormal.MoveModel.State
+import MovementFormal.MoveModel.Step
+import MovementFormal.MoveModel.StepLemmas.Run
+import MovementFormal.MoveModel.ExecResultDropMs
+import MovementFormal.MoveModel.Native.Registration
+import MovementFormal.MoveModel.Programs.Registration
+
 /-! ## Concrete Helper: PC 20 through PC 43 — Fiat-Shamir Message Assembly
 
 This file provides concrete proof work for the Fiat-Shamir message construction phase.
@@ -19,7 +27,9 @@ This systematic pattern makes these 23 PCs mechanically provable once container-
 threading is established.
 -/
 
-namespace MovementFormal.MoveModel.Experimental.ConfidentialAsset.Registration
+namespace MovementFormal.Experimental.ConfidentialAsset.Registration
+
+open MoveModel
 
 /-! ### Message assembly state progression
 
@@ -317,4 +327,4 @@ Total contribution: ~350 lines of structured message assembly proof.
 Combined with PC 4-20 helper: ~800 lines toward singleton branch completion.
 -/
 
-end MovementFormal.MoveModel.Experimental.ConfidentialAsset.Registration
+end MovementFormal.Experimental.ConfidentialAsset.Registration

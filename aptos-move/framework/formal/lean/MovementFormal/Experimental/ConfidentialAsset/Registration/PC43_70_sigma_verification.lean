@@ -1,3 +1,11 @@
+import MovementFormal.MoveModel.Value
+import MovementFormal.MoveModel.State
+import MovementFormal.MoveModel.Step
+import MovementFormal.MoveModel.StepLemmas.Run
+import MovementFormal.MoveModel.ExecResultDropMs
+import MovementFormal.MoveModel.Native.Registration
+import MovementFormal.MoveModel.Programs.Registration
+
 /-! ## Concrete Helper: PC 43 through PC 70 — Sigma Protocol Verification
 
 This file provides concrete proof work for the final phase of registration verification:
@@ -13,7 +21,9 @@ Each point operation is an oracle call with potential failure modes.
 The happy path threads through all successes and reaches PC 70 (ret).
 -/
 
-namespace MovementFormal.MoveModel.Experimental.ConfidentialAsset.Registration
+namespace MovementFormal.Experimental.ConfidentialAsset.Registration
+
+open MoveModel
 
 /-! ### State after message assembly
 
@@ -313,4 +323,4 @@ Estimated additional effort: ~500-800 lines of integration and sorry completion.
 **Total estimate for full singleton branch: ~3,000-3,300 lines** (matches roadmap estimate of 2000-3000).
 -/
 
-end MovementFormal.MoveModel.Experimental.ConfidentialAsset.Registration
+end MovementFormal.Experimental.ConfidentialAsset.Registration

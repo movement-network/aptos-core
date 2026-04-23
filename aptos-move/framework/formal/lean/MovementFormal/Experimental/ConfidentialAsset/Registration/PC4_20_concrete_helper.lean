@@ -1,3 +1,11 @@
+import MovementFormal.MoveModel.Value
+import MovementFormal.MoveModel.State
+import MovementFormal.MoveModel.Step
+import MovementFormal.MoveModel.StepLemmas.Run
+import MovementFormal.MoveModel.ExecResultDropMs
+import MovementFormal.MoveModel.Native.Registration
+import MovementFormal.MoveModel.Programs.Registration
+
 /-! ## Concrete Helper: PC 4 through PC 20 — Complete chain with oracle threading
 
 This helper provides CONCRETE proof work (not just documentation) for the critical
@@ -12,7 +20,9 @@ This is a working proof template that can be integrated into EvalEquivRebuild.le
 to make measurable progress on singleton branch completion.
 -/
 
-namespace MovementFormal.MoveModel.Experimental.ConfidentialAsset.Registration
+namespace MovementFormal.Experimental.ConfidentialAsset.Registration
+
+open MoveModel
 
 /-! ### Step 1: Define intermediate frame states
 
@@ -407,4 +417,4 @@ Total estimated: ~2000-2500 lines for complete singleton branch.
 This file contributes ~450 lines of concrete structural work.
 -/
 
-end MovementFormal.MoveModel.Experimental.ConfidentialAsset.Registration
+end MovementFormal.Experimental.ConfidentialAsset.Registration

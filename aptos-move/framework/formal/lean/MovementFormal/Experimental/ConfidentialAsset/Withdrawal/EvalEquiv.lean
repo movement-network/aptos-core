@@ -836,11 +836,20 @@ theorem withdrawal_eval_equiv_functional_sim
       rw [this]
       simp only [ExecResult.dropMs]
       -- TODO: Show that the functional sim match reduces to .error using hrange
-      -- The challenge is that hrange uses let-bound variables cs3 and rangeArgs,
-      -- but after unfolding the goal has the expanded expressions.
-      -- Need to show: o.verifyRangeProof (cs2.alloc proofFields[1]).fst [newBalRef, .immRef (cs2.alloc proofFields[1]).snd]
-      --             = o.verifyRangeProof cs3 rangeArgs (both equal none per hrange)
-      -- This should be provable by showing cs3 and rangeArgs unfold to those expressions.
+      -- ATTEMPTED 2026-04-23: This is harder than expected due to array proof irrelevance
+      --
+      -- The challenge: hrange states o.verifyRangeProof cs3 rangeArgs = none
+      -- where cs3, rangeArgs are let-bound at lines 799-800.
+      -- After unfolding functional sim, the goal has:
+      --   o.verifyRangeProof (cs2.alloc proofFields[1]).fst [newBalRef, .immRef (...).snd]
+      -- These SHOULD be definitionally equal to cs3 and rangeArgs, but they're not
+      -- because proofFields[1] has different implicit bound proofs.
+      --
+      -- Need: Proof irrelevance for array access, or congruence lemma showing that
+      -- cs2.alloc (proofFields[1]'h1) = cs2.alloc (proofFields[1]'h2) for any h1, h2
+      --
+      -- This blocks on the same array elaboration issue affecting other sorries.
+      -- Estimated effort: 30-40 lines once array proof irrelevance is available.
       sorry
 
     | some ([], cs4) =>

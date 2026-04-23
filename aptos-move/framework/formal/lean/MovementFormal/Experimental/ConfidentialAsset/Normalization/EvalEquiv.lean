@@ -603,25 +603,24 @@ theorem norm_run_pc5_to_pc8
          .address contract, .address sender, .u8 chainId]
         { initMs with containers := sigmaCs }
         (fuel - 3) := by
-  -- This theorem chains 3 operations: two copyLoc instructions (PCs 5-6) followed by
-  -- immBorrowField (PC 7) which allocates a new reference in the container store.
-  --
-  -- The proof structure:
-  -- 1. PC 5: copyLoc 5 (newBalRef) - reads locals[5], pushes to stack, locals unchanged
-  -- 2. PC 6: copyLoc 6 (proofRef) - reads locals[6], pushes to stack, locals unchanged
-  -- 3. PC 7: immBorrowField 0 - reads proofFields[0] from containers, allocates new ref
-  --
-  -- Key challenges:
-  -- - Proving locals5 contains the expected values at indices 5 and 6
-  -- - Coordinating with norm_run_pc0_to_pc5 witness to establish locals5 properties
-  -- - Container store alloc threading through immBorrowField
-  -- - Stack state evolution through 3 distinct operations
-  --
-  -- This proof requires norm_run_pc0_to_pc5 to be completed first, as it depends on
-  -- properties of the locals5 witness that that theorem produces.
-  --
-  -- Estimated completion effort: 80-100 lines after norm_run_pc0_to_pc5 is proved.
-  sorry
+  -- ATTEMPT (2026-04-23): Try to prove this step-by-step
+  -- Even though locals5 properties aren't known (from axiom norm_run_pc0_to_pc5),
+  -- we can still show the proof structure
+
+  -- The let-binding defines sigmaCs and sigmaFid from the alloc result
+  -- We need to work with this in the proof
+
+  -- First, assume locals5 has the right shape (would come from norm_run_pc0_to_pc5)
+  have hlocals5_size : 7 ≤ locals5.size := by sorry  -- from norm_run_pc0_to_pc5
+  have hlocals5_5 : locals5[5]'(by omega : 5 < locals5.size) = some newBalRef := by sorry  -- from norm_run_pc0_to_pc5
+  have hlocals5_6 : locals5[6]'(by omega : 6 < locals5.size) = some proofRef := by sorry  -- from norm_run_pc0_to_pc5
+
+  -- Now try the PC chain
+  -- The issue: we can't refer to sigmaCs and sigmaFid from the let-binding
+  -- because they're not in scope for the proof tactics
+
+  sorry  -- BLOCKER: Cannot refer to let-bound variables sigmaCs, sigmaFid in proof
+  -- Even with assumptions about locals5, the architectural issue remains
 
 /-! ## Top-level composition theorem (Phase 6)
 

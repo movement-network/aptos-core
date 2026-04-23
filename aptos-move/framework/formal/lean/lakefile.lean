@@ -127,6 +127,8 @@ lean_lib «MovementFormal» where
     `MovementFormal.Experimental.ConfidentialAsset.Registration.SingletonBranchIntegration,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.ValidationLemmas,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.OracleSemantics,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.ContainerStoreProperties,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.FuelManagement,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.Phase6Composition,
     `MovementFormal.MoveModel.Programs.Withdrawal,
     `MovementFormal.MoveModel.Programs.Transfer,

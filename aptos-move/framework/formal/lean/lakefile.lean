@@ -124,6 +124,8 @@ lean_lib «MovementFormal» where
     `MovementFormal.Experimental.ConfidentialAsset.Registration.PC4_20_concrete_helper,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.PC20_43_message_assembly,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.PC43_70_sigma_verification,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.SingletonBranchIntegration,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.ValidationLemmas,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.Phase6Composition,
     `MovementFormal.MoveModel.Programs.Withdrawal,
     `MovementFormal.MoveModel.Programs.Transfer,

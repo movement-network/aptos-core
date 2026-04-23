@@ -167,6 +167,8 @@ lean_lib «MovementFormal» where
     `MovementFormal.Experimental.ConfidentialAsset.Registration.StackDepthAnalysis,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.GlobalStateInvariants,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.InstructionEffectCatalog,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.BytecodeSemanticsCatalog,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.ProofCompositionPatterns,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.Phase6Composition,
     `MovementFormal.MoveModel.Programs.Withdrawal,
     `MovementFormal.MoveModel.Programs.Transfer,

@@ -134,6 +134,8 @@ lean_lib «MovementFormal» where
     `MovementFormal.Experimental.ConfidentialAsset.Registration.ErrorPathHandling,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.InstructionSemantics,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.PCRangeComposition,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.OracleHypothesesCatalog,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.LocalsManagementLemmas,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.Phase6Composition,
     `MovementFormal.MoveModel.Programs.Withdrawal,
     `MovementFormal.MoveModel.Programs.Transfer,

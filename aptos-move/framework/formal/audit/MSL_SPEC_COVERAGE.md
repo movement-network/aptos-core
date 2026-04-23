@@ -380,8 +380,15 @@ pending_counter), while Lean + difftest cover the crypto-native behavior that SM
 
 ---
 
-## Spec Quality Metrics
+## Spec Quality Metrics (Updated 2026-04-23)
 
+**Quantitative Coverage:**
+- **Spec blocks**: 136 total (61 asset, 32 balance, 26 elgamal, 10 proof, 7 test helpers)
+- **Pragma opaque**: 89 crypto-boundary functions
+- **Ensures clauses**: 126 postcondition assertions  
+- **Aborts_if clauses**: 140 abort condition checks
+
+**Qualitative Coverage:**
 - **Abort conditions**: All critical abort paths covered (frozen check, existence check, counter bounds)
 - **Frame clauses**: All `modifies global<...>(...)` clauses present
 - **Postconditions**: Balance length invariants, flag updates, counter arithmetic

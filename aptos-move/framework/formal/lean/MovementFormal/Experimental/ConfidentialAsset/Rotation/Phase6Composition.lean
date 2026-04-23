@@ -44,10 +44,10 @@ axiom rotate_is_formally_verified :
       (proofRid : RefId) (proofFields : List MoveValue)
       (initMs : MachineState)
       (hFieldCount : 1 < proofFields.length)
-      (hread : initMs.containers.read proofRid = some (.struct_ proofFields))
-      (hproofRef : getRefId proofRef = some proofRid)
+      (_hread : initMs.containers.read proofRid = some (.struct_ proofFields))
+      (_hproofRef : getRefId proofRef = some proofRid)
       (fuel : Nat)
-      (hfuel : fuel ≥ 15),
+      (_hfuel : fuel ≥ 15),
       let args := [.u8 chainId, .address sender, .address contract,
                    currentEkRef, newEkRef, curBalRef, newBalRef, proofRef]
       (eval (rotationModuleEnv o) verifyRotationProofIdx args fuel initMs).dropMs =

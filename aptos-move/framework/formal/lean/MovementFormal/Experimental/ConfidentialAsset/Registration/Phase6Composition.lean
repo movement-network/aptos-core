@@ -66,7 +66,7 @@ Broken MSL / difftest checks surface in their own CI lanes, not here.
 axiom register_is_formally_verified :
     ∀ (o : MovementFormal.MoveModel.Native.Registration.RegistrationNativeOracle)
       (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
-      (fuel : Nat) (hfuel : fuel ≥ 200),
+      (fuel : Nat) (_hfuel : fuel ≥ 200),
       (MovementFormal.MoveModel.eval
           (MovementFormal.MoveModel.Programs.Registration.registrationModuleEnv o)
           MovementFormal.MoveModel.Programs.Registration.verifyRegistrationProofIdx

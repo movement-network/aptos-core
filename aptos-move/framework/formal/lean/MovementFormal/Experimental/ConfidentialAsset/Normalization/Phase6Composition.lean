@@ -44,10 +44,10 @@ axiom normalize_is_formally_verified :
       (proofRid : RefId) (proofFields : List MoveValue)
       (initMs : MachineState)
       (hFieldCount : 1 < proofFields.length)
-      (hread : initMs.containers.read proofRid = some (.struct_ proofFields))
-      (hproofRef : getRefId proofRef = some proofRid)
+      (_hread : initMs.containers.read proofRid = some (.struct_ proofFields))
+      (_hproofRef : getRefId proofRef = some proofRid)
       (fuel : Nat)
-      (hfuel : fuel ≥ 14),
+      (_hfuel : fuel ≥ 14),
       let args := [.u8 chainId, .address sender, .address contract,
                    ekRef, curBalRef, newBalRef, proofRef]
       (eval (normalizationModuleEnv o) verifyNormalizationProofIdx args fuel initMs).dropMs =

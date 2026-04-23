@@ -50,10 +50,10 @@ axiom transfer_is_formally_verified :
       (proofRid : RefId) (proofFields : List MoveValue)
       (initMs : MachineState)
       (hFieldCount : 2 < proofFields.length)
-      (hread : initMs.containers.read proofRid = some (.struct_ proofFields))
-      (hproofRef : getRefId proofRef = some proofRid)
+      (_hread : initMs.containers.read proofRid = some (.struct_ proofFields))
+      (_hproofRef : getRefId proofRef = some proofRid)
       (fuel : Nat)
-      (hfuel : fuel ≥ 24),
+      (_hfuel : fuel ≥ 24),
       let args := [.u8 chainId, .address sender, .address contract,
                    senderEkRef, recipientEkRef, curBalRef, newBalRef,
                    senderAmountRef, recipientAmountRef,

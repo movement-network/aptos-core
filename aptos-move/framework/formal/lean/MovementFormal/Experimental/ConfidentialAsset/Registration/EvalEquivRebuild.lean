@@ -3543,9 +3543,24 @@ theorem registration_eval_equiv_functional_sim
             rw [h] at hsingle
             simp at hsingle
 
-    -- Now we can use horacle to drive the functional simulation
-    -- But we still need to prove the bytecode execution matches
-    -- This requires PC-threading through the full verification
-    sorry  -- TODO: complete bytecode PC-threading for singleton happy path
+    -- Now prove: eval ... = functional simulation result
+    -- horacle : o.newCompressedPointFromBytes [...] = some [v]
+    -- This means single? (some [v]) = some v
+
+    -- Simplify the functional simulation
+    simp only [verifyRegistrationBytecodeResult, registrationArgs, single?]
+    rw [horacle]
+    simp only [single?]
+
+    -- Now we need to match the rest of the functional simulation
+    -- The next step checks optionIsSome [v]
+    -- We need to thread through the bytecode to reach the same checks
+
+    -- Apply eval_registration_eq_run to convert eval to run
+    rw [eval_registration_eq_run]
+
+    -- Use the PC composition helpers to thread through execution
+    -- Start with PCs 0-2 which are covered by existing helpers
+    sorry  -- Continue PC-threading from where helpers leave off
 
 end MovementFormal.Experimental.ConfidentialAsset.Registration.EvalEquivRebuild

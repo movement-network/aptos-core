@@ -131,6 +131,7 @@ lean_lib «MovementFormal» where
     `MovementFormal.Experimental.ConfidentialAsset.Registration.FuelManagement,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.FrameConstructionHelpers,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.StackManagementLemmas,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.ErrorPathHandling,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.Phase6Composition,
     `MovementFormal.MoveModel.Programs.Withdrawal,
     `MovementFormal.MoveModel.Programs.Transfer,

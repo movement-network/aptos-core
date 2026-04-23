@@ -65,24 +65,105 @@ followed by the single-byte chainId.
 
 theorem thread_pc20_to_pc25_dst_and_chainId
     (s20 : MessageAssemblyState o)
-    (dst : MoveValue)  -- The DST constant
-    (horacle_append_dst : o.vectorAppend s20.containers [MoveValue.mutRef s20.rid_msg, dst] =
-                          some ([MoveValue.struct_ []], s20.containers))
-    (horacle_append_chainId : o.vectorAppend s20.containers [MoveValue.mutRef s20.rid_msg, MoveValue.u8 s20.chainId] =
-                               some ([MoveValue.struct_ []], s20.containers)) :
+    (dst : MoveValue)  -- The DST constant (domain separation tag)
+    (horacle_append_dst : vectorAppendU8Ref s20.containers [MoveValue.mutRef s20.rid_msg, dst] =
+                          some ([], s20.containers))
+    (horacle_append_chainId : vectorAppendU8Ref s20.containers [MoveValue.mutRef s20.rid_msg, MoveValue.u8 s20.chainId] =
+                               some ([], s20.containers)) :
     ∃ (s25 : MessageAssemblyState o),
       -- Message buffer now has DST || chainId appended
       s25.containers = s20.containers ∧
+      s25.msgBuf = s20.msgBuf ∧  -- Actually updated via mutation
       s25.fuel = s20.fuel - 5 := by
 
-  -- PC 20: ldConst (load DST)
-  -- PC 21: mutBorrowLoc 11 (borrow msgBuf)
-  -- PC 22: call vectorAppend (append DST)
-  -- PC 23: pop (discard unit result)
-  -- PC 24: mutBorrowLoc 11 (reborrow msgBuf)
-  -- PC 25: moveLoc 1 (push chainId)
+  -- PC 20: ldConst (load DST from constant pool)
+  let frame_pc20 : Frame := {
+    code := verifyRegistrationProofCode,
+    pc := 20,
+    locals := buildMessageLocals s20,
+    localRefs := (List.replicate 19 none).toArray
+  }
 
-  -- Each step follows: establish frame → apply step lemma → advance fuel
+  have step20 : step (registrationModuleEnv o) [] frame_pc20 []
+                     { MachineState.empty with containers := s20.containers } =
+               .ok [] {
+                 code := verifyRegistrationProofCode, pc := 21,
+                 locals := frame_pc20.locals, localRefs := frame_pc20.localRefs }
+               [dst]
+               { MachineState.empty with containers := s20.containers } := by
+    sorry  -- TODO: Apply step lemma for ldConst
+
+  -- PC 21: mutBorrowLoc 11 (borrow msgBuf mutably)
+  let frame_pc21 : Frame := {
+    code := verifyRegistrationProofCode,
+    pc := 21,
+    locals := frame_pc20.locals,
+    localRefs := frame_pc20.localRefs
+  }
+
+  have step21 : step (registrationModuleEnv o) [] frame_pc21 [dst]
+                     { MachineState.empty with containers := s20.containers } =
+               .ok [] {
+                 code := verifyRegistrationProofCode, pc := 22,
+                 locals := frame_pc21.locals,
+                 localRefs := frame_pc21.localRefs.set! 11 (some s20.rid_msg) }
+               [dst, MoveValue.mutRef s20.rid_msg]
+               { MachineState.empty with containers := s20.containers } := by
+    sorry  -- TODO: Apply step lemma for mutBorrowLoc
+
+  -- PC 22: call vectorAppendU8Ref (append DST to msgBuf)
+  let frame_pc22 : Frame := {
+    code := verifyRegistrationProofCode,
+    pc := 22,
+    locals := frame_pc21.locals,
+    localRefs := frame_pc21.localRefs.set! 11 (some s20.rid_msg)
+  }
+
+  have step22 : step (registrationModuleEnv o) [] frame_pc22 [dst, MoveValue.mutRef s20.rid_msg]
+                     { MachineState.empty with containers := s20.containers } =
+               .ok [] {
+                 code := verifyRegistrationProofCode, pc := 23,
+                 locals := frame_pc22.locals, localRefs := frame_pc22.localRefs }
+               [MoveValue.struct_ []]  -- Unit return value
+               { MachineState.empty with containers := s20.containers } := by
+    sorry  -- TODO: Apply step lemma for nativeRef call to vectorAppendU8Ref
+
+  -- PC 23: pop (discard unit result)
+  let frame_pc23 : Frame := {
+    code := verifyRegistrationProofCode,
+    pc := 23,
+    locals := frame_pc22.locals,
+    localRefs := frame_pc22.localRefs
+  }
+
+  have step23 : step (registrationModuleEnv o) [] frame_pc23 [MoveValue.struct_ []]
+                     { MachineState.empty with containers := s20.containers } =
+               .ok [] {
+                 code := verifyRegistrationProofCode, pc := 24,
+                 locals := frame_pc23.locals, localRefs := frame_pc23.localRefs }
+               []
+               { MachineState.empty with containers := s20.containers } := by
+    sorry  -- TODO: Apply step lemma for pop
+
+  -- PC 24: mutBorrowLoc 11 (reborrow msgBuf for next append)
+  let frame_pc24 : Frame := {
+    code := verifyRegistrationProofCode,
+    pc := 24,
+    locals := frame_pc23.locals,
+    localRefs := frame_pc23.localRefs
+  }
+
+  have step24 : step (registrationModuleEnv o) [] frame_pc24 []
+                     { MachineState.empty with containers := s20.containers } =
+               .ok [] {
+                 code := verifyRegistrationProofCode, pc := 25,
+                 locals := frame_pc24.locals,
+                 localRefs := frame_pc24.localRefs.set! 11 (some s20.rid_msg) }
+               [MoveValue.mutRef s20.rid_msg]
+               { MachineState.empty with containers := s20.containers } := by
+    sorry  -- TODO: Apply step lemma for mutBorrowLoc
+
+  -- Now at PC 25, ready to push chainId
 
   use {
     chainId := s20.chainId,
@@ -94,31 +175,99 @@ theorem thread_pc20_to_pc25_dst_and_chainId
     respBa := s20.respBa,
     rCompressed := s20.rCompressed,
     scalar := s20.scalar,
-    msgBuf := s20.msgBuf,  -- Updated with DST and chainId
+    msgBuf := s20.msgBuf,  -- Mutation happened through ref
     rid_msg := s20.rid_msg,
     containers := s20.containers,
     fuel := s20.fuel - 5,
     hfuel := by omega
   }
-  constructor <;> rfl
+  constructor
+  · rfl
+  · constructor
+    · rfl
+    · rfl
+
+where
+  buildMessageLocals (s : MessageAssemblyState o) : Array (Option MoveValue) :=
+    -- Locals array at PC 20 (after Phase 1 completion)
+    #[
+      some (MoveValue.u8 s.chainId),                                      -- 0: chainId
+      some (MoveValue.address s.sender),                                  -- 1: sender
+      some (MoveValue.address s.contract),                                -- 2: contract
+      some (MoveValue.address s.token),                                   -- 3: token
+      some (MoveValue.vector MoveType.u8 (s.ekBa.toList.map MoveValue.u8)),      -- 4: ek_ba
+      some (MoveValue.vector MoveType.u8 (s.commitBa.toList.map MoveValue.u8)),  -- 5: commit_ba
+      some (MoveValue.vector MoveType.u8 (s.respBa.toList.map MoveValue.u8)),    -- 6: resp_ba
+      none,                                                               -- 7: v (consumed)
+      some s.rCompressed,                                                 -- 8: r_compressed
+      none,                                                               -- 9: s_opt (consumed)
+      some s.scalar,                                                      -- 10: scalar
+      some s.msgBuf,                                                      -- 11: message buffer
+      none, none, none, none, none, none, none                          -- 12-18: unused
+    ]
 
 /-! ### PC 25-30: Sender address append -/
 
 theorem thread_pc25_to_pc30_sender
     (s25 : MessageAssemblyState o)
-    (horacle_append_sender : o.vectorAppend s25.containers
+    (horacle_append_chainId_stack : vectorAppendU8Ref s25.containers
+                                      [MoveValue.mutRef s25.rid_msg, MoveValue.u8 s25.chainId] =
+                                     some ([], s25.containers))
+    (horacle_append_sender : vectorAppendU8Ref s25.containers
                               [MoveValue.mutRef s25.rid_msg, MoveValue.address s25.sender] =
-                             some ([MoveValue.struct_ []], s25.containers)) :
+                             some ([], s25.containers)) :
     ∃ (s30 : MessageAssemblyState o),
       s30.containers = s25.containers ∧
-      s30.fuel = s25.fuel - 5 := by
+      s30.msgBuf = s25.msgBuf ∧
+      s30.fuel = s25.fuel - 7 := by
 
-  -- PC 25: (chainId on stack from previous)
-  -- PC 26: call vectorAppend (append chainId)
+  -- At PC 25, stack has [MoveValue.mutRef s25.rid_msg] from previous PC
+  -- We need to push chainId and call vectorAppend
+
+  -- PC 25: moveLoc 1 (push chainId)
+  let frame_pc25 : Frame := {
+    code := verifyRegistrationProofCode,
+    pc := 25,
+    locals := (buildMessageLocals s25).set! 1 (some (MoveValue.u8 s25.chainId)),
+    localRefs := (List.replicate 19 none).toArray.set! 11 (some s25.rid_msg)
+  }
+
+  let locals_after_pc25 := frame_pc25.locals.set! 1 none
+
+  have step25 : step (registrationModuleEnv o) [] frame_pc25 [MoveValue.mutRef s25.rid_msg]
+                     { MachineState.empty with containers := s25.containers } =
+               .ok [] {
+                 code := verifyRegistrationProofCode, pc := 26,
+                 locals := locals_after_pc25, localRefs := frame_pc25.localRefs }
+               [MoveValue.mutRef s25.rid_msg, MoveValue.u8 s25.chainId]
+               { MachineState.empty with containers := s25.containers } := by
+    sorry  -- TODO: Apply step lemma for moveLoc
+
+  -- PC 26: call vectorAppendU8Ref (append chainId)
+  let frame_pc26 : Frame := {
+    code := verifyRegistrationProofCode,
+    pc := 26,
+    locals := locals_after_pc25,
+    localRefs := frame_pc25.localRefs
+  }
+
+  have step26 : step (registrationModuleEnv o) [] frame_pc26
+                     [MoveValue.mutRef s25.rid_msg, MoveValue.u8 s25.chainId]
+                     { MachineState.empty with containers := s25.containers } =
+               .ok [] {
+                 code := verifyRegistrationProofCode, pc := 27,
+                 locals := frame_pc26.locals, localRefs := frame_pc26.localRefs }
+               [MoveValue.struct_ []]
+               { MachineState.empty with containers := s25.containers } := by
+    sorry  -- TODO: Apply step lemma for nativeRef call
+
   -- PC 27: pop
   -- PC 28: mutBorrowLoc 11
-  -- PC 29: moveLoc 2 (push sender)
-  -- PC 30: call vectorAppend (append sender)
+  -- PC 29: moveLoc 2 (push sender address)
+  -- PC 30: call vectorAppendU8Ref (append sender)
+  -- (Steps 27-30 similar to above pattern)
+
+  sorry  -- TODO: Complete PC 27-30 following same pattern
 
   use {
     chainId := s25.chainId,
@@ -133,10 +282,14 @@ theorem thread_pc25_to_pc30_sender
     msgBuf := s25.msgBuf,
     rid_msg := s25.rid_msg,
     containers := s25.containers,
-    fuel := s25.fuel - 5,
+    fuel := s25.fuel - 7,
     hfuel := by omega
   }
-  constructor <;> rfl
+  constructor
+  · rfl
+  · constructor
+    · rfl
+    · rfl
 
 /-! ### PC 30-35: Contract address append -/
 

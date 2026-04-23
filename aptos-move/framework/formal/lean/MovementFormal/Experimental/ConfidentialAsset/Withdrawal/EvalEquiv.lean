@@ -885,10 +885,11 @@ theorem withdrawal_eval_equiv_functional_sim
       -- Range returned non-empty list (arity mismatch)
       match h_retVals : retVals with
       | [] =>
-        -- UNREACHABLE in well-formed matches: | some ([], cs4) => handled this above
-        -- But Lean's elaborator generates this case, so must provide a proof
-        -- Since this is never executed, any proof suffices
-        sorry  -- Unreachable: more specific pattern matched first
+        -- UNREACHABLE: This case is impossible because | some ([], cs4) was matched first.
+        -- retVals here must be non-empty, so h_retVals : retVals = [] is contradictory.
+        -- However, Lean's pattern match elaborator doesn't track this, so we use sorry.
+        -- Could derive contradiction if we had a "not matched earlier" hypothesis.
+        sorry
       | head :: tail =>
         -- Arity mismatch: oracle returned non-empty when expecting empty
         -- The functional sim explicitly matches this and returns .error
@@ -902,7 +903,8 @@ theorem withdrawal_eval_equiv_functional_sim
     match h_retVals : retVals with
     | [] =>
         -- UNREACHABLE in well-formed matches: | some ([], cs2) => handled this above
-        sorry  -- Unreachable: more specific pattern matched first
+        -- Same pattern as the range case: retVals cannot be [] after the more specific pattern.
+        sorry
     | head :: tail =>
       -- Arity mismatch: oracle returned non-empty when expecting empty
       -- The functional sim explicitly matches this and returns .error

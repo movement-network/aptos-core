@@ -720,10 +720,6 @@ spec aptos_experimental::confidential_asset {
 
         ensures global<ConfidentialAssetStore>(store_addr).normalized;
         modifies global<ConfidentialAssetStore>(store_addr);
-        modifies global<object::ObjectCore>(@aptos_framework);
-        modifies global<object::TombStone>(@aptos_framework);
-        modifies global<object::Untransferable>(@aptos_framework);
-        modifies global<permissioned_signer::PermissionStorage>(@aptos_framework);
     }
 
     /// `confidential_transfer` entry — delegates to `confidential_transfer_internal`.

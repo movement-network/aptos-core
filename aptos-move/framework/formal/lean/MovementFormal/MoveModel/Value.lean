@@ -343,11 +343,14 @@ theorem read_alloc (cs : ContainerStore) (v : MoveValue) :
     rw [Array.size_push]; omega
   rw [dif_pos hlt]
   congr 1
-  -- TODO: Prove (arr.push x)[arr.size] = x
-  -- This should follow from Array.push definition, but requires the right lemma
-  -- from Std.Data.Array.Lemmas or manual proof via List append properties.
-  -- The property is straightforward: push adds at the end, arr.size is that index.
-  sorry
+  -- Prove (cs.store.push v)[cs.store.size] = v
+  -- This is a fundamental property of Array.push: pushing x onto arr
+  -- makes x accessible at index arr.size.
+  --
+  -- In Lean 4, we can use simp lemmas about Array operations.
+  -- Array.getElem_push states that for i < arr.size, (arr.push x)[i] = arr[i]
+  -- and (arr.push x)[arr.size] = x
+  simp only [Array.getElem_push_eq]
 
 /-- Alternative formulation with explicit outputs. -/
 theorem read_alloc_explicit {cs : ContainerStore} {v : MoveValue} {cs' : ContainerStore} {id : RefId}

@@ -160,6 +160,8 @@ lean_lib «MovementFormal» where
     `MovementFormal.Experimental.ConfidentialAsset.Registration.ErrorPathCompleteness,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.FuelOptimality,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.FrameWellFormedness,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.PCProgressMonotonicity,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.DataFlowAnalysis,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.Phase6Composition,
     `MovementFormal.MoveModel.Programs.Withdrawal,
     `MovementFormal.MoveModel.Programs.Transfer,

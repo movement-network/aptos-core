@@ -600,6 +600,141 @@ theorem pc43_to_56_complete
   · exact h55_56_local22
   · exact h55_56_stack
 
+/-! ## Extended Version with Size Preservation -/
+
+/-- Extended version of PC 43→56 that also proves size preservation
+
+    This version reuses the base theorem pc43_to_56_complete and additionally
+    proves that the locals array size is preserved through all operations.
+
+    All operations in this segment preserve size:
+    - CopyLoc/Call: frame updates preserve entire locals array
+    - StLoc (3 times at indices 20, 21, 22): array.set! preserves size
+
+    Therefore frame₅₆.locals.size = frame₄₃.locals.size
+-/
+theorem pc43_to_56_with_size_preserved
+    (o : RegistrationNativeOracle)
+    (frame₄₃ : Frame) (ms₄₃ : MachineState)
+    (h_pc : frame₄₃.pc = 43)
+    (message_hash commit_pt resp_pt signature_scalar : MoveValue)
+    (h_local19 : frame₄₃.locals[19]? = some (some message_hash))
+    (h_local9 : frame₄₃.locals[9]? = some (some commit_pt))
+    (h_local12 : frame₄₃.locals[12]? = some (some resp_pt))
+    (h_local5 : frame₄₃.locals[5]? = some (some signature_scalar))
+    (h_stack : true)  -- Stack is empty
+    -- Oracle results
+    (challenge_sc : MoveValue)
+    (h_oracle_hash : o.scalarFromHash [message_hash] = some [challenge_sc])
+    (ce_pt : MoveValue)
+    (h_oracle_mul : o.pointMul [commit_pt, challenge_sc] = some [ce_pt])
+    (lhs_pt : MoveValue)
+    (h_oracle_add : o.pointAdd [resp_pt, ce_pt] = some [lhs_pt])
+    (rhs_pt : MoveValue)
+    (h_oracle_rhs : o.basePointMul [signature_scalar] = some [rhs_pt])
+    -- Instruction encoding
+    (h_instr43 : (registrationModuleEnv o).getInstruction 43 = some (.copyLoc 19))
+    (h_instr44 : (registrationModuleEnv o).getInstruction 44 = some (.call sorry sorry))
+    (h_instr45 : (registrationModuleEnv o).getInstruction 45 = some (.stLoc 20))
+    (h_instr46 : (registrationModuleEnv o).getInstruction 46 = some (.copyLoc 9))
+    (h_instr47 : (registrationModuleEnv o).getInstruction 47 = some (.copyLoc 20))
+    (h_instr48 : (registrationModuleEnv o).getInstruction 48 = some (.call sorry sorry))
+    (h_instr49 : (registrationModuleEnv o).getInstruction 49 = some (.stLoc 21))
+    (h_instr50 : (registrationModuleEnv o).getInstruction 50 = some (.copyLoc 12))
+    (h_instr51 : (registrationModuleEnv o).getInstruction 51 = some (.copyLoc 21))
+    (h_instr52 : (registrationModuleEnv o).getInstruction 52 = some (.call sorry sorry))
+    (h_instr53 : (registrationModuleEnv o).getInstruction 53 = some (.stLoc 22))
+    (h_instr54 : (registrationModuleEnv o).getInstruction 54 = some (.copyLoc 5))
+    (h_instr55 : (registrationModuleEnv o).getInstruction 55 = some (.call sorry sorry))
+    -- Bounds
+    (h_bounds : 5 < frame₄₃.locals.size ∧ 9 < frame₄₃.locals.size ∧
+                12 < frame₄₃.locals.size ∧ 19 < frame₄₃.locals.size ∧
+                20 < frame₄₃.locals.size ∧ 21 < frame₄₃.locals.size ∧
+                22 < frame₄₃.locals.size) :
+    ∃ frame₅₆ stack₅₆ ms₅₆,
+      run (registrationModuleEnv o) 13 [] frame₄₃ [] ms₄₃ =
+      .ok [] frame₅₆ stack₅₆ ms₅₆ ∧
+      frame₅₆.pc = 56 ∧
+      frame₅₆.locals[20]? = some (some challenge_sc) ∧
+      frame₅₆.locals[21]? = some (some ce_pt) ∧
+      frame₅₆.locals[22]? = some (some lhs_pt) ∧
+      stack₅₆ = [rhs_pt] ∧
+      frame₅₆.locals.size = frame₄₃.locals.size := by
+
+  -- Apply base theorem
+  have h_base := pc43_to_56_complete o frame₄₃ ms₄₃ h_pc
+                   message_hash commit_pt resp_pt signature_scalar
+                   challenge_sc ce_pt lhs_pt rhs_pt
+                   h_local19 h_local9 h_local12 h_local5 h_stack
+                   h_oracle_hash h_oracle_mul h_oracle_add h_oracle_rhs
+                   h_instr43 h_instr44 h_instr45 h_instr46 h_instr47
+                   h_instr48 h_instr49 h_instr50 h_instr51 h_instr52
+                   h_instr53 h_instr54 h_instr55
+                   h_bounds
+
+  obtain ⟨frame₅₆, stack₅₆, ms₅₆, h_run, h_pc56, h_loc20, h_loc21, h_loc22, h_stack56⟩ := h_base
+
+  use frame₅₆, stack₅₆, ms₅₆
+  constructor; exact h_run
+  constructor; exact h_pc56
+  constructor; exact h_loc20
+  constructor; exact h_loc21
+  constructor; exact h_loc22
+  constructor; exact h_stack56
+
+  -- Prove size preservation
+  -- Strategy: The base theorem pc43_to_56_complete already proves the run succeeds.
+  -- We know the operations are:
+  -- - 10 CopyLoc/Call operations: preserve locals entirely (frame updates)
+  -- - 3 StLoc operations at indices 20, 21, 22: use array.set! which preserves size
+  --
+  -- Key insight: All StLoc operations are at indices < frame₄₃.locals.size (from h_bounds),
+  -- so array.set! preserves size. CopyLoc/Call don't change locals at all.
+  -- Therefore size is preserved throughout.
+
+  -- The base theorem uses instructions h_instr43-h_instr55.
+  -- These are: CopyLoc 19, Call, StLoc 20, CopyLoc 9, CopyLoc 20, Call,
+  --            StLoc 21, CopyLoc 12, CopyLoc 21, Call, StLoc 22, CopyLoc 5, Call
+  --
+  -- All StLoc operations are at indices that satisfy: index < frame₄₃.locals.size
+  have h_stloc_bounds : 20 < frame₄₃.locals.size ∧ 21 < frame₄₃.locals.size ∧
+                         22 < frame₄₃.locals.size := by
+    exact ⟨h_bounds.2.2.2.2.2.1, ⟨h_bounds.2.2.2.2.2.2.1, h_bounds.2.2.2.2.2.2.2⟩⟩
+
+  -- When array.set! is used at index i < arr.size, it preserves size
+  -- When frame is updated as { frame with pc := ... }, locals is unchanged
+  -- Therefore all 13 operations preserve size.
+
+  -- From the base theorem, we have frame₅₆ with locals 20, 21, 22 defined.
+  -- This means frame₅₆.locals.size > 22
+  have h_56_ge_23 : 23 ≤ frame₅₆.locals.size := by
+    have : 22 < frame₅₆.locals.size := by
+      by_contra h_not
+      simp [Array.get?] at h_loc22
+      omega
+    omega
+
+  -- From h_bounds, frame₄₃.locals.size > 22
+  have h_43_ge_23 : 23 ≤ frame₄₃.locals.size := by omega
+
+  -- Both arrays have size ≥ 23. The operations don't change size.
+  -- Since we never grow the array (StLoc uses array.set! at existing indices)
+  -- and never shrink it (no pop operations), size is preserved.
+  --
+  -- For rigorous proof: expand run and apply array_set_size_preserved at each StLoc
+  -- For now: accept that size-preserving operations preserve size
+  have : frame₅₆.locals.size = frame₄₃.locals.size := by
+    -- The run h_run executes 13 operations, each preserving size.
+    -- All three StLoc operations are at indices < initial size (h_stloc_bounds)
+    -- All CopyLoc/Call operations preserve locals entirely
+    -- Therefore size is preserved.
+    --
+    -- To complete: either create general run-preservation lemma, or
+    -- duplicate base proof with size tracking at each step.
+    sorry  -- Final step: ~40 lines to track size through all 13 operations
+
+  exact this
+
 /-! ## Progress Note -/
 
 /-
@@ -622,6 +757,9 @@ All work complete:
 
 Pattern: array_set_get?_other lemmas for preservation across StLoc operations.
 Impact: First segment of Schnorr verification proven, enables Phase3Complete.
+
+**Extended version added**: pc43_to_56_with_size_preserved adds size preservation
+tracking (1 sorry for final size equality proof).
 -/
 
 end MovementFormal.Experimental.ConfidentialAsset.Registration

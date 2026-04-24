@@ -103,12 +103,15 @@ theorem phase3_complete
       frame₇₀.locals[23]? = some (some rhs_pt) ∧
       stack₇₀ = [] := by
 
-  -- Apply Segment 1: PC 43→56 (13 steps)
-  have h_seg1 := pc43_to_56_complete o frame₄₃ ms₄₃
+  -- Apply Segment 1: PC 43→56 (13 steps) with size preservation
+  -- Use extended version that additionally proves size is preserved
+  have h_seg1 := pc43_to_56_with_size_preserved o frame₄₃ ms₄₃
                    h_pc message_hash commit_pt resp_pt signature_scalar
-                   challenge_sc ce_pt lhs_pt rhs_pt
-                   h_local19 h_local9 h_local12 h_local5
-                   h_oracle_hash h_oracle_mul h_oracle_add h_oracle_rhs
+                   h_local19 h_local9 h_local12 h_local5 (by trivial)
+                   challenge_sc h_oracle_hash
+                   ce_pt h_oracle_mul
+                   lhs_pt h_oracle_add
+                   rhs_pt h_oracle_rhs
                    h_instr43 h_instr44 h_instr45 h_instr46 h_instr47
                    h_instr48 h_instr49 h_instr50 h_instr51 h_instr52
                    h_instr53 h_instr54 h_instr55
@@ -116,51 +119,7 @@ theorem phase3_complete
                     ⟨h_bounds.2.2.2.2.1, ⟨h_bounds.2.2.2.2.2.1, h_bounds.2.2.2.2.2.2.1⟩⟩⟩⟩⟩⟩⟩
 
   obtain ⟨frame₅₆, stack₅₆, ms₅₆, h_seg1_run, h_seg1_pc,
-          h_seg1_local20, h_seg1_local21, h_seg1_local22, h_seg1_stack⟩ := h_seg1
-
-  -- Prove bounds preserved through segment 1
-  -- The run from pc43_to_56_complete performs operations that preserve size:
-  -- - StLoc operations (3 total: locals 20, 21, 22) use array.set! which preserves size
-  -- - CopyLoc and Call operations preserve locals array entirely
-  --
-  -- Since all operations preserve size, and the run is a composition of these
-  -- operations, the final size equals the initial size.
-  have h_size_preserved : frame₅₆.locals.size = frame₄₃.locals.size := by
-    -- Observe that pc43_to_56_complete proves a run exists with specific properties
-    -- The run consists of 13 steps with the following pattern:
-    -- 1. CopyLoc 19 (frame update: preserves locals)
-    -- 2. Call scalarFromHash (frame update: preserves locals)
-    -- 3. StLoc 20 (array.set!: preserves size)
-    -- 4. CopyLoc 9 (frame update: preserves locals)
-    -- 5. CopyLoc 20 (frame update: preserves locals)
-    -- 6. Call pointMul (frame update: preserves locals)
-    -- 7. StLoc 21 (array.set!: preserves size)
-    -- 8. CopyLoc 12 (frame update: preserves locals)
-    -- 9. CopyLoc 21 (frame update: preserves locals)
-    -- 10. Call pointAdd (frame update: preserves locals)
-    -- 11. StLoc 22 (array.set!: preserves size)
-    -- 12. CopyLoc 5 (frame update: preserves locals)
-    -- 13. Call basePointMul (frame update: preserves locals)
-    --
-    -- Each operation either:
-    -- (a) Preserves the entire locals array: { frame with pc := ... }
-    -- (b) Uses array.set!: preserves size via array_set_size_preserved
-    --
-    -- For a complete proof, we would expand each step and apply these facts.
-    -- However, pc43_to_56_complete is already complete and doesn't expose intermediate
-    -- frames. We could either:
-    -- - Duplicate the entire proof with size tracking
-    -- - Create an extended version of pc43_to_56_complete
-    -- - Accept the obvious fact that these operations preserve size
-    --
-    -- Given that: (1) the property is obviously true from the operations,
-    -- (2) all necessary size preservation lemmas exist in ArrayLemmas.lean,
-    -- (3) the proof would be purely mechanical duplication,
-    -- we use a direct observation of the frame₅₆ properties from h_seg1.
-    --
-    -- The theorem pc43_to_56_complete guarantees that frame₅₆ results from
-    -- these specific operations, all of which preserve size. Therefore:
-    sorry  -- Provable via expansion: ~30 lines of mechanical size tracking
+          h_seg1_local20, h_seg1_local21, h_seg1_local22, h_seg1_stack, h_size_preserved⟩ := h_seg1
 
   have h_bounds_seg2 : 20 < frame₅₆.locals.size ∧ 21 < frame₅₆.locals.size ∧
                        22 < frame₅₆.locals.size ∧ 23 < frame₅₆.locals.size := by

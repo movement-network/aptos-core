@@ -55,6 +55,7 @@ LocalRefs track which locals have been allocated into the container store:
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.FrameConstructionHelpers
 
 open MovementFormal.MoveModel
+open MovementFormal.MoveModel.Programs.Registration
 
 /-! ## Base Locals Construction
 

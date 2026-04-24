@@ -59,6 +59,7 @@ This range computes the Fiat-Shamir challenge `e = H(message)` and the base poin
 
 theorem thread_pc43_to_pc50_challenge_and_base
     (s43 : SigmaVerificationState o)
+    (hfuel43 : 78 ≤ s43.fuel)  -- Need 70 ≤ fuel after -8
     (challenge : MoveValue)  -- The computed challenge e
     (basePoint : MoveValue)  -- The base point h
     (ekAsPoint : MoveValue)  -- The encryption key as a point
@@ -236,7 +237,7 @@ theorem thread_pc43_to_pc50_challenge_and_base
     rid_msg := s43.rid_msg,
     containers := containers_after_ek_alloc,
     fuel := s43.fuel - 8,
-    hfuel := by sorry
+    hfuel := by omega  -- Uses hfuel43: 78 ≤ s43.fuel
   }
 
 where

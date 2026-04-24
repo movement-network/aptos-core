@@ -72,12 +72,12 @@ theorem chain_two_moveLoc
   sorry  -- TODO: Apply step_moveLoc twice + run_succ_ok_of_step chaining
 
 /-- Three consecutive moveLoc operations (common pattern in 3-arg functions). -/
-axiom chain_three_moveLoc : True  -- Placeholder axiom to allow file compilation
+theorem chain_three_moveLoc : True := trivial  -- Placeholder axiom to allow file compilation
 
 /-! ## Oracle Call Patterns -/
 
 /-- Oracle call with empty return - placeholder axiom. -/
-axiom chain_marshal_and_oracle_call_empty : True
+theorem chain_marshal_and_oracle_call_empty : True := trivial
 
 /-! ## Error Propagation Patterns -/
 
@@ -111,7 +111,7 @@ theorem run_error_monotonic
 /-! ## Container Threading Patterns -/
 
 /-- Two consecutive immBorrowField allocations - placeholder axiom. -/
-axiom chain_two_immBorrowField_allocs : True
+theorem chain_two_immBorrowField_allocs : True := trivial
 
 /-! ## Common Composition Helpers -/
 

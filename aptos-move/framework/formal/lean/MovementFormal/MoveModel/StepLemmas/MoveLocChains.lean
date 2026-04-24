@@ -26,7 +26,7 @@ variable {env : ModuleEnv}
 This is just a wrapper around step_moveLoc_noRef from Locals.lean
 with explicit PC parameter instead of using frame.pc.
 -/
-axiom step_moveLoc_single
+theorem step_moveLoc_single
     (frame : Frame) (cs : List Frame) (stack : List MoveValue) (ms : MachineState)
     (n i : Nat)
     (v : MoveValue)
@@ -41,7 +41,9 @@ axiom step_moveLoc_single
       { frame with
         pc := n + 1,
         locals := frame.locals.set i none hi }
-      cs (v :: stack) ms
+      cs (v :: stack) ms := by
+  subst hpc
+  exact step_moveLoc_noRef i v hn_lt hcode hi hv hRefNone
 
 /-! ## Two moveLoc chain -/
 

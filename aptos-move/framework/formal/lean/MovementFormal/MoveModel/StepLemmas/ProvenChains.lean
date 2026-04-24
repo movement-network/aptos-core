@@ -38,13 +38,8 @@ theorem run_error_from_step
 
 /-- Error is stable across multiple fuel increments.
 
-TODO: This should be provable by induction on n, but requires careful reasoning about
-the relationship between run at fuel and run at fuel+1 when step returns .ok but
-recursive run produces .error. The proof needs to track that if run fuel = .error
-and fuel > 0, then either step = .error (immediate) or step = .ok but the recursive
-run on the new state produces .error.
-
-Statement is correct and useful for error-propagation lemmas in PC-chaining proofs. -/
+If run produces .error at some fuel level, it produces .error at any higher fuel level.
+TODO: requires well-founded recursion or fuel/termination reasoning. -/
 axiom run_error_stable_multi :
     ∀ (frame : Frame) (cs : List Frame) (stack : List MoveValue) (ms : MachineState)
       (fuel n : Nat),

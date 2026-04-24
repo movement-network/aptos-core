@@ -133,16 +133,51 @@ theorem registration_singleton_branch_complete
       stack₆₁ = [] := by
 
   -- Phase 1: PC 4→20 (input processing, 17 steps)
-  sorry  -- Apply phase1_complete with all Phase 1 hypotheses
+  -- Construct Phase 1 inputs hypothesis
+  have h_inputs_p1 : frame₄.locals[0]? = some (some commitOption) ∧
+                     frame₄.locals[1]? = some (some respOption) ∧
+                     frame₄.locals[2]? = some (some chainIdScalar) ∧
+                     frame₄.locals[3]? = some (some sender) := by
+    exact ⟨h_local0, ⟨h_local1, ⟨h_local2, h_local3⟩⟩⟩
+
+  -- Bounds for Phase 1 (needs size > 20)
+  have h_bounds_p1 : frame₄.locals.size > 20 := by
+    have h20 := h_bounds 20 (by omega)
+    omega
+
+  -- Apply phase1_complete_detailed
+  have h_phase1 := phase1_complete_detailed o frame₄ ms₄ h_pc
+                     commitOption respOption chainIdScalar sender
+                     h_inputs_p1 (by trivial)
+                     h_oracle_commit_some h_oracle_resp_some
+                     commit_pt resp_pt
+                     h_oracle_commit_unwrap h_oracle_resp_unwrap
+                     h_instrs_phase1
+                     h_bounds_p1
+
+  obtain ⟨frame₂₀, stack₂₀, ms₂₀, h_p1_run, h_p1_pc,
+          h_p1_local9, h_p1_local12, h_p1_local13, h_p1_local14, h_p1_stack⟩ := h_phase1
 
   -- Phase 2: PC 20→43 (message assembly, 23 steps)
-  sorry  -- Apply phase2_complete with outputs from Phase 1
+  -- Need to match Phase 1 outputs to Phase 2 inputs
+  -- Phase 1 outputs: locals 9, 12, 13, 14 = commit_pt, resp_pt, chainIdScalar, sender
+  -- Phase 2 needs: locals 3, 8, 9, 13 (but these should be available from frame₂₀)
+
+  -- TODO: Properly thread inputs from Phase 1 to Phase 2
+  -- This requires showing that frame₂₀ has the right locals set
+  -- The connection is mechanical but requires careful hypothesis matching
+  sorry  -- ~40 lines: apply phase2_complete_detailed with Phase 1 outputs
 
   -- Phase 3: PC 43→61 (Schnorr verification, 18 steps)
-  sorry  -- Apply phase3_complete with outputs from Phase 2
+  -- TODO: Apply phase3_complete with outputs from Phase 2
+  -- Need to extract frame₄₃ from Phase 2 and thread to Phase 3
+  sorry  -- ~40 lines: apply phase3_complete with Phase 2 outputs
 
   -- Composition: run 17 + run 23 + run 18 = run 58
-  sorry  -- Chain all three phases via chain_n_plus_m_steps
+  -- TODO: Chain all three phase runs together
+  -- Pattern: h_run_40 := chain_n_plus_m_steps h_p1_run h_p2_run
+  --          h_run_58 := chain_n_plus_m_steps h_run_40 h_p3_run
+  sorry  -- ~30 lines: composition and arithmetic verification
 
 /-! ## Progress Note -/
 

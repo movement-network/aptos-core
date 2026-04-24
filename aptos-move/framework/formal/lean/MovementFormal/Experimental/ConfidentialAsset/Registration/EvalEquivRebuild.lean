@@ -123,16 +123,19 @@ elaboration cost the old `Part*.lean` chain incurred. -/
   unfold registrationInitFrame; rfl
 
 /-- `localRefs` of the registration initial frame is 19 `none`s. -/
-axiom registrationInitFrame_localRefs_eq (args : List MoveValue) :
+@[simp] theorem registrationInitFrame_localRefs_eq (args : List MoveValue) :
     (registrationInitFrame args).localRefs =
-      ((List.replicate 19 none).toArray : Array (Option RefId))
+      ((List.replicate 19 none).toArray : Array (Option RefId)) := by
+  unfold registrationInitFrame; rfl
 
-axiom registrationInitFrame_localRefs_size (args : List MoveValue) :
-    (registrationInitFrame args).localRefs.size = 19
+@[simp] theorem registrationInitFrame_localRefs_size (args : List MoveValue) :
+    (registrationInitFrame args).localRefs.size = 19 := by
+  simp [registrationInitFrame_localRefs_eq]
 
-axiom registrationInitFrame_localRefs_get? (args : List MoveValue) (i : Nat) :
+@[simp] theorem registrationInitFrame_localRefs_get? (args : List MoveValue) (i : Nat) :
     (registrationInitFrame args).localRefs[i]? =
-      ((List.replicate 19 none).toArray : Array (Option RefId))[i]?
+      ((List.replicate 19 none).toArray : Array (Option RefId))[i]? := by
+  simp [registrationInitFrame_localRefs_eq]
 
 /-! ## Step 0 — `moveLoc 5` at PC 0 moves the commitment bytes onto the stack
 
@@ -225,16 +228,20 @@ Bound checks and locals accesses become `rfl` / `decide` when args is the canoni
 literal, because `(args.map some ++ 12×none).toArray` is then fully concrete. -/
 
 /-- Size of `locals` on any initial frame is `args.length + 12`. -/
-axiom registrationInitFrame_locals_size (args : List MoveValue) :
-    (registrationInitFrame args).locals.size = args.length + 12
+@[simp] theorem registrationInitFrame_locals_size (args : List MoveValue) :
+    (registrationInitFrame args).locals.size = args.length + 12 := by
+  unfold registrationInitFrame
+  simp [List.length_append, List.length_map]
 
-axiom registrationInitFrame7_locals_size
+@[simp] theorem registrationInitFrame7_locals_size
     (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray) :
     (registrationInitFrame
-      (registrationArgs chainId sender contract token ekBa commitBa respBa)).locals.size = 19
+      (registrationArgs chainId sender contract token ekBa commitBa respBa)).locals.size = 19 := by
+  simp [registrationArgs]
 
-axiom registrationInitFrame_code_size (args : List MoveValue) :
-    (registrationInitFrame args).code.size = 84
+@[simp] theorem registrationInitFrame_code_size (args : List MoveValue) :
+    (registrationInitFrame args).code.size = 84 := by
+  simp [registrationInitFrame_code]; decide
 
 /-! ## PC 0 — moveLoc 5
 
@@ -3629,28 +3636,34 @@ Helper lemmas for reasoning about frame state updates during execution.
 -/
 
 /-- Setting a local preserves other locals. -/
-axiom locals_set_preserves_others
+@[simp] theorem locals_set_preserves_others
     (locals : Array (Option MoveValue))
     (idx idx' : Nat)
     (v : MoveValue)
     (hne : idx ≠ idx')
     (hbounds : idx < locals.size)
     (hbounds' : idx' < locals.size) :
-    (locals.set! idx (some v))[idx']? = locals[idx']?
+    (locals.set! idx (some v))[idx']? = locals[idx']? := by
+  simp [Array.getElem?_set!, hne]
 
-axiom locals_get_after_set_same
+@[simp] theorem locals_get_after_set_same
     (locals : Array (Option MoveValue))
     (idx : Nat)
     (v : MoveValue)
     (hbounds : idx < locals.size) :
-    (locals.set! idx (some v))[idx]? = some (some v)
+    (locals.set! idx (some v))[idx]? = some (some v) := by
+  simp [Array.getElem?_set!, hbounds]
 
-axiom moveLoc_clears_local
+@[simp] theorem moveLoc_clears_local
     (locals : Array (Option MoveValue))
     (idx : Nat)
     (v : MoveValue)
     (hget : locals[idx]? = some (some v)) :
-    (locals.set! idx none)[idx]? = some none
+    (locals.set! idx none)[idx]? = some none := by
+  have hbound : idx < locals.size := by
+    by_contra h
+    simp [Array.getElem?_neg h] at hget
+  simp [Array.getElem?_set!, hbound]
 
 axiom stLoc_sets_local
     (locals : Array (Option MoveValue))
@@ -3734,54 +3747,64 @@ def buildRegistrationLocals
     none                                                                  -- 18: rhs
   ]
 
-axiom buildRegistrationLocals_size
+@[simp] theorem buildRegistrationLocals_size
     (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray) (v : MoveValue) :
-    (buildRegistrationLocals chainId sender contract token ekBa commitBa respBa v).size = 19
+    (buildRegistrationLocals chainId sender contract token ekBa commitBa respBa v).size = 19 := by
+  unfold buildRegistrationLocals; decide
 
-axiom buildRegistrationLocals_chainId
+@[simp] theorem buildRegistrationLocals_chainId
     (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray) (v : MoveValue) :
     (buildRegistrationLocals chainId sender contract token ekBa commitBa respBa v)[0]? =
-    some (some (MoveValue.u8 chainId))
+    some (some (MoveValue.u8 chainId)) := by
+  unfold buildRegistrationLocals; rfl
 
-axiom buildRegistrationLocals_sender
+@[simp] theorem buildRegistrationLocals_sender
     (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray) (v : MoveValue) :
     (buildRegistrationLocals chainId sender contract token ekBa commitBa respBa v)[1]? =
-    some (some (MoveValue.address sender))
+    some (some (MoveValue.address sender)) := by
+  unfold buildRegistrationLocals; rfl
 
-axiom buildRegistrationLocals_contract
+@[simp] theorem buildRegistrationLocals_contract
     (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray) (v : MoveValue) :
     (buildRegistrationLocals chainId sender contract token ekBa commitBa respBa v)[2]? =
-    some (some (MoveValue.address contract))
+    some (some (MoveValue.address contract)) := by
+  unfold buildRegistrationLocals; rfl
 
-axiom buildRegistrationLocals_token
+@[simp] theorem buildRegistrationLocals_token
     (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray) (v : MoveValue) :
     (buildRegistrationLocals chainId sender contract token ekBa commitBa respBa v)[3]? =
-    some (some (MoveValue.address token))
+    some (some (MoveValue.address token)) := by
+  unfold buildRegistrationLocals; rfl
 
-axiom buildRegistrationLocals_ekBa
+@[simp] theorem buildRegistrationLocals_ekBa
     (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray) (v : MoveValue) :
     (buildRegistrationLocals chainId sender contract token ekBa commitBa respBa v)[4]? =
-    some (some (MoveValue.vector MoveType.u8 (ekBa.toList.map MoveValue.u8)))
+    some (some (MoveValue.vector MoveType.u8 (ekBa.toList.map MoveValue.u8))) := by
+  unfold buildRegistrationLocals; rfl
 
-axiom buildRegistrationLocals_commitBa
+@[simp] theorem buildRegistrationLocals_commitBa
     (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray) (v : MoveValue) :
     (buildRegistrationLocals chainId sender contract token ekBa commitBa respBa v)[5]? =
-    some (some (MoveValue.vector MoveType.u8 (commitBa.toList.map MoveValue.u8)))
+    some (some (MoveValue.vector MoveType.u8 (commitBa.toList.map MoveValue.u8))) := by
+  unfold buildRegistrationLocals; rfl
 
-axiom buildRegistrationLocals_respBa
+@[simp] theorem buildRegistrationLocals_respBa
     (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray) (v : MoveValue) :
     (buildRegistrationLocals chainId sender contract token ekBa commitBa respBa v)[6]? =
-    some (some (MoveValue.vector MoveType.u8 (respBa.toList.map MoveValue.u8)))
+    some (some (MoveValue.vector MoveType.u8 (respBa.toList.map MoveValue.u8))) := by
+  unfold buildRegistrationLocals; rfl
 
-axiom buildRegistrationLocals_v
+@[simp] theorem buildRegistrationLocals_v
     (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray) (v : MoveValue) :
     (buildRegistrationLocals chainId sender contract token ekBa commitBa respBa v)[7]? =
-    some (some v)
+    some (some v) := by
+  unfold buildRegistrationLocals; rfl
 
-axiom buildRegistrationLocals_8_none
+@[simp] theorem buildRegistrationLocals_8_none
     (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray) (v : MoveValue) :
     (buildRegistrationLocals chainId sender contract token ekBa commitBa respBa v)[8]? =
-    some none
+    some none := by
+  unfold buildRegistrationLocals; rfl
 
 /-! ## Step Composition Helpers
 
@@ -4127,12 +4150,13 @@ axiom locals_clear
     (h : idx < locals.size) :
     (locals.set! idx none)[idx]? = some none
 
-axiom locals_set_preserves_size
+@[simp] theorem locals_set_preserves_size
     (locals : Array (Option MoveValue))
     (idx : Nat)
     (v : Option MoveValue)
     (h : idx < locals.size) :
-    (locals.set! idx v).size = locals.size
+    (locals.set! idx v).size = locals.size := by
+  simp [Array.size_set!]
 
 /-! ## Fuel Arithmetic Helpers
 
@@ -4140,10 +4164,11 @@ Advanced fuel management for multi-PC compositions.
 -/
 
 /-- Fuel for sequence of N steps. -/
-axiom fuel_for_n_steps
+theorem fuel_for_n_steps
     (fuel n : Nat)
     (h : n ≤ fuel) :
-    ∃ fuel', fuel' = fuel - n ∧ fuel' + n = fuel
+    ∃ fuel', fuel' = fuel - n ∧ fuel' + n = fuel := by
+  exact ⟨fuel - n, rfl, Nat.sub_add_cancel h⟩
 
 axiom fuel_three_phase_composition
     (fuel n1 n2 n3 : Nat)

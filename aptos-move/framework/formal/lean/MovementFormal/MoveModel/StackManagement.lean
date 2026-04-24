@@ -45,9 +45,33 @@ theorem stack_size_after_moveLoc
     {stack : List MoveValue} {ms : MachineState}
     {frame' : Frame} {cs' : List Frame} {stack' : List MoveValue} {ms' : MachineState}
     {idx : Nat}
+    (hpc_bounds : frame.pc < frame.code.size)
+    (hinstr : frame.code[frame.pc] = .moveLoc idx)
     (hstep : step env frame cs stack ms = .ok frame' cs' stack' ms') :
     stack'.length = stack.length + 1 := by
-  sorry -- ~20 lines: unfold step for moveLoc, show stack' = v :: stack
+  unfold step at hstep
+  simp only [hpc_bounds, dif_pos, hinstr] at hstep
+  -- Split on idx < frame.locals.size
+  split at hstep <;> try (cases hstep; done)
+  -- Split on frame.locals[idx]
+  split at hstep <;> try (cases hstep; done)
+  -- Split on idx < frame.localRefs.size
+  split at hstep
+  · -- Case: idx < frame.localRefs.size
+    split at hstep
+    · -- Case: frame.localRefs[idx] = some rid
+      split at hstep
+      · -- Case: containers.read rid = some cv
+        injection hstep with h1 h2 h3 h4
+        rw [← h3]; simp
+      · -- Case: containers.read rid = none
+        cases hstep
+    · -- Case: frame.localRefs[idx] = none
+      injection hstep with h1 h2 h3 h4
+      rw [← h3]; simp
+  · -- Case: idx >= frame.localRefs.size
+    injection hstep with h1 h2 h3 h4
+    rw [← h3]; simp
 
 /-- copyLoc increases stack size by 1 (pushes a copy of the local value). -/
 theorem stack_size_after_copyLoc
@@ -55,9 +79,33 @@ theorem stack_size_after_copyLoc
     {stack : List MoveValue} {ms : MachineState}
     {frame' : Frame} {cs' : List Frame} {stack' : List MoveValue} {ms' : MachineState}
     {idx : Nat}
+    (hpc_bounds : frame.pc < frame.code.size)
+    (hinstr : frame.code[frame.pc] = .copyLoc idx)
     (hstep : step env frame cs stack ms = .ok frame' cs' stack' ms') :
     stack'.length = stack.length + 1 := by
-  sorry -- ~20 lines: similar to moveLoc
+  unfold step at hstep
+  simp only [hpc_bounds, dif_pos, hinstr] at hstep
+  -- Split on idx < frame.locals.size
+  split at hstep <;> try (cases hstep; done)
+  -- Split on frame.locals[idx]
+  split at hstep <;> try (cases hstep; done)
+  -- Split on idx < frame.localRefs.size
+  split at hstep
+  · -- Case: idx < frame.localRefs.size
+    split at hstep
+    · -- Case: frame.localRefs[idx] = some rid
+      split at hstep
+      · -- Case: containers.read rid = some cv
+        injection hstep with h1 h2 h3 h4
+        rw [← h3]; simp
+      · -- Case: containers.read rid = none
+        cases hstep
+    · -- Case: frame.localRefs[idx] = none
+      injection hstep with h1 h2 h3 h4
+      rw [← h3]; simp
+  · -- Case: idx >= frame.localRefs.size
+    injection hstep with h1 h2 h3 h4
+    rw [← h3]; simp
 
 /-- stLoc decreases stack size by 1 (pops value into local). -/
 theorem stack_size_after_stLoc
@@ -65,10 +113,22 @@ theorem stack_size_after_stLoc
     {stack : List MoveValue} {ms : MachineState}
     {frame' : Frame} {cs' : List Frame} {stack' : List MoveValue} {ms' : MachineState}
     {idx : Nat}
+    (hpc_bounds : frame.pc < frame.code.size)
+    (hinstr : frame.code[frame.pc] = .stLoc idx)
     (hstep : step env frame cs stack ms = .ok frame' cs' stack' ms')
     (hNonEmpty : stack.length > 0) :
     stack'.length = stack.length - 1 := by
-  sorry -- ~20 lines: show stack = v :: rest, stack' = rest
+  unfold step at hstep
+  simp only [hpc_bounds, dif_pos, hinstr] at hstep
+  -- Split on idx < frame.locals.size
+  split at hstep <;> try (cases hstep; done)
+  -- Split on stack pattern
+  split at hstep
+  · -- Case: v :: rest
+    injection hstep with h1 h2 h3 h4
+    rw [← h3]; simp
+  · -- Case: empty stack
+    cases hstep
 
 /-- immBorrowField: stack changes from (ref :: rest) to (fieldRef :: rest).
     Size is preserved (consumes 1, produces 1). -/
@@ -77,10 +137,26 @@ theorem stack_size_after_immBorrowField
     {stack : List MoveValue} {ms : MachineState}
     {frame' : Frame} {cs' : List Frame} {stack' : List MoveValue} {ms' : MachineState}
     {fieldIdx : Nat}
+    (hpc_bounds : frame.pc < frame.code.size)
+    (hinstr : frame.code[frame.pc] = .immBorrowField fieldIdx)
     (hstep : step env frame cs stack ms = .ok frame' cs' stack' ms')
     (hNonEmpty : stack.length > 0) :
     stack'.length = stack.length := by
-  sorry -- ~25 lines: show ref consumed, fieldRef produced
+  unfold step at hstep
+  simp only [hpc_bounds, dif_pos, hinstr] at hstep
+  -- Split on stack pattern (ref :: rest)
+  split at hstep <;> try (cases hstep; done)
+  -- Split on getRefId
+  split at hstep <;> try (cases hstep; done)
+  -- Split on containers.read
+  split at hstep <;> try (cases hstep; done)
+  -- Split on fieldIdx bounds
+  split at hstep
+  · -- Case: fieldIdx < fields.length
+    injection hstep with h1 h2 h3 h4
+    rw [← h3]; simp
+  · -- Case: fieldIdx >= fields.length
+    cases hstep
 
 /-- call (nativeRef, 0 returns): consumes N args, produces 0 values.
     For oracle calls in verifiers (verifySigmaProof, verifyRangeProof). -/
@@ -105,10 +181,25 @@ theorem stack_top_after_immBorrowField
     {stack : List MoveValue} {ms : MachineState}
     {frame' : Frame} {cs' : List Frame} {stack' : List MoveValue} {ms' : MachineState}
     {fieldIdx : Nat} (ref : MoveValue) (rest : List MoveValue)
+    (hpc_bounds : frame.pc < frame.code.size)
+    (hinstr : frame.code[frame.pc] = .immBorrowField fieldIdx)
     (hstep : step env frame cs stack ms = .ok frame' cs' stack' ms')
     (hStack : stack = ref :: rest) :
     ∃ fieldRef rest', stack' = fieldRef :: rest' ∧ rest'.length = rest.length := by
-  sorry -- ~30 lines: show field allocation, new ref pushed
+  unfold step at hstep
+  simp only [hpc_bounds, dif_pos, hinstr, hStack] at hstep
+  -- Split on getRefId ref
+  split at hstep <;> try (cases hstep; done)
+  -- Split on containers.read
+  split at hstep <;> try (cases hstep; done)
+  -- Split on fieldIdx bounds
+  split at hstep
+  · -- Case: fieldIdx < fields.length
+    injection hstep with h1 h2 h3 h4
+    rw [← h3]
+    exact ⟨.immRef _, rest, rfl, rfl⟩
+  · -- Case: fieldIdx >= fields.length
+    cases hstep
 
 /-! ## Marshaling pattern lemmas -/
 

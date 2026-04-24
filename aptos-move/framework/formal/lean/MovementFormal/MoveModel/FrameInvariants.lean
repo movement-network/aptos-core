@@ -113,7 +113,43 @@ theorem frame_invariant_preserved_moveLoc
     (hcode : code[pc]'hPcLt = .moveLoc idx)
     (hlt : idx < localsSize) :
     FrameInvariant frame' code localsSize (pc + 1) := by
-  sorry -- ~40 lines: unfold step, case split on moveLoc, apply Array.size_set
+  unfold step at hstep
+  rw [hinv.code, hinv.pc] at hstep
+  simp only [hPcLt, dif_pos, hcode] at hstep
+  -- Split on idx < frame.locals.size (which we know is true from hlt and hinv.localsSize)
+  have hlt' : idx < frame.locals.size := by rw [hinv.localsSize]; exact hlt
+  simp only [hlt', dif_pos] at hstep
+  -- Split on frame.locals[idx]
+  split at hstep <;> try (cases hstep; done)
+  -- Split on idx < frame.localRefs.size
+  split at hstep
+  · -- Case: idx < frame.localRefs.size
+    split at hstep
+    · -- Case: frame.localRefs[idx] = some rid
+      split at hstep
+      · -- Case: containers.read rid = some cv
+        injection hstep with h1 h2 h3 h4
+        rw [← h1]
+        constructor
+        · simp
+        · simp [Array.size_set, hinv.localsSize]
+        · simp
+      · -- Case: containers.read rid = none
+        cases hstep
+    · -- Case: frame.localRefs[idx] = none
+      injection hstep with h1 h2 h3 h4
+      rw [← h1]
+      constructor
+      · simp
+      · simp [Array.size_set, hinv.localsSize]
+      · simp
+  · -- Case: idx >= frame.localRefs.size
+    injection hstep with h1 h2 h3 h4
+    rw [← h1]
+    constructor
+    · simp
+    · simp [Array.size_set, hinv.localsSize]
+    · simp
 
 /-! ## Preservation lemmas: copyLoc -/
 
@@ -135,7 +171,42 @@ theorem frame_invariant_preserved_copyLoc
     (hPcLt : pc < code.size)
     (hcode : code[pc]'hPcLt = .copyLoc idx) :
     FrameInvariant frame' code localsSize (pc + 1) := by
-  sorry -- ~30 lines: unfold step, show { frame with pc := pc + 1 } preserves all invariants
+  unfold step at hstep
+  rw [hinv.code, hinv.pc] at hstep
+  simp only [hPcLt, dif_pos, hcode] at hstep
+  -- Split on idx < frame.locals.size
+  split at hstep <;> try (cases hstep; done)
+  -- Split on frame.locals[idx]
+  split at hstep <;> try (cases hstep; done)
+  -- Split on idx < frame.localRefs.size
+  split at hstep
+  · -- Case: idx < frame.localRefs.size
+    split at hstep
+    · -- Case: frame.localRefs[idx] = some rid
+      split at hstep
+      · -- Case: containers.read rid = some cv
+        injection hstep with h1 h2 h3 h4
+        rw [← h1]
+        constructor
+        · simp [hinv.code]
+        · simp [hinv.localsSize]
+        · simp [hinv.pc]
+      · -- Case: containers.read rid = none
+        cases hstep
+    · -- Case: frame.localRefs[idx] = none
+      injection hstep with h1 h2 h3 h4
+      rw [← h1]
+      constructor
+      · simp [hinv.code]
+      · simp [hinv.localsSize]
+      · simp [hinv.pc]
+  · -- Case: idx >= frame.localRefs.size
+    injection hstep with h1 h2 h3 h4
+    rw [← h1]
+    constructor
+    · simp [hinv.code]
+    · simp [hinv.localsSize]
+    · simp [hinv.pc]
 
 /-! ## Preservation lemmas: stLoc -/
 
@@ -157,7 +228,22 @@ theorem frame_invariant_preserved_stLoc
     (hPcLt : pc < code.size)
     (hcode : code[pc]'hPcLt = .stLoc idx) :
     FrameInvariant frame' code localsSize (pc + 1) := by
-  sorry -- ~35 lines: similar to moveLoc, rely on Array.size_set
+  unfold step at hstep
+  rw [hinv.code, hinv.pc] at hstep
+  simp only [hPcLt, dif_pos, hcode] at hstep
+  -- Split on idx < frame.locals.size
+  split at hstep <;> try (cases hstep; done)
+  -- Split on stack pattern
+  split at hstep
+  · -- Case: v :: rest
+    injection hstep with h1 h2 h3 h4
+    rw [← h1]
+    constructor
+    · simp
+    · simp [Array.size_set, hinv.localsSize]
+    · simp
+  · -- Case: empty stack
+    cases hstep
 
 /-! ## Preservation lemmas: immBorrowField -/
 
@@ -180,7 +266,26 @@ theorem frame_invariant_preserved_immBorrowField
     (hPcLt : pc < code.size)
     (hcode : code[pc]'hPcLt = .immBorrowField fieldIdx) :
     FrameInvariant frame' code localsSize (pc + 1) := by
-  sorry -- ~30 lines: frame mutation is only PC, all else unchanged
+  unfold step at hstep
+  rw [hinv.code, hinv.pc] at hstep
+  simp only [hPcLt, dif_pos, hcode] at hstep
+  -- Split on stack pattern (ref :: rest)
+  split at hstep <;> try (cases hstep; done)
+  -- Split on getRefId
+  split at hstep <;> try (cases hstep; done)
+  -- Split on containers.read
+  split at hstep <;> try (cases hstep; done)
+  -- Split on fieldIdx bounds
+  split at hstep
+  · -- Case: fieldIdx < fields.length
+    injection hstep with h1 h2 h3 h4
+    rw [← h1]
+    constructor
+    · simp [hinv.code]
+    · simp [hinv.localsSize]
+    · simp [hinv.pc]
+  · -- Case: fieldIdx >= fields.length
+    cases hstep
 
 /-! ## Preservation lemmas: call (nativeRef variant) -/
 
@@ -213,7 +318,9 @@ theorem frame_invariant_at_ret_completes
     (hcode : code[pc]'hPcLt = .ret)
     (hNoCs : cs = []) :
     step env frame [] stack ms = .returned stack ms := by
-  sorry -- ~20 lines: unfold step, apply ret semantics
+  unfold step
+  rw [hinv.code, hinv.pc]
+  simp [hPcLt, dif_pos, hcode, hNoCs]
 
 /-! ## Composition helpers
 

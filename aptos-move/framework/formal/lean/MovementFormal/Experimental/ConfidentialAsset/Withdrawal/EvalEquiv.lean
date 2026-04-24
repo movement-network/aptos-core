@@ -9,6 +9,7 @@ import MovementFormal.MoveModel.OpaqueFrames
 import MovementFormal.Experimental.ConfidentialAsset.Helpers.ArgumentMarshaling
 import MovementFormal.Experimental.ConfidentialAsset.Helpers.OracleComposition
 import MovementFormal.Experimental.ConfidentialAsset.Withdrawal.ConcreteHelpers
+import MovementFormal.Experimental.ConfidentialAsset.Withdrawal.BytecodeLemmas
 
 /-!
 # Bytecode eval ≡ functional simulation for `verify_withdrawal_proof` — Phase 4
@@ -70,23 +71,23 @@ def withdrawalArgs (chainId : UInt8) (sender contract : ByteArray)
     (withdrawalModuleEnv o).functions[2].body = .bytecode verifyWithdrawalProofCode 8 := by
   unfold withdrawalModuleEnv verifyWithdrawalProofDesc; rfl
 
-/-! ## Bytecode access lemmas -/
+/-! ## Bytecode access lemmas (extracted to BytecodeLemmas.lean) -/
 
-private theorem wdl_code_pc0  : verifyWithdrawalProofCode[0]'(by decide) = .moveLoc 0 := by unfold verifyWithdrawalProofCode; rfl
-private theorem wdl_code_pc1  : verifyWithdrawalProofCode[1]'(by decide) = .moveLoc 1 := by unfold verifyWithdrawalProofCode; rfl
-private theorem wdl_code_pc2  : verifyWithdrawalProofCode[2]'(by decide) = .moveLoc 2 := by unfold verifyWithdrawalProofCode; rfl
-private theorem wdl_code_pc3  : verifyWithdrawalProofCode[3]'(by decide) = .moveLoc 3 := by unfold verifyWithdrawalProofCode; rfl
-private theorem wdl_code_pc4  : verifyWithdrawalProofCode[4]'(by decide) = .moveLoc 4 := by unfold verifyWithdrawalProofCode; rfl
-private theorem wdl_code_pc5  : verifyWithdrawalProofCode[5]'(by decide) = .moveLoc 5 := by unfold verifyWithdrawalProofCode; rfl
-private theorem wdl_code_pc6  : verifyWithdrawalProofCode[6]'(by decide) = .copyLoc 6 := by unfold verifyWithdrawalProofCode; rfl
-private theorem wdl_code_pc7  : verifyWithdrawalProofCode[7]'(by decide) = .copyLoc 7 := by unfold verifyWithdrawalProofCode; rfl
-private theorem wdl_code_pc8  : verifyWithdrawalProofCode[8]'(by decide) = .immBorrowField 0 := by unfold verifyWithdrawalProofCode; rfl
-private theorem wdl_code_pc9  : verifyWithdrawalProofCode[9]'(by decide) = .call 0 := by unfold verifyWithdrawalProofCode; rfl
-private theorem wdl_code_pc10 : verifyWithdrawalProofCode[10]'(by decide) = .moveLoc 6 := by unfold verifyWithdrawalProofCode; rfl
-private theorem wdl_code_pc11 : verifyWithdrawalProofCode[11]'(by decide) = .moveLoc 7 := by unfold verifyWithdrawalProofCode; rfl
-private theorem wdl_code_pc12 : verifyWithdrawalProofCode[12]'(by decide) = .immBorrowField 1 := by unfold verifyWithdrawalProofCode; rfl
-private theorem wdl_code_pc13 : verifyWithdrawalProofCode[13]'(by decide) = .call 1 := by unfold verifyWithdrawalProofCode; rfl
-private theorem wdl_code_pc14 : verifyWithdrawalProofCode[14]'(by decide) = .ret := by unfold verifyWithdrawalProofCode; rfl
+private abbrev wdl_code_pc0  := BytecodeLemmas.instr0_eq
+private abbrev wdl_code_pc1  := BytecodeLemmas.instr1_eq
+private abbrev wdl_code_pc2  := BytecodeLemmas.instr2_eq
+private abbrev wdl_code_pc3  := BytecodeLemmas.instr3_eq
+private abbrev wdl_code_pc4  := BytecodeLemmas.instr4_eq
+private abbrev wdl_code_pc5  := BytecodeLemmas.instr5_eq
+private abbrev wdl_code_pc6  := BytecodeLemmas.instr6_eq
+private abbrev wdl_code_pc7  := BytecodeLemmas.instr7_eq
+private abbrev wdl_code_pc8  := BytecodeLemmas.instr8_eq
+private abbrev wdl_code_pc9  := BytecodeLemmas.instr9_eq
+private abbrev wdl_code_pc10 := BytecodeLemmas.instr10_eq
+private abbrev wdl_code_pc11 := BytecodeLemmas.instr11_eq
+private abbrev wdl_code_pc12 := BytecodeLemmas.instr12_eq
+private abbrev wdl_code_pc13 := BytecodeLemmas.instr13_eq
+private abbrev wdl_code_pc14 := BytecodeLemmas.instr14_eq
 
 /-! ## `eval` → `run` entry-point unfolding -/
 

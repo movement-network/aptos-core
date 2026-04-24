@@ -224,6 +224,7 @@ lean_lib «MovementFormal» where
     `MovementFormal.Experimental.ConfidentialAsset.Registration.StackDepthProofs,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.ValueProvenanceTracking,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.ProgressSummary,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.SingletonBranchImplementation,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.Phase6Composition,
     `MovementFormal.MoveModel.Programs.Withdrawal,
     `MovementFormal.MoveModel.Programs.Transfer,

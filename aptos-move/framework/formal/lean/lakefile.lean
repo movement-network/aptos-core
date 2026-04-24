@@ -180,6 +180,7 @@ lean_lib «MovementFormal» where
     `MovementFormal.Experimental.ConfidentialAsset.Registration.SchnorrProtocolVerification,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.StateInvariantTracking,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.AxiomEliminationRoadmap,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.ErrorPathAnalysisComplete,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.Phase6Composition,
     `MovementFormal.MoveModel.Programs.Withdrawal,
     `MovementFormal.MoveModel.Programs.Transfer,

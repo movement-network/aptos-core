@@ -88,7 +88,7 @@ theorem phase3_complete
     (h_instr59 : (registrationModuleEnv o).getInstruction 59 = some (.call sorry sorry))
     (h_instr60 : (registrationModuleEnv o).getInstruction 60 = some (.brFalse sorry))
     (h_instr61 : (registrationModuleEnv o).getInstruction 61 = some .ret)
-    -- Bounds
+    -- Bounds (all required locals must fit in array)
     (h_bounds : 5 < frame₄₃.locals.size ∧ 9 < frame₄₃.locals.size ∧
                 12 < frame₄₃.locals.size ∧ 19 < frame₄₃.locals.size ∧
                 20 < frame₄₃.locals.size ∧ 21 < frame₄₃.locals.size ∧
@@ -118,14 +118,20 @@ theorem phase3_complete
   obtain ⟨frame₅₆, stack₅₆, ms₅₆, h_seg1_run, h_seg1_pc,
           h_seg1_local20, h_seg1_local21, h_seg1_local22, h_seg1_stack⟩ := h_seg1
 
-  -- Apply Segment 2: PC 56→70 (5 steps)
+  -- Need to prove bounds preserved through segment 1
+  -- Segment 1 operations (CopyLoc, StLoc, Call) preserve or extend array size
+  -- Input: frame₄₃.locals.size > 23 (from h_bounds)
+  -- Output: frame₅₆.locals.size > 23 (preserved)
+  have h_size_preserved : frame₅₆.locals.size = frame₄₃.locals.size := by
+    -- All segment 1 operations preserve size:
+    -- - CopyLoc: frame with pc := ... keeps same locals
+    -- - StLoc: array.set! preserves size
+    -- - Call: frame with pc := ... keeps same locals
+    sorry  -- Needs size preservation lemma through run composition
+
   have h_bounds_seg2 : 22 < frame₅₆.locals.size ∧ 23 < frame₅₆.locals.size := by
-    -- Bounds preserved from segment 1 (frame operations don't change array size)
-    constructor
-    · -- 22 < size: segment 1 proved local 22 exists
-      sorry  -- Need array size preservation lemma
-    · -- 23 < size: segment 1 operations preserve array size
-      sorry  -- Need array size preservation lemma
+    rw [h_size_preserved]
+    exact ⟨h_bounds.2.2.2.2.2.2.1, h_bounds.2.2.2.2.2.2.2⟩
 
   have h_seg2 := pc56_to_70_success_path o frame₅₆ ms₅₆
                    h_seg1_pc lhs_pt rhs_pt
@@ -150,15 +156,19 @@ theorem phase3_complete
 
   constructor
   · -- Prove local 20 preserved through segment 2
-    -- Segment 2 operations: StLoc 23, CopyLoc 22, CopyLoc 23, Call, BrFalse
-    -- None of these modify local 20, so it's preserved
-    sorry  -- Need to prove frame₆₁.locals[20] = frame₅₆.locals[20] = h_seg1_local20
+    -- PC56_70 operations: StLoc 23 (index 23 ≠ 20), CopyLoc, Call, BrFalse
+    -- StLoc 23 preserves local 20 via array_set_get?_other
+    -- Other operations preserve all locals
+    -- Therefore: frame₆₁.locals[20] = frame₅₆.locals[20]
+    sorry  -- Need explicit tracking through PC56_70 steps
 
   constructor
   · -- Prove local 21 preserved through segment 2
-    -- Segment 2 operations: StLoc 23, CopyLoc 22, CopyLoc 23, Call, BrFalse
-    -- None of these modify local 21, so it's preserved
-    sorry  -- Need to prove frame₆₁.locals[21] = frame₅₆.locals[21] = h_seg1_local21
+    -- PC56_70 operations: StLoc 23 (index 23 ≠ 21), CopyLoc, Call, BrFalse
+    -- StLoc 23 preserves local 21 via array_set_get?_other
+    -- Other operations preserve all locals
+    -- Therefore: frame₆₁.locals[21] = frame₅₆.locals[21]
+    sorry  -- Need explicit tracking through PC56_70 steps
 
   constructor
   · exact h_seg2_local22
@@ -177,16 +187,29 @@ This theorem composes:
 1. **Segment 1 (PC 43→56)**: 13 steps, Schnorr computation (✅ zero sorry)
 2. **Segment 2 (PC 56→70)**: 5 steps, equality check (✅ zero sorry)
 
-Remaining work (~30 lines):
-- Prove bounds preserved from segment 1 to segment 2
-- Track local 20 preservation through segment 2
-- Track local 21 preservation through segment 2
+Remaining work (4 sorry, ~40 lines):
+1. **Array size preservation**: frame₅₆.locals.size = frame₄₃.locals.size
+   - Needs lemma: run operations preserve array size
+   - All segment 1 ops (CopyLoc, StLoc, Call) preserve size
 
-Pattern: Same local preservation approach as in individual segments.
+2. **Local 20 preservation through segment 2**: frame₆₁.locals[20] = frame₅₆.locals[20]
+   - PC56_70 operations don't modify local 20
+   - StLoc 23 preserves 20 (different index)
+   - Need to track through steps or prove general preservation lemma
+
+3. **Local 21 preservation through segment 2**: frame₆₁.locals[21] = frame₅₆.locals[21]
+   - PC56_70 operations don't modify local 21
+   - StLoc 23 preserves 21 (different index)
+   - Same as local 20 case
+
+**Approach**: Either extend PC56_70 to track locals 20/21, or prove general lemma:
+"If run modifies only specific locals, other locals are preserved"
+
+Pattern: Standard local preservation, well-understood.
 Impact: Completes Phase 3, enables full singleton branch main theorem.
 
-Current status: 3 sorry remaining (all local preservation)
-Estimated time to completion: 30-60 minutes
+Current status: 4 sorry remaining (3 preservation + 1 size)
+Estimated time to completion: 40-60 minutes
 -/
 
 end MovementFormal.Experimental.ConfidentialAsset.Registration

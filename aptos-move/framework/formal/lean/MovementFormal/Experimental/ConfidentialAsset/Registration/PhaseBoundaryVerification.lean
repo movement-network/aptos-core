@@ -44,7 +44,7 @@ structure BoundaryStatePC4 where
   ms : MachineState
   h_pc : frame.pc = 4
   h_stack_empty : stack = []
-  h_locals_size : frame.locals.length = 19
+  h_locals_size : frame.locals.size = 19
   h_inputs_present :
     ∃ chainId sender commit_ba resp_ba,
       frame.locals[0]? = some (some (.u8 chainId)) ∧
@@ -59,7 +59,7 @@ structure BoundaryStatePC20 where
   ms : MachineState
   h_pc : frame.pc = 20
   h_stack : stack = [] ∨ stack.length = 1
-  h_locals_size : frame.locals.length = 19
+  h_locals_size : frame.locals.size = 19
   h_phase1_complete :
     -- Commit and response points validated and unwrapped
     ∃ commit_pt resp_pt chainId,
@@ -76,7 +76,7 @@ structure BoundaryStatePC43 where
   ms : MachineState
   h_pc : frame.pc = 43
   h_stack_empty : stack = []
-  h_locals_size : frame.locals.length = 19
+  h_locals_size : frame.locals.size = 19
   h_phase2_complete :
     -- Message point and challenge scalar computed
     ∃ message_pt challenge_sc,
@@ -92,7 +92,7 @@ structure BoundaryStatePC70 where
   ms : MachineState
   h_pc : frame.pc = 70
   h_stack_result : ∃ result : Bool, stack = [.bool result]
-  h_locals_size : frame.locals.length = 19
+  h_locals_size : frame.locals.size = 19
   h_computation_complete : True  -- All phases executed
 
 /-! ## Boundary Transition Theorems -/
@@ -259,7 +259,7 @@ def challengeScalarTrace : BoundaryValueTrace (.struct []) :=
 /-- Invariants that hold at all boundaries -/
 structure UniversalBoundaryInvariant where
   locals_size_19 : ∀ pc ∈ [4, 20, 43, 70],
-    ∀ frame : Frame, frame.pc = pc → frame.locals.length = 19
+    ∀ frame : Frame, frame.pc = pc → frame.locals.size = 19
   no_dangling_refs : ∀ pc ∈ [4, 20, 43, 70],
     ∀ frame ms, True  -- No dangling container references
   values_well_typed : ∀ pc ∈ [4, 20, 43, 70],
@@ -313,7 +313,7 @@ theorem boundary_fuel_exact
 /-- Error detection at boundaries -/
 def boundaryErrorCheck (pc : Nat) (frame : Frame) : Option String :=
   match pc with
-  | 4  => if frame.locals.length ≠ 19 then
+  | 4  => if frame.locals.size ≠ 19 then
             some "Invalid locals size at entry"
           else none
   | 20 => if frame.pc ≠ 20 then

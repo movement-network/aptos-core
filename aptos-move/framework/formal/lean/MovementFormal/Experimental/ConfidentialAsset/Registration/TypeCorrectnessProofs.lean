@@ -370,7 +370,7 @@ theorem type_progress
     (ms : MachineState)
     (h_typed : WellTypedState frame stack ms)
     (h_not_terminal : frame.pc ≠ 70 ∧ frame.pc ≠ 79)
-    (h_pc_valid : frame.pc < frame.code.length) :
+    (h_pc_valid : frame.pc < frame.code.size) :
     ∃ frame' stack' ms',
       step env gs frame stack ms = .ok gs frame' stack' ms' := by
   sorry  -- Well-typed can step

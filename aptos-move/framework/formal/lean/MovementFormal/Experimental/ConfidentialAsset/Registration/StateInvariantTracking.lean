@@ -376,7 +376,7 @@ theorem complete_execution_induction
 
 /-- Check if a frame satisfies the invariant at a given PC -/
 def checkFrameInvariant (pc : Nat) (frame : Frame) : Bool :=
-  frame.pc = pc ∧ frame.locals.length = 19
+  frame.pc = pc ∧ frame.locals.size = 19
 
 /-- Check if a stack satisfies the type invariant -/
 def checkStackInvariant (stack : List MoveValue) : Bool :=
@@ -441,7 +441,7 @@ theorem no_invariant_violations
   where
     StatesatisfiesViolation : InvariantViolation → Prop
       | .frame_pc_mismatch exp act => frame.pc ≠ pc
-      | .locals_size_wrong exp act => frame.locals.length ≠ 19
+      | .locals_size_wrong exp act => frame.locals.size ≠ 19
       | .stack_too_deep depth max => stack.length > 10
       | .invalid_crypto_value val reason => False
       | .type_mismatch val exp act => False

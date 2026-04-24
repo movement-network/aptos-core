@@ -325,7 +325,7 @@ structure FrameWitness where
   frame : Frame
   pc : Nat
   h_pc : frame.pc = pc
-  h_locals_size : frame.locals.length = 19
+  h_locals_size : frame.locals.size = 19
   h_well_formed : ∀ i, i < 19 → frame.locals[i]?.isSome
 
 /-- Build FrameWitness from Frame and PC -/

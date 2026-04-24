@@ -184,6 +184,8 @@ lean_lib «MovementFormal» where
     `MovementFormal.Experimental.ConfidentialAsset.Registration.Phase2MessageAssembly,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.Phase3SchnorrComputation,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.LocalsLifetimeTracking,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.FuelAnalysisComplete,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.ReferenceSafetyComplete,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.Phase6Composition,
     `MovementFormal.MoveModel.Programs.Withdrawal,
     `MovementFormal.MoveModel.Programs.Transfer,

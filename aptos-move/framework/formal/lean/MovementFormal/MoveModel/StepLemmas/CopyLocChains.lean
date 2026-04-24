@@ -1,6 +1,7 @@
 import MovementFormal.MoveModel.StepLemmas.Run
 import MovementFormal.MoveModel.StepLemmas.Basic
 import MovementFormal.MoveModel.StepLemmas.Locals
+import MovementFormal.MoveModel.StepLemmas.MoveLocChains
 
 /-!
 # CopyLoc Chain Helpers
@@ -120,10 +121,35 @@ theorem chain_moveLoc_then_copyLoc
         pc := n + 2,
         locals := frame.locals.set i_move none hi_move_bound }
       cs (v_copy :: v_move :: rest) ms fuel := by
-  sorry  -- This proof is more complex than initially apparent - needs careful bound management
-  -- The issue is that after moveLoc sets locals[i_move] := none, the indices shift
-  -- and we need to show that locals.set doesn't affect the copyLoc index access
-  -- This is provable but requires several auxiliary lemmas about Array.set behavior
+  -- Rewrite hi_copy to get bound in terms of frame.locals.size
+  have hi_copy' : i_copy < frame.locals.size := by
+    have : (frame.locals.set i_move none hi_move_bound).size = frame.locals.size := by simp [Array.size_set]
+    rw [← this]; exact hi_copy
+  -- Step 1: moveLoc at PC n
+  have hstep1 : step env frame cs rest ms =
+    .ok { frame with pc := n + 1, locals := frame.locals.set i_move none hi_move } cs (v_move :: rest) ms :=
+    MoveLocChains.step_moveLoc_single frame cs rest ms n i_move v_move hn_lt hcode1 hpc hi_move hv_move hRefNone_move
+  -- Step 2: copyLoc at PC n+1 on the modified frame
+  let frame1 := { frame with pc := n + 1, locals := frame.locals.set i_move none hi_move }
+  -- Need to show frame1.code and frame1.pc satisfy copyLoc requirements
+  have hframe1_code_size : n + 1 < frame1.code.size := by simp [frame1]; exact hn1_lt
+  have hframe1_code : frame1.code[n+1]'hframe1_code_size = .copyLoc i_copy := by
+    simp [frame1]; exact hcode2
+  have hframe1_pc : frame1.pc = n + 1 := by simp [frame1]
+  have hframe1_locals_size : i_copy < frame1.locals.size := by
+    simp [frame1]; exact hi_copy'
+  have hframe1_locals_val : frame1.locals[i_copy]'hframe1_locals_size = some v_copy := by
+    simp [frame1]; exact hv_copy
+  have hstep2 : step env frame1 cs (v_move :: rest) ms =
+    .ok { frame1 with pc := n + 2 } cs (v_copy :: v_move :: rest) ms :=
+    step_copyLoc_single frame1 cs (v_move :: rest) ms (n+1) i_copy v_copy
+      hframe1_code_size hframe1_code hframe1_pc hframe1_locals_size hframe1_locals_val hRefNone_copy
+  -- Step 3: Chain the two steps
+  rw [heq_bounds] at hstep1
+  have h := run_succ_two_ok fuel frame1 { frame1 with pc := n + 2 } cs cs (v_move :: rest) (v_copy :: v_move :: rest) ms ms hstep1 hstep2
+  -- Simplify the final frame
+  simp only [frame1] at h
+  exact h
 
 /-! ## moveLoc chains followed by copyLoc sequences -/
 

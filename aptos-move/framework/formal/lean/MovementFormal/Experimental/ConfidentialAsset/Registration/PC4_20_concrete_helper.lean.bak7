@@ -381,7 +381,7 @@ theorem thread_pc6_to_pc8
     rid_v := s6.rid_v,
     containers := containers_after_extract,
     fuel := s6.fuel - 3,
-    hfuel := sorry,  -- Fuel bounds
+    hfuel := by have := s6.hfuel; omega,
     rCompressed := rCompressed
   }
 
@@ -510,7 +510,7 @@ theorem thread_pc8_to_pc11
     rid_v := s8.rid_v,
     containers := s8.containers,
     fuel := s8.fuel - 3,
-    hfuel := sorry,  -- Fuel bounds
+    hfuel := by have := s8.hfuel; omega,
     rCompressed := s8.rCompressed,
     respBa_val := respBa_val,
     s_opt := scalar_opt_result,
@@ -627,7 +627,7 @@ theorem thread_pc11_to_pc15
     rid_v := s11.rid_v,
     containers := containers_after_s_opt_alloc,
     fuel := s11.fuel - 3,
-    hfuel := sorry,  -- Fuel bounds
+    hfuel := by have := s11.hfuel; omega,
     rCompressed := s11.rCompressed,
     respBa_val := s11.respBa_val,
     s_opt := s11.s_opt,
@@ -757,7 +757,7 @@ theorem thread_pc15_to_pc18
     rid_v := s15.rid_v,
     containers := containers_after_extract_scalar,
     fuel := s15.fuel - 3,
-    hfuel := sorry,  -- Fuel bounds
+    hfuel := by have := s15.hfuel; omega,
     rCompressed := s15.rCompressed,
     respBa_val := s15.respBa_val,
     s_opt := s15.s_opt,
@@ -836,7 +836,7 @@ theorem thread_pc18_to_pc20
     rid_v := s18.rid_v,
     containers := s18.containers,
     fuel := s18.fuel - 2,
-    hfuel := sorry,  -- Fuel bounds
+    hfuel := by have := s18.hfuel; omega,
     rCompressed := s18.rCompressed,
     respBa_val := s18.respBa_val,
     s_opt := s18.s_opt,
@@ -887,25 +887,23 @@ theorem registration_run_pc4_to_pc20_singleton_happy_path
   obtain ⟨s6, _⟩ := thread_pc4_to_pc6 s4 hv_struct restData
 
   -- Thread PC 6 → 8
-  -- Note: s6.v = s4.v = v by definition, so hv_struct about v also applies to s6.v
-  obtain ⟨s8, _⟩ := thread_pc6_to_pc8 s6 rCompressed restData sorry
+  obtain ⟨s8, _⟩ := thread_pc6_to_pc8 s6 hv_struct restData
 
   -- Thread PC 8 → 11
-  obtain ⟨s11, _⟩ := thread_pc8_to_pc11 s8 respBa_val scalar restScalarData horacle_scalar
+  obtain ⟨s11, _⟩ := thread_pc8_to_pc11 s8 horacle_scalar respBa_val scalar restScalarData
 
   -- Thread PC 11 → 15
-  have h_s11_opt : ∃ scalar restData, s11.s_opt = MoveValue.struct_ (MoveValue.bool true :: scalar :: restData) := sorry
-  obtain ⟨s15, _⟩ := thread_pc11_to_pc15 s11 h_s11_opt
+  obtain ⟨s15, _⟩ := thread_pc11_to_pc15 s11
 
   -- Thread PC 15 → 18
-  have h_s15_opt : ∃ restData, s15.s_opt = MoveValue.struct_ (MoveValue.bool true :: s15.scalar :: restData) := sorry
-  obtain ⟨s18, _⟩ := thread_pc15_to_pc18 s15 h_s15_opt
+  obtain ⟨s18, _⟩ := thread_pc15_to_pc18 s15
 
   -- Thread PC 18 → 20
   obtain ⟨s20, _⟩ := thread_pc18_to_pc20 s18
 
   -- Return final state
   use s20.containers, s20.msgBuf
+  trivial
 
 /-! ### Usage in main theorem
 

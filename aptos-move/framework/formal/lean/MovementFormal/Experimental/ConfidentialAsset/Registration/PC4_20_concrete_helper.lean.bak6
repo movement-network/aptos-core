@@ -381,7 +381,7 @@ theorem thread_pc6_to_pc8
     rid_v := s6.rid_v,
     containers := containers_after_extract,
     fuel := s6.fuel - 3,
-    hfuel := sorry,  -- Fuel bounds
+    hfuel := by have := s6.hfuel; omega,
     rCompressed := rCompressed
   }
 
@@ -433,7 +433,18 @@ theorem thread_pc8_to_pc11
                 [] [respBa_val]
                 { MachineState.empty with containers := s8.containers } := by
     -- Apply StepLemmas.step_moveLoc_noRef
-    sorry  -- Step lemma unification
+    have result := StepLemmas.step_moveLoc_noRef 6 respBa_val
+                     hpc9 hinstr9 hlocal6_inbounds hlocal6_value hlocalRefs6_none
+    simp only [result]
+    congr 1
+    · -- Frame equality
+      simp [locals_after_pc9]
+      sorry  -- Array.set! massage
+    · -- Stack
+      rfl
+    · -- MachineState
+      rfl
+
   -- PC 10: call newScalarFromBytes
   let scalar_opt_result := MoveValue.struct_ (MoveValue.bool true :: scalar :: restScalarData)
   let funcIdx_newScalarFromBytes : Nat := 1
@@ -472,7 +483,13 @@ theorem thread_pc8_to_pc11
                  [] [scalar_opt_result]
                  { MachineState.empty with containers := s8.containers } := by
     -- Apply StepLemmas.step_call_native_ret1
-    sorry  -- Step lemma unification
+    have result := StepLemmas.step_call_native_ret1 funcIdx_newScalarFromBytes
+                     [respBa_val] [] [respBa_val]
+                     o.newScalarFromBytes 1 scalar_opt_result
+                     hpc10 hinstr10 hfuncIdx10_bounds hparams10 hreturns10 hbody10 htake10 horacle_scalar
+    simp only [result]
+    sorry  -- Frame equality
+
   -- PC 11: stLoc 9 (store scalar_opt_result)
   let locals_after_pc11 := locals_after_pc9.set! 9 (some scalar_opt_result)
 
@@ -497,7 +514,18 @@ theorem thread_pc8_to_pc11
                  [] []
                  { MachineState.empty with containers := s8.containers } := by
     -- Apply StepLemmas.step_stLoc
-    sorry  -- Step lemma unification
+    have result := StepLemmas.step_stLoc 9 scalar_opt_result []
+                     hpc11 hinstr11 hlocal9_inbounds
+    simp only [result]
+    congr 1
+    · -- Frame equality
+      simp [locals_after_pc11]
+      sorry  -- Array.set! massage
+    · -- Empty list
+      rfl
+    · -- MachineState
+      rfl
+
   use {
     chainId := s8.chainId,
     sender := s8.sender,
@@ -510,7 +538,7 @@ theorem thread_pc8_to_pc11
     rid_v := s8.rid_v,
     containers := s8.containers,
     fuel := s8.fuel - 3,
-    hfuel := sorry,  -- Fuel bounds
+    hfuel := by have := s8.hfuel; omega,
     rCompressed := s8.rCompressed,
     respBa_val := respBa_val,
     s_opt := scalar_opt_result,
@@ -567,7 +595,11 @@ theorem thread_pc11_to_pc15
                   [] [MoveValue.immRef rid_s_opt_fresh]
                   { MachineState.empty with containers := containers_after_s_opt_alloc } := by
     -- Apply StepLemmas.step_immBorrowLoc_fresh
-    sorry  -- Step lemma unification
+    have result := StepLemmas.step_immBorrowLoc_fresh 9 s11.s_opt containers_after_s_opt_alloc rid_s_opt_fresh
+                     hpc12 hinstr12 hlocal9_inbounds hlocal9_value halloc_s_opt hlocalRefs9_none
+    simp only [result]
+    sorry  -- Frame equality
+
   -- PC 13: call optionIsSomeRef (returns true since s_opt is Some)
   have hread_s_opt : containers_after_s_opt_alloc.read rid_s_opt_fresh = some s11.s_opt := by
     sorry  -- From alloc result
@@ -614,7 +646,10 @@ theorem thread_pc11_to_pc15
                   [] []
                   { MachineState.empty with containers := containers_after_s_opt_alloc } := by
     -- Apply StepLemmas.step_brFalse_not_taken
-    sorry  -- Step lemma unification
+    have result := StepLemmas.step_brFalse_not_taken 74 []
+                     hpc14 hinstr14
+    simp only [result]
+
   use {
     chainId := s11.chainId,
     sender := s11.sender,
@@ -627,7 +662,7 @@ theorem thread_pc11_to_pc15
     rid_v := s11.rid_v,
     containers := containers_after_s_opt_alloc,
     fuel := s11.fuel - 3,
-    hfuel := sorry,  -- Fuel bounds
+    hfuel := by have := s11.hfuel; omega,
     rCompressed := s11.rCompressed,
     respBa_val := s11.respBa_val,
     s_opt := s11.s_opt,
@@ -744,7 +779,11 @@ theorem thread_pc15_to_pc18
                   [] []
                   { MachineState.empty with containers := containers_after_extract_scalar } := by
     -- Apply StepLemmas.step_stLoc
-    sorry  -- Step lemma unification
+    have result := StepLemmas.step_stLoc 10 s15.scalar []
+                     hpc18 hinstr18 hlocal10_inbounds
+    simp only [result]
+    sorry  -- Frame equality
+
   use {
     chainId := s15.chainId,
     sender := s15.sender,
@@ -757,7 +796,7 @@ theorem thread_pc15_to_pc18
     rid_v := s15.rid_v,
     containers := containers_after_extract_scalar,
     fuel := s15.fuel - 3,
-    hfuel := sorry,  -- Fuel bounds
+    hfuel := by have := s15.hfuel; omega,
     rCompressed := s15.rCompressed,
     respBa_val := s15.respBa_val,
     s_opt := s15.s_opt,
@@ -823,7 +862,11 @@ theorem thread_pc18_to_pc20
                   [] []
                   { MachineState.empty with containers := s18.containers } := by
     -- Apply StepLemmas.step_stLoc
-    sorry  -- Step lemma unification
+    have result := StepLemmas.step_stLoc 11 empty_msg []
+                     hpc20 hinstr20 hlocal11_inbounds
+    simp only [result]
+    sorry  -- Frame equality
+
   use {
     chainId := s18.chainId,
     sender := s18.sender,
@@ -836,7 +879,7 @@ theorem thread_pc18_to_pc20
     rid_v := s18.rid_v,
     containers := s18.containers,
     fuel := s18.fuel - 2,
-    hfuel := sorry,  -- Fuel bounds
+    hfuel := by have := s18.hfuel; omega,
     rCompressed := s18.rCompressed,
     respBa_val := s18.respBa_val,
     s_opt := s18.s_opt,
@@ -845,6 +888,7 @@ theorem thread_pc18_to_pc20
     msgBuf := empty_msg,
     rid_msg := rid_msg_fresh
   }
+  constructor <;> rfl
 
 /-! ### Step 3: Main composition theorem
 
@@ -887,25 +931,23 @@ theorem registration_run_pc4_to_pc20_singleton_happy_path
   obtain ⟨s6, _⟩ := thread_pc4_to_pc6 s4 hv_struct restData
 
   -- Thread PC 6 → 8
-  -- Note: s6.v = s4.v = v by definition, so hv_struct about v also applies to s6.v
-  obtain ⟨s8, _⟩ := thread_pc6_to_pc8 s6 rCompressed restData sorry
+  obtain ⟨s8, _⟩ := thread_pc6_to_pc8 s6 hv_struct restData
 
   -- Thread PC 8 → 11
-  obtain ⟨s11, _⟩ := thread_pc8_to_pc11 s8 respBa_val scalar restScalarData horacle_scalar
+  obtain ⟨s11, _⟩ := thread_pc8_to_pc11 s8 horacle_scalar respBa_val scalar restScalarData
 
   -- Thread PC 11 → 15
-  have h_s11_opt : ∃ scalar restData, s11.s_opt = MoveValue.struct_ (MoveValue.bool true :: scalar :: restData) := sorry
-  obtain ⟨s15, _⟩ := thread_pc11_to_pc15 s11 h_s11_opt
+  obtain ⟨s15, _⟩ := thread_pc11_to_pc15 s11
 
   -- Thread PC 15 → 18
-  have h_s15_opt : ∃ restData, s15.s_opt = MoveValue.struct_ (MoveValue.bool true :: s15.scalar :: restData) := sorry
-  obtain ⟨s18, _⟩ := thread_pc15_to_pc18 s15 h_s15_opt
+  obtain ⟨s18, _⟩ := thread_pc15_to_pc18 s15
 
   -- Thread PC 18 → 20
   obtain ⟨s20, _⟩ := thread_pc18_to_pc20 s18
 
   -- Return final state
   use s20.containers, s20.msgBuf
+  trivial
 
 /-! ### Usage in main theorem
 

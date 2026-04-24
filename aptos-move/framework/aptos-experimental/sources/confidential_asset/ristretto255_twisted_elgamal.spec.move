@@ -25,11 +25,12 @@ spec aptos_experimental::ristretto255_twisted_elgamal {
 
     spec new_pubkey_from_bytes {
         pragma opaque;
-        aborts_if false;
+        aborts_if [abstract] false;
     }
 
     spec new_ciphertext_from_bytes {
         pragma opaque;
+        aborts_if [abstract] false;
     }
 
     //
@@ -38,16 +39,17 @@ spec aptos_experimental::ristretto255_twisted_elgamal {
 
     spec new_ciphertext_no_randomness {
         pragma opaque;
+        aborts_if [abstract] false;
     }
 
     spec ciphertext_from_points {
         pragma opaque;
-        aborts_if false;
+        aborts_if [abstract] false;
     }
 
     spec ciphertext_from_compressed_points {
         pragma opaque;
-        aborts_if false;
+        aborts_if [abstract] false;
     }
 
     //
@@ -56,12 +58,12 @@ spec aptos_experimental::ristretto255_twisted_elgamal {
 
     spec compress_ciphertext {
         pragma opaque;
-        aborts_if false;
+        aborts_if [abstract] false;
     }
 
     spec decompress_ciphertext {
         pragma opaque;
-        aborts_if false;
+        aborts_if [abstract] false;
     }
 
     //
@@ -70,32 +72,32 @@ spec aptos_experimental::ristretto255_twisted_elgamal {
 
     spec ciphertext_add {
         pragma opaque;
-        aborts_if false;
+        aborts_if [abstract] false;
     }
 
     spec ciphertext_add_assign {
         pragma opaque;
-        aborts_if false;
+        aborts_if [abstract] false;
     }
 
     spec ciphertext_sub {
         pragma opaque;
-        aborts_if false;
+        aborts_if [abstract] false;
     }
 
     spec ciphertext_sub_assign {
         pragma opaque;
-        aborts_if false;
+        aborts_if [abstract] false;
     }
 
     spec ciphertext_equals {
         pragma opaque;
-        aborts_if false;
+        aborts_if [abstract] false;
     }
 
     spec ciphertext_clone {
         pragma opaque;
-        aborts_if false;
+        aborts_if [abstract] false;
     }
 
     //
@@ -104,34 +106,37 @@ spec aptos_experimental::ristretto255_twisted_elgamal {
 
     spec pubkey_to_bytes {
         pragma opaque;
-        aborts_if false;
+        aborts_if [abstract] false;
     }
 
     spec pubkey_to_point {
         pragma opaque;
+        aborts_if [abstract] false;
     }
 
     spec pubkey_to_compressed_point {
         pragma opaque;
+        aborts_if [abstract] false;
     }
 
     spec ciphertext_to_bytes {
         pragma opaque;
+        aborts_if [abstract] false;
     }
 
     spec ciphertext_into_points {
         pragma opaque;
-        aborts_if false;
+        aborts_if [abstract] false;
     }
 
     spec ciphertext_as_points {
         pragma opaque;
-        aborts_if false;
+        aborts_if [abstract] false;
     }
 
     spec get_value_component {
         pragma opaque;
-        aborts_if false;
+        aborts_if [abstract] false;
     }
 
     //
@@ -140,22 +145,22 @@ spec aptos_experimental::ristretto255_twisted_elgamal {
 
     spec generate_twisted_elgamal_keypair {
         pragma opaque;
-        aborts_if false;
+        aborts_if [abstract] false;
         ensures std::option::spec_is_some(result.1);
     }
 
     spec pubkey_from_secret_key {
         pragma opaque;
-        aborts_if false;
+        aborts_if [abstract] false;
     }
 
     spec new_ciphertext {
         pragma opaque;
-        aborts_if false;
+        aborts_if [abstract] false;
     }
 
     spec new_ciphertext_with_basepoint {
         pragma opaque;
-        aborts_if false;
+        aborts_if [abstract] false;
     }
 }

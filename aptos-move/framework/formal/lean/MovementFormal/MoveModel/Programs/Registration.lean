@@ -52,7 +52,7 @@ open MovementFormal.Experimental.ConfidentialAsset.Registration.Formal
 The transcribed `LdConst` pool entry is therefore identical to the CA registration spec, not a second
 copy of the ASCII literal. -/
 def fiatShamirRegistrationDstValue : MoveValue :=
-  .vector .u8 (registrationDstBytes.toList.map MoveValue.u8)
+  .vector .u8 (MovementFormal.Experimental.ConfidentialAsset.Registration.Formal.registrationDstBytes.toList.map .u8)
 
 /-- Constant pool entry for `LdConst[5]` — the DST tag:
     `[38, 77, 111, ..., 110]` = length-prefixed

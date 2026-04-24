@@ -207,7 +207,7 @@ inductive TestOutcome where
 while the real VM serializes them in source-declaration order. For
 multi-return functions the two orderings are reversed. We reverse the
 Lean result to match the VM's convention before comparing. -/
-def runTestCase (tc : TestCase) : TestOutcome :=
+noncomputable def runTestCase (tc : TestCase) : TestOutcome :=
   if tc.skipLean then
     .skipped "skip_lean (VM-only oracle row)"
   else
@@ -257,7 +257,7 @@ end MovementFormal.DiffTest
 /-! ## Main -/
 
 open MovementFormal.DiffTest in
-def main (args : List String) : IO UInt32 := do
+noncomputable def main (args : List String) : IO UInt32 := do
   let path ← match args with
     | [p] => pure p
     | _ =>

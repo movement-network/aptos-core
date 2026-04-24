@@ -165,8 +165,12 @@ run_move_prover_for_op() {
         echo "ERROR: Z3_EXE not set. Run: movement update prover-dependencies --assume-yes" >&2
         return 1
     fi
+    if [ -z "${BOOGIE_EXE:-}" ]; then
+        echo "ERROR: BOOGIE_EXE not set. Run: movement update prover-dependencies --assume-yes" >&2
+        return 1
+    fi
 
-    movement move prove \
+    BOOGIE_EXE="$BOOGIE_EXE" Z3_EXE="$Z3_EXE" movement move prove \
         --package-dir "$REPO_ROOT/aptos-move/framework/aptos-experimental" \
         --named-addresses aptos_experimental=0x7 \
         --filter "$filter" \

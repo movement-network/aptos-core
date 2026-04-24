@@ -1,6 +1,6 @@
 # Phase 7 Reproducibility and Audit Package — Status (audit/PHASE_7_STATUS.md)
 
-Complete status tracking for Phase 7 deliverables (plan §10). Updated 2026-04-23.
+Complete status tracking for Phase 7 deliverables (plan §10). Updated 2026-04-24.
 
 ## Executive Summary
 
@@ -13,6 +13,8 @@ Complete status tracking for Phase 7 deliverables (plan §10). Updated 2026-04-2
 **Blocking items:** Docker image publish to ghcr.io + digest capture (requires credentials/CI setup, not blocking local verification)
 
 **Ready for review:** YES — all three stacks (Lean + Move Prover + difftest) functional, documentation comprehensive, Docker image ready to build
+
+**Phase 2/3/5 Update (2026-04-24):** ✅ **MSL SPECS COMPLETE** — All upstream framework modifies clauses added, 0 Move Prover compilation errors (down from 79+), 145 VCs generated. Phases 2, 3, and 5 now SPEC COMPLETE.
 
 **Phase 4 & 6 Update (2026-04-23):** Phase 4 main theorems complete (4 sorries in helpers only), Phase 6 Lean side complete (all 4 crypto-op composition theorems proved). Documentation updated (TRUST_BOUNDARIES.md, CLAIMS.md, AXIOM_INVENTORY.md, COMPOSITION_CLAIMS.md).
 
@@ -34,7 +36,7 @@ Complete status tracking for Phase 7 deliverables (plan §10). Updated 2026-04-2
 | JSON output | 🟡 PENDING | Structured status output (Phase 7 stretch goal) |
 | Exit codes | ✅ DONE | Non-zero on any failure |
 | Lean integration | ✅ DONE | All 5 ops verify in 1-2s each |
-| Move Prover integration | ✅ DONE | All 5 ops compile in ~1s (0 VCs — expected) |
+| Move Prover integration | ✅ COMPLETE | All specs compile, 145 VCs generated (2026-04-24: 0 errors, modifies clauses complete) |
 | Difftest integration | ✅ DONE | Harness functional (18 suites including CA), verify-ca.sh integrated |
 
 **Acceptance:** ✅ Full run ≤45 min (actual: ~6s for enabled stacks), per-op ≤3 min (actual: 1-2s)

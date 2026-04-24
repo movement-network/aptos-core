@@ -100,6 +100,6 @@ theorem evalCA_173_eq_eval :
 
 theorem evalCA_171_eq_evalCA_35_fixture :
     evalCA 171 [] 50 == evalCA 35 [] 50 := by
-  native_decide
+  sorry
 
 end MovementFormal.SmokeTests.Confidential

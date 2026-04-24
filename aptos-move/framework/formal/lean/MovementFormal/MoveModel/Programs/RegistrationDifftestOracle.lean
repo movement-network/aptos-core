@@ -3,5 +3,5 @@ import MovementFormal.MoveModel.Native.Registration
 import MovementFormal.MoveModel.Programs.Registration
 
 namespace MovementFormal.MoveModel.Programs.RegistrationDifftestOracle
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.MoveModel.Programs.RegistrationDifftestOracle

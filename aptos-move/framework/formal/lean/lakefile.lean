@@ -203,6 +203,7 @@ lean_lib «MovementFormal» where
     `MovementFormal.Experimental.ConfidentialAsset.Registration.PhaseSpecificInvariants,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.BytecodeSemanticsComplete,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.ExecutionTraceComplete,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.ProofCompositionComplete,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.Phase6Composition,
     `MovementFormal.MoveModel.Programs.Withdrawal,
     `MovementFormal.MoveModel.Programs.Transfer,

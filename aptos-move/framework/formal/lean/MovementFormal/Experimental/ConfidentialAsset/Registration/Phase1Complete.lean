@@ -93,17 +93,17 @@ theorem phase1_complete_detailed
     (h_instr8 : (registrationModuleEnv o).getInstruction 8 = some (.stLoc 8))
     (h_instr9 : (registrationModuleEnv o).getInstruction 9 = some (.copyLoc 6))
     -- Instruction encoding for Segment 2 (PC 10-15)
-    (h_instr10 : (registrationModuleEnv o).getInstruction 10 = some (.call sorry sorry))
-    (h_instr11 : (registrationModuleEnv o).getInstruction 11 = some (.brFalse 79))
-    (h_instr12 : (registrationModuleEnv o).getInstruction 12 = some (.moveLoc 1))
-    (h_instr13 : (registrationModuleEnv o).getInstruction 13 = some (.call sorry sorry))
-    (h_instr14 : (registrationModuleEnv o).getInstruction 14 = some (.stLoc 12))
-    (h_instr15 : (registrationModuleEnv o).getInstruction 15 = some (.copyLoc 6))
+    (h_instr10 : (registrationModuleEnv o).getInstruction 10 = some (.copyLoc 1))
+    (h_instr11 : (registrationModuleEnv o).getInstruction 11 = some (.call sorry sorry))
+    (h_instr12 : (registrationModuleEnv o).getInstruction 12 = some (.brTrue 79))
+    (h_instr13 : (registrationModuleEnv o).getInstruction 13 = some (.moveLoc 1))
+    (h_instr14 : (registrationModuleEnv o).getInstruction 14 = some (.call sorry sorry))
+    (h_instr15 : (registrationModuleEnv o).getInstruction 15 = some (.stLoc 12))
     -- Instruction encoding for Segment 3 (PC 16-19)
-    (h_instr16 : (registrationModuleEnv o).getInstruction 16 = some (.call sorry sorry))
+    (h_instr16 : (registrationModuleEnv o).getInstruction 16 = some (.copyLoc 2))
     (h_instr17 : (registrationModuleEnv o).getInstruction 17 = some (.stLoc 13))
     (h_instr18 : (registrationModuleEnv o).getInstruction 18 = some (.copyLoc 3))
-    (h_instr19 : (registrationModuleEnv o).getInstruction 19 = some (.call sorry sorry))
+    (h_instr19 : (registrationModuleEnv o).getInstruction 19 = some (.stLoc 14))
     -- Bounds
     (h_bounds : frame₄.locals.size > 20) :
     ∃ frame₂₀ stack₂₀ ms₂₀,
@@ -162,14 +162,39 @@ theorem phase1_complete_detailed
       .ok [] frame₂₀ stack₂₀ ms₂₀ ∧
       frame₂₀.pc = 20 ∧
       frame₂₀.locals[13]? = some (some chainIdScalar) ∧
-      frame₂₀.locals[14]? = some (some senderScalar) := by
-    -- Apply pc16_to_20_complete
-    -- Would need to establish:
-    -- - frame₁₆.locals[2]? = some (some chainIdScalar)
-    -- - frame₁₆.locals[3]? = some (some senderScalar)
-    -- - stack₁₆ = []
-    -- - All instruction encodings for PC 16-19
-    sorry
+      frame₂₀.locals[14]? = some (some senderScalar) ∧
+      stack₂₀ = [] := by
+    -- Need to prove locals 2 and 3 are preserved from frame₄ through segments 1 and 2
+    -- Segment 1 touches locals 0, 8 but preserves 2, 3
+    -- Segment 2 touches locals 1, 12 but preserves 2, 3
+    have h_local2_preserved : frame₁₆.locals[2]? = some (some chainIdScalar) := by
+      -- Local 2 should be preserved through both segments
+      -- Segment 1 (PC 4→10) touches locals 0 (invalidated) and 8 (set)
+      -- Segment 2 (PC 10→16) touches locals 1 (invalidated) and 12 (set)
+      -- Neither segment touches local 2, so it's preserved from frame₄
+      -- This requires either:
+      -- (a) Extended segment theorems that track all locals
+      -- (b) Or proving frame updates preserve untouched locals
+      -- For now, accept as preservation property
+      sorry
+
+    have h_local3_preserved : frame₁₆.locals[3]? = some (some senderScalar) := by
+      sorry
+
+    -- Stack should be empty after segment 2
+    have h_stack16_empty : stack₁₆ = [] := by
+      sorry
+
+    -- Apply pc16_to_20_complete with correct hypotheses
+    have h_seg3_base := pc16_to_20_complete o frame₁₆ ms₁₆
+                          h_seg2_pc
+                          chainIdScalar senderScalar
+                          h_local2_preserved h_local3_preserved
+                          rfl  -- h_stack (empty)
+                          h_instr16 h_instr17 h_instr18 h_instr19
+                          ⟨by omega, ⟨by omega, ⟨by omega, by omega⟩⟩⟩  -- h_bounds
+
+    exact h_seg3_base
 
   obtain ⟨frame₂₀, stack₂₀, ms₂₀, h_seg3_run, h_seg3_pc, h_seg3_local13, h_seg3_local14⟩ := h_seg3
 

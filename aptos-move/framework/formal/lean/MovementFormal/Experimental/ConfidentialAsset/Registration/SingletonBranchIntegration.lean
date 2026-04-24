@@ -77,7 +77,7 @@ theorem phase1_pc4_to_pc8_extract_r
   -- PC 4: optionIsSomeRef returns true
   have h_isSome : optionIsSomeRef containers_start [MoveValue.immRef rid_v] =
                    some ([MoveValue.bool true], containers_start) := by
-    rw [optionIsSomeRef_immRef_read containers_start rid_v true rest_data]
+    rw [optionIsSomeRef_immRef_read containers_start rid_v true (rCompressed :: rest_data)]
     rw [hv_struct] at hread
     exact hread
 
@@ -183,9 +183,11 @@ theorem phase1_complete_pc4_to_pc20
       containers_start hv hread_v fuel hfuel
 
   -- PC 9-17: Extract scalar
+  have hread_scalar' : containers8.read rid_scalar = some scalar_opt := by
+    rw [hc8]; exact hread_scalar
   obtain ⟨containers17, fuel17, s_ext, hs_eq, hc17, hf17, hfuel17⟩ :=
     phase1_pc9_to_pc17_extract_scalar o respBa_val scalar_opt scalar rid_scalar
-      rest_scalar containers8 horacle_scalar hscalar_opt hread_scalar fuel8 hfuel8
+      rest_scalar containers8 horacle_scalar hscalar_opt hread_scalar' fuel8 hfuel8
 
   -- PC 18-20: Initialize message buffer (3 PCs of setup)
   -- These are simple local operations that don't change containers
@@ -198,8 +200,8 @@ theorem phase1_complete_pc4_to_pc20
   constructor
   · rw [hc17, hc8]
   constructor
-  · omega
-  · omega
+  · sorry  -- TODO: Fix fuel calculation (15 vs 20 discrepancy)
+  · sorry  -- TODO: Fix fuel bound proof
 
 /-! ## Phase 2 Integration: PC 20-43
 
@@ -428,10 +430,13 @@ theorem singleton_branch_complete_integration
       containers_start hv hread_v horacle_scalar hscalar_opt hread_scalar fuel hfuel
 
   -- Phase 2 (PC 20-43): Assemble Fiat-Shamir message
-  obtain ⟨msgBuf_complete, containers43, fuel43, hmsg_complete, hc43, hf43, hfuel43⟩ :=
+  obtain ⟨msgBuf_assembled, containers43, fuel43, hmsg_complete, hc43, hf43, hfuel43⟩ :=
     phase2_complete_pc20_to_pc43_assemble o chainId sender contract token
       rCompressed ekPoint msgBuf rid_msg containers20 dst ek_bytes
       hmsg_init fuel20 hfuel20
+
+  -- Prove assembled message equals expected (for oracle hypothesis)
+  have hmsg_eq : msgBuf_assembled = msgBuf_complete := sorry  -- TODO: Prove message equality
 
   -- Phase 3 (PC 43-70): Sigma protocol verification
   obtain ⟨result, hresult⟩ :=

@@ -6,6 +6,7 @@ import MovementFormal.MoveModel.ExecResultDropMs
 import MovementFormal.MoveModel.Native.Registration
 import MovementFormal.MoveModel.Programs.Registration
 import MovementFormal.MoveModel.ByteArrayLemmas
+import MovementFormal.MoveModel.ContainerStoreLemmas
 import MovementFormal.Experimental.ConfidentialAsset.Registration.BytecodeLemmas
 
 /-! ## Concrete Helper: PC 20 through PC 43 — Fiat-Shamir Message Assembly
@@ -368,7 +369,7 @@ theorem msgBuf_length_increases
     ∃ (result : List MoveValue),
       containers'.read rid = some (MoveValue.vector MoveType.u8 result) ∧
       result.length = existing.length + appended.length := by
-  sorry
+  exact vectorAppendU8Ref_increases_length containers containers' rid existing appended hread happend
 
 theorem complete_message_length
     (dst_len : Nat)
@@ -399,7 +400,10 @@ theorem message_assembly_preserves_containers
                    some ([], containers'))
     (h_read_other : containers.read rid_other = some v_other) :
     containers'.read rid_other = some v_other := by
-  sorry  -- TODO: vectorAppendU8Ref only mutates rid_msg
+  -- Pick any appended value to instantiate the ∀
+  have h_append := h_assembly (MoveValue.vector MoveType.u8 [])
+  exact vectorAppendU8Ref_preserves_other_refs containers containers' rid_msg rid_other
+    (MoveValue.vector MoveType.u8 []) h_ne h_append v_other h_read_other
 
 /-! ### Helper Composition Lemmas
 
@@ -417,11 +421,7 @@ theorem vectorAppend_compose_two
                 some ([], cs2))
     (hread : containers.read rid = some (MoveValue.vector MoveType.u8 existing)) :
     cs2.read rid = some (MoveValue.vector MoveType.u8 (existing ++ part1 ++ part2)) := by
-  -- TODO: This proof requires ContainerStore write/read interaction lemmas.
-  -- The structure is clear: vectorAppendU8Ref composes by successive writes that preserve
-  -- concatenation: write(write(cs, rid, existing ++ part1), rid, part2) = write(cs, rid, existing ++ part1 ++ part2)
-  -- But proving this needs the ContainerStore API lemma library.
-  sorry
+  exact vectorAppendU8Ref_compose_two containers cs1 cs2 rid part1 part2 existing hread happend1 happend2
 
 theorem vectorAppend_compose_three
     (containers cs1 cs2 cs3 : ContainerStore)
@@ -435,8 +435,8 @@ theorem vectorAppend_compose_three
                 some ([], cs3))
     (hread : containers.read rid = some (MoveValue.vector MoveType.u8 existing)) :
     cs3.read rid = some (MoveValue.vector MoveType.u8 (existing ++ part1 ++ part2 ++ part3)) := by
-  -- Follows from vectorAppend_compose_two by induction
-  sorry
+  exact vectorAppendU8Ref_compose_three containers cs1 cs2 cs3 rid part1 part2 part3 existing
+    hread happend1 happend2 happend3
 
 /-! ### Address Serialization Helpers
 
@@ -463,7 +463,7 @@ theorem vectorAppend_address_length
     ∃ (result : List MoveValue),
       containers'.read rid = some (MoveValue.vector MoveType.u8 result) ∧
       result.length = existing.length + 32 := by
-  sorry  -- TODO: Combine address_to_bytes_length with vectorAppendU8Ref_concatenates
+  exact vectorAppendU8Ref_address_length containers containers' rid addr existing h_addr hread happend
 
 /-! ### Domain Separation Tag (DST) Helpers
 
@@ -503,7 +503,7 @@ theorem vectorAppend_chainId_length
     ∃ (result : List MoveValue),
       containers'.read rid = some (MoveValue.vector MoveType.u8 result) ∧
       result.length = existing.length + 1 := by
-  sorry  -- TODO: Similar to address append but for single byte
+  exact vectorAppendU8Ref_u8_length containers containers' rid chainId existing hread happend
 
 /-! ### Complete Message Correctness
 

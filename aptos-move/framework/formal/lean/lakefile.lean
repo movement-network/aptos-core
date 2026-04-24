@@ -94,6 +94,8 @@ lean_lib «MovementFormal» where
     `MovementFormal.MoveModel.StringCatalog,
     `MovementFormal.MoveModel.CmpCatalog,
     `MovementFormal.MoveModel.Value,
+    `MovementFormal.MoveModel.ByteArrayLemmas,
+    `MovementFormal.MoveModel.ContainerStoreLemmas,
     `MovementFormal.MoveModel.Instr,
     `MovementFormal.MoveModel.State,
     `MovementFormal.MoveModel.Step,

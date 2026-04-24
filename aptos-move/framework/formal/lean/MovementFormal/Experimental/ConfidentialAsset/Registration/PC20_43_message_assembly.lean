@@ -30,6 +30,7 @@ threading is established.
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration
 
 open MoveModel
+open MoveModel.Native.Registration
 
 /-! ### Message assembly state progression
 

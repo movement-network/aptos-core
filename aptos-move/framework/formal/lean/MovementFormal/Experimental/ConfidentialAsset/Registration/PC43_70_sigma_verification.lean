@@ -24,6 +24,7 @@ The happy path threads through all successes and reaches PC 70 (ret).
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration
 
 open MoveModel
+open MoveModel.Native.Registration
 
 /-! ### State after message assembly
 

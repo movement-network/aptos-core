@@ -23,6 +23,7 @@ to make measurable progress on singleton branch completion.
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration
 
 open MoveModel
+open MoveModel.Native.Registration
 
 /-! ### Step 1: Define intermediate frame states
 

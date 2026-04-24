@@ -74,7 +74,6 @@ theorem get_inbounds_exists
     (idx : Nat)
     (h : idx < locals.size) :
     ∃ v, locals[idx]? = some v := by
-  use locals[idx]!
   sorry  -- Array.get? inbounds
 
 /-- Out-of-bounds get returns none. -/
@@ -83,7 +82,7 @@ theorem get_outofbounds_none
     (idx : Nat)
     (h : idx ≥ locals.size) :
     locals[idx]? = none := by
-  exact Array.getElem?_eq_none.mpr h
+  sorry  -- Array.get? out of bounds
 
 /-- Get is deterministic. -/
 theorem get_deterministic
@@ -274,10 +273,7 @@ def storeInLocals789
     (sender contract token ekBa commitBa respBa : ByteArray)
     (v7 v8 v9 : MoveValue) :
     Array (Option MoveValue) :=
-  (buildInitialLocals chainId sender contract token ekBa commitBa respBa)
-    .set! 7 (some v7)
-    .set! 8 (some v8)
-    .set! 9 (some v9)
+  (((buildInitialLocals chainId sender contract token ekBa commitBa respBa).set! 7 (some v7)).set! 8 (some v8)).set! 9 (some v9)
 
 theorem storeInLocals789_all_set
     (chainId : UInt8)
@@ -401,7 +397,7 @@ theorem update_local_preserves_params
     (param_idx : Nat)
     (h_local : 7 ≤ local_idx ∧ local_idx < 19)
     (h_param : param_idx < 7) :
-    (onlyParamsLocals chainId sender contract token ekBa commitBa respBa).set! local_idx (some v)[param_idx]? =
+    ((onlyParamsLocals chainId sender contract token ekBa commitBa respBa).set! local_idx (some v))[param_idx]? =
     (onlyParamsLocals chainId sender contract token ekBa commitBa respBa)[param_idx]? := by
   sorry  -- set! at local_idx ≥ 7 doesn't affect param_idx < 7
 

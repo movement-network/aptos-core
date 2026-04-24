@@ -138,8 +138,26 @@ theorem takeN_from_marshaled_stack
     {stack : List MoveValue} (args : List MoveValue) (rest : List MoveValue) (n : Nat)
     (hStack : stack = args.reverse ++ rest)
     (hLen : args.length = n) :
-    takeN stack n = some (args.reverse, rest) := by
-  sorry -- ~40 lines: unfold takeN, induction on args
+    takeN stack n = some (args, rest) := by
+  unfold takeN
+  rw [hStack]
+  -- Show (args.reverse ++ rest).length >= n
+  have hlen_ge : (args.reverse ++ rest).length >= n := by
+    rw [List.length_append, List.length_reverse, hLen]
+    omega
+  -- Rewrite the if condition
+  rw [if_neg]
+  · -- Goal: some ((args.reverse ++ rest).take n |>.reverse, (args.reverse ++ rest).drop n) = some (args, rest)
+    congr 1
+    apply Prod.ext <;> simp only []
+    · -- Show (args.reverse ++ rest).take n |>.reverse = args
+      have hlen : args.reverse.length = n := by simp [hLen]
+      simp [List.take_left, hlen, List.reverse_reverse]
+    · -- Show (args.reverse ++ rest).drop n = rest
+      have hlen : args.reverse.length = n := by simp [hLen]
+      simp [List.drop_left, hlen]
+  · -- Show ¬ (args.reverse ++ rest).length < n
+    omega
 
 /-- After oracle consumes N args, stack is restored to pre-marshal state.
 

@@ -2641,10 +2641,11 @@ axiom vectorAppend_sequence_preserves_order
 /-! ### BCS serialization helpers -/
 
 /-- BCS serialization of address produces 32 bytes. -/
-axiom bcs_address_length
+@[simp] theorem bcs_address_length
     (addr : ByteArray)
     (h : addr.size = 32) :
-    (addr.toList.map MoveValue.u8).length = 32
+    (addr.toList.map MoveValue.u8).length = 32 := by
+  simp [List.length_map, h]
 
 axiom bcsToBytesAddressRef_identity
     (containers : ContainerStore)

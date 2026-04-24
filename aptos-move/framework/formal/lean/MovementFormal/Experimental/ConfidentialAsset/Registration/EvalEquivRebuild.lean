@@ -211,16 +211,18 @@ accesses concretely.
     (registrationArgs chainId sender contract token ekBa commitBa respBa).length = 7
 
 /-- `args[5]` is the commitment-bytes vector. -/
-axiom registrationArgs_get_5
+@[simp] theorem registrationArgs_get_5
     (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray) :
     (registrationArgs chainId sender contract token ekBa commitBa respBa)[5] =
-      .vector .u8 (commitBa.toList.map .u8)
+      .vector .u8 (commitBa.toList.map .u8) := by
+  unfold registrationArgs; rfl
 
 /-- `args[6]` is the response-bytes vector. -/
-axiom registrationArgs_get_6
+@[simp] theorem registrationArgs_get_6
     (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray) :
     (registrationArgs chainId sender contract token ekBa commitBa respBa)[6] =
-      .vector .u8 (respBa.toList.map .u8)
+      .vector .u8 (respBa.toList.map .u8) := by
+  unfold registrationArgs; rfl
 
 /-! ## Initial-frame facts on the 7-element args
 

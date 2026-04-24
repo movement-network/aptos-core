@@ -78,9 +78,8 @@ theorem phase1_pc4_to_pc8_extract_r
   have h_isSome : optionIsSomeRef containers_start [MoveValue.immRef rid_v] =
                    some ([MoveValue.bool true], containers_start) := by
     rw [optionIsSomeRef_immRef_read containers_start rid_v true rest_data]
-    · rfl
-    · rw [hv_struct] at hread
-      exact hread
+    rw [hv_struct] at hread
+    exact hread
 
   -- PC 5: brFalse not taken (result is true)
   -- Continue to PC 6
@@ -113,7 +112,7 @@ theorem phase1_pc9_to_pc17_extract_scalar
     (rid_scalar : RefId)
     (rest_scalar : List MoveValue)
     (containers_start : ContainerStore)
-    (horacle_scalar : o.scalarFromBytes [respBa_val] = some [scalar_opt])
+    (horacle_scalar : o.newScalarFromBytes [respBa_val] = some [scalar_opt])
     (hscalar_opt : scalar_opt = MoveValue.struct_ (MoveValue.bool true :: scalar :: rest_scalar))
     (hread : containers_start.read rid_scalar = some scalar_opt)
     (fuel : Nat) (hfuel : 66 ≤ fuel) :
@@ -126,7 +125,7 @@ theorem phase1_pc9_to_pc17_extract_scalar
   -- PC 9-11: scalarFromBytes call
   have h_scalar_struct : IsValidScalarResult scalar_opt := by
     use true, scalar, rest_scalar
-    exact hscalar_opt
+    rfl
 
   -- PC 12-17: Extract scalar from option (similar to PC 4-8)
   have h_isSome : optionIsSomeRef containers_start [MoveValue.immRef rid_scalar] =
@@ -167,7 +166,7 @@ theorem phase1_complete_pc4_to_pc20
     (containers_start : ContainerStore)
     (hv : v = MoveValue.struct_ (MoveValue.bool true :: rCompressed :: rest_data))
     (hread_v : containers_start.read rid_v = some v)
-    (horacle_scalar : o.scalarFromBytes [respBa_val] = some [scalar_opt])
+    (horacle_scalar : o.newScalarFromBytes [respBa_val] = some [scalar_opt])
     (hscalar_opt : scalar_opt = MoveValue.struct_ (MoveValue.bool true :: scalar :: rest_scalar))
     (hread_scalar : containers_start.read rid_scalar = some scalar_opt)
     (fuel : Nat) (hfuel : 70 ≤ fuel) :
@@ -362,8 +361,8 @@ theorem phase3_complete_pc43_to_pc70_sigma_success
     (horacle_decompress : o.pointDecompress [rCompressed] = some [rhs])
     (horacle_equals : o.pointEquals [lhs, rhs] = some [MoveValue.bool true])
     (fuel : Nat) (hfuel : 27 ≤ fuel) :
-    ∃ (result : EvalResult),
-      result = EvalResult.returned [] MachineState.empty := by
+    ∃ (result : ExecResult),
+      result = ExecResult.returned [] MachineState.empty := by
 
   -- PC 43-50: Challenge and base point computation
   obtain ⟨containers50, fuel50, e, h, ek, he, hh, hek, hc50, hf50, hfuel50⟩ :=
@@ -383,8 +382,7 @@ theorem phase3_complete_pc43_to_pc70_sigma_success
   -- PC 70: ret → .returned [] ms
   -- After .dropMs → .returned [] MachineState.empty
 
-  use EvalResult.returned [] MachineState.empty
-  rfl
+  use ExecResult.returned [] MachineState.empty
 
 /-! ## Main Integration: Complete Singleton Branch
 
@@ -412,7 +410,7 @@ theorem singleton_branch_complete_integration
     (hread_scalar : containers_start.read rid_scalar = some scalar_opt)
     (hmsg_init : msgBuf = MoveValue.vector MoveType.u8 [])
     -- Oracle hypotheses (all success)
-    (horacle_scalar : o.scalarFromBytes [respBa_val] = some [scalar_opt])
+    (horacle_scalar : o.newScalarFromBytes [respBa_val] = some [scalar_opt])
     (horacle_challenge : o.newScalarFromBytes [msgBuf_complete] = some [challenge_e])
     (horacle_base : o.hashToPointBase [] = some [base_point_h])
     (horacle_ek : o.pubkeyToPoint [ekPoint] = some [ek_as_point])
@@ -421,8 +419,8 @@ theorem singleton_branch_complete_integration
     (horacle_add : o.pointAdd [h_times_s, ek_times_e] = some [lhs])
     (horacle_decompress : o.pointDecompress [rCompressed] = some [rhs])
     (horacle_equals : o.pointEquals [lhs, rhs] = some [MoveValue.bool true]) :
-    ∃ (result : EvalResult),
-      result = EvalResult.returned [] MachineState.empty := by
+    ∃ (result : ExecResult),
+      result = ExecResult.returned [] MachineState.empty := by
 
   -- Phase 1 (PC 4-20): Extract rCompressed and scalar
   obtain ⟨containers20, fuel20, r_ext, s_ext, hr, hs, hc20, hf20, hfuel20⟩ :=
@@ -445,6 +443,6 @@ theorem singleton_branch_complete_integration
       fuel43 hfuel43
 
   use result
-  exact hresult
+  rfl
 
 end MovementFormal.Experimental.ConfidentialAsset.Registration

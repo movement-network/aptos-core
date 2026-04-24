@@ -4768,7 +4768,7 @@ theorem registration_eval_equiv_functional_sim
                 sorry  -- TODO: pointEquals oracle
 
               -- At PC 70, we execute ret with empty callStack
-              -- This should produce EvalResult.returned [] MachineState.empty
+              -- This should produce ExecResult.returned [] MachineState.empty
 
               /-! ### Final composition: connect to functional simulation -/
 
@@ -5589,8 +5589,8 @@ theorem registration_eval_equiv_functional_sim
               }
 
               -- Apply composition theorem for PC 43-70
-              have h_sigma_success : ∃ (result : EvalResult),
-                                       result = EvalResult.returned [] MachineState.empty := by
+              have h_sigma_success : ∃ (result : ExecResult),
+                                       result = ExecResult.returned [] MachineState.empty := by
                 apply registration_run_pc43_to_pc70_sigma_success o sigma_state_pc43
                   challenge_e base_point_h ek_as_point
                   h_times_s ek_times_e lhs_point rhs_point
@@ -6632,15 +6632,15 @@ theorem helper_pc67_to_pc70_equals_and_ret_success
     (horacle_equals : o.pointEquals containers_at_pc67 [lhs, rhs] =
                       some ([MoveValue.bool true], containers_at_pc67))
     (fuel : Nat) (hfuel : 14 ≤ fuel) :
-    ∃ (result : EvalResult),
-      result = EvalResult.returned [] MachineState.empty := by
+    ∃ (result : ExecResult),
+      result = ExecResult.returned [] MachineState.empty := by
 
   -- PC 67-69: point_equals returns true
   -- PC 70: brFalse (not taken since result is true)
   -- PC 71: ret with empty callStack → .returned [] ms
   -- After .dropMs → .returned [] MachineState.empty
 
-  use EvalResult.returned [] MachineState.empty
+  use ExecResult.returned [] MachineState.empty
   rfl
 
 /-! ### Helper: PC 67-73 (equality check false, abort) -/
@@ -6656,8 +6656,8 @@ theorem helper_pc67_to_pc73_equals_and_abort_verify_failed
     (horacle_equals : o.pointEquals containers_at_pc67 [lhs, rhs] =
                       some ([MoveValue.bool false], containers_at_pc67))
     (fuel : Nat) (hfuel : 14 ≤ fuel) :
-    ∃ (result : EvalResult),
-      result = EvalResult.aborted 65537 := by
+    ∃ (result : ExecResult),
+      result = ExecResult.aborted 65537 := by
 
   -- PC 67-69: point_equals returns false
   -- PC 70: brFalse 72 (TAKEN since result is false)
@@ -6665,7 +6665,7 @@ theorem helper_pc67_to_pc73_equals_and_abort_verify_failed
   -- PC 73: call error::invalid_argument
   -- Abort code: 65537 = ESIGMA_PROTOCOL_VERIFY_FAILED
 
-  use EvalResult.aborted 65537
+  use ExecResult.aborted 65537
   rfl
 
 /-! ## Main Composition: Full PC 4-70 Happy Path
@@ -6736,8 +6736,8 @@ theorem singleton_branch_pc4_to_pc70_happy_path_composition
                           some ([rhs], containers_at_pc4))
     (horacle_equals : o.pointEquals containers_at_pc4 [lhs, rhs] =
                       some ([MoveValue.bool true], containers_at_pc4)) :
-    ∃ (result : EvalResult),
-      result = EvalResult.returned [] MachineState.empty := by
+    ∃ (result : ExecResult),
+      result = ExecResult.returned [] MachineState.empty := by
 
   -- PC 4-6: optionIsSomeRef check
   obtain ⟨containers6, fuel6, hc6, hf6, hfuel6⟩ :=
@@ -6822,8 +6822,8 @@ theorem helper_pc4_to_pc83_option_none_abort
     (hv : v = MoveValue.struct_ (MoveValue.bool false :: rest))
     (hread : containers_at_pc4.read rid_v = some v)
     (fuel : Nat) (hfuel : 70 ≤ fuel) :
-    ∃ (result : EvalResult),
-      result = EvalResult.aborted 65537 := by
+    ∃ (result : ExecResult),
+      result = ExecResult.aborted 65537 := by
 
   -- PC 4: optionIsSomeRef returns false
   have horacle : o.optionIsSomeRef containers_at_pc4 [MoveValue.immRef rid_v] =
@@ -6839,7 +6839,7 @@ theorem helper_pc4_to_pc83_option_none_abort
   -- PC 80: call error::invalid_argument
   -- Abort with code 65537
 
-  use EvalResult.aborted 65537
+  use ExecResult.aborted 65537
   rfl
 
 /-! ### PC 10 error path: newScalarFromBytes returns none -/
@@ -6853,11 +6853,11 @@ theorem helper_pc10_scalar_none_error
     (containers_at_pc10 : ContainerStore)
     (horacle : o.scalarFromBytes containers_at_pc10 [respBa_val] = none)
     (fuel : Nat) (hfuel : 66 ≤ fuel) :
-    ∃ (result : EvalResult),
-      result = EvalResult.error := by
+    ∃ (result : ExecResult),
+      result = ExecResult.error := by
 
   -- Native call returns none → step produces .error
-  use EvalResult.error
+  use ExecResult.error
   rfl
 
 /-! ### PC 13-14 error path: scalar option is None -/
@@ -6875,8 +6875,8 @@ theorem helper_pc13_to_pc78_scalar_none_abort
     (hscalar_opt : scalar_opt = MoveValue.struct_ (MoveValue.bool false :: rest))
     (hread : containers_at_pc13.read rid_scalar = some scalar_opt)
     (fuel : Nat) (hfuel : 64 ≤ fuel) :
-    ∃ (result : EvalResult),
-      result = EvalResult.aborted 65537 := by
+    ∃ (result : ExecResult),
+      result = ExecResult.aborted 65537 := by
 
   -- PC 13: optionIsSomeRef returns false
   have horacle : o.optionIsSomeRef containers_at_pc13 [MoveValue.immRef rid_scalar] =
@@ -6887,7 +6887,7 @@ theorem helper_pc13_to_pc78_scalar_none_abort
   -- PC 14: brFalse 74 (TAKEN)
   -- PC 74-78: abort
 
-  use EvalResult.aborted 65537
+  use ExecResult.aborted 65537
   rfl
 
 /-! ### Oracle failure error paths -/
@@ -6899,10 +6899,10 @@ theorem helper_point_operation_none_error
     (args : List MoveValue)
     (horacle_none : True)  -- Placeholder for oracle = none condition
     (fuel : Nat) (hfuel : 10 ≤ fuel) :
-    ∃ (result : EvalResult),
-      result = EvalResult.error := by
+    ∃ (result : ExecResult),
+      result = ExecResult.error := by
 
-  use EvalResult.error
+  use ExecResult.error
   rfl
 
 /-! ## Frame Construction Lemmas
@@ -7129,8 +7129,8 @@ theorem bytecode_success_matches_functional_sim_success
     (hbytecode : True)  -- Placeholder for bytecode execution result
     (hfunctional : True)  -- Placeholder for functional sim result
     :
-    EvalResult.returned [] MachineState.empty =
-    EvalResult.returned [] MachineState.empty := by
+    ExecResult.returned [] MachineState.empty =
+    ExecResult.returned [] MachineState.empty := by
   rfl
 
 /-- When bytecode execution aborts with 65537, it matches functional sim verify_failed. -/
@@ -7142,8 +7142,8 @@ theorem bytecode_abort_matches_functional_sim_verify_failed
     (hbytecode : True)  -- Placeholder for bytecode execution result
     (hfunctional : True)  -- Placeholder for functional sim result
     :
-    EvalResult.aborted 65537 =
-    EvalResult.aborted 65537 := by
+    ExecResult.aborted 65537 =
+    ExecResult.aborted 65537 := by
   rfl
 
 /-! ## PC-by-PC Step Lemma Applications (Detailed Proofs)
@@ -7661,7 +7661,7 @@ theorem newCompressedPointFromBytes_none_produces_error
     (h_none : o.newCompressedPointFromBytes [commitBa_vec] = none)
     (fuel : Nat)
     (h_fuel : fuel ≥ 3) :
-    ∃ (result : EvalResult),
+    ∃ (result : ExecResult),
       result = .error := by
   sorry  -- TODO: Native call failure at PC 1 propagates to .error
 
@@ -7674,7 +7674,7 @@ theorem optionIsSomeRef_false_pc4_branches_to_abort
                some ([.bool false], containers))
     (fuel : Nat)
     (h_fuel : fuel ≥ 15) :
-    ∃ (result : EvalResult),
+    ∃ (result : ExecResult),
       result = .aborted 65537 := by
   -- PC 4: optionIsSomeRef returns false
   -- PC 5: brFalse 79 IS taken (branch to error path)
@@ -7688,7 +7688,7 @@ theorem newScalarFromBytes_none_option_pc10_branches_to_abort
     (h_result : o.newScalarFromBytes [respBa_vec] = some [.struct_ [.bool false]])
     (fuel : Nat)
     (h_fuel : fuel ≥ 20) :
-    ∃ (result : EvalResult),
+    ∃ (result : ExecResult),
       result = .aborted 65537 := by
   -- PC 10: newScalarFromBytes returns Some(.struct_ [.bool false, ...])
   -- PC 13: optionIsSomeRef on result returns false
@@ -7703,7 +7703,7 @@ theorem pubkeyToPoint_none_pc49_produces_error
     (h_none : o.pubkeyToPoint [ek_point] = none)
     (fuel : Nat)
     (h_fuel : fuel ≥ 50) :
-    ∃ (result : EvalResult),
+    ∃ (result : ExecResult),
       result = .error := by
   sorry  -- TODO: Native call failure propagates to .error
 
@@ -7714,7 +7714,7 @@ theorem pointMul_h_s_none_produces_error
     (h_none : o.pointMul [h, s] = none)
     (fuel : Nat)
     (h_fuel : fuel ≥ 55) :
-    ∃ (result : EvalResult),
+    ∃ (result : ExecResult),
       result = .error := by
   sorry  -- TODO: Native call failure propagates
 
@@ -7725,7 +7725,7 @@ theorem pointMul_ek_e_none_produces_error
     (h_none : o.pointMul [ek, e] = none)
     (fuel : Nat)
     (h_fuel : fuel ≥ 58) :
-    ∃ (result : EvalResult),
+    ∃ (result : ExecResult),
       result = .error := by
   sorry  -- TODO: Native call failure propagates
 
@@ -7736,7 +7736,7 @@ theorem pointAdd_none_produces_error
     (h_none : o.pointAdd [point1, point2] = none)
     (fuel : Nat)
     (h_fuel : fuel ≥ 62) :
-    ∃ (result : EvalResult),
+    ∃ (result : ExecResult),
       result = .error := by
   sorry  -- TODO: Native call failure propagates
 
@@ -7747,7 +7747,7 @@ theorem pointDecompress_none_produces_error
     (h_none : o.pointDecompress [compressed] = none)
     (fuel : Nat)
     (h_fuel : fuel ≥ 65) :
-    ∃ (result : EvalResult),
+    ∃ (result : ExecResult),
       result = .error := by
   sorry  -- TODO: Native call failure propagates
 
@@ -7758,7 +7758,7 @@ theorem pointEquals_none_produces_error
     (h_none : o.pointEquals [lhs, rhs] = none)
     (fuel : Nat)
     (h_fuel : fuel ≥ 68) :
-    ∃ (result : EvalResult),
+    ∃ (result : ExecResult),
       result = .error := by
   sorry  -- TODO: Native call failure propagates
 
@@ -7769,7 +7769,7 @@ theorem pointEquals_false_pc69_branches_to_abort
     (h_false : o.pointEquals [lhs, rhs] = some [.bool false])
     (fuel : Nat)
     (h_fuel : fuel ≥ 73) :
-    ∃ (result : EvalResult),
+    ∃ (result : ExecResult),
       result = .aborted 65537 := by
   -- PC 69: brFalse 71 IS taken (since pointEquals returned false)
   -- PC 71: ldU64 1
@@ -7897,7 +7897,7 @@ theorem pc73_abort_has_correct_code
     (fuel : Nat)
     (h_pc : frame_pc73.pc = 73)
     (h_fuel : 1 ≤ fuel) :
-    ∃ (result : EvalResult),
+    ∃ (result : ExecResult),
       result = .aborted 65537 := by
   sorry  -- TODO: Execute abort instruction at PC 73
 
@@ -8104,7 +8104,7 @@ theorem run_deterministic
     (stack : List MoveValue)
     (ms : MachineState)
     (fuel : Nat)
-    (result1 result2 : EvalResult)
+    (result1 result2 : ExecResult)
     (h1 : run env cs frame stack ms fuel = result1)
     (h2 : run env cs frame stack ms fuel = result2) :
     result1 = result2 := by

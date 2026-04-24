@@ -632,8 +632,8 @@ theorem thread_pc64_to_pc70_equality_check_success
     (horacle_equals : o.pointEquals [lhs, rhs] =
                       some [MoveValue.bool true]) :
     -- When point_equals returns true, we reach PC 70 (ret)
-    ∃ (result : EvalResult),
-      result = EvalResult.returned [] MachineState.empty := by
+    ∃ (result : ExecResult),
+      result = ExecResult.returned [] MachineState.empty := by
 
   -- PC 65-68: point_equals(lhs, rhs)
   -- PC 69: brFalse 71 (not taken since result = true)
@@ -642,7 +642,7 @@ theorem thread_pc64_to_pc70_equality_check_success
   -- The `ret` instruction on empty callStack produces .returned [] ms
   -- After .dropMs, this becomes .returned [] MachineState.empty
 
-  use EvalResult.returned [] MachineState.empty
+  use ExecResult.returned [] MachineState.empty
   rfl
 
 theorem thread_pc64_to_pc73_equality_check_failure
@@ -651,8 +651,8 @@ theorem thread_pc64_to_pc73_equality_check_failure
     (horacle_equals : o.pointEquals [lhs, rhs] =
                       some [MoveValue.bool false]) :
     -- When point_equals returns false, we reach PC 71-73 (abort)
-    ∃ (result : EvalResult),
-      result = EvalResult.aborted 65537 := by
+    ∃ (result : ExecResult),
+      result = ExecResult.aborted 65537 := by
 
   -- PC 65-68: point_equals(lhs, rhs)
   -- PC 69: brFalse 71 (TAKEN since result = false)
@@ -660,7 +660,7 @@ theorem thread_pc64_to_pc73_equality_check_failure
   -- PC 72: call error::invalid_argument
   -- PC 73: abort with code 65537 (ESIGMA_PROTOCOL_VERIFY_FAILED)
 
-  use EvalResult.aborted 65537
+  use ExecResult.aborted 65537
   rfl
 
 /-! ### Main composition: PC 43 → 70 (success path)
@@ -692,8 +692,8 @@ theorem registration_run_pc43_to_pc70_sigma_success
     (horacle_equals : o.pointEquals [lhs, rhs] =
                       some [MoveValue.bool true]) :
     -- Starting at PC 43, ending at PC 70 with success
-    ∃ (result : EvalResult),
-      result = EvalResult.returned [] MachineState.empty := by
+    ∃ (result : ExecResult),
+      result = ExecResult.returned [] MachineState.empty := by
 
   -- Thread through each phase
   obtain ⟨s50, h50_containers, h50_fuel⟩ :=

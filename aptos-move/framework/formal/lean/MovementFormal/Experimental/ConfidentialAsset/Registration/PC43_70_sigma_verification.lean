@@ -5,6 +5,7 @@ import MovementFormal.MoveModel.StepLemmas.Run
 import MovementFormal.MoveModel.ExecResultDropMs
 import MovementFormal.MoveModel.Native.Registration
 import MovementFormal.MoveModel.Programs.Registration
+import MovementFormal.Experimental.ConfidentialAsset.Registration.BytecodeLemmas
 
 /-! ## Concrete Helper: PC 43 through PC 70 — Sigma Protocol Verification
 
@@ -91,7 +92,10 @@ theorem thread_pc43_to_pc50_challenge_and_base
                  locals := locals_after_pc43, localRefs := frame_pc43.localRefs } []
                [s43.msgBuf]
                { MachineState.empty with containers := s43.containers } := by
-    sorry  -- TODO: Apply step lemma for moveLoc
+    -- Use bytecode lemmas for PC 43
+    have hpc : 43 < verifyRegistrationProofCode.size := BytecodeLemmas.pc43_inbounds
+    have hinstr : verifyRegistrationProofCode[43]'hpc = .moveLoc 11 := BytecodeLemmas.instr43_eq
+    sorry  -- Still need: apply step_moveLoc with concrete frame
 
   -- PC 44: call newScalarFromSha2_512 (compute Fiat-Shamir challenge)
   let frame_pc44 : Frame := {
@@ -127,7 +131,10 @@ theorem thread_pc43_to_pc50_challenge_and_base
                  locals := locals_after_pc45, localRefs := frame_pc45.localRefs } []
                []
                { MachineState.empty with containers := s43.containers } := by
-    sorry  -- TODO: Apply step lemma for stLoc
+    -- Use bytecode lemmas for PC 45
+    have hpc : 45 < verifyRegistrationProofCode.size := BytecodeLemmas.pc45_inbounds
+    have hinstr : verifyRegistrationProofCode[45]'hpc = .stLoc 12 := BytecodeLemmas.instr45_eq
+    sorry  -- Still need: apply step_stLoc with concrete frame
 
   -- PC 46: call hashToPointBase (get base point h)
   let frame_pc46 : Frame := {
@@ -382,7 +389,7 @@ theorem thread_pc50_to_pc58_point_multiplications
            -- Would need intermediate lemma: step with refs on stack → step with dereferenced values
 
 where
-  funcIdx_pointMul : Nat := 4  -- Placeholder
+  funcIdx_pointMul : Nat := BytecodeLemmas.funcIdx_pointMul  -- 12
 
   -- PC 54: stLoc 15 (store h*s result)
   let frame_pc54 : Frame := {
@@ -394,11 +401,11 @@ where
 
   let locals_after_pc54 := frame_pc54.locals.set! 15 (some hs_product)
 
-  have hpc54 : 54 < verifyRegistrationProofCode.size := by
-    sorry  -- From code definition
+  have hpc54 : 54 < verifyRegistrationProofCode.size :=
+    BytecodeLemmas.pc54_inbounds
 
-  have hinstr54 : verifyRegistrationProofCode[54]'hpc54 = .stLoc 15 := by
-    sorry  -- From code transcription
+  have hinstr54 : verifyRegistrationProofCode[54]'hpc54 = .stLoc 15 :=
+    BytecodeLemmas.instr54_eq
 
   have hlocal15_inbounds : 15 < frame_pc54.locals.size := by
     sorry  -- locals size = 19

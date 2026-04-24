@@ -66,19 +66,21 @@ axiom container_alloc_commute
 /-! ## Functional simulation result equivalences -/
 
 /-- When functional sim returns .error, dropMs preserves it. -/
-axiom functionalSim_error_dropMs
+theorem functionalSim_error_dropMs
     {ResultType : Type}
     [Inhabited ResultType]
     (error_constructor : ResultType) :
     (match error_constructor with
-     | _ => ExecResult.error : ExecResult).dropMs = ExecResult.error
+     | _ => ExecResult.error : ExecResult).dropMs = ExecResult.error := by
+  simp [ExecResult.dropMs]
 
 /-- When functional sim returns .returned, dropMs drops the machine state. -/
-axiom functionalSim_returned_dropMs
+theorem functionalSim_returned_dropMs
     (ms : MachineState) :
     (match true with
      | true => ExecResult.returned [] ms
      | false => ExecResult.error).dropMs =
-    ExecResult.returned [] MachineState.empty
+    ExecResult.returned [] MachineState.empty := by
+  simp [ExecResult.dropMs]
 
 end MovementFormal.Experimental.ConfidentialAsset.Helpers.FunctionalSimBridge

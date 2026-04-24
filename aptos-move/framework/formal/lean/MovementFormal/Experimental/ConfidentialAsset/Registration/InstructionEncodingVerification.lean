@@ -43,13 +43,14 @@ inductive ExpectedInstruction
   deriving Repr, BEq, DecidableEq
 
 /-- Convert expected to actual instruction -/
-def ExpectedInstruction.toInstruction : ExpectedInstruction → Instruction
-  | .copyLoc idx => .copyLoc idx
-  | .stLoc idx => .stLoc idx
-  | .moveLoc idx => .moveLoc idx
-  | .call name => .call sorry sorry  -- Function handle details
-  | .brTrue offset => .brTrue offset
-  | .brFalse offset => .brFalse offset
+def ExpectedInstruction.toInstruction (ei : ExpectedInstruction) : MoveInstr :=
+  match ei with
+  | ExpectedInstruction.copyLoc idx => MoveInstr.copyLoc idx
+  | ExpectedInstruction.stLoc idx => MoveInstr.stLoc idx
+  | ExpectedInstruction.moveLoc idx => MoveInstr.moveLoc idx
+  | ExpectedInstruction.call name => MoveInstr.call sorry  -- Function index
+  | ExpectedInstruction.brTrue offset => MoveInstr.brTrue offset
+  | ExpectedInstruction.brFalse offset => MoveInstr.brFalse offset
 
 /-! ## Phase 1 Instruction Map (PC 4→20) -/
 

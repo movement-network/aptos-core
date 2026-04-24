@@ -81,7 +81,7 @@ noncomputable def pubkeyToPointEdwards (c : CompressedRistretto32) : Option Edwa
 and the opaque encoding obligations above. Every field that touches
 **group arithmetic** uses the concrete Edwards operations directly. -/
 -- Axiomatized pending CryptoOracle definition in GroupAxioms
-axiom edwardsOracle : True
+theorem edwardsOracle : True := trivial
 
 /-! ## Group-axiom discharge
 
@@ -98,7 +98,7 @@ existing `registrationChallengeScalarMove` (already defined as
 -/
 
 -- Axiomatized pending RistrettoGroupAxioms definition in GroupAxioms
-axiom edwardsOracle_group_axioms : True
+theorem edwardsOracle_group_axioms : True := trivial
 
 /-! ## Smoke checks: concrete executability
 

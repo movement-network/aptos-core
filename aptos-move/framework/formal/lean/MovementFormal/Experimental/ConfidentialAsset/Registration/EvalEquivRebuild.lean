@@ -7568,8 +7568,8 @@ theorem run_two_consecutive_steps
     (stack1 stack2 stack3 : List MoveValue)
     (ms1 ms2 ms3 : MachineState)
     (fuel : Nat)
-    (step1 : step env cs frame1 stack1 ms1 = .ok cs frame2 stack2 ms2)
-    (step2 : step env cs frame2 stack2 ms2 = .ok cs frame3 stack3 ms3)
+    (step1 : step env frame cs1 stack1 ms1 = .ok cs frame2 stack2 ms2)
+    (step2 : step env frame cs2 stack2 ms2 = .ok cs frame3 stack3 ms3)
     (hfuel : 2 ≤ fuel) :
     run env cs frame1 stack1 ms1 fuel =
     run env cs frame3 stack3 ms3 (fuel - 2) := by
@@ -7591,9 +7591,9 @@ theorem run_three_consecutive_steps
     (stack1 stack2 stack3 stack4 : List MoveValue)
     (ms1 ms2 ms3 ms4 : MachineState)
     (fuel : Nat)
-    (step1 : step env cs frame1 stack1 ms1 = .ok cs frame2 stack2 ms2)
-    (step2 : step env cs frame2 stack2 ms2 = .ok cs frame3 stack3 ms3)
-    (step3 : step env cs frame3 stack3 ms3 = .ok cs frame4 stack4 ms4)
+    (step1 : step env frame cs1 stack1 ms1 = .ok cs frame2 stack2 ms2)
+    (step2 : step env frame cs2 stack2 ms2 = .ok cs frame3 stack3 ms3)
+    (step3 : step env frame cs3 stack3 ms3 = .ok cs frame4 stack4 ms4)
     (hfuel : 3 ≤ fuel) :
     run env cs frame1 stack1 ms1 fuel =
     run env cs frame4 stack4 ms4 (fuel - 3) := by
@@ -7611,10 +7611,10 @@ theorem run_four_consecutive_steps
     (stack1 stack2 stack3 stack4 stack5 : List MoveValue)
     (ms1 ms2 ms3 ms4 ms5 : MachineState)
     (fuel : Nat)
-    (step1 : step env cs frame1 stack1 ms1 = .ok cs frame2 stack2 ms2)
-    (step2 : step env cs frame2 stack2 ms2 = .ok cs frame3 stack3 ms3)
-    (step3 : step env cs frame3 stack3 ms3 = .ok cs frame4 stack4 ms4)
-    (step4 : step env cs frame4 stack4 ms4 = .ok cs frame5 stack5 ms5)
+    (step1 : step env frame cs1 stack1 ms1 = .ok cs frame2 stack2 ms2)
+    (step2 : step env frame cs2 stack2 ms2 = .ok cs frame3 stack3 ms3)
+    (step3 : step env frame cs3 stack3 ms3 = .ok cs frame4 stack4 ms4)
+    (step4 : step env frame cs4 stack4 ms4 = .ok cs frame5 stack5 ms5)
     (hfuel : 4 ≤ fuel) :
     run env cs frame1 stack1 ms1 fuel =
     run env cs frame5 stack5 ms5 (fuel - 4) := by
@@ -7632,11 +7632,11 @@ theorem run_five_consecutive_steps
     (stack1 stack2 stack3 stack4 stack5 stack6 : List MoveValue)
     (ms1 ms2 ms3 ms4 ms5 ms6 : MachineState)
     (fuel : Nat)
-    (step1 : step env cs frame1 stack1 ms1 = .ok cs frame2 stack2 ms2)
-    (step2 : step env cs frame2 stack2 ms2 = .ok cs frame3 stack3 ms3)
-    (step3 : step env cs frame3 stack3 ms3 = .ok cs frame4 stack4 ms4)
-    (step4 : step env cs frame4 stack4 ms4 = .ok cs frame5 stack5 ms5)
-    (step5 : step env cs frame5 stack5 ms5 = .ok cs frame6 stack6 ms6)
+    (step1 : step env frame cs1 stack1 ms1 = .ok cs frame2 stack2 ms2)
+    (step2 : step env frame cs2 stack2 ms2 = .ok cs frame3 stack3 ms3)
+    (step3 : step env frame cs3 stack3 ms3 = .ok cs frame4 stack4 ms4)
+    (step4 : step env frame cs4 stack4 ms4 = .ok cs frame5 stack5 ms5)
+    (step5 : step env frame cs5 stack5 ms5 = .ok cs frame6 stack6 ms6)
     (hfuel : 5 ≤ fuel) :
     run env cs frame1 stack1 ms1 fuel =
     run env cs frame6 stack6 ms6 (fuel - 5) := by
@@ -8090,8 +8090,8 @@ theorem execution_deterministic
     (stack : List MoveValue)
     (ms : MachineState)
     (result1 result2 : StepResult)
-    (h1 : step env cs frame stack ms = result1)
-    (h2 : step env cs frame stack ms = result2) :
+    (h1 : step env frame cs stack ms = result1)
+    (h2 : step env frame cs stack ms = result2) :
     result1 = result2 := by
   rw [h1] at h2
   exact h2

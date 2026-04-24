@@ -61,9 +61,8 @@ Post-state:
 - stack = v2 :: v1 :: rest
 
 **NOTE:** Requires i1 ≠ i2 and careful array bounds management.
-Converted to axiom due to array bound elaboration in tactic mode.
 -/
-axiom chain_two_moveLoc
+theorem chain_two_moveLoc
     (frame : Frame) (cs : List Frame) (rest : List MoveValue) (ms : MachineState)
     (n i1 i2 : Nat)
     (v1 v2 : MoveValue)
@@ -87,7 +86,35 @@ axiom chain_two_moveLoc
       { frame with
         pc := n + 2,
         locals := (frame.locals.set i1 none hi1_bound).set i2 none hi2 }
-      cs (v2 :: v1 :: rest) ms fuel
+      cs (v2 :: v1 :: rest) ms fuel := by
+  -- Rewrite hi2 to not depend on set
+  have hi2' : i2 < frame.locals.size := by
+    have : (frame.locals.set i1 none hi1_bound).size = frame.locals.size := by simp [Array.size_set]
+    rw [← this]; exact hi2
+  -- Step 1: First moveLoc at PC n
+  have hstep1 : step env frame cs rest ms =
+    .ok { frame with pc := n + 1, locals := frame.locals.set i1 none hi1 } cs (v1 :: rest) ms :=
+    step_moveLoc_single frame cs rest ms n i1 v1 hn_lt hcode1 hpc hi1 hv1 hRefNone1
+  -- Step 2: Second moveLoc at PC n+1 on the modified frame
+  let frame1 := { frame with pc := n + 1, locals := frame.locals.set i1 none hi1 }
+  have hframe1_code_size : n + 1 < frame1.code.size := by simp [frame1]; exact hn1_lt
+  have hframe1_code : frame1.code[n+1]'hframe1_code_size = .moveLoc i2 := by
+    simp [frame1]; exact hcode2
+  have hframe1_pc : frame1.pc = n + 1 := by simp [frame1]
+  have hframe1_locals_size : i2 < frame1.locals.size := by
+    simp [frame1]; exact hi2'
+  have hframe1_locals_val : frame1.locals[i2]'hframe1_locals_size = some v2 := by
+    simp [frame1]; exact hv2
+  have hstep2 : step env frame1 cs (v1 :: rest) ms =
+    .ok { frame1 with pc := n + 2, locals := frame1.locals.set i2 none hframe1_locals_size } cs (v2 :: v1 :: rest) ms :=
+    step_moveLoc_single frame1 cs (v1 :: rest) ms (n+1) i2 v2
+      hframe1_code_size hframe1_code hframe1_pc hframe1_locals_size hframe1_locals_val hRefNone2
+  -- Step 3: Chain the two steps using run_succ_two_ok
+  have h := run_succ_two_ok fuel frame1 { frame1 with pc := n + 2, locals := frame1.locals.set i2 none hframe1_locals_size }
+    cs cs (v1 :: rest) (v2 :: v1 :: rest) ms ms hstep1 hstep2
+  -- Simplify: { frame1 with ... } = { frame with pc := n + 2, locals := ... }
+  simp only [frame1] at h
+  exact h
 
 /-! ## Three moveLoc chain -/
 

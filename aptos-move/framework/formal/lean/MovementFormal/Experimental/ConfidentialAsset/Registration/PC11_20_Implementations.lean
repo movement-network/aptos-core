@@ -431,7 +431,106 @@ theorem pc10_to_20_composition
       frame₂₀.locals[13]? = some (some chainIdScalar) ∧
       frame₂₀.locals[14]? = some (some senderScalar) ∧
       stack₂₀ = [] := by
-  sorry
+
+  -- Step 1: PC 10→11 (CopyLoc 1)
+  have h10_11 := pc10_to_11_complete o frame₁₀ [] ms₁₀
+                   h_pc respOption h_local1 h_instr10 (by omega)
+  obtain ⟨frame₁₁, stack₁₁, ms₁₁, h10_11_step, h10_11_pc, h10_11_stack⟩ := h10_11
+
+  -- Step 2: PC 11→12 (Call isSome)
+  have h11_12 := pc11_to_12_complete o frame₁₁ stack₁₁ ms₁₁
+                   h10_11_pc respOption h10_11_stack true h_is_some h_instr11
+  obtain ⟨frame₁₂, stack₁₂, ms₁₂, h11_12_step, h11_12_pc, h11_12_stack⟩ := h11_12
+
+  -- Step 3: PC 12→13 (BrTrue - true case, continue)
+  have h12_13 := pc12_to_13_true o frame₁₂ stack₁₂ ms₁₂
+                   h11_12_pc h11_12_stack h_instr12
+  obtain ⟨frame₁₃, stack₁₃, ms₁₃, h12_13_step, h12_13_pc, h12_13_stack⟩ := h12_13
+
+  -- Step 4: PC 13→14 (MoveLoc 1)
+  have h_local1_frame13 : frame₁₃.locals[1]? = some (some respOption) := by
+    -- frame₁₃ = { frame₁₂ with pc := 13 } from brTrue
+    -- frame₁₂ = { frame₁₁ with pc := 12 } from call
+    -- frame₁₁ = { frame₁₀ with pc := 11 } from copyLoc
+    -- Therefore frame₁₃.locals = frame₁₀.locals
+    rfl ▸ h_local1
+
+  have h13_14 := pc13_to_14_complete o frame₁₃ stack₁₃ ms₁₃
+                   h12_13_pc respOption h_local1_frame13 h12_13_stack h_instr13
+  obtain ⟨frame₁₄, stack₁₄, ms₁₄, h13_14_step, h13_14_pc, h13_14_stack⟩ := h13_14
+
+  -- Step 5: PC 14→15 (Call unwrap)
+  have h14_15 := pc14_to_15_complete o frame₁₄ stack₁₄ ms₁₄
+                   h13_14_pc respOption h13_14_stack resp_pt h_unwrap h_instr14
+  obtain ⟨frame₁₅, stack₁₅, ms₁₅, h14_15_step, h14_15_pc, h14_15_stack⟩ := h14_15
+
+  -- Step 6: PC 15→16 (StLoc 12)
+  have h15_16 := pc15_to_16_complete o frame₁₅ stack₁₅ ms₁₅
+                   h14_15_pc resp_pt h14_15_stack h_instr15 (by omega)
+  obtain ⟨frame₁₆, stack₁₆, ms₁₆, h15_16_step, h15_16_pc, h15_16_local12, h15_16_stack⟩ := h15_16
+
+  -- Step 7: PC 16→17 (CopyLoc 2)
+  have h_local2_frame16 : frame₁₆.locals[2]? = some (some chainIdScalar) := by
+    -- Local 2 preserved through all frame updates
+    rfl ▸ h_local2
+
+  have h16_17 := pc16_to_17_complete o frame₁₆ stack₁₆ ms₁₆
+                   h15_16_pc chainIdScalar h_local2_frame16 h15_16_stack h_instr16 (by omega)
+  obtain ⟨frame₁₇, stack₁₇, ms₁₇, h16_17_step, h16_17_pc, h16_17_stack⟩ := h16_17
+
+  -- Step 8: PC 17→18 (StLoc 13)
+  have h17_18 := pc17_to_18_complete o frame₁₇ stack₁₇ ms₁₇
+                   h16_17_pc chainIdScalar h16_17_stack h_instr17 (by omega)
+  obtain ⟨frame₁₈, stack₁₈, ms₁₈, h17_18_step, h17_18_pc, h17_18_local13, h17_18_stack⟩ := h17_18
+
+  -- Step 9: PC 18→19 (CopyLoc 3)
+  have h_local3_frame18 : frame₁₈.locals[3]? = some (some senderScalar) := by
+    -- Local 3 preserved through all frame updates
+    rfl ▸ h_local3
+
+  have h18_19 := pc18_to_19_complete o frame₁₈ stack₁₈ ms₁₈
+                   h17_18_pc senderScalar h_local3_frame18 h17_18_stack h_instr18 (by omega)
+  obtain ⟨frame₁₉, stack₁₉, ms₁₉, h18_19_step, h18_19_pc, h18_19_stack⟩ := h18_19
+
+  -- Step 10: PC 19→20 (StLoc 14)
+  have h19_20 := pc19_to_20_complete o frame₁₉ stack₁₉ ms₁₉
+                   h18_19_pc senderScalar h18_19_stack h_instr19 (by omega)
+  obtain ⟨frame₂₀, stack₂₀, ms₂₀, h19_20_step, h19_20_pc, h19_20_local14, h19_20_stack⟩ := h19_20
+
+  -- Compose all 10 steps
+  use frame₂₀, stack₂₀, ms₂₀
+  constructor
+  · -- Build run 10 from individual steps
+    have h_run1 := (by simp [run]; exact h10_11_step : run (registrationModuleEnv o) 1 [] frame₁₀ [] ms₁₀ = .ok [] frame₁₁ stack₁₁ ms₁₁)
+    have h_run2 := chain_n_plus_m_steps h_run1 (by simp [run]; exact h11_12_step)
+    have h_run3 := chain_n_plus_m_steps h_run2 (by simp [run]; exact h12_13_step)
+    have h_run4 := chain_n_plus_m_steps h_run3 (by simp [run]; exact h13_14_step)
+    have h_run5 := chain_n_plus_m_steps h_run4 (by simp [run]; exact h14_15_step)
+    have h_run6 := chain_n_plus_m_steps h_run5 (by simp [run]; exact h15_16_step)
+    have h_run7 := chain_n_plus_m_steps h_run6 (by simp [run]; exact h16_17_step)
+    have h_run8 := chain_n_plus_m_steps h_run7 (by simp [run]; exact h17_18_step)
+    have h_run9 := chain_n_plus_m_steps h_run8 (by simp [run]; exact h18_19_step)
+    have h_run10 := chain_n_plus_m_steps h_run9 (by simp [run]; exact h19_20_step)
+    have : 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 = 10 := by decide
+    convert h_run10 using 2; omega
+
+  constructor
+  · exact h19_20_pc
+
+  constructor
+  · -- Local 12 preserved from step 6
+    have : frame₂₀.locals[12]? = frame₁₆.locals[12]? := by rfl  -- frame updates preserve locals
+    rw [this]; exact h15_16_local12
+
+  constructor
+  · -- Local 13 preserved from step 8
+    have : frame₂₀.locals[13]? = frame₁₈.locals[13]? := by rfl
+    rw [this]; exact h17_18_local13
+
+  constructor
+  · exact h19_20_local14
+
+  · exact h19_20_stack
 
 /-! ## Progress Tracking -/
 

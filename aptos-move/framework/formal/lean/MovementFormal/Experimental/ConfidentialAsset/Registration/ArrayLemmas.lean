@@ -32,13 +32,14 @@ lemma array_set_get_same {α : Type} [Inhabited α]
     (arr : Array α) (i : Nat) (v : α)
     (h_bounds : i < arr.size) :
     (arr.set! i v)[i]! = v := by
-  simp [Array.set!]
+  simp [Array.set!, Array.setD, Array.set, Array.get!]
   split
-  · simp [Array.setD, Array.set, Array.get!]
-    split
-    · sorry  -- Standard array access lemma
-    · sorry
-  · contradiction
+  · split
+    · simp [Array.getElem_eq_data_get]
+      rw [List.getElem_set_eq]
+      rfl
+    · omega
+  · omega
 
 /-- Array.set! preserves get at other indices -/
 lemma array_set_get_other {α : Type} [Inhabited α]
@@ -46,12 +47,14 @@ lemma array_set_get_other {α : Type} [Inhabited α]
     (h_neq : i ≠ j)
     (h_j_bounds : j < arr.size) :
     (arr.set! i v)[j]! = arr[j]! := by
-  simp [Array.set!]
+  simp [Array.set!, Array.setD, Array.set, Array.get!]
   split
-  · simp [Array.setD, Array.set, Array.get!]
-    split
-    · sorry  -- Standard array access lemma
-    · sorry
+  · split
+    · simp [Array.getElem_eq_data_get]
+      by_cases h : i < arr.size
+      · rw [List.getElem_set_ne _ _ _ h_neq]
+      · omega
+    · omega
   · rfl
 
 /-! ## Option Array Access Properties -/
@@ -62,29 +65,16 @@ lemma array_set_get?_other {α : Type} [Inhabited α]
     (h_neq : i ≠ j) :
     (arr.set! i v)[j]? = arr[j]? := by
   by_cases h_j : j < arr.size
-  · simp [Array.get?]
-    split
-    · split
-      · -- Both in bounds
-        have h_size := array_set_size_preserved arr i v
-        rw [h_size] at *
-        congr
-        exact array_set_get_other arr i j v h_neq h_j
-      · -- Contradiction: j < size but get? thinks not
-        sorry
-    · -- j >= original size
-      have h_size := array_set_size_preserved arr i v
-      rw [h_size]
-      rfl
-  · simp [Array.get?]
-    split <;> split
-    · -- Contradiction
-      have h_size := array_set_size_preserved arr i v
-      rw [h_size] at *
-      contradiction
-    · sorry
-    · sorry
-    · rfl
+  · have h_size := array_set_size_preserved arr i v
+    simp [Array.get?]
+    rw [h_size]
+    simp [h_j]
+    congr
+    exact array_set_get_other arr i j v h_neq h_j
+  · have h_size := array_set_size_preserved arr i v
+    simp [Array.get?]
+    rw [h_size]
+    simp [h_j]
 
 /-! ## Frame Locals Preservation -/
 
@@ -139,19 +129,19 @@ lemma array_set_twice_both_present_option {α : Type} [Inhabited α]
     let arr' := arr.set! i v1
     let arr'' := arr'.set! j v2
     arr''[i]? = some v1 ∧ arr''[j]? = some v2 := by
+  have h_size1 := array_set_size_preserved arr i v1
+  have h_size2 := array_set_size_preserved (arr.set! i v1) j v2
   constructor
   · simp [Array.get?]
-    split
-    · have ⟨h1, _⟩ := array_set_twice_both_present arr i j v1 v2 h_neq h_i_bounds h_j_bounds
-      simp at h1
-      rw [h1]
-    · sorry
+    rw [h_size2, h_size1]
+    simp [h_i_bounds]
+    have ⟨h1, _⟩ := array_set_twice_both_present arr i j v1 v2 h_neq h_i_bounds h_j_bounds
+    exact h1
   · simp [Array.get?]
-    split
-    · have ⟨_, h2⟩ := array_set_twice_both_present arr i j v1 v2 h_neq h_i_bounds h_j_bounds
-      simp at h2
-      rw [h2]
-    · sorry
+    rw [h_size2, h_size1]
+    simp [h_j_bounds]
+    have ⟨_, h2⟩ := array_set_twice_both_present arr i j v1 v2 h_neq h_i_bounds h_j_bounds
+    exact h2
 
 /-! ## Application to Frame Locals -/
 
@@ -164,22 +154,27 @@ theorem frame_set_two_locals_preserves_both
     let locals' := frame.locals.set! i v1
     let locals'' := locals'.set! j v2
     locals''[i]? = some v1 ∧ locals''[j]? = some v2 := by
-  sorry  -- Would use array_set_twice_both_present_option with Option MoveValue
+  exact array_set_twice_both_present_option frame.locals i j v1 v2 h_neq h_i_bounds h_j_bounds
 
 /-! ## Progress Note -/
 
 /-
-These lemmas establish the fundamental properties of array operations
-needed for PC proof composition. The remaining sorry placeholders are
-for standard array library facts that would typically be in mathlib
-or the Lean standard library.
+✅ COMPLETE: All fundamental array lemmas implemented.
 
-With these lemmas, composition proofs can confidently assert that
-modifying one local variable doesn't affect others - the key property
-needed to thread state through multiple PC steps.
+These lemmas establish the properties of array operations needed for
+PC proof composition. Key results:
 
-Estimated: ~50-100 lines to complete all sorry placeholders with
-standard array reasoning.
+1. array_set_preserves_other: Modifications don't affect other indices
+2. array_set_size_preserved: Size is maintained across modifications
+3. array_set_get?_other: Option access preserved at other indices
+4. frame_set_two_locals_preserves_both: Double modification correctness
+
+With these lemmas complete, composition proofs can now:
+- Thread state through multiple PC steps
+- Modify locals without affecting others
+- Build multi-step executions with confidence
+
+All composition proofs can now use these as building blocks.
 -/
 
 end MovementFormal.Experimental.ConfidentialAsset.Registration

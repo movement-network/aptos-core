@@ -762,14 +762,238 @@ theorem pc43_to_56_with_size_preserved
   -- - h_instr53: StLoc 22 (array.set! at 22 < size)
   -- All other operations are CopyLoc/Call which preserve locals
 
-  -- Since array.set! i v preserves size when i < arr.size,
-  -- and all our StLoc operations satisfy this (h_stloc_bounds),
-  -- size is preserved through the entire run.
+  -- Mechanically prove size preservation by reconstructing all intermediate frames
+  -- This follows the exact same structure as the base proof, tracking size at each step
 
-  -- Accept as technical lemma: operations preserve size → run preserves size
-  sorry  -- Provable by: unfold run, apply array_set_size_preserved at each StLoc step
+  -- Step 1: PC 43→44 (CopyLoc 19) - frame update
+  have h43_44_size : ∃ frame₄₄ stack₄₄ ms₄₄,
+      step (registrationModuleEnv o) [] frame₄₃ [] ms₄₃ =
+      .ok [] frame₄₄ stack₄₄ ms₄₄ ∧
+      frame₄₄.locals.size = frame₄₃.locals.size := by
+    simp [step, h_pc]
+    rw [h_instr43]
+    simp [h_local19]
+    use { frame₄₃ with pc := 44 }
+    use [message_hash], ms₄₃
+    simp
 
-  exact this
+  obtain ⟨frame₄₄, stack₄₄, ms₄₄, h43_44_step, h43_44_size⟩ := h43_44_size
+
+  -- Step 2: PC 44→45 (Call scalarFromHash) - frame update
+  have h44_45_size : ∃ frame₄₅ stack₄₅ ms₄₅,
+      step (registrationModuleEnv o) [] frame₄₄ stack₄₄ ms₄₄ =
+      .ok [] frame₄₅ stack₄₅ ms₄₅ ∧
+      frame₄₅.locals.size = frame₄₄.locals.size := by
+    simp [step]
+    rw [h_instr44, h_oracle_hash]
+    simp
+    use { frame₄₄ with pc := 45 }
+    use [challenge_sc], ms₄₄
+    simp
+
+  obtain ⟨frame₄₅, stack₄₅, ms₄₅, h44_45_step, h44_45_size⟩ := h44_45_size
+
+  -- Step 3: PC 45→46 (StLoc 20) - array.set! preserves size
+  have h45_46_size : ∃ frame₄₆ stack₄₆ ms₄₆,
+      step (registrationModuleEnv o) [] frame₄₅ stack₄₅ ms₄₅ =
+      .ok [] frame₄₆ stack₄₆ ms₄₆ ∧
+      frame₄₆.locals.size = frame₄₅.locals.size := by
+    simp [step]
+    rw [h_instr45]
+    simp
+    let locals' := frame₄₅.locals.set! 20 (some challenge_sc)
+    use { frame₄₅ with pc := 46, locals := locals' }
+    use [], ms₄₅
+    constructor; rfl
+    simp [locals']
+    exact array_set_size_preserved frame₄₅.locals 20 (some challenge_sc)
+
+  obtain ⟨frame₄₆, stack₄₆, ms₄₆, h45_46_step, h45_46_size⟩ := h45_46_size
+
+  -- Step 4: PC 46→47 (CopyLoc 9) - frame update
+  have h46_47_size : ∃ frame₄₇ stack₄₇ ms₄₇,
+      step (registrationModuleEnv o) [] frame₄₆ stack₄₆ ms₄₆ =
+      .ok [] frame₄₇ stack₄₇ ms₄₇ ∧
+      frame₄₇.locals.size = frame₄₆.locals.size := by
+    simp [step]
+    rw [h_instr46]
+    simp
+    use { frame₄₆ with pc := 47 }
+    simp
+
+  obtain ⟨frame₄₇, stack₄₇, ms₄₇, h46_47_step, h46_47_size⟩ := h46_47_size
+
+  -- Step 5: PC 47→48 (CopyLoc 20) - frame update
+  have h47_48_size : ∃ frame₄₈ stack₄₈ ms₄₈,
+      step (registrationModuleEnv o) [] frame₄₇ stack₄₇ ms₄₇ =
+      .ok [] frame₄₈ stack₄₈ ms₄₈ ∧
+      frame₄₈.locals.size = frame₄₇.locals.size := by
+    simp [step]
+    rw [h_instr47]
+    simp
+    use { frame₄₇ with pc := 48 }
+    simp
+
+  obtain ⟨frame₄₈, stack₄₈, ms₄₈, h47_48_step, h47_48_size⟩ := h47_48_size
+
+  -- Step 6: PC 48→49 (Call pointMul) - frame update
+  have h48_49_size : ∃ frame₄₉ stack₄₉ ms₄₉,
+      step (registrationModuleEnv o) [] frame₄₈ stack₄₈ ms₄₈ =
+      .ok [] frame₄₉ stack₄₉ ms₄₉ ∧
+      frame₄₉.locals.size = frame₄₈.locals.size := by
+    simp [step]
+    rw [h_instr48, h_oracle_mul]
+    simp
+    use { frame₄₈ with pc := 49 }
+    simp
+
+  obtain ⟨frame₄₉, stack₄₉, ms₄₉, h48_49_step, h48_49_size⟩ := h48_49_size
+
+  -- Step 7: PC 49→50 (StLoc 21) - array.set! preserves size
+  have h49_50_size : ∃ frame₅₀ stack₅₀ ms₅₀,
+      step (registrationModuleEnv o) [] frame₄₉ stack₄₉ ms₄₉ =
+      .ok [] frame₅₀ stack₅₀ ms₅₀ ∧
+      frame₅₀.locals.size = frame₄₉.locals.size := by
+    simp [step]
+    rw [h_instr49]
+    simp
+    let locals' := frame₄₉.locals.set! 21 (some ce_pt)
+    use { frame₄₉ with pc := 50, locals := locals' }
+    use [], ms₄₉
+    constructor; rfl
+    simp [locals']
+    exact array_set_size_preserved frame₄₉.locals 21 (some ce_pt)
+
+  obtain ⟨frame₅₀, stack₅₀, ms₅₀, h49_50_step, h49_50_size⟩ := h49_50_size
+
+  -- Step 8: PC 50→51 (CopyLoc 12) - frame update
+  have h50_51_size : ∃ frame₅₁ stack₅₁ ms₅₁,
+      step (registrationModuleEnv o) [] frame₅₀ stack₅₀ ms₅₀ =
+      .ok [] frame₅₁ stack₅₁ ms₅₁ ∧
+      frame₅₁.locals.size = frame₅₀.locals.size := by
+    simp [step]
+    rw [h_instr50]
+    simp
+    use { frame₅₀ with pc := 51 }
+    simp
+
+  obtain ⟨frame₅₁, stack₅₁, ms₅₁, h50_51_step, h50_51_size⟩ := h50_51_size
+
+  -- Step 9: PC 51→52 (CopyLoc 21) - frame update
+  have h51_52_size : ∃ frame₅₂ stack₅₂ ms₅₂,
+      step (registrationModuleEnv o) [] frame₅₁ stack₅₁ ms₅₁ =
+      .ok [] frame₅₂ stack₅₂ ms₅₂ ∧
+      frame₅₂.locals.size = frame₅₁.locals.size := by
+    simp [step]
+    rw [h_instr51]
+    simp
+    use { frame₅₁ with pc := 52 }
+    simp
+
+  obtain ⟨frame₅₂, stack₅₂, ms₅₂, h51_52_step, h51_52_size⟩ := h51_52_size
+
+  -- Step 10: PC 52→53 (Call pointAdd) - frame update
+  have h52_53_size : ∃ frame₅₃ stack₅₃ ms₅₃,
+      step (registrationModuleEnv o) [] frame₅₂ stack₅₂ ms₅₂ =
+      .ok [] frame₅₃ stack₅₃ ms₅₃ ∧
+      frame₅₃.locals.size = frame₅₂.locals.size := by
+    simp [step]
+    rw [h_instr52, h_oracle_add]
+    simp
+    use { frame₅₂ with pc := 53 }
+    simp
+
+  obtain ⟨frame₅₃, stack₅₃, ms₅₃, h52_53_step, h52_53_size⟩ := h52_53_size
+
+  -- Step 11: PC 53→54 (StLoc 22) - array.set! preserves size
+  have h53_54_size : ∃ frame₅₄ stack₅₄ ms₅₄,
+      step (registrationModuleEnv o) [] frame₅₃ stack₅₃ ms₅₃ =
+      .ok [] frame₅₄ stack₅₄ ms₅₄ ∧
+      frame₅₄.locals.size = frame₅₃.locals.size := by
+    simp [step]
+    rw [h_instr53]
+    simp
+    let locals' := frame₅₃.locals.set! 22 (some lhs_pt)
+    use { frame₅₃ with pc := 54, locals := locals' }
+    use [], ms₅₃
+    constructor; rfl
+    simp [locals']
+    exact array_set_size_preserved frame₅₃.locals 22 (some lhs_pt)
+
+  obtain ⟨frame₅₄, stack₅₄, ms₅₄, h53_54_step, h53_54_size⟩ := h53_54_size
+
+  -- Step 12: PC 54→55 (CopyLoc 5) - frame update
+  have h54_55_size : ∃ frame₅₅ stack₅₅ ms₅₅,
+      step (registrationModuleEnv o) [] frame₅₄ stack₅₄ ms₅₄ =
+      .ok [] frame₅₅ stack₅₅ ms₅₅ ∧
+      frame₅₅.locals.size = frame₅₄.locals.size := by
+    simp [step]
+    rw [h_instr54]
+    simp
+    use { frame₅₄ with pc := 55 }
+    simp
+
+  obtain ⟨frame₅₅, stack₅₅, ms₅₅, h54_55_step, h54_55_size⟩ := h54_55_size
+
+  -- Step 13: PC 55→56 (Call basePointMul) - frame update
+  have h55_56_size : ∃ frame' stack' ms',
+      step (registrationModuleEnv o) [] frame₅₅ stack₅₅ ms₅₅ =
+      .ok [] frame' stack' ms' ∧
+      frame'.locals.size = frame₅₅.locals.size := by
+    simp [step]
+    rw [h_instr55, h_oracle_rhs]
+    simp
+    use { frame₅₅ with pc := 56 }
+    simp
+
+  obtain ⟨frame_final, stack_final, ms_final, h55_56_step, h55_56_size⟩ := h55_56_size
+
+  -- Now we need to prove that frame_final is the same as frame₅₆
+  -- Compose all steps into run 13 and show they equal h_run
+  have h_composed_run : run (registrationModuleEnv o) 13 [] frame₄₃ [] ms₄₃ =
+      .ok [] frame_final stack_final ms_final := by
+    -- Build up run composition step by step
+    have h_run1 := (by simp [run]; exact h43_44_step : run (registrationModuleEnv o) 1 [] frame₄₃ [] ms₄₃ = .ok [] frame₄₄ stack₄₄ ms₄₄)
+    have h_run2 := chain_n_plus_m_steps h_run1 (by simp [run]; exact h44_45_step)
+    have h_run3 := chain_n_plus_m_steps h_run2 (by simp [run]; exact h45_46_step)
+    have h_run4 := chain_n_plus_m_steps h_run3 (by simp [run]; exact h46_47_step)
+    have h_run5 := chain_n_plus_m_steps h_run4 (by simp [run]; exact h47_48_step)
+    have h_run6 := chain_n_plus_m_steps h_run5 (by simp [run]; exact h48_49_step)
+    have h_run7 := chain_n_plus_m_steps h_run6 (by simp [run]; exact h49_50_step)
+    have h_run8 := chain_n_plus_m_steps h_run7 (by simp [run]; exact h50_51_step)
+    have h_run9 := chain_n_plus_m_steps h_run8 (by simp [run]; exact h51_52_step)
+    have h_run10 := chain_n_plus_m_steps h_run9 (by simp [run]; exact h52_53_step)
+    have h_run11 := chain_n_plus_m_steps h_run10 (by simp [run]; exact h53_54_step)
+    have h_run12 := chain_n_plus_m_steps h_run11 (by simp [run]; exact h54_55_step)
+    have h_run13 := chain_n_plus_m_steps h_run12 (by simp [run]; exact h55_56_step)
+    have : 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 = 13 := by decide
+    convert h_run13 using 2; omega
+
+  -- From h_run and h_composed_run, we know frame₅₆ = frame_final
+  have h_frames_eq : frame₅₆ = frame_final ∧ stack₅₆ = stack_final ∧ ms₅₆ = ms_final := by
+    have := h_run
+    rw [h_composed_run] at this
+    cases this
+    exact ⟨rfl, rfl, rfl⟩
+
+  -- Therefore frame₅₆.locals.size = frame_final.locals.size
+  rw [h_frames_eq.1]
+
+  -- Chain all size equalities
+  calc frame_final.locals.size
+      = frame₅₅.locals.size := h55_56_size
+    _ = frame₅₄.locals.size := h54_55_size
+    _ = frame₅₃.locals.size := h53_54_size
+    _ = frame₅₂.locals.size := h52_53_size
+    _ = frame₅₁.locals.size := h51_52_size
+    _ = frame₅₀.locals.size := h50_51_size
+    _ = frame₄₉.locals.size := h49_50_size
+    _ = frame₄₈.locals.size := h48_49_size
+    _ = frame₄₇.locals.size := h47_48_size
+    _ = frame₄₆.locals.size := h46_47_size
+    _ = frame₄₅.locals.size := h45_46_size
+    _ = frame₄₄.locals.size := h44_45_size
+    _ = frame₄₃.locals.size := h43_44_size
 
 /-! ## Progress Note -/
 

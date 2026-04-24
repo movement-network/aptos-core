@@ -92,9 +92,9 @@ theorem thread_pc20_to_pc25_dst_and_chainId
     (s20 : MessageAssemblyState o)
     (hfuel20 : 70 ≤ s20.fuel)  -- PC 20-25 uses ~5 fuel
     (dst : MoveValue)  -- The DST constant (domain separation tag)
-    (horacle_append_dst : vectorAppendU8Ref s20.containers [MoveValue.mutRef s20.rid_msg, dst] =
+    (_horacle_append_dst : vectorAppendU8Ref s20.containers [MoveValue.mutRef s20.rid_msg, dst] =
                           some ([], s20.containers))
-    (horacle_append_chainId : vectorAppendU8Ref s20.containers [MoveValue.mutRef s20.rid_msg, MoveValue.u8 s20.chainId] =
+    (_horacle_append_chainId : vectorAppendU8Ref s20.containers [MoveValue.mutRef s20.rid_msg, MoveValue.u8 s20.chainId] =
                                some ([], s20.containers)) :
     ∃ (s25 : MessageAssemblyState o),
       -- Message buffer now has DST || chainId appended
@@ -123,7 +123,7 @@ theorem thread_pc20_to_pc25_dst_and_chainId
 theorem thread_pc25_to_pc30_sender
     (s25 : MessageAssemblyState o)
     (hfuel25 : 63 ≤ s25.fuel)  -- PC 25-30 uses ~7 fuel
-    (horacle_append_chainId_stack : vectorAppendU8Ref s25.containers
+    (_horacle_append_chainId_stack : vectorAppendU8Ref s25.containers
                                       [MoveValue.mutRef s25.rid_msg, MoveValue.u8 s25.chainId] =
                                      some ([], s25.containers))
     (horacle_append_sender : vectorAppendU8Ref s25.containers

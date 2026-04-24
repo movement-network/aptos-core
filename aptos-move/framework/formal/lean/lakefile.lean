@@ -240,6 +240,7 @@ lean_lib «MovementFormal» where
     `MovementFormal.Experimental.ConfidentialAsset.Registration.PC20_30_Composition,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.PC31_43_Composition,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.Phase2Complete,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.PC43_56_Composition,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.PhaseCompositionImplementations,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.ExampleComposition,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.Phase6Composition,

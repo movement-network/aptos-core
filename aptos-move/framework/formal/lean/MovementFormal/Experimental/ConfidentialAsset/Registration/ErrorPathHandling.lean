@@ -61,6 +61,27 @@ def ERROR_INVALID_ARGUMENT : UInt64 := 65537
 axiom error_invalid_argument_value :
     ERROR_INVALID_ARGUMENT = 65537
 
+/-! ## Validation Predicates
+
+Predicates for validating cryptographic values.
+-/
+
+/-- Valid compressed point bytes (32 bytes, valid curve point). -/
+def IsValidCompressedPointBytes (v : MoveValue) : Prop :=
+  ∃ (data : List MoveValue),
+    v = .vector .u8 data ∧
+    data.length = 32 ∧
+    ∀ elem ∈ data, ∃ b : UInt8, elem = .u8 b
+    -- TODO: Add curve membership check
+
+/-- Valid scalar bytes (32 bytes, reduced mod L). -/
+def IsReducedScalar (v : MoveValue) : Prop :=
+  ∃ (data : List MoveValue),
+    v = .vector .u8 data ∧
+    data.length = 32 ∧
+    ∀ elem ∈ data, ∃ b : UInt8, elem = .u8 b
+    -- TODO: Add reduction check
+
 /-! ## Oracle Failure Conditions
 
 Conditions under which oracles return None or failure values.
@@ -73,14 +94,14 @@ axiom newCompressedPointFromBytes_fails_on_wrong_length
     (data : List MoveValue)
     (h_bytes : bytes = .vector .u8 data)
     (h_len : data.length ≠ 32) :
-    ∃ result, o.newCompressedPointFromBytes [bytes] = some [MoveValue.struct_ [MoveValue.bool false]]
+    ∃ (result : MoveValue), o.newCompressedPointFromBytes [bytes] = some [MoveValue.struct_ [MoveValue.bool false]]
 
 /-- newCompressedPointFromBytes fails when input has invalid point encoding. -/
 axiom newCompressedPointFromBytes_fails_on_invalid_encoding
     (o : RegistrationNativeOracle)
     (bytes : MoveValue)
     (h_invalid : ¬IsValidCompressedPointBytes bytes) :
-    ∃ result, o.newCompressedPointFromBytes [bytes] = some [MoveValue.struct_ [MoveValue.bool false]]
+    ∃ (result : MoveValue), o.newCompressedPointFromBytes [bytes] = some [MoveValue.struct_ [MoveValue.bool false]]
 
 /-- newScalarFromBytes fails when input is not 32 bytes. -/
 axiom newScalarFromBytes_fails_on_wrong_length
@@ -89,14 +110,14 @@ axiom newScalarFromBytes_fails_on_wrong_length
     (data : List MoveValue)
     (h_bytes : bytes = .vector .u8 data)
     (h_len : data.length ≠ 32) :
-    ∃ result, o.newScalarFromBytes [bytes] = some [MoveValue.struct_ [MoveValue.bool false]]
+    ∃ (result : MoveValue), o.newScalarFromBytes [bytes] = some [MoveValue.struct_ [MoveValue.bool false]]
 
 /-- newScalarFromBytes fails when scalar is not reduced mod L. -/
 axiom newScalarFromBytes_fails_on_unreduced
     (o : RegistrationNativeOracle)
     (bytes : MoveValue)
     (h_unreduced : ¬IsReducedScalar bytes) :
-    ∃ result, o.newScalarFromBytes [bytes] = some [MoveValue.struct_ [MoveValue.bool false]]
+    ∃ (result : MoveValue), o.newScalarFromBytes [bytes] = some [MoveValue.struct_ [MoveValue.bool false]]
 
 /-- pointEquals returns false when points differ. -/
 axiom pointEquals_returns_false_on_mismatch
@@ -293,22 +314,6 @@ def sigmaVerificationFailureMessage : String :=
 
 Predicates for valid inputs that avoid error paths.
 -/
-
-/-- Valid compressed point bytes (32 bytes, valid curve point). -/
-def IsValidCompressedPointBytes (v : MoveValue) : Prop :=
-  ∃ (data : List MoveValue),
-    v = .vector .u8 data ∧
-    data.length = 32 ∧
-    ∀ elem ∈ data, ∃ b : UInt8, elem = .u8 b
-    -- TODO: Add curve membership check
-
-/-- Valid scalar bytes (32 bytes, reduced mod L). -/
-def IsReducedScalar (v : MoveValue) : Prop :=
-  ∃ (data : List MoveValue),
-    v = .vector .u8 data ∧
-    data.length = 32 ∧
-    ∀ elem ∈ data, ∃ b : UInt8, elem = .u8 b
-    -- TODO: Add reduction check
 
 /-- Valid registration proof inputs (happy path precondition). -/
 structure ValidRegistrationInputs where

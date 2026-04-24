@@ -30,6 +30,8 @@ import MovementFormal.Experimental.ConfidentialAsset.Registration.BytecodeTransc
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration
 
+open MovementFormal.MoveModel
+
 /-! ## Instruction Encoding Types -/
 
 /-- Expected instruction at a PC -/

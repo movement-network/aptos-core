@@ -339,11 +339,11 @@ theorem thread_pc50_to_pc58_point_multiplications
     localRefs := frame_pc52.localRefs.set! 10 (some rid_s)
   }
 
-  have hpc53 : 53 < verifyRegistrationProofCode.size := by
-    sorry  -- From code definition
+  have hpc53 : 53 < verifyRegistrationProofCode.size :=
+    BytecodeLemmas.pc53_inbounds
 
-  have hinstr53 : verifyRegistrationProofCode[53]'hpc53 = .call funcIdx_pointMul := by
-    sorry  -- From code transcription
+  have hinstr53 : verifyRegistrationProofCode[53]'hpc53 = .call funcIdx_pointMul :=
+    BytecodeLemmas.instr53_eq
 
   have hfuncIdx53_bounds : funcIdx_pointMul < (registrationModuleEnv o).functions.size := by
     sorry  -- From module env
@@ -478,11 +478,11 @@ where
     localRefs := frame_pc56.localRefs.set! 12 (some rid_e)
   }
 
-  have hpc57 : 57 < verifyRegistrationProofCode.size := by
-    sorry  -- From code definition
+  have hpc57 : 57 < verifyRegistrationProofCode.size :=
+    BytecodeLemmas.pc57_inbounds
 
-  have hinstr57 : verifyRegistrationProofCode[57]'hpc57 = .call funcIdx_pointMul := by
-    sorry  -- From code transcription
+  have hinstr57 : verifyRegistrationProofCode[57]'hpc57 = .call funcIdx_pointMul :=
+    BytecodeLemmas.instr57_eq
 
   have htake57 : takeN [MoveValue.immRef rid_ek, MoveValue.immRef rid_e] 2 =
                  some ([MoveValue.immRef rid_ek, MoveValue.immRef rid_e], []) := by
@@ -523,11 +523,11 @@ where
 
   let locals_after_pc58 := frame_pc58.locals.set! 16 (some ek_e_product)
 
-  have hpc58 : 58 < verifyRegistrationProofCode.size := by
-    sorry  -- From code definition
+  have hpc58 : 58 < verifyRegistrationProofCode.size :=
+    BytecodeLemmas.pc58_inbounds
 
-  have hinstr58 : verifyRegistrationProofCode[58]'hpc58 = .stLoc 16 := by
-    sorry  -- From code transcription
+  have hinstr58 : verifyRegistrationProofCode[58]'hpc58 = .stLoc 16 :=
+    BytecodeLemmas.instr58_eq
 
   have hlocal16_inbounds : 16 < frame_pc58.locals.size := by
     sorry  -- locals size = 19

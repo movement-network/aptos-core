@@ -413,7 +413,32 @@ theorem pc4_to_79_error_path
       .ok [] frame₇₉ stack₇₉ ms₇₉ ∧
       frame₇₉.pc = 79 ∧
       stack₇₉ = [] := by
-  sorry
+
+  -- Step 1-2: PC 4→5 (run 2: CopyLoc + Call isSome, returns false)
+  have h4_5 := pc4_to_5_complete o frame₄ [] ms₄
+                 h_pc init.commitOption h_local0 rfl false h_is_some
+                 h_instr4 (by omega)
+  obtain ⟨frame₅, stack₅, ms₅, h4_5_run, h4_5_pc, h4_5_stack⟩ := h4_5
+
+  -- Step 3: PC 5→79 (BrFalse, false case branches to 79)
+  have h_stack_bool_false : stack₅ = [.bool false] := by
+    simp [h4_5_stack]
+
+  have h5_79 := pc5_to_79_false o frame₅ stack₅ ms₅
+                  h4_5_pc h_stack_bool_false h_instr5
+  obtain ⟨frame₇₉, stack₇₉, ms₇₉, h5_79_step, h5_79_pc, h5_79_stack⟩ := h5_79
+
+  -- Compose: run 2 + 1 = run 3
+  use frame₇₉, stack₇₉, ms₇₉
+  constructor
+  · have h_run3 := chain_n_plus_m_steps h4_5_run (by simp [run]; exact h5_79_step)
+    have : 2 + 1 = 3 := by decide
+    convert h_run3 using 2; omega
+
+  constructor
+  · exact h5_79_pc
+
+  · exact h5_79_stack
 
 /-! ## Progress Tracking -/
 

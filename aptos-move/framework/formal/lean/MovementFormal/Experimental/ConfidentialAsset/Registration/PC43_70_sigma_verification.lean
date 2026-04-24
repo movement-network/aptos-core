@@ -598,6 +598,7 @@ Compute lhs = h*s + ek*e and decompress rhs = decompress(r_compressed).
 
 theorem thread_pc58_to_pc64_addition_and_decompress
     (s58 : SigmaVerificationState o)
+    (hfuel58 : 76 ≤ s58.fuel)  -- Need 70 ≤ fuel after -6, so 76 ≤ s58.fuel
     (hs_product ek_e_product : MoveValue)
     (lhs rhs : MoveValue)
     (horacle_add : o.pointAdd [hs_product, ek_e_product] =
@@ -622,7 +623,7 @@ theorem thread_pc58_to_pc64_addition_and_decompress
     rid_msg := s58.rid_msg,
     containers := s58.containers,
     fuel := s58.fuel - 6,
-    hfuel := by sorry
+    hfuel := by omega  -- Uses hfuel58 hypothesis
   }
 
 /-! ### PC 64-70: Equality check and success

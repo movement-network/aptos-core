@@ -39,8 +39,8 @@ structure TraceStep (env : ModuleEnv) where
   stack_after : List MoveValue
   ms_before : MachineState
   ms_after : MachineState
-  h_step : step env frame_before [] stack_before ms_before =
-           ExecResult.ok frame_after [] stack_after ms_after
+  h_step : step env frame []_before stack_before ms_before =
+           .ok [] frame_after stack_after ms_after
 
 /-- A trace segment between two PCs. -/
 structure TraceSegment (env : ModuleEnv) (pc_start pc_end : Nat) where
@@ -157,11 +157,11 @@ theorem compose_two_steps
     (f0 f1 f2 : Frame)
     (s0 s1 s2 : List MoveValue)
     (m0 m1 m2 : MachineState)
-    (h_step1 : step env f0 [] s0 m0 = ExecResult.ok f1 [] s1 m1)
-    (h_step2 : step env f1 [] s1 m1 = ExecResult.ok f2 [] s2 m2) :
+    (h_step1 : step env [] f0 s0 m0 = ExecResult.ok f1 s1 m1)
+    (h_step2 : step env [] f1 s1 m1 = ExecResult.ok f2 s2 m2) :
     ∃ (fuel : Nat),
       fuel = 2 ∧
-      run env f0 [] s0 m0 fuel = ExecResult.ok f2 [] s2 m2 := by
+      run env [] f0 s0 m0 fuel = ExecResult.ok f2 s2 m2 := by
   use 2
   constructor
   · rfl
@@ -173,12 +173,12 @@ theorem compose_three_steps
     (f0 f1 f2 f3 : Frame)
     (s0 s1 s2 s3 : List MoveValue)
     (m0 m1 m2 m3 : MachineState)
-    (h_step1 : step env f0 [] s0 m0 = ExecResult.ok f1 [] s1 m1)
-    (h_step2 : step env f1 [] s1 m1 = ExecResult.ok f2 [] s2 m2)
-    (h_step3 : step env f2 [] s2 m2 = ExecResult.ok f3 [] s3 m3) :
+    (h_step1 : step env [] f0 s0 m0 = ExecResult.ok f1 s1 m1)
+    (h_step2 : step env [] f1 s1 m1 = ExecResult.ok f2 s2 m2)
+    (h_step3 : step env [] f2 s2 m2 = ExecResult.ok f3 s3 m3) :
     ∃ (fuel : Nat),
       fuel = 3 ∧
-      run env f0 [] s0 m0 fuel = ExecResult.ok f3 [] s3 m3 := by
+      run env [] f0 s0 m0 fuel = ExecResult.ok f3 s3 m3 := by
   use 3
   constructor
   · rfl

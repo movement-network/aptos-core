@@ -49,8 +49,8 @@ theorem transition_pop
     (h_pc : frame.pc < frame.code.size)
     (h_instr : frame.code[frame.pc]'h_pc = .pop)
     (h_stack : (top :: rest).length > 0) :
-    step env [] frame (top :: rest) ms =
-    .ok [] { frame with pc := frame.pc + 1 } rest ms := by
+    step env frame [] (top :: rest) ms =
+    ExecResult.ok { frame with pc := frame.pc + 1 } [] rest ms := by
   sorry  -- pop semantics
 
 /-- Stack unchanged by non-stack instructions (except expected modifications). -/
@@ -65,7 +65,7 @@ theorem stack_preserved_by_stLoc
     (h_instr : frame.code[frame.pc]'h_pc = .stLoc idx)
     (h_idx : idx < frame.locals.size) :
     ∃ frame' ms',
-      step env [] frame (value :: rest) ms = .ok [] frame' rest ms' ∧
+      step env frame [] (value :: rest) ms = ExecResult.ok frame' [] rest ms' ∧
       frame'.pc = frame.pc + 1 := by
   sorry  -- stLoc pops value, updates local
 
@@ -86,8 +86,8 @@ theorem transition_copyLoc
     (h_instr : frame.code[frame.pc]'h_pc = .copyLoc idx)
     (h_idx : idx < frame.locals.size)
     (h_local : frame.locals[idx]'h_idx = some value) :
-    step env [] frame stack ms =
-    .ok [] { frame with pc := frame.pc + 1 } (value :: stack) ms := by
+    step env frame [] stack ms =
+    ExecResult.ok { frame with pc := frame.pc + 1 } [] (value :: stack) ms := by
   sorry  -- copyLoc semantics
 
 /-- moveLoc: Pushes local onto stack, clears local (no localRef). -/
@@ -104,11 +104,12 @@ theorem transition_moveLoc_noRef
     (h_local : frame.locals[idx]'h_idx = some value)
     (h_idx_ref : idx < frame.localRefs.size)
     (h_no_ref : frame.localRefs[idx]'h_idx_ref = none) :
-    step env [] frame stack ms =
-    .ok []
+    step env frame [] stack ms =
+    ExecResult.ok
         { frame with
           pc := frame.pc + 1,
           locals := frame.locals.set! idx none }
+        []
         (value :: stack)
         ms := by
   sorry  -- moveLoc semantics (no ref case)
@@ -126,11 +127,12 @@ theorem transition_moveLoc_withRef
     (h_idx : idx < frame.locals.size)
     (h_idx_ref : idx < frame.localRefs.size)
     (h_ref : frame.localRefs[idx]'h_idx_ref = some rid) :
-    step env [] frame stack ms =
-    .ok []
+    step env frame [] stack ms =
+    ExecResult.ok
         { frame with
           pc := frame.pc + 1,
           localRefs := frame.localRefs.set! idx none }
+        []
         (.immRef rid :: stack)
         ms := by
   sorry  -- moveLoc semantics (ref case)
@@ -146,11 +148,12 @@ theorem transition_stLoc
     (h_pc : frame.pc < frame.code.size)
     (h_instr : frame.code[frame.pc]'h_pc = .stLoc idx)
     (h_idx : idx < frame.locals.size) :
-    step env [] frame (value :: rest) ms =
-    .ok []
+    step env frame [] (value :: rest) ms =
+    ExecResult.ok
         { frame with
           pc := frame.pc + 1,
           locals := frame.locals.set! idx (some value) }
+        []
         rest
         ms := by
   sorry  -- stLoc semantics
@@ -176,12 +179,13 @@ theorem transition_immBorrowLoc
     (h_local : frame.locals[idx]'h_idx = some value)
     (h_idx_ref : idx < frame.localRefs.size)
     (h_no_ref : frame.localRefs[idx]'h_idx_ref = none)
-    (h_alloc : ms.containers.alloc value = some (rid, containers')) :
-    step env [] frame stack ms =
-    .ok []
+    (h_alloc : ms.containers.alloc value = (containers', rid)) :
+    step env frame [] stack ms =
+    ExecResult.ok
         { frame with
           pc := frame.pc + 1,
           localRefs := frame.localRefs.set! idx (some rid) }
+        []
         (.immRef rid :: stack)
         { ms with containers := containers' } := by
   sorry  -- immBorrowLoc semantics
@@ -202,12 +206,13 @@ theorem transition_mutBorrowLoc_fresh
     (h_local : frame.locals[idx]'h_idx = some value)
     (h_idx_ref : idx < frame.localRefs.size)
     (h_no_ref : frame.localRefs[idx]'h_idx_ref = none)
-    (h_alloc : ms.containers.alloc value = some (rid, containers')) :
-    step env [] frame stack ms =
-    .ok []
+    (h_alloc : ms.containers.alloc value = (containers', rid)) :
+    step env frame [] stack ms =
+    ExecResult.ok
         { frame with
           pc := frame.pc + 1,
           localRefs := frame.localRefs.set! idx (some rid) }
+        []
         (.mutRef rid :: stack)
         { ms with containers := containers' } := by
   sorry  -- mutBorrowLoc semantics (fresh case)
@@ -225,9 +230,10 @@ theorem transition_mutBorrowLoc_existing
     (h_idx : idx < frame.locals.size)
     (h_idx_ref : idx < frame.localRefs.size)
     (h_ref : frame.localRefs[idx]'h_idx_ref = some rid) :
-    step env [] frame stack ms =
-    .ok []
+    step env frame [] stack ms =
+    ExecResult.ok
         { frame with pc := frame.pc + 1 }
+        []
         (.mutRef rid :: stack)
         ms := by
   sorry  -- mutBorrowLoc semantics (existing case)
@@ -243,9 +249,10 @@ theorem transition_readRef_imm
     (h_pc : frame.pc < frame.code.size)
     (h_instr : frame.code[frame.pc]'h_pc = .readRef)
     (h_read : ms.containers.read rid = some value) :
-    step env [] frame (.immRef rid :: rest) ms =
-    .ok []
+    step env frame [] (.immRef rid :: rest) ms =
+    ExecResult.ok
         { frame with pc := frame.pc + 1 }
+        []
         (value :: rest)
         ms := by
   sorry  -- readRef semantics (immRef)
@@ -261,9 +268,10 @@ theorem transition_readRef_mut
     (h_pc : frame.pc < frame.code.size)
     (h_instr : frame.code[frame.pc]'h_pc = .readRef)
     (h_read : ms.containers.read rid = some value) :
-    step env [] frame (.mutRef rid :: rest) ms =
-    .ok []
+    step env frame [] (.mutRef rid :: rest) ms =
+    ExecResult.ok
         { frame with pc := frame.pc + 1 }
+        []
         (value :: rest)
         ms := by
   sorry  -- readRef semantics (mutRef)
@@ -280,9 +288,10 @@ theorem transition_writeRef
     (h_pc : frame.pc < frame.code.size)
     (h_instr : frame.code[frame.pc]'h_pc = .writeRef)
     (h_write : ms.containers.write rid value = some containers') :
-    step env [] frame (.mutRef rid :: value :: rest) ms =
-    .ok []
+    step env frame [] (.mutRef rid :: value :: rest) ms =
+    ExecResult.ok
         { frame with pc := frame.pc + 1 }
+        []
         rest
         { ms with containers := containers' } := by
   sorry  -- writeRef semantics
@@ -300,10 +309,11 @@ theorem transition_freezeRef
     (h_pc : frame.pc < frame.code.size)
     (h_instr : frame.code[frame.pc]'h_pc = .freezeRef)
     (h_read : ms.containers.read rid_mut = some value)
-    (h_alloc : ms.containers.alloc value = some (rid_imm, containers')) :
-    step env [] frame (.mutRef rid_mut :: rest) ms =
-    .ok []
+    (h_alloc : ms.containers.alloc value = (containers', rid_imm)) :
+    step env frame [] (.mutRef rid_mut :: rest) ms =
+    ExecResult.ok
         { frame with pc := frame.pc + 1 }
+        []
         (.immRef rid_imm :: rest)
         { ms with containers := containers' } := by
   sorry  -- freezeRef semantics
@@ -322,9 +332,10 @@ theorem transition_brFalse_taken
     (target : Nat)
     (h_pc : frame.pc < frame.code.size)
     (h_instr : frame.code[frame.pc]'h_pc = .brFalse target) :
-    step env [] frame (.bool false :: rest) ms =
-    .ok []
+    step env frame [] (.bool false :: rest) ms =
+    ExecResult.ok
         { frame with pc := target }
+        []
         rest
         ms := by
   sorry  -- brFalse semantics (taken)
@@ -338,9 +349,10 @@ theorem transition_brFalse_not_taken
     (target : Nat)
     (h_pc : frame.pc < frame.code.size)
     (h_instr : frame.code[frame.pc]'h_pc = .brFalse target) :
-    step env [] frame (.bool true :: rest) ms =
-    .ok []
+    step env frame [] (.bool true :: rest) ms =
+    ExecResult.ok
         { frame with pc := frame.pc + 1 }
+        []
         rest
         ms := by
   sorry  -- brFalse semantics (not taken)
@@ -353,7 +365,7 @@ theorem transition_ret
     (ms : MachineState)
     (h_pc : frame.pc < frame.code.size)
     (h_instr : frame.code[frame.pc]'h_pc = .ret) :
-    step env [] frame stack ms = .ret [] stack ms := by
+    step env frame [] stack ms = ExecResult.returned stack ms := by
   sorry  -- ret semantics
 
 /-! ## Function Call Transitions
@@ -377,9 +389,10 @@ theorem transition_call_native_1_1
     (h_func : env.functions[funcIdx]'h_bounds =
               { numParams := 1, numReturns := 1, body := .native oracle })
     (h_oracle : oracle [arg] = some [result]) :
-    step env [] frame (arg :: rest) ms =
-    .ok []
+    step env frame [] (arg :: rest) ms =
+    ExecResult.ok
         { frame with pc := frame.pc + 1 }
+        []
         (result :: rest)
         ms := by
   sorry  -- Native call semantics
@@ -400,9 +413,10 @@ theorem transition_call_native_2_1
     (h_func : env.functions[funcIdx]'h_bounds =
               { numParams := 2, numReturns := 1, body := .native oracle })
     (h_oracle : oracle [arg1, arg2] = some [result]) :
-    step env [] frame (arg1 :: arg2 :: rest) ms =
-    .ok []
+    step env frame [] (arg1 :: arg2 :: rest) ms =
+    ExecResult.ok
         { frame with pc := frame.pc + 1 }
+        []
         (result :: rest)
         ms := by
   sorry  -- Native call semantics
@@ -424,9 +438,10 @@ theorem transition_call_nativeRef_1_1
     (h_func : env.functions[funcIdx]'h_bounds =
               { numParams := 1, numReturns := 1, body := .nativeRef oracle })
     (h_oracle : oracle ms.containers [arg] = some ([result], containers')) :
-    step env [] frame (arg :: rest) ms =
-    .ok []
+    step env frame [] (arg :: rest) ms =
+    ExecResult.ok
         { frame with pc := frame.pc + 1 }
+        []
         (result :: rest)
         { ms with containers := containers' } := by
   sorry  -- NativeRef call semantics
@@ -447,9 +462,10 @@ theorem transition_call_nativeRef_2_0
     (h_func : env.functions[funcIdx]'h_bounds =
               { numParams := 2, numReturns := 0, body := .nativeRef oracle })
     (h_oracle : oracle ms.containers [arg1, arg2] = some ([], containers')) :
-    step env [] frame (arg1 :: arg2 :: rest) ms =
-    .ok []
+    step env frame [] (arg1 :: arg2 :: rest) ms =
+    ExecResult.ok
         { frame with pc := frame.pc + 1 }
+        []
         rest
         { ms with containers := containers' } := by
   sorry  -- NativeRef call semantics
@@ -467,14 +483,14 @@ theorem transition_vecPack
     (rest : List MoveValue)
     (ms : MachineState)
     (n : Nat)
-    (typ : ValueType)
+    (typ : MoveType)
     (h_pc : frame.pc < frame.code.size)
     (h_instr : frame.code[frame.pc]'h_pc = .vecPack typ n)
-    (h_len : elements.length = n)
-    (h_type : ∀ e ∈ elements, e.type = typ) :
-    step env [] frame (elements ++ rest) ms =
-    .ok []
+    (h_len : elements.length = n) :
+    step env frame [] (elements ++ rest) ms =
+    ExecResult.ok
         { frame with pc := frame.pc + 1 }
+        []
         (.vector typ elements :: rest)
         ms := by
   sorry  -- vecPack semantics
@@ -495,10 +511,10 @@ theorem pattern_copyLoc_then_native_call
     (local_idx funcIdx : Nat)
     (value result : MoveValue)
     (oracle : List MoveValue → Option (List MoveValue))
-    (h_step1 : step env [] frame stack ms = .ok [] frame' stack' ms')
-    (h_step2 : step env [] frame' stack' ms' = .ok [] frame'' stack'' ms'') :
+    (h_step1 : step env frame [] stack ms = ExecResult.ok frame' [] stack' ms')
+    (h_step2 : step env frame' [] stack' ms' = ExecResult.ok frame'' [] stack'' ms'') :
     ∃ (fuel : Nat), fuel = 2 ∧
-      run env [] frame stack ms fuel = .ok [] frame'' stack'' ms'' := by
+      run env frame [] stack ms fuel = ExecResult.ok frame'' [] stack'' ms'' := by
   use 2
   constructor
   · rfl
@@ -518,7 +534,7 @@ theorem pattern_mutBorrowLoc_then_nativeRef_call
     (oracle : ContainerStore → List MoveValue → Option (List MoveValue × ContainerStore)) :
     ∃ frame'' stack'' ms'',
       (∃ (fuel : Nat), fuel = 2 ∧
-        run env [] frame stack ms fuel = .ok [] frame'' stack'' ms'') ∧
+        run env frame [] stack ms fuel = ExecResult.ok frame'' [] stack'' ms'') ∧
       ms''.containers = containers'' := by
   sorry  -- Composite pattern
 
@@ -533,7 +549,7 @@ theorem locals_size_invariant
     (frame frame' : Frame)
     (stack stack' : List MoveValue)
     (ms ms' : MachineState)
-    (h_step : step env [] frame stack ms = .ok [] frame' stack' ms') :
+    (h_step : step env frame [] stack ms = ExecResult.ok frame' [] stack' ms') :
     frame'.locals.size = frame.locals.size := by
   sorry  -- All instructions preserve locals.size
 
@@ -543,7 +559,7 @@ theorem code_immutable
     (frame frame' : Frame)
     (stack stack' : List MoveValue)
     (ms ms' : MachineState)
-    (h_step : step env [] frame stack ms = .ok [] frame' stack' ms') :
+    (h_step : step env frame [] stack ms = ExecResult.ok frame' [] stack' ms') :
     frame'.code = frame.code := by
   sorry  -- Code never changes
 
@@ -553,7 +569,7 @@ theorem localRefs_size_invariant
     (frame frame' : Frame)
     (stack stack' : List MoveValue)
     (ms ms' : MachineState)
-    (h_step : step env [] frame stack ms = .ok [] frame' stack' ms') :
+    (h_step : step env frame [] stack ms = ExecResult.ok frame' [] stack' ms') :
     frame'.localRefs.size = frame.localRefs.size := by
   sorry  -- All instructions preserve localRefs.size
 
@@ -564,7 +580,7 @@ theorem frame_validity_preserved
     (stack stack' : List MoveValue)
     (ms ms' : MachineState)
     (h_valid : IsValidFrame frame)
-    (h_step : step env [] frame stack ms = .ok [] frame' stack' ms') :
+    (h_step : step env frame [] stack ms = ExecResult.ok frame' [] stack' ms') :
     IsValidFrame frame' := by
   sorry  -- Valid transitions preserve frame validity
 

@@ -39,8 +39,8 @@ structure TraceStep (env : ModuleEnv) where
   stack_after : List MoveValue
   ms_before : MachineState
   ms_after : MachineState
-  h_step : step env frame_before [] stack_before ms_before =
-           ExecResult.ok frame_after [] stack_after ms_after
+  h_step : step env frame []_before stack_before ms_before =
+           .ok [] frame_after stack_after ms_after
 
 /-- A trace segment between two PCs. -/
 structure TraceSegment (env : ModuleEnv) (pc_start pc_end : Nat) where
@@ -69,7 +69,7 @@ theorem step_increments_pc_nonbranch
     (frame' : Frame)
     (stack' : List MoveValue)
     (ms' : MachineState)
-    (h_step : step env frame [] stack ms = ExecResult.ok frame' stack' ms')
+    (h_step : step env frame [] stack ms = ExecResult.ok frame' [] stack' ms')
     (h_pc : frame.pc < frame.code.size)
     (h_nonbranch : ∀ target, frame.code[frame.pc]'h_pc ≠ .brFalse target ∧
                               frame.code[frame.pc]'h_pc ≠ .brTrue target ∧
@@ -88,7 +88,7 @@ theorem step_brFalse_taken
     (h_instr : frame.code[frame.pc]'h_pc = .brFalse target)
     (h_stack : stack = .bool false :: stack.tail) :
     ∃ frame' stack' ms',
-      step env frame [] stack ms = ExecResult.ok frame' stack' ms' ∧
+      step env frame [] stack ms = ExecResult.ok frame' [] stack' ms' ∧
       frame'.pc = target := by
   sorry  -- brFalse semantics
 
@@ -103,7 +103,7 @@ theorem step_brFalse_not_taken
     (h_instr : frame.code[frame.pc]'h_pc = .brFalse target)
     (h_stack : stack = .bool true :: stack.tail) :
     ∃ frame' stack' ms',
-      step env frame [] stack ms = ExecResult.ok frame' stack' ms' ∧
+      step env frame [] stack ms = ExecResult.ok frame' [] stack' ms' ∧
       frame'.pc = frame.pc + 1 := by
   sorry  -- brFalse semantics
 
@@ -116,7 +116,7 @@ theorem step_preserves_code
     (frame' : Frame)
     (stack' : List MoveValue)
     (ms' : MachineState)
-    (h_step : step env frame [] stack ms = ExecResult.ok frame' stack' ms') :
+    (h_step : step env frame [] stack ms = ExecResult.ok frame' [] stack' ms') :
     frame'.code = frame.code := by
   sorry  -- Code is immutable
 
@@ -129,7 +129,7 @@ theorem step_preserves_locals_size
     (frame' : Frame)
     (stack' : List MoveValue)
     (ms' : MachineState)
-    (h_step : step env frame [] stack ms = ExecResult.ok frame' stack' ms') :
+    (h_step : step env frame [] stack ms = ExecResult.ok frame' [] stack' ms') :
     frame'.locals.size = frame.locals.size := by
   sorry  -- Locals size invariant
 
@@ -142,7 +142,7 @@ theorem step_preserves_localRefs_size
     (frame' : Frame)
     (stack' : List MoveValue)
     (ms' : MachineState)
-    (h_step : step env frame [] stack ms = ExecResult.ok frame' stack' ms') :
+    (h_step : step env frame [] stack ms = ExecResult.ok frame' [] stack' ms') :
     frame'.localRefs.size = frame.localRefs.size := by
   sorry  -- LocalRefs size invariant
 
@@ -161,7 +161,7 @@ theorem compose_two_steps
     (h_step2 : step env f1 [] s1 m1 = ExecResult.ok f2 [] s2 m2) :
     ∃ (fuel : Nat),
       fuel = 2 ∧
-      run env f0 [] s0 m0 fuel = ExecResult.ok f2 [] s2 m2 := by
+      run env [] f0 s0 m0 fuel = ExecResult.ok f2 [] s2 m2 := by
   use 2
   constructor
   · rfl
@@ -178,7 +178,7 @@ theorem compose_three_steps
     (h_step3 : step env f2 [] s2 m2 = ExecResult.ok f3 [] s3 m3) :
     ∃ (fuel : Nat),
       fuel = 3 ∧
-      run env f0 [] s0 m0 fuel = ExecResult.ok f3 [] s3 m3 := by
+      run env [] f0 s0 m0 fuel = ExecResult.ok f3 [] s3 m3 := by
   use 3
   constructor
   · rfl

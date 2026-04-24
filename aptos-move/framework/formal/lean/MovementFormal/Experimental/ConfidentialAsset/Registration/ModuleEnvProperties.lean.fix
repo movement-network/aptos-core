@@ -189,7 +189,7 @@ axiom func3_spec
     (registrationModuleEnv o).functions[3]'(by sorry) = {
       numParams := 1,
       numReturns := 1,
-      body := .nativeRef optionIsSomeRef
+      body := .nativeRef o.optionIsSomeRef
     }
 
 /-- optionExtractRef specification. -/
@@ -198,7 +198,7 @@ axiom func4_spec
     (registrationModuleEnv o).functions[4]'(by sorry) = {
       numParams := 1,
       numReturns := 1,
-      body := .nativeRef optionExtractRef
+      body := .nativeRef o.optionExtractRef
     }
 
 /-- vectorPushBackU8Ref specification. -/
@@ -207,7 +207,7 @@ axiom func5_spec
     (registrationModuleEnv o).functions[5]'(by sorry) = {
       numParams := 2,
       numReturns := 0,
-      body := .nativeRef vectorPushBackU8Ref
+      body := .nativeRef o.vectorPushBackU8Ref
     }
 
 /-- vectorAppendU8Ref specification. -/
@@ -216,7 +216,7 @@ axiom func6_spec
     (registrationModuleEnv o).functions[6]'(by sorry) = {
       numParams := 2,
       numReturns := 0,
-      body := .nativeRef vectorAppendU8Ref
+      body := .nativeRef o.vectorAppendU8Ref
     }
 
 /-- bcsToBytesAddressRef specification. -/
@@ -225,7 +225,7 @@ axiom func7_spec
     (registrationModuleEnv o).functions[7]'(by sorry) = {
       numParams := 1,
       numReturns := 1,
-      body := .nativeRef bcsToBytesAddressRef
+      body := .nativeRef o.bcsToBytesAddressRef
     }
 
 /-- newScalarFromSha2_512 specification. -/

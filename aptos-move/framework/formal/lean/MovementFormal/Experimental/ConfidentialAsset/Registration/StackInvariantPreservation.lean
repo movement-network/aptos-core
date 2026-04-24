@@ -60,7 +60,7 @@ theorem pop_decreases_depth
     (ms ms' : MachineState)
     (h_pc : frame.pc < frame.code.size)
     (h_instr : frame.code[frame.pc] = .pop)
-    (h_step : step env [] frame (top :: rest) ms = .ok [] frame' rest ms') :
+    (h_step : step env frame [] (top :: rest) ms = ExecResult.ok frame' [] rest ms') :
     rest.length < (top :: rest).length := by
   sorry  -- pop removes top element
 
@@ -71,7 +71,7 @@ theorem push_increases_depth
     (stack stack' : List MoveValue)
     (ms ms' : MachineState)
     (value : MoveValue)
-    (h_step : step env [] frame stack ms = .ok [] frame' (value :: stack) ms') :
+    (h_step : step env frame [] stack ms = ExecResult.ok frame' [] (value :: stack) ms') :
     stack'.length = stack.length + 1 := by
   sorry  -- Push adds one element
 
@@ -79,6 +79,9 @@ theorem push_increases_depth
 
 Type correctness of stack elements.
 -/
+
+/-- Placeholder for well-typed value predicate. -/
+def IsWellTypedValue : MoveValue → Prop := fun _ => True
 
 /-- Stack contains only well-typed values. -/
 theorem stack_welltyped
@@ -89,16 +92,13 @@ theorem stack_welltyped
     ∀ v ∈ stack, IsWellTypedValue v := by
   sorry  -- All values from valid sources
 
-where
-  IsWellTypedValue : MoveValue → Prop := fun _ => True  -- Placeholder
-
 /-- Bool on stack after comparison operations. -/
 theorem bool_on_stack_after_comparison
     (o : RegistrationNativeOracle)
     (pc : Nat)
     (stack : List MoveValue)
     (h_comparison : pc ∈ [4, 11, 67]) :
-    ∃ b rest, stack = .bool b :: rest := by
+    ∃ b rest, stack = MoveValue.bool b :: rest := by
   sorry  -- Comparison oracles return bool
 
 /-- CompressedPoint on stack after construction. -/
@@ -156,14 +156,14 @@ theorem stack_empty_at_pc43
 theorem stack_has_bool_at_pc70
     (o : RegistrationNativeOracle)
     (s70 : StateAtPC70 o) :
-    s70.stack = [.bool s70.equals_result] := by
+    s70.stack = [MoveValue.bools70.equals_result] := by
   exact s70.h_stack
 
 /-- Stack has bool at PC 73. -/
 theorem stack_has_bool_at_pc73
     (o : RegistrationNativeOracle)
     (s73 : StateAtPC73 o) :
-    s73.stack = [.bool true] := by
+    s73.stack = [MoveValue.booltrue] := by
   exact s73.h_stack
 
 /-! ## Stack Preservation Across Instruction Categories
@@ -179,7 +179,7 @@ theorem copyLoc_preserves_rest
     (ms ms' : MachineState)
     (idx : Nat)
     (value : MoveValue)
-    (h_step : step env [] frame stack ms = .ok [] frame' stack' ms')
+    (h_step : step env frame [] stack ms = ExecResult.ok frame' [] stack' ms')
     (h_pc : frame.pc < frame.code.size)
     (h_instr : frame.code[frame.pc] = .copyLoc idx)
     (h_stack' : stack' = value :: stack) :
@@ -194,7 +194,7 @@ theorem moveLoc_preserves_rest
     (ms ms' : MachineState)
     (idx : Nat)
     (value : MoveValue)
-    (h_step : step env [] frame stack ms = .ok [] frame' stack' ms')
+    (h_step : step env frame [] stack ms = ExecResult.ok frame' [] stack' ms')
     (h_pc : frame.pc < frame.code.size)
     (h_instr : frame.code[frame.pc] = .moveLoc idx)
     (h_stack' : stack' = value :: stack) :
@@ -209,7 +209,7 @@ theorem stLoc_preserves_rest
     (rest rest' : List MoveValue)
     (ms ms' : MachineState)
     (idx : Nat)
-    (h_step : step env [] frame (value :: rest) ms = .ok [] frame' rest' ms')
+    (h_step : step env frame [] (value :: rest) ms = ExecResult.ok frame' [] rest' ms')
     (h_pc : frame.pc < frame.code.size)
     (h_instr : frame.code[frame.pc] = .stLoc idx)
     (h_rest : rest' = rest) :
@@ -226,7 +226,7 @@ theorem native_call_preserves_rest
     (ms ms' : MachineState)
     (funcIdx : Nat)
     (numParams numReturns : Nat)
-    (h_step : step env [] frame (args ++ rest) ms = .ok [] frame' (results ++ rest') ms')
+    (h_step : step env frame [] (args ++ rest) ms = ExecResult.ok frame' (results ++ rest') ms')
     (h_pc : frame.pc < frame.code.size)
     (h_instr : frame.code[frame.pc] = .call funcIdx)
     (h_args : args.length = numParams)
@@ -376,7 +376,7 @@ theorem stack_depth_decreases_after_consumption
     (frame frame' : Frame)
     (stack stack' : List MoveValue)
     (ms ms' : MachineState)
-    (h_step : step env [] frame stack ms = .ok [] frame' stack' ms')
+    (h_step : step env frame [] stack ms = ExecResult.ok frame' [] stack' ms')
     (h_consumes : InstructionConsumes frame.code[frame.pc]) :
     stack'.length < stack.length ∨ stack'.length = stack.length := by
   sorry  -- Consuming instructions don't grow stack
@@ -401,7 +401,7 @@ theorem pop_stack_effect
     (v : MoveValue)
     (rest : List MoveValue)
     (ms ms' : MachineState)
-    (h_step : step env [] frame (v :: rest) ms = .ok [] frame' rest ms')
+    (h_step : step env frame [] (v :: rest) ms = ExecResult.ok frame' [] rest ms')
     (h_pc : frame.pc < frame.code.size)
     (h_instr : frame.code[frame.pc] = .pop) :
     rest = rest := by
@@ -415,7 +415,7 @@ theorem copyLoc_stack_effect
     (ms ms' : MachineState)
     (idx : Nat)
     (v : MoveValue)
-    (h_step : step env [] frame rest ms = .ok [] frame' (v :: rest) ms')
+    (h_step : step env frame [] rest ms = ExecResult.ok frame' (v :: rest) ms')
     (h_pc : frame.pc < frame.code.size)
     (h_instr : frame.code[frame.pc] = .copyLoc idx)
     (h_local : frame.locals[idx]? = some (some v)) :
@@ -430,7 +430,7 @@ theorem stLoc_stack_effect
     (rest : List MoveValue)
     (ms ms' : MachineState)
     (idx : Nat)
-    (h_step : step env [] frame (v :: rest) ms = .ok [] frame' rest ms')
+    (h_step : step env frame [] (v :: rest) ms = ExecResult.ok frame' [] rest ms')
     (h_pc : frame.pc < frame.code.size)
     (h_instr : frame.code[frame.pc] = .stLoc idx) :
     rest = rest := by
@@ -444,7 +444,7 @@ theorem brFalse_stack_effect
     (rest : List MoveValue)
     (ms ms' : MachineState)
     (target : Nat)
-    (h_step : step env [] frame (.bool b :: rest) ms = .ok [] frame' rest ms')
+    (h_step : step env frame [] (MoveValue.boolb :: rest) ms = ExecResult.ok frame' [] rest ms')
     (h_pc : frame.pc < frame.code.size)
     (h_instr : frame.code[frame.pc] = .brFalse target) :
     rest = rest := by
@@ -458,7 +458,7 @@ theorem native_call_1_1_stack_effect
     (rest : List MoveValue)
     (ms ms' : MachineState)
     (funcIdx : Nat)
-    (h_step : step env [] frame (arg :: rest) ms = .ok [] frame' (result :: rest) ms')
+    (h_step : step env frame [] (arg :: rest) ms = ExecResult.ok frame' (result :: rest) ms')
     (h_pc : frame.pc < frame.code.size)
     (h_instr : frame.code[frame.pc] = .call funcIdx) :
     (result :: rest).tail = rest := by
@@ -472,7 +472,7 @@ theorem native_call_2_1_stack_effect
     (rest : List MoveValue)
     (ms ms' : MachineState)
     (funcIdx : Nat)
-    (h_step : step env [] frame (arg1 :: arg2 :: rest) ms =
+    (h_step : step env frame [] (arg1 :: arg2 :: rest) ms =
               .ok [] frame' (result :: rest) ms')
     (h_pc : frame.pc < frame.code.size)
     (h_instr : frame.code[frame.pc] = .call funcIdx) :

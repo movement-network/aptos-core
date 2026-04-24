@@ -151,7 +151,7 @@ theorem optionIsSomeRef_returns_bool
     (ref : MoveValue)
     (result : MoveValue)
     (containers' : ContainerStore)
-    (h_call : optionIsSomeRef containers [ref] = some ([result], containers'))
+    (h_call : o.optionIsSomeRef containers [ref] = some ([result], containers'))
     (h_ref_type : IsImmRef ref ∨ IsMutRef ref) :
     IsBool result := by
   sorry  -- Returns bool

@@ -559,11 +559,6 @@ theorem thread_pc8_to_pc11
     s_opt := scalar_opt_result,
     rid_s_opt := 0  -- Will be allocated at PC 12
   }
-  constructor
-  · rfl
-  · constructor
-    · rfl
-    · rfl
 
 theorem thread_pc11_to_pc15
     (s11 : FrameAtPC11 o)
@@ -624,7 +619,7 @@ theorem thread_pc11_to_pc15
   have hread_s_opt : containers_after_s_opt_alloc.read rid_s_opt_fresh = some s11.s_opt := by
     sorry  -- From alloc result
 
-  have horacle_pc13 : o.optionIsSomeRef containers_after_s_opt_alloc [MoveValue.immRef rid_s_opt_fresh] =
+  have horacle_pc13 : optionIsSomeRef containers_after_s_opt_alloc [MoveValue.immRef rid_s_opt_fresh] =
                        some ([MoveValue.bool true], containers_after_s_opt_alloc) := by
     sorry  -- Apply optionIsSomeRef_immRef_read with hs_opt_struct
 
@@ -689,7 +684,6 @@ theorem thread_pc11_to_pc15
     rid_s_opt := rid_s_opt_fresh,
     scalar := scalar_extracted
   }
-  rfl
 
 where
   funcIdx_optionIsSomeRef : Nat := 2  -- Placeholder
@@ -702,6 +696,7 @@ theorem thread_pc15_to_pc18
       s18.fuel = s15.fuel - 3 := by
   obtain ⟨restData_scalar, hs_opt_eq⟩ := h_s_opt_struct
 
+  let funcIdx_optionExtractRef : Nat := 0  -- Placeholder
   let locals_at_pc15 := (registrationLocals s15.chainId s15.sender s15.contract s15.token s15.ekBa s15.commitBa s15.respBa (some s15.v)).set! 8 (some s15.rCompressed) |>.set! 6 none |>.set! 9 (some s15.s_opt)
 
   -- PC 16: mutBorrowLoc 9 (get mutable reference to s_opt)
@@ -823,7 +818,6 @@ theorem thread_pc15_to_pc18
     rid_s_opt := s15.rid_s_opt,
     scalar := s15.scalar
   }
-  rfl
 
 theorem thread_pc18_to_pc20
     (s18 : FrameAtPC18 o) :

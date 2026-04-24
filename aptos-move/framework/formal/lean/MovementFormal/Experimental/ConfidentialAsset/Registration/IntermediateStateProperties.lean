@@ -4,5 +4,5 @@ import MovementFormal.Experimental.ConfidentialAsset.Registration.PCBoundaryCond
 import MovementFormal.Experimental.ConfidentialAsset.Registration.ValidationLemmas
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.IntermediateStateProperties
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Registration.IntermediateStateProperties

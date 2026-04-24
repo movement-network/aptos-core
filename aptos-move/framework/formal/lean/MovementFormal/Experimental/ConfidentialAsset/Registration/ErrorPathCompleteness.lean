@@ -5,5 +5,5 @@ import MovementFormal.Experimental.ConfidentialAsset.Registration.BytecodeTransc
 import MovementFormal.Experimental.ConfidentialAsset.Registration.PCBoundaryConditions
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.ErrorPathCompleteness
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Registration.ErrorPathCompleteness

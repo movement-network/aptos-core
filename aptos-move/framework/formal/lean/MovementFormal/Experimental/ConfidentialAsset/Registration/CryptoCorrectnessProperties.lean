@@ -4,5 +4,5 @@ import MovementFormal.AptosStd.Crypto.Ristretto255
 import MovementFormal.Experimental.ConfidentialAsset.Registration.OracleSemantics
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.CryptoCorrectnessProperties
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Registration.CryptoCorrectnessProperties

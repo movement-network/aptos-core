@@ -4,5 +4,5 @@ import MovementFormal.MoveModel.Step
 import MovementFormal.MoveModel.Native.Registration
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.ValidationLemmas
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Registration.ValidationLemmas

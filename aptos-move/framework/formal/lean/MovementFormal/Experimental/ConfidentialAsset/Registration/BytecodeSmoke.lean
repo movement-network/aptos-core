@@ -4,5 +4,5 @@ import MovementFormal.Experimental.ConfidentialAsset.Registration.VerifyMath
 import MovementFormal.Experimental.ConfidentialAsset.Registration.TranscriptAlignment
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.BytecodeSmoke
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Registration.BytecodeSmoke

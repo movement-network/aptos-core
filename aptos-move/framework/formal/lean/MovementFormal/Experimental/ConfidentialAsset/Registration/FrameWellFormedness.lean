@@ -5,5 +5,5 @@ import MovementFormal.MoveModel.FrameInvariants
 import MovementFormal.Experimental.ConfidentialAsset.Registration.ModuleEnvProperties
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.FrameWellFormedness
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Registration.FrameWellFormedness

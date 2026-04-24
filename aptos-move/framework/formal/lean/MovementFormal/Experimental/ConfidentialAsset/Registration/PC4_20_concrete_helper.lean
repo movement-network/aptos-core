@@ -10,5 +10,5 @@ import MovementFormal.MoveModel.ExecResultDropMs
 import MovementFormal.MoveModel.Native.Registration
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.PC4_20_concrete_helper
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Registration.PC4_20_concrete_helper

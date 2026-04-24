@@ -5,5 +5,5 @@ import MovementFormal.Experimental.ConfidentialAsset.Registration.FuelBudgetProo
 import MovementFormal.Experimental.ConfidentialAsset.Registration.PCBoundaryConditions
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.FuelOptimality
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Registration.FuelOptimality

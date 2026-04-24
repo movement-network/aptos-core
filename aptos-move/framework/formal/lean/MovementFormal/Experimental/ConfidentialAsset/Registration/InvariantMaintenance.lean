@@ -5,5 +5,5 @@ import MovementFormal.Experimental.ConfidentialAsset.Registration.ValidationLemm
 import MovementFormal.Experimental.ConfidentialAsset.Registration.PCBoundaryConditions
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.InvariantMaintenance
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Registration.InvariantMaintenance

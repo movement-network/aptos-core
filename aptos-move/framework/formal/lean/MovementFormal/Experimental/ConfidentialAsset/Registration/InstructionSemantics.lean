@@ -4,5 +4,5 @@ import MovementFormal.MoveModel.Step
 import MovementFormal.MoveModel.Instr
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.InstructionSemantics
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Registration.InstructionSemantics

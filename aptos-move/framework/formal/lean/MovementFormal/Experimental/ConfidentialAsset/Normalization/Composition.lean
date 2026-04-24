@@ -1,5 +1,5 @@
 import MovementFormal.Experimental.ConfidentialAsset.Normalization.EvalEquiv
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Normalization.Composition
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Normalization.Composition

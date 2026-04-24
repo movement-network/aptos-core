@@ -5,5 +5,5 @@ import MovementFormal.MoveModel.StepLemmas.Bundled
 import MovementFormal.Experimental.ConfidentialAsset.Registration.ConcreteExecutionLemmas
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.ConcreteLemmaInstantiations
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Registration.ConcreteLemmaInstantiations

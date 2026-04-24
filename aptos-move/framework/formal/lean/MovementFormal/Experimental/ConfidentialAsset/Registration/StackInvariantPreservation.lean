@@ -5,5 +5,5 @@ import MovementFormal.Experimental.ConfidentialAsset.Registration.StackManagemen
 import MovementFormal.Experimental.ConfidentialAsset.Registration.StateTransitionLemmas
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.StackInvariantPreservation
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Registration.StackInvariantPreservation

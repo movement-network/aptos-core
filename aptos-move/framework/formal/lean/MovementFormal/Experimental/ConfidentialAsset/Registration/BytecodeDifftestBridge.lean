@@ -3,5 +3,5 @@ import MovementFormal.MoveModel.Programs.RegistrationDifftestOracle
 import MovementFormal.Experimental.ConfidentialAsset.Registration.Operational
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.BytecodeDifftestBridge
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Registration.BytecodeDifftestBridge

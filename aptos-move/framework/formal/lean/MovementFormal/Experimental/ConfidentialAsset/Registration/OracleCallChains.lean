@@ -5,5 +5,5 @@ import MovementFormal.Experimental.ConfidentialAsset.Registration.OracleSemantic
 import MovementFormal.Experimental.ConfidentialAsset.Registration.OracleHypothesesCatalog
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.OracleCallChains
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Registration.OracleCallChains

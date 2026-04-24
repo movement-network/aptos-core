@@ -5,5 +5,5 @@ import MovementFormal.Experimental.ConfidentialAsset.Registration.FuelManagement
 import MovementFormal.Experimental.ConfidentialAsset.Registration.ValidationLemmas
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.ExecutionTraceProperties
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Registration.ExecutionTraceProperties

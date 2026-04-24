@@ -5,5 +5,5 @@ import MovementFormal.Experimental.ConfidentialAsset.Registration.ExecutionTrace
 import MovementFormal.Experimental.ConfidentialAsset.Registration.PCBoundaryConditions
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.ExecutionTracesDetailed
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Registration.ExecutionTracesDetailed

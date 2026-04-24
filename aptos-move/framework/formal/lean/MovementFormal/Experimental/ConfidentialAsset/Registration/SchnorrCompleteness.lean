@@ -5,5 +5,5 @@ import MovementFormal.AptosStd.Crypto.Ristretto255
 import Mathlib.Algebra.Module.Basic
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.SchnorrCompleteness
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Registration.SchnorrCompleteness

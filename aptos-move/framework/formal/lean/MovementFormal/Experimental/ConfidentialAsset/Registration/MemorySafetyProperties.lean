@@ -5,5 +5,5 @@ import MovementFormal.Experimental.ConfidentialAsset.Registration.RefIdManagemen
 import MovementFormal.Experimental.ConfidentialAsset.Registration.InvariantMaintenance
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.MemorySafetyProperties
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Registration.MemorySafetyProperties

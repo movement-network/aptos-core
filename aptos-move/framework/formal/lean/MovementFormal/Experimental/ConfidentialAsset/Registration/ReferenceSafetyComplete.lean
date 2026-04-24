@@ -1,5 +1,5 @@
 
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.ReferenceSafetyComplete
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Registration.ReferenceSafetyComplete

@@ -5,5 +5,5 @@ import MovementFormal.MoveModel.StepLemmas.Calls
 import MovementFormal.MoveModel.Native.Registration
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.NativeCallPatterns
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Registration.NativeCallPatterns

@@ -5,5 +5,5 @@ import MovementFormal.Experimental.ConfidentialAsset.Registration.TranscriptAlig
 import MovementFormal.Experimental.ConfidentialAsset.Registration.FunctionalSim
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.BytecodeDifftestEval
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Registration.BytecodeDifftestEval

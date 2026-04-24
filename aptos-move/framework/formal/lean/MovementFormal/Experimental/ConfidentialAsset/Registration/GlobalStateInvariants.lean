@@ -5,5 +5,5 @@ import MovementFormal.Experimental.ConfidentialAsset.Registration.InvariantMaint
 import MovementFormal.Experimental.ConfidentialAsset.Registration.FrameWellFormedness
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.GlobalStateInvariants
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Registration.GlobalStateInvariants

@@ -4,5 +4,5 @@ import MovementFormal.MoveModel.Native.Registration
 import MovementFormal.Experimental.ConfidentialAsset.Registration.ValidationLemmas
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.OracleSemantics
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Registration.OracleSemantics

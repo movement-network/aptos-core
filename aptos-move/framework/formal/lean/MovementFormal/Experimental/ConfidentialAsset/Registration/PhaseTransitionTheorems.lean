@@ -6,5 +6,5 @@ import MovementFormal.Experimental.ConfidentialAsset.Registration.ExecutionTrace
 import MovementFormal.Experimental.ConfidentialAsset.Registration.OracleHypothesesCatalog
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.PhaseTransitionTheorems
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Registration.PhaseTransitionTheorems

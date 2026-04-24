@@ -3,5 +3,5 @@ import MovementFormal.MoveModel.ExecResultDropMs
 import MovementFormal.MoveModel.Programs.Registration
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.EvalEquiv
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Registration.EvalEquiv

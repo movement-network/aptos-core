@@ -5,5 +5,5 @@ import MovementFormal.Experimental.ConfidentialAsset.Registration.StateTransitio
 import MovementFormal.Experimental.ConfidentialAsset.Registration.InstructionSemantics
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.CompositeInstructionPatterns
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Registration.CompositeInstructionPatterns

@@ -1,5 +1,5 @@
 
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.Phase1PCProofs
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Registration.Phase1PCProofs

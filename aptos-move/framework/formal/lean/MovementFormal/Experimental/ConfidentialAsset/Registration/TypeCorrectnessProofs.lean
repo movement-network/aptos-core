@@ -5,5 +5,5 @@ import MovementFormal.Experimental.ConfidentialAsset.Registration.ValueTypePrese
 import MovementFormal.Experimental.ConfidentialAsset.Registration.PCBoundaryConditions
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.TypeCorrectnessProofs
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Registration.TypeCorrectnessProofs

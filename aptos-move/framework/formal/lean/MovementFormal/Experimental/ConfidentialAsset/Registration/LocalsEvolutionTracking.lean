@@ -4,5 +4,5 @@ import MovementFormal.Experimental.ConfidentialAsset.Registration.LocalsManageme
 import MovementFormal.Experimental.ConfidentialAsset.Registration.PCBoundaryConditions
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.LocalsEvolutionTracking
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Registration.LocalsEvolutionTracking

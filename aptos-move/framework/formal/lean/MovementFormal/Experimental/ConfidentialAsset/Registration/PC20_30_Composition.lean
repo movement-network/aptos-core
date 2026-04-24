@@ -1,5 +1,5 @@
 
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.PC20_30_Composition
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Registration.PC20_30_Composition

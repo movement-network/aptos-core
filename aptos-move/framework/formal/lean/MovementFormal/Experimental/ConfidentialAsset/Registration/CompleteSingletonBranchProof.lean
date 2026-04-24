@@ -5,5 +5,5 @@ import MovementFormal.Experimental.ConfidentialAsset.Registration.PCBoundaryCond
 import MovementFormal.Experimental.ConfidentialAsset.Registration.ExecutionTraceProperties
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.CompleteSingletonBranchProof
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Registration.CompleteSingletonBranchProof

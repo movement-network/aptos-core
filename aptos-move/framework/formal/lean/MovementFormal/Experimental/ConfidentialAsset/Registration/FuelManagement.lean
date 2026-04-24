@@ -4,5 +4,5 @@ import MovementFormal.MoveModel.Step
 import MovementFormal.MoveModel.StepLemmas.Run
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.FuelManagement
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Registration.FuelManagement

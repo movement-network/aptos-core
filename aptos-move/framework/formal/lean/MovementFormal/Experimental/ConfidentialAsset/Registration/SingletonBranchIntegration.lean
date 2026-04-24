@@ -9,5 +9,5 @@ import MovementFormal.MoveModel.Programs.Registration
 import MovementFormal.Experimental.ConfidentialAsset.Registration.FunctionalSim
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.SingletonBranchIntegration
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Registration.SingletonBranchIntegration

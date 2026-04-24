@@ -5,5 +5,5 @@ import MovementFormal.MoveModel.Native.Registration
 import MovementFormal.Std.Error
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.ErrorPathHandling
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Registration.ErrorPathHandling

@@ -3,5 +3,5 @@ import MovementFormal.MoveModel.State
 import MovementFormal.Experimental.ConfidentialAsset.Registration.ContainerStoreProperties
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.RefIdManagementLemmas
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Registration.RefIdManagementLemmas

@@ -5,5 +5,5 @@ import MovementFormal.Experimental.ConfidentialAsset.Registration.BytecodeTransc
 import MovementFormal.Experimental.ConfidentialAsset.Registration.InstructionEffectCatalog
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.BytecodeSemanticsCatalog
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Registration.BytecodeSemanticsCatalog

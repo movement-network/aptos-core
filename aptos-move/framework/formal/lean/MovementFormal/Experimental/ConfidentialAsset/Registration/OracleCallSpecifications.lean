@@ -2,5 +2,5 @@ import MovementFormal.MoveModel.Value
 import MovementFormal.MoveModel.Native.Registration
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.OracleCallSpecifications
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Registration.OracleCallSpecifications

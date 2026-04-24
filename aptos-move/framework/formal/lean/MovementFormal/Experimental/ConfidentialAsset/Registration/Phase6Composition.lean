@@ -2,5 +2,5 @@ import MovementFormal.Experimental.ConfidentialAsset.Registration.EvalEquiv
 import MovementFormal.Experimental.ConfidentialAsset.Registration.Refinement
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.Phase6Composition
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Registration.Phase6Composition

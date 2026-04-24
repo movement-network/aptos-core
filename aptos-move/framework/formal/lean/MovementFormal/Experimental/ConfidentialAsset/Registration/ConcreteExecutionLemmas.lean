@@ -5,5 +5,5 @@ import MovementFormal.MoveModel.StepLemmas.Basic
 import MovementFormal.MoveModel.StepLemmas.Locals
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.ConcreteExecutionLemmas
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Registration.ConcreteExecutionLemmas

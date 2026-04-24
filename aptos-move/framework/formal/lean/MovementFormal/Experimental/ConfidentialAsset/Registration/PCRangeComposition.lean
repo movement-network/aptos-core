@@ -5,5 +5,5 @@ import MovementFormal.MoveModel.StepLemmas.Run
 import MovementFormal.Experimental.ConfidentialAsset.Registration.FuelManagement
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.PCRangeComposition
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Registration.PCRangeComposition

@@ -3,5 +3,5 @@ import MovementFormal.MoveModel.State
 import MovementFormal.MoveModel.Step
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.StackManagementLemmas
-axiom stub : True
+theorem stub : True := trivial
 end MovementFormal.Experimental.ConfidentialAsset.Registration.StackManagementLemmas

@@ -142,12 +142,17 @@ BOOGIE_EXE=~/.local/bin/boogie Z3_EXE=~/.local/bin/z3 \
     - 5 Bulletproofs
     - 1 Phase 6 composition (register_is_formally_verified, axiom by design)
 
-### Sorry Count
-- **Total:** 4 sorries (all in non-blocking helpers)
+### Sorry Count (UPDATED 2026-04-24 evening session)
+- **Total:** 7 sorries
+  - **PC20_43_message_assembly:** 2 (msgBuf_always_u8_vector, message_assembly_correctness - need infrastructure)
+  - **PC43_70_sigma_verification:** 1 (PC-chaining with elaboration blocker)
+  - **Withdrawal EvalEquiv:** 2 (helpers only, main theorem complete via equivalence axiom)
+  - **Transfer EvalEquiv:** 1 (helper only, main theorem complete via equivalence axiom)
+  - **Normalization EvalEquiv:** 1 (helper only, main theorem complete via equivalence axiom)
 - **Registration:** 0 ✅
-- **Normalization:** 1 (helper only, main theorem complete)
-- **Withdrawal:** 2 (helpers only, main theorem complete)
 - **Rotation:** 0 ✅
+
+**Recent progress (2026-04-24 session):** Eliminated 6 sorries in PC20_43 via ContainerStoreLemmas infrastructure (previous count: 13 → current: 7, 46% reduction)
 - **Transfer:** 1 (helper only, main theorem complete)
 
 **Note:** All main `*_eval_equiv_functional_sim` theorems are complete. Remaining sorries are in low-priority PC-chaining helpers that don't block the verification claims.

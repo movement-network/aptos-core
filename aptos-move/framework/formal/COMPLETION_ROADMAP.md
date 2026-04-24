@@ -26,9 +26,10 @@ Complete roadmap from current state (2026-04-22) to "done" per plan §9 definiti
 
 **Overall completion:** ~88% (measured by acceptance criteria met vs total)
 
-**Phase 4 & 6 Update (2026-04-23):**
+**Phase 4 & 6 Update (2026-04-23, evening session 2026-04-24):**
 - All 4 main EvalEquiv theorems complete via direct equivalence axioms (rotation, normalization, withdrawal, transfer)
-- Sorry reduction: 17 → 4 (76% improvement, all remaining in non-blocking helpers)
+- Sorry reduction: 17 → 4 (76% improvement) → **7 current** (2026-04-24 session added PC20_43 + PC43_70 sorries)
+  - 2026-04-24 evening: Eliminated 6 sorries in PC20_43 via ContainerStoreLemmas (13 → 7 total)
 - All 4 Phase 6 composition theorems (`*_is_formally_verified`) converted from axioms to theorems
 - Axiom count increase: 27 → 62 (added 35 Phase 4 bytecode axioms: 4 equivalence + 26 ConcreteHelpers + 5 FunctionalSimBridge)
 

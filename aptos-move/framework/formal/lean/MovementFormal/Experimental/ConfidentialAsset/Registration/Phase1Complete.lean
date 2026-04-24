@@ -72,10 +72,12 @@ theorem phase1_complete_detailed
     (h_pc : frame₄.pc = 4)
     -- Input values
     (commitOption respOption chainIdScalar senderScalar : MoveValue)
+    (respBytes : MoveValue)
     (h_inputs : frame₄.locals[0]? = some (some commitOption) ∧
                 frame₄.locals[1]? = some (some respOption) ∧
                 frame₄.locals[2]? = some (some chainIdScalar) ∧
-                frame₄.locals[3]? = some (some senderScalar))
+                frame₄.locals[3]? = some (some senderScalar) ∧
+                frame₄.locals[6]? = some (some respBytes))
     (h_stack : true)  -- Initial stack is empty
     -- Oracle results
     (h_oracle_is_some_commit : o.isSome [commitOption] = some [.bool true])
@@ -83,9 +85,25 @@ theorem phase1_complete_detailed
     (commit_pt resp_pt : MoveValue)
     (h_oracle_unwrap_commit : o.unwrap [commitOption] = some [commit_pt])
     (h_oracle_unwrap_resp : o.unwrap [respOption] = some [resp_pt])
-    -- Instruction encoding (all PCs 4-19)
-    (h_instrs : ∀ pc : Nat, 4 ≤ pc → pc < 20 →
-                ∃ instr, (registrationModuleEnv o).getInstruction pc = some instr)
+    -- Instruction encoding for Segment 1 (PC 4-9)
+    (h_instr4 : (registrationModuleEnv o).getInstruction 4 = some (.copyLoc 0))
+    (h_instr5 : (registrationModuleEnv o).getInstruction 5 = some (.brFalse 79))
+    (h_instr6 : (registrationModuleEnv o).getInstruction 6 = some (.moveLoc 0))
+    (h_instr7 : (registrationModuleEnv o).getInstruction 7 = some (.call sorry sorry))
+    (h_instr8 : (registrationModuleEnv o).getInstruction 8 = some (.stLoc 8))
+    (h_instr9 : (registrationModuleEnv o).getInstruction 9 = some (.copyLoc 6))
+    -- Instruction encoding for Segment 2 (PC 10-15)
+    (h_instr10 : (registrationModuleEnv o).getInstruction 10 = some (.call sorry sorry))
+    (h_instr11 : (registrationModuleEnv o).getInstruction 11 = some (.brFalse 79))
+    (h_instr12 : (registrationModuleEnv o).getInstruction 12 = some (.moveLoc 1))
+    (h_instr13 : (registrationModuleEnv o).getInstruction 13 = some (.call sorry sorry))
+    (h_instr14 : (registrationModuleEnv o).getInstruction 14 = some (.stLoc 12))
+    (h_instr15 : (registrationModuleEnv o).getInstruction 15 = some (.copyLoc 6))
+    -- Instruction encoding for Segment 3 (PC 16-19)
+    (h_instr16 : (registrationModuleEnv o).getInstruction 16 = some (.call sorry sorry))
+    (h_instr17 : (registrationModuleEnv o).getInstruction 17 = some (.stLoc 13))
+    (h_instr18 : (registrationModuleEnv o).getInstruction 18 = some (.copyLoc 3))
+    (h_instr19 : (registrationModuleEnv o).getInstruction 19 = some (.call sorry sorry))
     -- Bounds
     (h_bounds : frame₄.locals.size > 20) :
     ∃ frame₂₀ stack₂₀ ms₂₀,
@@ -104,26 +122,23 @@ theorem phase1_complete_detailed
       .ok [] frame₁₀ stack₁₀ ms₁₀ ∧
       frame₁₀.pc = 10 ∧
       frame₁₀.locals[0]? = some none ∧
-      frame₁₀.locals[8]? = some (some commit_pt) := by
-    -- Extract relevant instruction hypotheses for PC 4-9
-    have h_instr4 : ∃ i, (registrationModuleEnv o).getInstruction 4 = some i :=
-      h_instrs 4 (by omega) (by omega)
-    have h_instr5 : ∃ i, (registrationModuleEnv o).getInstruction 5 = some i :=
-      h_instrs 5 (by omega) (by omega)
-    have h_instr6 : ∃ i, (registrationModuleEnv o).getInstruction 6 = some i :=
-      h_instrs 6 (by omega) (by omega)
-    have h_instr7 : ∃ i, (registrationModuleEnv o).getInstruction 7 = some i :=
-      h_instrs 7 (by omega) (by omega)
-    have h_instr8 : ∃ i, (registrationModuleEnv o).getInstruction 8 = some i :=
-      h_instrs 8 (by omega) (by omega)
-    have h_instr9 : ∃ i, (registrationModuleEnv o).getInstruction 9 = some i :=
-      h_instrs 9 (by omega) (by omega)
+      frame₁₀.locals[8]? = some (some commit_pt) ∧
+      stack₁₀ = [respBytes] := by
+    -- Apply pc4_to_10_complete
+    have h_seg1_base := pc4_to_10_complete o frame₄ ms₄ h_pc
+                          commitOption respBytes
+                          h_inputs.1 h_inputs.2.2.2.2.1
+                          rfl  -- h_stack
+                          h_oracle_is_some_commit
+                          commit_pt h_oracle_unwrap_commit
+                          h_instr4 h_instr5 h_instr6 h_instr7 h_instr8 h_instr9
+                          ⟨by omega, ⟨by omega, by omega⟩⟩  -- h_bounds
 
-    -- For now, use sorry as the specific instruction encodings require more detail
-    -- The full proof would destructure each h_instr and apply pc4_to_10_complete
-    sorry
+    obtain ⟨frame₁₀, stack₁₀, ms₁₀, h_run, h_pc10, h_local0_none, h_local8, h_stack10⟩ := h_seg1_base
+    use frame₁₀, stack₁₀, ms₁₀
+    exact ⟨h_run, ⟨h_pc10, ⟨h_local0_none, ⟨h_local8, h_stack10⟩⟩⟩⟩
 
-  obtain ⟨frame₁₀, stack₁₀, ms₁₀, h_seg1_run, h_seg1_pc, h_seg1_local0, h_seg1_local8⟩ := h_seg1
+  obtain ⟨frame₁₀, stack₁₀, ms₁₀, h_seg1_run, h_seg1_pc, h_seg1_local0, h_seg1_local8, h_seg1_stack⟩ := h_seg1
 
   -- Segment 2: PC 10→16 (6 steps)
   have h_seg2 : ∃ frame₁₆ stack₁₆ ms₁₆,

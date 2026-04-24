@@ -183,7 +183,6 @@ theorem thread_pc20_to_pc25_dst_and_chainId
     fuel := s20.fuel - 5,
     hfuel := by sorry
   }
-  constructor <;> sorry
 
 where
   buildMessageLocals (s : MessageAssemblyState o) : Array (Option MoveValue) :=

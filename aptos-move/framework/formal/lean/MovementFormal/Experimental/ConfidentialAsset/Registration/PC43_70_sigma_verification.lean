@@ -23,9 +23,9 @@ The happy path threads through all successes and reaches PC 70 (ret).
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration
 
-open MoveModel
-open MoveModel.Native.Registration
-open MoveModel.Programs.Registration
+open MovementFormal.MoveModel
+open MovementFormal.MoveModel.Native.Registration
+open MovementFormal.MoveModel.Programs.Registration
 
 /-! ### State after message assembly
 
@@ -255,7 +255,7 @@ where
       none,                                                               -- 13: base_point_h (to be filled)
       none,                                                               -- 14: ek_as_point (to be filled)
       none,                                                               -- 15: h_times_s (to be filled)
-      none,                                                               // 16: ek_times_e (to be filled)
+      none,                                                               -- 16: ek_times_e (to be filled)
       none,                                                               -- 17: lhs (to be filled)
       none                                                                -- 18: rhs (to be filled)
     ]

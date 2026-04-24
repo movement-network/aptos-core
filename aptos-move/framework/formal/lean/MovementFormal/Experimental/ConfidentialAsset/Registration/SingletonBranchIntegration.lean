@@ -27,8 +27,9 @@ singleton branch proof.
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration
 
-open MoveModel
-open MoveModel.Native.Registration
+open MovementFormal.MoveModel
+open MovementFormal.MoveModel.Native.Registration
+open MovementFormal.MoveModel.Programs.Registration
 
 /-! ## Phase 1 Integration: PC 4-20
 

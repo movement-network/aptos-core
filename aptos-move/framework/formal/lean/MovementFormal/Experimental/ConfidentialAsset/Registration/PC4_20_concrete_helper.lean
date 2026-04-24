@@ -27,9 +27,9 @@ to make measurable progress on singleton branch completion.
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration
 
-open MoveModel
-open MoveModel.Native.Registration
-open MoveModel.Programs.Registration
+open MovementFormal.MoveModel
+open MovementFormal.MoveModel.Native.Registration
+open MovementFormal.MoveModel.Programs.Registration
 
 /-! ### Helper Lemmas: Simple Facts
 

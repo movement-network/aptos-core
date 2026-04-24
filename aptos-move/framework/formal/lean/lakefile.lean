@@ -172,6 +172,7 @@ lean_lib «MovementFormal» where
     `MovementFormal.Experimental.ConfidentialAsset.Registration.ValidationLemmasRefined,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.TypeCorrectnessProofs,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.ExecutionTracesDetailed,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.ConcreteLemmaInstantiations,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.Phase6Composition,
     `MovementFormal.MoveModel.Programs.Withdrawal,
     `MovementFormal.MoveModel.Programs.Transfer,

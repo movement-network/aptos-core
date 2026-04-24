@@ -1,10 +1,12 @@
 import MovementFormal.MoveModel.Value
 import MovementFormal.MoveModel.State
 import MovementFormal.MoveModel.Step
+import MovementFormal.MoveModel.StepLemmas.Basic
 import MovementFormal.MoveModel.StepLemmas.Run
 import MovementFormal.MoveModel.ExecResultDropMs
 import MovementFormal.MoveModel.Native.Registration
 import MovementFormal.MoveModel.Programs.Registration
+import MovementFormal.MoveModel.Programs.RegistrationHelpers
 
 /-! ## Concrete Helper: PC 4 through PC 20 — Complete chain with oracle threading
 
@@ -24,6 +26,46 @@ namespace MovementFormal.Experimental.ConfidentialAsset.Registration
 
 open MoveModel
 open MoveModel.Native.Registration
+open MoveModel.Programs.Registration
+
+/-! ### Helper Lemmas: Simple Facts
+
+Basic facts about code size, instruction content, and array bounds.
+These replace `sorry` placeholders with concrete proofs.
+-/
+
+/-! ## Code Size and Bounds -/
+
+theorem code_size_bounds : 70 < verifyRegistrationProofCode.size := by decide
+
+theorem pc_in_bounds (pc : Nat) (h : pc ≤ 70) : pc < verifyRegistrationProofCode.size := by
+  have : 70 < verifyRegistrationProofCode.size := code_size_bounds
+  omega
+
+/-! ## Instruction Content -/
+
+theorem code_at_4 (h : 4 < verifyRegistrationProofCode.size) :
+    verifyRegistrationProofCode[4] = MoveInstr.call 1 := by rfl
+
+theorem code_at_5 (h : 5 < verifyRegistrationProofCode.size) :
+    verifyRegistrationProofCode[5] = MoveInstr.brFalse 79 := by rfl
+
+theorem code_at_6 (h : 6 < verifyRegistrationProofCode.size) :
+    verifyRegistrationProofCode[6] = MoveInstr.mutBorrowLoc 7 := by rfl
+
+theorem code_at_7 (h : 7 < verifyRegistrationProofCode.size) :
+    verifyRegistrationProofCode[7] = MoveInstr.call 2 := by rfl
+
+theorem code_at_70 (h : 70 < verifyRegistrationProofCode.size) :
+    verifyRegistrationProofCode[70] = MoveInstr.ret := by rfl
+
+/-! ## Locals and LocalRefs -/
+
+theorem localRefs_19_size : ((List.replicate 19 none).toArray : Array (Option RefId)).size = 19 := by rfl
+
+theorem localRefs_index_in_bounds (i : Nat) (h : i < 19) :
+    i < ((List.replicate 19 none).toArray : Array (Option RefId)).size := by
+  rw [localRefs_19_size]; exact h
 
 /-! ### Step 1: Define intermediate frame states
 
@@ -47,31 +89,31 @@ structure FrameAtPC4 (o : RegistrationNativeOracle) where
   hfuel : 67 ≤ fuel
 
 /-- Frame state at PC 6 after optionIsSomeRef returned true and brFalse not taken -/
-structure FrameAtPC6 extends FrameAtPC4 where
+structure FrameAtPC6 (o : RegistrationNativeOracle) extends FrameAtPC4 o where
   -- Same state as PC 4, just different PC
   -- Stack is empty after brFalse consumed the bool
 
 /-- Frame state at PC 8 after optionExtractRef extracted rCompressed -/
-structure FrameAtPC8 extends FrameAtPC6 where
+structure FrameAtPC8 (o : RegistrationNativeOracle) extends FrameAtPC6 o where
   rCompressed : MoveValue  -- The extracted value from v
   -- Stack has rCompressed on top
 
 /-- Frame state at PC 11 after scalarFromBytes returned s_opt -/
-structure FrameAtPC11 extends FrameAtPC8 where
+structure FrameAtPC11 (o : RegistrationNativeOracle) extends FrameAtPC8 o where
   respBa_val : MoveValue  -- The response bytes value (was in local 6)
   s_opt : MoveValue  -- The result from scalarFromBytes
   rid_s_opt : RefId  -- Will be allocated at PC 12
 
 /-- Frame state at PC 15 after second optionIsSomeRef and brFalse -/
-structure FrameAtPC15 extends FrameAtPC11 where
+structure FrameAtPC15 (o : RegistrationNativeOracle) extends FrameAtPC11 o where
   scalar : MoveValue  -- Will be extracted from s_opt
 
 /-- Frame state at PC 18 after scalar extracted, ready for message assembly -/
-structure FrameAtPC18 extends FrameAtPC15 where
+structure FrameAtPC18 (o : RegistrationNativeOracle) extends FrameAtPC15 o where
   -- Now have rCompressed in local 8, scalar in local 10
 
 /-- Frame state at PC 20 after initial message setup -/
-structure FrameAtPC20 extends FrameAtPC18 where
+structure FrameAtPC20 (o : RegistrationNativeOracle) extends FrameAtPC18 o where
   msgBuf : MoveValue  -- The message buffer (empty vector initially)
   rid_msg : RefId  -- Ref to message buffer
 
@@ -88,14 +130,14 @@ theorem thread_pc4_to_pc6
       -- The run from PC 4 with s4's state reaches PC 6 with s6's state
       (run (registrationModuleEnv o)
           { code := verifyRegistrationProofCode, pc := 4,
-            locals := registrationLocals s4.chainId s4.sender s4.contract s4.token s4.ekBa s4.commitBa s4.respBa s4.v,
+            locals := registrationLocals s4.chainId s4.sender s4.contract s4.token s4.ekBa s4.commitBa s4.respBa (some s4.v),
             localRefs := (List.replicate 19 none).toArray }
           [] [MoveValue.immRef s4.rid_v]
           { MachineState.empty with containers := s4.containers }
           (s4.fuel - 4 + 2)) =
       (run (registrationModuleEnv o)
           { code := verifyRegistrationProofCode, pc := 6,
-            locals := registrationLocals s4.chainId s4.sender s4.contract s4.token s4.ekBa s4.commitBa s4.respBa s4.v,
+            locals := registrationLocals s4.chainId s4.sender s4.contract s4.token s4.ekBa s4.commitBa s4.respBa (some s4.v),
             localRefs := (List.replicate 19 none).toArray }
           [] []
           { MachineState.empty with containers := s4.containers }
@@ -111,7 +153,7 @@ theorem thread_pc4_to_pc6
     sorry
 
   -- Oracle hypothesis: optionIsSomeRef on v (which is Some-structured) returns true
-  have horacle_pc4 : o.optionIsSomeRef s4.containers [MoveValue.immRef s4.rid_v] =
+  have horacle_pc4 : optionIsSomeRef s4.containers [MoveValue.immRef s4.rid_v] =
                       some ([MoveValue.bool true], s4.containers) := by
     -- Would apply optionIsSomeRef semantics with hv_struct
     sorry
@@ -120,12 +162,12 @@ theorem thread_pc4_to_pc6
   -- Would use step_registration_pc4 (need to define for native calls)
   have step4 : step (registrationModuleEnv o)
                 { code := verifyRegistrationProofCode, pc := 4,
-                  locals := registrationLocals s4.chainId s4.sender s4.contract s4.token s4.ekBa s4.commitBa s4.respBa s4.v,
+                  locals := registrationLocals s4.chainId s4.sender s4.contract s4.token s4.ekBa s4.commitBa s4.respBa (some s4.v),
                   localRefs := (List.replicate 19 none).toArray }
                 [] [MoveValue.immRef s4.rid_v]
                 { MachineState.empty with containers := s4.containers } =
               .ok { code := verifyRegistrationProofCode, pc := 5,
-                    locals := registrationLocals s4.chainId s4.sender s4.contract s4.token s4.ekBa s4.commitBa s4.respBa s4.v,
+                    locals := registrationLocals s4.chainId s4.sender s4.contract s4.token s4.ekBa s4.commitBa s4.respBa (some s4.v),
                     localRefs := (List.replicate 19 none).toArray }
                 [] [MoveValue.bool true]
                 { MachineState.empty with containers := s4.containers } := by
@@ -134,14 +176,14 @@ theorem thread_pc4_to_pc6
   -- Advance fuel through PC 4
   have run4 : run (registrationModuleEnv o)
                 { code := verifyRegistrationProofCode, pc := 4,
-                  locals := registrationLocals s4.chainId s4.sender s4.contract s4.token s4.ekBa s4.commitBa s4.respBa s4.v,
+                  locals := registrationLocals s4.chainId s4.sender s4.contract s4.token s4.ekBa s4.commitBa s4.respBa (some s4.v),
                   localRefs := (List.replicate 19 none).toArray }
                 [] [MoveValue.immRef s4.rid_v]
                 { MachineState.empty with containers := s4.containers }
                 (s4.fuel - 4 + 2) =
               run (registrationModuleEnv o)
                 { code := verifyRegistrationProofCode, pc := 5,
-                  locals := registrationLocals s4.chainId s4.sender s4.contract s4.token s4.ekBa s4.commitBa s4.respBa s4.v,
+                  locals := registrationLocals s4.chainId s4.sender s4.contract s4.token s4.ekBa s4.commitBa s4.respBa (some s4.v),
                   localRefs := (List.replicate 19 none).toArray }
                 [] [MoveValue.bool true]
                 { MachineState.empty with containers := s4.containers }
@@ -150,12 +192,22 @@ theorem thread_pc4_to_pc6
     rw [StepLemmas.run_succ_ok_of_step (s4.fuel - 4 + 1) _ _ _ _ step4]
 
   -- PC 5: brFalse 79 (not taken since stack = .bool true)
-  have step5 := step_registration_pc5_notTaken (registrationModuleEnv o) [] []
-                  { MachineState.empty with containers := s4.containers }
+  have hpc5 : 5 < verifyRegistrationProofCode.size := by
+    exact Nat.lt_trans (by decide : 5 < 70) code_size_bounds
+  have hinstr5 : verifyRegistrationProofCode[5]'hpc5 = .brFalse 79 := by
+    exact code_at_5 hpc5
+  have step5 : step (registrationModuleEnv o)
                   { code := verifyRegistrationProofCode, pc := 5,
-                    locals := registrationLocals s4.chainId s4.sender s4.contract s4.token s4.ekBa s4.commitBa s4.respBa s4.v,
+                    locals := registrationLocals s4.chainId s4.sender s4.contract s4.token s4.ekBa s4.commitBa s4.respBa (some s4.v),
                     localRefs := (List.replicate 19 none).toArray }
-                  rfl rfl
+                  [] [MoveValue.bool true]
+                  { MachineState.empty with containers := s4.containers } =
+               .ok { code := verifyRegistrationProofCode, pc := 6,
+                     locals := registrationLocals s4.chainId s4.sender s4.contract s4.token s4.ekBa s4.commitBa s4.respBa (some s4.v),
+                     localRefs := (List.replicate 19 none).toArray }
+                  [] []
+                  { MachineState.empty with containers := s4.containers } := by
+    exact StepLemmas.step_brFalse_not_taken 79 [] hpc5 hinstr5
 
   -- Advance fuel through PC 5
   rw [run4]
@@ -178,11 +230,6 @@ theorem thread_pc4_to_pc6
     hfuel := s4.hfuel
   }
 
-where
-  registrationLocals (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray) (v : MoveValue) : Array (Option MoveValue) :=
-    -- Placeholder - would construct actual locals array
-    #[]
-
 theorem thread_pc6_to_pc8
     (s6 : FrameAtPC6 o)
     (rCompressed : MoveValue)
@@ -199,19 +246,20 @@ theorem thread_pc6_to_pc8
   -- Step lemma for PC 6 (mutBorrowLoc 7)
   -- mutBorrowLoc needs: PC in bounds, instruction check, local bounds, local value, alloc result
   have hpc6 : 6 < verifyRegistrationProofCode.size := by
-    sorry  -- From code definition
+    exact Nat.lt_trans (by decide : 6 < 70) code_size_bounds
 
   have hinstr6 : verifyRegistrationProofCode[6]'hpc6 = .mutBorrowLoc 7 := by
-    sorry  -- From code transcription
+    exact code_at_6 hpc6
 
-  have hlocal7_inbounds : 7 < (registrationLocals s6.chainId s6.sender s6.contract s6.token s6.ekBa s6.commitBa s6.respBa s6.v).size := by
-    sorry  -- From locals construction (size = 19)
+  have hlocal7_inbounds : 7 < (registrationLocals s6.chainId s6.sender s6.contract s6.token s6.ekBa s6.commitBa s6.respBa (some s6.v)).size := by
+    rw [Programs.Registration.registrationLocals_size]
+    decide
 
-  have hlocal7_value : (registrationLocals s6.chainId s6.sender s6.contract s6.token s6.ekBa s6.commitBa s6.respBa s6.v)[7]'hlocal7_inbounds = some s6.v := by
-    sorry  -- From locals construction
+  have hlocal7_value : (registrationLocals s6.chainId s6.sender s6.contract s6.token s6.ekBa s6.commitBa s6.respBa (some s6.v))[7]'hlocal7_inbounds = some s6.v := by
+    apply Programs.Registration.registrationLocals_local7
 
   have hlocalRefs7_inbounds : 7 < ((List.replicate 19 none).toArray : Array (Option RefId)).size := by
-    simp [List.replicate, List.toArray_data]
+    rw [localRefs_19_size]
     decide
 
   have hlocalRefs7_none : ((List.replicate 19 none).toArray : Array (Option RefId))[7]'hlocalRefs7_inbounds = none := by
@@ -223,12 +271,12 @@ theorem thread_pc6_to_pc8
 
   have step6 : step (registrationModuleEnv o)
                 { code := verifyRegistrationProofCode, pc := 6,
-                  locals := registrationLocals s6.chainId s6.sender s6.contract s6.token s6.ekBa s6.commitBa s6.respBa s6.v,
+                  locals := registrationLocals s6.chainId s6.sender s6.contract s6.token s6.ekBa s6.commitBa s6.respBa (some s6.v),
                   localRefs := (List.replicate 19 none).toArray }
                 [] []
                 { MachineState.empty with containers := s6.containers } =
               .ok { code := verifyRegistrationProofCode, pc := 7,
-                    locals := registrationLocals s6.chainId s6.sender s6.contract s6.token s6.ekBa s6.commitBa s6.respBa s6.v,
+                    locals := registrationLocals s6.chainId s6.sender s6.contract s6.token s6.ekBa s6.commitBa s6.respBa (some s6.v),
                     localRefs := (List.replicate 19 none).toArray.set! 7 (some rid_v_mut) }
                 [] [MoveValue.mutRef rid_v_mut]
                 { MachineState.empty with containers := containers_after_alloc } := by
@@ -280,12 +328,12 @@ theorem thread_pc6_to_pc8
 
   have step7 : step (registrationModuleEnv o)
                 { code := verifyRegistrationProofCode, pc := 7,
-                  locals := registrationLocals s6.chainId s6.sender s6.contract s6.token s6.ekBa s6.commitBa s6.respBa s6.v,
+                  locals := registrationLocals s6.chainId s6.sender s6.contract s6.token s6.ekBa s6.commitBa s6.respBa (some s6.v),
                   localRefs := (List.replicate 19 none).toArray.set! 7 (some rid_v_mut) }
                 [] [MoveValue.mutRef rid_v_mut]
                 { MachineState.empty with containers := containers_after_alloc } =
               .ok { code := verifyRegistrationProofCode, pc := 8,
-                    locals := registrationLocals s6.chainId s6.sender s6.contract s6.token s6.ekBa s6.commitBa s6.respBa s6.v,
+                    locals := registrationLocals s6.chainId s6.sender s6.contract s6.token s6.ekBa s6.commitBa s6.respBa (some s6.v),
                     localRefs := (List.replicate 19 none).toArray.set! 7 (some rid_v_mut) }
                 [] [rCompressed]
                 { MachineState.empty with containers := containers_after_extract } := by
@@ -301,7 +349,7 @@ where
   funcIdx_optionExtractRef : Nat := 0  -- Placeholder index
 
   -- PC 8: stLoc 8
-  let locals_after_pc8 := (registrationLocals s6.chainId s6.sender s6.contract s6.token s6.ekBa s6.commitBa s6.respBa s6.v).set! 8 (some rCompressed)
+  let locals_after_pc8 := (registrationLocals s6.chainId s6.sender s6.contract s6.token s6.ekBa s6.commitBa s6.respBa (some s6.v)).set! 8 (some rCompressed)
 
   have hpc8 : 8 < verifyRegistrationProofCode.size := by
     sorry  -- From code definition
@@ -309,12 +357,12 @@ where
   have hinstr8 : verifyRegistrationProofCode[8]'hpc8 = .stLoc 8 := by
     sorry  -- From code transcription
 
-  have hlocal8_inbounds : 8 < (registrationLocals s6.chainId s6.sender s6.contract s6.token s6.ekBa s6.commitBa s6.respBa s6.v).size := by
+  have hlocal8_inbounds : 8 < (registrationLocals s6.chainId s6.sender s6.contract s6.token s6.ekBa s6.commitBa s6.respBa (some s6.v)).size := by
     sorry  -- From locals size = 19
 
   have step8 : step (registrationModuleEnv o)
                 { code := verifyRegistrationProofCode, pc := 8,
-                  locals := registrationLocals s6.chainId s6.sender s6.contract s6.token s6.ekBa s6.commitBa s6.respBa s6.v,
+                  locals := registrationLocals s6.chainId s6.sender s6.contract s6.token s6.ekBa s6.commitBa s6.respBa (some s6.v),
                   localRefs := (List.replicate 19 none).toArray.set! 7 (some rid_v_mut) }
                 [] [rCompressed]
                 { MachineState.empty with containers := containers_after_extract } =

@@ -305,8 +305,9 @@ Latest commit: 93004cd748
 Files changed: 14 (across 4 commits)
 Lines added: ~7,303
 Total commits this session: 7
+-/
 
-end MovementFormal.Experimental.ConfidentialAsset.Registration
+namespace MovementFormal.Experimental.ConfidentialAsset.Registration
 
 /-! ## Session Summary -/
 

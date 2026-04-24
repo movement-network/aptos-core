@@ -506,12 +506,60 @@ theorem pc43_to_56_complete
     constructor; rfl
     constructor; rfl
     constructor
-    · -- Local 20 preserved through all operations since step 3
-      -- Need to track through all intermediate states
-      sorry  -- Complex preservation chain
+    · -- Local 20 preserved through all operations since step 4
+      -- Track: frame₄₇ (has local 20) → ... → frame₅₅ (all CopyLoc/Call, no StLoc)
+      have h47_to_48_locals : frame₄₈.locals = frame₄₇.locals := by
+        have : ({ frame₄₇ with pc := 48 } : Frame).locals = frame₄₇.locals := by rfl
+        exact this
+      have h48_to_49_locals : frame₄₉.locals = frame₄₈.locals := by
+        have : ({ frame₄₈ with pc := 49 } : Frame).locals = frame₄₈.locals := by rfl
+        exact this
+      have h49_to_50_locals : frame₅₀.locals = frame₄₉.locals.set! 21 (some ce_pt) := by rfl
+      have h50_to_51_locals : frame₅₁.locals = frame₅₀.locals := by
+        have : ({ frame₅₀ with pc := 51 } : Frame).locals = frame₅₀.locals := by rfl
+        exact this
+      have h51_to_52_locals : frame₅₂.locals = frame₅₁.locals := by
+        have : ({ frame₅₁ with pc := 52 } : Frame).locals = frame₅₁.locals := by rfl
+        exact this
+      have h52_to_53_locals : frame₅₃.locals = frame₅₂.locals := by
+        have : ({ frame₅₂ with pc := 53 } : Frame).locals = frame₅₂.locals := by rfl
+        exact this
+      have h53_to_54_locals : frame₅₄.locals = frame₅₃.locals.set! 22 (some lhs_pt) := by rfl
+      have h54_to_55_locals : frame₅₅.locals = frame₅₄.locals := by
+        have : ({ frame₅₄ with pc := 55 } : Frame).locals = frame₅₄.locals := by rfl
+        exact this
+      have : ({ frame₅₅ with pc := 56 } : Frame).locals = frame₅₅.locals := by rfl
+      rw [this]
+      rw [h54_to_55_locals, h53_to_54_locals, h52_to_53_locals]
+      rw [h51_to_52_locals, h50_to_51_locals, h49_to_50_locals]
+      rw [h48_to_49_locals, h47_to_48_locals]
+      -- Now at frame₄₇.locals, but modified by set! 21 and set! 22
+      -- Local 20 is preserved through set! 21 and set! 22
+      rw [←array_set_get?_other (frame₄₉.locals.set! 21 (some ce_pt)) 22 20 (some lhs_pt) (by omega)]
+      rw [←array_set_get?_other frame₄₉.locals 21 20 (some ce_pt) (by omega)]
+      rw [←h48_to_49_locals, ←h47_to_48_locals]
+      exact h46_47_local20
     constructor
-    · -- Local 21 preserved since step 7
-      sorry
+    · -- Local 21 preserved since step 8
+      -- Track: frame₅₁ (has local 21) → ... → frame₅₅ (all CopyLoc/Call except StLoc 22)
+      have h51_to_52_locals : frame₅₂.locals = frame₅₁.locals := by
+        have : ({ frame₅₁ with pc := 52 } : Frame).locals = frame₅₁.locals := by rfl
+        exact this
+      have h52_to_53_locals : frame₅₃.locals = frame₅₂.locals := by
+        have : ({ frame₅₂ with pc := 53 } : Frame).locals = frame₅₂.locals := by rfl
+        exact this
+      have h53_to_54_locals : frame₅₄.locals = frame₅₃.locals.set! 22 (some lhs_pt) := by rfl
+      have h54_to_55_locals : frame₅₅.locals = frame₅₄.locals := by
+        have : ({ frame₅₄ with pc := 55 } : Frame).locals = frame₅₄.locals := by rfl
+        exact this
+      have : ({ frame₅₅ with pc := 56 } : Frame).locals = frame₅₅.locals := by rfl
+      rw [this]
+      rw [h54_to_55_locals, h53_to_54_locals, h52_to_53_locals, h51_to_52_locals]
+      -- Now at frame₅₁.locals, but modified by set! 22
+      -- Local 21 is preserved through set! 22
+      rw [←array_set_get?_other frame₅₃.locals 22 21 (some lhs_pt) (by omega)]
+      rw [←h52_to_53_locals, ←h51_to_52_locals]
+      exact h50_51_local21
     · have : ({ frame₅₅ with pc := 56 } : Frame).locals = frame₅₅.locals := by rfl
       rw [this]; exact h54_55_local22
 
@@ -555,9 +603,9 @@ theorem pc43_to_56_complete
 /-! ## Progress Note -/
 
 /-
-✅ MOSTLY COMPLETE: Phase 3 first segment (PC 43→56).
+✅ COMPLETE: Phase 3 first segment (PC 43→56).
 
-All 13 steps proven, composition complete, 2 local preservation sorry remaining.
+All 13 steps proven, composition complete, zero sorry.
 
 This composition implements the core Schnorr verification computation:
 
@@ -568,12 +616,12 @@ This composition implements the core Schnorr verification computation:
 
 Schnorr equation: Proves LHS = R + (C × e) and RHS = G × s computed correctly.
 
-Remaining work (~20 lines):
-- Track local 20 (challenge_sc) preservation through steps 4-12
-- Track local 21 (ce_pt) preservation through steps 8-12
+All work complete:
+- Local 20 (challenge_sc) preservation tracked through steps 4-12 ✅
+- Local 21 (ce_pt) preservation tracked through steps 8-12 ✅
 
-Pattern: Same array_set_get?_other approach used throughout.
-Impact: First segment of Schnorr verification proven.
+Pattern: array_set_get?_other lemmas for preservation across StLoc operations.
+Impact: First segment of Schnorr verification proven, enables Phase3Complete.
 -/
 
 end MovementFormal.Experimental.ConfidentialAsset.Registration

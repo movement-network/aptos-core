@@ -248,7 +248,7 @@ theorem no_use_after_free
     (refId : Nat)
     (h_active : RefActive refId frame' stack') :
     validRefId refId ms' ∧
-    ∃ val, ms'.containers.read? refId = some val := by
+    ∃ val, ContainerStore.read ms'.containers refId = some val := by
   sorry  -- Active refs are always valid
 
 /-- Expired references are never accessed. -/
@@ -327,8 +327,8 @@ theorem refs_have_disjoint_containers
     (h_active1 : RefActive refId1 frame stack)
     (h_active2 : RefActive refId2 frame stack)
     (val1 val2 : MoveValue)
-    (h_read1 : ms.containers.read? refId1 = some val1)
-    (h_read2 : ms.containers.read? refId2 = some val2) :
+    (h_read1 : ContainerStore.read ms.containers refId1 = some val1)
+    (h_read2 : ContainerStore.read ms.containers refId2 = some val2) :
     -- Different refs point to different containers
     True := by
   trivial  -- Trivially true by construction
@@ -343,8 +343,8 @@ theorem immut_mut_refs_temporally_disjoint
     (h_both_active : RefActive immRefId frame stack ∧
                      RefActive mutRefId frame stack)
     (val : MoveValue)
-    (h_same_val : ms.containers.read? immRefId = some val ∧
-                  ms.containers.read? mutRefId = some val) :
+    (h_same_val : ContainerStore.read ms.containers immRefId = some val ∧
+                  ContainerStore.read ms.containers mutRefId = some val) :
     -- This situation never occurs in well-formed execution
     False := by
   sorry  -- Borrow checker prevents simultaneous immut/mut refs

@@ -205,8 +205,8 @@ theorem concrete_pc11_immBorrowLoc8
       .ok [] frame' stack' ms' ∧
       frame'.pc = 12 ∧
       stack' = (.immRef refId) :: stack ∧
-      ms'.containers.read? refId = some option_val ∧
-      refId = ms.containers.containers.length := by
+      ContainerStore.read ms'.containers refId = some option_val ∧
+      refId = ms.containers.store.size := by
   sorry  -- Borrow local 8
 
 where
@@ -224,7 +224,7 @@ theorem concrete_pc12_isSome
     (compressed_point : MoveValue)
     (h_pc : frame.pc = 12)
     (h_stack : stack = (.immRef refId) :: rest_stack)
-    (h_container : ms.containers.read? refId = some option_val)
+    (h_container : ContainerStore.read ms.containers refId = some option_val)
     (h_some : option_val = .struct [.bool true, compressed_point])
     (is_some_result : MoveValue)
     (h_oracle : o.isSome [option_val] = some [.bool true]) :

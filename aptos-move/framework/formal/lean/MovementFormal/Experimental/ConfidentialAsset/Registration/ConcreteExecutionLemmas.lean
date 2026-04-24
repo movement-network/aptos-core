@@ -195,7 +195,7 @@ theorem step_pc11_immBorrowLoc8
       .ok [] frame' stack' ms' ∧
       frame'.pc = 12 ∧
       stack' = (.immRef refId) :: stack ∧
-      ms'.containers.read? refId = some val8 := by
+      ContainerStore.read ms'.containers refId = some val8 := by
   sorry  -- ImmBorrowLoc 8 creates immutable reference
 
 /-- PC 12: Call is_some -/
@@ -209,7 +209,7 @@ theorem step_pc12_call_is_some
     (h_pc : frame.pc = 12)
     (h_instr : frame.code[12]? = some (.call 2))  -- func 2 is is_some
     (h_stack : stack = (.immRef refId) :: rest_stack)
-    (h_container : ms.containers.read? refId = some option_val)
+    (h_container : ContainerStore.read ms.containers refId = some option_val)
     (h_oracle : o.isSome [option_val] = some [.bool is_some_result]) :
     ∃ frame' stack',
       step (registrationModuleEnv o) [] frame stack ms =

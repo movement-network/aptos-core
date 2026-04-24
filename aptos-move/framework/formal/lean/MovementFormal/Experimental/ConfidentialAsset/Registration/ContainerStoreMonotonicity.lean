@@ -37,7 +37,7 @@ open MovementFormal.Experimental.ConfidentialAsset.Registration.PCBoundaryCondit
 
 /-- Container store size (number of allocated containers). -/
 def containerStoreSize (ms : MachineState) : Nat :=
-  ms.containers.containers.length
+  ms.containers.store.size
 
 /-- Reference ID is valid (within container store bounds). -/
 def validRefId (refId : Nat) (ms : MachineState) : Prop :=
@@ -142,7 +142,7 @@ theorem immRef_value_persistent
     (ms : MachineState)
     (refId : Nat)
     (val : MoveValue)
-    (h_immRef : ms.containers.read? refId = some val)
+    (h_immRef : ContainerStore.read ms.containers refId = some val)
     (h_immutable : IsImmutableRef refId ms)
     (fuel : Nat)
     (frame' : Frame)
@@ -150,7 +150,7 @@ theorem immRef_value_persistent
     (ms' : MachineState)
     (h_run : run (registrationModuleEnv o) [] frame stack ms fuel =
              .ok [] frame' stack' ms') :
-    ms'.containers.read? refId = some val := by
+    ContainerStore.read ms'.containers refId = some val := by
   sorry  -- Immutable refs never change
 
 where
@@ -168,7 +168,7 @@ theorem mutRef_can_update
     (ms : MachineState)
     (refId : Nat)
     (val_before : MoveValue)
-    (h_mutRef : ms.containers.read? refId = some val_before)
+    (h_mutRef : ContainerStore.read ms.containers refId = some val_before)
     (h_mutable : IsMutableRef refId ms)
     (frame' : Frame)
     (stack' : List MoveValue)
@@ -177,7 +177,7 @@ theorem mutRef_can_update
               .ok [] frame' stack' ms')
     (h_write_instr : frame.code[frame.pc]? = some .writeRef)
     (val_after : MoveValue)
-    (h_after : ms'.containers.read? refId = some val_after) :
+    (h_after : ContainerStore.read ms'.containers refId = some val_after) :
     -- Value may have changed, but reference still exists
     validRefId refId ms' := by
   sorry  -- Mutable ref updated but not removed
@@ -203,7 +203,7 @@ theorem mutRef_accessible_after_update
     (ms' : MachineState)
     (h_step : step (registrationModuleEnv o) [] frame stack ms =
               .ok [] frame' stack' ms') :
-    ∃ val, ms'.containers.read? refId = some val := by
+    ∃ val, ContainerStore.read ms'.containers refId = some val := by
   sorry  -- Reference remains in store
 
 where
@@ -288,13 +288,13 @@ theorem no_deallocation
     (ms : MachineState)
     (h_code : frame.code = verifyRegistrationProofCode o)
     (refId : Nat)
-    (h_exists : ∃ val, ms.containers.read? refId = some val)
+    (h_exists : ∃ val, ContainerStore.read ms.containers refId = some val)
     (frame' : Frame)
     (stack' : List MoveValue)
     (ms' : MachineState)
     (h_step : step (registrationModuleEnv o) [] frame stack ms =
               .ok [] frame' stack' ms') :
-    ∃ val, ms'.containers.read? refId = some val := by
+    ∃ val, ContainerStore.read ms'.containers refId = some val := by
   sorry  -- Containers never deallocated
 
 /-- Run never deallocates containers. -/
@@ -305,14 +305,14 @@ theorem run_no_deallocation
     (ms : MachineState)
     (h_code : frame.code = verifyRegistrationProofCode o)
     (refId : Nat)
-    (h_exists : ∃ val, ms.containers.read? refId = some val)
+    (h_exists : ∃ val, ContainerStore.read ms.containers refId = some val)
     (fuel : Nat)
     (frame' : Frame)
     (stack' : List MoveValue)
     (ms' : MachineState)
     (h_run : run (registrationModuleEnv o) [] frame stack ms fuel =
              .ok [] frame' stack' ms') :
-    ∃ val, ms'.containers.read? refId = some val := by
+    ∃ val, ContainerStore.read ms'.containers refId = some val := by
   sorry  -- Run never deallocates
 
 /-! ## Reference Lifetime Safety -/
@@ -361,7 +361,7 @@ structure ContainerStoreInvariant (ms : MachineState) : Prop where
   -- All valid ref IDs point to actual values
   h_valid_refs_have_values : ∀ refId,
     refId < containerStoreSize ms →
-    ∃ val, ms.containers.read? refId = some val
+    ∃ val, ContainerStore.read ms.containers refId = some val
   -- Container store is append-only (never shrinks)
   h_append_only : True
 

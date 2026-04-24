@@ -307,6 +307,10 @@ theorem vectorAppend_compose_two
                 some ([], cs2))
     (hread : containers.read rid = some (MoveValue.vector MoveType.u8 existing)) :
     cs2.read rid = some (MoveValue.vector MoveType.u8 (existing ++ part1 ++ part2)) := by
+  -- TODO: This proof requires ContainerStore write/read interaction lemmas.
+  -- The structure is clear: vectorAppendU8Ref composes by successive writes that preserve
+  -- concatenation: write(write(cs, rid, existing ++ part1), rid, part2) = write(cs, rid, existing ++ part1 ++ part2)
+  -- But proving this needs the ContainerStore API lemma library.
   sorry
 
 theorem vectorAppend_compose_three
@@ -321,6 +325,7 @@ theorem vectorAppend_compose_three
                 some ([], cs3))
     (hread : containers.read rid = some (MoveValue.vector MoveType.u8 existing)) :
     cs3.read rid = some (MoveValue.vector MoveType.u8 (existing ++ part1 ++ part2 ++ part3)) := by
+  -- Follows from vectorAppend_compose_two by induction
   sorry
 
 /-! ### Address Serialization Helpers

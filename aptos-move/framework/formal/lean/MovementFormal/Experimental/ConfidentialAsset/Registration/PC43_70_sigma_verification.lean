@@ -348,7 +348,7 @@ theorem thread_pc50_to_pc58_point_multiplications
     sorry  -- pointMul returns point
 
   have hbody53 : (registrationModuleEnv o).functions[funcIdx_pointMul].body =
-                 .native o.pointMul := by
+                 .nativeRef (wrapOracleImmRef2 o.pointMul) := by
     sorry  -- From module env
 
   have htake53 : takeN [MoveValue.immRef rid_h, MoveValue.immRef rid_s] 2 =
@@ -592,10 +592,10 @@ theorem thread_pc58_to_pc64_addition_and_decompress
     (s58 : SigmaVerificationState o)
     (hs_product ek_e_product : MoveValue)
     (lhs rhs : MoveValue)
-    (horacle_add : o.pointAdd s58.containers [hs_product, ek_e_product] =
-                   some ([lhs], s58.containers))
-    (horacle_decompress : o.pointDecompress s58.containers [s58.rCompressed] =
-                          some ([rhs], s58.containers)) :
+    (horacle_add : o.pointAdd [hs_product, ek_e_product] =
+                   some [lhs])
+    (horacle_decompress : o.pointDecompress [s58.rCompressed] =
+                          some [rhs]) :
     ∃ (s64 : SigmaVerificationState o),
       -- lhs and rhs ready for equality check
       s64.containers = s58.containers ∧
@@ -628,8 +628,8 @@ If false → PC 71 (abort with ESIGMA_PROTOCOL_VERIFY_FAILED)
 theorem thread_pc64_to_pc70_equality_check_success
     (s64 : SigmaVerificationState o)
     (lhs rhs : MoveValue)
-    (horacle_equals : o.pointEquals s64.containers [lhs, rhs] =
-                      some ([MoveValue.bool true], s64.containers)) :
+    (horacle_equals : o.pointEquals [lhs, rhs] =
+                      some [MoveValue.bool true]) :
     -- When point_equals returns true, we reach PC 70 (ret)
     ∃ (result : EvalResult),
       result = EvalResult.returned [] MachineState.empty := by
@@ -647,8 +647,8 @@ theorem thread_pc64_to_pc70_equality_check_success
 theorem thread_pc64_to_pc73_equality_check_failure
     (s64 : SigmaVerificationState o)
     (lhs rhs : MoveValue)
-    (horacle_equals : o.pointEquals s64.containers [lhs, rhs] =
-                      some ([MoveValue.bool false], s64.containers)) :
+    (horacle_equals : o.pointEquals [lhs, rhs] =
+                      some [MoveValue.bool false]) :
     -- When point_equals returns false, we reach PC 71-73 (abort)
     ∃ (result : EvalResult),
       result = EvalResult.aborted 65537 := by
@@ -674,22 +674,22 @@ theorem registration_run_pc43_to_pc70_sigma_success
     (challenge basePoint ekAsPoint : MoveValue)
     (hs_product ek_e_product lhs rhs : MoveValue)
     -- Oracle hypotheses for the happy path (all succeed, final equals is true)
-    (horacle_challenge : o.newScalarFromSha2_512 s43.containers [s43.msgBuf] =
-                         some ([challenge], s43.containers))
-    (horacle_base : o.hashToPointBase s43.containers [] =
-                    some ([basePoint], s43.containers))
-    (horacle_ek_to_point : o.pubkeyToPoint s43.containers [s43.ekPoint] =
-                           some ([ekAsPoint], s43.containers))
-    (horacle_hs : o.pointMul s43.containers [basePoint, s43.scalar] =
-                  some ([hs_product], s43.containers))
-    (horacle_ek_e : o.pointMul s43.containers [ekAsPoint, challenge] =
-                    some ([ek_e_product], s43.containers))
-    (horacle_add : o.pointAdd s43.containers [hs_product, ek_e_product] =
-                   some ([lhs], s43.containers))
-    (horacle_decompress : o.pointDecompress s43.containers [s43.rCompressed] =
-                          some ([rhs], s43.containers))
-    (horacle_equals : o.pointEquals s43.containers [lhs, rhs] =
-                      some ([MoveValue.bool true], s43.containers)) :
+    (horacle_challenge : newScalarFromSha2_512 [s43.msgBuf] =
+                         some [challenge])
+    (horacle_base : o.hashToPointBase [] =
+                    some [basePoint])
+    (horacle_ek_to_point : o.pubkeyToPoint [s43.ekPoint] =
+                           some [ekAsPoint])
+    (horacle_hs : o.pointMul [basePoint, s43.scalar] =
+                  some [hs_product])
+    (horacle_ek_e : o.pointMul [ekAsPoint, challenge] =
+                    some [ek_e_product])
+    (horacle_add : o.pointAdd [hs_product, ek_e_product] =
+                   some [lhs])
+    (horacle_decompress : o.pointDecompress [s43.rCompressed] =
+                          some [rhs])
+    (horacle_equals : o.pointEquals [lhs, rhs] =
+                      some [MoveValue.bool true]) :
     -- Starting at PC 43, ending at PC 70 with success
     ∃ (result : EvalResult),
       result = EvalResult.returned [] MachineState.empty := by

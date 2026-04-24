@@ -892,8 +892,8 @@ theorem registration_run_pc4_to_pc20_singleton_happy_path
     (containers_at_pc4 : ContainerStore)
     (fuel : Nat) (hfuel : 67 ≤ fuel)
     (hv_struct : v = MoveValue.struct_ (MoveValue.bool true :: rCompressed :: restData))
-    (horacle_scalar : o.scalarFromBytes containers_at_pc4 [respBa_val] =
-                      some ([MoveValue.struct_ (MoveValue.bool true :: scalar :: restScalarData)], containers_at_pc4)) :
+    (horacle_scalar : o.newScalarFromBytes [respBa_val] =
+                      some [MoveValue.struct_ (MoveValue.bool true :: scalar :: restScalarData)]) :
     -- Starting at PC 4 with v allocated in containers_at_pc4
     -- Ending at PC 20 with message buffer setup
     ∃ (containers_at_pc20 : ContainerStore) (msgBuf : MoveValue),

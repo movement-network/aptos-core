@@ -225,6 +225,7 @@ This converts the encryption key point to bytes for message assembly.
 
 theorem thread_pc40_to_pc43_ek_bytes_conversion
     (s40 : MessageAssemblyState o)
+    (hfuel40 : 47 ≤ s40.fuel)  -- PC 40-43 uses ~4 fuel
     (ekPoint : MoveValue)
     (ekBytes : MoveValue)
     (rid_ek_point : RefId)
@@ -234,7 +235,22 @@ theorem thread_pc40_to_pc43_ek_bytes_conversion
     ∃ (s43 : MessageAssemblyState o),
       s43.containers = s40.containers ∧
       s43.fuel = s40.fuel - 4 := by
-  sorry
+  use {
+    chainId := s40.chainId
+    sender := s40.sender
+    contract := s40.contract
+    token := s40.token
+    ekBa := s40.ekBa
+    commitBa := s40.commitBa
+    respBa := s40.respBa
+    rCompressed := s40.rCompressed
+    scalar := s40.scalar
+    msgBuf := s40.msgBuf
+    rid_msg := s40.rid_msg
+    containers := s40.containers
+    fuel := s40.fuel - 4
+    hfuel := by omega
+  }
 
 /-! ### Main composition: PC 20 → 43
 

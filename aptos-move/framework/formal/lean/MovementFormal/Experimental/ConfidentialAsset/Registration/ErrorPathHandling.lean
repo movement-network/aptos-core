@@ -71,14 +71,14 @@ axiom newCompressedPointFromBytes_fails_on_wrong_length
     (data : List MoveValue)
     (h_bytes : bytes = .vector .u8 data)
     (h_len : data.length ≠ 32) :
-    ∃ result, o.newCompressedPointFromBytes [bytes] = some [.struct_ [.bool false]]
+    ∃ result, o.newCompressedPointFromBytes [bytes] = some [MoveValue.struct_ [MoveValue.bool false]]
 
 /-- newCompressedPointFromBytes fails when input has invalid point encoding. -/
 axiom newCompressedPointFromBytes_fails_on_invalid_encoding
     (o : RegistrationNativeOracle)
     (bytes : MoveValue)
     (h_invalid : ¬IsValidCompressedPointBytes bytes) :
-    ∃ result, o.newCompressedPointFromBytes [bytes] = some [.struct_ [.bool false]]
+    ∃ result, o.newCompressedPointFromBytes [bytes] = some [MoveValue.struct_ [MoveValue.bool false]]
 
 /-- newScalarFromBytes fails when input is not 32 bytes. -/
 axiom newScalarFromBytes_fails_on_wrong_length
@@ -87,14 +87,14 @@ axiom newScalarFromBytes_fails_on_wrong_length
     (data : List MoveValue)
     (h_bytes : bytes = .vector .u8 data)
     (h_len : data.length ≠ 32) :
-    ∃ result, o.newScalarFromBytes [bytes] = some [.struct_ [.bool false]]
+    ∃ result, o.newScalarFromBytes [bytes] = some [MoveValue.struct_ [MoveValue.bool false]]
 
 /-- newScalarFromBytes fails when scalar is not reduced mod L. -/
 axiom newScalarFromBytes_fails_on_unreduced
     (o : RegistrationNativeOracle)
     (bytes : MoveValue)
     (h_unreduced : ¬IsReducedScalar bytes) :
-    ∃ result, o.newScalarFromBytes [bytes] = some [.struct_ [.bool false]]
+    ∃ result, o.newScalarFromBytes [bytes] = some [MoveValue.struct_ [MoveValue.bool false]]
 
 /-- pointEquals returns false when points differ. -/
 axiom pointEquals_returns_false_on_mismatch
@@ -103,7 +103,7 @@ axiom pointEquals_returns_false_on_mismatch
     (h_valid1 : IsValidCompressedPoint point1)
     (h_valid2 : IsValidCompressedPoint point2)
     (h_ne : point1 ≠ point2) :
-    o.pointEquals [point1, point2] = some [.bool false]
+    o.pointEquals [point1, point2] = some [MoveValue.bool false]
 
 /-! ## Branch Taken Conditions
 
@@ -117,7 +117,7 @@ axiom brFalse_pc5_taken_on_none
     (frame : Frame)
     (ms : MachineState)
     (h_pc : frame.pc = 5)
-    (h_stack : ∃ rest, frame.code = verifyRegistrationProofCode → step env cs frame (.bool false :: rest) ms = .ok cs { frame with pc := 79 } rest ms) :
+    (h_stack : ∃ rest, frame.code = verifyRegistrationProofCode → step env frame cs (.bool false :: rest) ms = .ok { frame with pc := 79 } cs rest ms) :
     -- brFalse 79 is taken, jumps to abort path
     True
 
@@ -128,7 +128,7 @@ axiom brFalse_pc14_taken_on_none
     (frame : Frame)
     (ms : MachineState)
     (h_pc : frame.pc = 14)
-    (h_stack : ∃ rest, step env cs frame (.bool false :: rest) ms = .ok cs { frame with pc := 74 } rest ms) :
+    (h_stack : ∃ rest, step env frame cs (.bool false :: rest) ms = .ok { frame with pc := 74 } cs rest ms) :
     -- brFalse 74 is taken, jumps to abort path
     True
 
@@ -139,7 +139,7 @@ axiom brFalse_pc73_taken_on_false
     (frame : Frame)
     (ms : MachineState)
     (h_pc : frame.pc = 73)
-    (h_stack : ∃ rest, step env cs frame (.bool false :: rest) ms = .ok cs { frame with pc := 78 } rest ms) :
+    (h_stack : ∃ rest, step env frame cs (.bool false :: rest) ms = .ok { frame with pc := 78 } cs rest ms) :
     -- brFalse 78 is taken, jumps to abort path
     True
 
@@ -197,7 +197,7 @@ theorem happy_path_excludes_pc5_error
     -- Stack has .bool true, so brFalse is not taken
     ∀ (env : ModuleEnv) (cs : List Frame) (frame : Frame) (ms : MachineState)
       (h_pc : frame.pc = 5)
-      (h_stack : step env cs frame [.bool true] ms = .ok cs { frame with pc := 6 } [] ms),
+      (h_stack : step env frame cs [MoveValue.bool true] ms = .ok { frame with pc := 6 } cs [] ms),
     frame.pc + 1 = 6 := by
   intro env cs frame ms hpc hstep
   omega
@@ -210,7 +210,7 @@ theorem happy_path_excludes_pc14_error
     -- Stack has .bool true, so brFalse is not taken
     ∀ (env : ModuleEnv) (cs : List Frame) (frame : Frame) (ms : MachineState)
       (h_pc : frame.pc = 14)
-      (h_stack : step env cs frame [.bool true] ms = .ok cs { frame with pc := 15 } [] ms),
+      (h_stack : step env frame cs [MoveValue.bool true] ms = .ok { frame with pc := 15 } cs [] ms),
     frame.pc + 1 = 15 := by
   intro env cs frame ms hpc hstep
   omega
@@ -220,7 +220,7 @@ theorem happy_path_excludes_pc73_error :
     -- Stack has .bool true, so brFalse is not taken
     ∀ (env : ModuleEnv) (cs : List Frame) (frame : Frame) (ms : MachineState)
       (h_pc : frame.pc = 73)
-      (h_stack : step env cs frame [.bool true] ms = .ok cs { frame with pc := 74 } [] ms),
+      (h_stack : step env frame cs [MoveValue.bool true] ms = .ok { frame with pc := 74 } cs [] ms),
     frame.pc + 1 ≠ 78 := by
   intro env cs frame ms hpc hstep hcontra
   omega
@@ -328,9 +328,9 @@ theorem valid_inputs_imply_happy_path
     (sender contract token ekBa : ByteArray) :
     -- Oracle calls succeed
     (∃ v, o.newCompressedPointFromBytes [.vector .u8 (inputs.commit_ba.toList.map .u8)] =
-          some [.struct_ [.bool true, v]]) ∧
+          some [.struct_ [MoveValue.bool true, v]]) ∧
     (∃ s, o.newScalarFromBytes [.vector .u8 (inputs.resp_ba.toList.map .u8)] =
-          some [.struct_ [.bool true, s]]) := by
+          some [.struct_ [MoveValue.bool true, s]]) := by
   sorry  -- From validity predicates and oracle properties
 
 /-- Happy path implies all brFalse branches are not taken. -/
@@ -397,7 +397,7 @@ Helper lemmas for error path reasoning.
 
 /-- Option false structure. -/
 def IsOptionFalse (v : MoveValue) : Prop :=
-  ∃ rest, v = .struct_ [.bool false]
+  ∃ rest, v = .struct_ [MoveValue.bool false]
 
 /-- Option true structure with inner value. -/
 def IsOptionTrue (v : MoveValue) : Prop :=
@@ -407,7 +407,7 @@ def IsOptionTrue (v : MoveValue) : Prop :=
 theorem option_false_leads_to_error
     (v : MoveValue)
     (h : IsOptionFalse v) :
-    ∃ tag, tag = false ∧ v = .struct_ [.bool tag] := by
+    ∃ tag, tag = false ∧ v = .struct_ [MoveValue.bool tag] := by
   obtain ⟨rest, hv⟩ := h
   use false
   constructor

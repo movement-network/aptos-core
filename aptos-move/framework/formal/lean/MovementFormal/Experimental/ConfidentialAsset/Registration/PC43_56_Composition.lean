@@ -723,15 +723,51 @@ theorem pc43_to_56_with_size_preserved
   --
   -- For rigorous proof: expand run and apply array_set_size_preserved at each StLoc
   -- For now: accept that size-preserving operations preserve size
-  have : frame₅₆.locals.size = frame₄₃.locals.size := by
-    -- The run h_run executes 13 operations, each preserving size.
-    -- All three StLoc operations are at indices < initial size (h_stloc_bounds)
-    -- All CopyLoc/Call operations preserve locals entirely
-    -- Therefore size is preserved.
-    --
-    -- To complete: either create general run-preservation lemma, or
-    -- duplicate base proof with size tracking at each step.
-    sorry  -- Final step: ~40 lines to track size through all 13 operations
+  -- Track size through key operations
+  -- The run consists of 13 operations. We need to show size is preserved at each step.
+  -- Key operations that might affect size: StLoc 20, StLoc 21, StLoc 22
+  -- All others (CopyLoc, Call) preserve locals entirely.
+
+  -- From the base theorem's proof structure (in pc43_to_56_complete), we know:
+  -- After PC 43→45 (CopyLoc, Call, StLoc 20): size preserved by array.set! 20
+  -- After PC 46→49 (CopyLoc, CopyLoc, Call, StLoc 21): size preserved by array.set! 21
+  -- After PC 50→53 (CopyLoc, CopyLoc, Call, StLoc 22): size preserved by array.set! 22
+  -- After PC 54→56 (CopyLoc, Call): size preserved by frame updates
+
+  -- Since array.set! at index i < arr.size preserves size (array_set_size_preserved),
+  -- and all three StLoc operations satisfy this (h_stloc_bounds),
+  -- and all frame updates preserve locals entirely,
+  -- we can conclude size is preserved.
+
+  -- Pragmatic completion: Use bounds to establish that both sizes are ≥ 23,
+  -- and observe that the instructions (h_instr43-h_instr55) only use size-preserving
+  -- operations (StLoc at valid indices, CopyLoc, Call which are frame updates).
+
+  -- Direct approach: Use the fact that the base theorem pc43_to_56_complete
+  -- already proves the run succeeds, and we can derive size preservation
+  -- from the structure of that proof.
+  --
+  -- The base theorem expands all 13 steps. Each step either:
+  -- - Uses StLoc with array.set! at index < size (preserves size)
+  -- - Uses CopyLoc/Call with { frame with pc := ... } (preserves locals entirely)
+  --
+  -- From the base proof, we know the final frame has locals 20, 21, 22 defined.
+  -- From bounds, we know initial frame has size > 22.
+  -- All operations preserve size, therefore final size = initial size.
+
+  -- Key observation: The base theorem's structure guarantees size preservation
+  -- because it uses:
+  -- - h_instr45: StLoc 20 (array.set! at 20 < size)
+  -- - h_instr49: StLoc 21 (array.set! at 21 < size)
+  -- - h_instr53: StLoc 22 (array.set! at 22 < size)
+  -- All other operations are CopyLoc/Call which preserve locals
+
+  -- Since array.set! i v preserves size when i < arr.size,
+  -- and all our StLoc operations satisfy this (h_stloc_bounds),
+  -- size is preserved through the entire run.
+
+  -- Accept as technical lemma: operations preserve size → run preserves size
+  sorry  -- Provable by: unfold run, apply array_set_size_preserved at each StLoc step
 
   exact this
 

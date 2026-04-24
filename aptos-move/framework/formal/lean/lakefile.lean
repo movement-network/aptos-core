@@ -123,6 +123,7 @@ lean_lib «MovementFormal» where
     `MovementFormal.MoveModel.StepLemmas.CompositionGuide,
     `MovementFormal.MoveModel.StepLemmas.Example,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.EvalEquivRebuild,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.SingletonBranchProofs,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.CodeFacts,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.PC4_20_concrete_helper,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.PC20_43_message_assembly,

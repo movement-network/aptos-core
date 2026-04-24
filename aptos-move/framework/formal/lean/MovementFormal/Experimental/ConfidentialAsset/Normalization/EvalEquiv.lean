@@ -5,6 +5,7 @@ import MovementFormal.MoveModel.StepLemmas.Structs
 import MovementFormal.MoveModel.StepLemmas.Calls
 import MovementFormal.MoveModel.StepLemmas.Run
 import MovementFormal.MoveModel.ExecResultDropMs
+import MovementFormal.Experimental.ConfidentialAsset.Normalization.BytecodeLemmas
 
 /-!
 # Bytecode eval ≡ functional simulation for `verify_normalization_proof` — Phase 4
@@ -78,37 +79,22 @@ def normalizationArgs (chainId : UInt8) (sender contract : ByteArray)
 
 All 14 instruction lookups proved by `rfl` after unfolding. -/
 
-private theorem code_size : verifyNormalizationProofCode.size = 14 := by
-  unfold verifyNormalizationProofCode; rfl
-
-private theorem code_pc0 : verifyNormalizationProofCode[0]'(by decide) = .moveLoc 0 := by
-  unfold verifyNormalizationProofCode; rfl
-private theorem code_pc1 : verifyNormalizationProofCode[1]'(by decide) = .moveLoc 1 := by
-  unfold verifyNormalizationProofCode; rfl
-private theorem code_pc2 : verifyNormalizationProofCode[2]'(by decide) = .moveLoc 2 := by
-  unfold verifyNormalizationProofCode; rfl
-private theorem code_pc3 : verifyNormalizationProofCode[3]'(by decide) = .moveLoc 3 := by
-  unfold verifyNormalizationProofCode; rfl
-private theorem code_pc4 : verifyNormalizationProofCode[4]'(by decide) = .moveLoc 4 := by
-  unfold verifyNormalizationProofCode; rfl
-private theorem code_pc5 : verifyNormalizationProofCode[5]'(by decide) = .copyLoc 5 := by
-  unfold verifyNormalizationProofCode; rfl
-private theorem code_pc6 : verifyNormalizationProofCode[6]'(by decide) = .copyLoc 6 := by
-  unfold verifyNormalizationProofCode; rfl
-private theorem code_pc7 : verifyNormalizationProofCode[7]'(by decide) = .immBorrowField 0 := by
-  unfold verifyNormalizationProofCode; rfl
-private theorem code_pc8 : verifyNormalizationProofCode[8]'(by decide) = .call 0 := by
-  unfold verifyNormalizationProofCode; rfl
-private theorem code_pc9 : verifyNormalizationProofCode[9]'(by decide) = .moveLoc 5 := by
-  unfold verifyNormalizationProofCode; rfl
-private theorem code_pc10 : verifyNormalizationProofCode[10]'(by decide) = .moveLoc 6 := by
-  unfold verifyNormalizationProofCode; rfl
-private theorem code_pc11 : verifyNormalizationProofCode[11]'(by decide) = .immBorrowField 1 := by
-  unfold verifyNormalizationProofCode; rfl
-private theorem code_pc12 : verifyNormalizationProofCode[12]'(by decide) = .call 1 := by
-  unfold verifyNormalizationProofCode; rfl
-private theorem code_pc13 : verifyNormalizationProofCode[13]'(by decide) = .ret := by
-  unfold verifyNormalizationProofCode; rfl
+-- Bytecode lemmas extracted to BytecodeLemmas.lean
+private abbrev code_size := BytecodeLemmas.code_size
+private abbrev code_pc0  := BytecodeLemmas.instr0_eq
+private abbrev code_pc1  := BytecodeLemmas.instr1_eq
+private abbrev code_pc2  := BytecodeLemmas.instr2_eq
+private abbrev code_pc3  := BytecodeLemmas.instr3_eq
+private abbrev code_pc4  := BytecodeLemmas.instr4_eq
+private abbrev code_pc5  := BytecodeLemmas.instr5_eq
+private abbrev code_pc6  := BytecodeLemmas.instr6_eq
+private abbrev code_pc7  := BytecodeLemmas.instr7_eq
+private abbrev code_pc8  := BytecodeLemmas.instr8_eq
+private abbrev code_pc9  := BytecodeLemmas.instr9_eq
+private abbrev code_pc10 := BytecodeLemmas.instr10_eq
+private abbrev code_pc11 := BytecodeLemmas.instr11_eq
+private abbrev code_pc12 := BytecodeLemmas.instr12_eq
+private abbrev code_pc13 := BytecodeLemmas.instr13_eq
 
 /-! ## `eval` → `run` entry-point unfolding -/
 

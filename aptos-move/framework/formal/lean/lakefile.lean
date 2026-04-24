@@ -193,6 +193,7 @@ lean_lib «MovementFormal» where
     `MovementFormal.Experimental.ConfidentialAsset.Registration.ProofTacticsAutomation,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.StackManipulationComplete,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.IntegrationTestSuite,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.TypeSystemIntegration,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.Phase6Composition,
     `MovementFormal.MoveModel.Programs.Withdrawal,
     `MovementFormal.MoveModel.Programs.Transfer,

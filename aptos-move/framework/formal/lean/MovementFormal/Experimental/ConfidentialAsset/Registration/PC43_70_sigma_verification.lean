@@ -64,12 +64,12 @@ theorem thread_pc43_to_pc50_challenge_and_base
     (basePoint : MoveValue)  -- The base point h
     (ekAsPoint : MoveValue)  -- The encryption key as a point
     (rid_ek : RefId)
-    (horacle_challenge : newScalarFromSha2_512 [s43.msgBuf] =
+    (_horacle_challenge : newScalarFromSha2_512 [s43.msgBuf] =
                          some [challenge])
-    (horacle_base : o.hashToPointBase [] =
+    (_horacle_base : o.hashToPointBase [] =
                     some [basePoint])
-    (hread_ek : s43.containers.read rid_ek = some s43.ekPoint)
-    (horacle_ek_to_point : o.pubkeyToPoint [s43.ekPoint] =
+    (_hread_ek : s43.containers.read rid_ek = some s43.ekPoint)
+    (_horacle_ek_to_point : o.pubkeyToPoint [s43.ekPoint] =
                            some [ekAsPoint]) :
     ∃ (s50 : SigmaVerificationState o),
       -- Challenge e and base point h are now in locals, ek converted to point
@@ -278,13 +278,13 @@ theorem thread_pc50_to_pc58_point_multiplications
     (h s e ek_as_point : MoveValue)  -- Inputs
     (hs_product ek_e_product : MoveValue)  -- Outputs
     (rid_h rid_s rid_ek rid_e : RefId)
-    (hread_h : s50.containers.read rid_h = some h)
-    (hread_s : s50.containers.read rid_s = some s)
-    (hread_ek : s50.containers.read rid_ek = some ek_as_point)
-    (hread_e : s50.containers.read rid_e = some e)
-    (horacle_hs : o.pointMul [h, s] =
+    (_hread_h : s50.containers.read rid_h = some h)
+    (_hread_s : s50.containers.read rid_s = some s)
+    (_hread_ek : s50.containers.read rid_ek = some ek_as_point)
+    (_hread_e : s50.containers.read rid_e = some e)
+    (_horacle_hs : o.pointMul [h, s] =
                   some [hs_product])
-    (horacle_ek_e : o.pointMul [ek_as_point, e] =
+    (_horacle_ek_e : o.pointMul [ek_as_point, e] =
                     some [ek_e_product]) :
     ∃ (s58 : SigmaVerificationState o),
       -- Both products computed and stored
@@ -613,9 +613,9 @@ theorem thread_pc58_to_pc64_addition_and_decompress
     (hfuel58 : 76 ≤ s58.fuel)  -- Need 70 ≤ fuel after -6, so 76 ≤ s58.fuel
     (hs_product ek_e_product : MoveValue)
     (lhs rhs : MoveValue)
-    (horacle_add : o.pointAdd [hs_product, ek_e_product] =
+    (_horacle_add : o.pointAdd [hs_product, ek_e_product] =
                    some [lhs])
-    (horacle_decompress : o.pointDecompress [s58.rCompressed] =
+    (_horacle_decompress : o.pointDecompress [s58.rCompressed] =
                           some [rhs]) :
     ∃ (s64 : SigmaVerificationState o),
       -- lhs and rhs ready for equality check
@@ -646,9 +646,9 @@ If false → PC 71 (abort with ESIGMA_PROTOCOL_VERIFY_FAILED)
 -/
 
 theorem thread_pc64_to_pc70_equality_check_success
-    (s64 : SigmaVerificationState o)
+    (_s64 : SigmaVerificationState o)
     (lhs rhs : MoveValue)
-    (horacle_equals : o.pointEquals [lhs, rhs] =
+    (_horacle_equals : o.pointEquals [lhs, rhs] =
                       some [MoveValue.bool true]) :
     -- When point_equals returns true, we reach PC 70 (ret)
     ∃ (result : ExecResult),
@@ -664,9 +664,9 @@ theorem thread_pc64_to_pc70_equality_check_success
   use ExecResult.returned [] MachineState.empty
 
 theorem thread_pc64_to_pc73_equality_check_failure
-    (s64 : SigmaVerificationState o)
+    (_s64 : SigmaVerificationState o)
     (lhs rhs : MoveValue)
-    (horacle_equals : o.pointEquals [lhs, rhs] =
+    (_horacle_equals : o.pointEquals [lhs, rhs] =
                       some [MoveValue.bool false]) :
     -- When point_equals returns false, we reach PC 71-73 (abort)
     ∃ (result : ExecResult),
@@ -694,26 +694,26 @@ theorem registration_run_pc43_to_pc70_sigma_success
     (rid_ek : RefId)  -- Add missing reference ID
     (rid_h rid_s rid_ek' rid_e : RefId)  -- Reference IDs for point mul
     -- Oracle hypotheses for the happy path (all succeed, final equals is true)
-    (horacle_challenge : newScalarFromSha2_512 [s43.msgBuf] =
+    (_horacle_challenge : newScalarFromSha2_512 [s43.msgBuf] =
                          some [challenge])
-    (horacle_base : o.hashToPointBase [] =
+    (_horacle_base : o.hashToPointBase [] =
                     some [basePoint])
-    (hread_ek : s43.containers.read rid_ek = some s43.ekPoint)
-    (horacle_ek_to_point : o.pubkeyToPoint [s43.ekPoint] =
+    (_hread_ek : s43.containers.read rid_ek = some s43.ekPoint)
+    (_horacle_ek_to_point : o.pubkeyToPoint [s43.ekPoint] =
                            some [ekAsPoint])
-    (hread_h : s43.containers.read rid_h = some basePoint)
-    (hread_s : s43.containers.read rid_s = some s43.scalar)
-    (hread_ek' : s43.containers.read rid_ek' = some ekAsPoint)
-    (hread_e : s43.containers.read rid_e = some challenge)
-    (horacle_hs : o.pointMul [basePoint, s43.scalar] =
+    (_hread_h : s43.containers.read rid_h = some basePoint)
+    (_hread_s : s43.containers.read rid_s = some s43.scalar)
+    (_hread_ek' : s43.containers.read rid_ek' = some ekAsPoint)
+    (_hread_e : s43.containers.read rid_e = some challenge)
+    (_horacle_hs : o.pointMul [basePoint, s43.scalar] =
                   some [hs_product])
-    (horacle_ek_e : o.pointMul [ekAsPoint, challenge] =
+    (_horacle_ek_e : o.pointMul [ekAsPoint, challenge] =
                     some [ek_e_product])
-    (horacle_add : o.pointAdd [hs_product, ek_e_product] =
+    (_horacle_add : o.pointAdd [hs_product, ek_e_product] =
                    some [lhs])
-    (horacle_decompress : o.pointDecompress [s43.rCompressed] =
+    (_horacle_decompress : o.pointDecompress [s43.rCompressed] =
                           some [rhs])
-    (horacle_equals : o.pointEquals [lhs, rhs] =
+    (_horacle_equals : o.pointEquals [lhs, rhs] =
                       some [MoveValue.bool true]) :
     -- Starting at PC 43, ending at PC 70 with success
     ∃ (result : ExecResult),

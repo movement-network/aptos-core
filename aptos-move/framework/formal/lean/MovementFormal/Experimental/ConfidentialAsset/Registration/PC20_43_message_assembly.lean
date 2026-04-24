@@ -126,7 +126,7 @@ theorem thread_pc25_to_pc30_sender
     (_horacle_append_chainId_stack : vectorAppendU8Ref s25.containers
                                       [MoveValue.mutRef s25.rid_msg, MoveValue.u8 s25.chainId] =
                                      some ([], s25.containers))
-    (horacle_append_sender : vectorAppendU8Ref s25.containers
+    (_horacle_append_sender : vectorAppendU8Ref s25.containers
                               [MoveValue.mutRef s25.rid_msg, MoveValue.address s25.sender] =
                              some ([], s25.containers)) :
     ∃ (s30 : MessageAssemblyState o),
@@ -155,10 +155,10 @@ theorem thread_pc25_to_pc30_sender
 theorem thread_pc30_to_pc35_contract
     (s30 : MessageAssemblyState o)
     (hfuel30 : 53 ≤ s30.fuel)  -- PC 30-35 uses ~10 fuel, need 43 remaining after
-    (horacle_append_sender : vectorAppendU8Ref s30.containers
+    (_horacle_append_sender : vectorAppendU8Ref s30.containers
                               [MoveValue.mutRef s30.rid_msg, MoveValue.address s30.sender] =
                              some ([], s30.containers))
-    (horacle_append_contract : vectorAppendU8Ref s30.containers
+    (_horacle_append_contract : vectorAppendU8Ref s30.containers
                                 [MoveValue.mutRef s30.rid_msg, MoveValue.address s30.contract] =
                                some ([], s30.containers)) :
     ∃ (s35 : MessageAssemblyState o),
@@ -187,7 +187,7 @@ theorem thread_pc30_to_pc35_contract
 theorem thread_pc35_to_pc40_token
     (s35 : MessageAssemblyState o)
     (hfuel35 : 48 ≤ s35.fuel)  -- Need sufficient fuel for remaining PCs
-    (horacle_append_token : vectorAppendU8Ref s35.containers
+    (_horacle_append_token : vectorAppendU8Ref s35.containers
                              [MoveValue.mutRef s35.rid_msg, MoveValue.address s35.token] =
                             some ([], s35.containers)) :
     ∃ (s40 : MessageAssemblyState o),
@@ -231,8 +231,8 @@ theorem thread_pc40_to_pc43_ek_bytes_conversion
     (ekPoint : MoveValue)
     (ekBytes : MoveValue)
     (rid_ek_point : RefId)
-    (hread_ek : s40.containers.read rid_ek_point = some ekPoint)
-    (horacle_point_to_bytes : o.compressedPointToBytes [ekPoint] =
+    (_hread_ek : s40.containers.read rid_ek_point = some ekPoint)
+    (_horacle_point_to_bytes : o.compressedPointToBytes [ekPoint] =
                                some [ekBytes]) :
     ∃ (s43 : MessageAssemblyState o),
       s43.containers = s40.containers ∧
@@ -267,22 +267,22 @@ theorem registration_run_pc20_to_pc43_message_assembly_complete
     (ekPoint ekBytes : MoveValue)
     (rid_ek : RefId)
     -- Oracle hypotheses for all the vectorAppend and compressedPointToBytes calls
-    (horacle_dst : vectorAppendU8Ref s20.containers [MoveValue.mutRef s20.rid_msg, dst] =
+    (_horacle_dst : vectorAppendU8Ref s20.containers [MoveValue.mutRef s20.rid_msg, dst] =
                    some ([], s20.containers))
-    (horacle_chainId : vectorAppendU8Ref s20.containers [MoveValue.mutRef s20.rid_msg, MoveValue.u8 s20.chainId] =
+    (_horacle_chainId : vectorAppendU8Ref s20.containers [MoveValue.mutRef s20.rid_msg, MoveValue.u8 s20.chainId] =
                        some ([], s20.containers))
-    (horacle_sender : vectorAppendU8Ref s20.containers [MoveValue.mutRef s20.rid_msg, MoveValue.address s20.sender] =
+    (_horacle_sender : vectorAppendU8Ref s20.containers [MoveValue.mutRef s20.rid_msg, MoveValue.address s20.sender] =
                       some ([], s20.containers))
-    (horacle_contract : vectorAppendU8Ref s20.containers [MoveValue.mutRef s20.rid_msg, MoveValue.address s20.contract] =
+    (_horacle_contract : vectorAppendU8Ref s20.containers [MoveValue.mutRef s20.rid_msg, MoveValue.address s20.contract] =
                         some ([], s20.containers))
-    (horacle_token : vectorAppendU8Ref s20.containers [MoveValue.mutRef s20.rid_msg, MoveValue.address s20.token] =
+    (_horacle_token : vectorAppendU8Ref s20.containers [MoveValue.mutRef s20.rid_msg, MoveValue.address s20.token] =
                      some ([], s20.containers))
-    (hread_ek : s20.containers.read rid_ek = some ekPoint)
-    (horacle_ek_bytes : o.compressedPointToBytes [ekPoint] =
+    (_hread_ek : s20.containers.read rid_ek = some ekPoint)
+    (_horacle_ek_bytes : o.compressedPointToBytes [ekPoint] =
                         some [ekBytes])
-    (horacle_append_ek : vectorAppendU8Ref s20.containers [MoveValue.mutRef s20.rid_msg, ekBytes] =
+    (_horacle_append_ek : vectorAppendU8Ref s20.containers [MoveValue.mutRef s20.rid_msg, ekBytes] =
                          some ([], s20.containers))
-    (horacle_append_r : vectorAppendU8Ref s20.containers [MoveValue.mutRef s20.rid_msg, s20.rCompressed] =
+    (_horacle_append_r : vectorAppendU8Ref s20.containers [MoveValue.mutRef s20.rid_msg, s20.rCompressed] =
                         some ([], s20.containers)) :
     ∃ (s43 : MessageAssemblyState o),
       -- Message now contains: DST || chainId || sender || contract || token || ek_bytes || r_compressed
@@ -381,7 +381,7 @@ theorem complete_message_length
     (h_ek_bytes : ek_bytes.length = ek_len)
     (h_r_bytes : r_bytes.length = r_len)
     (msg : MoveValue)
-    (h_msg : msg = MoveValue.vector MoveType.u8 data)
+    (_h_msg : msg = MoveValue.vector MoveType.u8 data)
     (h_complete : data = dst_bytes ++ chainId_byte :: sender_bytes ++ contract_bytes ++ token_bytes ++ ek_bytes ++ r_bytes)
     (h_addr_len : sender_bytes.length = 32 ∧ contract_bytes.length = 32 ∧ token_bytes.length = 32) :
     data.length = dst_len + 1 + 32 + 32 + 32 + ek_len + r_len := by

@@ -314,8 +314,8 @@ structure WellTypedState (frame : Frame) (stack : List MoveValue)
     ∀ v, frame.locals[idx]? = some (some v) →
     ∃ typ, hasType v typ
   -- All container values have types
-  h_containers_typed : ∀ refId < ms.containerStore.containers.length,
-    ∀ v, ms.containerStore.read? refId = some v →
+  h_containers_typed : ∀ refId < ms.containers.containers.length,
+    ∀ v, ms.containers.read? refId = some v →
     ∃ typ, hasType v typ
 
 /-- Initial state is well-typed. -/
@@ -391,7 +391,7 @@ theorem type_completeness
     (val : MoveValue)
     (h_in_state : val ∈ stack' ∨
                   (∃ idx, ∃ v, frame'.locals[idx]? = some (some v) ∧ v = val) ∨
-                  (∃ refId, ms'.containerStore.read? refId = some val)) :
+                  (∃ refId, ms'.containers.read? refId = some val)) :
     ∃ typ, hasType val typ := by
   sorry  -- All values have types
 

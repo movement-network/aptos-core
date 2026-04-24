@@ -165,7 +165,7 @@ where
                    (stack : List MoveValue) (ms : MachineState) : Prop :=
     (.mutRef refId) ∈ stack ∧
     ∃ v, frame.locals[idx]? = some (some v) ∧
-         ms.containerStore.read? refId = some v
+         ms.containers.read? refId = some v
 
 /-- ImmBorrowLoc postcondition. -/
 def immBorrowLoc_post (idx : Nat) (frame : Frame) (stack : List MoveValue)
@@ -175,9 +175,9 @@ def immBorrowLoc_post (idx : Nat) (frame : Frame) (stack : List MoveValue)
     -- Local value
     frame.locals[idx]? = some (some v) ∧
     -- New reference created
-    refId = ms.containerStore.containers.length ∧
+    refId = ms.containers.containers.length ∧
     -- Reference points to value
-    ms'.containerStore.read? refId = some v ∧
+    ms'.containers.read? refId = some v ∧
     -- Reference pushed to stack
     stack' = (.immRef refId) :: stack ∧
     -- Locals unchanged
@@ -185,8 +185,8 @@ def immBorrowLoc_post (idx : Nat) (frame : Frame) (stack : List MoveValue)
     -- PC incremented
     frame'.pc = frame.pc + 1 ∧
     -- Container store grew
-    ms'.containerStore.containers.length =
-    ms.containerStore.containers.length + 1
+    ms'.containers.containers.length =
+    ms.containers.containers.length + 1
 
 /-- ImmBorrowLoc semantics. -/
 def immBorrowLoc_semantics (idx : Nat) : InstructionSemantics :=
@@ -214,7 +214,7 @@ where
                (stack : List MoveValue) (ms : MachineState) : Prop :=
     ((.immRef refId) ∈ stack ∨ (.mutRef refId) ∈ stack) ∧
     ∃ v, frame.locals[idx]? = some (some v) ∧
-         ms.containerStore.read? refId = some v
+         ms.containers.read? refId = some v
 
 /-- MutBorrowLoc postcondition. -/
 def mutBorrowLoc_post (idx : Nat) (frame : Frame) (stack : List MoveValue)
@@ -222,13 +222,13 @@ def mutBorrowLoc_post (idx : Nat) (frame : Frame) (stack : List MoveValue)
     (ms' : MachineState) : Prop :=
   ∃ v refId,
     frame.locals[idx]? = some (some v) ∧
-    refId = ms.containerStore.containers.length ∧
-    ms'.containerStore.read? refId = some v ∧
+    refId = ms.containers.containers.length ∧
+    ms'.containers.read? refId = some v ∧
     stack' = (.mutRef refId) :: stack ∧
     frame'.locals = frame.locals ∧
     frame'.pc = frame.pc + 1 ∧
-    ms'.containerStore.containers.length =
-    ms.containerStore.containers.length + 1
+    ms'.containers.containers.length =
+    ms.containers.containers.length + 1
 
 /-- MutBorrowLoc semantics. -/
 def mutBorrowLoc_semantics (idx : Nat) : InstructionSemantics :=
@@ -246,7 +246,7 @@ def readRef_pre (frame : Frame) (stack : List MoveValue)
   (∃ refId rest, (stack = (.immRef refId) :: rest ∨
                   stack = (.mutRef refId) :: rest) ∧
                  -- Reference valid
-                 refId < ms.containerStore.containers.length) ∧
+                 refId < ms.containers.containers.length) ∧
   -- PC points to ReadRef
   frame.code[frame.pc]? = some .readRef
 
@@ -259,7 +259,7 @@ def readRef_post (frame : Frame) (stack : List MoveValue)
     (stack = (.immRef refId) :: rest ∨
      stack = (.mutRef refId) :: rest) ∧
     -- Value read from container
-    ms.containerStore.read? refId = some v ∧
+    ms.containers.read? refId = some v ∧
     -- Value replaces reference on stack
     stack' = v :: rest ∧
     -- Locals unchanged
@@ -283,7 +283,7 @@ def writeRef_pre (frame : Frame) (stack : List MoveValue)
     (ms : MachineState) : Prop :=
   -- Stack has value and mutable reference
   (∃ v refId rest, stack = v :: (.mutRef refId) :: rest ∧
-                   refId < ms.containerStore.containers.length) ∧
+                   refId < ms.containers.containers.length) ∧
   -- PC points to WriteRef
   frame.code[frame.pc]? = some .writeRef
 
@@ -297,10 +297,10 @@ def writeRef_post (frame : Frame) (stack : List MoveValue)
     -- Both popped
     stack' = rest ∧
     -- Value written to container
-    ms'.containerStore.read? refId = some v ∧
+    ms'.containers.read? refId = some v ∧
     -- Other containers unchanged
     (∀ refId' ≠ refId,
-      ms'.containerStore.read? refId' = ms.containerStore.read? refId') ∧
+      ms'.containers.read? refId' = ms.containers.read? refId') ∧
     -- Locals unchanged
     frame'.locals = frame.locals ∧
     -- PC incremented

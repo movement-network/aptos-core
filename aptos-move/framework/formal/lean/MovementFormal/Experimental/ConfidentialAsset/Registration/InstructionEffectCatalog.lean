@@ -100,7 +100,7 @@ theorem copyLoc_effect_correct
     -- PC effect: increment
     frame'.pc = frame.pc + 1 ∧
     -- Container effect: none
-    ms'.containerStore = ms.containerStore := by
+    ms'.containers = ms.containers := by
   sorry  -- CopyLoc effect
 
 /-! ## MoveLoc Effect -/
@@ -135,7 +135,7 @@ theorem moveLoc_effect_correct
     -- PC effect: increment
     frame'.pc = frame.pc + 1 ∧
     -- Container effect: none
-    ms'.containerStore = ms.containerStore := by
+    ms'.containers = ms.containers := by
   sorry  -- MoveLoc effect
 
 /-! ## StLoc Effect -/
@@ -170,7 +170,7 @@ theorem stLoc_effect_correct
     -- PC effect: increment
     frame'.pc = frame.pc + 1 ∧
     -- Container effect: none
-    ms'.containerStore = ms.containerStore := by
+    ms'.containers = ms.containers := by
   sorry  -- StLoc effect
 
 /-! ## ImmBorrowLoc Effect -/
@@ -205,8 +205,8 @@ theorem immBorrowLoc_effect_correct
     -- PC effect: increment
     frame'.pc = frame.pc + 1 ∧
     -- Container effect: allocate
-    ms'.containerStore.containers.length =
-    ms.containerStore.containers.length + 1 := by
+    ms'.containers.containers.length =
+    ms.containers.containers.length + 1 := by
   sorry  -- ImmBorrowLoc effect
 
 /-! ## MutBorrowLoc Effect -/
@@ -241,8 +241,8 @@ theorem mutBorrowLoc_effect_correct
     -- PC effect: increment
     frame'.pc = frame.pc + 1 ∧
     -- Container effect: allocate
-    ms'.containerStore.containers.length =
-    ms.containerStore.containers.length + 1 := by
+    ms'.containers.containers.length =
+    ms.containers.containers.length + 1 := by
   sorry  -- MutBorrowLoc effect
 
 /-! ## ReadRef Effect -/
@@ -266,7 +266,7 @@ theorem readRef_effect_correct
     (h_instr : frame.code[frame.pc]? = some .readRef)
     (h_stack : stack = (.immRef refId) :: rest_stack ∨
                stack = (.mutRef refId) :: rest_stack)
-    (h_container : ms.containerStore.read? refId = some val)
+    (h_container : ms.containers.read? refId = some val)
     (frame' : Frame)
     (stack' : List MoveValue)
     (ms' : MachineState)
@@ -279,7 +279,7 @@ theorem readRef_effect_correct
     -- PC effect: increment
     frame'.pc = frame.pc + 1 ∧
     -- Container effect: none
-    ms'.containerStore = ms.containerStore := by
+    ms'.containers = ms.containers := by
   sorry  -- ReadRef effect
 
 /-! ## WriteRef Effect -/
@@ -314,7 +314,7 @@ theorem writeRef_effect_correct
     -- PC effect: increment
     frame'.pc = frame.pc + 1 ∧
     -- Container effect: modified
-    ms'.containerStore.read? refId = some val_new := by
+    ms'.containers.read? refId = some val_new := by
   sorry  -- WriteRef effect
 
 /-! ## Call Effect -/
@@ -386,7 +386,7 @@ theorem brFalse_false_effect_correct
     -- PC effect: branch to target
     frame'.pc = target ∧
     -- Container effect: none
-    ms'.containerStore = ms.containerStore := by
+    ms'.containers = ms.containers := by
   sorry  -- BrFalse (false) effect
 
 /-- BrFalse correctness (true case). -/
@@ -410,7 +410,7 @@ theorem brFalse_true_effect_correct
     -- PC effect: increment (continue)
     frame'.pc = frame.pc + 1 ∧
     -- Container effect: none
-    ms'.containerStore = ms.containerStore := by
+    ms'.containers = ms.containers := by
   sorry  -- BrFalse (true) effect
 
 /-! ## Instruction Frequency and Distribution -/

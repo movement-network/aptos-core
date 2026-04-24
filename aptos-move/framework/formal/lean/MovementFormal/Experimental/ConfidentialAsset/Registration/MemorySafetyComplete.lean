@@ -133,7 +133,7 @@ theorem no_use_after_move
 
 /-- Reference validity predicate -/
 def isValidRef (ref : ReferenceId) (ms : MachineState) : Bool :=
-  ms.containerStore.contains ref
+  ms.containers.contains ref
   where
     ContainerStore.contains (_ : ContainerStore) (_ : ReferenceId) : Bool := sorry
 

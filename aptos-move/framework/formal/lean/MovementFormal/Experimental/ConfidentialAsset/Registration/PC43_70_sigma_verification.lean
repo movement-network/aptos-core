@@ -25,6 +25,7 @@ namespace MovementFormal.Experimental.ConfidentialAsset.Registration
 
 open MoveModel
 open MoveModel.Native.Registration
+open MoveModel.Programs.Registration
 
 /-! ### State after message assembly
 

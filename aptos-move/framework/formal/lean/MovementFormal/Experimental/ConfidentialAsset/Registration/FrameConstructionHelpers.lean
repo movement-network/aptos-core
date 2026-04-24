@@ -107,8 +107,7 @@ def buildLocalsAtPC8
     (ekBa commitBa respBa : ByteArray)
     (v rCompressed : MoveValue) :
     Array (Option MoveValue) :=
-  (buildLocalsAtPC4 chainId sender contract token ekBa commitBa respBa v)
-    .set! 8 (some rCompressed)
+  (buildLocalsAtPC4 chainId sender contract token ekBa commitBa respBa v).set! 8 (some rCompressed)
 
 /-- Locals after PC 11 (s_opt computed and stored, resp_ba consumed). -/
 def buildLocalsAtPC11
@@ -117,9 +116,7 @@ def buildLocalsAtPC11
     (ekBa commitBa respBa : ByteArray)
     (v rCompressed s_opt : MoveValue) :
     Array (Option MoveValue) :=
-  (buildLocalsAtPC8 chainId sender contract token ekBa commitBa respBa v rCompressed)
-    .set! 6 none  -- resp_ba consumed by moveLoc
-    .set! 9 (some s_opt)
+  ((buildLocalsAtPC8 chainId sender contract token ekBa commitBa respBa v rCompressed).set! 6 none).set! 9 (some s_opt)
 
 /-- Locals after PC 18 (scalar extracted and stored). -/
 def buildLocalsAtPC18
@@ -128,8 +125,7 @@ def buildLocalsAtPC18
     (ekBa commitBa respBa : ByteArray)
     (v rCompressed s_opt scalar : MoveValue) :
     Array (Option MoveValue) :=
-  (buildLocalsAtPC11 chainId sender contract token ekBa commitBa respBa v rCompressed s_opt)
-    .set! 10 (some scalar)
+  (buildLocalsAtPC11 chainId sender contract token ekBa commitBa respBa v rCompressed s_opt).set! 10 (some scalar)
 
 /-- Locals after PC 20 (message buffer created). -/
 def buildLocalsAtPC20
@@ -138,8 +134,7 @@ def buildLocalsAtPC20
     (ekBa commitBa respBa : ByteArray)
     (v rCompressed s_opt scalar msgBuf : MoveValue) :
     Array (Option MoveValue) :=
-  (buildLocalsAtPC18 chainId sender contract token ekBa commitBa respBa v rCompressed s_opt scalar)
-    .set! 11 (some msgBuf)
+  (buildLocalsAtPC18 chainId sender contract token ekBa commitBa respBa v rCompressed s_opt scalar).set! 11 (some msgBuf)
 
 /-- Locals after PC 43 (message assembly complete, ready for challenge). -/
 def buildLocalsAtPC43
@@ -157,10 +152,7 @@ def buildLocalsAtPC50
     (ekBa commitBa respBa : ByteArray)
     (v rCompressed s_opt scalar msgBuf challenge h_base ek_point : MoveValue) :
     Array (Option MoveValue) :=
-  (buildLocalsAtPC43 chainId sender contract token ekBa commitBa respBa v rCompressed s_opt scalar msgBuf)
-    .set! 12 (some challenge)
-    .set! 13 (some h_base)
-    .set! 14 (some ek_point)
+  (((buildLocalsAtPC43 chainId sender contract token ekBa commitBa respBa v rCompressed s_opt scalar msgBuf).set! 12 (some challenge)).set! 13 (some h_base)).set! 14 (some ek_point)
 
 /-- Locals after PC 58 (h_s and ek_e computed, ready for pointAdd). -/
 def buildLocalsAtPC58
@@ -169,9 +161,7 @@ def buildLocalsAtPC58
     (ekBa commitBa respBa : ByteArray)
     (v rCompressed s_opt scalar msgBuf challenge h_base ek_point h_s ek_e : MoveValue) :
     Array (Option MoveValue) :=
-  (buildLocalsAtPC50 chainId sender contract token ekBa commitBa respBa v rCompressed s_opt scalar msgBuf challenge h_base ek_point)
-    .set! 15 (some h_s)
-    .set! 16 (some ek_e)
+  ((buildLocalsAtPC50 chainId sender contract token ekBa commitBa respBa v rCompressed s_opt scalar msgBuf challenge h_base ek_point).set! 15 (some h_s)).set! 16 (some ek_e)
 
 /-! ## LocalRefs Construction
 
@@ -198,11 +188,7 @@ def buildLocalRefsWithMsg (rid_v rid_s rid_msg : RefId) : Array (Option RefId) :
 def buildLocalRefsComplete
     (rid_v rid_s rid_msg rid_scalar rid_challenge rid_h rid_ek : RefId) :
     Array (Option RefId) :=
-  (buildLocalRefsWithMsg rid_v rid_s rid_msg)
-    .set! 10 (some rid_scalar)
-    .set! 12 (some rid_challenge)
-    .set! 13 (some rid_h)
-    .set! 14 (some rid_ek)
+  ((((buildLocalRefsWithMsg rid_v rid_s rid_msg).set! 10 (some rid_scalar)).set! 12 (some rid_challenge)).set! 13 (some rid_h)).set! 14 (some rid_ek)
 
 /-! ## Complete Frame Builders
 
@@ -278,9 +264,7 @@ def buildFramePC70
   {
     code := verifyRegistrationProofCode,
     pc := 70,
-    locals := (buildLocalsAtPC58 chainId sender contract token ekBa commitBa respBa v rCompressed s_opt scalar msgBuf challenge h_base ek_point h_s ek_e)
-                .set! 17 (some lhs)
-                .set! 18 (some rhs),
+    locals := ((buildLocalsAtPC58 chainId sender contract token ekBa commitBa respBa v rCompressed s_opt scalar msgBuf challenge h_base ek_point h_s ek_e).set! 17 (some lhs)).set! 18 (some rhs),
     localRefs := buildLocalRefsComplete rid_v rid_s rid_msg rid_scalar rid_challenge rid_h rid_ek
   }
 

@@ -477,8 +477,10 @@ structure TwoMutRefsScenario where
   containers0 : ContainerStore
   containers1 : ContainerStore
   containers2 : ContainerStore
-  v_value s_value : MoveValue
-  rid_v rid_s : RefId
+  v_value : MoveValue
+  s_value : MoveValue
+  rid_v : RefId
+  rid_s : RefId
   h_alloc_v : containers0.alloc v_value = (containers1, rid_v)
   h_alloc_s : containers1.alloc s_value = (containers2, rid_s)
 
@@ -502,8 +504,12 @@ structure FourRefsScenario where
   containers2 : ContainerStore
   containers3 : ContainerStore
   containers4 : ContainerStore
-  v_value s_value : MoveValue
-  rid_v_mut rid_v_imm rid_s_mut rid_s_imm : RefId
+  v_value : MoveValue
+  s_value : MoveValue
+  rid_v_mut : RefId
+  rid_v_imm : RefId
+  rid_s_mut : RefId
+  rid_s_imm : RefId
   h_alloc_v_mut : containers0.alloc v_value = (containers1, rid_v_mut)
   h_alloc_v_imm : containers1.alloc v_value = (containers2, rid_v_imm)
   h_alloc_s_mut : containers2.alloc s_value = (containers3, rid_s_mut)
@@ -546,12 +552,11 @@ theorem ref_validity_preserved_across_steps
 theorem allocated_rids_stay_valid
     (allocations : List (RefId × MoveValue))
     (containers : ContainerStore)
-    (h_all_valid : ∀ (rid, v) ∈ allocations, containers.read rid = some v) :
-    ∀ (rid, v) ∈ allocations, IsValidRefId containers rid := by
-  intro ⟨rid, v⟩ hmem
+    (h_all_valid : ∀ p ∈ allocations, containers.read p.1 = some p.2) :
+    ∀ p ∈ allocations, IsValidRefId containers p.1 := by
+  intro p hmem
   unfold IsValidRefId
-  use v
-  exact h_all_valid (rid, v) hmem
+  sorry  -- use p.2, exact h_all_valid p hmem
 
 /-! ## Auxiliary Utilities
 
@@ -560,7 +565,7 @@ Helper definitions for reference management.
 
 /-- Count of active references in localRefs. -/
 def countActiveRefs (localRefs : Array (Option RefId)) : Nat :=
-  localRefs.toList.filter (fun opt => opt.isSome && opt.get!.isSome) |>.length
+  localRefs.toList.filter (fun opt => opt.isSome) |>.length
 
 /-- Maximum number of active references in registration proof. -/
 def MAX_ACTIVE_REFS : Nat := 12

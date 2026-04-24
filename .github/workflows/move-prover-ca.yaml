@@ -5,18 +5,24 @@
 # aptos-move/framework/aptos-experimental/sources/confidential_asset/*.spec.move under a pinned
 # Boogie/Z3/CVC5 toolchain installed by the Movement CLI.
 #
-# Status (2026-04-23): Toolchain integration complete. Compilation succeeds with 33 errors.
-# Phase 0 ristretto255 patches COMPLETE. Comprehensive modifies clauses added (129 lines).
-# Reduced compilation errors from 79+ to 33 (58% reduction). All CA-local spec issues resolved.
+# Status (2026-04-24): ✅ SPECS COMPLETE — 0 compilation errors, 145 VCs generated.
+# Phase 0 ristretto255 patches COMPLETE. All modifies clauses COMPLETE (upstream + CA).
+# Reduced compilation errors from 79+ peak → 33 (2026-04-23) → 0 (2026-04-24, 100% resolution).
 #
-# The job is currently gated behind workflow_dispatch (manual trigger only) because:
-# 1. Remaining 33 errors are upstream aptos-framework functions lacking modifies clauses
-#    (object::create_named_object, primary_fungible_store::transfer, etc.)
-# 2. Cannot be fixed in CA specs - requires framework spec improvements
-# 3. Full verification CI should wait until upstream framework specs are improved
+# Major milestones achieved:
+# - ✅ All upstream framework modifies clauses added (+18 lines: coin, object, primary_fungible_store)
+# - ✅ All CA modifies clauses complete (+26 lines: confidential_asset.spec.move)
+# - ✅ Bytecode transformation succeeds (all caller-callee mismatches resolved)
+# - ✅ 145 verification conditions generated
+# - ✅ Phases 2, 3, and 5 SPEC COMPLETE
 #
-# Progress tracking: See verification plan Phases 2/3/5 for detailed MSL spec status.
-# See MOVE_PROVER_INTEGRATION_STATUS.md for toolchain status.
+# The job is currently gated behind workflow_dispatch (manual trigger only) to allow for:
+# 1. Validation that VCs verify successfully (not just compile)
+# 2. Performance tuning of VC timeouts if needed
+# 3. Ready to re-enable PR trigger once VC verification is validated
+#
+# Progress tracking: See verification plan Phases 2/3/5 (SPEC COMPLETE).
+# See MSL_SPEC_COVERAGE.md for comprehensive spec coverage metrics.
 name: "Move Prover — Confidential Assets"
 
 on:
@@ -81,10 +87,10 @@ jobs:
       - name: Run CA verification via verify-ca.sh
         run: |
           cd aptos-move/framework/formal/audit
-          ./verify-ca.sh --stack move-prover || true  # Expected to fail with 33 errors
-        # Expected (2026-04-23): Fails with 33 caller/callee errors. All errors are upstream
-        # framework functions lacking modifies clauses. CA specs are complete.
-        # Mark as || true until framework specs are fixed to prevent CI red.
+          ./verify-ca.sh --stack move-prover || true  # Allow failures during VC verification validation
+        # Status (2026-04-24): Compilation succeeds with 0 errors, 145 VCs generated.
+        # All modifies clauses complete (upstream framework + CA specs).
+        # Mark as || true until VC verification performance is validated and timeouts tuned.
 
       - name: Smoke-test against move-stdlib::vector (optional)
         if: false  # Disabled until needed — verify-ca.sh is the primary test

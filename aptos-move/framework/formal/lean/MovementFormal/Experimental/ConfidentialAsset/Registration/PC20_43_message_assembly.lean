@@ -245,7 +245,7 @@ theorem msgBuf_always_u8_vector
     (s : MessageAssemblyState o) :
     ∃ (data : List MoveValue),
       s.msgBuf = MoveValue.vector MoveType.u8 data := by
-  sorry  -- TODO: Invariant from construction
+  sorry  -- TODO: This should be a field in MessageAssemblyState or a separate invariant predicate
 
 /-- Message length grows monotonically during assembly. -/
 theorem msgBuf_length_increases
@@ -263,15 +263,20 @@ theorem msgBuf_length_increases
 theorem complete_message_length
     (dst_len : Nat)
     (ek_len r_len : Nat)
-    (h_dst : dst_len = 32)  -- Domain separation tag length
-    (h_ek : ek_len = 32)    -- Compressed point length
-    (h_r : r_len = 32)      -- Compressed point length
+    (h_dst_len : dst_len = 32)  -- Domain separation tag length
+    (h_ek_len : ek_len = 32)    -- Compressed point length
+    (h_r_len : r_len = 32)      -- Compressed point length
+    (h_dst_bytes : dst_bytes.length = dst_len)
+    (h_ek_bytes : ek_bytes.length = ek_len)
+    (h_r_bytes : r_bytes.length = r_len)
     (msg : MoveValue)
     (h_msg : msg = MoveValue.vector MoveType.u8 data)
     (h_complete : data = dst_bytes ++ chainId_byte :: sender_bytes ++ contract_bytes ++ token_bytes ++ ek_bytes ++ r_bytes)
     (h_addr_len : sender_bytes.length = 32 ∧ contract_bytes.length = 32 ∧ token_bytes.length = 32) :
     data.length = dst_len + 1 + 32 + 32 + 32 + ek_len + r_len := by
-  sorry  -- TODO: List.length arithmetic with substitution
+  rw [h_complete]
+  simp only [List.length_append, List.length_cons, List.length_nil]
+  omega
 
 /-- Message assembly preserves container store except for message buffer ref. -/
 theorem message_assembly_preserves_containers
@@ -328,7 +333,7 @@ theorem address_to_bytes_length
     (addr : ByteArray)
     (h_addr : addr.size = 32) :
     (addr.toList.map MoveValue.u8).length = 32 := by
-  sorry  -- TODO: List.map preserves length
+  sorry  -- TODO: ByteArray.toList preserves length - requires ByteArray lemma library
 
 /-- Address append increases message by 32 bytes. -/
 theorem vectorAppend_address_length
@@ -360,7 +365,7 @@ theorem dst_has_fixed_length
     ∃ (bytes : List MoveValue),
       dst = MoveValue.vector MoveType.u8 bytes ∧
       bytes.length = 32 := by
-  sorry
+  exact ⟨dst_bytes, h_dst, h_dst_bytes⟩
 
 /-! ### ChainId Serialization
 
@@ -370,7 +375,7 @@ ChainId is a single u8 byte.
 theorem chainId_single_byte
     (chainId : UInt8) :
     [MoveValue.u8 chainId].length = 1 := by
-  sorry
+  rfl
 
 theorem vectorAppend_chainId_length
     (containers containers' : ContainerStore)

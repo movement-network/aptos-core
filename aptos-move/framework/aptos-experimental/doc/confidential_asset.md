@@ -120,6 +120,7 @@ It enables private transfers by obfuscating token amounts while keeping sender a
     -  [Function `freeze_token_internal`](#@Specification_1_freeze_token_internal)
     -  [Function `unfreeze_token_internal`](#@Specification_1_unfreeze_token_internal)
     -  [Function `ensure_fa_config_exists`](#@Specification_1_ensure_fa_config_exists)
+    -  [Function `get_user_signer`](#@Specification_1_get_user_signer)
     -  [Function `get_user_address`](#@Specification_1_get_user_address)
     -  [Function `get_fa_config_signer`](#@Specification_1_get_fa_config_signer)
     -  [Function `get_fa_config_address`](#@Specification_1_get_fa_config_address)
@@ -3240,6 +3241,7 @@ Lean pins the verifier's accept/reject semantics, MSL pins the resulting store s
 <b>ensures</b> <b>global</b>&lt;<a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>&gt;(store_addr).normalized;
 <b>ensures</b> <b>global</b>&lt;<a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>&gt;(store_addr).pending_counter == 0;
 <b>modifies</b> <b>global</b>&lt;<a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>&gt;(store_addr);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/object.md#0x1_object_ObjectCore">object::ObjectCore</a>&gt;(@aptos_framework);
 </code></pre>
 
 
@@ -3266,6 +3268,11 @@ Lean pins the verifier's accept/reject semantics, MSL pins the resulting store s
 <b>ensures</b> <b>global</b>&lt;<a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>&gt;(recipient_store).pending_counter
     == <b>old</b>(<b>global</b>&lt;<a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>&gt;(recipient_store)).pending_counter + 1;
 <b>modifies</b> <b>global</b>&lt;<a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>&gt;(recipient_store);
+<b>modifies</b> <b>global</b>&lt;aptos_framework::fungible_asset::ConcurrentFungibleBalance&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;aptos_framework::fungible_asset::FungibleStore&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/object.md#0x1_object_ObjectCore">object::ObjectCore</a>&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/object.md#0x1_object_Untransferable">object::Untransferable</a>&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;aptos_framework::permissioned_signer::PermissionStorage&gt;(@aptos_framework);
 </code></pre>
 
 
@@ -3332,6 +3339,11 @@ by ensure_sufficient_fa and deposit operations.
 <b>modifies</b> <b>global</b>&lt;aptos_framework::fungible_asset::Supply&gt;(@aptos_framework);
 <b>modifies</b> <b>global</b>&lt;aptos_framework::fungible_asset::ConcurrentSupply&gt;(@aptos_framework);
 <b>modifies</b> <b>global</b>&lt;aptos_framework::primary_fungible_store::DeriveRefPod&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/coin.md#0x1_coin_CoinStore">coin::CoinStore</a>&lt;CoinType&gt;&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/coin.md#0x1_coin_PairedCoinType">coin::PairedCoinType</a>&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/coin.md#0x1_coin_PairedFungibleAssetRefs">coin::PairedFungibleAssetRefs</a>&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/coin.md#0x1_coin_CoinConversionMap">coin::CoinConversionMap</a>&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/coin.md#0x1_coin_CoinInfo">coin::CoinInfo</a>&lt;CoinType&gt;&gt;(@aptos_framework);
 </code></pre>
 
 
@@ -3363,6 +3375,11 @@ by ensure_sufficient_fa and deposit operations.
 <b>modifies</b> <b>global</b>&lt;aptos_framework::fungible_asset::Supply&gt;(@aptos_framework);
 <b>modifies</b> <b>global</b>&lt;aptos_framework::fungible_asset::ConcurrentSupply&gt;(@aptos_framework);
 <b>modifies</b> <b>global</b>&lt;aptos_framework::primary_fungible_store::DeriveRefPod&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/coin.md#0x1_coin_CoinConversionMap">coin::CoinConversionMap</a>&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/coin.md#0x1_coin_CoinInfo">coin::CoinInfo</a>&lt;CoinType&gt;&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/coin.md#0x1_coin_CoinStore">coin::CoinStore</a>&lt;CoinType&gt;&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/coin.md#0x1_coin_PairedCoinType">coin::PairedCoinType</a>&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/coin.md#0x1_coin_PairedFungibleAssetRefs">coin::PairedFungibleAssetRefs</a>&gt;(@aptos_framework);
 </code></pre>
 
 
@@ -3975,6 +3992,7 @@ for <code>token</code>. Aborts if the FA store doesn't exist (EINTERNAL_ERROR).
 <b>ensures</b> len(<b>global</b>&lt;<a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>&gt;(store_addr).actual_balance.chunks)
     == <a href="confidential_balance.md#0x7_confidential_balance_ACTUAL_BALANCE_CHUNKS">confidential_balance::ACTUAL_BALANCE_CHUNKS</a>;
 <b>modifies</b> <b>global</b>&lt;<a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>&gt;(store_addr);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/object.md#0x1_object_ObjectCore">object::ObjectCore</a>&gt;(@aptos_framework);
 </code></pre>
 
 
@@ -4313,6 +4331,26 @@ Marked opaque; full composition in Phase 5.
 
 
 
+<a id="@Specification_1_get_user_signer"></a>
+
+### Function `get_user_signer`
+
+
+<pre><code><b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_get_user_signer">get_user_signer</a>(user: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, token: <a href="../../aptos-framework/doc/object.md#0x1_object_Object">object::Object</a>&lt;<a href="../../aptos-framework/doc/fungible_asset.md#0x1_fungible_asset_Metadata">fungible_asset::Metadata</a>&gt;): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>
+</code></pre>
+
+
+<code>get_user_signer</code> — Creates a signer for the user's CA store object.
+Calls object::create_named_object which modifies object::ObjectCore.
+
+
+<pre><code><b>pragma</b> aborts_if_is_strict = <b>false</b>;
+<b>pragma</b> opaque;
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/object.md#0x1_object_ObjectCore">object::ObjectCore</a>&gt;(@aptos_framework);
+</code></pre>
+
+
+
 <a id="@Specification_1_get_user_address"></a>
 
 ### Function `get_user_address`
@@ -4326,15 +4364,6 @@ Marked opaque; full composition in Phase 5.
 
 <pre><code><b>pragma</b> opaque;
 <b>ensures</b> result == <a href="confidential_asset.md#0x7_confidential_asset_spec_get_user_address">spec_get_user_address</a>(user, token);
-</code></pre>
-
-
-
-
-<a id="0x7_confidential_asset_spec_get_fa_config_address"></a>
-
-
-<pre><code><b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_spec_get_fa_config_address">spec_get_fa_config_address</a>(token: Object&lt;Metadata&gt;): <b>address</b>;
 </code></pre>
 
 
@@ -4355,6 +4384,25 @@ Marked opaque; touches object framework resources.
 <pre><code><b>pragma</b> aborts_if_is_strict = <b>false</b>;
 <b>pragma</b> opaque;
 <b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/object.md#0x1_object_ObjectCore">object::ObjectCore</a>&gt;(@aptos_framework);
+</code></pre>
+
+
+<code>get_fa_config_signer</code> — Creates a signer for the FA config object.
+Calls object::create_named_object which modifies object::ObjectCore.
+
+
+<pre><code><b>pragma</b> aborts_if_is_strict = <b>false</b>;
+<b>pragma</b> opaque;
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/object.md#0x1_object_ObjectCore">object::ObjectCore</a>&gt;(@aptos_framework);
+</code></pre>
+
+
+
+
+<a id="0x7_confidential_asset_spec_get_fa_config_address"></a>
+
+
+<pre><code><b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_spec_get_fa_config_address">spec_get_fa_config_address</a>(token: Object&lt;Metadata&gt;): <b>address</b>;
 </code></pre>
 
 
@@ -4401,6 +4449,11 @@ Marked opaque for now; full composition with coin/FA framework specs in Phase 5.
 <b>modifies</b> <b>global</b>&lt;aptos_framework::fungible_asset::Supply&gt;(@aptos_framework);
 <b>modifies</b> <b>global</b>&lt;aptos_framework::fungible_asset::ConcurrentSupply&gt;(@aptos_framework);
 <b>modifies</b> <b>global</b>&lt;aptos_framework::primary_fungible_store::DeriveRefPod&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/coin.md#0x1_coin_PairedCoinType">coin::PairedCoinType</a>&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/coin.md#0x1_coin_PairedFungibleAssetRefs">coin::PairedFungibleAssetRefs</a>&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/coin.md#0x1_coin_CoinConversionMap">coin::CoinConversionMap</a>&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/coin.md#0x1_coin_CoinInfo">coin::CoinInfo</a>&lt;CoinType&gt;&gt;(@aptos_framework);
+<b>modifies</b> <b>global</b>&lt;<a href="../../aptos-framework/doc/coin.md#0x1_coin_CoinStore">coin::CoinStore</a>&lt;CoinType&gt;&gt;(@aptos_framework);
 </code></pre>
 
 

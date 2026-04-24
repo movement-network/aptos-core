@@ -152,10 +152,10 @@ theorem takeN_from_marshaled_stack
     apply Prod.ext <;> simp only []
     · -- Show (args.reverse ++ rest).take n |>.reverse = args
       have hlen : args.reverse.length = n := by simp [hLen]
-      simp [List.take_left, hlen, List.reverse_reverse]
+      simp [hlen, List.reverse_reverse]
     · -- Show (args.reverse ++ rest).drop n = rest
       have hlen : args.reverse.length = n := by simp [hLen]
-      simp [List.drop_left, hlen]
+      simp [hlen]
   · -- Show ¬ (args.reverse ++ rest).length < n
     omega
 

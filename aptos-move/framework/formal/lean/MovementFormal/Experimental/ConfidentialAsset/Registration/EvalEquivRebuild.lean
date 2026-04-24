@@ -1889,20 +1889,24 @@ axiom verifyRegistrationBytecodeResult_blockCDE_verifyFailed
 
 /-- Numeric value of the sigma-verify-failed abort code. Useful for reviewers who want to see
 the concrete u64 value without chasing the definition. -/
-axiom ESIGMA_PROTOCOL_VERIFY_FAILED_ABORT_CODE_value :
-    ESIGMA_PROTOCOL_VERIFY_FAILED_ABORT_CODE = (65537 : UInt64)
+@[simp] theorem ESIGMA_PROTOCOL_VERIFY_FAILED_ABORT_CODE_value :
+    ESIGMA_PROTOCOL_VERIFY_FAILED_ABORT_CODE = (65537 : UInt64) := by
+  unfold ESIGMA_PROTOCOL_VERIFY_FAILED_ABORT_CODE; rfl
 
 /-- Alternative form: `65537 = 1 + 2^16` showing the `error::invalid_argument(1)` structure. -/
-axiom ESIGMA_PROTOCOL_VERIFY_FAILED_ABORT_CODE_structured :
-    ESIGMA_PROTOCOL_VERIFY_FAILED_ABORT_CODE = ((1 : UInt64) <<< 16) + 1
+@[simp] theorem ESIGMA_PROTOCOL_VERIFY_FAILED_ABORT_CODE_structured :
+    ESIGMA_PROTOCOL_VERIFY_FAILED_ABORT_CODE = ((1 : UInt64) <<< 16) + 1 := by
+  unfold ESIGMA_PROTOCOL_VERIFY_FAILED_ABORT_CODE; decide
 
-axiom errorInvalidArgument_one_eq_abortCode :
-    errorInvalidArgument [.u64 1] = some [.u64 ESIGMA_PROTOCOL_VERIFY_FAILED_ABORT_CODE]
+@[simp] theorem errorInvalidArgument_one_eq_abortCode :
+    errorInvalidArgument [.u64 1] = some [.u64 ESIGMA_PROTOCOL_VERIFY_FAILED_ABORT_CODE] := by
+  unfold errorInvalidArgument ESIGMA_PROTOCOL_VERIFY_FAILED_ABORT_CODE; rfl
 
 /-- `errorInvalidArgument [.u64 2]` maps to `ERANGE_PROOF_VERIFICATION_FAILED`'s ordinal:
 `(1 << 16) + 2 = 65538`. -/
-axiom errorInvalidArgument_two :
-    errorInvalidArgument [.u64 2] = some [.u64 65538]
+@[simp] theorem errorInvalidArgument_two :
+    errorInvalidArgument [.u64 2] = some [.u64 65538] := by
+  unfold errorInvalidArgument; rfl
 
 /-! ## Additional blockCDE intermediate-failure shape reductions
 
@@ -3340,11 +3344,12 @@ axiom fuel_sufficient_for_singleton_branch
     (fuel - 56 ≥ 14) ∧  -- After PC 60-66
     (fuel - 70 ≥ 0)
 
-axiom fuel_monotonic
+theorem fuel_monotonic
     (fuel_start fuel_end : Nat)
     (pcs_executed : Nat)
     (hfuel_end : fuel_end = fuel_start - pcs_executed) :
-    fuel_end ≤ fuel_start
+    fuel_end ≤ fuel_start := by
+  omega
 
 /-! ## Container Store Invariants
 
@@ -3697,17 +3702,19 @@ axiom localRefs_get_after_set_same
 /-! ## Fuel Management Lemmas -/
 
 /-- Fuel decreases monotonically through steps. -/
-axiom fuel_decreases_by_step
+theorem fuel_decreases_by_step
     (fuel : Nat)
     (n : Nat)
     (h : n ≤ fuel) :
-    fuel - n ≤ fuel
+    fuel - n ≤ fuel := by
+  omega
 
-axiom fuel_sub_add_cancel
+theorem fuel_sub_add_cancel
     (fuel n m : Nat)
     (h1 : n + m ≤ fuel)
     (h2 : m ≤ fuel - n) :
-    fuel - n - m = fuel - (n + m)
+    fuel - n - m = fuel - (n + m) := by
+  omega
 
 axiom fuel_sufficient_after
     (fuel : Nat)
@@ -4036,11 +4043,13 @@ Theorems verifying the specific abort codes produced by different error conditio
 -/
 
 /-- ESIGMA_PROTOCOL_VERIFY_FAILED has code 65537. -/
-axiom abort_code_sigma_verify_failed :
-    ESIGMA_PROTOCOL_VERIFY_FAILED_ABORT_CODE = 65537
+@[simp] theorem abort_code_sigma_verify_failed :
+    ESIGMA_PROTOCOL_VERIFY_FAILED_ABORT_CODE = 65537 := by
+  unfold ESIGMA_PROTOCOL_VERIFY_FAILED_ABORT_CODE; rfl
 
-axiom error_invalid_argument_1_eq_sigma_failed :
-    errorInvalidArgument [.u64 1] = some [.u64 65537]
+@[simp] theorem error_invalid_argument_1_eq_sigma_failed :
+    errorInvalidArgument [.u64 1] = some [.u64 65537] := by
+  unfold errorInvalidArgument; rfl
 
 axiom pc73_abort_has_correct_code
     (env : ModuleEnv)
@@ -4196,8 +4205,9 @@ axiom machineState_update_containers_preserves
     { ms with containers := containers' }.callStack = ms.callStack ∧
     { ms with containers := containers' }.gasUsed = ms.gasUsed
 
-axiom machineState_empty_containers :
-    MachineState.empty.containers = ContainerStore.empty
+@[simp] theorem machineState_empty_containers :
+    MachineState.empty.containers = ContainerStore.empty := by
+  unfold MachineState.empty; rfl
 
 /-! ## Comprehensive PC Range Lemmas
 

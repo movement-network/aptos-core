@@ -386,7 +386,7 @@ theorem complete_message_length
     (h_addr_len : sender_bytes.length = 32 ∧ contract_bytes.length = 32 ∧ token_bytes.length = 32) :
     data.length = dst_len + 1 + 32 + 32 + 32 + ek_len + r_len := by
   rw [h_complete]
-  simp only [List.length_append, List.length_cons, List.length_nil]
+  simp only [List.length_append, List.length_cons]
   omega
 
 /-- Message assembly preserves container store except for message buffer ref. -/

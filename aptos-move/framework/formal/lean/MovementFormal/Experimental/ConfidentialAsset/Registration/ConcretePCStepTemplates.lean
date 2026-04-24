@@ -66,7 +66,7 @@ def templateCopyLoc (pc : Nat) (idx : Nat) : TemplateOutput :=
       s!"    (inputs : RegistrationInputValues)\n" ++
       s!"    (frame : Frame) (stack : List MoveValue) (ms : MachineState)\n" ++
       s!"    (h_pc : frame.pc = {pc})\n" ++
-      s!"    (h_locals : frame.locals.length = 19)\n" ++
+      s!"    (h_locals : frame.locals.size = 19)\n" ++
       s!"    (val : MoveValue)\n" ++
       s!"    (h_local : frame.locals[{idx}]? = some (some val))\n" ++
       s!"    : ∃ frame' stack' ms',\n" ++
@@ -110,7 +110,7 @@ def templateStLoc (pc : Nat) (idx : Nat) : TemplateOutput :=
       s!"    (o : RegistrationNativeOracle)\n" ++
       s!"    (frame : Frame) (stack : List MoveValue) (ms : MachineState)\n" ++
       s!"    (h_pc : frame.pc = {pc})\n" ++
-      s!"    (h_locals : frame.locals.length = 19)\n" ++
+      s!"    (h_locals : frame.locals.size = 19)\n" ++
       s!"    (val : MoveValue)\n" ++
       s!"    (rest : List MoveValue)\n" ++
       s!"    (h_stack : stack = val :: rest)\n" ++
@@ -360,7 +360,7 @@ def isTemplateApplicable
     (frame : Frame)
     (stack : List MoveValue) : Bool :=
   frame.pc = pc ∧
-  frame.locals.length = 19 ∧
+  frame.locals.size = 19 ∧
   stack.length ≤ 10
 
 /-- Template applicability theorem -/

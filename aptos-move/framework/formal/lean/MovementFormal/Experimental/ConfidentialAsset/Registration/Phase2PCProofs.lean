@@ -52,7 +52,7 @@ theorem pc20_to_21
     (inputs : RegistrationInputValues)
     (frame : Frame) (stack : List MoveValue) (ms : MachineState)
     (h_pc : frame.pc = 20)
-    (h_locals : frame.locals.length = 19)
+    (h_locals : frame.locals.size = 19)
     (respOpt : MoveValue)
     (h_resp : frame.locals[8]? = some (some respOpt))
     (h_stack : stack = []) :

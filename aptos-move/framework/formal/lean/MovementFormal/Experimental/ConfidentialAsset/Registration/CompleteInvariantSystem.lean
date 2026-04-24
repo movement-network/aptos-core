@@ -58,7 +58,7 @@ namespace MovementFormal.Experimental.ConfidentialAsset.Registration
 /-- Frame invariant -/
 structure FrameInvariant (frame : Frame) where
   pc_in_range : 4 ≤ frame.pc ∧ frame.pc ≤ 70
-  locals_size : frame.locals.length = 19
+  locals_size : frame.locals.size = 19
   locals_welltyped : ∀ idx val, frame.locals[idx]? = some (some val) →
     ∃ ty, HasType val ty
 
@@ -168,7 +168,7 @@ theorem run_preserves_global_invariant
 /-- Check frame invariant -/
 def checkFrameInvariant (frame : Frame) : Bool :=
   4 ≤ frame.pc ∧ frame.pc ≤ 70 ∧
-  frame.locals.length = 19
+  frame.locals.size = 19
 
 /-- Check stack invariant -/
 def checkStackInvariant (pc : Nat) (stack : List MoveValue) : Bool :=
@@ -214,8 +214,8 @@ def detectViolations
     violations := violations ++ [.frame_pc_out_of_range frame.pc]
 
   -- Check locals size
-  if frame.locals.length ≠ 19 then
-    violations := violations ++ [.frame_locals_wrong_size frame.locals.length]
+  if frame.locals.size ≠ 19 then
+    violations := violations ++ [.frame_locals_wrong_size frame.locals.size]
 
   -- Check stack depth
   if stack.length > 10 then

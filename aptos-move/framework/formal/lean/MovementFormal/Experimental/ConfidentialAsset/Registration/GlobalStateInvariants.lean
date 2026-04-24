@@ -56,7 +56,7 @@ structure GlobalRegistrationInvariant (o : RegistrationNativeOracle)
 
   -- PC invariants
   h_pc_in_range : 4 ≤ frame.pc ∧ frame.pc ≤ 79
-  h_pc_in_code : frame.pc < frame.code.length ∨ frame.pc = 70 ∨ frame.pc = 79
+  h_pc_in_code : frame.pc < frame.code.size ∨ frame.pc = 70 ∨ frame.pc = 79
 
   -- Locals invariants
   h_locals_size : frame.locals.size = 19

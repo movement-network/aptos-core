@@ -33,7 +33,7 @@ structure WellFormedRegistrationFrame (o : RegistrationNativeOracle) (frame : Fr
   -- Code is the verify_registration_proof bytecode
   h_code_identity : frame.code = verifyRegistrationProofCode o
   -- Code length is 79 instructions
-  h_code_length : frame.code.length = 79
+  h_code_length : frame.code.size = 79
   -- PC is within valid range
   h_pc_bounds : 4 ≤ frame.pc ∧ frame.pc ≤ 79
   -- Locals array has exactly 19 slots
@@ -263,7 +263,7 @@ structure FrameStructuralInvariant (frame : Frame) : Prop where
   h_locals_wellsized : frame.locals.size = 19
   h_localRefs_wellsized : frame.localRefs.size = 19
   -- PC is valid index or terminal
-  h_pc_valid : frame.pc < frame.code.length ∨ frame.pc = 79
+  h_pc_valid : frame.pc < frame.code.size ∨ frame.pc = 79
   -- Each local is either empty (none) or contains a value (some v)
   h_locals_option : ∀ i, i < frame.locals.size →
                     ∃ opt, frame.locals[i]? = some opt

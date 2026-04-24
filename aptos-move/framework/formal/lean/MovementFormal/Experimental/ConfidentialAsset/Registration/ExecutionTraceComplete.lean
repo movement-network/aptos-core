@@ -49,7 +49,7 @@ structure TraceEntry where
 /-- Trace entry well-formed -/
 def TraceEntry.wellFormed (entry : TraceEntry) : Prop :=
   entry.frame.pc = entry.pc ∧
-  entry.frame.locals.length = 19 ∧
+  entry.frame.locals.size = 19 ∧
   entry.stack.length ≤ 10 ∧
   bytecodeAt entry.pc = entry.instruction
 
@@ -257,7 +257,7 @@ def checkPropertiesAlongTrace (trace : ExecutionTrace) : List PropertyCheck :=
   trace.entries.map fun entry =>
     { pc := entry.pc
       properties := [
-        ("locals_size_19", entry.frame.locals.length = 19),
+        ("locals_size_19", entry.frame.locals.size = 19),
         ("stack_bounded", entry.stack.length ≤ 10),
         ("invariants_hold", entry.invariants_hold),
         ("pc_in_range", 4 ≤ entry.pc ∧ entry.pc ≤ 70)

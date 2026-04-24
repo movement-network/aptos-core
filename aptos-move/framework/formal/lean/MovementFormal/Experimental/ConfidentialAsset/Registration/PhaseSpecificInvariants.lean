@@ -211,7 +211,7 @@ structure CrossPhaseInvariant where
   h_locals_size : ∀ pc frame,
     4 ≤ pc ∧ pc ≤ 70 →
     frame.pc = pc →
-    frame.locals.length = 19
+    frame.locals.size = 19
   -- Stack bounded by phase-specific maxima
   h_stack_bound : ∀ pc stack,
     4 ≤ pc ∧ pc ≤ 70 →

@@ -279,7 +279,7 @@ theorem stLoc_updates_only_target
 theorem locals_size_invariant
     (o : RegistrationNativeOracle)
     (frame : Frame) (stack : List MoveValue) (ms : MachineState)
-    (h_size : frame.locals.length = 19)
+    (h_size : frame.locals.size = 19)
     (frame' stack' ms' : _)
     (h_step : step (registrationModuleEnv o) [] frame stack ms =
               .ok [] frame' stack' ms') :

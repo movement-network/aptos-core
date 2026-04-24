@@ -237,7 +237,7 @@ theorem hoareCopyLoc
     (P : MoveValue → Prop) :
     hoareTriple
       (fun frame stack ms =>
-        frame.locals.length = 19 ∧
+        frame.locals.size = 19 ∧
         ∃ val, frame.locals[idx]? = some (some val) ∧ P val)
       (.CopyLoc idx)
       (fun frame' stack' ms' =>

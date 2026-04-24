@@ -341,7 +341,7 @@ theorem locals_never_overflow
     (o : RegistrationNativeOracle)
     (frame : Frame)
     (h_pc : 4 ≤ frame.pc ∧ frame.pc < 70) :
-    frame.locals.length = 19 := by
+    frame.locals.size = 19 := by
   sorry
 
 /-! ## Bounds Checking -/
@@ -412,7 +412,7 @@ theorem registration_memory_safe
     -- Stack bounded
     (∀ stack, stack.length ≤ 10) ∧
     -- Locals bounded
-    (∀ frame, frame.locals.length = 19) ∧
+    (∀ frame, frame.locals.size = 19) ∧
     -- All accesses in bounds
     (∀ pc idx, bytecodeAt pc = .CopyLoc idx → idx < 19) ∧
     -- Container store consistent

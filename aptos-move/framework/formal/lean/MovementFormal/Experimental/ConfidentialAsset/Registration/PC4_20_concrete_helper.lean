@@ -2,6 +2,9 @@ import MovementFormal.MoveModel.Value
 import MovementFormal.MoveModel.State
 import MovementFormal.MoveModel.Step
 import MovementFormal.MoveModel.StepLemmas.Basic
+import MovementFormal.MoveModel.StepLemmas.Locals
+import MovementFormal.MoveModel.StepLemmas.Refs
+import MovementFormal.MoveModel.StepLemmas.Calls
 import MovementFormal.MoveModel.StepLemmas.Run
 import MovementFormal.MoveModel.ExecResultDropMs
 import MovementFormal.MoveModel.Native.Registration
@@ -263,7 +266,7 @@ theorem thread_pc6_to_pc8
     decide
 
   have hlocalRefs7_none : ((List.replicate 19 none).toArray : Array (Option RefId))[7]'hlocalRefs7_inbounds = none := by
-    simp [List.replicate, List.toArray_data, Array.get_eq_getElem]
+    -- simp [List.replicate]
     sorry  -- Array index computation
 
   have halloc : s6.containers.alloc s6.v = (containers_after_alloc, rid_v_mut) := by
@@ -277,21 +280,18 @@ theorem thread_pc6_to_pc8
                 { MachineState.empty with containers := s6.containers } =
               .ok { code := verifyRegistrationProofCode, pc := 7,
                     locals := registrationLocals s6.chainId s6.sender s6.contract s6.token s6.ekBa s6.commitBa s6.respBa (some s6.v),
-                    localRefs := (List.replicate 19 none).toArray.set! 7 (some rid_v_mut) }
+                    localRefs := (List.replicate 19 none).toArray.set 7 (some rid_v_mut) (by omega) }
                 [] [MoveValue.mutRef rid_v_mut]
                 { MachineState.empty with containers := containers_after_alloc } := by
-    -- Apply StepLemmas.step_mutBorrowLoc_freshInBounds
-    have result := StepLemmas.step_mutBorrowLoc_freshInBounds 7 s6.v containers_after_alloc rid_v_mut
+    exact StepLemmas.step_mutBorrowLoc_freshInBounds 7 s6.v containers_after_alloc rid_v_mut
                      hpc6 hinstr6 hlocal7_inbounds hlocal7_value hlocalRefs7_inbounds hlocalRefs7_none halloc
-    simp only [result]
-    sorry  -- Massage frame equality
 
   -- PC 7: call optionExtractRef
-  -- Oracle hypothesis
-  have horacle_pc7_read : containers_after_alloc.read rid_v_mut = some s6.v := by
-    sorry  -- TODO: From containers_after_alloc construction
-
   let containers_after_extract := containers_after_alloc  -- Mutated by extract
+
+  -- Build read hypothesis for optionExtractRef (combining container read with struct equality)
+  have horacle_pc7_read : containers_after_alloc.read rid_v_mut = some (.struct_ (.bool true :: rCompressed :: restData)) := by
+    sorry  -- TODO: From containers_after_alloc construction + hv_struct
 
   -- Build write hypothesis for optionExtractRef
   have hwrite_extract : containers_after_alloc.write rid_v_mut (.struct_ [.bool false]) = some containers_after_extract := by
@@ -300,9 +300,11 @@ theorem thread_pc6_to_pc8
   have horacle_pc7 : optionExtractRef containers_after_alloc [MoveValue.mutRef rid_v_mut] =
                      some ([rCompressed], containers_after_extract) := by
     -- Use optionExtractRef_mutRef_read_write from OracleSemantics
-    have rest_witness : List MoveValue := restData
-    exact optionExtractRef_mutRef_read_write containers_after_alloc rid_v_mut rCompressed rest_witness
-            containers_after_extract hv_struct hwrite_extract
+    exact optionExtractRef_mutRef_read_write containers_after_alloc rid_v_mut rCompressed restData
+            containers_after_extract horacle_pc7_read hwrite_extract
+
+  -- funcIdx_optionExtractRef placeholder
+  let funcIdx_optionExtractRef : Nat := 0
 
   -- Apply step lemma for native call at PC 7
   have hpc7 : 7 < verifyRegistrationProofCode.size := by
@@ -344,9 +346,6 @@ theorem thread_pc6_to_pc8
                      hpc7 hinstr7 hfuncIdx7_bounds hparams7 hreturns7 hbody7 htake7 horacle_pc7
     simp only [result]
     sorry  -- Massage frame and ms equality
-
-where
-  funcIdx_optionExtractRef : Nat := 0  -- Placeholder index
 
   -- PC 8: stLoc 8
   let locals_after_pc8 := (registrationLocals s6.chainId s6.sender s6.contract s6.token s6.ekBa s6.commitBa s6.respBa (some s6.v)).set! 8 (some rCompressed)
@@ -410,11 +409,11 @@ theorem thread_pc8_to_pc11
     (horacle_scalar : o.newScalarFromBytes [respBa_val] =
                       some [MoveValue.struct_ (MoveValue.bool true :: scalar :: restScalarData)]) :
     ∃ (s11 : FrameAtPC11 o),
-      s11.scalar_opt = MoveValue.struct_ (MoveValue.bool true :: scalar :: restScalarData) ∧
+      s11.s_opt = MoveValue.struct_ (MoveValue.bool true :: scalar :: restScalarData) ∧
       s11.respBa_val = respBa_val ∧
       s11.fuel = s8.fuel - 3 := by
   -- PC 9: moveLoc 6 (push respBa_val from local 6)
-  let locals_at_pc8 := (registrationLocals s8.chainId s8.sender s8.contract s8.token s8.ekBa s8.commitBa s8.respBa s8.v).set! 8 (some s8.rCompressed)
+  let locals_at_pc8 := (registrationLocals s8.chainId s8.sender s8.contract s8.token s8.ekBa s8.commitBa s8.respBa (some s8.v)).set! 8 (some s8.rCompressed)
 
   have hpc9 : 9 < verifyRegistrationProofCode.size := by
     sorry  -- From code definition
@@ -433,8 +432,8 @@ theorem thread_pc8_to_pc11
       ∃ (h : 6 < ((List.replicate 19 none).toArray : Array (Option RefId)).size),
         ((List.replicate 19 none).toArray : Array (Option RefId))[6]'h = none := by
     right
-    use (by simp [List.replicate, List.toArray_data] : 6 < ((List.replicate 19 none).toArray : Array (Option RefId)).size)
-    simp [List.replicate, List.toArray_data]
+    use (by simp [List.replicate] : 6 < ((List.replicate 19 none).toArray : Array (Option RefId)).size)
+    simp [List.replicate]
     sorry  -- Array index
 
   let locals_after_pc9 := locals_at_pc8.set! 6 none
@@ -465,6 +464,7 @@ theorem thread_pc8_to_pc11
 
   -- PC 10: call newScalarFromBytes
   let scalar_opt_result := MoveValue.struct_ (MoveValue.bool true :: scalar :: restScalarData)
+  let funcIdx_newScalarFromBytes : Nat := 1
 
   have hpc10 : 10 < verifyRegistrationProofCode.size := by
     sorry  -- From code definition
@@ -506,9 +506,6 @@ theorem thread_pc8_to_pc11
                      hpc10 hinstr10 hfuncIdx10_bounds hparams10 hreturns10 hbody10 htake10 horacle_scalar
     simp only [result]
     sorry  -- Frame equality
-
-where
-  funcIdx_newScalarFromBytes : Nat := 1  -- Placeholder
 
   -- PC 11: stLoc 9 (store scalar_opt_result)
   let locals_after_pc11 := locals_after_pc9.set! 9 (some scalar_opt_result)
@@ -583,10 +580,7 @@ theorem thread_pc11_to_pc15
   let rid_s_opt_fresh : RefId := s11.rid_s_opt
   let containers_after_s_opt_alloc : ContainerStore := s11.containers  -- Updated by alloc
 
-  let locals_at_pc11 := (registrationLocals s11.chainId s11.sender s11.contract s11.token s11.ekBa s11.commitBa s11.respBa s11.v)
-                          .set! 8 (some s11.rCompressed)
-                          .set! 6 none
-                          .set! 9 (some s11.s_opt)
+  let locals_at_pc11 := (registrationLocals s11.chainId s11.sender s11.contract s11.token s11.ekBa s11.commitBa s11.respBa (some s11.v)).set! 8 (some s11.rCompressed) |>.set! 6 none |>.set! 9 (some s11.s_opt)
 
   have hpc12 : 12 < verifyRegistrationProofCode.size := by
     sorry  -- From code definition
@@ -608,7 +602,7 @@ theorem thread_pc11_to_pc15
       ∃ (h : 9 < ((List.replicate 19 none).toArray : Array (Option RefId)).size),
         ((List.replicate 19 none).toArray : Array (Option RefId))[9]'h = none := by
     right
-    use (by simp [List.replicate, List.toArray_data] : 9 < ((List.replicate 19 none).toArray : Array (Option RefId)).size)
+    use (by simp [List.replicate] : 9 < ((List.replicate 19 none).toArray : Array (Option RefId)).size)
     sorry  -- Array index
 
   have step12 : step (registrationModuleEnv o)
@@ -710,10 +704,7 @@ theorem thread_pc15_to_pc18
       s18.fuel = s15.fuel - 3 := by
   obtain ⟨restData_scalar, hs_opt_eq⟩ := h_s_opt_struct
 
-  let locals_at_pc15 := (registrationLocals s15.chainId s15.sender s15.contract s15.token s15.ekBa s15.commitBa s15.respBa s15.v)
-                          .set! 8 (some s15.rCompressed)
-                          .set! 6 none
-                          .set! 9 (some s15.s_opt)
+  let locals_at_pc15 := (registrationLocals s15.chainId s15.sender s15.contract s15.token s15.ekBa s15.commitBa s15.respBa (some s15.v)).set! 8 (some s15.rCompressed) |>.set! 6 none |>.set! 9 (some s15.s_opt)
 
   -- PC 16: mutBorrowLoc 9 (get mutable reference to s_opt)
   let rid_s_opt_mut : RefId := s15.rid_s_opt  -- Reuse existing rid
@@ -735,7 +726,7 @@ theorem thread_pc15_to_pc18
       ∃ (h : 9 < ((List.replicate 19 none).toArray : Array (Option RefId)).size),
         ((List.replicate 19 none).toArray : Array (Option RefId))[9]'h = none := by
     right
-    use (by simp [List.replicate, List.toArray_data] : 9 < ((List.replicate 19 none).toArray : Array (Option RefId)).size)
+    use (by simp [List.replicate] : 9 < ((List.replicate 19 none).toArray : Array (Option RefId)).size)
     sorry  -- Array index
 
   let containers_after_mutBorrow := s15.containers  -- Would be updated by alloc if fresh
@@ -845,11 +836,7 @@ theorem thread_pc18_to_pc20
   -- PC 19: Create empty vector for Fiat-Shamir message
   -- PC 20: Allocate message buffer into containers
 
-  let locals_at_pc18 := (registrationLocals s18.chainId s18.sender s18.contract s18.token s18.ekBa s18.commitBa s18.respBa s18.v)
-                          .set! 8 (some s18.rCompressed)
-                          .set! 6 none
-                          .set! 9 (some s18.s_opt)
-                          .set! 10 (some s18.scalar)
+  let locals_at_pc18 := (registrationLocals s18.chainId s18.sender s18.contract s18.token s18.ekBa s18.commitBa s18.respBa (some s18.v)).set! 8 (some s18.rCompressed) |>.set! 6 none |>.set! 9 (some s18.s_opt) |>.set! 10 (some s18.scalar)
 
   -- PC 19: vecPack<u8> 0 (create empty u8 vector)
   let empty_msg := MoveValue.vector MoveType.u8 []

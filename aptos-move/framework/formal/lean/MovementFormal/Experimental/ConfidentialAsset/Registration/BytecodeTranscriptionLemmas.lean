@@ -48,6 +48,7 @@ Total length: 79 instructions (indices 0-78)
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.BytecodeTranscriptionLemmas
 
 open MovementFormal.MoveModel
+open MovementFormal.MoveModel.Programs.Registration
 
 /-! ## Code Length and Bounds
 
@@ -80,7 +81,6 @@ theorem pc78_inbounds :
 theorem pc79_outofbounds :
     79 ≥ verifyRegistrationProofCode.size := by
   rw [verifyRegistrationProofCode_length]
-  decide
 
 /-! ## Instruction Identity Lemmas
 

@@ -159,25 +159,81 @@ theorem registration_singleton_branch_complete
           h_p1_local9, h_p1_local12, h_p1_local13, h_p1_local14, h_p1_stack⟩ := h_phase1
 
   -- Phase 2: PC 20→43 (message assembly, 23 steps)
-  -- Need to match Phase 1 outputs to Phase 2 inputs
-  -- Phase 1 outputs: locals 9, 12, 13, 14 = commit_pt, resp_pt, chainIdScalar, sender
-  -- Phase 2 needs: locals 3, 8, 9, 13 (but these should be available from frame₂₀)
+  -- Phase 1 outputs frame₂₀ with:
+  --   local 9 = commit_pt
+  --   local 12 = resp_pt
+  --   local 13 = chainIdScalar
+  --   local 14 = sender
 
-  -- TODO: Properly thread inputs from Phase 1 to Phase 2
-  -- This requires showing that frame₂₀ has the right locals set
-  -- The connection is mechanical but requires careful hypothesis matching
-  sorry  -- ~40 lines: apply phase2_complete_detailed with Phase 1 outputs
+  -- Phase 2 needs these same values but also requires locals 3 and 8
+  -- For a complete proof, we'd need to show frame₂₀ preserves these
+  -- For now, we outline the application structure:
+
+  -- Construct Phase 2 input hypotheses
+  -- Note: This is a simplified version - full version needs more locals
+  have h_inputs_p2 : frame₂₀.locals[3]? = some (some sender) ∧
+                     frame₂₀.locals[9]? = some (some commit_pt) ∧
+                     frame₂₀.locals[13]? = some (some chainIdScalar) := by
+    constructor
+    · -- Need to show local 3 = sender in frame₂₀
+      -- This should come from Phase 1 preservation
+      sorry
+    constructor
+    · exact h_p1_local9  -- From Phase 1 output
+    · exact h_p1_local13  -- From Phase 1 output
+
+  -- Bounds for Phase 2
+  have h_bounds_p2 : frame₂₀.locals.size > 20 := by
+    -- Size preserved from frame₄ through Phase 1
+    sorry
+
+  -- Apply phase2_complete (simplified - full version needs all oracle hypotheses)
+  sorry  -- Complete application with all hypotheses (~30 more lines)
+
+  -- For structure, assume we get frame₄₃:
+  -- obtain ⟨frame₄₃, stack₄₃, ms₄₃, h_p2_run, h_p2_pc, ...⟩ := h_phase2
 
   -- Phase 3: PC 43→61 (Schnorr verification, 18 steps)
-  -- TODO: Apply phase3_complete with outputs from Phase 2
-  -- Need to extract frame₄₃ from Phase 2 and thread to Phase 3
-  sorry  -- ~40 lines: apply phase3_complete with Phase 2 outputs
+  -- Assuming we extracted frame₄₃ from Phase 2, apply Phase 3
+
+  -- The application would look like:
+  -- have h_phase3 := phase3_complete o frame₄₃ ms₄₃
+  --                    h_p2_pc message_hash commit_pt resp_pt signature_scalar
+  --                    h_p2_local19 h_p2_local9 h_p2_local12 h_local5
+  --                    challenge_sc ce_pt lhs_pt rhs_pt
+  --                    h_oracle_challenge h_oracle_mul h_oracle_add3
+  --                    h_oracle_rhs h_oracle_eq
+  --                    ... -- all instruction hypotheses
+  --                    h_bounds_p3
+
+  -- obtain ⟨frame₆₁, stack₆₁, ms₆₁, h_p3_run, h_p3_pc, ...⟩ := h_phase3
+
+  sorry  -- Complete Phase 3 application (~40 lines)
 
   -- Composition: run 17 + run 23 + run 18 = run 58
-  -- TODO: Chain all three phase runs together
-  -- Pattern: h_run_40 := chain_n_plus_m_steps h_p1_run h_p2_run
-  --          h_run_58 := chain_n_plus_m_steps h_run_40 h_p3_run
-  sorry  -- ~30 lines: composition and arithmetic verification
+  -- Once we have h_p1_run, h_p2_run, h_p3_run, compose them:
+
+  -- Step 1: Compose Phase 1 + Phase 2
+  -- have h_run_40 : run (registrationModuleEnv o) 40 [] frame₄ [] ms₄ =
+  --                 .ok [] frame₄₃ stack₄₃ ms₄₃ := by
+  --   have h_compose := chain_n_plus_m_steps h_p1_run h_p2_run
+  --   have : 17 + 23 = 40 := by decide
+  --   convert h_compose using 2; omega
+
+  -- Step 2: Compose (Phase 1 + Phase 2) + Phase 3
+  -- have h_run_58 : run (registrationModuleEnv o) 58 [] frame₄ [] ms₄ =
+  --                 .ok [] frame₆₁ stack₆₁ ms₆₁ := by
+  --   have h_compose := chain_n_plus_m_steps h_run_40 h_p3_run
+  --   have : 40 + 18 = 58 := by decide
+  --   convert h_compose using 2; omega
+
+  -- Final: Package results
+  -- use frame₆₁, stack₆₁, ms₆₁
+  -- constructor; exact h_run_58
+  -- constructor; exact h_p3_pc
+  -- ... (thread through all final local proofs)
+
+  sorry  -- Complete composition and result packaging (~30 lines)
 
 /-! ## Progress Note -/
 

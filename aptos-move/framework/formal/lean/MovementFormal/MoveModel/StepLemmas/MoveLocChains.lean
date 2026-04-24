@@ -288,12 +288,8 @@ theorem chain_four_moveLoc
 /-- Chain five moveLoc operations on distinct local indices.
 
 Common pattern in 5+ argument entry points (like normalization, rotation).
-
-NOTE: Converted to axiom due to complex array bound elaboration.
-The proof structure is sound but hits Lean elaborator constraints in tactic mode.
-Can be completed via term-mode construction or by restructuring the proof.
 -/
-axiom chain_five_moveLoc
+theorem chain_five_moveLoc
     (frame : Frame) (cs : List Frame) (rest : List MoveValue) (ms : MachineState)
     (n i1 i2 i3 i4 i5 : Nat)
     (v1 v2 v3 v4 v5 : MoveValue)
@@ -338,6 +334,58 @@ axiom chain_five_moveLoc
       { frame with
         pc := n + 5,
         locals := ((((frame.locals.set i1 none hi1_bound).set i2 none hi2_bound).set i3 none hi3_bound).set i4 none hi4_bound).set i5 none hi5 }
-      cs (v5 :: v4 :: v3 :: v2 :: v1 :: rest) ms fuel
+      cs (v5 :: v4 :: v3 :: v2 :: v1 :: rest) ms fuel := by
+  -- Rewrite bounds
+  have hi2' : i2 < frame.locals.size := by
+    have : (frame.locals.set i1 none hi1_bound).size = frame.locals.size := by simp [Array.size_set]
+    rw [← this]; exact hi2
+  have hi3' : i3 < frame.locals.size := by
+    have : ((frame.locals.set i1 none hi1_bound).set i2 none hi2_bound).size = frame.locals.size := by simp [Array.size_set]
+    rw [← this]; exact hi3
+  have hi4' : i4 < frame.locals.size := by
+    have : (((frame.locals.set i1 none hi1_bound).set i2 none hi2_bound).set i3 none hi3_bound).size = frame.locals.size := by simp [Array.size_set]
+    rw [← this]; exact hi4
+  have hi5' : i5 < frame.locals.size := by
+    have : ((((frame.locals.set i1 none hi1_bound).set i2 none hi2_bound).set i3 none hi3_bound).set i4 none hi4_bound).size = frame.locals.size := by simp [Array.size_set]
+    rw [← this]; exact hi5
+  -- Step 1
+  have hstep1 : step env frame cs rest ms =
+    .ok { frame with pc := n + 1, locals := frame.locals.set i1 none hi1 } cs (v1 :: rest) ms :=
+    step_moveLoc_single frame cs rest ms n i1 v1 hn_lt hcode1 hpc hi1 hv1 hRefNone1
+  -- Step 2
+  let frame1 := { frame with pc := n + 1, locals := frame.locals.set i1 none hi1 }
+  have hstep2 : step env frame1 cs (v1 :: rest) ms =
+    .ok { frame1 with pc := n + 2, locals := frame1.locals.set i2 none (by simp [frame1]; exact hi2') } cs (v2 :: v1 :: rest) ms :=
+    step_moveLoc_single frame1 cs (v1 :: rest) ms (n+1) i2 v2
+      (by simp [frame1]; exact hn1_lt) (by simp [frame1]; exact hcode2) (by simp [frame1])
+      (by simp [frame1]; exact hi2') (by simp [frame1]; exact hv2) hRefNone2
+  -- Step 3
+  let frame2 := { frame1 with pc := n + 2, locals := frame1.locals.set i2 none (by simp [frame1]; exact hi2') }
+  have hstep3 : step env frame2 cs (v2 :: v1 :: rest) ms =
+    .ok { frame2 with pc := n + 3, locals := frame2.locals.set i3 none (by simp [frame2, frame1]; exact hi3') } cs (v3 :: v2 :: v1 :: rest) ms :=
+    step_moveLoc_single frame2 cs (v2 :: v1 :: rest) ms (n+2) i3 v3
+      (by simp [frame2, frame1]; exact hn2_lt) (by simp [frame2, frame1]; exact hcode3) (by simp [frame2])
+      (by simp [frame2, frame1]; exact hi3') (by simp [frame2, frame1]; exact hv3) hRefNone3
+  -- Step 4
+  let frame3 := { frame2 with pc := n + 3, locals := frame2.locals.set i3 none (by simp [frame2, frame1]; exact hi3') }
+  have hstep4 : step env frame3 cs (v3 :: v2 :: v1 :: rest) ms =
+    .ok { frame3 with pc := n + 4, locals := frame3.locals.set i4 none (by simp [frame3, frame2, frame1]; exact hi4') } cs (v4 :: v3 :: v2 :: v1 :: rest) ms :=
+    step_moveLoc_single frame3 cs (v3 :: v2 :: v1 :: rest) ms (n+3) i4 v4
+      (by simp [frame3, frame2, frame1]; exact hn3_lt) (by simp [frame3, frame2, frame1]; exact hcode4) (by simp [frame3])
+      (by simp [frame3, frame2, frame1]; exact hi4') (by simp [frame3, frame2, frame1]; exact hv4) hRefNone4
+  -- Step 5
+  let frame4 := { frame3 with pc := n + 4, locals := frame3.locals.set i4 none (by simp [frame3, frame2, frame1]; exact hi4') }
+  have hstep5 : step env frame4 cs (v4 :: v3 :: v2 :: v1 :: rest) ms =
+    .ok { frame4 with pc := n + 5, locals := frame4.locals.set i5 none (by simp [frame4, frame3, frame2, frame1]; exact hi5') } cs (v5 :: v4 :: v3 :: v2 :: v1 :: rest) ms :=
+    step_moveLoc_single frame4 cs (v4 :: v3 :: v2 :: v1 :: rest) ms (n+4) i5 v5
+      (by simp [frame4, frame3, frame2, frame1]; exact hn4_lt) (by simp [frame4, frame3, frame2, frame1]; exact hcode5) (by simp [frame4])
+      (by simp [frame4, frame3, frame2, frame1]; exact hi5') (by simp [frame4, frame3, frame2, frame1]; exact hv5) hRefNone5
+  -- Chain
+  have h := run_succ_five_ok fuel frame1 frame2 frame3 frame4
+    { frame4 with pc := n + 5, locals := frame4.locals.set i5 none (by simp [frame4, frame3, frame2, frame1]; exact hi5') }
+    cs cs cs cs cs (v1 :: rest) (v2 :: v1 :: rest) (v3 :: v2 :: v1 :: rest) (v4 :: v3 :: v2 :: v1 :: rest) (v5 :: v4 :: v3 :: v2 :: v1 :: rest)
+    ms ms ms ms ms hstep1 hstep2 hstep3 hstep4 hstep5
+  simp only [frame4, frame3, frame2, frame1] at h
+  exact h
 
 end MovementFormal.MoveModel.StepLemmas.MoveLocChains

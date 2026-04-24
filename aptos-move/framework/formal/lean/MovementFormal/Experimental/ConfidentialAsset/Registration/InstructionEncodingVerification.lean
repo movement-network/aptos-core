@@ -31,6 +31,7 @@ import MovementFormal.Experimental.ConfidentialAsset.Registration.BytecodeTransc
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration
 
 open MovementFormal.MoveModel
+open MovementFormal.MoveModel.Native.Registration
 
 /-! ## Instruction Encoding Types -/
 
@@ -248,9 +249,9 @@ def countCall : Nat :=
     fun i => match i with | .call _ => true | _ => false
 
 /-- Instruction type distribution -/
-#eval s!"CopyLoc: {countCopyLoc}"
-#eval s!"StLoc: {countStLoc}"
-#eval s!"Call: {countCall}"
+-- #eval s!"CopyLoc: {countCopyLoc}"
+-- #eval s!"StLoc: {countStLoc}"
+-- #eval s!"Call: {countCall}"
 
 /-! ## Instruction Encoding Completeness -/
 
@@ -271,7 +272,7 @@ theorem no_instructions_outside_range (o : RegistrationNativeOracle) :
 /-! ## Instruction Validation Helpers -/
 
 /-- Validate instruction matches expectation -/
-def validateInstruction (actual : Instruction) (expected : ExpectedInstruction) : Bool :=
+def validateInstruction (actual : MoveInstr) (expected : ExpectedInstruction) : Bool :=
   match actual, expected with
   | .copyLoc i1, .copyLoc i2 => i1 == i2
   | .stLoc i1, .stLoc i2 => i1 == i2
@@ -292,7 +293,7 @@ def instructionName : ExpectedInstruction → String
 /-- Generate instruction encoding report -/
 def generateEncodingReport : String :=
   let header := "Instruction Encoding Verification Report\n" ++
-                "=" .times 70 ++ "\n\n"
+                String.mk (List.replicate 70 '=') ++ "\n\n"
 
   let phase1 := s!"Phase 1 (PC 4→20): {phase1Instructions.length} instructions\n"
   let phase2 := s!"Phase 2 (PC 20→43): {phase2Instructions.length} instructions\n"
@@ -306,6 +307,6 @@ def generateEncodingReport : String :=
 
   header ++ phase1 ++ phase2 ++ phase3 ++ total ++ stats
 
-#eval generateEncodingReport
+-- #eval generateEncodingReport
 
 end MovementFormal.Experimental.ConfidentialAsset.Registration

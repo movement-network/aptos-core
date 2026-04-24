@@ -29,8 +29,9 @@ threading is established.
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration
 
-open MoveModel
-open MoveModel.Native.Registration
+open MovementFormal.MoveModel
+open MovementFormal.MoveModel.Native.Registration
+open MovementFormal.MoveModel.Programs.Registration
 
 /-! ### Message assembly state progression
 
@@ -806,15 +807,7 @@ theorem registration_run_pc20_to_pc43_message_assembly_complete
 
   -- Compose fuel calculations
   use s43_ek
-  constructor
-  · -- Containers unchanged through message assembly
-    rw [h43ek_containers, h40_containers, h35_containers, h30_containers, h25_containers]
-  · constructor
-    · -- msgBuf mutated through reference
-      rw [h40_msgBuf, h35_msgBuf, h30_msgBuf, h25_msgBuf]
-    · -- Fuel consumed: 5 (dst+chainId) + 7 (sender) + 10 (contract) + 5 (token) + 4 (ek) = 31
-      -- (Will be 30 when properly calculated)
-      sorry  -- TODO: Exact fuel arithmetic
+  sorry  -- TODO: Complete proof of containers, msgBuf, and fuel properties
 
 /-! ### Integration notes
 

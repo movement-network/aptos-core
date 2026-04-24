@@ -2022,7 +2022,9 @@ def fiatRegistrationSigmaDstBytes : List UInt8 :=
 axiom fiatRegistrationSigmaDstBytes_eq_fiatShamirRegistrationDst_toList :
     fiatRegistrationSigmaDstBytes = fiatShamirRegistrationDst.toList
 
-axiom fiatRegistrationSigmaDstBytes_length : fiatRegistrationSigmaDstBytes.length = 38
+theorem fiatRegistrationSigmaDstBytes_length : fiatRegistrationSigmaDstBytes.length = 38 := by
+  unfold fiatRegistrationSigmaDstBytes
+  exact registrationDstBytes_toList_length
 
 private def fiatRegistrationSigmaDstConst : ConstPoolEntry where
   type := .vector .u8

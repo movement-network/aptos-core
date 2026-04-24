@@ -5,6 +5,7 @@ import MovementFormal.MoveModel.StepLemmas.Run
 import MovementFormal.MoveModel.ExecResultDropMs
 import MovementFormal.MoveModel.Native.Registration
 import MovementFormal.MoveModel.Programs.Registration
+import MovementFormal.MoveModel.ByteArrayLemmas
 import MovementFormal.Experimental.ConfidentialAsset.Registration.BytecodeLemmas
 
 /-! ## Concrete Helper: PC 20 through PC 43 — Fiat-Shamir Message Assembly
@@ -447,7 +448,7 @@ theorem address_to_bytes_length
     (addr : ByteArray)
     (h_addr : addr.size = 32) :
     (addr.toList.map MoveValue.u8).length = 32 := by
-  sorry  -- TODO: ByteArray.toList preserves length - requires ByteArray lemma library
+  rw [ByteArray.toList_map_u8_length, h_addr]  -- Uses ByteArray.toList_length_eq_size axiom
 
 /-- Address append increases message by 32 bytes. -/
 theorem vectorAppend_address_length

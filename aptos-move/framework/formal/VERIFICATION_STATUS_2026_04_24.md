@@ -88,16 +88,23 @@ BOOGIE_EXE=~/.local/bin/boogie Z3_EXE=~/.local/bin/z3 \
 
 **Result:** ✅ All 60 verifiable VCs passing (100%). Cross-module verification (145 VCs) blocked on upstream ristretto255 issue.
 
-### Trust Boundaries ✅ PASS
+### Trust Boundaries ✅ PASS (UPDATED 2026-04-24)
 
 **Reconciliation check:** `./scripts/reconcile_trust_boundaries.sh`
 
 | Metric | Expected | Actual | Status |
 |--------|----------|--------|--------|
-| CA axioms | ~10 | 10 | ✅ Match |
+| CA axioms (tracked subset) | ~10 | 10 | ✅ Match |
 | Pragma opaque | ~89 | 89 | ✅ Match |
-| Total axioms (with crypto) | ~62 | 62 | ✅ Match |
+| CA-tracked axioms (with crypto) | ~62 | 62 | ✅ Match (2026-04-23 baseline) |
+| **Full codebase axioms** | **~447** | **447** | **✅ NEW (2026-04-24)** |
 | Verification escapes | documented | 1 test-only pragma verify=false | ✅ Acceptable |
+
+**Axiom Reduction Update (2026-04-24):**
+- Systematic cleanup session: 643 → 447 total axioms (-196, -30.5%)
+- 177 stub axioms converted (`axiom name : True` → `theorem name : True := trivial`)
+- 19 simple axioms converted (error codes, fuel arithmetic, array ops, linting)
+- Full details in AXIOM_REDUCTION_PROGRESS_2026_04_24.md and SESSION_2026_04_24_FINAL_SUMMARY.md
 
 **Result:** TRUST_BOUNDARIES.md is reconciled with current codebase.
 

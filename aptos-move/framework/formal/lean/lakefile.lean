@@ -207,6 +207,8 @@ lean_lib «MovementFormal» where
     `MovementFormal.Experimental.ConfidentialAsset.Registration.ConcreteWitnessBuilders,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.AxiomEliminationComplete,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.FinalIntegrationFramework,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.PCRangeProofs,
+    `MovementFormal.Experimental.ConfidentialAsset.Registration.OracleCorrespondenceComplete,
     `MovementFormal.Experimental.ConfidentialAsset.Registration.Phase6Composition,
     `MovementFormal.MoveModel.Programs.Withdrawal,
     `MovementFormal.MoveModel.Programs.Transfer,

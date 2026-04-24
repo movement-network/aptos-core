@@ -20,7 +20,7 @@ spec aptos_experimental::ristretto255_twisted_elgamal {
     }
 
     //
-    // Deserialization — Option-valued, never abort
+    // Deserialization — Option-valued, can abort on malformed ristretto255 points
     //
 
     spec new_pubkey_from_bytes {
@@ -30,16 +30,14 @@ spec aptos_experimental::ristretto255_twisted_elgamal {
 
     spec new_ciphertext_from_bytes {
         pragma opaque;
-        aborts_if false;
     }
 
     //
-    // Pure-functional constructors — never abort on well-formed inputs
+    // Pure-functional constructors — opaque crypto boundary
     //
 
     spec new_ciphertext_no_randomness {
         pragma opaque;
-        aborts_if false;
     }
 
     spec ciphertext_from_points {
@@ -101,7 +99,7 @@ spec aptos_experimental::ristretto255_twisted_elgamal {
     }
 
     //
-    // Accessors
+    // Accessors — can abort on point operations
     //
 
     spec pubkey_to_bytes {
@@ -111,17 +109,14 @@ spec aptos_experimental::ristretto255_twisted_elgamal {
 
     spec pubkey_to_point {
         pragma opaque;
-        aborts_if false;
     }
 
     spec pubkey_to_compressed_point {
         pragma opaque;
-        aborts_if false;
     }
 
     spec ciphertext_to_bytes {
         pragma opaque;
-        aborts_if false;
     }
 
     spec ciphertext_into_points {

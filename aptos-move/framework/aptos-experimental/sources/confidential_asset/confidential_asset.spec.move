@@ -364,6 +364,12 @@ spec aptos_experimental::confidential_asset {
     // acceptance ≡ sigma predicate) compose on top of these in Phase 5.
     //
 
+    /// `get_user_signer` — helper to create user-derived signer for store object.
+    spec get_user_signer {
+        pragma opaque;
+        modifies global<object::ObjectCore>(@aptos_framework);
+    }
+
     /// `register_internal` — creates a fresh ConfidentialAssetStore for (user, token).
     ///
     /// **Strengthened post-conditions** (Phase 2 extended):
@@ -394,6 +400,7 @@ spec aptos_experimental::confidential_asset {
             == confidential_balance::ACTUAL_BALANCE_CHUNKS;
 
         modifies global<ConfidentialAssetStore>(store_addr);
+        modifies global<object::ObjectCore>(@aptos_framework);
     }
 
     /// `ensure_sufficient_fa` — helper that converts CoinType to FA if needed.
@@ -411,6 +418,11 @@ spec aptos_experimental::confidential_asset {
         modifies global<aptos_framework::fungible_asset::Supply>(@aptos_framework);
         modifies global<aptos_framework::fungible_asset::ConcurrentSupply>(@aptos_framework);
         modifies global<aptos_framework::primary_fungible_store::DeriveRefPod>(@aptos_framework);
+        modifies global<aptos_framework::coin::CoinConversionMap>(@aptos_framework);
+        modifies global<aptos_framework::coin::CoinInfo<CoinType>>(@aptos_framework);
+        modifies global<aptos_framework::coin::CoinStore<CoinType>>(@aptos_framework);
+        modifies global<aptos_framework::coin::PairedCoinType>(@aptos_framework);
+        modifies global<aptos_framework::coin::PairedFungibleAssetRefs>(@aptos_framework);
     }
 
     /// `deposit_to_internal` — receives an amount into the recipient's pending balance.
@@ -705,6 +717,7 @@ spec aptos_experimental::confidential_asset {
         // emits Registered { addr: user, asset_type: token_addr, ek: ... } to sender;
 
         modifies global<ConfidentialAssetStore>(store_addr);
+        modifies global<object::ObjectCore>(@aptos_framework);
     }
 
     /// `deposit_to` entry — delegates to `deposit_to_internal`.
@@ -723,6 +736,11 @@ spec aptos_experimental::confidential_asset {
             == old(global<ConfidentialAssetStore>(recipient_store)).pending_counter + 1;
 
         modifies global<ConfidentialAssetStore>(recipient_store);
+        modifies global<aptos_framework::fungible_asset::FungibleStore>(@aptos_framework);
+        modifies global<aptos_framework::fungible_asset::ConcurrentFungibleBalance>(@aptos_framework);
+        modifies global<object::ObjectCore>(@aptos_framework);
+        modifies global<object::Untransferable>(@aptos_framework);
+        modifies global<aptos_framework::permissioned_signer::PermissionStorage>(@aptos_framework);
     }
 
     /// `deposit_coins_to` entry — converts `CoinType` to FA then delegates to `deposit_to_internal`.
@@ -747,6 +765,11 @@ spec aptos_experimental::confidential_asset {
         modifies global<aptos_framework::fungible_asset::Supply>(@aptos_framework);
         modifies global<aptos_framework::fungible_asset::ConcurrentSupply>(@aptos_framework);
         modifies global<aptos_framework::primary_fungible_store::DeriveRefPod>(@aptos_framework);
+        modifies global<aptos_framework::coin::CoinConversionMap>(@aptos_framework);
+        modifies global<aptos_framework::coin::CoinInfo<CoinType>>(@aptos_framework);
+        modifies global<aptos_framework::coin::CoinStore<CoinType>>(@aptos_framework);
+        modifies global<aptos_framework::coin::PairedCoinType>(@aptos_framework);
+        modifies global<aptos_framework::coin::PairedFungibleAssetRefs>(@aptos_framework);
     }
 
     /// `deposit_coins` entry — to self.
@@ -766,6 +789,11 @@ spec aptos_experimental::confidential_asset {
         modifies global<aptos_framework::fungible_asset::Supply>(@aptos_framework);
         modifies global<aptos_framework::fungible_asset::ConcurrentSupply>(@aptos_framework);
         modifies global<aptos_framework::primary_fungible_store::DeriveRefPod>(@aptos_framework);
+        modifies global<aptos_framework::coin::CoinConversionMap>(@aptos_framework);
+        modifies global<aptos_framework::coin::CoinInfo<CoinType>>(@aptos_framework);
+        modifies global<aptos_framework::coin::CoinStore<CoinType>>(@aptos_framework);
+        modifies global<aptos_framework::coin::PairedCoinType>(@aptos_framework);
+        modifies global<aptos_framework::coin::PairedFungibleAssetRefs>(@aptos_framework);
     }
 
     /// `deposit` entry — deposits to self. `to = address_of(sender)` path.

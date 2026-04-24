@@ -2,9 +2,21 @@ spec aptos_std::ristretto255 {
     // Phase 0 patch: force vector-length monomorphization for Ristretto types
     // so downstream CA modules can reason about vector<CompressedRistretto> lengths
     // (see PHASE_0_RISTRETTO255_PATCH_NOTES.md Bug 2)
+    //
+    // Helper spec functions that explicitly use vector operations to force Boogie
+    // monomorphization of vector<CompressedRistretto> and vector<RistrettoPoint>.
+    spec fun spec_compressed_vector_len(v: vector<CompressedRistretto>): u64 {
+        len(v)
+    }
+
+    spec fun spec_point_vector_len(v: vector<RistrettoPoint>): u64 {
+        len(v)
+    }
+
     spec module {
-        invariant [deactivated] forall v: vector<CompressedRistretto> : len(v) >= 0;
-        invariant [deactivated] forall v: vector<RistrettoPoint> : len(v) >= 0;
+        // These invariants reference the helper functions above, forcing monomorphization
+        invariant [deactivated] forall v: vector<CompressedRistretto> : spec_compressed_vector_len(v) >= 0;
+        invariant [deactivated] forall v: vector<RistrettoPoint> : spec_point_vector_len(v) >= 0;
     }
 
     spec point_equals {
@@ -301,9 +313,11 @@ spec aptos_std::ristretto255 {
 
     spec fun spec_scalar_is_canonical_internal(s: vector<u8>): bool;
 
-    spec fun spec_scalar_from_u64_internal(num: u64): vector<u8>;
+    // Phase 0 patch Bug 1: use `num` type to avoid bv64/bv128 vs int encoding mismatch
+    // (see PHASE_0_RISTRETTO255_PATCH_NOTES.md Bug 1, Candidate patch C)
+    spec fun spec_scalar_from_u64_internal(num: num): vector<u8>;
 
-    spec fun spec_scalar_from_u128_internal(num: u128): vector<u8>;
+    spec fun spec_scalar_from_u128_internal(num: num): vector<u8>;
 
     spec fun spec_scalar_reduced_from_32_bytes_internal(bytes: vector<u8>): vector<u8>;
 

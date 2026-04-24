@@ -159,9 +159,11 @@ spec aptos_framework::object {
     }
 
     spec create_named_object(creator: &signer, seed: vector<u8>): ConstructorRef {
+        pragma opaque;
         let creator_address = signer::address_of(creator);
         let obj_addr = spec_create_object_address(creator_address, seed);
         aborts_if exists<ObjectCore>(obj_addr);
+        modifies global<ObjectCore>(@aptos_framework);
 
         ensures exists<ObjectCore>(obj_addr);
         ensures global<ObjectCore>(obj_addr) == ObjectCore {

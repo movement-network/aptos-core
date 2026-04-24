@@ -10,18 +10,19 @@ simple lemmas proved, complex ones need more infrastructure.
 -/
 
 import MovementFormal.MoveModel.Value
+import MovementFormal.Std.ByteArrayAppend
 
 namespace MovementFormal.MoveModel
 
 /-! ## ByteArray size and length properties -/
 
 /-- ByteArray.toList preserves the size as length.
-This is the key lemma needed for address_to_bytes_length in PC20_43_message_assembly.
-
-NOTE: ByteArray.toList is defined as a loop, not data.toList, so proof
-requires induction on the loop. Deferred pending loop lemma infrastructure. -/
-axiom ByteArray.toList_length_eq_size (ba : ByteArray) :
-    ba.toList.length = ba.size
+This is the key lemma needed for address_to_bytes_length in PC20_43_message_assembly. -/
+theorem ByteArray.toList_length_eq_size (ba : ByteArray) :
+    ba.toList.length = ba.size := by
+  rw [Std.byteArray_toList_eq_data_toList]
+  rw [Array.length_toList]
+  rfl
 
 /-- Converting ByteArray to List of MoveValue.u8 preserves length. -/
 theorem ByteArray.toList_map_u8_length (ba : ByteArray) :
@@ -35,18 +36,21 @@ axiom address_bytearray_size_eq_32 (addr : ByteArray)
 
 /-! ## ByteArray concatenation properties -/
 
-/-- Appending to a ByteArray increases its size by the appended length.
+/-- Appending to a ByteArray increases its size by the appended length. -/
+theorem ByteArray.append_size (ba1 ba2 : ByteArray) :
+    (ba1.append ba2).size = ba1.size + ba2.size := by
+  -- ByteArray.append is implemented as ba2.copySlice 0 ba1 ba1.size ba2.size false
+  -- The ++ notation is HAppend.hAppend which calls ByteArray.append
+  have h : ba1 ++ ba2 = ba1.append ba2 := rfl
+  rw [← h]
+  have hdata := Std.byteArray_data_append ba1 ba2
+  change (ba1 ++ ba2).data.size = ba1.data.size + ba2.data.size
+  rw [hdata, Array.size_append]
 
-NOTE: ByteArray.append uses copySlice, not Array append. Proving size property
-requires copySlice lemmas. Deferred pending ByteArray stdlib investigation. -/
-axiom ByteArray.append_size (ba1 ba2 : ByteArray) :
-    (ba1.append ba2).size = ba1.size + ba2.size
-
-/-- Converting concatenated ByteArrays to lists commutes with append.
-
-NOTE: Depends on toList loop properties + copySlice semantics. -/
-axiom ByteArray.toList_append (ba1 ba2 : ByteArray) :
-    (ba1.append ba2).toList = ba1.toList ++ ba2.toList
+/-- Converting concatenated ByteArrays to lists commutes with append. -/
+theorem ByteArray.toList_append (ba1 ba2 : ByteArray) :
+    (ba1.append ba2).toList = ba1.toList ++ ba2.toList :=
+  Std.byteArray_toList_append ba1 ba2
 
 /-! ## ByteArray emptiness and initialization -/
 
@@ -60,12 +64,10 @@ theorem ByteArray.empty_data :
     ByteArray.empty.data = #[] := by
   rfl
 
-/-- Empty ByteArray has empty list representation.
-
-NOTE: ByteArray.empty is defined as emptyWithCapacity 0, and toList is a loop.
-Proving this requires showing the loop terminates immediately on empty data. -/
-axiom ByteArray.empty_toList :
-    ByteArray.empty.toList = []
+/-- Empty ByteArray has empty list representation. -/
+theorem ByteArray.empty_toList :
+    ByteArray.empty.toList = [] := by
+  simp [Std.byteArray_toList_eq_data_toList, ByteArray.empty_data]
 
 /-! ## ByteArray equality -/
 
@@ -78,7 +80,8 @@ theorem ByteArray.eq_of_data_eq (ba1 ba2 : ByteArray)
 
 /-- Two ByteArrays are equal if their list representations are equal.
 
-NOTE: Requires proving toList is injective, which needs loop lemmas. -/
+NOTE: Proving this requires Array extensionality from list equality, which needs
+careful handling of dependent bounds. Deferred for future work. -/
 axiom ByteArray.eq_of_toList_eq (ba1 ba2 : ByteArray)
     (h : ba1.toList = ba2.toList) :
     ba1 = ba2

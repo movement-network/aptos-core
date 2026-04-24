@@ -5,6 +5,7 @@ import MovementFormal.MoveModel.StepLemmas.Calls
 import MovementFormal.MoveModel.StepLemmas.Run
 import MovementFormal.MoveModel.ExecResultDropMs
 import MovementFormal.Experimental.ConfidentialAsset.Registration.FunctionalSim
+import MovementFormal.Experimental.ConfidentialAsset.Registration.BytecodeLemmas
 import MovementFormal.Experimental.ConfidentialAsset.Registration.PC4_20_concrete_helper
 import MovementFormal.Experimental.ConfidentialAsset.Registration.PC20_43_message_assembly
 import MovementFormal.Experimental.ConfidentialAsset.Registration.PC43_70_sigma_verification
@@ -141,9 +142,9 @@ off the stack (moveLoc only writes, doesn't consume), and produces a frame at PC
 
 /-- The first bytecode instruction is `moveLoc 5` — committed by the `verifyRegistrationProofCode`
 constant, independent of the args. -/
-axiom registrationCode_pc0 :
+theorem registrationCode_pc0 :
     verifyRegistrationProofCode[0]'(by unfold verifyRegistrationProofCode; decide) =
-      .moveLoc 5
+      .moveLoc 5 := BytecodeLemmas.instr0_eq
 
 /-! ## Locals facts at PC 0
 
@@ -4276,8 +4277,8 @@ axiom registration_run_through_pc8_from_pc3_structure
   have step3 := @StepLemmas.step_immBorrowLoc_fresh
     (registrationModuleEnv o) f3 [] [] MachineState.empty
     7 v containers_at_pc4 rid_v
-    (by show 3 < verifyRegistrationProofCode.size; unfold verifyRegistrationProofCode; decide)
-    (by show verifyRegistrationProofCode[3] = .immBorrowLoc 7; rfl)
+    BytecodeLemmas.pc3_inbounds
+    BytecodeLemmas.instr3_eq
     hf3_locals_7 hf3_locals_7_val
     rfl hf3_localRefs_7
 
@@ -4351,8 +4352,8 @@ axiom registration_run_through_pc8_from_pc3_structure
   have step6 := @StepLemmas.step_mutBorrowLoc_existing
     (registrationModuleEnv o) f6 [] [] ms4
     7 v rid_v
-    (by show 6 < verifyRegistrationProofCode.size; unfold verifyRegistrationProofCode; decide)
-    (by show verifyRegistrationProofCode[6] = .mutBorrowLoc 7; rfl)
+    BytecodeLemmas.pc6_inbounds
+    BytecodeLemmas.instr6_eq
     (by simp [f6, locals3, registrationArgs] : 7 < f6.locals.size)
     (by simp [f6, locals3] : f6.locals[7] = some v)
     (by sorry : 7 < f6.localRefs.size)  -- Would need to show localRefs was extended

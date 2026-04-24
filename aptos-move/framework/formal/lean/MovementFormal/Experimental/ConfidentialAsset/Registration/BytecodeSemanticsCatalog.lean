@@ -29,13 +29,13 @@ open MovementFormal.Experimental.ConfidentialAsset.Registration.InstructionEffec
 
 /-- Hoare triple for instruction semantics. -/
 structure InstructionSemantics where
-  instr : Instr
+  instr : MoveInstr
   precondition : Frame → List MoveValue → MachineState → Prop
   postcondition : Frame → List MoveValue → MachineState →
                   Frame → List MoveValue → MachineState → Prop
-  h_correctness : ∀ env gs frame stack ms frame' stack' ms',
+  h_correctness : ∀ env frame gs stack ms frame' stack' ms',
     precondition frame stack ms →
-    step env gs frame stack ms = .ok gs frame' stack' ms' →
+    step env frame gs stack ms = .ok frame' gs stack' ms' →
     postcondition frame stack ms frame' stack' ms'
 
 /-! ## CopyLoc Semantics -/
@@ -48,7 +48,7 @@ def copyLoc_pre (idx : Nat) (frame : Frame) (stack : List MoveValue)
   -- Stack must have room
   stack.length < 1000 ∧  -- Arbitrary large bound
   -- PC points to CopyLoc instruction
-  frame.code[frame.pc]? = some (.copyLoc idx)
+  frame.code[frame.pc]? = some (MoveInstr.copyLoc idx)
 
 /-- CopyLoc postcondition. -/
 def copyLoc_post (idx : Nat) (frame : Frame) (stack : List MoveValue)
@@ -83,7 +83,7 @@ def moveLoc_pre (idx : Nat) (frame : Frame) (stack : List MoveValue)
   -- Stack has room
   stack.length < 1000 ∧
   -- PC points to MoveLoc
-  frame.code[frame.pc]? = some (.moveLoc idx)
+  frame.code[frame.pc]? = some (MoveInstr.moveLoc idx)
 
 /-- MoveLoc postcondition. -/
 def moveLoc_post (idx : Nat) (frame : Frame) (stack : List MoveValue)
@@ -120,7 +120,7 @@ def stLoc_pre (idx : Nat) (frame : Frame) (stack : List MoveValue)
   -- Local idx exists
   idx < frame.locals.size ∧
   -- PC points to StLoc
-  frame.code[frame.pc]? = some (.stLoc idx)
+  frame.code[frame.pc]? = some (MoveInstr.stLoc idx)
 
 /-- StLoc postcondition. -/
 def stLoc_post (idx : Nat) (frame : Frame) (stack : List MoveValue)
@@ -158,14 +158,14 @@ def immBorrowLoc_pre (idx : Nat) (frame : Frame) (stack : List MoveValue)
   -- No conflicting mutable borrow exists
   (∀ refId, ¬IsMutableBorrowOf refId idx frame stack ms) ∧
   -- PC points to ImmBorrowLoc
-  frame.code[frame.pc]? = some (.immBorrowLoc idx)
+  frame.code[frame.pc]? = some (MoveInstr.immBorrowLoc idx)
 
 where
   IsMutableBorrowOf (refId idx : Nat) (frame : Frame)
                    (stack : List MoveValue) (ms : MachineState) : Prop :=
     (.mutRef refId) ∈ stack ∧
     ∃ v, frame.locals[idx]? = some (some v) ∧
-         ms.containers.read? refId = some v
+         ContainerStore.read ms.containers refId = some v
 
 /-- ImmBorrowLoc postcondition. -/
 def immBorrowLoc_post (idx : Nat) (frame : Frame) (stack : List MoveValue)
@@ -175,9 +175,9 @@ def immBorrowLoc_post (idx : Nat) (frame : Frame) (stack : List MoveValue)
     -- Local value
     frame.locals[idx]? = some (some v) ∧
     -- New reference created
-    refId = ms.containers.containers.length ∧
+    refId = ms.containers.store.size ∧
     -- Reference points to value
-    ms'.containers.read? refId = some v ∧
+    ContainerStore.read ms'.containers refId = some v ∧
     -- Reference pushed to stack
     stack' = (.immRef refId) :: stack ∧
     -- Locals unchanged
@@ -185,8 +185,8 @@ def immBorrowLoc_post (idx : Nat) (frame : Frame) (stack : List MoveValue)
     -- PC incremented
     frame'.pc = frame.pc + 1 ∧
     -- Container store grew
-    ms'.containers.containers.length =
-    ms.containers.containers.length + 1
+    ms'.containers.store.size =
+    ms.containers.store.size + 1
 
 /-- ImmBorrowLoc semantics. -/
 def immBorrowLoc_semantics (idx : Nat) : InstructionSemantics :=
@@ -207,14 +207,14 @@ def mutBorrowLoc_pre (idx : Nat) (frame : Frame) (stack : List MoveValue)
   -- No other borrows exist (exclusive access)
   (∀ refId, ¬IsAnyBorrowOf refId idx frame stack ms) ∧
   -- PC points to MutBorrowLoc
-  frame.code[frame.pc]? = some (.mutBorrowLoc idx)
+  frame.code[frame.pc]? = some (MoveInstr.mutBorrowLoc idx)
 
 where
   IsAnyBorrowOf (refId idx : Nat) (frame : Frame)
                (stack : List MoveValue) (ms : MachineState) : Prop :=
     ((.immRef refId) ∈ stack ∨ (.mutRef refId) ∈ stack) ∧
     ∃ v, frame.locals[idx]? = some (some v) ∧
-         ms.containers.read? refId = some v
+         ContainerStore.read ms.containers refId = some v
 
 /-- MutBorrowLoc postcondition. -/
 def mutBorrowLoc_post (idx : Nat) (frame : Frame) (stack : List MoveValue)
@@ -222,13 +222,13 @@ def mutBorrowLoc_post (idx : Nat) (frame : Frame) (stack : List MoveValue)
     (ms' : MachineState) : Prop :=
   ∃ v refId,
     frame.locals[idx]? = some (some v) ∧
-    refId = ms.containers.containers.length ∧
-    ms'.containers.read? refId = some v ∧
+    refId = ms.containers.store.size ∧
+    ContainerStore.read ms'.containers refId = some v ∧
     stack' = (.mutRef refId) :: stack ∧
     frame'.locals = frame.locals ∧
     frame'.pc = frame.pc + 1 ∧
-    ms'.containers.containers.length =
-    ms.containers.containers.length + 1
+    ms'.containers.store.size =
+    ms.containers.store.size + 1
 
 /-- MutBorrowLoc semantics. -/
 def mutBorrowLoc_semantics (idx : Nat) : InstructionSemantics :=
@@ -246,9 +246,9 @@ def readRef_pre (frame : Frame) (stack : List MoveValue)
   (∃ refId rest, (stack = (.immRef refId) :: rest ∨
                   stack = (.mutRef refId) :: rest) ∧
                  -- Reference valid
-                 refId < ms.containers.containers.length) ∧
+                 refId < ms.containers.store.size) ∧
   -- PC points to ReadRef
-  frame.code[frame.pc]? = some .readRef
+  frame.code[frame.pc]? = some MoveInstr.readRef
 
 /-- ReadRef postcondition. -/
 def readRef_post (frame : Frame) (stack : List MoveValue)
@@ -259,7 +259,7 @@ def readRef_post (frame : Frame) (stack : List MoveValue)
     (stack = (.immRef refId) :: rest ∨
      stack = (.mutRef refId) :: rest) ∧
     -- Value read from container
-    ms.containers.read? refId = some v ∧
+    ContainerStore.read ms.containers refId = some v ∧
     -- Value replaces reference on stack
     stack' = v :: rest ∧
     -- Locals unchanged
@@ -283,9 +283,9 @@ def writeRef_pre (frame : Frame) (stack : List MoveValue)
     (ms : MachineState) : Prop :=
   -- Stack has value and mutable reference
   (∃ v refId rest, stack = v :: (.mutRef refId) :: rest ∧
-                   refId < ms.containers.containers.length) ∧
+                   refId < ms.containers.store.size) ∧
   -- PC points to WriteRef
-  frame.code[frame.pc]? = some .writeRef
+  frame.code[frame.pc]? = some MoveInstr.writeRef
 
 /-- WriteRef postcondition. -/
 def writeRef_post (frame : Frame) (stack : List MoveValue)
@@ -297,10 +297,10 @@ def writeRef_post (frame : Frame) (stack : List MoveValue)
     -- Both popped
     stack' = rest ∧
     -- Value written to container
-    ms'.containers.read? refId = some v ∧
+    ContainerStore.read ms'.containers refId = some v ∧
     -- Other containers unchanged
     (∀ refId' ≠ refId,
-      ms'.containers.read? refId' = ms.containers.read? refId') ∧
+      ContainerStore.read ms'.containers refId' = ContainerStore.read ms.containers refId') ∧
     -- Locals unchanged
     frame'.locals = frame.locals ∧
     -- PC incremented
@@ -321,7 +321,7 @@ def call_pre (funcIdx : Nat) (num_args : Nat)
   -- Stack has enough arguments
   stack.length ≥ num_args ∧
   -- PC points to Call
-  frame.code[frame.pc]? = some (.call funcIdx) ∧
+  frame.code[frame.pc]? = some (MoveInstr.call funcIdx) ∧
   -- Oracle defined for arguments
   (∃ args : List MoveValue, args.length = num_args ∧
     stack.take num_args = args.reverse)
@@ -366,9 +366,9 @@ def brFalse_pre (target : Nat) (frame : Frame) (stack : List MoveValue)
   -- Stack has boolean
   (∃ b rest, stack = (.bool b) :: rest) ∧
   -- Target PC valid
-  target < frame.code.length ∧
+  target < frame.code.size ∧
   -- PC points to BrFalse
-  frame.code[frame.pc]? = some (.brFalse target)
+  frame.code[frame.pc]? = some (MoveInstr.brFalse target)
 
 /-- BrFalse postcondition (false case). -/
 def brFalse_post_false (target : Nat) (frame : Frame) (stack : List MoveValue)
@@ -447,7 +447,7 @@ def registrationSemanticsCatalog : List InstructionSemantics :=
 /-- Semantic catalog is complete. -/
 theorem semantics_catalog_complete :
     registrationSemanticsCatalog.length > 0 := by
-  norm_num
+  decide
 
 /-! ## Semantic Composition -/
 
@@ -465,13 +465,13 @@ def composeSemantics (s1 s2 : InstructionSemantics) : InstructionSemantics :=
 theorem sequential_composition_correct
     (s1 s2 : InstructionSemantics)
     (env : ModuleEnv)
-    (gs : GlobalState)
+    (cs : List Frame)
     (frame : Frame)
     (stack : List MoveValue)
     (ms : MachineState)
     (h_pre : s1.precondition frame stack ms) :
     ∃ frame' stack' ms',
-      step env gs frame stack ms = .ok gs frame' stack' ms' →
+      step env frame cs stack ms = .ok frame' cs stack' ms' →
       s1.postcondition frame stack ms frame' stack' ms' := by
   sorry  -- Composition preserves semantics
 

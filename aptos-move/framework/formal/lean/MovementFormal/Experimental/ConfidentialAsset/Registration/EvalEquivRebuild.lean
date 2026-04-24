@@ -7571,10 +7571,10 @@ theorem run_two_consecutive_steps
     (step1 : step env frame cs1 stack1 ms1 = .ok cs frame2 stack2 ms2)
     (step2 : step env frame cs2 stack2 ms2 = .ok cs frame3 stack3 ms3)
     (hfuel : 2 ≤ fuel) :
-    run env cs frame1 stack1 ms1 fuel =
-    run env cs frame3 stack3 ms3 (fuel - 2) := by
-  have h1 : run env cs frame1 stack1 ms1 fuel =
-            run env cs frame2 stack2 ms2 (fuel - 1) := by
+    run env frame cs1 stack1 ms1 fuel =
+    run env frame cs3 stack3 ms3 (fuel - 2) := by
+  have h1 : run env frame cs1 stack1 ms1 fuel =
+            run env frame cs2 stack2 ms2 (fuel - 1) := by
     have : fuel = (fuel - 1) + 1 := by omega
     rw [this]
     rw [StepLemmas.run_succ_ok_of_step (fuel - 1) _ _ _ _ step1]
@@ -7595,8 +7595,8 @@ theorem run_three_consecutive_steps
     (step2 : step env frame cs2 stack2 ms2 = .ok cs frame3 stack3 ms3)
     (step3 : step env frame cs3 stack3 ms3 = .ok cs frame4 stack4 ms4)
     (hfuel : 3 ≤ fuel) :
-    run env cs frame1 stack1 ms1 fuel =
-    run env cs frame4 stack4 ms4 (fuel - 3) := by
+    run env frame cs1 stack1 ms1 fuel =
+    run env frame cs4 stack4 ms4 (fuel - 3) := by
   have h12 := run_two_consecutive_steps env cs frame1 frame2 frame3 stack1 stack2 stack3 ms1 ms2 ms3 fuel step1 step2 (by omega)
   rw [h12]
   have : fuel - 2 = (fuel - 3) + 1 := by omega
@@ -7616,8 +7616,8 @@ theorem run_four_consecutive_steps
     (step3 : step env frame cs3 stack3 ms3 = .ok cs frame4 stack4 ms4)
     (step4 : step env frame cs4 stack4 ms4 = .ok cs frame5 stack5 ms5)
     (hfuel : 4 ≤ fuel) :
-    run env cs frame1 stack1 ms1 fuel =
-    run env cs frame5 stack5 ms5 (fuel - 4) := by
+    run env frame cs1 stack1 ms1 fuel =
+    run env frame cs5 stack5 ms5 (fuel - 4) := by
   have h123 := run_three_consecutive_steps env cs frame1 frame2 frame3 frame4 stack1 stack2 stack3 stack4 ms1 ms2 ms3 ms4 fuel step1 step2 step3 (by omega)
   rw [h123]
   have : fuel - 3 = (fuel - 4) + 1 := by omega
@@ -7638,8 +7638,8 @@ theorem run_five_consecutive_steps
     (step4 : step env frame cs4 stack4 ms4 = .ok cs frame5 stack5 ms5)
     (step5 : step env frame cs5 stack5 ms5 = .ok cs frame6 stack6 ms6)
     (hfuel : 5 ≤ fuel) :
-    run env cs frame1 stack1 ms1 fuel =
-    run env cs frame6 stack6 ms6 (fuel - 5) := by
+    run env frame cs1 stack1 ms1 fuel =
+    run env frame cs6 stack6 ms6 (fuel - 5) := by
   have h1234 := run_four_consecutive_steps env cs frame1 frame2 frame3 frame4 frame5 stack1 stack2 stack3 stack4 stack5 ms1 ms2 ms3 ms4 ms5 fuel step1 step2 step3 step4 (by omega)
   rw [h1234]
   have : fuel - 4 = (fuel - 5) + 1 := by omega
@@ -8105,8 +8105,8 @@ theorem run_deterministic
     (ms : MachineState)
     (fuel : Nat)
     (result1 result2 : ExecResult)
-    (h1 : run env cs frame stack ms fuel = result1)
-    (h2 : run env cs frame stack ms fuel = result2) :
+    (h1 : run env frame cs stack ms fuel = result1)
+    (h2 : run env frame cs stack ms fuel = result2) :
     result1 = result2 := by
   rw [h1] at h2
   exact h2

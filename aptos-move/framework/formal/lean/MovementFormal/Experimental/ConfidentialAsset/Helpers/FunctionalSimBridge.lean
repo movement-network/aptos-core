@@ -56,12 +56,13 @@ axiom oracle_call_with_alloc_none
 /-! ## Container store threading through alloc -/
 
 /-- Threading containers through multiple allocs is associative. -/
-axiom container_alloc_commute
+theorem container_alloc_commute
     (cs : ContainerStore)
     (field1 field2 : MoveValue) :
     let (cs1, _fid1) := cs.alloc field1
     let (cs2, _fid2) := cs1.alloc field2
-    cs2 = ((cs.alloc field1).1.alloc field2).1
+    cs2 = ((cs.alloc field1).1.alloc field2).1 := by
+  rfl
 
 /-! ## Functional simulation result equivalences -/
 

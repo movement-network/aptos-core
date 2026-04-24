@@ -1,5 +1,6 @@
 import MovementFormal.MoveModel.Step
 import MovementFormal.MoveModel.Programs.Registration
+import MovementFormal.MoveModel.ByteArrayLemmas
 import MovementFormal.Experimental.ConfidentialAsset.Registration.Formal
 
 /-!
@@ -223,13 +224,13 @@ argument that is orthogonal to the cryptographic verification.
 We axiomatize `ByteArray.toList_append` here.  It is verified concretely by
 `native_decide` for every concrete `ByteArray` pair and is a well-known property
 of `ByteArray.toList` (matching `Array.toList_append` via `ByteArray.data_append`).
-This is a **library-level obligation**, not a security assumption. -/
+This is a **library-level obligation**, not a security assumption.
 
-axiom ByteArray.toList_append (a b : ByteArray) :
-    (a ++ b).toList = a.toList ++ b.toList
+Note: ByteArray.toList_append is now provided by ByteArrayLemmas. -/
 
-axiom ByteArray.toList_mk_singleton (x : UInt8) :
-    (ByteArray.mk #[x]).toList = [x]
+theorem ByteArray.toList_mk_singleton (x : UInt8) :
+    (ByteArray.mk #[x]).toList = [x] := by
+  rw [Std.byteArray_toList_eq_data_toList]
 
 /-! ## Structural properties
 

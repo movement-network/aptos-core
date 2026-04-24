@@ -248,26 +248,34 @@ axiom registration_pc0_sides (args : List MoveValue) (hargs6 : 6 ≤ args.length
     5 < (registrationInitFrame args).locals.size ∧
     5 < (registrationInitFrame args).localRefs.size
 
-axiom registrationInitFrame_code_pc0_get? (args : List MoveValue) :
-    (registrationInitFrame args).code[0]? = some (.moveLoc 5)
+theorem registrationInitFrame_code_pc0_get? (args : List MoveValue) :
+    (registrationInitFrame args).code[0]? = some (.moveLoc 5) := by
+  simp [registrationInitFrame_code]
+  rfl
 
-axiom registrationInitFrame_code_pc1_get? (args : List MoveValue) :
-    (registrationInitFrame args).code[1]? = some (.call 0)
+theorem registrationInitFrame_code_pc1_get? (args : List MoveValue) :
+    (registrationInitFrame args).code[1]? = some (.call 0) := by
+  simp [registrationInitFrame_code]; rfl
 
-axiom registrationInitFrame_code_pc2_get? (args : List MoveValue) :
-    (registrationInitFrame args).code[2]? = some (.stLoc 7)
+theorem registrationInitFrame_code_pc2_get? (args : List MoveValue) :
+    (registrationInitFrame args).code[2]? = some (.stLoc 7) := by
+  simp [registrationInitFrame_code]; rfl
 
-axiom registrationInitFrame_code_pc3_get? (args : List MoveValue) :
-    (registrationInitFrame args).code[3]? = some (.immBorrowLoc 7)
+theorem registrationInitFrame_code_pc3_get? (args : List MoveValue) :
+    (registrationInitFrame args).code[3]? = some (.immBorrowLoc 7) := by
+  simp [registrationInitFrame_code]; rfl
 
-axiom registrationInitFrame_code_pc4_get? (args : List MoveValue) :
-    (registrationInitFrame args).code[4]? = some (.call 1)
+theorem registrationInitFrame_code_pc4_get? (args : List MoveValue) :
+    (registrationInitFrame args).code[4]? = some (.call 1) := by
+  simp [registrationInitFrame_code]; rfl
 
-axiom registrationInitFrame_code_pc5_get? (args : List MoveValue) :
-    (registrationInitFrame args).code[5]? = some (.brFalse 79)
+theorem registrationInitFrame_code_pc5_get? (args : List MoveValue) :
+    (registrationInitFrame args).code[5]? = some (.brFalse 79) := by
+  simp [registrationInitFrame_code]; rfl
 
-axiom registrationInitFrame_code_pc83_get? (args : List MoveValue) :
-    (registrationInitFrame args).code[83]? = some .abort_
+theorem registrationInitFrame_code_pc83_get? (args : List MoveValue) :
+    (registrationInitFrame args).code[83]? = some .abort_ := by
+  simp [registrationInitFrame_code]; rfl
 
 /-! ## PC 0 — the `moveLoc 5` step fully discharged for the canonical 7-args shape
 
@@ -961,93 +969,93 @@ Batched `rfl` lemmas exposing `numParams`, `numReturns`, and `body` for every fu
 bytecode dispatches to. These let per-PC proofs be shortened, and give future rebuild work a
 fixed reference point. -/
 
-axiom registrationModuleEnv_fn0_numParams (o : RegistrationNativeOracle) :
+theorem registrationModuleEnv_fn0_numParams (o : RegistrationNativeOracle) :
     ((registrationModuleEnv o).functions[0]'(by
-      rw [registrationModuleEnv_functions_size]; decide)).numParams = 1
+      rw [registrationModuleEnv_functions_size]; decide)).numParams = 1 := by rfl
 
-axiom registrationModuleEnv_fn0_numReturns (o : RegistrationNativeOracle) :
+theorem registrationModuleEnv_fn0_numReturns (o : RegistrationNativeOracle) :
     ((registrationModuleEnv o).functions[0]'(by
-      rw [registrationModuleEnv_functions_size]; decide)).numReturns = 1
+      rw [registrationModuleEnv_functions_size]; decide)).numReturns = 1 := by rfl
 
-axiom registrationModuleEnv_fn0_body (o : RegistrationNativeOracle) :
+theorem registrationModuleEnv_fn0_body (o : RegistrationNativeOracle) :
     ((registrationModuleEnv o).functions[0]'(by
       rw [registrationModuleEnv_functions_size]; decide)).body =
-      .native o.newCompressedPointFromBytes
+      .native o.newCompressedPointFromBytes := by rfl
 
-axiom registrationModuleEnv_fn1_numParams (o : RegistrationNativeOracle) :
+theorem registrationModuleEnv_fn1_numParams (o : RegistrationNativeOracle) :
     ((registrationModuleEnv o).functions[1]'(by
-      rw [registrationModuleEnv_functions_size]; decide)).numParams = 1
+      rw [registrationModuleEnv_functions_size]; decide)).numParams = 1 := by rfl
 
-axiom registrationModuleEnv_fn1_body (o : RegistrationNativeOracle) :
+theorem registrationModuleEnv_fn1_body (o : RegistrationNativeOracle) :
     ((registrationModuleEnv o).functions[1]'(by
       rw [registrationModuleEnv_functions_size]; decide)).body =
-      .nativeRef optionIsSomeRef
+      .nativeRef optionIsSomeRef := by rfl
 
-axiom registrationModuleEnv_fn16_body (o : RegistrationNativeOracle) :
+theorem registrationModuleEnv_fn16_body (o : RegistrationNativeOracle) :
     ((registrationModuleEnv o).functions[16]'(by
       rw [registrationModuleEnv_functions_size]; decide)).body =
-      .native errorInvalidArgument
+      .native errorInvalidArgument := by rfl
 
 /-! Fn2 = optionExtractRefDesc (nativeRef optionExtractRef, 1→1) -/
-axiom registrationModuleEnv_fn2_numParams (o : RegistrationNativeOracle) :
+theorem registrationModuleEnv_fn2_numParams (o : RegistrationNativeOracle) :
     ((registrationModuleEnv o).functions[2]'(by
-      rw [registrationModuleEnv_functions_size]; decide)).numParams = 1
+      rw [registrationModuleEnv_functions_size]; decide)).numParams = 1 := by rfl
 
-axiom registrationModuleEnv_fn2_numReturns (o : RegistrationNativeOracle) :
+theorem registrationModuleEnv_fn2_numReturns (o : RegistrationNativeOracle) :
     ((registrationModuleEnv o).functions[2]'(by
-      rw [registrationModuleEnv_functions_size]; decide)).numReturns = 1
+      rw [registrationModuleEnv_functions_size]; decide)).numReturns = 1 := by rfl
 
-axiom registrationModuleEnv_fn2_body (o : RegistrationNativeOracle) :
+theorem registrationModuleEnv_fn2_body (o : RegistrationNativeOracle) :
     ((registrationModuleEnv o).functions[2]'(by
       rw [registrationModuleEnv_functions_size]; decide)).body =
-      .nativeRef optionExtractRef
+      .nativeRef optionExtractRef := by rfl
 
 /-! Fn3 = newScalarFromBytes (native, 1→1) -/
-axiom registrationModuleEnv_fn3_numParams (o : RegistrationNativeOracle) :
+theorem registrationModuleEnv_fn3_numParams (o : RegistrationNativeOracle) :
     ((registrationModuleEnv o).functions[3]'(by
-      rw [registrationModuleEnv_functions_size]; decide)).numParams = 1
+      rw [registrationModuleEnv_functions_size]; decide)).numParams = 1 := by rfl
 
-axiom registrationModuleEnv_fn3_numReturns (o : RegistrationNativeOracle) :
+theorem registrationModuleEnv_fn3_numReturns (o : RegistrationNativeOracle) :
     ((registrationModuleEnv o).functions[3]'(by
-      rw [registrationModuleEnv_functions_size]; decide)).numReturns = 1
+      rw [registrationModuleEnv_functions_size]; decide)).numReturns = 1 := by rfl
 
-axiom registrationModuleEnv_fn3_body (o : RegistrationNativeOracle) :
+theorem registrationModuleEnv_fn3_body (o : RegistrationNativeOracle) :
     ((registrationModuleEnv o).functions[3]'(by
       rw [registrationModuleEnv_functions_size]; decide)).body =
-      .native o.newScalarFromBytes
+      .native o.newScalarFromBytes := by rfl
 
 /-! Fn4 = vectorPushBackU8RefDesc (nativeRef vectorPushBackU8Ref, 2→0) -/
-axiom registrationModuleEnv_fn4_numParams (o : RegistrationNativeOracle) :
+theorem registrationModuleEnv_fn4_numParams (o : RegistrationNativeOracle) :
     ((registrationModuleEnv o).functions[4]'(by
-      rw [registrationModuleEnv_functions_size]; decide)).numParams = 2
+      rw [registrationModuleEnv_functions_size]; decide)).numParams = 2 := by rfl
 
-axiom registrationModuleEnv_fn4_numReturns (o : RegistrationNativeOracle) :
+theorem registrationModuleEnv_fn4_numReturns (o : RegistrationNativeOracle) :
     ((registrationModuleEnv o).functions[4]'(by
-      rw [registrationModuleEnv_functions_size]; decide)).numReturns = 0
+      rw [registrationModuleEnv_functions_size]; decide)).numReturns = 0 := by rfl
 
-axiom registrationModuleEnv_fn4_body (o : RegistrationNativeOracle) :
+theorem registrationModuleEnv_fn4_body (o : RegistrationNativeOracle) :
     ((registrationModuleEnv o).functions[4]'(by
       rw [registrationModuleEnv_functions_size]; decide)).body =
-      .nativeRef vectorPushBackU8Ref
+      .nativeRef vectorPushBackU8Ref := by rfl
 
 /-! Fn5 = bcsToBytesAddressRefDesc (nativeRef bcsToBytesAddressRef, 1→1) -/
-axiom registrationModuleEnv_fn5_numParams (o : RegistrationNativeOracle) :
+theorem registrationModuleEnv_fn5_numParams (o : RegistrationNativeOracle) :
     ((registrationModuleEnv o).functions[5]'(by
-      rw [registrationModuleEnv_functions_size]; decide)).numParams = 1
+      rw [registrationModuleEnv_functions_size]; decide)).numParams = 1 := by rfl
 
-axiom registrationModuleEnv_fn5_numReturns (o : RegistrationNativeOracle) :
+theorem registrationModuleEnv_fn5_numReturns (o : RegistrationNativeOracle) :
     ((registrationModuleEnv o).functions[5]'(by
-      rw [registrationModuleEnv_functions_size]; decide)).numReturns = 1
+      rw [registrationModuleEnv_functions_size]; decide)).numReturns = 1 := by rfl
 
-axiom registrationModuleEnv_fn5_body (o : RegistrationNativeOracle) :
+theorem registrationModuleEnv_fn5_body (o : RegistrationNativeOracle) :
     ((registrationModuleEnv o).functions[5]'(by
       rw [registrationModuleEnv_functions_size]; decide)).body =
-      .nativeRef bcsToBytesAddressRef
+      .nativeRef bcsToBytesAddressRef := by rfl
 
 /-! Fn6 = vectorAppendU8RefDesc (nativeRef vectorAppendU8Ref, 2→0) -/
-axiom registrationModuleEnv_fn6_numParams (o : RegistrationNativeOracle) :
+theorem registrationModuleEnv_fn6_numParams (o : RegistrationNativeOracle) :
     ((registrationModuleEnv o).functions[6]'(by
-      rw [registrationModuleEnv_functions_size]; decide)).numParams = 2
+      rw [registrationModuleEnv_functions_size]; decide)).numParams = 2 := by rfl
 
 axiom registrationModuleEnv_fn6_numReturns (o : RegistrationNativeOracle) :
     ((registrationModuleEnv o).functions[6]'(by

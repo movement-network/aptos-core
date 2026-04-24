@@ -91,23 +91,27 @@ theorem frameAfterMoveLoc_locals_size (frame : Frame) (idx : Nat) (h : idx < fra
     (frameAfterMoveLoc frame idx h).locals.size = frame.locals.size := by
   simp [frameAfterMoveLoc, Array.size_set]
 
-/-- frameAfterMoveLoc sets locals[idx] to none.
-
-    This should be provable from Array.set lemmas but the required lemma
-    (Array.get_set_eq or similar) doesn't exist in the current Lean stdlib.
-    Keeping as axiom pending stdlib Array API improvements. -/
-axiom frameAfterMoveLoc_locals_at_idx
+/-- frameAfterMoveLoc sets locals[idx] to none. -/
+theorem frameAfterMoveLoc_locals_at_idx
     (frame : Frame) (idx : Nat) (h : idx < frame.locals.size)
     (h' : idx < (frameAfterMoveLoc frame idx h).locals.size) :
-    (frameAfterMoveLoc frame idx h).locals[idx]'h' = none
+    (frameAfterMoveLoc frame idx h).locals[idx]'h' = none := by
+  simp [frameAfterMoveLoc]
 
 /-- frameAfterMoveLoc preserves locals[j] for j ≠ idx. -/
-axiom frameAfterMoveLoc_locals_at_other
+theorem frameAfterMoveLoc_locals_at_other
     (frame : Frame) (idx j : Nat) (h : idx < frame.locals.size)
     (hj : j < (frameAfterMoveLoc frame idx h).locals.size)
     (hjOrig : j < frame.locals.size)
     (hne : j ≠ idx) :
-    (frameAfterMoveLoc frame idx h).locals[j]'hj = frame.locals[j]'hjOrig
+    (frameAfterMoveLoc frame idx h).locals[j]'hj = frame.locals[j]'hjOrig := by
+  simp only [frameAfterMoveLoc]
+  rw [Array.get_set]
+  split
+  · rename_i heq
+    -- idx = j contradicts hne : j ≠ idx
+    exact absurd heq.symm hne
+  · rfl
 
 /-- frameAfterCopyLoc increments PC. -/
 theorem frameAfterCopyLoc_pc (frame : Frame) (idx : Nat) :
@@ -140,18 +144,25 @@ theorem frameAfterStLoc_locals_size (frame : Frame) (idx : Nat) (v : MoveValue) 
   simp [frameAfterStLoc, Array.size_set]
 
 /-- frameAfterStLoc sets locals[idx] to some v. -/
-axiom frameAfterStLoc_locals_at_idx
+theorem frameAfterStLoc_locals_at_idx
     (frame : Frame) (idx : Nat) (v : MoveValue) (h : idx < frame.locals.size)
     (h' : idx < (frameAfterStLoc frame idx v h).locals.size) :
-    (frameAfterStLoc frame idx v h).locals[idx]'h' = some v
+    (frameAfterStLoc frame idx v h).locals[idx]'h' = some v := by
+  simp [frameAfterStLoc]
 
 /-- frameAfterStLoc preserves locals[j] for j ≠ idx. -/
-axiom frameAfterStLoc_locals_at_other
+theorem frameAfterStLoc_locals_at_other
     (frame : Frame) (idx j : Nat) (v : MoveValue) (h : idx < frame.locals.size)
     (hj : j < (frameAfterStLoc frame idx v h).locals.size)
     (hjOrig : j < frame.locals.size)
     (hne : j ≠ idx) :
-    (frameAfterStLoc frame idx v h).locals[j]'hj = frame.locals[j]'hjOrig
+    (frameAfterStLoc frame idx v h).locals[j]'hj = frame.locals[j]'hjOrig := by
+  simp only [frameAfterStLoc]
+  rw [Array.get_set]
+  split
+  · rename_i heq
+    exact absurd heq.symm hne
+  · rfl
 
 /-- frameAfterImmBorrowField increments PC. -/
 theorem frameAfterImmBorrowField_pc (frame : Frame) :

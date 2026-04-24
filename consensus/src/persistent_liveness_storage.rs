@@ -113,6 +113,19 @@ impl LedgerRecoveryData {
         //TODO(l1-migration): when blocks is empty and we have to create virtual genesis from storage to start consensus.
         // This is only required for migration when we only have a single validator network
         let blocks_empty = blocks.is_empty();
+        if ends_epoch || blocks_empty {
+            warn!(
+                ends_epoch = ends_epoch,
+                blocks_empty = blocks_empty,
+                num_blocks = blocks.len(),
+                num_quorum_certs = quorum_certs.len(),
+                ledger_epoch = self.storage_ledger.ledger_info().epoch(),
+                ledger_round = self.storage_ledger.commit_info().round(),
+                ledger_version = self.storage_ledger.ledger_info().version(),
+                consensus_block_id = ?self.storage_ledger.ledger_info().consensus_block_id(),
+                "Recovery is synthesizing a genesis block from ledger info",
+            );
+        }
         let (latest_commit_id, latest_ledger_info_sig) = if ends_epoch || blocks_empty {
             let genesis =
                 Block::make_genesis_block_from_ledger_info(self.storage_ledger.ledger_info());
@@ -215,6 +228,19 @@ impl LedgerRecoveryData {
         let ends_epoch = self.storage_ledger.ledger_info().ends_epoch();
         // TODO(l1-migration): This is for single validator network boostrap. We created virtual genesis to start the consensus
         let blocks_empty = blocks.is_empty();
+        if ends_epoch || blocks_empty {
+            warn!(
+                ends_epoch = ends_epoch,
+                blocks_empty = blocks_empty,
+                num_blocks = blocks.len(),
+                num_quorum_certs = quorum_certs.len(),
+                ledger_epoch = self.storage_ledger.ledger_info().epoch(),
+                ledger_round = self.storage_ledger.commit_info().round(),
+                ledger_version = self.storage_ledger.ledger_info().version(),
+                consensus_block_id = ?self.storage_ledger.ledger_info().consensus_block_id(),
+                "Recovery is synthesizing a root block from ledger info",
+            );
+        }
         let (root_id, latest_ledger_info_sig) = if ends_epoch || blocks_empty {
             let genesis =
                 Block::make_genesis_block_from_ledger_info(self.storage_ledger.ledger_info());
@@ -522,7 +548,7 @@ impl PersistentLivenessStorage for StorageWriteProxy {
     }
 
     fn start(&self, order_vote_enabled: bool, window_size: Option<u64>) -> LivenessStorageData {
-        info!("Start consensus recovery.");
+        warn!("Start consensus recovery.");
         let raw_data = self
             .db
             .get_data()
@@ -537,6 +563,13 @@ impl PersistentLivenessStorage for StorageWriteProxy {
         });
         let blocks = raw_data.2;
         let quorum_certs: Vec<_> = raw_data.3;
+        warn!(
+            num_blocks = blocks.len(),
+            num_quorum_certs = quorum_certs.len(),
+            has_last_vote = last_vote.is_some(),
+            has_highest_2chain_timeout_cert = highest_2chain_timeout_cert.is_some(),
+            "Recovered consensus data from ConsensusDB",
+        );
         let blocks_repr: Vec<String> = blocks.iter().map(|b| format!("\n\t{}", b)).collect();
         info!(
             "The following blocks were restored from ConsensusDB : {}",
@@ -585,7 +618,7 @@ impl PersistentLivenessStorage for StorageWriteProxy {
                         .delete_highest_2chain_timeout_certificate()
                         .expect("unable to cleanup highest 2-chain timeout cert");
                 }
-                info!(
+                warn!(
                     "Starting up the consensus state machine with recovery data - [last_vote {}], [highest timeout certificate: {}]",
                     initial_data.last_vote.as_ref().map_or_else(|| "None".to_string(), |v| v.to_string()),
                     initial_data.highest_2chain_timeout_certificate().as_ref().map_or_else(|| "None".to_string(), |v| v.to_string()),

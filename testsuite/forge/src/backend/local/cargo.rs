@@ -71,7 +71,9 @@ pub fn get_aptos_node_binary_at_revision(revision: &str) -> Result<(String, Path
     let forge_directory = metadata.target_directory.join("forge");
     let revision = git_rev_parse(&metadata, format!("{}^{{commit}}", revision))?;
     let checkout_dir = forge_directory.join(&revision);
-    let forge_target_directory = forge_directory.join("target");
+    // Keep build artifacts isolated per revision to avoid cargo reusing incompatible
+    // incremental metadata across unrelated historical checkouts.
+    let forge_target_directory = forge_directory.join(format!("target-{}", revision));
     let aptos_node_bin = forge_directory.join(format!(
         "aptos-node--{}{}",
         revision,

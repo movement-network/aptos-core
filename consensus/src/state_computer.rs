@@ -496,10 +496,15 @@ impl StateComputer for ExecutionProxy {
     ) {
         // Reset the executor with the virtual genesis block ID if provided
         if let Some(virtual_genesis_id) = virtual_genesis_block_id {
+            aptos_logger::warn!(
+                virtual_genesis_id = ?virtual_genesis_id,
+                "Resetting executor with virtual genesis"
+            );
             self.executor
                 .reset_with_virtual_genesis(Some(virtual_genesis_id))
                 .expect("Failed to reset executor with virtual genesis");
         } else {
+            aptos_logger::warn!("Resetting executor without virtual genesis");
             self.executor.reset().expect("Failed to reset executor");
         }
 

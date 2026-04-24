@@ -48,13 +48,19 @@ impl LocalVersion {
 pub struct LocalFactory {
     versions: Arc<HashMap<Version, LocalVersion>>,
     swarm_dir: Option<String>,
+    init_genesis_config: Option<InitGenesisConfigFn>,
 }
 
 impl LocalFactory {
-    pub fn new(versions: HashMap<Version, LocalVersion>, swarm_dir: Option<String>) -> Self {
+    pub fn new(
+        versions: HashMap<Version, LocalVersion>,
+        swarm_dir: Option<String>,
+        init_genesis_config: Option<InitGenesisConfigFn>,
+    ) -> Self {
         Self {
             versions: Arc::new(versions),
             swarm_dir,
+            init_genesis_config,
         }
     }
 
@@ -66,7 +72,7 @@ impl LocalFactory {
         })?;
 
         versions.insert(new_version.version.clone(), new_version);
-        Ok(Self::new(versions, swarm_dir))
+        Ok(Self::new(versions, swarm_dir, None))
     }
 
     pub fn from_revision(revision: &str) -> Result<Self> {
@@ -78,7 +84,7 @@ impl LocalFactory {
             })?;
 
         versions.insert(new_version.version.clone(), new_version);
-        Ok(Self::new(versions, None))
+        Ok(Self::new(versions, None, None))
     }
 
     pub fn with_revision_and_workspace(revision: &str) -> Result<Self> {
@@ -95,7 +101,32 @@ impl LocalFactory {
         let mut versions = HashMap::new();
         versions.insert(workspace.version(), workspace);
         versions.insert(revision.version(), revision);
-        Ok(Self::new(versions, None))
+        Ok(Self::new(versions, None, None))
+    }
+
+    pub fn with_revisions(old_revision: &str, new_revision: &str) -> Result<Self> {
+        let old_revision =
+            cargo::get_aptos_node_binary_at_revision(old_revision).map(|(revision, bin)| {
+                let version = Version::new(usize::MIN, revision);
+                LocalVersion { bin, version }
+            })?;
+        let new_revision =
+            cargo::get_aptos_node_binary_at_revision(new_revision).map(|(revision, bin)| {
+                let version = Version::new(usize::MAX, revision);
+                LocalVersion { bin, version }
+            })?;
+
+        let mut versions = HashMap::new();
+        versions.insert(old_revision.version(), old_revision);
+        versions.insert(new_revision.version(), new_revision);
+        Ok(Self::new(versions, None, None))
+    }
+
+    pub fn with_epoch_duration_secs(mut self, epoch_duration_secs: u64) -> Self {
+        self.init_genesis_config = Some(Arc::new(move |config| {
+            config.epoch_duration_secs = epoch_duration_secs;
+        }));
+        self
     }
 
     /// Create a LocalFactory with a aptos-node version built at the tip of upstream/main and the
@@ -208,7 +239,7 @@ impl Factory for LocalFactory {
                 None,
                 None,
                 None,
-                None,
+                self.init_genesis_config.clone(),
                 guard,
             )
             .await?;

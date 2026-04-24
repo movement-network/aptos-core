@@ -33,6 +33,8 @@ import MovementFormal.Experimental.ConfidentialAsset.Registration.InstructionSem
 
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration
 
+open MovementFormal.MoveModel
+
 /-! ## Small-Step Semantics -/
 
 /-- Small-step transition relation -/

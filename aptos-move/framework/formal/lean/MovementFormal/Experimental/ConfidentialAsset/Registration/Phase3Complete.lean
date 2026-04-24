@@ -129,19 +129,22 @@ theorem phase3_complete
     -- - Call: frame with pc := ... keeps same locals
     sorry  -- Needs size preservation lemma through run composition
 
-  have h_bounds_seg2 : 22 < frame₅₆.locals.size ∧ 23 < frame₅₆.locals.size := by
+  have h_bounds_seg2 : 20 < frame₅₆.locals.size ∧ 21 < frame₅₆.locals.size ∧
+                       22 < frame₅₆.locals.size ∧ 23 < frame₅₆.locals.size := by
     rw [h_size_preserved]
-    exact ⟨h_bounds.2.2.2.2.2.2.1, h_bounds.2.2.2.2.2.2.2⟩
+    exact ⟨h_bounds.2.2.2.2.2.1, ⟨h_bounds.2.2.2.2.2.2.1,
+           ⟨h_bounds.2.2.2.2.2.2.2.1, h_bounds.2.2.2.2.2.2.2.2⟩⟩⟩
 
-  have h_seg2 := pc56_to_70_success_path o frame₅₆ ms₅₆
-                   h_seg1_pc lhs_pt rhs_pt
-                   h_seg1_stack h_seg1_local22
+  -- Use extended version that tracks locals 20 and 21
+  have h_seg2 := pc56_to_70_with_preserved_locals o frame₅₆ ms₅₆
+                   h_seg1_pc lhs_pt rhs_pt challenge_sc ce_pt
+                   h_seg1_stack h_seg1_local20 h_seg1_local21 h_seg1_local22
                    h_oracle_eq
                    h_instr56 h_instr57 h_instr58 h_instr59 h_instr60 h_instr61
                    h_bounds_seg2
 
   obtain ⟨frame₆₁, stack₆₁, ms₆₁, h_seg2_run, h_seg2_pc,
-          h_seg2_local22, h_seg2_local23, h_seg2_stack⟩ := h_seg2
+          h_seg2_local20, h_seg2_local21, h_seg2_local22, h_seg2_local23, h_seg2_stack⟩ := h_seg2
 
   -- Compose both segments
   use frame₆₁, stack₆₁, ms₆₁
@@ -155,20 +158,12 @@ theorem phase3_complete
   · exact h_seg2_pc
 
   constructor
-  · -- Prove local 20 preserved through segment 2
-    -- PC56_70 operations: StLoc 23 (index 23 ≠ 20), CopyLoc, Call, BrFalse
-    -- StLoc 23 preserves local 20 via array_set_get?_other
-    -- Other operations preserve all locals
-    -- Therefore: frame₆₁.locals[20] = frame₅₆.locals[20]
-    sorry  -- Need explicit tracking through PC56_70 steps
+  · -- Local 20 preserved (from extended theorem)
+    exact h_seg2_local20
 
   constructor
-  · -- Prove local 21 preserved through segment 2
-    -- PC56_70 operations: StLoc 23 (index 23 ≠ 21), CopyLoc, Call, BrFalse
-    -- StLoc 23 preserves local 21 via array_set_get?_other
-    -- Other operations preserve all locals
-    -- Therefore: frame₆₁.locals[21] = frame₅₆.locals[21]
-    sorry  -- Need explicit tracking through PC56_70 steps
+  · -- Local 21 preserved (from extended theorem)
+    exact h_seg2_local21
 
   constructor
   · exact h_seg2_local22
@@ -181,35 +176,28 @@ theorem phase3_complete
 /-! ## Progress Metrics -/
 
 /-
-✅ STRUCTURE COMPLETE: Phase 3 composition defined.
+✅ NEARLY COMPLETE: Phase 3 composition defined and integrated.
 
 This theorem composes:
 1. **Segment 1 (PC 43→56)**: 13 steps, Schnorr computation (✅ zero sorry)
 2. **Segment 2 (PC 56→70)**: 5 steps, equality check (✅ zero sorry)
 
-Remaining work (4 sorry, ~40 lines):
+**Integration status**: Uses extended PC56_70 theorem that tracks locals 20 and 21.
+
+Remaining work (1 sorry here, 2 in PC56_70_Composition):
 1. **Array size preservation**: frame₅₆.locals.size = frame₄₃.locals.size
    - Needs lemma: run operations preserve array size
    - All segment 1 ops (CopyLoc, StLoc, Call) preserve size
+   - Provable from Array lemmas, needs ~10 line proof
 
-2. **Local 20 preservation through segment 2**: frame₆₁.locals[20] = frame₅₆.locals[20]
-   - PC56_70 operations don't modify local 20
-   - StLoc 23 preserves 20 (different index)
-   - Need to track through steps or prove general preservation lemma
+**Note**: Locals 20 and 21 preservation moved to pc56_to_70_with_preserved_locals
+which has 2 sorry for those proofs. Total sorry across Phase 3: 3 (1 here + 2 there).
 
-3. **Local 21 preservation through segment 2**: frame₆₁.locals[21] = frame₅₆.locals[21]
-   - PC56_70 operations don't modify local 21
-   - StLoc 23 preserves 21 (different index)
-   - Same as local 20 case
-
-**Approach**: Either extend PC56_70 to track locals 20/21, or prove general lemma:
-"If run modifies only specific locals, other locals are preserved"
-
-Pattern: Standard local preservation, well-understood.
+Pattern: Standard local preservation and size preservation.
 Impact: Completes Phase 3, enables full singleton branch main theorem.
 
-Current status: 4 sorry remaining (3 preservation + 1 size)
-Estimated time to completion: 40-60 minutes
+Current status: 3 sorry total (1 in this file, 2 in PC56_70_Composition)
+Estimated time to completion: 30-40 minutes
 -/
 
 end MovementFormal.Experimental.ConfidentialAsset.Registration

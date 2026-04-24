@@ -212,7 +212,9 @@ Aggressive with full automation:
 - `CONFIDENTIAL_ASSETS_UNIFIED_VERIFICATION_PLAN.md`: Phase 1 requirements
 - This file: Implementation tracking
 
-end MovementFormal.Experimental.ConfidentialAsset.Registration
+-/
+
+namespace MovementFormal.Experimental.ConfidentialAsset.Registration
 
 /-! ## Progress Metrics -/
 

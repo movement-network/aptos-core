@@ -200,7 +200,7 @@ structure NewScalarFromBytesCallPattern (o : RegistrationNativeOracle) where
   }
   horacle : o.newScalarFromBytes [respBa_val] = some [s_opt_result]
   step_result : step env frame [] (respBa_val :: rest_stack) ms =
-                .ok [] { frame with pc := frame.pc + 1 } (s_opt_result :: rest_stack) ms
+                .ok { frame with pc := frame.pc + 1 } [] (s_opt_result :: rest_stack) ms
 
 /-- optionIsSomeRef call pattern. -/
 structure OptionIsSomeRefCallPattern (o : RegistrationNativeOracle) where
@@ -222,7 +222,7 @@ structure OptionIsSomeRefCallPattern (o : RegistrationNativeOracle) where
   }
   horacle : o.optionIsSomeRef ms.containers [.immRef rid] = some ([.bool tag], containers')
   step_result : step env frame [] (.immRef rid :: rest_stack) ms =
-                .ok [] { frame with pc := frame.pc + 1 } (.bool tag :: rest_stack)
+                .ok { frame with pc := frame.pc + 1 } [] (.bool tag :: rest_stack)
                      { ms with containers := containers' }
 
 /-- optionExtractRef call pattern. -/
@@ -245,7 +245,7 @@ structure OptionExtractRefCallPattern (o : RegistrationNativeOracle) where
   }
   horacle : optionExtractRef ms.containers [.mutRef rid] = some ([extracted], containers')
   step_result : step env frame [] (.mutRef rid :: rest_stack) ms =
-                .ok [] { frame with pc := frame.pc + 1 } (extracted :: rest_stack)
+                .ok { frame with pc := frame.pc + 1 } [] (extracted :: rest_stack)
                      { ms with containers := containers' }
 
 /-- vectorPushBackU8Ref call pattern. -/
@@ -268,7 +268,7 @@ structure VectorPushBackU8RefCallPattern (o : RegistrationNativeOracle) where
   }
   horacle : vectorPushBackU8Ref ms.containers [.mutRef rid, .u8 byte] = some ([], containers')
   step_result : step env frame [] (.mutRef rid :: .u8 byte :: rest_stack) ms =
-                .ok [] { frame with pc := frame.pc + 1 } rest_stack
+                .ok { frame with pc := frame.pc + 1 } rest_stack
                      { ms with containers := containers' }
 
 /-- pointMul call pattern. -/
@@ -289,7 +289,7 @@ structure PointMulCallPattern (o : RegistrationNativeOracle) where
   }
   horacle : o.pointMul [point, scalar] = some [result]
   step_result : step env frame [] (point :: scalar :: rest_stack) ms =
-                .ok [] { frame with pc := frame.pc + 1 } (result :: rest_stack) ms
+                .ok { frame with pc := frame.pc + 1 } [] (result :: rest_stack) ms
 
 /-- pointAdd call pattern. -/
 structure PointAddCallPattern (o : RegistrationNativeOracle) where
@@ -309,7 +309,7 @@ structure PointAddCallPattern (o : RegistrationNativeOracle) where
   }
   horacle : o.pointAdd [point1, point2] = some [result]
   step_result : step env frame [] (point1 :: point2 :: rest_stack) ms =
-                .ok [] { frame with pc := frame.pc + 1 } (result :: rest_stack) ms
+                .ok { frame with pc := frame.pc + 1 } [] (result :: rest_stack) ms
 
 /-- pointEquals call pattern. -/
 structure PointEqualsCallPattern (o : RegistrationNativeOracle) where
@@ -330,7 +330,7 @@ structure PointEqualsCallPattern (o : RegistrationNativeOracle) where
   }
   horacle : o.pointEquals [point1, point2] = some [.bool equals]
   step_result : step env frame [] (point1 :: point2 :: rest_stack) ms =
-                .ok [] { frame with pc := frame.pc + 1 } (.bool equals :: rest_stack) ms
+                .ok { frame with pc := frame.pc + 1 } [] (.bool equals :: rest_stack) ms
 
 /-- newScalarFromSha2_512 call pattern. -/
 structure NewScalarFromSha2_512CallPattern where
@@ -350,7 +350,7 @@ structure NewScalarFromSha2_512CallPattern where
   }
   horacle : newScalarFromSha2_512 [message] = some [challenge]
   step_result : step env frame [] (message :: rest_stack) ms =
-                .ok [] { frame with pc := frame.pc + 1 } (challenge :: rest_stack) ms
+                .ok { frame with pc := frame.pc + 1 } [] (challenge :: rest_stack) ms
 
 /-- hashToPointBase call pattern (0 arguments). -/
 structure HashToPointBaseCallPattern (o : RegistrationNativeOracle) where
@@ -370,7 +370,7 @@ structure HashToPointBaseCallPattern (o : RegistrationNativeOracle) where
   }
   horacle : o.hashToPointBase [] = some [base]
   step_result : step env frame [] rest_stack ms =
-                .ok [] { frame with pc := frame.pc + 1 } (base :: rest_stack) ms
+                .ok { frame with pc := frame.pc + 1 } [] (base :: rest_stack) ms
 
 /-! ## Pattern Construction Lemmas
 
@@ -394,7 +394,7 @@ theorem build_newCompressedPointFromBytes_pattern
              env.functions[funcIdx].body = .native o.newCompressedPointFromBytes)
     (horacle : o.newCompressedPointFromBytes [commitBa_val] = some [v_result]) :
     step env frame [] (commitBa_val :: rest_stack) ms =
-      .ok [] { frame with pc := frame.pc + 1 } (v_result :: rest_stack) ms := by
+      .ok { frame with pc := frame.pc + 1 } [] (v_result :: rest_stack) ms := by
   sorry  -- Apply native_call_1_to_1
 
 /-- Construct pointMul pattern from oracle hypothesis. -/
@@ -414,7 +414,7 @@ theorem build_pointMul_pattern
              env.functions[funcIdx].body = .native o.pointMul)
     (horacle : o.pointMul [point, scalar] = some [result]) :
     step env frame [] (point :: scalar :: rest_stack) ms =
-      .ok [] { frame with pc := frame.pc + 1 } (result :: rest_stack) ms := by
+      .ok { frame with pc := frame.pc + 1 } [] (result :: rest_stack) ms := by
   sorry  -- Apply native_call_2_to_1
 
 /-! ## Pattern Validation

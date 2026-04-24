@@ -10,7 +10,7 @@ the per-PC step theorems (axioms only in Phase 6 composition stubs).
 
 **Verification performance** (via `audit/verify-ca.sh --stack lean`): All 5 operations complete in ~6s total (register 1s, withdraw 1s, transfer 2s, normalize 1s, rotate 1s), well within plan budget of ≤2700s full run and ≤180s per-op. See VERIFY_CA_ENHANCEMENTS_2026_04_22.md for details.
 
-**Last updated**: 2026-04-22 evening (updated performance numbers, verify-ca.sh implementation)
+**Last updated**: 2026-04-24 (added BytecodeLemmas infrastructure documentation - 303 specification lemmas)
 
 ## Coverage Summary
 
@@ -53,6 +53,55 @@ All verifier proofs follow the unified architecture from `Registration/EvalEquiv
    - Top-level `<verifier>_eval_equiv_functional_sim` connects `eval` to functional sim
    - Requires chaining all PCs through `run_succ_ok_of_step`
    - Currently axiom stubs; proofs estimated 200-450 lines per verifier
+
+## Bytecode Specification Infrastructure
+
+**NEW (2026-04-24)**: All 5 CA operations now have dedicated `BytecodeLemmas` modules providing complete,
+reusable bytecode specifications.
+
+### BytecodeLemmas Modules
+
+Each verifier has a companion `BytecodeLemmas.lean` module with:
+- **PC bound lemmas**: `pc{N}_inbounds` proving `N < verifyXProofCode.size` (provable by `decide`)
+- **Instruction lemmas**: `instr{N}_eq` stating `verifyXProofCode[N] = <instruction>` (provable by `rfl`)
+- **Function indices** (Registration only): Named constants for all 18 module functions
+
+### Coverage
+
+| Module | File | PCs | PC Bounds | Instruction Lemmas | Function Indices |
+|--------|------|-----|-----------|-------------------|------------------|
+| Registration | `Registration/BytecodeLemmas.lean` | 83 (0-82) | 83 theorems | 83 theorems | 18 definitions |
+| Rotation | `Rotation/BytecodeLemmas.lean` | 15 (0-14) | 15 theorems | 15 theorems | - |
+| Normalization | `Normalization/BytecodeLemmas.lean` | 14 (0-13) | 14 theorems | 14 theorems | + 1 size theorem |
+| Withdrawal | `Withdrawal/BytecodeLemmas.lean` | 15 (0-14) | 15 theorems | 15 theorems | - |
+| Transfer | `Transfer/BytecodeLemmas.lean` | 24 (0-23) | 24 theorems | 24 theorems | - |
+| **Total** | **5 modules** | **151 PCs** | **151 theorems** | **151 theorems** | **+ 19 utilities** |
+
+**Grand total**: **303 bytecode specification lemmas** across all modules.
+
+### Benefits
+
+1. **Single source of truth**: Bytecode specifications separated from proof logic
+2. **Maintainability**: Changes to bytecode require updates in one place only
+3. **Consistency**: Uniform naming (`pc{N}_inbounds`, `instr{N}_eq`) across all modules
+4. **Reusability**: EvalEquiv files use `abbrev` aliases for backwards compatibility
+
+### Example Usage
+
+Before (inline proof):
+```lean
+have hpc : 43 < verifyRegistrationProofCode.size := by
+  unfold verifyRegistrationProofCode; decide
+have hinstr : verifyRegistrationProofCode[43]'hpc = .moveLoc 11 := by rfl
+```
+
+After (BytecodeLemmas):
+```lean
+have hpc := BytecodeLemmas.pc43_inbounds
+have hinstr := BytecodeLemmas.instr43_eq
+```
+
+All BytecodeLemmas modules build cleanly and are integrated into the full CA Lean tree (2033 jobs).
 
 ## Detailed Coverage
 

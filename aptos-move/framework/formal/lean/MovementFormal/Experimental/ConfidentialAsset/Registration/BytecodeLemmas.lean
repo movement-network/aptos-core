@@ -44,6 +44,28 @@ These prove that specific PC values are within bounds.
 Provable by `decide` since the size is concrete.
 -/
 
+-- Early PCs (0-19): decompression + extraction
+theorem pc0_inbounds : 0 < verifyRegistrationProofCode.size := by decide
+theorem pc1_inbounds : 1 < verifyRegistrationProofCode.size := by decide
+theorem pc2_inbounds : 2 < verifyRegistrationProofCode.size := by decide
+theorem pc3_inbounds : 3 < verifyRegistrationProofCode.size := by decide
+theorem pc4_inbounds : 4 < verifyRegistrationProofCode.size := by decide
+theorem pc5_inbounds : 5 < verifyRegistrationProofCode.size := by decide
+theorem pc6_inbounds : 6 < verifyRegistrationProofCode.size := by decide
+theorem pc7_inbounds : 7 < verifyRegistrationProofCode.size := by decide
+theorem pc8_inbounds : 8 < verifyRegistrationProofCode.size := by decide
+theorem pc9_inbounds : 9 < verifyRegistrationProofCode.size := by decide
+theorem pc10_inbounds : 10 < verifyRegistrationProofCode.size := by decide
+theorem pc11_inbounds : 11 < verifyRegistrationProofCode.size := by decide
+theorem pc12_inbounds : 12 < verifyRegistrationProofCode.size := by decide
+theorem pc13_inbounds : 13 < verifyRegistrationProofCode.size := by decide
+theorem pc14_inbounds : 14 < verifyRegistrationProofCode.size := by decide
+theorem pc15_inbounds : 15 < verifyRegistrationProofCode.size := by decide
+theorem pc16_inbounds : 16 < verifyRegistrationProofCode.size := by decide
+theorem pc17_inbounds : 17 < verifyRegistrationProofCode.size := by decide
+theorem pc18_inbounds : 18 < verifyRegistrationProofCode.size := by decide
+theorem pc19_inbounds : 19 < verifyRegistrationProofCode.size := by decide
+
 -- Message assembly range (PCs 20-42)
 theorem pc20_inbounds : 20 < verifyRegistrationProofCode.size := by decide
 theorem pc21_inbounds : 21 < verifyRegistrationProofCode.size := by decide
@@ -99,11 +121,47 @@ theorem pc68_inbounds : 68 < verifyRegistrationProofCode.size := by decide
 theorem pc69_inbounds : 69 < verifyRegistrationProofCode.size := by decide
 theorem pc70_inbounds : 70 < verifyRegistrationProofCode.size := by decide
 
+-- Error paths (PCs 71-83)
+theorem pc71_inbounds : 71 < verifyRegistrationProofCode.size := by decide
+theorem pc72_inbounds : 72 < verifyRegistrationProofCode.size := by decide
+theorem pc73_inbounds : 73 < verifyRegistrationProofCode.size := by decide
+theorem pc74_inbounds : 74 < verifyRegistrationProofCode.size := by decide
+theorem pc75_inbounds : 75 < verifyRegistrationProofCode.size := by decide
+theorem pc76_inbounds : 76 < verifyRegistrationProofCode.size := by decide
+theorem pc77_inbounds : 77 < verifyRegistrationProofCode.size := by decide
+theorem pc78_inbounds : 78 < verifyRegistrationProofCode.size := by decide
+theorem pc79_inbounds : 79 < verifyRegistrationProofCode.size := by decide
+theorem pc80_inbounds : 80 < verifyRegistrationProofCode.size := by decide
+theorem pc81_inbounds : 81 < verifyRegistrationProofCode.size := by decide
+theorem pc82_inbounds : 82 < verifyRegistrationProofCode.size := by decide
+
 /-! ## Instruction Lemmas
 
 These prove that specific PCs contain specific instructions.
 Provable by `rfl` since the bytecode is concrete.
 -/
+
+-- Early instructions (PCs 0-19)
+theorem instr0_eq : verifyRegistrationProofCode[0]'pc0_inbounds = .moveLoc 5 := by rfl
+theorem instr1_eq : verifyRegistrationProofCode[1]'pc1_inbounds = .call funcIdx_newCompressedPointFromBytes := by rfl
+theorem instr2_eq : verifyRegistrationProofCode[2]'pc2_inbounds = .stLoc 7 := by rfl
+theorem instr3_eq : verifyRegistrationProofCode[3]'pc3_inbounds = .immBorrowLoc 7 := by rfl
+theorem instr4_eq : verifyRegistrationProofCode[4]'pc4_inbounds = .call funcIdx_optionIsSome := by rfl
+theorem instr5_eq : verifyRegistrationProofCode[5]'pc5_inbounds = .brFalse 79 := by rfl
+theorem instr6_eq : verifyRegistrationProofCode[6]'pc6_inbounds = .mutBorrowLoc 7 := by rfl
+theorem instr7_eq : verifyRegistrationProofCode[7]'pc7_inbounds = .call funcIdx_optionExtract := by rfl
+theorem instr8_eq : verifyRegistrationProofCode[8]'pc8_inbounds = .stLoc 8 := by rfl
+theorem instr9_eq : verifyRegistrationProofCode[9]'pc9_inbounds = .moveLoc 6 := by rfl
+theorem instr10_eq : verifyRegistrationProofCode[10]'pc10_inbounds = .call funcIdx_newScalarFromBytes := by rfl
+theorem instr11_eq : verifyRegistrationProofCode[11]'pc11_inbounds = .stLoc 9 := by rfl
+theorem instr12_eq : verifyRegistrationProofCode[12]'pc12_inbounds = .immBorrowLoc 9 := by rfl
+theorem instr13_eq : verifyRegistrationProofCode[13]'pc13_inbounds = .call funcIdx_optionIsSome := by rfl
+theorem instr14_eq : verifyRegistrationProofCode[14]'pc14_inbounds = .brFalse 74 := by rfl
+theorem instr15_eq : verifyRegistrationProofCode[15]'pc15_inbounds = .mutBorrowLoc 9 := by rfl
+theorem instr16_eq : verifyRegistrationProofCode[16]'pc16_inbounds = .call funcIdx_optionExtract := by rfl
+theorem instr17_eq : verifyRegistrationProofCode[17]'pc17_inbounds = .stLoc 10 := by rfl
+theorem instr18_eq : verifyRegistrationProofCode[18]'pc18_inbounds = .ldConst 5 := by rfl
+theorem instr19_eq : verifyRegistrationProofCode[19]'pc19_inbounds = .stLoc 11 := by rfl
 
 -- Message assembly instructions (PCs 20-42)
 theorem instr20_eq : verifyRegistrationProofCode[20]'pc20_inbounds = .mutBorrowLoc 11 := by rfl
@@ -159,5 +217,19 @@ theorem instr67_eq : verifyRegistrationProofCode[67]'pc67_inbounds = .immBorrowL
 theorem instr68_eq : verifyRegistrationProofCode[68]'pc68_inbounds = .call funcIdx_pointEquals := by rfl
 theorem instr69_eq : verifyRegistrationProofCode[69]'pc69_inbounds = .brFalse 71 := by rfl
 theorem instr70_eq : verifyRegistrationProofCode[70]'pc70_inbounds = .ret := by rfl
+
+-- Error path instructions
+theorem instr71_eq : verifyRegistrationProofCode[71]'pc71_inbounds = .ldU64 1 := by rfl
+theorem instr72_eq : verifyRegistrationProofCode[72]'pc72_inbounds = .call funcIdx_errorInvalidArgument := by rfl
+theorem instr73_eq : verifyRegistrationProofCode[73]'pc73_inbounds = .abort_ := by rfl
+theorem instr74_eq : verifyRegistrationProofCode[74]'pc74_inbounds = .moveLoc 3 := by rfl
+theorem instr75_eq : verifyRegistrationProofCode[75]'pc75_inbounds = .pop := by rfl
+theorem instr76_eq : verifyRegistrationProofCode[76]'pc76_inbounds = .ldU64 1 := by rfl
+theorem instr77_eq : verifyRegistrationProofCode[77]'pc77_inbounds = .call funcIdx_errorInvalidArgument := by rfl
+theorem instr78_eq : verifyRegistrationProofCode[78]'pc78_inbounds = .abort_ := by rfl
+theorem instr79_eq : verifyRegistrationProofCode[79]'pc79_inbounds = .moveLoc 3 := by rfl
+theorem instr80_eq : verifyRegistrationProofCode[80]'pc80_inbounds = .pop := by rfl
+theorem instr81_eq : verifyRegistrationProofCode[81]'pc81_inbounds = .ldU64 1 := by rfl
+theorem instr82_eq : verifyRegistrationProofCode[82]'pc82_inbounds = .call funcIdx_errorInvalidArgument := by rfl
 
 end MovementFormal.Experimental.ConfidentialAsset.Registration.BytecodeLemmas

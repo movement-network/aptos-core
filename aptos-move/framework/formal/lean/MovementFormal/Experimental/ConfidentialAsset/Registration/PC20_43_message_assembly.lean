@@ -5,6 +5,7 @@ import MovementFormal.MoveModel.StepLemmas.Run
 import MovementFormal.MoveModel.ExecResultDropMs
 import MovementFormal.MoveModel.Native.Registration
 import MovementFormal.MoveModel.Programs.Registration
+import MovementFormal.Experimental.ConfidentialAsset.Registration.BytecodeLemmas
 
 /-! ## Concrete Helper: PC 20 through PC 43 — Fiat-Shamir Message Assembly
 

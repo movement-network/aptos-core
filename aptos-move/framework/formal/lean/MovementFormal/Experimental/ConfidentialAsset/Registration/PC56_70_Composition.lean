@@ -287,39 +287,183 @@ theorem pc56_to_70_with_preserved_locals
       frame₆₁.locals[23]? = some (some rhs_pt) ∧
       stack₆₁ = [] := by
 
-  -- Apply the base theorem
-  have h_base := pc56_to_70_success_path o frame₅₆ ms₅₆ h_pc lhs_pt rhs_pt
-                   h_stack h_local22 h_oracle_eq
-                   h_instr56 h_instr57 h_instr58 h_instr59 h_instr60 h_instr61
-                   ⟨h_bounds.2.2.1, h_bounds.2.2.2⟩
+  -- We need to expand the steps to track locals 20 and 21
+  -- (The base theorem doesn't expose intermediate frames for these locals)
 
-  obtain ⟨frame₆₁, stack₆₁, ms₆₁, h_run, h_pc61, h_loc22, h_loc23, h_stack61⟩ := h_base
+  -- Step 1: PC 56→57 (StLoc 23: store RHS)
+  have h56_57 : ∃ frame₅₇ stack₅₇ ms₅₇,
+      step (registrationModuleEnv o) [] frame₅₆ [rhs_pt] ms₅₆ =
+      .ok [] frame₅₇ stack₅₇ ms₅₇ ∧
+      frame₅₇.pc = 57 ∧
+      stack₅₇ = [] ∧
+      frame₅₇.locals[20]? = some (some challenge_sc) ∧
+      frame₅₇.locals[21]? = some (some ce_pt) ∧
+      frame₅₇.locals[22]? = some (some lhs_pt) ∧
+      frame₅₇.locals[23]? = some (some rhs_pt) := by
+    simp [step, h_pc]
+    rw [h_instr56]
+    simp
+    let locals' := frame₅₆.locals.set! 23 (some rhs_pt)
+    use { frame₅₆ with pc := 57, locals := locals' }
+    use []
+    use ms₅₆
+    constructor; rfl
+    constructor; rfl
+    constructor; rfl
+    constructor
+    · -- Local 20 preserved (20 ≠ 23)
+      have : ({ frame₅₆ with pc := 57, locals := locals' } : Frame).locals = locals' := by rfl
+      rw [this, ←h_local20]
+      exact array_set_get?_other frame₅₆.locals 23 20 (some rhs_pt) (by omega)
+    constructor
+    · -- Local 21 preserved (21 ≠ 23)
+      have : ({ frame₅₆ with pc := 57, locals := locals' } : Frame).locals = locals' := by rfl
+      rw [this, ←h_local21]
+      exact array_set_get?_other frame₅₆.locals 23 21 (some rhs_pt) (by omega)
+    constructor
+    · -- Local 22 preserved (22 ≠ 23)
+      have : ({ frame₅₆ with pc := 57, locals := locals' } : Frame).locals = locals' := by rfl
+      rw [this, ←h_local22]
+      exact array_set_get?_other frame₅₆.locals 23 22 (some rhs_pt) (by omega)
+    · -- Local 23 set
+      have : ({ frame₅₆ with pc := 57, locals := locals' } : Frame).locals = locals' := by rfl
+      rw [this]
+      simp [locals', Array.get?]
+      have h_size := array_set_size_preserved frame₅₆.locals 23 (some rhs_pt)
+      rw [h_size]
+      simp [h_bounds]
+      rfl
 
+  obtain ⟨frame₅₇, stack₅₇, ms₅₇, h56_57_step, h56_57_pc, h56_57_stack,
+          h56_57_local20, h56_57_local21, h56_57_local22, h56_57_local23⟩ := h56_57
+
+  -- Steps 2-5: Frame updates only, all locals preserved
+  have h57_to_61 : ∃ frame₆₁ stack₆₁ ms₆₁,
+      run (registrationModuleEnv o) 4 [] frame₅₇ stack₅₇ ms₅₇ =
+      .ok [] frame₆₁ stack₆₁ ms₆₁ ∧
+      frame₆₁.pc = 61 ∧
+      frame₆₁.locals = frame₅₇.locals ∧
+      stack₆₁ = [] := by
+    -- Steps 2-5 are CopyLoc, CopyLoc, Call, BrFalse
+    -- All preserve locals (only update pc and stack)
+
+    -- Step 2: PC 57→58 (CopyLoc 22)
+    have h57_58 : ∃ frame₅₈ stack₅₈ ms₅₈,
+        step (registrationModuleEnv o) [] frame₅₇ stack₅₇ ms₅₇ =
+        .ok [] frame₅₈ stack₅₈ ms₅₈ ∧
+        frame₅₈.pc = 58 ∧
+        stack₅₈ = [lhs_pt] ∧
+        frame₅₈.locals = frame₅₇.locals := by
+      simp [step, h56_57_pc]
+      rw [h_instr57]
+      simp [h56_57_stack, h56_57_local22]
+      use { frame₅₇ with pc := 58 }
+      use [lhs_pt]
+      use ms₅₇
+      simp
+
+    obtain ⟨frame₅₈, stack₅₈, ms₅₈, h57_58_step, h57_58_pc, h57_58_stack, h57_58_locals⟩ := h57_58
+
+    -- Step 3: PC 58→59 (CopyLoc 23)
+    have h58_59 : ∃ frame₅₉ stack₅₉ ms₅₉,
+        step (registrationModuleEnv o) [] frame₅₈ stack₅₈ ms₅₈ =
+        .ok [] frame₅₉ stack₅₉ ms₅₉ ∧
+        frame₅₉.pc = 59 ∧
+        stack₅₉ = [rhs_pt, lhs_pt] ∧
+        frame₅₉.locals = frame₅₈.locals := by
+      simp [step, h57_58_pc]
+      rw [h_instr58]
+      have : frame₅₈.locals[23]? = some (some rhs_pt) := by
+        rw [h57_58_locals]; exact h56_57_local23
+      simp [h57_58_stack, this]
+      use { frame₅₈ with pc := 59 }
+      use [rhs_pt, lhs_pt]
+      use ms₅₈
+      simp
+
+    obtain ⟨frame₅₉, stack₅₉, ms₅₉, h58_59_step, h58_59_pc, h58_59_stack, h58_59_locals⟩ := h58_59
+
+    -- Step 4: PC 59→60 (Call pointEquals)
+    have h59_60 : ∃ frame₆₀ stack₆₀ ms₆₀,
+        step (registrationModuleEnv o) [] frame₅₉ stack₅₉ ms₅₉ =
+        .ok [] frame₆₀ stack₆₀ ms₆₀ ∧
+        frame₆₀.pc = 60 ∧
+        stack₆₀ = [.bool true] ∧
+        frame₆₀.locals = frame₅₉.locals := by
+      simp [step, h58_59_pc]
+      rw [h_instr59]
+      rw [h_oracle_eq]
+      simp [h58_59_stack]
+      use { frame₅₉ with pc := 60 }
+      use [.bool true]
+      use ms₅₉
+      simp
+
+    obtain ⟨frame₆₀, stack₆₀, ms₆₀, h59_60_step, h59_60_pc, h59_60_stack, h59_60_locals⟩ := h59_60
+
+    -- Step 5: PC 60→61 (BrFalse)
+    have h60_61 : ∃ frame₆₁ stack₆₁ ms₆₁,
+        step (registrationModuleEnv o) [] frame₆₀ stack₆₀ ms₆₀ =
+        .ok [] frame₆₁ stack₆₁ ms₆₁ ∧
+        frame₆₁.pc = 61 ∧
+        stack₆₁ = [] ∧
+        frame₆₁.locals = frame₆₀.locals := by
+      simp [step, h59_60_pc]
+      rw [h_instr60]
+      simp [h59_60_stack]
+      use { frame₆₀ with pc := 61 }
+      use []
+      use ms₆₀
+      simp
+
+    obtain ⟨frame₆₁, stack₆₁, ms₆₁, h60_61_step, h60_61_pc, h60_61_stack, h60_61_locals⟩ := h60_61
+
+    -- Compose steps 2-5 into run 4
+    use frame₆₁, stack₆₁, ms₆₁
+    constructor
+    · have h_run1 := (by simp [run]; exact h57_58_step : run (registrationModuleEnv o) 1 [] frame₅₇ stack₅₇ ms₅₇ = .ok [] frame₅₈ stack₅₈ ms₅₈)
+      have h_run2 := chain_n_plus_m_steps h_run1 (by simp [run]; exact h58_59_step)
+      have h_run3 := chain_n_plus_m_steps h_run2 (by simp [run]; exact h59_60_step)
+      have h_run4 := chain_n_plus_m_steps h_run3 (by simp [run]; exact h60_61_step)
+      have : 1 + 1 + 1 + 1 = 4 := by decide
+      convert h_run4 using 2; omega
+    constructor; exact h60_61_pc
+    constructor
+    · -- Chain locals equalities
+      rw [h60_61_locals, h59_60_locals, h58_59_locals, h57_58_locals]
+    · exact h60_61_stack
+
+  obtain ⟨frame₆₁, stack₆₁, ms₆₁, h57_to_61_run, h57_to_61_pc, h57_to_61_locals, h57_to_61_stack⟩ := h57_to_61
+
+  -- Compose all 5 steps: run 1 + run 4 = run 5
   use frame₆₁, stack₆₁, ms₆₁
-  constructor; exact h_run
-  constructor; exact h_pc61
   constructor
-  · -- Prove local 20 preserved
-    -- The run in h_base corresponds to these operations:
-    -- 1. StLoc 23 (preserves index 20 via array_set_get?_other)
-    -- 2-5. CopyLoc, Call, BrFalse (all preserve locals)
-    --
-    -- Since the base theorem proved this run succeeds, and we know:
-    -- - Step 1 uses array.set! 23 which preserves index 20 (20 ≠ 23)
-    -- - Steps 2-5 use { frame with pc := ... } which preserves locals
-    -- - Therefore frame₆₁.locals[20] = frame₅₆.locals[20]
-    --
-    -- This is provable by expanding the run and applying array_set_get?_other
-    -- at step 1, then frame equality for steps 2-5. For now, we leave as sorry
-    -- with the understanding that it's mechanically provable from the structure.
-    sorry  -- Provable: ~20 lines expanding run structure
+  · have h_run1 := (by simp [run]; exact h56_57_step : run (registrationModuleEnv o) 1 [] frame₅₆ [rhs_pt] ms₅₆ = .ok [] frame₅₇ stack₅₇ ms₅₇)
+    have h_run5 := chain_n_plus_m_steps h_run1 h57_to_61_run
+    have : 1 + 4 = 5 := by decide
+    convert h_run5 using 2; omega
+  constructor; exact h57_to_61_pc
   constructor
-  · -- Prove local 21 preserved
-    -- Same reasoning as local 20: StLoc 23 preserves index 21 (21 ≠ 23)
-    sorry  -- Provable: ~20 lines, same pattern as local 20
-  constructor; exact h_loc22
-  constructor; exact h_loc23
-  exact h_stack61
+  · -- Local 20 preserved through all steps
+    have : frame₆₁.locals[20]? = frame₅₇.locals[20]? := by
+      rw [←h57_to_61_locals]
+    rw [this]; exact h56_57_local20
+  constructor
+  · -- Local 21 preserved through all steps
+    have : frame₆₁.locals[21]? = frame₅₇.locals[21]? := by
+      rw [←h57_to_61_locals]
+    rw [this]; exact h56_57_local21
+  constructor
+  · -- Local 22 preserved through all steps
+    have : frame₆₁.locals[22]? = frame₅₇.locals[22]? := by
+      rw [←h57_to_61_locals]
+    rw [this]; exact h56_57_local22
+  constructor
+  · -- Local 23 preserved through all steps
+    have : frame₆₁.locals[23]? = frame₅₇.locals[23]? := by
+      rw [←h57_to_61_locals]
+    rw [this]; exact h56_57_local23
+  · exact h57_to_61_stack
 
 /-! ## Progress Note -/
 

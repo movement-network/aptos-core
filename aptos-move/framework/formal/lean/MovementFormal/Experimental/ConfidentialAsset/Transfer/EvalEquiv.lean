@@ -8,6 +8,7 @@ import MovementFormal.MoveModel.ExecResultDropMs
 import MovementFormal.Experimental.ConfidentialAsset.Helpers.ArgumentMarshaling
 import MovementFormal.Experimental.ConfidentialAsset.Helpers.OracleComposition
 import MovementFormal.Experimental.ConfidentialAsset.Transfer.ConcreteHelpers
+import MovementFormal.Experimental.ConfidentialAsset.Transfer.BytecodeLemmas
 
 /-!
 # Bytecode eval ≡ functional simulation for `verify_transfer_proof` — Phase 4
@@ -86,32 +87,32 @@ def transferArgs (chainId : UInt8) (sender contract : ByteArray)
     (transferModuleEnv o).functions[3].body = .bytecode verifyTransferProofCode 13 := by
   unfold transferModuleEnv verifyTransferProofDesc; rfl
 
-/-! ## Bytecode access lemmas -/
+/-! ## Bytecode access lemmas (extracted to BytecodeLemmas.lean) -/
 
-private theorem tr_code_pc0  : verifyTransferProofCode[0]'(by decide)  = .moveLoc 0  := by unfold verifyTransferProofCode; rfl
-private theorem tr_code_pc1  : verifyTransferProofCode[1]'(by decide)  = .moveLoc 1  := by unfold verifyTransferProofCode; rfl
-private theorem tr_code_pc2  : verifyTransferProofCode[2]'(by decide)  = .moveLoc 2  := by unfold verifyTransferProofCode; rfl
-private theorem tr_code_pc3  : verifyTransferProofCode[3]'(by decide)  = .moveLoc 3  := by unfold verifyTransferProofCode; rfl
-private theorem tr_code_pc4  : verifyTransferProofCode[4]'(by decide)  = .moveLoc 4  := by unfold verifyTransferProofCode; rfl
-private theorem tr_code_pc5  : verifyTransferProofCode[5]'(by decide)  = .moveLoc 5  := by unfold verifyTransferProofCode; rfl
-private theorem tr_code_pc6  : verifyTransferProofCode[6]'(by decide)  = .copyLoc 6  := by unfold verifyTransferProofCode; rfl
-private theorem tr_code_pc7  : verifyTransferProofCode[7]'(by decide)  = .moveLoc 7  := by unfold verifyTransferProofCode; rfl
-private theorem tr_code_pc8  : verifyTransferProofCode[8]'(by decide)  = .copyLoc 8  := by unfold verifyTransferProofCode; rfl
-private theorem tr_code_pc9  : verifyTransferProofCode[9]'(by decide)  = .moveLoc 9  := by unfold verifyTransferProofCode; rfl
-private theorem tr_code_pc10 : verifyTransferProofCode[10]'(by decide) = .moveLoc 10 := by unfold verifyTransferProofCode; rfl
-private theorem tr_code_pc11 : verifyTransferProofCode[11]'(by decide) = .moveLoc 11 := by unfold verifyTransferProofCode; rfl
-private theorem tr_code_pc12 : verifyTransferProofCode[12]'(by decide) = .copyLoc 12 := by unfold verifyTransferProofCode; rfl
-private theorem tr_code_pc13 : verifyTransferProofCode[13]'(by decide) = .immBorrowField 0 := by unfold verifyTransferProofCode; rfl
-private theorem tr_code_pc14 : verifyTransferProofCode[14]'(by decide) = .call 0     := by unfold verifyTransferProofCode; rfl
-private theorem tr_code_pc15 : verifyTransferProofCode[15]'(by decide) = .moveLoc 6  := by unfold verifyTransferProofCode; rfl
-private theorem tr_code_pc16 : verifyTransferProofCode[16]'(by decide) = .copyLoc 12 := by unfold verifyTransferProofCode; rfl
-private theorem tr_code_pc17 : verifyTransferProofCode[17]'(by decide) = .immBorrowField 1 := by unfold verifyTransferProofCode; rfl
-private theorem tr_code_pc18 : verifyTransferProofCode[18]'(by decide) = .call 1     := by unfold verifyTransferProofCode; rfl
-private theorem tr_code_pc19 : verifyTransferProofCode[19]'(by decide) = .moveLoc 8  := by unfold verifyTransferProofCode; rfl
-private theorem tr_code_pc20 : verifyTransferProofCode[20]'(by decide) = .moveLoc 12 := by unfold verifyTransferProofCode; rfl
-private theorem tr_code_pc21 : verifyTransferProofCode[21]'(by decide) = .immBorrowField 2 := by unfold verifyTransferProofCode; rfl
-private theorem tr_code_pc22 : verifyTransferProofCode[22]'(by decide) = .call 2     := by unfold verifyTransferProofCode; rfl
-private theorem tr_code_pc23 : verifyTransferProofCode[23]'(by decide) = .ret        := by unfold verifyTransferProofCode; rfl
+private abbrev tr_code_pc0  := BytecodeLemmas.instr0_eq
+private abbrev tr_code_pc1  := BytecodeLemmas.instr1_eq
+private abbrev tr_code_pc2  := BytecodeLemmas.instr2_eq
+private abbrev tr_code_pc3  := BytecodeLemmas.instr3_eq
+private abbrev tr_code_pc4  := BytecodeLemmas.instr4_eq
+private abbrev tr_code_pc5  := BytecodeLemmas.instr5_eq
+private abbrev tr_code_pc6  := BytecodeLemmas.instr6_eq
+private abbrev tr_code_pc7  := BytecodeLemmas.instr7_eq
+private abbrev tr_code_pc8  := BytecodeLemmas.instr8_eq
+private abbrev tr_code_pc9  := BytecodeLemmas.instr9_eq
+private abbrev tr_code_pc10 := BytecodeLemmas.instr10_eq
+private abbrev tr_code_pc11 := BytecodeLemmas.instr11_eq
+private abbrev tr_code_pc12 := BytecodeLemmas.instr12_eq
+private abbrev tr_code_pc13 := BytecodeLemmas.instr13_eq
+private abbrev tr_code_pc14 := BytecodeLemmas.instr14_eq
+private abbrev tr_code_pc15 := BytecodeLemmas.instr15_eq
+private abbrev tr_code_pc16 := BytecodeLemmas.instr16_eq
+private abbrev tr_code_pc17 := BytecodeLemmas.instr17_eq
+private abbrev tr_code_pc18 := BytecodeLemmas.instr18_eq
+private abbrev tr_code_pc19 := BytecodeLemmas.instr19_eq
+private abbrev tr_code_pc20 := BytecodeLemmas.instr20_eq
+private abbrev tr_code_pc21 := BytecodeLemmas.instr21_eq
+private abbrev tr_code_pc22 := BytecodeLemmas.instr22_eq
+private abbrev tr_code_pc23 := BytecodeLemmas.instr23_eq
 
 /-! ## `eval` → `run` entry-point unfolding -/
 

@@ -3,6 +3,7 @@ import MovementFormal.MoveModel.State
 import MovementFormal.MoveModel.Step
 import MovementFormal.MoveModel.Native.Registration
 import MovementFormal.Std.Error
+import MovementFormal.Experimental.ConfidentialAsset.Registration.ValidationLemmas
 
 /-! # Error Path Handling for Registration Proof
 
@@ -48,6 +49,7 @@ namespace MovementFormal.Experimental.ConfidentialAsset.Registration.ErrorPathHa
 
 open MovementFormal.MoveModel
 open MovementFormal.MoveModel.Native.Registration
+open MovementFormal.Experimental.ConfidentialAsset.Registration.Validation
 
 /-! ## Error Code Constants
 
@@ -404,11 +406,11 @@ Helper lemmas for error path reasoning.
 
 /-- Option false structure. -/
 def IsOptionFalse (v : MoveValue) : Prop :=
-  ∃ rest, v = .struct_ [MoveValue.bool false]
+  ∃ (rest : List MoveValue), v = .struct_ [MoveValue.bool false]
 
 /-- Option true structure with inner value. -/
 def IsOptionTrue (v : MoveValue) : Prop :=
-  ∃ inner rest, v = .struct_ (.bool true :: inner :: rest)
+  ∃ (inner : MoveValue) (rest : List MoveValue), v = .struct_ (.bool true :: inner :: rest)
 
 /-- Option false leads to error path. -/
 theorem option_false_leads_to_error

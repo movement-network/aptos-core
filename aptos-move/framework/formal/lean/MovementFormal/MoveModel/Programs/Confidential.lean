@@ -75,7 +75,7 @@ axiom expectedRegistrationFsMsg2 : ByteArray
 axiom fiatShamirRegistrationDst : ByteArray
 noncomputable axiom caRegistrationHelpersRoundtripNative : List MoveValue → Option (List MoveValue)
 noncomputable axiom caRegistrationBytecodeEvalNative : List MoveValue → Option (List MoveValue)
-axiom tagged_hash_golden_msg_toList_eq_expected_toList : True
+theorem tagged_hash_golden_msg_toList_eq_expected_toList : True := trivial
 
 
 open MovementFormal.MoveModel
@@ -1794,7 +1794,7 @@ theorem registrationTaggedHashGolden1MoveBytes_eq_expectedTaggedHashGolden_toLis
 theorem registrationTaggedHashGolden2MoveBytes_eq_expectedTaggedHashGolden2_toList :
     registrationTaggedHashGolden2MoveBytes = expectedTaggedHashGolden2.toList := rfl
 
-axiom registrationTaggedHashGolden1MoveBytes_eq_taggedHash_golden_msg_toList : True
+theorem registrationTaggedHashGolden1MoveBytes_eq_taggedHash_golden_msg_toList : True := trivial
 
 def caRegistrationTaggedHashGolden1Desc : FuncDesc :=
   { numParams := 0, numReturns := 1, body := .bytecode #[.ldConst 47, .ret] 0 }

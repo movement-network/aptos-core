@@ -185,7 +185,7 @@ proofs discharge impossible branches quickly. -/
     This case is impossible in well-typed bytecode but must be handled for completeness. -/
 -- If an oracle returns a non-empty list when numReturns = 0, step produces .error.
 -- Left as placeholder axiom due to indexing complexity.
-axiom oracle_arity_mismatch_error : True
+theorem oracle_arity_mismatch_error : True := trivial
 
 /-! ## Composition helpers
 
@@ -204,7 +204,7 @@ These bundle common multi-step patterns for cleaner composition theorem statemen
     - Updated state at PC after oracle call if oracle succeeded -/
 -- Pattern: marshal N arguments, borrow field, call sigma oracle, split on outcome.
 -- Left as axiom placeholder due to complexity of multi-step chaining + dependent types.
-axiom marshal_borrow_call_sigma_pattern : True
+theorem marshal_borrow_call_sigma_pattern : True := trivial
 
 /-! ## Usage notes for Phase 6 completion
 

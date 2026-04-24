@@ -125,7 +125,6 @@ theorem phase1_pc9_to_pc17_extract_scalar
   -- PC 9-11: scalarFromBytes call
   have h_scalar_struct : IsValidScalarResult scalar_opt := by
     use true, scalar, rest_scalar
-    exact hscalar_opt
 
   -- PC 12-17: Extract scalar from option (similar to PC 4-8)
   have h_isSome : optionIsSomeRef containers_start [MoveValue.immRef rid_scalar] =
@@ -429,14 +428,14 @@ theorem singleton_branch_complete_integration
       containers_start hv hread_v horacle_scalar hscalar_opt hread_scalar fuel hfuel
 
   -- Phase 2 (PC 20-43): Assemble Fiat-Shamir message
-  obtain ⟨msgBuf_comp, containers43, fuel43, hmsg_complete, hc43, hf43, hfuel43⟩ :=
+  obtain ⟨msgBuf_complete, containers43, fuel43, hmsg_complete, hc43, hf43, hfuel43⟩ :=
     phase2_complete_pc20_to_pc43_assemble o chainId sender contract token
       rCompressed ekPoint msgBuf rid_msg containers20 dst ek_bytes
       hmsg_init fuel20 hfuel20
 
   -- Phase 3 (PC 43-70): Sigma protocol verification
   obtain ⟨result, hresult⟩ :=
-    phase3_complete_pc43_to_pc70_sigma_success o msgBuf_comp ekPoint rCompressed scalar
+    phase3_complete_pc43_to_pc70_sigma_success o msgBuf_complete ekPoint rCompressed scalar
       challenge_e base_point_h ek_as_point h_times_s ek_times_e lhs rhs
       containers43 horacle_challenge horacle_base horacle_ek
       horacle_h_mul_s horacle_ek_mul_e horacle_add horacle_decompress horacle_equals

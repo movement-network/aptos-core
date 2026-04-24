@@ -2,6 +2,7 @@ import MovementFormal.MoveModel.Value
 import MovementFormal.MoveModel.State
 import MovementFormal.Experimental.ConfidentialAsset.Registration.FrameConstructionHelpers
 import MovementFormal.Experimental.ConfidentialAsset.Registration.ValidationLemmas
+import MovementFormal.Experimental.ConfidentialAsset.Registration.ErrorPathHandling
 
 /-! # PC Boundary Conditions
 
@@ -30,6 +31,7 @@ namespace MovementFormal.Experimental.ConfidentialAsset.Registration.PCBoundaryC
 open MovementFormal.MoveModel
 open MovementFormal.Experimental.ConfidentialAsset.Registration.FrameConstructionHelpers
 open MovementFormal.Experimental.ConfidentialAsset.Registration.Validation
+open MovementFormal.Experimental.ConfidentialAsset.Registration.ErrorPathHandling
 
 /-! ## PC 0 Boundary (Entry Point)
 
@@ -43,8 +45,12 @@ structure StateAtPC0 (o : RegistrationNativeOracle) where
   ms : MachineState
   -- Input parameters
   chainId : UInt8
-  sender contract token : ByteArray
-  ekBa commitBa respBa : ByteArray
+  sender : ByteArray
+  contract : ByteArray
+  token : ByteArray
+  ekBa : ByteArray
+  commitBa : ByteArray
+  respBa : ByteArray
   -- Frame properties
   h_pc : frame.pc = 0
   h_code : frame.code = verifyRegistrationProofCode
@@ -91,8 +97,12 @@ structure StateAtPC4 (o : RegistrationNativeOracle) where
   ms : MachineState
   -- Original inputs (preserved in locals 0-6)
   chainId : UInt8
-  sender contract token : ByteArray
-  ekBa commitBa respBa : ByteArray
+  sender : ByteArray
+  contract : ByteArray
+  token : ByteArray
+  ekBa : ByteArray
+  commitBa : ByteArray
+  respBa : ByteArray
   -- Frame properties
   h_pc : frame.pc = 4
   h_code : frame.code = verifyRegistrationProofCode
@@ -132,7 +142,9 @@ structure StateAtPC20 (o : RegistrationNativeOracle) where
   responseScalar : MoveValue
   -- Original parameters (still in locals 0-6)
   chainId : UInt8
-  sender contract token : ByteArray
+  sender : ByteArray
+  contract : ByteArray
+  token : ByteArray
   ekBa : ByteArray
   -- Frame properties
   h_pc : frame.pc = 20
@@ -176,13 +188,17 @@ structure StateAtPC43 (o : RegistrationNativeOracle) where
   stack : List MoveValue
   ms : MachineState
   -- Phase 1 results (still in locals)
-  rCompressed responseScalar : MoveValue
+  rCompressed : MoveValue
+  responseScalar : MoveValue
   -- Message buffer
   rid_msg : RefId
   assembled_bytes : List MoveValue
   -- Original parameters
   chainId : UInt8
-  sender contract token ekBa : ByteArray
+  sender : ByteArray
+  contract : ByteArray
+  token : ByteArray
+  ekBa : ByteArray
   -- Frame properties
   h_pc : frame.pc = 43
   h_code : frame.code = verifyRegistrationProofCode
@@ -436,7 +452,8 @@ axiom transition_pc0_to_pc4
 axiom transition_pc4_to_pc20
     (o : RegistrationNativeOracle)
     (s4 : StateAtPC4 o)
-    (h_valid_inputs : ValidRegistrationInputs s4.commitBa s4.respBa) :
+    (h_valid_inputs : IsValidCompressedPointBytes (.vector .u8 (s4.commitBa.toList.map .u8)) ∧
+                      IsReducedScalar (.vector .u8 (s4.respBa.toList.map .u8))) :
     ∃ (s20 : StateAtPC20 o),
       -- Parameters preserved
       s20.chainId = s4.chainId ∧

@@ -1,6 +1,7 @@
 import MovementFormal.MoveModel.Value
 import MovementFormal.MoveModel.State
 import MovementFormal.MoveModel.Step
+import MovementFormal.MoveModel.Native.Registration
 import MovementFormal.Std.Error
 
 /-! # Error Path Handling for Registration Proof
@@ -46,6 +47,7 @@ to immediate abort, not functional simulation equivalence.
 namespace MovementFormal.Experimental.ConfidentialAsset.Registration.ErrorPathHandling
 
 open MovementFormal.MoveModel
+open MovementFormal.MoveModel.Native.Registration
 
 /-! ## Error Code Constants
 

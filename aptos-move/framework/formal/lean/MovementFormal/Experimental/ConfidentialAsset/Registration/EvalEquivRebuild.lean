@@ -3365,12 +3365,13 @@ axiom containers_unchanged_through_oracle_call
     (hcontainers : containers_after = containers_before) :
     containers_after = containers_before
 
-axiom read_preserves_containers
+theorem read_preserves_containers
     (containers : ContainerStore)
     (rid : RefId)
     (v : MoveValue)
     (hread : containers.read rid = some v) :
-    containers = containers
+    containers = containers := by
+  rfl
 
 /-! ## Stack and Locals Management
 
@@ -3673,31 +3674,34 @@ Helper lemmas for reasoning about frame state updates during execution.
     simp [Array.getElem?_neg h] at hget
   simp [Array.getElem?_set!, hbound]
 
-axiom stLoc_sets_local
+theorem stLoc_sets_local
     (locals : Array (Option MoveValue))
     (idx : Nat)
     (v : MoveValue)
     (hbounds : idx < locals.size) :
-    (locals.set! idx (some v))[idx]? = some (some v)
+    (locals.set! idx (some v))[idx]? = some (some v) := by
+  simp [Array.getElem?_set!, hbounds]
 
 /-! ## LocalRefs Management -/
 
 /-- Setting localRef preserves other refs. -/
-axiom localRefs_set_preserves_others
+theorem localRefs_set_preserves_others
     (localRefs : Array (Option RefId))
     (idx idx' : Nat)
     (rid : RefId)
     (hne : idx ≠ idx')
     (hbounds : idx < localRefs.size)
     (hbounds' : idx' < localRefs.size) :
-    (localRefs.set! idx (some rid))[idx']? = localRefs[idx']?
+    (localRefs.set! idx (some rid))[idx']? = localRefs[idx']? := by
+  simp [Array.getElem?_set!, hne]
 
-axiom localRefs_get_after_set_same
+theorem localRefs_get_after_set_same
     (localRefs : Array (Option RefId))
     (idx : Nat)
     (rid : RefId)
     (hbounds : idx < localRefs.size) :
-    (localRefs.set! idx (some rid))[idx]? = some (some rid)
+    (localRefs.set! idx (some rid))[idx]? = some (some rid) := by
+  simp [Array.getElem?_set!, hbounds]
 
 /-! ## Fuel Management Lemmas -/
 
@@ -4024,11 +4028,14 @@ Theorems for container store operations with invalid references.
 -/
 
 /-- Reading from non-existent ref returns none. -/
-axiom containers_read_nonexistent_returns_none
+theorem containers_read_nonexistent_returns_none
     (containers : ContainerStore)
     (rid : RefId)
     (h_not_allocated : ∀ v, containers.read rid ≠ some v) :
-    containers.read rid = none
+    containers.read rid = none := by
+  cases h : containers.read rid
+  · rfl
+  · exact absurd h (h_not_allocated _)
 
 axiom containers_write_nonexistent_fails
     (containers : ContainerStore)
@@ -4124,21 +4131,24 @@ Helpers for reasoning about stack operations.
 -/
 
 /-- Pushing to stack maintains other elements. -/
-axiom stack_push_preserves_tail
+theorem stack_push_preserves_tail
     (stack : List MoveValue)
     (v : MoveValue) :
-    (v :: stack).tail? = some stack
+    (v :: stack).tail? = some stack := by
+  rfl
 
-axiom stack_head_after_push
+theorem stack_head_after_push
     (stack : List MoveValue)
     (v : MoveValue) :
-    (v :: stack).head? = some v
+    (v :: stack).head? = some v := by
+  rfl
 
-axiom stack_pop_twice
+theorem stack_pop_twice
     (stack : List MoveValue)
     (v1 v2 : MoveValue)
     (h : stack = v1 :: v2 :: rest) :
-    rest = stack.tail!.tail!
+    rest = stack.tail!.tail! := by
+  rw [h]; rfl
 
 /-! ## Locals Update Helpers
 

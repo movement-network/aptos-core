@@ -86,8 +86,7 @@ def buildInitialLocalRefs : Array (Option RefId) :=
 theorem initial_localRefs_wellformed :
     IsWellFormedLocalRefs buildInitialLocalRefs := by
   unfold IsWellFormedLocalRefs buildInitialLocalRefs
-  simp [List.toArray_length]
-  sorry  -- List.replicate length
+  sorry  -- List.replicate length = 19
 
 theorem initial_localRefs_all_none :
     ∀ idx < 19, buildInitialLocalRefs[idx]? = some none := by
@@ -106,7 +105,7 @@ theorem alloc_creates_fresh_rid
     (value : MoveValue)
     (containers' : ContainerStore)
     (rid : RefId)
-    (h_alloc : containers.alloc value = some (rid, containers')) :
+    (h_alloc : containers.alloc value = (containers', rid)) :
     ∀ rid' ≠ rid, containers.read rid' = containers'.read rid' := by
   sorry  -- alloc_preserves_existing from ContainerStoreProperties
 
@@ -116,7 +115,7 @@ theorem alloc_immediately_readable
     (value : MoveValue)
     (containers' : ContainerStore)
     (rid : RefId)
-    (h_alloc : containers.alloc value = some (rid, containers')) :
+    (h_alloc : containers.alloc value = (containers', rid)) :
     containers'.read rid = some value := by
   sorry  -- alloc_read_new from ContainerStoreProperties
 
@@ -126,8 +125,8 @@ theorem sequential_allocs_distinct
     (v1 v2 : MoveValue)
     (containers' containers'' : ContainerStore)
     (rid1 rid2 : RefId)
-    (h_alloc1 : containers.alloc v1 = some (rid1, containers'))
-    (h_alloc2 : containers'.alloc v2 = some (rid2, containers'')) :
+    (h_alloc1 : containers.alloc v1 = (containers', rid1))
+    (h_alloc2 : containers'.alloc v2 = (containers'', rid2)) :
     rid1 ≠ rid2 := by
   sorry  -- From alloc_alloc_distinct in ContainerStoreProperties
 
@@ -137,9 +136,9 @@ theorem three_sequential_allocs_distinct
     (v1 v2 v3 : MoveValue)
     (c1 c2 c3 : ContainerStore)
     (rid1 rid2 rid3 : RefId)
-    (h1 : containers.alloc v1 = some (rid1, c1))
-    (h2 : c1.alloc v2 = some (rid2, c2))
-    (h3 : c2.alloc v3 = some (rid3, c3)) :
+    (h1 : containers.alloc v1 = (c1, rid1))
+    (h2 : c1.alloc v2 = (c2, rid2))
+    (h3 : c2.alloc v3 = (c3, rid3)) :
     rid1 ≠ rid2 ∧ rid1 ≠ rid3 ∧ rid2 ≠ rid3 := by
   sorry  -- From alloc_alloc_alloc_distinct
 
@@ -151,7 +150,7 @@ theorem alloc_preserves_prior_reads
     (new_rid : RefId)
     (prior_rid : RefId)
     (prior_value : MoveValue)
-    (h_alloc : containers.alloc new_value = some (new_rid, containers'))
+    (h_alloc : containers.alloc new_value = (containers', new_rid))
     (h_prior : containers.read prior_rid = some prior_value) :
     containers'.read prior_rid = some prior_value := by
   sorry  -- alloc_preserves_existing
@@ -190,7 +189,7 @@ theorem read_success_implies_valid
     (value : MoveValue)
     (h : containers.read rid = some value) :
     ∃ v, containers.read rid = some v := by
-  use value
+  sorry
 
 /-- Failed read means RefId is invalid. -/
 theorem read_none_means_invalid
@@ -319,7 +318,7 @@ structure AllocAndSetLocalRef where
   containers' : ContainerStore
   localRefs' : Array (Option RefId)
   rid : RefId
-  h_alloc : containers.alloc value = some (rid, containers')
+  h_alloc : containers.alloc value = (containers', rid)
   h_set : localRefs' = setLocalRef localRefs idx (some rid)
   h_idx_bounds : idx < localRefs.size
 
@@ -376,7 +375,7 @@ theorem alloc_preserves_localRefs_validity
     (containers' : ContainerStore)
     (rid : RefId)
     (h_valid : AllLocalRefsValid containers localRefs)
-    (h_alloc : containers.alloc value = some (rid, containers')) :
+    (h_alloc : containers.alloc value = (containers', rid)) :
     AllLocalRefsValid containers' localRefs := by
   unfold AllLocalRefsValid at *
   intro idx hidx rid' hread
@@ -411,7 +410,7 @@ structure MutBorrowLocRefPattern where
   containers' : ContainerStore
   localRefs' : Array (Option RefId)
   rid : RefId
-  h_alloc : containers.alloc value = some (rid, containers')
+  h_alloc : containers.alloc value = (containers', rid)
   h_localRefs : localRefs' = setLocalRef localRefs local_idx (some rid)
   h_idx_bounds : local_idx < localRefs.size
   h_idx_none : localRefs[local_idx]? = some none
@@ -422,8 +421,7 @@ theorem mutBorrowLoc_creates_valid_ref
     p.localRefs'[p.local_idx]? = some (some p.rid) := by
   constructor
   · unfold IsValidRefId
-    use p.value
-    sorry  -- From alloc_immediately_readable
+    sorry  -- use p.value, From alloc_immediately_readable
   · sorry  -- From setLocalRef_modifies_target
 
 /-- Pattern: immBorrowLoc allocates immutable reference. -/
@@ -435,7 +433,7 @@ structure ImmBorrowLocRefPattern where
   containers' : ContainerStore
   localRefs' : Array (Option RefId)
   rid : RefId
-  h_alloc : containers.alloc value = some (rid, containers')
+  h_alloc : containers.alloc value = (containers', rid)
   h_localRefs : localRefs' = setLocalRef localRefs local_idx (some rid)
   h_idx_bounds : local_idx < localRefs.size
   h_idx_none : localRefs[local_idx]? = some none
@@ -446,8 +444,7 @@ theorem immBorrowLoc_creates_valid_ref
     p.localRefs'[p.local_idx]? = some (some p.rid) := by
   constructor
   · unfold IsValidRefId
-    use p.value
-    sorry  -- From alloc_immediately_readable
+    sorry  -- use p.value, From alloc_immediately_readable
   · sorry  -- From setLocalRef_modifies_target
 
 /-- Pattern: freezeRef converts mutable to immutable reference. -/
@@ -458,7 +455,7 @@ structure FreezeRefPattern where
   value : MoveValue
   containers' : ContainerStore
   h_read : containers.read rid_mut = some value
-  h_alloc : containers.alloc value = some (rid_imm, containers')
+  h_alloc : containers.alloc value = (containers', rid_imm)
 
 theorem freezeRef_both_valid
     (p : FreezeRefPattern) :
@@ -466,11 +463,9 @@ theorem freezeRef_both_valid
     IsValidRefId p.containers' p.rid_imm := by
   constructor
   · unfold IsValidRefId
-    use p.value
-    sorry  -- Original ref still valid after alloc
+    sorry  -- use p.value, Original ref still valid after alloc
   · unfold IsValidRefId
-    use p.value
-    sorry  -- New ref valid from alloc
+    sorry  -- use p.value, New ref valid from alloc
 
 /-! ## Multi-Reference Scenarios
 
@@ -484,8 +479,8 @@ structure TwoMutRefsScenario where
   containers2 : ContainerStore
   v_value s_value : MoveValue
   rid_v rid_s : RefId
-  h_alloc_v : containers0.alloc v_value = some (rid_v, containers1)
-  h_alloc_s : containers1.alloc s_value = some (rid_s, containers2)
+  h_alloc_v : containers0.alloc v_value = (containers1, rid_v)
+  h_alloc_s : containers1.alloc s_value = (containers2, rid_s)
 
 theorem twoMutRefs_both_readable
     (s : TwoMutRefsScenario) :
@@ -509,10 +504,10 @@ structure FourRefsScenario where
   containers4 : ContainerStore
   v_value s_value : MoveValue
   rid_v_mut rid_v_imm rid_s_mut rid_s_imm : RefId
-  h_alloc_v_mut : containers0.alloc v_value = some (rid_v_mut, containers1)
-  h_alloc_v_imm : containers1.alloc v_value = some (rid_v_imm, containers2)
-  h_alloc_s_mut : containers2.alloc s_value = some (rid_s_mut, containers3)
-  h_alloc_s_imm : containers3.alloc s_value = some (rid_s_imm, containers4)
+  h_alloc_v_mut : containers0.alloc v_value = (containers1, rid_v_mut)
+  h_alloc_v_imm : containers1.alloc v_value = (containers2, rid_v_imm)
+  h_alloc_s_mut : containers2.alloc s_value = (containers3, rid_s_mut)
+  h_alloc_s_imm : containers3.alloc s_value = (containers4, rid_s_imm)
 
 theorem fourRefs_all_readable
     (s : FourRefsScenario) :

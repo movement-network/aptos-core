@@ -283,7 +283,7 @@ theorem locals_size_invariant
     (frame' stack' ms' : _)
     (h_step : step (registrationModuleEnv o) [] frame stack ms =
               .ok [] frame' stack' ms') :
-    frame'.locals.length = 19 := by
+    frame'.locals.size = 19 := by
   sorry
 
 /-- Reading a None local fails -/
@@ -357,7 +357,7 @@ theorem complete_locals_evolution
     (h_exec : run (registrationModuleEnv o) 67 [] frame₀ [] ms₀ =
               .ok [] frame' stack' ms') :
     frame'.pc = 70 ∧
-    frame'.locals.length = 19 ∧
+    frame'.locals.size = 19 ∧
     (∀ slot, isLiveAt slot 70 →
       ∃ val, frame'.locals[slot.toNat]? = some (some val)) := by
   sorry

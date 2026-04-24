@@ -48,7 +48,7 @@ structure StateInvariant (pc : Nat) where
   -- Frame invariants
   frame_well_formed : Frame → Prop
   h_frame_pc : ∀ f, frame_well_formed f → f.pc = pc
-  h_frame_locals : ∀ f, frame_well_formed f → f.locals.length = 19
+  h_frame_locals : ∀ f, frame_well_formed f → f.locals.size = 19
   h_frame_locals_valid : ∀ f i, frame_well_formed f → i < 19 →
     f.locals[i]?.isSome
 
@@ -78,7 +78,7 @@ structure StateInvariant (pc : Nat) where
 
 /-- Construct state invariant for a specific PC -/
 def mkStateInvariant (pc : Nat) : StateInvariant pc :=
-  { frame_well_formed := fun f => f.pc = pc ∧ f.locals.length = 19
+  { frame_well_formed := fun f => f.pc = pc ∧ f.locals.size = 19
     h_frame_pc := by simp [frame_well_formed]; intros; assumption
     h_frame_locals := by simp [frame_well_formed]; intros; exact ‹_›
     h_frame_locals_valid := by sorry
@@ -97,7 +97,7 @@ def stateInvariantPC4 (inputs : RegistrationInputValues) : StateInvariant 4 :=
   { mkStateInvariant 4 with
     frame_well_formed := fun f =>
       f.pc = 4 ∧
-      f.locals.length = 19 ∧
+      f.locals.size = 19 ∧
       f.locals[0]? = some (some (.u8 inputs.chainId)) ∧
       f.locals[1]? = some (some (.address inputs.sender)) ∧
       f.locals[2]? = some (some (.vector .u8 (inputs.commitBa.toList.map .u8))) ∧
@@ -113,7 +113,7 @@ def stateInvariantPC10
   { mkStateInvariant 10 with
     frame_well_formed := fun f =>
       f.pc = 10 ∧
-      f.locals.length = 19 ∧
+      f.locals.size = 19 ∧
       f.locals[0]? = some (some (.u8 inputs.chainId)) ∧
       f.locals[5]? = some (some (.vector .u8 (inputs.commitBa.toList.map .u8)))
     stack_well_typed := fun s =>
@@ -133,7 +133,7 @@ def stateInvariantPC20
   { mkStateInvariant 20 with
     frame_well_formed := fun f =>
       f.pc = 20 ∧
-      f.locals.length = 19 ∧
+      f.locals.size = 19 ∧
       f.locals[6]? = some (some p1.commitOption) ∧
       f.locals[8]? = some (some p1.respOption)
     stack_well_typed := fun s =>
@@ -150,7 +150,7 @@ def stateInvariantPC43
   { mkStateInvariant 43 with
     frame_well_formed := fun f =>
       f.pc = 43 ∧
-      f.locals.length = 19 ∧
+      f.locals.size = 19 ∧
       (∃ locals,
         f.locals = locals ∧
         (∃ idx_challenge idx_commit,
@@ -169,7 +169,7 @@ def stateInvariantPC70
     (inputs : RegistrationInputValues)
     (flow : CompleteValueFlow o inputs) : StateInvariant 70 :=
   { mkStateInvariant 70 with
-    frame_well_formed := fun f => f.pc = 70 ∧ f.locals.length = 19
+    frame_well_formed := fun f => f.pc = 70 ∧ f.locals.size = 19
     stack_well_typed := fun s =>
       s = [.bool flow.phase3.finalResult] ∧
       (∃ b, flow.phase3.finalResult = b) }

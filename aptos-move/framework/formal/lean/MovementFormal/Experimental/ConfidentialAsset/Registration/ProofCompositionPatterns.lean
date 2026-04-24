@@ -258,8 +258,8 @@ structure BrFalseWithMergePattern where
   ms_before : MachineState
   h_instr : frame_before.code[pc_branch]? = some (.brFalse pc_target)
   h_stack : stack_before = (.bool condition) :: rest_stack
-  h_target_valid : pc_target < frame_before.code.length
-  h_merge_valid : pc_merge < frame_before.code.length
+  h_target_valid : pc_target < frame_before.code.size
+  h_merge_valid : pc_merge < frame_before.code.size
   rest_stack : List MoveValue
 
 /-- Branch taken case. -/

@@ -359,7 +359,7 @@ theorem progress
   sorry
   where
     WellFormed : Frame → List MoveValue → MachineState → Prop :=
-      fun f s _ => f.locals.length = 19 ∧ s.length ≤ 10
+      fun f s _ => f.locals.size = 19 ∧ s.length ≤ 10
 
 /-- Preservation: Steps preserve well-formedness -/
 theorem preservation
@@ -372,7 +372,7 @@ theorem preservation
   sorry
   where
     WellFormed : Frame → List MoveValue → MachineState → Prop :=
-      fun f s _ => f.locals.length = 19 ∧ s.length ≤ 10
+      fun f s _ => f.locals.size = 19 ∧ s.length ≤ 10
 
 /-! ## Complete Semantics Theorem -/
 
@@ -405,6 +405,6 @@ theorem registration_semantics_complete
   sorry
   where
     WellFormed : Frame → List MoveValue → MachineState → Prop :=
-      fun f s _ => f.locals.length = 19 ∧ s.length ≤ 10
+      fun f s _ => f.locals.size = 19 ∧ s.length ≤ 10
 
 end MovementFormal.Experimental.ConfidentialAsset.Registration

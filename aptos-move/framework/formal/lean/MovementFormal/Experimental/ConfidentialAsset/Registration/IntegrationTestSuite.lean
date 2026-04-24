@@ -180,7 +180,7 @@ def testPhase1to2Boundary : TestCase :=
           -- Check boundary conditions
           if frame₂₀.pc = 20 ∧
              (stack₂₀ = [] ∨ stack₂₀.length = 1) ∧
-             frame₂₀.locals.length = 19 then
+             frame₂₀.locals.size = 19 then
             return .pass
           else
             return .fail "Boundary conditions violated"

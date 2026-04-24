@@ -305,7 +305,7 @@ theorem pc_within_code_length
     (ms' : MachineState)
     (h_run : run (registrationModuleEnv o) [] frame stack ms fuel =
              .ok [] frame' stack' ms') :
-    frame'.pc < frame'.code.length ∨
+    frame'.pc < frame'.code.size ∨
     frame'.pc = 70 ∨
     frame'.pc = 79 := by
   sorry  -- PC within code or terminal

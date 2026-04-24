@@ -331,7 +331,7 @@ structure FrameWitness where
 /-- Build FrameWitness from Frame and PC -/
 def mkFrameWitness (f : Frame) (pc : Nat)
     (h_pc : f.pc = pc)
-    (h_size : f.locals.length = 19) :
+    (h_size : f.locals.size = 19) :
     FrameWitness :=
   ⟨f, pc, h_pc, h_size, by sorry⟩
 

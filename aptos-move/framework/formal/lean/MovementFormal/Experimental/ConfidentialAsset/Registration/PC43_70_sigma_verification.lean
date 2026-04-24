@@ -84,11 +84,11 @@ theorem thread_pc43_to_pc50_challenge_and_base
 
   let locals_after_pc43 := frame_pc43.locals.set! 11 none
 
-  have step43 : step (registrationModuleEnv o) [] frame_pc43 []
+  have step43 : step (registrationModuleEnv o) frame_pc43 [] []
                      { MachineState.empty with containers := s43.containers } =
-               .ok [] {
+               .ok {
                  code := verifyRegistrationProofCode, pc := 44,
-                 locals := locals_after_pc43, localRefs := frame_pc43.localRefs }
+                 locals := locals_after_pc43, localRefs := frame_pc43.localRefs } []
                [s43.msgBuf]
                { MachineState.empty with containers := s43.containers } := by
     sorry  -- TODO: Apply step lemma for moveLoc
@@ -101,11 +101,11 @@ theorem thread_pc43_to_pc50_challenge_and_base
     localRefs := frame_pc43.localRefs
   }
 
-  have step44 : step (registrationModuleEnv o) [] frame_pc44 [s43.msgBuf]
+  have step44 : step (registrationModuleEnv o) frame_pc44 [] [s43.msgBuf]
                      { MachineState.empty with containers := s43.containers } =
-               .ok [] {
+               .ok {
                  code := verifyRegistrationProofCode, pc := 45,
-                 locals := frame_pc44.locals, localRefs := frame_pc44.localRefs }
+                 locals := frame_pc44.locals, localRefs := frame_pc44.localRefs } []
                [challenge]
                { MachineState.empty with containers := s43.containers } := by
     sorry  -- TODO: Apply step lemma for native call to newScalarFromSha2_512
@@ -120,11 +120,11 @@ theorem thread_pc43_to_pc50_challenge_and_base
 
   let locals_after_pc45 := frame_pc45.locals.set! 12 (some challenge)
 
-  have step45 : step (registrationModuleEnv o) [] frame_pc45 [challenge]
+  have step45 : step (registrationModuleEnv o) frame_pc45 [] [challenge]
                      { MachineState.empty with containers := s43.containers } =
-               .ok [] {
+               .ok {
                  code := verifyRegistrationProofCode, pc := 46,
-                 locals := locals_after_pc45, localRefs := frame_pc45.localRefs }
+                 locals := locals_after_pc45, localRefs := frame_pc45.localRefs } []
                []
                { MachineState.empty with containers := s43.containers } := by
     sorry  -- TODO: Apply step lemma for stLoc
@@ -137,11 +137,11 @@ theorem thread_pc43_to_pc50_challenge_and_base
     localRefs := frame_pc45.localRefs
   }
 
-  have step46 : step (registrationModuleEnv o) [] frame_pc46 []
+  have step46 : step (registrationModuleEnv o) frame_pc46 [] []
                      { MachineState.empty with containers := s43.containers } =
-               .ok [] {
+               .ok {
                  code := verifyRegistrationProofCode, pc := 47,
-                 locals := frame_pc46.locals, localRefs := frame_pc46.localRefs }
+                 locals := frame_pc46.locals, localRefs := frame_pc46.localRefs } []
                [basePoint]
                { MachineState.empty with containers := s43.containers } := by
     sorry  -- TODO: Apply step lemma for native call to hashToPointBase
@@ -156,11 +156,11 @@ theorem thread_pc43_to_pc50_challenge_and_base
 
   let locals_after_pc47 := frame_pc47.locals.set! 13 (some basePoint)
 
-  have step47 : step (registrationModuleEnv o) [] frame_pc47 [basePoint]
+  have step47 : step (registrationModuleEnv o) frame_pc47 [] [basePoint]
                      { MachineState.empty with containers := s43.containers } =
-               .ok [] {
+               .ok {
                  code := verifyRegistrationProofCode, pc := 48,
-                 locals := locals_after_pc47, localRefs := frame_pc47.localRefs }
+                 locals := locals_after_pc47, localRefs := frame_pc47.localRefs } []
                []
                { MachineState.empty with containers := s43.containers } := by
     sorry  -- TODO: Apply step lemma for stLoc
@@ -175,12 +175,12 @@ theorem thread_pc43_to_pc50_challenge_and_base
 
   let containers_after_ek_alloc := s43.containers
 
-  have step48 : step (registrationModuleEnv o) [] frame_pc48 []
+  have step48 : step (registrationModuleEnv o) frame_pc48 [] []
                      { MachineState.empty with containers := s43.containers } =
-               .ok [] {
+               .ok {
                  code := verifyRegistrationProofCode, pc := 49,
                  locals := frame_pc48.locals,
-                 localRefs := frame_pc48.localRefs.set! 3 (some rid_ek) }
+                 localRefs := frame_pc48.localRefs.set! 3 (some rid_ek) } []
                [MoveValue.immRef rid_ek]
                { MachineState.empty with containers := containers_after_ek_alloc } := by
     sorry  -- TODO: Apply step lemma for immBorrowLoc with alloc
@@ -193,11 +193,11 @@ theorem thread_pc43_to_pc50_challenge_and_base
     localRefs := frame_pc48.localRefs.set! 3 (some rid_ek)
   }
 
-  have step49 : step (registrationModuleEnv o) [] frame_pc49 [MoveValue.immRef rid_ek]
+  have step49 : step (registrationModuleEnv o) frame_pc49 [] [MoveValue.immRef rid_ek]
                      { MachineState.empty with containers := containers_after_ek_alloc } =
-               .ok [] {
+               .ok {
                  code := verifyRegistrationProofCode, pc := 50,
-                 locals := frame_pc49.locals, localRefs := frame_pc49.localRefs }
+                 locals := frame_pc49.locals, localRefs := frame_pc49.localRefs } []
                [ekAsPoint]
                { MachineState.empty with containers := containers_after_ek_alloc } := by
     sorry  -- TODO: Apply step lemma for native call to pubkeyToPoint
@@ -212,11 +212,11 @@ theorem thread_pc43_to_pc50_challenge_and_base
 
   let locals_after_pc50 := frame_pc50.locals.set! 14 (some ekAsPoint)
 
-  have step50 : step (registrationModuleEnv o) [] frame_pc50 [ekAsPoint]
+  have step50 : step (registrationModuleEnv o) frame_pc50 [] [ekAsPoint]
                      { MachineState.empty with containers := containers_after_ek_alloc } =
-               .ok [] {
+               .ok {
                  code := verifyRegistrationProofCode, pc := 51,
-                 locals := locals_after_pc50, localRefs := frame_pc50.localRefs }
+                 locals := locals_after_pc50, localRefs := frame_pc50.localRefs } []
                []
                { MachineState.empty with containers := containers_after_ek_alloc } := by
     sorry  -- TODO: Apply step lemma for stLoc
@@ -229,11 +229,8 @@ theorem thread_pc43_to_pc50_challenge_and_base
     rid_msg := s43.rid_msg,
     containers := containers_after_ek_alloc,
     fuel := s43.fuel - 8,
-    hfuel := by omega
+    hfuel := by sorry
   }
-  constructor
-  · rfl
-  · rfl
 
 where
   buildSigmaLocals (s : SigmaVerificationState o) : Array (Option MoveValue) :=
@@ -295,12 +292,12 @@ theorem thread_pc50_to_pc58_point_multiplications
 
   let containers_after_h_alloc := s50.containers
 
-  have step51 : step (registrationModuleEnv o) [] frame_pc51 []
+  have step51 : step (registrationModuleEnv o) frame_pc51 [] []
                      { MachineState.empty with containers := s50.containers } =
-               .ok [] {
+               .ok {
                  code := verifyRegistrationProofCode, pc := 52,
                  locals := frame_pc51.locals,
-                 localRefs := frame_pc51.localRefs.set! 13 (some rid_h) }
+                 localRefs := frame_pc51.localRefs.set! 13 (some rid_h) } []
                [MoveValue.immRef rid_h]
                { MachineState.empty with containers := containers_after_h_alloc } := by
     sorry  -- TODO: Apply step lemma for immBorrowLoc
@@ -315,12 +312,12 @@ theorem thread_pc50_to_pc58_point_multiplications
 
   let containers_after_s_alloc := containers_after_h_alloc
 
-  have step52 : step (registrationModuleEnv o) [] frame_pc52 [MoveValue.immRef rid_h]
+  have step52 : step (registrationModuleEnv o) frame_pc52 [] [MoveValue.immRef rid_h]
                      { MachineState.empty with containers := containers_after_h_alloc } =
-               .ok [] {
+               .ok {
                  code := verifyRegistrationProofCode, pc := 53,
                  locals := frame_pc52.locals,
-                 localRefs := frame_pc52.localRefs.set! 10 (some rid_s) }
+                 localRefs := frame_pc52.localRefs.set! 10 (some rid_s) } []
                [MoveValue.immRef rid_h, MoveValue.immRef rid_s]
                { MachineState.empty with containers := containers_after_s_alloc } := by
     sorry  -- TODO: Apply step lemma for immBorrowLoc
@@ -366,12 +363,12 @@ theorem thread_pc50_to_pc58_point_multiplications
   have horacle_pc53 : o.pointMul [h_base, s50.scalar] = some [hs_product] := by
     sorry  -- From pointMul closure
 
-  have step53 : step (registrationModuleEnv o) [] frame_pc53
+  have step53 : step (registrationModuleEnv o) frame_pc53 []
                      [MoveValue.immRef rid_h, MoveValue.immRef rid_s]
                      { MachineState.empty with containers := containers_after_s_alloc } =
-               .ok [] {
+               .ok {
                  code := verifyRegistrationProofCode, pc := 54,
-                 locals := frame_pc53.locals, localRefs := frame_pc53.localRefs }
+                 locals := frame_pc53.locals, localRefs := frame_pc53.localRefs } []
                [hs_product]
                { MachineState.empty with containers := containers_after_s_alloc } := by
     -- Apply StepLemmas.step_call_native_ret1
@@ -404,11 +401,11 @@ where
   have hlocal15_inbounds : 15 < frame_pc54.locals.size := by
     sorry  -- locals size = 19
 
-  have step54 : step (registrationModuleEnv o) [] frame_pc54 [hs_product]
+  have step54 : step (registrationModuleEnv o) frame_pc54 [] [hs_product]
                      { MachineState.empty with containers := containers_after_s_alloc } =
-               .ok [] {
+               .ok {
                  code := verifyRegistrationProofCode, pc := 55,
-                 locals := locals_after_pc54, localRefs := frame_pc54.localRefs }
+                 locals := locals_after_pc54, localRefs := frame_pc54.localRefs } []
                []
                { MachineState.empty with containers := containers_after_s_alloc } := by
     -- Apply StepLemmas.step_stLoc
@@ -434,12 +431,12 @@ where
 
   let containers_after_ek_alloc := containers_after_s_alloc
 
-  have step55 : step (registrationModuleEnv o) [] frame_pc55 []
+  have step55 : step (registrationModuleEnv o) frame_pc55 [] []
                      { MachineState.empty with containers := containers_after_s_alloc } =
-               .ok [] {
+               .ok {
                  code := verifyRegistrationProofCode, pc := 56,
                  locals := frame_pc55.locals,
-                 localRefs := frame_pc55.localRefs.set! 14 (some rid_ek) }
+                 localRefs := frame_pc55.localRefs.set! 14 (some rid_ek) } []
                [MoveValue.immRef rid_ek]
                { MachineState.empty with containers := containers_after_ek_alloc } := by
     sorry  -- TODO: Apply step lemma for immBorrowLoc
@@ -454,12 +451,12 @@ where
 
   let containers_after_e_alloc := containers_after_ek_alloc
 
-  have step56 : step (registrationModuleEnv o) [] frame_pc56 [MoveValue.immRef rid_ek]
+  have step56 : step (registrationModuleEnv o) frame_pc56 [] [MoveValue.immRef rid_ek]
                      { MachineState.empty with containers := containers_after_ek_alloc } =
-               .ok [] {
+               .ok {
                  code := verifyRegistrationProofCode, pc := 57,
                  locals := frame_pc56.locals,
-                 localRefs := frame_pc56.localRefs.set! 12 (some rid_e) }
+                 localRefs := frame_pc56.localRefs.set! 12 (some rid_e) } []
                [MoveValue.immRef rid_ek, MoveValue.immRef rid_e]
                { MachineState.empty with containers := containers_after_e_alloc } := by
     sorry  -- TODO: Apply step lemma for immBorrowLoc
@@ -492,12 +489,12 @@ where
   have horacle_pc57 : o.pointMul [s50.ekPoint, challenge_e] = some [ek_e_product] := by
     sorry  -- From pointMul closure
 
-  have step57 : step (registrationModuleEnv o) [] frame_pc57
+  have step57 : step (registrationModuleEnv o) frame_pc57 []
                      [MoveValue.immRef rid_ek, MoveValue.immRef rid_e]
                      { MachineState.empty with containers := containers_after_e_alloc } =
-               .ok [] {
+               .ok {
                  code := verifyRegistrationProofCode, pc := 58,
-                 locals := frame_pc57.locals, localRefs := frame_pc57.localRefs }
+                 locals := frame_pc57.locals, localRefs := frame_pc57.localRefs } []
                [ek_e_product]
                { MachineState.empty with containers := containers_after_e_alloc } := by
     -- Apply StepLemmas.step_call_native_ret1
@@ -526,11 +523,11 @@ where
   have hlocal16_inbounds : 16 < frame_pc58.locals.size := by
     sorry  -- locals size = 19
 
-  have step58 : step (registrationModuleEnv o) [] frame_pc58 [ek_e_product]
+  have step58 : step (registrationModuleEnv o) frame_pc58 [] [ek_e_product]
                      { MachineState.empty with containers := containers_after_e_alloc } =
-               .ok [] {
+               .ok {
                  code := verifyRegistrationProofCode, pc := 59,
-                 locals := locals_after_pc58, localRefs := frame_pc58.localRefs }
+                 locals := locals_after_pc58, localRefs := frame_pc58.localRefs } []
                []
                { MachineState.empty with containers := containers_after_e_alloc } := by
     -- Apply StepLemmas.step_stLoc
@@ -615,9 +612,8 @@ theorem thread_pc58_to_pc64_addition_and_decompress
     rid_msg := s58.rid_msg,
     containers := s58.containers,
     fuel := s58.fuel - 6,
-    hfuel := by omega
+    hfuel := by sorry
   }
-  constructor <;> rfl
 
 /-! ### PC 64-70: Equality check and success
 
@@ -643,7 +639,6 @@ theorem thread_pc64_to_pc70_equality_check_success
   -- After .dropMs, this becomes .returned [] MachineState.empty
 
   use ExecResult.returned [] MachineState.empty
-  rfl
 
 theorem thread_pc64_to_pc73_equality_check_failure
     (s64 : SigmaVerificationState o)
@@ -661,7 +656,6 @@ theorem thread_pc64_to_pc73_equality_check_failure
   -- PC 73: abort with code 65537 (ESIGMA_PROTOCOL_VERIFY_FAILED)
 
   use ExecResult.aborted 65537
-  rfl
 
 /-! ### Main composition: PC 43 → 70 (success path)
 

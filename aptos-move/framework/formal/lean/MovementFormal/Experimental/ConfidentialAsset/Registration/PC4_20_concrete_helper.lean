@@ -399,7 +399,6 @@ theorem thread_pc6_to_pc8
     hfuel := by omega,
     rCompressed := rCompressed
   }
-  constructor <;> rfl
 
 theorem thread_pc8_to_pc11
     (s8 : FrameAtPC8 o)
@@ -434,7 +433,6 @@ theorem thread_pc8_to_pc11
     right
     use (by simp [List.replicate] : 6 < ((List.replicate 19 none).toArray : Array (Option RefId)).size)
     simp [List.replicate]
-    sorry  -- Array index
 
   let locals_after_pc9 := locals_at_pc8.set! 6 none
 

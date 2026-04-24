@@ -125,7 +125,7 @@ theorem phase1_pc9_to_pc17_extract_scalar
   -- PC 9-11: scalarFromBytes call
   have h_scalar_struct : IsValidScalarResult scalar_opt := by
     use true, scalar, rest_scalar
-    rfl
+    exact hscalar_opt
 
   -- PC 12-17: Extract scalar from option (similar to PC 4-8)
   have h_isSome : optionIsSomeRef containers_start [MoveValue.immRef rid_scalar] =
@@ -443,6 +443,5 @@ theorem singleton_branch_complete_integration
       fuel43 hfuel43
 
   use result
-  rfl
 
 end MovementFormal.Experimental.ConfidentialAsset.Registration

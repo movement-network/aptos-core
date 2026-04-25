@@ -86,6 +86,58 @@ theorem chain_two_copyLoc
   simp only [frame1] at h
   exact h
 
+/-- Chain three copyLoc operations.
+
+Unlike moveLoc, all three locals remain unchanged since copyLoc preserves values.
+-/
+theorem chain_three_copyLoc
+    (frame : Frame) (cs : List Frame) (rest : List MoveValue) (ms : MachineState)
+    (n i1 i2 i3 : Nat)
+    (v1 v2 v3 : MoveValue)
+    (fuel : Nat)
+    (hn_lt : n < frame.code.size)
+    (hn1_lt : n + 1 < frame.code.size)
+    (hn2_lt : n + 2 < frame.code.size)
+    (hcode1 : frame.code[n]'hn_lt = .copyLoc i1)
+    (hcode2 : frame.code[n+1]'hn1_lt = .copyLoc i2)
+    (hcode3 : frame.code[n+2]'hn2_lt = .copyLoc i3)
+    (hpc : frame.pc = n)
+    (hi1 : i1 < frame.locals.size)
+    (hv1 : frame.locals[i1]'hi1 = some v1)
+    (hRefNone1 : ¬ i1 < frame.localRefs.size ∨
+                  ∃ h : i1 < frame.localRefs.size, frame.localRefs[i1]'h = none)
+    (hi2 : i2 < frame.locals.size)
+    (hv2 : frame.locals[i2]'hi2 = some v2)
+    (hRefNone2 : ¬ i2 < frame.localRefs.size ∨
+                  ∃ h : i2 < frame.localRefs.size, frame.localRefs[i2]'h = none)
+    (hi3 : i3 < frame.locals.size)
+    (hv3 : frame.locals[i3]'hi3 = some v3)
+    (hRefNone3 : ¬ i3 < frame.localRefs.size ∨
+                  ∃ h : i3 < frame.localRefs.size, frame.localRefs[i3]'h = none) :
+    run env frame cs rest ms (fuel + 3) =
+    run env
+      { frame with pc := n + 3 }
+      cs (v3 :: v2 :: v1 :: rest) ms fuel := by
+  -- Step 1: copyLoc at PC n
+  have hstep1 : step env frame cs rest ms =
+    .ok { frame with pc := n + 1 } cs (v1 :: rest) ms :=
+    step_copyLoc_single frame cs rest ms n i1 v1 hn_lt hcode1 hpc hi1 hv1 hRefNone1
+  -- Step 2: copyLoc at PC n+1
+  let frame1 := { frame with pc := n + 1 }
+  have hstep2 : step env frame1 cs (v1 :: rest) ms =
+    .ok { frame1 with pc := n + 2 } cs (v2 :: v1 :: rest) ms :=
+    step_copyLoc_single frame1 cs (v1 :: rest) ms (n+1) i2 v2 hn1_lt hcode2 rfl hi2 hv2 hRefNone2
+  -- Step 3: copyLoc at PC n+2
+  let frame2 := { frame1 with pc := n + 2 }
+  have hstep3 : step env frame2 cs (v2 :: v1 :: rest) ms =
+    .ok { frame2 with pc := n + 3 } cs (v3 :: v2 :: v1 :: rest) ms :=
+    step_copyLoc_single frame2 cs (v2 :: v1 :: rest) ms (n+2) i3 v3 hn2_lt hcode3 rfl hi3 hv3 hRefNone3
+  -- Chain the three steps
+  have h := run_succ_three_ok fuel frame1 frame2 { frame2 with pc := n + 3 }
+    cs cs cs (v1 :: rest) (v2 :: v1 :: rest) (v3 :: v2 :: v1 :: rest) ms ms ms hstep1 hstep2 hstep3
+  simp only [frame2, frame1] at h
+  exact h
+
 /-! ## Mixed moveLoc + copyLoc chains -/
 
 /-- Common pattern: moveLoc followed by copyLoc.

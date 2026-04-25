@@ -69,7 +69,30 @@ theorem chain_two_moveLoc
               pc := n + 2,
               locals := (frame.locals.set i1 none hi1_bound).set i2 none hi2 }
         cs ([v2, v1] ++ rest) ms fuel := by
-  sorry  -- TODO: Apply step_moveLoc twice + run_succ_ok_of_step chaining
+  -- Rewrite hi2 bound
+  have hi2' : i2 < frame.locals.size := by
+    have : (frame.locals.set i1 none hi1_bound).size = frame.locals.size := by simp [Array.size_set]
+    rw [← this]; exact hi2
+  -- Step 1: moveLoc at PC n
+  have hstep1 : step env frame cs rest ms =
+    .ok { frame with pc := n + 1, locals := frame.locals.set i1 none hi1 } cs (v1 :: rest) ms := by
+    subst hpc
+    exact step_moveLoc_noRef i1 v1 hn_lt hcode hi1 hv1 hRefNone1
+  -- Step 2: moveLoc at PC n+1
+  let frame1 := { frame with pc := n + 1, locals := frame.locals.set i1 none hi1 }
+  have hstep2 : step env frame1 cs (v1 :: rest) ms =
+    .ok { frame1 with pc := n + 2, locals := frame1.locals.set i2 none hi2 } cs (v2 :: v1 :: rest) ms := by
+    have hframe1_locals_size : i2 < frame1.locals.size := by simp [frame1, Array.size_set]; exact hi2'
+    have hframe1_locals_val : frame1.locals[i2]'hframe1_locals_size = some v2 := by
+      simp [frame1]; exact hv2
+    show step env { frame with pc := n + 1, locals := frame.locals.set i1 none hi1 } cs (v1 :: rest) ms =
+      .ok { { frame with pc := n + 1, locals := frame.locals.set i1 none hi1 } with pc := n + 2, locals := ({ frame with pc := n + 1, locals := frame.locals.set i1 none hi1 }.locals.set i2 none hi2) } cs (v2 :: v1 :: rest) ms
+    exact step_moveLoc_noRef i2 v2 hn1_lt hcode' hframe1_locals_size hframe1_locals_val hRefNone2
+  -- Chain the two steps
+  have h := run_succ_two_ok fuel frame1 { frame1 with pc := n + 2, locals := frame1.locals.set i2 none hi2 }
+    cs cs (v1 :: rest) (v2 :: v1 :: rest) ms ms hstep1 hstep2
+  simp only [frame1] at h
+  exact h
 
 /-- Three consecutive moveLoc operations (common pattern in 3-arg functions). -/
 theorem chain_three_moveLoc : True := trivial  -- Placeholder axiom to allow file compilation

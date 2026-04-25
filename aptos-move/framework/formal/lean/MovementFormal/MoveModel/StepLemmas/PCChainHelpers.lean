@@ -94,8 +94,86 @@ theorem chain_two_moveLoc
   simp only [frame1] at h
   exact h
 
-/-- Three consecutive moveLoc operations (common pattern in 3-arg functions). -/
-theorem chain_three_moveLoc : True := trivial  -- Placeholder axiom to allow file compilation
+/-- Three consecutive moveLoc operations (common pattern in 3-arg functions).
+
+Chains:
+- PC n: moveLoc i1 (push v1, locals[i1] ← none)
+- PC n+1: moveLoc i2 (push v2, locals[i2] ← none)
+- PC n+2: moveLoc i3 (push v3, locals[i3] ← none)
+
+Result: stack becomes [v3, v2, v1, ...rest], three locals consumed.
+-/
+theorem chain_three_moveLoc
+    (n i1 i2 i3 : Nat)
+    (v1 v2 v3 : MoveValue)
+    (rest : List MoveValue)
+    (fuel : Nat)
+    (hn_lt : n < frame.code.size)
+    (hn1_lt : n + 1 < frame.code.size)
+    (hn2_lt : n + 2 < frame.code.size)
+    (hcode1 : frame.code[n]'hn_lt = .moveLoc i1)
+    (hcode2 : frame.code[n+1]'hn1_lt = .moveLoc i2)
+    (hcode3 : frame.code[n+2]'hn2_lt = .moveLoc i3)
+    (hpc : frame.pc = n)
+    (hi1 : i1 < frame.locals.size)
+    (hv1 : frame.locals[i1]'hi1 = some v1)
+    (hi1_bound : i1 < frame.locals.size)
+    (hi2 : i2 < (frame.locals.set i1 none hi1_bound).size)
+    (hv2 : (frame.locals.set i1 none hi1_bound)[i2]'hi2 = some v2)
+    (hi2_bound : i2 < (frame.locals.set i1 none hi1_bound).size)
+    (hi3 : i3 < ((frame.locals.set i1 none hi1_bound).set i2 none hi2_bound).size)
+    (hv3 : ((frame.locals.set i1 none hi1_bound).set i2 none hi2_bound)[i3]'hi3 = some v3)
+    (hRefNone1 : ¬ i1 < frame.localRefs.size ∨
+                  ∃ h : i1 < frame.localRefs.size, frame.localRefs[i1]'h = none)
+    (hRefNone2 : ¬ i2 < frame.localRefs.size ∨
+                  ∃ h : i2 < frame.localRefs.size, frame.localRefs[i2]'h = none)
+    (hRefNone3 : ¬ i3 < frame.localRefs.size ∨
+                  ∃ h : i3 < frame.localRefs.size, frame.localRefs[i3]'h = none) :
+    run env frame cs rest ms (fuel + 3) =
+    run env { frame with
+              pc := n + 3,
+              locals := ((frame.locals.set i1 none hi1_bound).set i2 none hi2_bound).set i3 none hi3 }
+        cs ([v3, v2, v1] ++ rest) ms fuel := by
+  -- Rewrite bounds
+  have hi2' : i2 < frame.locals.size := by
+    have : (frame.locals.set i1 none hi1_bound).size = frame.locals.size := by simp [Array.size_set]
+    rw [← this]; exact hi2
+  have hi3' : i3 < frame.locals.size := by
+    have h1 : (frame.locals.set i1 none hi1_bound).size = frame.locals.size := by simp [Array.size_set]
+    have h2 : ((frame.locals.set i1 none hi1_bound).set i2 none hi2_bound).size = (frame.locals.set i1 none hi1_bound).size := by simp [Array.size_set]
+    calc i3 < ((frame.locals.set i1 none hi1_bound).set i2 none hi2_bound).size := hi3
+      _ = (frame.locals.set i1 none hi1_bound).size := h2
+      _ = frame.locals.size := h1
+  -- Step 1: moveLoc at PC n
+  have hstep1 : step env frame cs rest ms =
+    .ok { frame with pc := n + 1, locals := frame.locals.set i1 none hi1 } cs (v1 :: rest) ms := by
+    subst hpc
+    exact step_moveLoc_noRef i1 v1 hn_lt hcode1 hi1 hv1 hRefNone1
+  -- Step 2: moveLoc at PC n+1
+  let frame1 := { frame with pc := n + 1, locals := frame.locals.set i1 none hi1 }
+  have hstep2 : step env frame1 cs (v1 :: rest) ms =
+    .ok { frame1 with pc := n + 2, locals := frame1.locals.set i2 none hi2 } cs (v2 :: v1 :: rest) ms := by
+    have hframe1_locals_size : i2 < frame1.locals.size := by simp [frame1, Array.size_set]; exact hi2'
+    have hframe1_locals_val : frame1.locals[i2]'hframe1_locals_size = some v2 := by
+      simp [frame1]; exact hv2
+    show step env { frame with pc := n + 1, locals := frame.locals.set i1 none hi1 } cs (v1 :: rest) ms =
+      .ok { { frame with pc := n + 1, locals := frame.locals.set i1 none hi1 } with pc := n + 2, locals := ({ frame with pc := n + 1, locals := frame.locals.set i1 none hi1 }.locals.set i2 none hi2) } cs (v2 :: v1 :: rest) ms
+    exact step_moveLoc_noRef i2 v2 hn1_lt hcode2 hframe1_locals_size hframe1_locals_val hRefNone2
+  -- Step 3: moveLoc at PC n+2
+  let frame2 := { frame1 with pc := n + 2, locals := frame1.locals.set i2 none hi2 }
+  have hstep3 : step env frame2 cs (v2 :: v1 :: rest) ms =
+    .ok { frame2 with pc := n + 3, locals := frame2.locals.set i3 none hi3 } cs (v3 :: v2 :: v1 :: rest) ms := by
+    have hframe2_locals_size : i3 < frame2.locals.size := by simp [frame2, frame1, Array.size_set]; exact hi3'
+    have hframe2_locals_val : frame2.locals[i3]'hframe2_locals_size = some v3 := by
+      simp [frame2, frame1]; exact hv3
+    show step env { frame1 with pc := n + 2, locals := frame1.locals.set i2 none hi2 } cs (v2 :: v1 :: rest) ms =
+      .ok { { frame1 with pc := n + 2, locals := frame1.locals.set i2 none hi2 } with pc := n + 3, locals := ({ frame1 with pc := n + 2, locals := frame1.locals.set i2 none hi2 }.locals.set i3 none hi3) } cs (v3 :: v2 :: v1 :: rest) ms
+    exact step_moveLoc_noRef i3 v3 hn2_lt hcode3 hframe2_locals_size hframe2_locals_val hRefNone3
+  -- Chain the three steps using run_succ_three_ok
+  have h := run_succ_three_ok fuel frame1 frame2 { frame2 with pc := n + 3, locals := frame2.locals.set i3 none hi3 }
+    cs cs cs (v1 :: rest) (v2 :: v1 :: rest) (v3 :: v2 :: v1 :: rest) ms ms ms hstep1 hstep2 hstep3
+  simp only [frame2, frame1] at h
+  exact h
 
 /-! ## Oracle Call Patterns -/
 

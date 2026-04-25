@@ -1,6 +1,7 @@
 import MovementFormal.MoveModel.StepLemmas.Run
 import MovementFormal.MoveModel.StepLemmas.Basic
 import MovementFormal.MoveModel.StepLemmas.Locals
+import MovementFormal.MoveModel.StepLemmas.MoveLocChains
 
 /-!
 # PC Chain Helper Patterns
@@ -284,6 +285,64 @@ theorem chain_four_moveLoc
     ms ms ms ms hstep1 hstep2 hstep3 hstep4
   simp only [frame3, frame2, frame1] at h
   exact h
+
+/-- Five consecutive moveLoc operations (common in 5-arg marshaling sequences).
+
+Result: stack = [v5, v4, v3, v2, v1, ...rest], five locals consumed.
+-/
+theorem chain_five_moveLoc
+    (n i1 i2 i3 i4 i5 : Nat)
+    (v1 v2 v3 v4 v5 : MoveValue)
+    (rest : List MoveValue)
+    (fuel : Nat)
+    (hn_lt : n < frame.code.size)
+    (hn1_lt : n + 1 < frame.code.size)
+    (hn2_lt : n + 2 < frame.code.size)
+    (hn3_lt : n + 3 < frame.code.size)
+    (hn4_lt : n + 4 < frame.code.size)
+    (hcode1 : frame.code[n]'hn_lt = .moveLoc i1)
+    (hcode2 : frame.code[n+1]'hn1_lt = .moveLoc i2)
+    (hcode3 : frame.code[n+2]'hn2_lt = .moveLoc i3)
+    (hcode4 : frame.code[n+3]'hn3_lt = .moveLoc i4)
+    (hcode5 : frame.code[n+4]'hn4_lt = .moveLoc i5)
+    (hpc : frame.pc = n)
+    (hi1 : i1 < frame.locals.size)
+    (hv1 : frame.locals[i1]'hi1 = some v1)
+    (hi1_bound : i1 < frame.locals.size)
+    (hi2 : i2 < (frame.locals.set i1 none hi1_bound).size)
+    (hv2 : (frame.locals.set i1 none hi1_bound)[i2]'hi2 = some v2)
+    (hi2_bound : i2 < (frame.locals.set i1 none hi1_bound).size)
+    (hi3 : i3 < ((frame.locals.set i1 none hi1_bound).set i2 none hi2_bound).size)
+    (hv3 : ((frame.locals.set i1 none hi1_bound).set i2 none hi2_bound)[i3]'hi3 = some v3)
+    (hi3_bound : i3 < ((frame.locals.set i1 none hi1_bound).set i2 none hi2_bound).size)
+    (hi4 : i4 < (((frame.locals.set i1 none hi1_bound).set i2 none hi2_bound).set i3 none hi3_bound).size)
+    (hv4 : (((frame.locals.set i1 none hi1_bound).set i2 none hi2_bound).set i3 none hi3_bound)[i4]'hi4 = some v4)
+    (hi4_bound : i4 < (((frame.locals.set i1 none hi1_bound).set i2 none hi2_bound).set i3 none hi3_bound).size)
+    (hi5 : i5 < ((((frame.locals.set i1 none hi1_bound).set i2 none hi2_bound).set i3 none hi3_bound).set i4 none hi4_bound).size)
+    (hv5 : ((((frame.locals.set i1 none hi1_bound).set i2 none hi2_bound).set i3 none hi3_bound).set i4 none hi4_bound)[i5]'hi5 = some v5)
+    (hRefNone1 : ¬ i1 < frame.localRefs.size ∨
+                  ∃ h : i1 < frame.localRefs.size, frame.localRefs[i1]'h = none)
+    (hRefNone2 : ¬ i2 < frame.localRefs.size ∨
+                  ∃ h : i2 < frame.localRefs.size, frame.localRefs[i2]'h = none)
+    (hRefNone3 : ¬ i3 < frame.localRefs.size ∨
+                  ∃ h : i3 < frame.localRefs.size, frame.localRefs[i3]'h = none)
+    (hRefNone4 : ¬ i4 < frame.localRefs.size ∨
+                  ∃ h : i4 < frame.localRefs.size, frame.localRefs[i4]'h = none)
+    (hRefNone5 : ¬ i5 < frame.localRefs.size ∨
+                  ∃ h : i5 < frame.localRefs.size, frame.localRefs[i5]'h = none) :
+    run env frame cs rest ms (fuel + 5) =
+    run env { frame with
+              pc := n + 5,
+              locals := ((((frame.locals.set i1 none hi1_bound).set i2 none hi2_bound).set i3 none hi3_bound).set i4 none hi4_bound).set i5 none hi5 }
+        cs ([v5, v4, v3, v2, v1] ++ rest) ms fuel := by
+  -- Use the existing chain_five_moveLoc from MoveLocChains for the core proof
+  exact MoveLocChains.chain_five_moveLoc frame cs rest ms n i1 i2 i3 i4 i5 v1 v2 v3 v4 v5 fuel
+    hn_lt hn1_lt hn2_lt hn3_lt hn4_lt hcode1 hcode2 hcode3 hcode4 hcode5 hpc
+    hi1 hv1 hRefNone1 hi1_bound
+    hi2 hv2 hRefNone2 hi2_bound
+    hi3 hv3 hRefNone3 hi3_bound
+    hi4 hv4 hRefNone4 hi4_bound
+    hi5 hv5 hRefNone5
 
 /-- Oracle call with empty return - placeholder axiom. -/
 theorem chain_marshal_and_oracle_call_empty : True := trivial

@@ -203,6 +203,84 @@ theorem chain_moveLoc_then_copyLoc
   simp only [frame1] at h
   exact h
 
+/-- Pattern: two moveLocs followed by one copyLoc.
+
+Common in verifiers that marshal multiple consumed args then copy a proof ref.
+-/
+theorem chain_two_moveLoc_then_copyLoc
+    (frame : Frame) (cs : List Frame) (rest : List MoveValue) (ms : MachineState)
+    (n i_move1 i_move2 i_copy : Nat)
+    (v_move1 v_move2 v_copy : MoveValue)
+    (fuel : Nat)
+    (hn_lt : n < frame.code.size)
+    (hn1_lt : n + 1 < frame.code.size)
+    (hn2_lt : n + 2 < frame.code.size)
+    (hcode1 : frame.code[n]'hn_lt = .moveLoc i_move1)
+    (hcode2 : frame.code[n+1]'hn1_lt = .moveLoc i_move2)
+    (hcode3 : frame.code[n+2]'hn2_lt = .copyLoc i_copy)
+    (hpc : frame.pc = n)
+    (hi_move1 : i_move1 < frame.locals.size)
+    (hv_move1 : frame.locals[i_move1]'hi_move1 = some v_move1)
+    (hRefNone_move1 : ¬ i_move1 < frame.localRefs.size ∨
+                       ∃ h : i_move1 < frame.localRefs.size, frame.localRefs[i_move1]'h = none)
+    (hi_move1_bound : i_move1 < frame.locals.size)
+    (hi_move2 : i_move2 < (frame.locals.set i_move1 none hi_move1_bound).size)
+    (hv_move2 : (frame.locals.set i_move1 none hi_move1_bound)[i_move2]'hi_move2 = some v_move2)
+    (hRefNone_move2 : ¬ i_move2 < frame.localRefs.size ∨
+                       ∃ h : i_move2 < frame.localRefs.size, frame.localRefs[i_move2]'h = none)
+    (hi_move2_bound : i_move2 < (frame.locals.set i_move1 none hi_move1_bound).size)
+    (hi_copy : i_copy < ((frame.locals.set i_move1 none hi_move1_bound).set i_move2 none hi_move2_bound).size)
+    (hv_copy : ((frame.locals.set i_move1 none hi_move1_bound).set i_move2 none hi_move2_bound)[i_copy]'hi_copy = some v_copy)
+    (hRefNone_copy : ¬ i_copy < frame.localRefs.size ∨
+                      ∃ h : i_copy < frame.localRefs.size, frame.localRefs[i_copy]'h = none)
+    (heq_bounds : hi_move1 = hi_move1_bound := by rfl) :
+    run env frame cs rest ms (fuel + 3) =
+    run env
+      { frame with
+        pc := n + 3,
+        locals := (frame.locals.set i_move1 none hi_move1_bound).set i_move2 none hi_move2_bound }
+      cs (v_copy :: v_move2 :: v_move1 :: rest) ms fuel := by
+  -- Rewrite bounds
+  have hi_move2' : i_move2 < frame.locals.size := by
+    have : (frame.locals.set i_move1 none hi_move1_bound).size = frame.locals.size := by simp [Array.size_set]
+    rw [← this]; exact hi_move2
+  have hi_copy' : i_copy < frame.locals.size := by
+    have h1 : (frame.locals.set i_move1 none hi_move1_bound).size = frame.locals.size := by simp [Array.size_set]
+    have h2 : ((frame.locals.set i_move1 none hi_move1_bound).set i_move2 none hi_move2_bound).size = (frame.locals.set i_move1 none hi_move1_bound).size := by simp [Array.size_set]
+    calc i_copy < ((frame.locals.set i_move1 none hi_move1_bound).set i_move2 none hi_move2_bound).size := hi_copy
+      _ = (frame.locals.set i_move1 none hi_move1_bound).size := h2
+      _ = frame.locals.size := h1
+  -- Step 1: moveLoc at PC n
+  have hstep1 : step env frame cs rest ms =
+    .ok { frame with pc := n + 1, locals := frame.locals.set i_move1 none hi_move1 } cs (v_move1 :: rest) ms := by
+    subst hpc
+    exact step_moveLoc_noRef i_move1 v_move1 hn_lt hcode1 hi_move1 hv_move1 hRefNone_move1
+  -- Step 2: moveLoc at PC n+1
+  let frame1 := { frame with pc := n + 1, locals := frame.locals.set i_move1 none hi_move1 }
+  have hstep2 : step env frame1 cs (v_move1 :: rest) ms =
+    .ok { frame1 with pc := n + 2, locals := frame1.locals.set i_move2 none hi_move2 } cs (v_move2 :: v_move1 :: rest) ms := by
+    have hframe1_locals_size : i_move2 < frame1.locals.size := by simp [frame1, Array.size_set]; exact hi_move2'
+    have hframe1_locals_val : frame1.locals[i_move2]'hframe1_locals_size = some v_move2 := by
+      simp [frame1]; exact hv_move2
+    show step env { frame with pc := n + 1, locals := frame.locals.set i_move1 none hi_move1 } cs (v_move1 :: rest) ms =
+      .ok { { frame with pc := n + 1, locals := frame.locals.set i_move1 none hi_move1 } with pc := n + 2, locals := ({ frame with pc := n + 1, locals := frame.locals.set i_move1 none hi_move1 }.locals.set i_move2 none hi_move2) } cs (v_move2 :: v_move1 :: rest) ms
+    exact step_moveLoc_noRef i_move2 v_move2 hn1_lt hcode2 hframe1_locals_size hframe1_locals_val hRefNone_move2
+  -- Step 3: copyLoc at PC n+2
+  let frame2 := { frame1 with pc := n + 2, locals := frame1.locals.set i_move2 none hi_move2 }
+  have hstep3 : step env frame2 cs (v_move2 :: v_move1 :: rest) ms =
+    .ok { frame2 with pc := n + 3 } cs (v_copy :: v_move2 :: v_move1 :: rest) ms := by
+    have hframe2_locals_size : i_copy < frame2.locals.size := by simp [frame2, frame1, Array.size_set]; exact hi_copy'
+    have hframe2_locals_val : frame2.locals[i_copy]'hframe2_locals_size = some v_copy := by
+      simp [frame2, frame1]; exact hv_copy
+    exact step_copyLoc_single frame2 cs (v_move2 :: v_move1 :: rest) ms (n+2) i_copy v_copy hn2_lt hcode3 rfl hframe2_locals_size hframe2_locals_val hRefNone_copy
+  -- Chain the three steps
+  rw [heq_bounds] at hstep1
+  have h := run_succ_three_ok fuel frame1 frame2 { frame2 with pc := n + 3 }
+    cs cs cs (v_move1 :: rest) (v_move2 :: v_move1 :: rest) (v_copy :: v_move2 :: v_move1 :: rest)
+    ms ms ms hstep1 hstep2 hstep3
+  simp only [frame2, frame1] at h
+  exact h
+
 /-! ## moveLoc chains followed by copyLoc sequences -/
 
 /-- Common verifier pattern: multiple moveLoc to marshal args, then copyLoc to duplicate refs.

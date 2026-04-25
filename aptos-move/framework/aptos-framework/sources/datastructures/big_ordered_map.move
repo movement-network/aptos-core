@@ -500,7 +500,7 @@ module aptos_std::big_ordered_map {
     /// Disclaimer: This function may be costly as the BigOrderedMap may be huge in size. Use it at your own discretion.
     public fun to_ordered_map<K: drop + copy + store, V: copy + store>(self: &BigOrderedMap<K, V>): OrderedMap<K, V> {
         let result = ordered_map::new();
-        self.for_each_ref_friend(|k, v| {
+        self.for_each_ref_internal(|k, v| {
             result.new_end_iter().iter_add(&mut result, *k, *v);
         });
         result
@@ -512,7 +512,7 @@ module aptos_std::big_ordered_map {
     /// use iterartor or next_key/prev_key to iterate over across portion of the map.
     public fun keys<K: store + copy + drop, V: store + copy>(self: &BigOrderedMap<K, V>): vector<K> {
         let result = vector[];
-        self.for_each_ref_friend(|k, _v| {
+        self.for_each_ref_internal(|k, _v| {
             result.push_back(*k);
         });
         result
@@ -570,8 +570,9 @@ module aptos_std::big_ordered_map {
         // })
     }
 
-    // TODO: Temporary friend implementaiton, until for_each_ref can be made efficient.
-    inline fun for_each_ref_friend<K: drop + copy + store, V: store>(self: &BigOrderedMap<K, V>, f: |&K, &V|) {
+    // Internal efficient O(n) traversal; exists until the public `for_each_ref`
+    // (currently O(n * log(n)) via the public iterator API) can be made efficient.
+    inline fun for_each_ref_internal<K: drop + copy + store, V: store>(self: &BigOrderedMap<K, V>, f: |&K, &V|) {
         self.for_each_leaf_node_ref(|node| {
             node.children.for_each_ref_friend(|k: &K, v: &Child<V>| {
                 f(k, &v.value);
@@ -1527,7 +1528,7 @@ module aptos_std::big_ordered_map {
         });
 
         let index = 0;
-        map.for_each_ref_friend(|k, v| {
+        map.for_each_ref_internal(|k, v| {
             assert!(k == expected_keys.borrow(index), *k + 100);
             assert!(v == expected_values.borrow(index), *k + 200);
             index += 1;

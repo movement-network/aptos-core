@@ -202,6 +202,82 @@ theorem chain_four_copyLoc
   simp only [frame3, frame2, frame1] at h
   exact h
 
+/-- Chain five copyLoc operations.
+
+All five locals remain unchanged since copyLoc preserves values.
+-/
+theorem chain_five_copyLoc
+    (frame : Frame) (cs : List Frame) (rest : List MoveValue) (ms : MachineState)
+    (n i1 i2 i3 i4 i5 : Nat)
+    (v1 v2 v3 v4 v5 : MoveValue)
+    (fuel : Nat)
+    (hn_lt : n < frame.code.size)
+    (hn1_lt : n + 1 < frame.code.size)
+    (hn2_lt : n + 2 < frame.code.size)
+    (hn3_lt : n + 3 < frame.code.size)
+    (hn4_lt : n + 4 < frame.code.size)
+    (hcode1 : frame.code[n]'hn_lt = .copyLoc i1)
+    (hcode2 : frame.code[n+1]'hn1_lt = .copyLoc i2)
+    (hcode3 : frame.code[n+2]'hn2_lt = .copyLoc i3)
+    (hcode4 : frame.code[n+3]'hn3_lt = .copyLoc i4)
+    (hcode5 : frame.code[n+4]'hn4_lt = .copyLoc i5)
+    (hpc : frame.pc = n)
+    (hi1 : i1 < frame.locals.size)
+    (hv1 : frame.locals[i1]'hi1 = some v1)
+    (hRefNone1 : ¬ i1 < frame.localRefs.size ∨
+                  ∃ h : i1 < frame.localRefs.size, frame.localRefs[i1]'h = none)
+    (hi2 : i2 < frame.locals.size)
+    (hv2 : frame.locals[i2]'hi2 = some v2)
+    (hRefNone2 : ¬ i2 < frame.localRefs.size ∨
+                  ∃ h : i2 < frame.localRefs.size, frame.localRefs[i2]'h = none)
+    (hi3 : i3 < frame.locals.size)
+    (hv3 : frame.locals[i3]'hi3 = some v3)
+    (hRefNone3 : ¬ i3 < frame.localRefs.size ∨
+                  ∃ h : i3 < frame.localRefs.size, frame.localRefs[i3]'h = none)
+    (hi4 : i4 < frame.locals.size)
+    (hv4 : frame.locals[i4]'hi4 = some v4)
+    (hRefNone4 : ¬ i4 < frame.localRefs.size ∨
+                  ∃ h : i4 < frame.localRefs.size, frame.localRefs[i4]'h = none)
+    (hi5 : i5 < frame.locals.size)
+    (hv5 : frame.locals[i5]'hi5 = some v5)
+    (hRefNone5 : ¬ i5 < frame.localRefs.size ∨
+                  ∃ h : i5 < frame.localRefs.size, frame.localRefs[i5]'h = none) :
+    run env frame cs rest ms (fuel + 5) =
+    run env
+      { frame with pc := n + 5 }
+      cs (v5 :: v4 :: v3 :: v2 :: v1 :: rest) ms fuel := by
+  -- Step 1: copyLoc at PC n
+  have hstep1 : step env frame cs rest ms =
+    .ok { frame with pc := n + 1 } cs (v1 :: rest) ms :=
+    step_copyLoc_single frame cs rest ms n i1 v1 hn_lt hcode1 hpc hi1 hv1 hRefNone1
+  -- Step 2: copyLoc at PC n+1
+  let frame1 := { frame with pc := n + 1 }
+  have hstep2 : step env frame1 cs (v1 :: rest) ms =
+    .ok { frame1 with pc := n + 2 } cs (v2 :: v1 :: rest) ms :=
+    step_copyLoc_single frame1 cs (v1 :: rest) ms (n+1) i2 v2 hn1_lt hcode2 rfl hi2 hv2 hRefNone2
+  -- Step 3: copyLoc at PC n+2
+  let frame2 := { frame1 with pc := n + 2 }
+  have hstep3 : step env frame2 cs (v2 :: v1 :: rest) ms =
+    .ok { frame2 with pc := n + 3 } cs (v3 :: v2 :: v1 :: rest) ms :=
+    step_copyLoc_single frame2 cs (v2 :: v1 :: rest) ms (n+2) i3 v3 hn2_lt hcode3 rfl hi3 hv3 hRefNone3
+  -- Step 4: copyLoc at PC n+3
+  let frame3 := { frame2 with pc := n + 3 }
+  have hstep4 : step env frame3 cs (v3 :: v2 :: v1 :: rest) ms =
+    .ok { frame3 with pc := n + 4 } cs (v4 :: v3 :: v2 :: v1 :: rest) ms :=
+    step_copyLoc_single frame3 cs (v3 :: v2 :: v1 :: rest) ms (n+3) i4 v4 hn3_lt hcode4 rfl hi4 hv4 hRefNone4
+  -- Step 5: copyLoc at PC n+4
+  let frame4 := { frame3 with pc := n + 4 }
+  have hstep5 : step env frame4 cs (v4 :: v3 :: v2 :: v1 :: rest) ms =
+    .ok { frame4 with pc := n + 5 } cs (v5 :: v4 :: v3 :: v2 :: v1 :: rest) ms :=
+    step_copyLoc_single frame4 cs (v4 :: v3 :: v2 :: v1 :: rest) ms (n+4) i5 v5 hn4_lt hcode5 rfl hi5 hv5 hRefNone5
+  -- Chain the five steps
+  have h := run_succ_five_ok fuel frame1 frame2 frame3 frame4 { frame4 with pc := n + 5 }
+    cs cs cs cs cs
+    (v1 :: rest) (v2 :: v1 :: rest) (v3 :: v2 :: v1 :: rest) (v4 :: v3 :: v2 :: v1 :: rest) (v5 :: v4 :: v3 :: v2 :: v1 :: rest)
+    ms ms ms ms ms hstep1 hstep2 hstep3 hstep4 hstep5
+  simp only [frame4, frame3, frame2, frame1] at h
+  exact h
+
 /-! ## Mixed moveLoc + copyLoc chains -/
 
 /-- Common pattern: moveLoc followed by copyLoc.

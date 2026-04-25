@@ -1,6 +1,7 @@
 import MovementFormal.MoveModel.StepLemmas.Run
 import MovementFormal.MoveModel.StepLemmas.Basic
 import MovementFormal.MoveModel.StepLemmas.Structs
+import MovementFormal.MoveModel.StepLemmas.Locals
 import MovementFormal.MoveModel.ContainerEvolution
 
 /-!
@@ -142,13 +143,18 @@ axiom chain_three_immBorrowField
 Example from Normalization PC 6-7:
 - PC 6: copyLoc 6 (copy proof ref)
 - PC 7: immBorrowField 0 (borrow sigma field)
+
+NOTE: immBorrowField consumes the struct ref from the stack and replaces it with the field ref.
+Final stack is `.immRef fid :: rest`, not `.immRef fid :: v_copy :: rest`.
 -/
-axiom chain_copyLoc_immBorrowField
+theorem chain_copyLoc_immBorrowField
     (frame : Frame) (cs : List Frame) (rest : List MoveValue) (ms : MachineState)
     (n i_copy field_idx : Nat)
     (v_copy : MoveValue)
     (rid : RefId)
     (fields : List MoveValue)
+    (cs' : ContainerStore)
+    (fid : RefId)
     (fuel : Nat)
     (hn_lt : n < frame.code.size)
     (hn1_lt : n + 1 < frame.code.size)
@@ -161,14 +167,33 @@ axiom chain_copyLoc_immBorrowField
                  ∃ h : i_copy < frame.localRefs.size, frame.localRefs[i_copy]'h = none)
     (hgetRef : getRefId v_copy = some rid)
     (hread : ms.containers.read rid = some (.struct_ fields))
-    (hfield : field_idx < fields.length) :
-    let (cs', fid) := ms.containers.alloc (fields[field_idx]'hfield)
+    (hfield : field_idx < fields.length)
+    (halloc : ms.containers.alloc (fields[field_idx]'hfield) = (cs', fid)) :
     run env frame cs rest ms (fuel + 2) =
     run env
       { frame with pc := n + 2 }
-      cs (.immRef fid :: v_copy :: rest)
+      cs (.immRef fid :: rest)
       { ms with containers := cs' }
-      fuel
+      fuel := by
+  -- Step 1: copyLoc at PC n
+  have hstep1 : step env frame cs rest ms =
+    .ok { frame with pc := n + 1 } cs (v_copy :: rest) ms := by
+    subst hpc
+    exact StepLemmas.step_copyLoc_noRef i_copy v_copy hn_lt hcode_copy hi_copy hv_copy hRefNone
+  -- Step 2: immBorrowField at PC n+1 on the modified frame
+  let frame1 := { frame with pc := n + 1 }
+  have hstep2 : step env frame1 cs (v_copy :: rest) ms =
+    .ok { frame1 with pc := n + 2 } cs (.immRef fid :: rest)
+      { ms with containers := cs' } := by
+    have hframe1_code_size : n + 1 < frame1.code.size := by simp [frame1]; exact hn1_lt
+    have hframe1_code : frame1.code[n+1]'hframe1_code_size = .immBorrowField field_idx := by
+      simp [frame1]; exact hcode_borrow
+    exact StepLemmas.step_immBorrowField field_idx rid fields cs' fid v_copy rest
+      hframe1_code_size hframe1_code hgetRef hread hfield halloc
+  -- Chain the two steps
+  have h := run_succ_two_ok fuel frame1 { frame1 with pc := n + 2 } cs cs (v_copy :: rest) (.immRef fid :: rest) ms { ms with containers := cs' } hstep1 hstep2
+  simp only [frame1] at h
+  exact h
 
 /-! ## Container store evolution lemmas -/
 

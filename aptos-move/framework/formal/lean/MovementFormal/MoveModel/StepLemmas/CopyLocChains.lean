@@ -158,6 +158,9 @@ theorem chain_moveLoc_then_copyLoc
 Example from Normalization:
 - PCs 0-4: moveLoc chain (5 args)
 - PCs 5-6: copyLoc chain (2 proof refs)
+
+NOTE: This axiom has a simplified signature - full proof would require complete hypotheses
+for all moveLoc and copyLoc operations. Marked as placeholder for future work.
 -/
 axiom chain_five_moveLoc_two_copyLoc
     (frame : Frame) (cs : List Frame) (rest : List MoveValue) (ms : MachineState)

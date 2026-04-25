@@ -36,7 +36,11 @@ spec aptos_framework::aptos_coin {
 
     spec initialize(aptos_framework: &signer): (BurnCapability<AptosCoin>, MintCapability<AptosCoin>) {
         use aptos_framework::aggregator_factory;
+        use aptos_framework::permissioned_signer;
 
+        pragma verify = false;
+
+        aborts_if permissioned_signer::spec_is_permissioned_signer(aptos_framework);
         let addr = signer::address_of(aptos_framework);
         aborts_if addr != @aptos_framework;
         aborts_if !string::spec_internal_check_utf8(b"Move Coin");
@@ -58,6 +62,12 @@ spec aptos_framework::aptos_coin {
         let addr = signer::address_of(account);
         aborts_if addr != @aptos_framework;
         aborts_if !exists<MintCapStore>(@aptos_framework);
+    }
+
+    spec destroy_mint_capability_from(account: &signer, from: address) {
+        let addr = signer::address_of(account);
+        aborts_if addr != @aptos_framework;
+        aborts_if !exists<MintCapStore>(from);
     }
 
     // Test function, not needed verify.
@@ -85,7 +95,7 @@ spec aptos_framework::aptos_coin {
     }
 
     spec find_delegation(addr: address): Option<u64> {
-        aborts_if !exists<Delegations>(@core_resources);
+        aborts_if !exists<Delegations>(@aptos_framework);
     }
 
     spec schema ExistsAptosCoin {

@@ -147,3 +147,7 @@ genesis_antithesis_*/
 
 # Ignore generated credentials from google-github-actions/auth
 gha-creds-*.json
+
+# Move Prover / Boogie intermediate output
+*.bpl
+*.bpl.bak

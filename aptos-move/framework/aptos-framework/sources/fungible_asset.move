@@ -702,8 +702,8 @@ module aptos_framework::fungible_asset {
 
     #[view]
     /// Return whether a fungible asset type has any dispatch or derived-supply hooks registered.
-    public fun is_asset_type_dispatchable(metadata: &Object<Metadata>): bool {
-        let metadata_addr = object::object_address(metadata);
+    public fun is_asset_type_dispatchable(metadata: Object<Metadata>): bool {
+        let metadata_addr = object::object_address(&metadata);
         exists<DispatchFunctionStore>(metadata_addr) || exists<DeriveSupply>(metadata_addr)
     }
 

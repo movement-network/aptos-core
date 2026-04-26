@@ -1015,7 +1015,7 @@ module aptos_experimental::confidential_asset_tests {
     {
         let token = set_up_dispatchable_fa_test(&confidential_asset, &aptos_fx, &fa, &alice, 500);
 
-        assert!(fungible_asset::is_asset_type_dispatchable(&token), 1);
+        assert!(fungible_asset::is_asset_type_dispatchable(token), 1);
 
         let (_, alice_ek) = generate_twisted_elgamal_keypair();
         confidential_asset::register_for_testing(&alice, token, twisted_elgamal::pubkey_to_bytes(&alice_ek));
@@ -1036,7 +1036,7 @@ module aptos_experimental::confidential_asset_tests {
         let token = set_up_for_confidential_asset_test(
             &confidential_asset, &aptos_fx, &fa, &alice, &alice, 500, 0);
 
-        assert!(!fungible_asset::is_asset_type_dispatchable(&token), 1);
+        assert!(!fungible_asset::is_asset_type_dispatchable(token), 1);
 
         let (_, alice_ek) = generate_twisted_elgamal_keypair();
         confidential_asset::register_for_testing(&alice, token, twisted_elgamal::pubkey_to_bytes(&alice_ek));

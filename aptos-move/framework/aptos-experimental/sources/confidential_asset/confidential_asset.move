@@ -1162,7 +1162,7 @@ module aptos_experimental::confidential_asset {
     /// fee-on-transfer tokens, rebasing balances, custom supply hooks). Until a safe
     /// integration path exists, only standard (non-dispatchable) FA types are accepted.
     fun is_safe_for_confidentiality(token: &Object<Metadata>): bool {
-        !fungible_asset::is_asset_type_dispatchable(token)
+        !fungible_asset::is_asset_type_dispatchable(*token)
     }
 
     /// Ensures that the `FAConfig` object exists for the specified token.

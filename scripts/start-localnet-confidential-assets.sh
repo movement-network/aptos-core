@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start Movement localnet (indexer API + faucet without delegation), enable confidential-assets
+# Start Movement localnet (validator REST + faucet, no Docker indexer), enable confidential-assets
 # feature flag 87 (BULLETPROOFS_BATCH_NATIVES) via mint.key, then publish AptosExperimental using the
 # account in .movement/config.yaml (see MOVEMENT_PROFILE / --named-addresses).
 #
@@ -16,28 +16,29 @@
 #   • 8080 — fullnode REST API (ledger), what `move run-script --url` uses. Your log line
 #            "REST API endpoint: http://127.0.0.1:8080" is this.
 #   • 8070 — localnet "ready server" only: a tiny HTTP endpoint the CLI runs so clients can wait
-#            until *all* configured services pass health checks (node + faucet + Docker indexer
-#            stack when using --with-indexer-api). It is NOT the blockchain API.
-#            The CLI prints: Readiness endpoint: http://127.0.0.1:8070/
+#            until configured services pass health checks (node + faucet for this stack). It is NOT
+#            the blockchain API. The CLI prints: Readiness endpoint: http://127.0.0.1:8070/
 #   To wait only for the node REST API (8080), set:  WAIT_STRATEGY=node
 #
 # Environment:
-#   MOVEMENT      — movement CLI (default: movement)
-#   APTOS         — deprecated alias for MOVEMENT if MOVEMENT is unset
+#   MOVEMENT      — movement CLI (default: $REPO_ROOT/target/release/movement, built via
+#                   `cargo build -p movement --release` if missing). Override with
+#                   MOVEMENT=/path/to/binary. The local build keeps the on-chain framework
+#                   in sync with this checked-out repo.
+#   SKIP_MOVEMENT_BUILD=1 — do not build movement CLI; fall back to `movement` on $PATH if
+#                   $REPO_ROOT/target/release/movement isn't already built.
 #   REPO_ROOT     — repo root (default: parent of scripts/)
-#   APTOS_ROOT    — deprecated alias for REPO_ROOT
 #   APTOS_LOCALNET_TEST_DIR — localnet data dir (default: $REPO_ROOT/.movement/testnet)
 #   NODE_URL      — REST base for `move run-script` (default: http://127.0.0.1:8080; refreshed from
 #                   $TEST_DIR/0/node.yaml when that file appears)
 #   READY_URL     — ready-server URL (default: http://127.0.0.1:8070/) when WAIT_STRATEGY=ready.
 #   WAIT_STRATEGY — ready | node (default: ready). "node" polls only NODE_URL/v1 (validator up).
 #   NODE_WAIT_TIMEOUT_SECS — max poll time (default: 120). When everything is healthy, localnet
-#          usually becomes ready in ~20s; raise this if Docker is pulling images or disks are slow.
+#          usually becomes ready in ~20s; raise this on slow hosts.
 #   SKIP_START=1  — skip starting localnet; only run the feature-flag transaction
 #   BACKGROUND=0  — run localnet in the foreground (blocks; run feature step separately)
-#   SKIP_DOCKER_CHECK=1 — skip `docker info` preflight (not recommended with --with-indexer-api)
 #   KEEP_LOCALNET — after success, keep localnet running (default: 1). Set to 0 to always stop on exit.
-#          On failure, localnet is always shut down if this script started it (no orphan stacks).
+#          On failure, localnet is always shut down if this script started it (no orphan process).
 #   LOCALNET_ATTACH — when KEEP_LOCALNET=1 and this script started localnet in the background (default: 1),
 #          block at the end on `wait` until the localnet process exits or you press Ctrl+C (which stops
 #          localnet via the EXIT trap). Set to 0 to return to the shell immediately while localnet keeps
@@ -70,10 +71,24 @@
 
 set -euo pipefail
 
-MOVEMENT="${MOVEMENT:-${APTOS:-movement}}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _default_repo_root="$(cd "${SCRIPT_DIR}/.." && pwd)"
-REPO_ROOT="${REPO_ROOT:-${APTOS_ROOT:-$_default_repo_root}}"
+REPO_ROOT="${REPO_ROOT:-$_default_repo_root}"
+# Use a locally-built movement binary so the on-chain framework matches this checked-out repo.
+# Build it if missing. Override the binary path with MOVEMENT=/path/to/binary; skip the build
+# (e.g. to use whatever's on $PATH) with SKIP_MOVEMENT_BUILD=1.
+_local_movement="${REPO_ROOT}/target/release/movement"
+SKIP_MOVEMENT_BUILD="${SKIP_MOVEMENT_BUILD:-0}"
+if [[ -z "${MOVEMENT:-}" ]]; then
+  if [[ ! -x "$_local_movement" && "$SKIP_MOVEMENT_BUILD" != "1" ]]; then
+    echo "Building movement CLI (cargo build -p movement --release; first build can take 10+ minutes)..."
+    (cd "$REPO_ROOT" && cargo build -p movement --release)
+  fi
+  if [[ -x "$_local_movement" ]]; then
+    MOVEMENT="$_local_movement"
+  fi
+fi
+MOVEMENT="${MOVEMENT:-movement}"
 TEST_DIR="${APTOS_LOCALNET_TEST_DIR:-$REPO_ROOT/.movement/testnet}"
 LOCALNET_LOG="${REPO_ROOT}/.movement/localnet.log"
 LOCALNET_PID_FILE="${REPO_ROOT}/.movement/localnet.pid"
@@ -86,7 +101,6 @@ BACKGROUND="${BACKGROUND:-1}"
 NODE_WAIT_TIMEOUT_SECS="${NODE_WAIT_TIMEOUT_SECS:-120}"
 MINT_KEY_WAIT_SECS="${MINT_KEY_WAIT_SECS:-60}"
 POLL_INTERVAL_SECS="${POLL_INTERVAL_SECS:-0.5}"
-SKIP_DOCKER_CHECK="${SKIP_DOCKER_CHECK:-0}"
 WAIT_STRATEGY="${WAIT_STRATEGY:-ready}"
 KEEP_LOCALNET="${KEEP_LOCALNET:-1}"
 LOCALNET_ATTACH="${LOCALNET_ATTACH:-1}"
@@ -126,21 +140,6 @@ if [[ "$SKIP_EXPERIMENTAL_PUBLISH" != "1" ]] && [[ ! -d "$EXPERIMENTAL_PACKAGE_D
   echo "error: experimental package not found at $EXPERIMENTAL_PACKAGE_DIR" >&2
   exit 1
 fi
-
-require_docker() {
-  if [[ "$SKIP_DOCKER_CHECK" == "1" ]]; then
-    return 0
-  fi
-  if ! command -v docker >/dev/null 2>&1; then
-    echo "error: docker not found. This script uses --with-indexer-api (Postgres + processors + Hasura in Docker)." >&2
-    echo "      Install Docker or set SKIP_DOCKER_CHECK=1 at your own risk." >&2
-    exit 1
-  fi
-  if ! docker info >/dev/null 2>&1; then
-    echo "error: Docker is not reachable (docker info failed). Start Docker Desktop / the daemon and retry." >&2
-    exit 1
-  fi
-}
 
 # Parse REST bind from generated validator config (host for curl).
 refresh_node_url_from_node_yaml() {
@@ -187,7 +186,7 @@ localnet_responds() {
 wait_target_description() {
   case "$WAIT_STRATEGY" in
     node) echo "node REST ${NODE_URL}/v1" ;;
-    *) echo "ready server $READY_URL (all health checks)" ;;
+    *) echo "ready server $READY_URL (node + faucet health checks)" ;;
   esac
 }
 
@@ -540,13 +539,11 @@ wait_for_mint_key() {
 run_localnet() {
   mkdir -p "$REPO_ROOT/.movement"
   cd "$REPO_ROOT"
-  require_docker
   if [[ "$BACKGROUND" == "1" ]]; then
     echo "Starting localnet in background (logs: $LOCALNET_LOG) ..."
     nohup "$MOVEMENT" node run-localnet \
       --force-restart \
       --assume-yes \
-      --with-indexer-api \
       --do-not-delegate \
       --test-dir "$TEST_DIR" \
       >"$LOCALNET_LOG" 2>&1 &
@@ -563,7 +560,6 @@ run_localnet() {
     exec "$MOVEMENT" node run-localnet \
       --force-restart \
       --assume-yes \
-      --with-indexer-api \
       --do-not-delegate \
       --test-dir "$TEST_DIR"
   fi
@@ -628,7 +624,7 @@ echo "Enabling feature flag 87 (BULLETPROOFS_BATCH_NATIVES) ..."
 publish_experimental_from_profile
 
 echo "Done — feature flag and (if enabled) publish finished."
-echo "REST: $NODE_URL/v1  (full-stack ready probe: $READY_URL — set WAIT_STRATEGY=node to wait only on REST)"
+echo "REST: $NODE_URL/v1  (ready probe: $READY_URL — set WAIT_STRATEGY=node to wait only on REST)"
 
 # Hold this shell so localnet is not an invisible background process (default). Ctrl+C stops localnet.
 if [[ "$STARTED_LOCALNET_BG" == "1" ]] && [[ "$KEEP_LOCALNET" == "1" ]] && [[ "${LOCALNET_ATTACH:-1}" == "1" ]]; then

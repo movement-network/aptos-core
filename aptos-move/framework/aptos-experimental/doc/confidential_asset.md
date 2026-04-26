@@ -63,9 +63,12 @@ It enables private transfers by obfuscating token amounts while keeping sender a
 -  [Function `rollover_pending_balance_internal`](#0x7_confidential_asset_rollover_pending_balance_internal)
 -  [Function `freeze_token_internal`](#0x7_confidential_asset_freeze_token_internal)
 -  [Function `unfreeze_token_internal`](#0x7_confidential_asset_unfreeze_token_internal)
+-  [Function `is_safe_for_confidentiality`](#0x7_confidential_asset_is_safe_for_confidentiality)
 -  [Function `ensure_fa_config_exists`](#0x7_confidential_asset_ensure_fa_config_exists)
 -  [Function `get_fa_store_signer`](#0x7_confidential_asset_get_fa_store_signer)
 -  [Function `get_fa_store_address`](#0x7_confidential_asset_get_fa_store_address)
+-  [Function `get_pool_fa_store`](#0x7_confidential_asset_get_pool_fa_store)
+-  [Function `ensure_pool_fa_store`](#0x7_confidential_asset_ensure_pool_fa_store)
 -  [Function `get_user_signer`](#0x7_confidential_asset_get_user_signer)
 -  [Function `get_user_address`](#0x7_confidential_asset_get_user_address)
 -  [Function `get_fa_config_signer`](#0x7_confidential_asset_get_fa_config_signer)
@@ -957,6 +960,16 @@ The pending balance must be zero for this operation.
 
 
 
+<a id="0x7_confidential_asset_ENO_CONFIDENTIAL_ASSET_POOL"></a>
+
+No confidential asset pool exists for the given asset type.
+
+
+<pre><code><b>const</b> <a href="confidential_asset.md#0x7_confidential_asset_ENO_CONFIDENTIAL_ASSET_POOL">ENO_CONFIDENTIAL_ASSET_POOL</a>: u64 = 20;
+</code></pre>
+
+
+
 <a id="0x7_confidential_asset_ERANGE_PROOF_SYSTEM_HAS_INSUFFICIENT_RANGE"></a>
 
 The range proof system does not support sufficient range.
@@ -983,6 +996,17 @@ The token is already allowed for confidential transfers.
 
 
 <pre><code><b>const</b> <a href="confidential_asset.md#0x7_confidential_asset_ETOKEN_ENABLED">ETOKEN_ENABLED</a>: u64 = 12;
+</code></pre>
+
+
+
+<a id="0x7_confidential_asset_EUNSAFE_DISPATCHABLE_FA"></a>
+
+Dispatchable fungible asset types (those with custom withdraw, deposit, balance, or
+supply hooks) are not yet supported in confidential transfers.
+
+
+<pre><code><b>const</b> <a href="confidential_asset.md#0x7_confidential_asset_EUNSAFE_DISPATCHABLE_FA">EUNSAFE_DISPATCHABLE_FA</a>: u64 = 19;
 </code></pre>
 
 
@@ -2102,10 +2126,7 @@ Returns the circulating supply of the confidential asset.
 
 
 <pre><code><b>public</b> <b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_confidential_asset_balance">confidential_asset_balance</a>(token: Object&lt;Metadata&gt;): u64 <b>acquires</b> <a href="confidential_asset.md#0x7_confidential_asset_FAController">FAController</a> {
-    <b>let</b> fa_store_address = <a href="confidential_asset.md#0x7_confidential_asset_get_fa_store_address">get_fa_store_address</a>();
-    <b>assert</b>!(<a href="../../aptos-framework/doc/primary_fungible_store.md#0x1_primary_fungible_store_primary_store_exists">primary_fungible_store::primary_store_exists</a>(fa_store_address, token), <a href="confidential_asset.md#0x7_confidential_asset_EINTERNAL_ERROR">EINTERNAL_ERROR</a>);
-
-    <a href="../../aptos-framework/doc/primary_fungible_store.md#0x1_primary_fungible_store_balance">primary_fungible_store::balance</a>(fa_store_address, token)
+    <a href="../../aptos-framework/doc/fungible_asset.md#0x1_fungible_asset_balance">fungible_asset::balance</a>(<a href="confidential_asset.md#0x7_confidential_asset_get_pool_fa_store">get_pool_fa_store</a>(token))
 }
 </code></pre>
 
@@ -2134,6 +2155,7 @@ Implementation of the <code>register</code> entry function.
     token: Object&lt;Metadata&gt;,
     ek: twisted_elgamal::CompressedPubkey) <b>acquires</b> <a href="confidential_asset.md#0x7_confidential_asset_FAController">FAController</a>, <a href="confidential_asset.md#0x7_confidential_asset_FAConfig">FAConfig</a>
 {
+    <b>assert</b>!(<a href="confidential_asset.md#0x7_confidential_asset_is_safe_for_confidentiality">is_safe_for_confidentiality</a>(&token), <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="confidential_asset.md#0x7_confidential_asset_EUNSAFE_DISPATCHABLE_FA">EUNSAFE_DISPATCHABLE_FA</a>));
     <b>assert</b>!(<a href="confidential_asset.md#0x7_confidential_asset_is_token_allowed">is_token_allowed</a>(token), <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="confidential_asset.md#0x7_confidential_asset_ETOKEN_DISABLED">ETOKEN_DISABLED</a>));
 
     <b>let</b> user = <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(sender);
@@ -2185,15 +2207,17 @@ Implementation of the <code>deposit_to</code> entry function.
     <b>to</b>: <b>address</b>,
     amount: u64) <b>acquires</b> <a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>, <a href="confidential_asset.md#0x7_confidential_asset_FAController">FAController</a>, <a href="confidential_asset.md#0x7_confidential_asset_FAConfig">FAConfig</a>
 {
+    <b>assert</b>!(<a href="confidential_asset.md#0x7_confidential_asset_is_safe_for_confidentiality">is_safe_for_confidentiality</a>(&token), <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="confidential_asset.md#0x7_confidential_asset_EUNSAFE_DISPATCHABLE_FA">EUNSAFE_DISPATCHABLE_FA</a>));
     <b>assert</b>!(<a href="confidential_asset.md#0x7_confidential_asset_is_token_allowed">is_token_allowed</a>(token), <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="confidential_asset.md#0x7_confidential_asset_ETOKEN_DISABLED">ETOKEN_DISABLED</a>));
     <b>assert</b>!(!<a href="confidential_asset.md#0x7_confidential_asset_is_frozen">is_frozen</a>(<b>to</b>, token), <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_state">error::invalid_state</a>(<a href="confidential_asset.md#0x7_confidential_asset_EALREADY_FROZEN">EALREADY_FROZEN</a>));
 
     <b>let</b> from = <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(sender);
 
-    <b>let</b> sender_fa_store = <a href="../../aptos-framework/doc/primary_fungible_store.md#0x1_primary_fungible_store_ensure_primary_store_exists">primary_fungible_store::ensure_primary_store_exists</a>(from, token);
-    <b>let</b> ca_fa_store = <a href="../../aptos-framework/doc/primary_fungible_store.md#0x1_primary_fungible_store_ensure_primary_store_exists">primary_fungible_store::ensure_primary_store_exists</a>(<a href="confidential_asset.md#0x7_confidential_asset_get_fa_store_address">get_fa_store_address</a>(), token);
+    <b>let</b> pool_fa_store = <a href="confidential_asset.md#0x7_confidential_asset_ensure_pool_fa_store">ensure_pool_fa_store</a>(token);
 
-    <a href="../../aptos-framework/doc/dispatchable_fungible_asset.md#0x1_dispatchable_fungible_asset_transfer">dispatchable_fungible_asset::transfer</a>(sender, sender_fa_store, ca_fa_store, amount);
+    <b>let</b> pool_before = <a href="../../aptos-framework/doc/fungible_asset.md#0x1_fungible_asset_balance">fungible_asset::balance</a>(pool_fa_store);
+    <b>let</b> sender_fa_store = <a href="../../aptos-framework/doc/primary_fungible_store.md#0x1_primary_fungible_store_primary_store">primary_fungible_store::primary_store</a>(from, token);
+    <a href="../../aptos-framework/doc/dispatchable_fungible_asset.md#0x1_dispatchable_fungible_asset_transfer">dispatchable_fungible_asset::transfer</a>(sender, sender_fa_store, pool_fa_store, amount);
 
     <b>let</b> ca_store = <b>borrow_global_mut</b>&lt;<a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>&gt;(<a href="confidential_asset.md#0x7_confidential_asset_get_user_address">get_user_address</a>(<b>to</b>, token));
     <b>let</b> pending_balance = <a href="confidential_balance.md#0x7_confidential_balance_decompress_balance">confidential_balance::decompress_balance</a>(&ca_store.pending_balance);
@@ -2219,6 +2243,11 @@ Implementation of the <code>deposit_to</code> entry function.
         amount,
         new_pending_balance: ca_store.pending_balance,
     });
+
+    <b>assert</b>!(
+        amount == <a href="../../aptos-framework/doc/fungible_asset.md#0x1_fungible_asset_balance">fungible_asset::balance</a>(pool_fa_store) - pool_before,
+        <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="confidential_asset.md#0x7_confidential_asset_EUNSAFE_DISPATCHABLE_FA">EUNSAFE_DISPATCHABLE_FA</a>)
+    );
 }
 </code></pre>
 
@@ -2251,6 +2280,8 @@ Withdrawals are always allowed, regardless of the token allow status.
     new_balance: <a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>,
     proof: WithdrawalProof) <b>acquires</b> <a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>, <a href="confidential_asset.md#0x7_confidential_asset_FAController">FAController</a>
 {
+    <b>assert</b>!(<a href="confidential_asset.md#0x7_confidential_asset_is_safe_for_confidentiality">is_safe_for_confidentiality</a>(&token), <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="confidential_asset.md#0x7_confidential_asset_EUNSAFE_DISPATCHABLE_FA">EUNSAFE_DISPATCHABLE_FA</a>));
+
     <b>let</b> from = <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(sender);
 
     <b>let</b> sender_ek = <a href="confidential_asset.md#0x7_confidential_asset_encryption_key">encryption_key</a>(from, token);
@@ -2273,7 +2304,10 @@ Withdrawals are always allowed, regardless of the token allow status.
     ca_store.normalized = <b>true</b>;
     ca_store.actual_balance = <a href="confidential_balance.md#0x7_confidential_balance_compress_balance">confidential_balance::compress_balance</a>(&new_balance);
 
-    <a href="../../aptos-framework/doc/primary_fungible_store.md#0x1_primary_fungible_store_transfer">primary_fungible_store::transfer</a>(&<a href="confidential_asset.md#0x7_confidential_asset_get_fa_store_signer">get_fa_store_signer</a>(), token, <b>to</b>, amount);
+    <b>let</b> pool_fa_store = <a href="confidential_asset.md#0x7_confidential_asset_get_pool_fa_store">get_pool_fa_store</a>(token);
+    <b>let</b> pool_before = <a href="../../aptos-framework/doc/fungible_asset.md#0x1_fungible_asset_balance">fungible_asset::balance</a>(pool_fa_store);
+    <b>let</b> recipient_fa_store = <a href="../../aptos-framework/doc/primary_fungible_store.md#0x1_primary_fungible_store_ensure_primary_store_exists">primary_fungible_store::ensure_primary_store_exists</a>(<b>to</b>, token);
+    <a href="../../aptos-framework/doc/dispatchable_fungible_asset.md#0x1_dispatchable_fungible_asset_transfer">dispatchable_fungible_asset::transfer</a>(&<a href="confidential_asset.md#0x7_confidential_asset_get_fa_store_signer">get_fa_store_signer</a>(), pool_fa_store, recipient_fa_store, amount);
 
     <a href="../../aptos-framework/doc/event.md#0x1_event_emit">event::emit</a>(<a href="confidential_asset.md#0x7_confidential_asset_Withdrawn">Withdrawn</a> {
         from,
@@ -2282,6 +2316,11 @@ Withdrawals are always allowed, regardless of the token allow status.
         amount,
         new_available_balance: ca_store.actual_balance,
     });
+
+    <b>assert</b>!(
+        amount == pool_before - <a href="../../aptos-framework/doc/fungible_asset.md#0x1_fungible_asset_balance">fungible_asset::balance</a>(pool_fa_store),
+        <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="confidential_asset.md#0x7_confidential_asset_EUNSAFE_DISPATCHABLE_FA">EUNSAFE_DISPATCHABLE_FA</a>)
+    );
 }
 </code></pre>
 
@@ -2317,6 +2356,7 @@ Implementation of the <code>confidential_transfer</code> entry function.
     proof: TransferProof,
     sender_auditor_hint: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;) <b>acquires</b> <a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>, <a href="confidential_asset.md#0x7_confidential_asset_FAConfig">FAConfig</a>, <a href="confidential_asset.md#0x7_confidential_asset_FAController">FAController</a>
 {
+    <b>assert</b>!(<a href="confidential_asset.md#0x7_confidential_asset_is_safe_for_confidentiality">is_safe_for_confidentiality</a>(&token), <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="confidential_asset.md#0x7_confidential_asset_EUNSAFE_DISPATCHABLE_FA">EUNSAFE_DISPATCHABLE_FA</a>));
     <b>assert</b>!(<a href="confidential_asset.md#0x7_confidential_asset_is_token_allowed">is_token_allowed</a>(token), <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="confidential_asset.md#0x7_confidential_asset_ETOKEN_DISABLED">ETOKEN_DISABLED</a>));
     <b>assert</b>!(!<a href="confidential_asset.md#0x7_confidential_asset_is_frozen">is_frozen</a>(<b>to</b>, token), <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_state">error::invalid_state</a>(<a href="confidential_asset.md#0x7_confidential_asset_EALREADY_FROZEN">EALREADY_FROZEN</a>));
     <b>assert</b>!(
@@ -2660,6 +2700,36 @@ Implementation of the <code>unfreeze_token</code> entry function.
 
 </details>
 
+<a id="0x7_confidential_asset_is_safe_for_confidentiality"></a>
+
+## Function `is_safe_for_confidentiality`
+
+Returns whether the given asset type is safe for use in confidential transfers.
+
+Dispatchable fungible assets can override withdraw, deposit, balance, or supply
+behaviour in ways that are incompatible with encrypted on-chain balances (e.g.,
+fee-on-transfer tokens, rebasing balances, custom supply hooks). Until a safe
+integration path exists, only standard (non-dispatchable) FA types are accepted.
+
+
+<pre><code><b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_is_safe_for_confidentiality">is_safe_for_confidentiality</a>(token: &<a href="../../aptos-framework/doc/object.md#0x1_object_Object">object::Object</a>&lt;<a href="../../aptos-framework/doc/fungible_asset.md#0x1_fungible_asset_Metadata">fungible_asset::Metadata</a>&gt;): bool
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_is_safe_for_confidentiality">is_safe_for_confidentiality</a>(token: &Object&lt;Metadata&gt;): bool {
+    !<a href="../../aptos-framework/doc/fungible_asset.md#0x1_fungible_asset_is_asset_type_dispatchable">fungible_asset::is_asset_type_dispatchable</a>(*token)
+}
+</code></pre>
+
+
+
+</details>
+
 <a id="0x7_confidential_asset_ensure_fa_config_exists"></a>
 
 ## Function `ensure_fa_config_exists`
@@ -2741,6 +2811,58 @@ Returns the address that handles all the FA primary stores.
 
 <pre><code><b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_get_fa_store_address">get_fa_store_address</a>(): <b>address</b> <b>acquires</b> <a href="confidential_asset.md#0x7_confidential_asset_FAController">FAController</a> {
     <a href="../../aptos-framework/doc/object.md#0x1_object_address_from_extend_ref">object::address_from_extend_ref</a>(&<b>borrow_global</b>&lt;<a href="confidential_asset.md#0x7_confidential_asset_FAController">FAController</a>&gt;(@aptos_experimental).extend_ref)
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x7_confidential_asset_get_pool_fa_store"></a>
+
+## Function `get_pool_fa_store`
+
+Returns the pool's primary fungible store for the given token, aborting if it does not exist.
+
+
+<pre><code><b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_get_pool_fa_store">get_pool_fa_store</a>(token: <a href="../../aptos-framework/doc/object.md#0x1_object_Object">object::Object</a>&lt;<a href="../../aptos-framework/doc/fungible_asset.md#0x1_fungible_asset_Metadata">fungible_asset::Metadata</a>&gt;): <a href="../../aptos-framework/doc/object.md#0x1_object_Object">object::Object</a>&lt;<a href="../../aptos-framework/doc/fungible_asset.md#0x1_fungible_asset_FungibleStore">fungible_asset::FungibleStore</a>&gt;
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_get_pool_fa_store">get_pool_fa_store</a>(token: Object&lt;Metadata&gt;): Object&lt;FungibleStore&gt; <b>acquires</b> <a href="confidential_asset.md#0x7_confidential_asset_FAController">FAController</a> {
+    <b>let</b> pool_addr = <a href="confidential_asset.md#0x7_confidential_asset_get_fa_store_address">get_fa_store_address</a>();
+    <b>assert</b>!(<a href="../../aptos-framework/doc/primary_fungible_store.md#0x1_primary_fungible_store_primary_store_exists">primary_fungible_store::primary_store_exists</a>(pool_addr, token), <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_not_found">error::not_found</a>(<a href="confidential_asset.md#0x7_confidential_asset_ENO_CONFIDENTIAL_ASSET_POOL">ENO_CONFIDENTIAL_ASSET_POOL</a>));
+    <a href="../../aptos-framework/doc/primary_fungible_store.md#0x1_primary_fungible_store_primary_store">primary_fungible_store::primary_store</a>(pool_addr, token)
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x7_confidential_asset_ensure_pool_fa_store"></a>
+
+## Function `ensure_pool_fa_store`
+
+Returns the pool's primary fungible store for the given token, creating it if necessary.
+
+
+<pre><code><b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_ensure_pool_fa_store">ensure_pool_fa_store</a>(token: <a href="../../aptos-framework/doc/object.md#0x1_object_Object">object::Object</a>&lt;<a href="../../aptos-framework/doc/fungible_asset.md#0x1_fungible_asset_Metadata">fungible_asset::Metadata</a>&gt;): <a href="../../aptos-framework/doc/object.md#0x1_object_Object">object::Object</a>&lt;<a href="../../aptos-framework/doc/fungible_asset.md#0x1_fungible_asset_FungibleStore">fungible_asset::FungibleStore</a>&gt;
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_ensure_pool_fa_store">ensure_pool_fa_store</a>(token: Object&lt;Metadata&gt;): Object&lt;FungibleStore&gt; <b>acquires</b> <a href="confidential_asset.md#0x7_confidential_asset_FAController">FAController</a> {
+    <a href="../../aptos-framework/doc/primary_fungible_store.md#0x1_primary_fungible_store_ensure_primary_store_exists">primary_fungible_store::ensure_primary_store_exists</a>(<a href="confidential_asset.md#0x7_confidential_asset_get_fa_store_address">get_fa_store_address</a>(), token)
 }
 </code></pre>
 
@@ -3121,7 +3243,7 @@ Returns <code>Some(Object&lt;Metadata&gt;)</code> if user has a sufficient amoun
 
 ## Function `serialize_auditor_eks`
 
-Pure serialization helpers (no <code><b>borrow_global</b></code>). Public so <code><b>move</b>-lean-difftest</code> and other
+Pure serialization helpers (no <code><b>borrow_global</b></code>). Public so off-chain tooling and
 tooling can exercise the same entrypoints as tests without <code>#[test_only]</code> harness modules.
 
 

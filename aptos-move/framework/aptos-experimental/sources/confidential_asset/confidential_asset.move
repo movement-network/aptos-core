@@ -13,7 +13,7 @@ module aptos_experimental::confidential_asset {
     use aptos_framework::coin;
     use aptos_framework::event;
     use aptos_framework::dispatchable_fungible_asset;
-    use aptos_framework::fungible_asset::{Metadata};
+    use aptos_framework::fungible_asset::{Self, FungibleStore, Metadata};
     use aptos_framework::object::{Self, ExtendRef, Object};
     use aptos_framework::primary_fungible_store;
     use aptos_framework::system_addresses;
@@ -84,6 +84,13 @@ module aptos_experimental::confidential_asset {
 
     /// `sender_auditor_hint` exceeds [`MAX_SENDER_AUDITOR_HINT_BYTES`].
     const EAUDITOR_HINT_TOO_LONG: u64 = 18;
+
+    /// Dispatchable fungible asset types (those with custom withdraw, deposit, balance, or
+    /// supply hooks) are not yet supported in confidential transfers.
+    const EUNSAFE_DISPATCHABLE_FA: u64 = 19;
+
+    /// No confidential asset pool exists for the given asset type.
+    const ENO_CONFIDENTIAL_ASSET_POOL: u64 = 20;
 
     //
     // Constants
@@ -750,10 +757,7 @@ module aptos_experimental::confidential_asset {
     #[view]
     /// Returns the circulating supply of the confidential asset.
     public fun confidential_asset_balance(token: Object<Metadata>): u64 acquires FAController {
-        let fa_store_address = get_fa_store_address();
-        assert!(primary_fungible_store::primary_store_exists(fa_store_address, token), EINTERNAL_ERROR);
-
-        primary_fungible_store::balance(fa_store_address, token)
+        fungible_asset::balance(get_pool_fa_store(token))
     }
 
     //
@@ -767,6 +771,7 @@ module aptos_experimental::confidential_asset {
         token: Object<Metadata>,
         ek: twisted_elgamal::CompressedPubkey) acquires FAController, FAConfig
     {
+        assert!(is_safe_for_confidentiality(&token), error::invalid_argument(EUNSAFE_DISPATCHABLE_FA));
         assert!(is_token_allowed(token), error::invalid_argument(ETOKEN_DISABLED));
 
         let user = signer::address_of(sender);
@@ -798,15 +803,17 @@ module aptos_experimental::confidential_asset {
         to: address,
         amount: u64) acquires ConfidentialAssetStore, FAController, FAConfig
     {
+        assert!(is_safe_for_confidentiality(&token), error::invalid_argument(EUNSAFE_DISPATCHABLE_FA));
         assert!(is_token_allowed(token), error::invalid_argument(ETOKEN_DISABLED));
         assert!(!is_frozen(to, token), error::invalid_state(EALREADY_FROZEN));
 
         let from = signer::address_of(sender);
 
-        let sender_fa_store = primary_fungible_store::ensure_primary_store_exists(from, token);
-        let ca_fa_store = primary_fungible_store::ensure_primary_store_exists(get_fa_store_address(), token);
+        let pool_fa_store = ensure_pool_fa_store(token);
 
-        dispatchable_fungible_asset::transfer(sender, sender_fa_store, ca_fa_store, amount);
+        let pool_before = fungible_asset::balance(pool_fa_store);
+        let sender_fa_store = primary_fungible_store::primary_store(from, token);
+        dispatchable_fungible_asset::transfer(sender, sender_fa_store, pool_fa_store, amount);
 
         let ca_store = borrow_global_mut<ConfidentialAssetStore>(get_user_address(to, token));
         let pending_balance = confidential_balance::decompress_balance(&ca_store.pending_balance);
@@ -832,6 +839,11 @@ module aptos_experimental::confidential_asset {
             amount,
             new_pending_balance: ca_store.pending_balance,
         });
+
+        assert!(
+            amount == fungible_asset::balance(pool_fa_store) - pool_before,
+            error::invalid_argument(EUNSAFE_DISPATCHABLE_FA)
+        );
     }
 
     /// Implementation of the `withdraw_to` entry function.
@@ -844,6 +856,8 @@ module aptos_experimental::confidential_asset {
         new_balance: confidential_balance::ConfidentialBalance,
         proof: WithdrawalProof) acquires ConfidentialAssetStore, FAController
     {
+        assert!(is_safe_for_confidentiality(&token), error::invalid_argument(EUNSAFE_DISPATCHABLE_FA));
+
         let from = signer::address_of(sender);
 
         let sender_ek = encryption_key(from, token);
@@ -866,7 +880,10 @@ module aptos_experimental::confidential_asset {
         ca_store.normalized = true;
         ca_store.actual_balance = confidential_balance::compress_balance(&new_balance);
 
-        primary_fungible_store::transfer(&get_fa_store_signer(), token, to, amount);
+        let pool_fa_store = get_pool_fa_store(token);
+        let pool_before = fungible_asset::balance(pool_fa_store);
+        let recipient_fa_store = primary_fungible_store::ensure_primary_store_exists(to, token);
+        dispatchable_fungible_asset::transfer(&get_fa_store_signer(), pool_fa_store, recipient_fa_store, amount);
 
         event::emit(Withdrawn {
             from,
@@ -875,6 +892,11 @@ module aptos_experimental::confidential_asset {
             amount,
             new_available_balance: ca_store.actual_balance,
         });
+
+        assert!(
+            amount == pool_before - fungible_asset::balance(pool_fa_store),
+            error::invalid_argument(EUNSAFE_DISPATCHABLE_FA)
+        );
     }
 
     /// Implementation of the `confidential_transfer` entry function.
@@ -890,6 +912,7 @@ module aptos_experimental::confidential_asset {
         proof: TransferProof,
         sender_auditor_hint: vector<u8>) acquires ConfidentialAssetStore, FAConfig, FAController
     {
+        assert!(is_safe_for_confidentiality(&token), error::invalid_argument(EUNSAFE_DISPATCHABLE_FA));
         assert!(is_token_allowed(token), error::invalid_argument(ETOKEN_DISABLED));
         assert!(!is_frozen(to, token), error::invalid_state(EALREADY_FROZEN));
         assert!(
@@ -1132,6 +1155,16 @@ module aptos_experimental::confidential_asset {
     // Private functions.
     //
 
+    /// Returns whether the given asset type is safe for use in confidential transfers.
+    ///
+    /// Dispatchable fungible assets can override withdraw, deposit, balance, or supply
+    /// behaviour in ways that are incompatible with encrypted on-chain balances (e.g.,
+    /// fee-on-transfer tokens, rebasing balances, custom supply hooks). Until a safe
+    /// integration path exists, only standard (non-dispatchable) FA types are accepted.
+    fun is_safe_for_confidentiality(token: &Object<Metadata>): bool {
+        !fungible_asset::is_asset_type_dispatchable(*token)
+    }
+
     /// Ensures that the `FAConfig` object exists for the specified token.
     /// If the object does not exist, creates it.
     /// Used only for internal purposes.
@@ -1158,6 +1191,18 @@ module aptos_experimental::confidential_asset {
     /// Returns the address that handles all the FA primary stores.
     fun get_fa_store_address(): address acquires FAController {
         object::address_from_extend_ref(&borrow_global<FAController>(@aptos_experimental).extend_ref)
+    }
+
+    /// Returns the pool's primary fungible store for the given token, aborting if it does not exist.
+    fun get_pool_fa_store(token: Object<Metadata>): Object<FungibleStore> acquires FAController {
+        let pool_addr = get_fa_store_address();
+        assert!(primary_fungible_store::primary_store_exists(pool_addr, token), error::not_found(ENO_CONFIDENTIAL_ASSET_POOL));
+        primary_fungible_store::primary_store(pool_addr, token)
+    }
+
+    /// Returns the pool's primary fungible store for the given token, creating it if necessary.
+    fun ensure_pool_fa_store(token: Object<Metadata>): Object<FungibleStore> acquires FAController {
+        primary_fungible_store::ensure_primary_store_exists(get_fa_store_address(), token)
     }
 
     /// Returns an object for handling the `ConfidentialAssetStore` and returns a signer for it.
@@ -1375,7 +1420,7 @@ module aptos_experimental::confidential_asset {
         confidential_balance::verify_actual_balance(&actual_balance, user_dk, amount)
     }
 
-    /// Pure serialization helpers (no `borrow_global`). Public so `move-lean-difftest` and other
+    /// Pure serialization helpers (no `borrow_global`). Public so off-chain tooling and
     /// tooling can exercise the same entrypoints as tests without `#[test_only]` harness modules.
     public fun serialize_auditor_eks(auditor_eks: &vector<twisted_elgamal::CompressedPubkey>): vector<u8> {
         let auditor_eks_bytes = vector[];

@@ -1,7 +1,3 @@
-// Modifying on-chain feature flags:
-// Enabled Features: [BulletproofsBatchNatives]
-// Disabled Features: []
-//
 script {
     use aptos_framework::aptos_governance;
     use std::features;

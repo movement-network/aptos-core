@@ -8,6 +8,7 @@ module aptos_experimental::confidential_asset_tests {
     use aptos_framework::account;
     use aptos_framework::chain_id;
     use aptos_framework::coin;
+    use aptos_framework::dispatchable_fungible_asset;
     use aptos_framework::fungible_asset::{Self, Metadata};
     use aptos_framework::object::{Self, Object};
     use aptos_framework::primary_fungible_store;
@@ -956,5 +957,89 @@ module aptos_experimental::confidential_asset_tests {
         assert!(coin::balance<MockCoin>(alice_addr) == 50, 1);
         assert!(primary_fungible_store::balance(alice_addr, token) == 50, 1);
         assert!(confidential_asset::verify_pending_balance(alice_addr, token, &alice_dk, 50), 1);
+    }
+
+    fun set_up_dispatchable_fa_test(
+        confidential_asset_signer: &signer,
+        aptos_fx: &signer,
+        fa: &signer,
+        sender: &signer,
+        sender_amount: u64): Object<Metadata>
+    {
+        chain_id::initialize_for_test(aptos_fx, 4);
+
+        let ctor_ref = &object::create_sticky_object(signer::address_of(fa));
+
+        primary_fungible_store::create_primary_store_enabled_fungible_asset(
+            ctor_ref,
+            option::none(),
+            utf8(b"DispatchToken"),
+            utf8(b"DT"),
+            18,
+            utf8(b"https://"),
+            utf8(b"https://"),
+        );
+
+        dispatchable_fungible_asset::register_dispatch_functions(
+            ctor_ref,
+            option::none(),
+            option::none(),
+            option::none(),
+        );
+
+        let mint_ref = fungible_asset::generate_mint_ref(ctor_ref);
+
+        confidential_asset::init_module_for_testing(confidential_asset_signer);
+        features::change_feature_flags_for_testing(aptos_fx, vector[features::get_bulletproofs_feature()], vector[]);
+
+        let token = object::object_from_constructor_ref<Metadata>(ctor_ref);
+
+        let sender_store = primary_fungible_store::ensure_primary_store_exists(signer::address_of(sender), token);
+        fungible_asset::mint_to(&mint_ref, sender_store, sender_amount);
+
+        token
+    }
+
+    #[test(
+        confidential_asset = @aptos_experimental,
+        aptos_fx = @aptos_framework,
+        fa = @0xfa,
+        alice = @0xa1
+    )]
+    #[expected_failure(abort_code = 0x010013, location = confidential_asset)]
+    fun fail_register_with_dispatchable_fa(
+        confidential_asset: signer,
+        aptos_fx: signer,
+        fa: signer,
+        alice: signer)
+    {
+        let token = set_up_dispatchable_fa_test(&confidential_asset, &aptos_fx, &fa, &alice, 500);
+
+        assert!(fungible_asset::is_asset_type_dispatchable(token), 1);
+
+        let (_, alice_ek) = generate_twisted_elgamal_keypair();
+        confidential_asset::register_for_testing(&alice, token, twisted_elgamal::pubkey_to_bytes(&alice_ek));
+    }
+
+    #[test(
+        confidential_asset = @aptos_experimental,
+        aptos_fx = @aptos_framework,
+        fa = @0xfa,
+        alice = @0xa1
+    )]
+    fun success_standard_fa_not_blocked(
+        confidential_asset: signer,
+        aptos_fx: signer,
+        fa: signer,
+        alice: signer)
+    {
+        let token = set_up_for_confidential_asset_test(
+            &confidential_asset, &aptos_fx, &fa, &alice, &alice, 500, 0);
+
+        assert!(!fungible_asset::is_asset_type_dispatchable(token), 1);
+
+        let (_, alice_ek) = generate_twisted_elgamal_keypair();
+        confidential_asset::register_for_testing(&alice, token, twisted_elgamal::pubkey_to_bytes(&alice_ek));
+        confidential_asset::deposit(&alice, token, 100);
     }
 }

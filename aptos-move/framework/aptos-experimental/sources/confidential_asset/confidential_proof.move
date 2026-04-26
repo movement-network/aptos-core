@@ -245,86 +245,6 @@ module aptos_experimental::confidential_proof {
         );
     }
 
-    /// Byte-for-byte the Fiat–Shamir input `msg` built in `verify_registration_proof` before
-    /// `ristretto255::new_scalar_from_sha2_512(msg)` (DST is the prefix of `msg`).
-    ///
-    /// Exposed as a normal `public` entry (not `#[test_only]`) so off-chain tooling and
-    /// `move-lean-difftest` harnesses can pin the transcript without duplicating concatenation logic.
-    public fun registration_fs_message_for_test(
-        chain_id: u8,
-        sender: address,
-        contract_address: address,
-        token_address: address,
-        ek: &twisted_elgamal::CompressedPubkey,
-        commitment_bytes: vector<u8>,
-    ): vector<u8> {
-        let msg = FIAT_SHAMIR_REGISTRATION_SIGMA_DST;
-        msg.push_back(chain_id);
-        msg.append(std::bcs::to_bytes(&sender));
-        msg.append(std::bcs::to_bytes(&contract_address));
-        msg.append(std::bcs::to_bytes(&token_address));
-        msg.append(twisted_elgamal::pubkey_to_bytes(ek));
-        msg.append(commitment_bytes);
-        msg
-    }
-
-    /// Deterministic registration Schnorr commitment/response using caller-supplied nonce `k`
-    /// (same transcript + algebra as `prove_registration`, but without `random_scalar()`).
-    ///
-    /// Intended for `move-lean-difftest` and off-chain parity checks against `verify_registration_proof`.
-    public fun prove_registration_deterministic_for_difftest(
-        chain_id: u8,
-        sender: address,
-        contract_address: address,
-        dk: &Scalar,
-        ek: &twisted_elgamal::CompressedPubkey,
-        token_address: address,
-        k: &Scalar,
-    ): (vector<u8>, vector<u8>) {
-        let h = ristretto255::hash_to_point_base();
-        let r = ristretto255::point_mul(&h, k);
-        let r_compressed = ristretto255::point_compress(&r);
-
-        let msg = FIAT_SHAMIR_REGISTRATION_SIGMA_DST;
-        msg.push_back(chain_id);
-        msg.append(std::bcs::to_bytes(&sender));
-        msg.append(std::bcs::to_bytes(&contract_address));
-        msg.append(std::bcs::to_bytes(&token_address));
-        msg.append(twisted_elgamal::pubkey_to_bytes(ek));
-        msg.append(ristretto255::compressed_point_to_bytes(r_compressed));
-        let e = ristretto255::new_scalar_from_sha2_512(msg);
-
-        let dk_inv = ristretto255::scalar_invert(dk).extract();
-        let s = ristretto255::scalar_sub(k, &ristretto255::scalar_mul(&e, &dk_inv));
-
-        let commitment_bytes = ristretto255::compressed_point_to_bytes(r_compressed);
-        let response_bytes = ristretto255::scalar_to_bytes(&s);
-
-        (commitment_bytes, response_bytes)
-    }
-
-    /// Public wrapper around [`verify_registration_proof`] for harnesses that are not `friend`
-    /// of `confidential_proof` (e.g. `0x1::difftest_confidential_proof` in `move-lean-difftest`).
-    public fun verify_registration_proof_for_difftest(
-        chain_id: u8,
-        sender: address,
-        contract_address: address,
-        ek: &twisted_elgamal::CompressedPubkey,
-        token_address: address,
-        commitment_bytes: vector<u8>,
-        response_bytes: vector<u8>,
-    ) {
-        verify_registration_proof(
-            chain_id,
-            sender,
-            contract_address,
-            ek,
-            token_address,
-            commitment_bytes,
-            response_bytes,
-        );
-    }
-
     /// Verifies the validity of the `withdraw` operation.
     ///
     /// This function ensures that the provided proof (`WithdrawalProof`) meets the following conditions:
@@ -2409,6 +2329,40 @@ module aptos_experimental::confidential_proof {
     }
 
     #[test_only]
+    /// Same transcript and algebra as on-chain registration prove, with caller-supplied nonce `k`
+    /// (used by `prove_registration` after drawing random `k`).
+    fun prove_registration_deterministic(
+        chain_id: u8,
+        sender: address,
+        contract_address: address,
+        dk: &Scalar,
+        ek: &twisted_elgamal::CompressedPubkey,
+        token_address: address,
+        k: &Scalar,
+    ): (vector<u8>, vector<u8>) {
+        let h = ristretto255::hash_to_point_base();
+        let r = ristretto255::point_mul(&h, k);
+        let r_compressed = ristretto255::point_compress(&r);
+
+        let msg = FIAT_SHAMIR_REGISTRATION_SIGMA_DST;
+        msg.push_back(chain_id);
+        msg.append(std::bcs::to_bytes(&sender));
+        msg.append(std::bcs::to_bytes(&contract_address));
+        msg.append(std::bcs::to_bytes(&token_address));
+        msg.append(twisted_elgamal::pubkey_to_bytes(ek));
+        msg.append(ristretto255::compressed_point_to_bytes(r_compressed));
+        let e = ristretto255::new_scalar_from_sha2_512(msg);
+
+        let dk_inv = ristretto255::scalar_invert(dk).extract();
+        let s = ristretto255::scalar_sub(k, &ristretto255::scalar_mul(&e, &dk_inv));
+
+        let commitment_bytes = ristretto255::compressed_point_to_bytes(r_compressed);
+        let response_bytes = ristretto255::scalar_to_bytes(&s);
+
+        (commitment_bytes, response_bytes)
+    }
+
+    #[test_only]
     public fun prove_registration(
         chain_id: u8,
         sender: address,
@@ -2418,7 +2372,7 @@ module aptos_experimental::confidential_proof {
         token_address: address,
     ): (vector<u8>, vector<u8>) {
         let k = ristretto255::random_scalar();
-        prove_registration_deterministic_for_difftest(
+        prove_registration_deterministic(
             chain_id,
             sender,
             contract_address,

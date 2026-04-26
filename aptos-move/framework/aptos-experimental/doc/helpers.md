@@ -47,6 +47,27 @@ exists because we did not like the interface of <code>std::vector::trim</code>.)
 
 
 
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="helpers.md#0x7_helpers_cut_vector">cut_vector</a>&lt;T&gt;(vec: &<b>mut</b> <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;T&gt;, cut_len: u64): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;T&gt; {
+    <b>let</b> len = <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector_length">vector::length</a>(vec);
+    <b>let</b> res = <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector_empty">vector::empty</a>();
+    <b>assert</b>!(len &gt;= cut_len, <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_out_of_range">error::out_of_range</a>(<a href="helpers.md#0x7_helpers_EVECTOR_CUT_TOO_LARGE">EVECTOR_CUT_TOO_LARGE</a>));
+    <b>while</b> (cut_len &gt; 0) {
+        res.push_back(<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector_pop_back">vector::pop_back</a>(vec));
+        cut_len -= 1;
+    };
+    res.reverse();
+    res
+}
+</code></pre>
+
+
+
+</details>
+
 <a id="0x7_helpers_get_veiled_balance_zero_ciphertext"></a>
 
 ## Function `get_veiled_balance_zero_ciphertext`
@@ -59,6 +80,20 @@ Returns an encryption of zero, without any randomness (i.e., $r=0$), under any E
 
 
 
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="helpers.md#0x7_helpers_get_veiled_balance_zero_ciphertext">get_veiled_balance_zero_ciphertext</a>(): elgamal::CompressedCiphertext {
+    elgamal::ciphertext_from_compressed_points(
+        <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_identity_compressed">ristretto255::point_identity_compressed</a>(), <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_identity_compressed">ristretto255::point_identity_compressed</a>())
+}
+</code></pre>
+
+
+
+</details>
+
 <a id="0x7_helpers_public_amount_to_veiled_balance"></a>
 
 ## Function `public_amount_to_veiled_balance`
@@ -69,3 +104,23 @@ WARNING: This is not a proper ciphertext: the value <code>amount</code> can be e
 
 <pre><code><b>public</b> <b>fun</b> <a href="helpers.md#0x7_helpers_public_amount_to_veiled_balance">public_amount_to_veiled_balance</a>(amount: u32): <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255_elgamal.md#0x1_ristretto255_elgamal_Ciphertext">ristretto255_elgamal::Ciphertext</a>
 </code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="helpers.md#0x7_helpers_public_amount_to_veiled_balance">public_amount_to_veiled_balance</a>(amount: u32): elgamal::Ciphertext {
+    <b>let</b> scalar = <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_new_scalar_from_u32">ristretto255::new_scalar_from_u32</a>(amount);
+
+    elgamal::new_ciphertext_no_randomness(&scalar)
+}
+</code></pre>
+
+
+
+</details>
+
+
+[move-book]: https://aptos.dev/move/book/SUMMARY

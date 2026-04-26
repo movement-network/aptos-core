@@ -21,10 +21,13 @@
 #   To wait only for the node REST API (8080), set:  WAIT_STRATEGY=node
 #
 # Environment:
-#   MOVEMENT      — movement CLI (default: movement)
-#   APTOS         — deprecated alias for MOVEMENT if MOVEMENT is unset
+#   MOVEMENT      — movement CLI (default: $REPO_ROOT/target/release/movement, built via
+#                   `cargo build -p movement --release` if missing). Override with
+#                   MOVEMENT=/path/to/binary. The local build keeps the on-chain framework
+#                   in sync with this checked-out repo.
+#   SKIP_MOVEMENT_BUILD=1 — do not build movement CLI; fall back to `movement` on $PATH if
+#                   $REPO_ROOT/target/release/movement isn't already built.
 #   REPO_ROOT     — repo root (default: parent of scripts/)
-#   APTOS_ROOT    — deprecated alias for REPO_ROOT
 #   APTOS_LOCALNET_TEST_DIR — localnet data dir (default: $REPO_ROOT/.movement/testnet)
 #   NODE_URL      — REST base for `move run-script` (default: http://127.0.0.1:8080; refreshed from
 #                   $TEST_DIR/0/node.yaml when that file appears)
@@ -68,10 +71,24 @@
 
 set -euo pipefail
 
-MOVEMENT="${MOVEMENT:-${APTOS:-movement}}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _default_repo_root="$(cd "${SCRIPT_DIR}/.." && pwd)"
-REPO_ROOT="${REPO_ROOT:-${APTOS_ROOT:-$_default_repo_root}}"
+REPO_ROOT="${REPO_ROOT:-$_default_repo_root}"
+# Use a locally-built movement binary so the on-chain framework matches this checked-out repo.
+# Build it if missing. Override the binary path with MOVEMENT=/path/to/binary; skip the build
+# (e.g. to use whatever's on $PATH) with SKIP_MOVEMENT_BUILD=1.
+_local_movement="${REPO_ROOT}/target/release/movement"
+SKIP_MOVEMENT_BUILD="${SKIP_MOVEMENT_BUILD:-0}"
+if [[ -z "${MOVEMENT:-}" ]]; then
+  if [[ ! -x "$_local_movement" && "$SKIP_MOVEMENT_BUILD" != "1" ]]; then
+    echo "Building movement CLI (cargo build -p movement --release; first build can take 10+ minutes)..."
+    (cd "$REPO_ROOT" && cargo build -p movement --release)
+  fi
+  if [[ -x "$_local_movement" ]]; then
+    MOVEMENT="$_local_movement"
+  fi
+fi
+MOVEMENT="${MOVEMENT:-movement}"
 TEST_DIR="${APTOS_LOCALNET_TEST_DIR:-$REPO_ROOT/.movement/testnet}"
 LOCALNET_LOG="${REPO_ROOT}/.movement/localnet.log"
 LOCALNET_PID_FILE="${REPO_ROOT}/.movement/localnet.pid"

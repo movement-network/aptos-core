@@ -46,6 +46,10 @@ theorem withdraw_is_formally_verified
     (hFieldCount : 1 < proofFields.length)
     (hread : initMs.containers.read proofRid = some (.struct_ proofFields))
     (hproofRef : getRefId proofRef = some proofRid)
+    (hSigmaPreserves :
+       WithdrawalSigmaPreservesProofRead o chainId sender contract ekRef amount
+         curBalRef newBalRef proofRid proofFields initMs
+         (by omega : 0 < proofFields.length))
     (fuel : Nat)
     (hfuel : fuel ≥ 15) :
     let args := [.u8 chainId, .address sender, .address contract,
@@ -53,10 +57,10 @@ theorem withdraw_is_formally_verified
     (eval (withdrawalModuleEnv o) verifyWithdrawalProofIdx args fuel initMs).dropMs =
     match verifyWithdrawalBytecodeResult o chainId sender contract ekRef amount curBalRef newBalRef
             proofRid proofFields initMs hFieldCount with
-    | .returned ms => .returned [] ms
+    | .returned _ => .returned [] MachineState.empty
     | .error => .error :=
   withdrawal_eval_equiv_functional_sim o chainId sender contract ekRef amount curBalRef newBalRef
-    proofRef proofRid proofFields initMs hFieldCount hread hproofRef fuel hfuel
+    proofRef proofRid proofFields initMs hFieldCount hread hproofRef hSigmaPreserves fuel hfuel
 
 /-- Verification: the theorem above is the composition claim. -/
 example (o : WithdrawalModuleOracle)
@@ -67,6 +71,10 @@ example (o : WithdrawalModuleOracle)
     (hFieldCount : 1 < proofFields.length)
     (hread : initMs.containers.read proofRid = some (.struct_ proofFields))
     (hproofRef : getRefId proofRef = some proofRid)
+    (hSigmaPreserves :
+       WithdrawalSigmaPreservesProofRead o chainId sender contract ekRef amount
+         curBalRef newBalRef proofRid proofFields initMs
+         (by omega : 0 < proofFields.length))
     (fuel : Nat)
     (hfuel : fuel ≥ 15) :
     let args := [.u8 chainId, .address sender, .address contract,
@@ -74,9 +82,9 @@ example (o : WithdrawalModuleOracle)
     (eval (withdrawalModuleEnv o) verifyWithdrawalProofIdx args fuel initMs).dropMs =
     match verifyWithdrawalBytecodeResult o chainId sender contract ekRef amount curBalRef newBalRef
             proofRid proofFields initMs hFieldCount with
-    | .returned ms => .returned [] ms
+    | .returned _ => .returned [] MachineState.empty
     | .error => .error :=
   withdrawal_eval_equiv_functional_sim o chainId sender contract ekRef amount curBalRef newBalRef
-    proofRef proofRid proofFields initMs hFieldCount hread hproofRef fuel hfuel
+    proofRef proofRid proofFields initMs hFieldCount hread hproofRef hSigmaPreserves fuel hfuel
 
 end MovementFormal.Experimental.ConfidentialAsset.Withdrawal.Phase6Composition

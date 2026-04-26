@@ -10,6 +10,8 @@ import MovementFormal.Experimental.ConfidentialAsset.Helpers.OracleComposition
 import MovementFormal.Experimental.ConfidentialAsset.Rotation.ConcreteHelpers
 import MovementFormal.Experimental.ConfidentialAsset.Rotation.BytecodeLemmas
 import MovementFormal.Experimental.ConfidentialAsset.Helpers.FunctionalSimBridge
+import Mathlib.Tactic.Common
+import Mathlib.Tactic.Set
 
 /-!
 # Bytecode eval ≡ functional simulation for `verify_rotation_proof` — Phase 4
@@ -257,6 +259,23 @@ theorem step_rotation_pc9 (o : RotationModuleOracle)
   simp only [rotationModuleEnv_fn0_numReturns, beq_self_eq_true, ↓reduceIte]
   rw [show frame.pc + 1 = 10 from by omega]
 
+theorem step_rotation_pc9_multi (o : RotationModuleOracle)
+    (frame : Frame) (cs : List Frame) (stack : List MoveValue) (ms : MachineState)
+    (hcode : frame.code = verifyRotationProofCode) (hpc : frame.pc = 9)
+    (args rest : List MoveValue) (v : MoveValue) (vs : List MoveValue)
+    (containers' : ContainerStore)
+    (htake : takeN stack 8 = some (args, rest))
+    (himpl : o.verifySigmaProof ms.containers args = some (v :: vs, containers')) :
+    step (rotationModuleEnv o) frame cs stack ms = .error := by
+  have hpc_lt : frame.pc < frame.code.size := by rw [hpc, hcode]; decide
+  have hc : frame.code[frame.pc]'hpc_lt = .call 0 := by simp only [hcode, hpc]; exact rot_code_pc9
+  simp only [step, dif_pos hpc_lt, hc, dif_pos (show 0 < (rotationModuleEnv o).functions.size by simp)]
+  simp only [rotationModuleEnv_fn0_numParams, htake, rotationModuleEnv_fn0_body, himpl]
+  unfold handleNativeResult
+  cases vs with
+  | nil => simp [rotationModuleEnv_fn0_numReturns]
+  | cons w ws => simp [rotationModuleEnv_fn0_numReturns]
+
 theorem step_rotation_pc9_none (o : RotationModuleOracle)
     (frame : Frame) (cs : List Frame) (stack : List MoveValue) (ms : MachineState)
     (hcode : frame.code = verifyRotationProofCode) (hpc : frame.pc = 9)
@@ -334,6 +353,23 @@ theorem step_rotation_pc13 (o : RotationModuleOracle)
   unfold handleNativeResult
   simp only [rotationModuleEnv_fn1_numReturns, beq_self_eq_true, ↓reduceIte]
   rw [show frame.pc + 1 = 14 from by omega]
+
+theorem step_rotation_pc13_multi (o : RotationModuleOracle)
+    (frame : Frame) (cs : List Frame) (stack : List MoveValue) (ms : MachineState)
+    (hcode : frame.code = verifyRotationProofCode) (hpc : frame.pc = 13)
+    (args rest : List MoveValue) (v : MoveValue) (vs : List MoveValue)
+    (containers' : ContainerStore)
+    (htake : takeN stack 2 = some (args, rest))
+    (himpl : o.verifyRangeProof ms.containers args = some (v :: vs, containers')) :
+    step (rotationModuleEnv o) frame cs stack ms = .error := by
+  have hpc_lt : frame.pc < frame.code.size := by rw [hpc, hcode]; decide
+  have hc : frame.code[frame.pc]'hpc_lt = .call 1 := by simp only [hcode, hpc]; exact rot_code_pc13
+  simp only [step, dif_pos hpc_lt, hc, dif_pos (show 1 < (rotationModuleEnv o).functions.size by simp)]
+  simp only [rotationModuleEnv_fn1_numParams, htake, rotationModuleEnv_fn1_body, himpl]
+  unfold handleNativeResult
+  cases vs with
+  | nil => simp [rotationModuleEnv_fn1_numReturns]
+  | cons w ws => simp [rotationModuleEnv_fn1_numReturns]
 
 theorem step_rotation_pc13_none (o : RotationModuleOracle)
     (frame : Frame) (cs : List Frame) (stack : List MoveValue) (ms : MachineState)
@@ -468,43 +504,1317 @@ The full eval↔functional-sim equivalence. Structure:
 The proof requires ~300 lines of frame manipulation and oracle case splitting.
 Currently structured with sorry placeholders for incremental completion. -/
 
-/-! ## Direct equivalence axiom (to bypass architectural blockers) -/
+/-! ## Error-path PC chain helpers (analogous to Withdrawal/EvalEquiv.lean) -/
 
-/-- Axiom: eval result matches functional simulation result.
+/-- When sigma oracle returns none on the rotation proof, run produces error.
 
-This axiom directly states the equivalence without requiring manual PC-chaining.
-It's derivable in principle from ConcreteHelpers (rotation_happy_path_complete +
-error-path axioms) by case analysis on oracle outcomes, but that derivation is
-blocked by an architectural mismatch:
-- ConcreteHelpers expect: `o.verifySigmaProof initMs.containers args = ...`
-- Functional sim does: `let (cs, fid) := initMs.containers.alloc field; o.verifySigmaProof cs args = ...`
-
-This axiom bypasses that issue. It is "technically routine" in the same sense as
-the ConcreteHelpers axioms - it states that the bytecode correctly implements
-the functional specification.
-
-**Justification:** The bytecode faithfully transcribes the Move source, and the
-functional simulation matches the Move semantics. The equivalence is routine to
-verify by inspection (or would be provable with appropriate bridge lemmas).
--/
-axiom rotation_eval_equiv_functional_sim_axiom
+Chains PCs 0-9 — 6 moveLoc (PCs 0-5), 2 copyLoc (PCs 6-7), immBorrowField (PC 8),
+sigma call returning none (PC 9) — into a single `.error` result. -/
+theorem rot_run_to_sigma_fail_produces_error
     (o : RotationModuleOracle)
     (chainId : UInt8) (sender contract : ByteArray)
     (currentEkRef newEkRef curBalRef newBalRef proofRef : MoveValue)
     (proofRid : RefId) (proofFields : List MoveValue)
     (initMs : MachineState)
-    (hFieldCount : 1 < proofFields.length)
+    (cs1 : ContainerStore) (sigmaFid : RefId)
+    (hFieldCount : 0 < proofFields.length)
     (hread : initMs.containers.read proofRid = some (.struct_ proofFields))
     (hproofRef : getRefId proofRef = some proofRid)
+    (halloc : initMs.containers.alloc (proofFields[0]'hFieldCount) = (cs1, sigmaFid))
+    (fuel : Nat)
+    (hfuel : fuel ≥ 10)
+    (hsigmaFail : o.verifySigmaProof cs1 [.u8 chainId, .address sender, .address contract,
+                                          currentEkRef, newEkRef, curBalRef, newBalRef,
+                                          .immRef sigmaFid] = none) :
+    run (rotationModuleEnv o)
+        { code := verifyRotationProofCode, pc := 0,
+          locals := ([.u8 chainId, .address sender, .address contract,
+                      currentEkRef, newEkRef, curBalRef, newBalRef, proofRef].map some).toArray,
+          localRefs := (List.replicate 8 none).toArray }
+        [] [] initMs fuel = .error := by
+  -- Initial frame f0 with 8 args.
+  set f0 : Frame :=
+      { code := verifyRotationProofCode, pc := 0,
+        locals := ([(.u8 chainId : MoveValue), .address sender, .address contract,
+                    currentEkRef, newEkRef, curBalRef, newBalRef, proofRef].map some).toArray,
+        localRefs := (List.replicate 8 none).toArray }
+    with hf0_def
+  have hf0_size : f0.locals.size = 8 := by simp [f0]
+  -- PC 0: moveLoc 0 (chainId)
+  have hf0_lt0 : 0 < f0.locals.size := by rw [hf0_size]; decide
+  have hf0_v0 : f0.locals[0]'hf0_lt0 = some (.u8 chainId) := by simp [f0]
+  have hf0_ref0 : ¬ 0 < f0.localRefs.size ∨
+                  ∃ h : 0 < f0.localRefs.size, f0.localRefs[0]'h = none := by
+    right; refine ⟨by simp [f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[0]'(by simp) = none; decide
+  have step1 := step_rotation_pc0 o f0 [] [] initMs rfl rfl (.u8 chainId)
+                  hf0_lt0 hf0_v0 hf0_ref0
+  -- f1 at PC 1 (sender)
+  set f1 := { f0 with pc := 1, locals := f0.locals.set 0 none hf0_lt0 } with hf1_def
+  have hf1_size : f1.locals.size = 8 := by
+    show (f0.locals.set 0 none hf0_lt0).size = 8; rw [Array.size_set]; exact hf0_size
+  have hf1_lt1 : 1 < f1.locals.size := by rw [hf1_size]; decide
+  have hf1_v1 : f1.locals[1]'hf1_lt1 = some (.address sender) := by
+    show (f0.locals.set 0 none hf0_lt0)[1]'hf1_lt1 = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 1)]; simp [f0]
+  have hf1_ref1 : ¬ 1 < f1.localRefs.size ∨
+                  ∃ h : 1 < f1.localRefs.size, f1.localRefs[1]'h = none := by
+    right; refine ⟨by simp [f1, f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[1]'(by simp) = none; decide
+  have step2 := step_rotation_pc1 o f1 [] [(.u8 chainId : MoveValue)] initMs rfl rfl
+                  (.address sender) hf1_lt1 hf1_v1 hf1_ref1
+  -- f2 at PC 2 (contract)
+  set f2 := { f1 with pc := 2, locals := f1.locals.set 1 none hf1_lt1 } with hf2_def
+  have hf2_size : f2.locals.size = 8 := by
+    show (f1.locals.set 1 none hf1_lt1).size = 8; rw [Array.size_set]; exact hf1_size
+  have hf2_lt2 : 2 < f2.locals.size := by rw [hf2_size]; decide
+  have hf2_v2 : f2.locals[2]'hf2_lt2 = some (.address contract) := by
+    show (f1.locals.set 1 none hf1_lt1)[2]'hf2_lt2 = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 2)]
+    show (f0.locals.set 0 none hf0_lt0)[2]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 2)]; simp [f0]
+  have hf2_ref2 : ¬ 2 < f2.localRefs.size ∨
+                  ∃ h : 2 < f2.localRefs.size, f2.localRefs[2]'h = none := by
+    right; refine ⟨by simp [f2, f1, f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[2]'(by simp) = none; decide
+  have step3 := step_rotation_pc2 o f2 []
+                  [(.address sender : MoveValue), (.u8 chainId : MoveValue)] initMs rfl rfl
+                  (.address contract) hf2_lt2 hf2_v2 hf2_ref2
+  -- f3 at PC 3 (currentEkRef)
+  set f3 := { f2 with pc := 3, locals := f2.locals.set 2 none hf2_lt2 } with hf3_def
+  have hf3_size : f3.locals.size = 8 := by
+    show (f2.locals.set 2 none hf2_lt2).size = 8; rw [Array.size_set]; exact hf2_size
+  have hf3_lt3 : 3 < f3.locals.size := by rw [hf3_size]; decide
+  have hf3_v3 : f3.locals[3]'hf3_lt3 = some currentEkRef := by
+    show (f2.locals.set 2 none hf2_lt2)[3]'hf3_lt3 = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 3)]
+    show (f1.locals.set 1 none hf1_lt1)[3]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 3)]
+    show (f0.locals.set 0 none hf0_lt0)[3]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 3)]; simp [f0]
+  have hf3_ref3 : ¬ 3 < f3.localRefs.size ∨
+                  ∃ h : 3 < f3.localRefs.size, f3.localRefs[3]'h = none := by
+    right; refine ⟨by simp [f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[3]'(by simp) = none; decide
+  have step4 := step_rotation_pc3 o f3 []
+                  [(.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl currentEkRef hf3_lt3 hf3_v3 hf3_ref3
+  -- f4 at PC 4 (newEkRef)
+  set f4 := { f3 with pc := 4, locals := f3.locals.set 3 none hf3_lt3 } with hf4_def
+  have hf4_size : f4.locals.size = 8 := by
+    show (f3.locals.set 3 none hf3_lt3).size = 8; rw [Array.size_set]; exact hf3_size
+  have hf4_lt4 : 4 < f4.locals.size := by rw [hf4_size]; decide
+  have hf4_v4 : f4.locals[4]'hf4_lt4 = some newEkRef := by
+    show (f3.locals.set 3 none hf3_lt3)[4]'hf4_lt4 = _
+    rw [Array.getElem_set, if_neg (by decide : (3 : Nat) ≠ 4)]
+    show (f2.locals.set 2 none hf2_lt2)[4]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 4)]
+    show (f1.locals.set 1 none hf1_lt1)[4]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 4)]
+    show (f0.locals.set 0 none hf0_lt0)[4]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 4)]; simp [f0]
+  have hf4_ref4 : ¬ 4 < f4.localRefs.size ∨
+                  ∃ h : 4 < f4.localRefs.size, f4.localRefs[4]'h = none := by
+    right; refine ⟨by simp [f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[4]'(by simp) = none; decide
+  have step5 := step_rotation_pc4 o f4 []
+                  [currentEkRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl newEkRef hf4_lt4 hf4_v4 hf4_ref4
+  -- f5 at PC 5 (curBalRef)
+  set f5 := { f4 with pc := 5, locals := f4.locals.set 4 none hf4_lt4 } with hf5_def
+  have hf5_size : f5.locals.size = 8 := by
+    show (f4.locals.set 4 none hf4_lt4).size = 8; rw [Array.size_set]; exact hf4_size
+  have hf5_lt5 : 5 < f5.locals.size := by rw [hf5_size]; decide
+  have hf5_v5 : f5.locals[5]'hf5_lt5 = some curBalRef := by
+    show (f4.locals.set 4 none hf4_lt4)[5]'hf5_lt5 = _
+    rw [Array.getElem_set, if_neg (by decide : (4 : Nat) ≠ 5)]
+    show (f3.locals.set 3 none hf3_lt3)[5]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (3 : Nat) ≠ 5)]
+    show (f2.locals.set 2 none hf2_lt2)[5]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 5)]
+    show (f1.locals.set 1 none hf1_lt1)[5]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 5)]
+    show (f0.locals.set 0 none hf0_lt0)[5]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 5)]; simp [f0]
+  have hf5_ref5 : ¬ 5 < f5.localRefs.size ∨
+                  ∃ h : 5 < f5.localRefs.size, f5.localRefs[5]'h = none := by
+    right; refine ⟨by simp [f5, f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[5]'(by simp) = none; decide
+  have step6 := step_rotation_pc5 o f5 []
+                  [newEkRef, currentEkRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl curBalRef hf5_lt5 hf5_v5 hf5_ref5
+  -- f6 at PC 6 (copyLoc 6 → newBalRef, doesn't clear locals[6])
+  set f6 := { f5 with pc := 6, locals := f5.locals.set 5 none hf5_lt5 } with hf6_def
+  have hf6_size : f6.locals.size = 8 := by
+    show (f5.locals.set 5 none hf5_lt5).size = 8; rw [Array.size_set]; exact hf5_size
+  have hf6_lt6 : 6 < f6.locals.size := by rw [hf6_size]; decide
+  have hf6_v6 : f6.locals[6]'hf6_lt6 = some newBalRef := by
+    show (f5.locals.set 5 none hf5_lt5)[6]'hf6_lt6 = _
+    rw [Array.getElem_set, if_neg (by decide : (5 : Nat) ≠ 6)]
+    show (f4.locals.set 4 none hf4_lt4)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (4 : Nat) ≠ 6)]
+    show (f3.locals.set 3 none hf3_lt3)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (3 : Nat) ≠ 6)]
+    show (f2.locals.set 2 none hf2_lt2)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 6)]
+    show (f1.locals.set 1 none hf1_lt1)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 6)]
+    show (f0.locals.set 0 none hf0_lt0)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 6)]; simp [f0]
+  have hf6_ref6 : ¬ 6 < f6.localRefs.size ∨
+                  ∃ h : 6 < f6.localRefs.size, f6.localRefs[6]'h = none := by
+    right; refine ⟨by simp [f6, f5, f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[6]'(by simp) = none; decide
+  have step7 := step_rotation_pc6 o f6 []
+                  [curBalRef, newEkRef, currentEkRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl newBalRef hf6_lt6 hf6_v6 hf6_ref6
+  -- f7 at PC 7 (copyLoc 7 → proofRef, locals unchanged)
+  set f7 := { f6 with pc := 7 } with hf7_def
+  have hf7_size : f7.locals.size = 8 := hf6_size
+  have hf7_lt7 : 7 < f7.locals.size := by rw [hf7_size]; decide
+  have hf7_v7 : f7.locals[7]'hf7_lt7 = some proofRef := by
+    show f6.locals[7]'_ = _
+    show (f5.locals.set 5 none hf5_lt5)[7]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (5 : Nat) ≠ 7)]
+    show (f4.locals.set 4 none hf4_lt4)[7]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (4 : Nat) ≠ 7)]
+    show (f3.locals.set 3 none hf3_lt3)[7]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (3 : Nat) ≠ 7)]
+    show (f2.locals.set 2 none hf2_lt2)[7]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 7)]
+    show (f1.locals.set 1 none hf1_lt1)[7]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 7)]
+    show (f0.locals.set 0 none hf0_lt0)[7]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 7)]; simp [f0]
+  have hf7_ref7 : ¬ 7 < f7.localRefs.size ∨
+                  ∃ h : 7 < f7.localRefs.size, f7.localRefs[7]'h = none := by
+    right; refine ⟨by simp [f7, f6, f5, f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[7]'(by simp) = none; decide
+  have step8 := step_rotation_pc7 o f7 []
+                  [newBalRef, curBalRef, newEkRef, currentEkRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl proofRef hf7_lt7 hf7_v7 hf7_ref7
+  -- f8 at PC 8 (immBorrowField 0 — alloc sigma_proof, push .immRef sigmaFid, pop proofRef)
+  set f8 := { f7 with pc := 8 } with hf8_def
+  have step9 := step_rotation_pc8 o f8 []
+                  [newBalRef, curBalRef, newEkRef, currentEkRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl proofRid proofFields cs1 sigmaFid proofRef
+                  hproofRef hread hFieldCount halloc
+  -- f9 at PC 9 (sigma call, none)
+  set f9 := { f8 with pc := 9 } with hf9_def
+  set ms9 : MachineState := { initMs with containers := cs1 } with hms9_def
+  have htake :
+      takeN [(.immRef sigmaFid : MoveValue), newBalRef, curBalRef, newEkRef, currentEkRef,
+              (.address contract : MoveValue), (.address sender : MoveValue),
+              (.u8 chainId : MoveValue)] 8 =
+        some ([.u8 chainId, .address sender, .address contract,
+               currentEkRef, newEkRef, curBalRef, newBalRef, .immRef sigmaFid], []) := rfl
+  have step10 := step_rotation_pc9_none o f9 []
+                  [(.immRef sigmaFid : MoveValue), newBalRef, curBalRef, newEkRef, currentEkRef,
+                    (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  ms9 rfl rfl
+                  [.u8 chainId, .address sender, .address contract,
+                   currentEkRef, newEkRef, curBalRef, newBalRef, .immRef sigmaFid]
+                  [] htake hsigmaFail
+  -- Compose: 9 OK steps + 1 error step.
+  obtain ⟨ef, hef⟩ : ∃ ef, fuel = ef + 10 := ⟨fuel - 10, by omega⟩
+  rw [hef]
+  rw [show ef + 10 = (ef + 9) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 9) _ _ _ _ step1,
+      show ef + 9 = (ef + 8) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 8) _ _ _ _ step2,
+      show ef + 8 = (ef + 7) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 7) _ _ _ _ step3,
+      show ef + 7 = (ef + 6) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 6) _ _ _ _ step4,
+      show ef + 6 = (ef + 5) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 5) _ _ _ _ step5,
+      show ef + 5 = (ef + 4) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 4) _ _ _ _ step6,
+      show ef + 4 = (ef + 3) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 3) _ _ _ _ step7,
+      show ef + 3 = (ef + 2) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 2) _ _ _ _ step8,
+      show ef + 2 = (ef + 1) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 1) _ _ _ _ step9,
+      StepLemmas.run_succ_error_of_step ef step10]
+
+/-- When sigma oracle returns a non-empty result list (arity mismatch),
+    run produces error.
+
+Same first 9 OK steps as `rot_run_to_sigma_fail_produces_error`; final step uses
+`step_rotation_pc9_multi` (numReturns=0 vs result length ≥ 1 in handleNativeResult). -/
+theorem rot_run_to_sigma_arity_mismatch_produces_error
+    (o : RotationModuleOracle)
+    (chainId : UInt8) (sender contract : ByteArray)
+    (currentEkRef newEkRef curBalRef newBalRef proofRef : MoveValue)
+    (proofRid : RefId) (proofFields : List MoveValue)
+    (initMs : MachineState)
+    (cs1 cs2 : ContainerStore) (sigmaFid : RefId)
+    (sigmaResultHead : MoveValue) (sigmaResultTail : List MoveValue)
+    (hFieldCount : 0 < proofFields.length)
+    (hread : initMs.containers.read proofRid = some (.struct_ proofFields))
+    (hproofRef : getRefId proofRef = some proofRid)
+    (halloc : initMs.containers.alloc (proofFields[0]'hFieldCount) = (cs1, sigmaFid))
+    (fuel : Nat)
+    (hfuel : fuel ≥ 10)
+    (hsigmaArityMismatch :
+       o.verifySigmaProof cs1
+         [.u8 chainId, .address sender, .address contract,
+          currentEkRef, newEkRef, curBalRef, newBalRef, .immRef sigmaFid] =
+         some (sigmaResultHead :: sigmaResultTail, cs2)) :
+    run (rotationModuleEnv o)
+        { code := verifyRotationProofCode, pc := 0,
+          locals := ([.u8 chainId, .address sender, .address contract,
+                      currentEkRef, newEkRef, curBalRef, newBalRef, proofRef].map some).toArray,
+          localRefs := (List.replicate 8 none).toArray }
+        [] [] initMs fuel = .error := by
+  set f0 : Frame :=
+      { code := verifyRotationProofCode, pc := 0,
+        locals := ([(.u8 chainId : MoveValue), .address sender, .address contract,
+                    currentEkRef, newEkRef, curBalRef, newBalRef, proofRef].map some).toArray,
+        localRefs := (List.replicate 8 none).toArray }
+    with hf0_def
+  have hf0_size : f0.locals.size = 8 := by simp [f0]
+  have hf0_lt0 : 0 < f0.locals.size := by rw [hf0_size]; decide
+  have hf0_v0 : f0.locals[0]'hf0_lt0 = some (.u8 chainId) := by simp [f0]
+  have hf0_ref0 : ¬ 0 < f0.localRefs.size ∨
+                  ∃ h : 0 < f0.localRefs.size, f0.localRefs[0]'h = none := by
+    right; refine ⟨by simp [f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[0]'(by simp) = none; decide
+  have step1 := step_rotation_pc0 o f0 [] [] initMs rfl rfl (.u8 chainId)
+                  hf0_lt0 hf0_v0 hf0_ref0
+  set f1 := { f0 with pc := 1, locals := f0.locals.set 0 none hf0_lt0 } with hf1_def
+  have hf1_size : f1.locals.size = 8 := by
+    show (f0.locals.set 0 none hf0_lt0).size = 8; rw [Array.size_set]; exact hf0_size
+  have hf1_lt1 : 1 < f1.locals.size := by rw [hf1_size]; decide
+  have hf1_v1 : f1.locals[1]'hf1_lt1 = some (.address sender) := by
+    show (f0.locals.set 0 none hf0_lt0)[1]'hf1_lt1 = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 1)]; simp [f0]
+  have hf1_ref1 : ¬ 1 < f1.localRefs.size ∨
+                  ∃ h : 1 < f1.localRefs.size, f1.localRefs[1]'h = none := by
+    right; refine ⟨by simp [f1, f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[1]'(by simp) = none; decide
+  have step2 := step_rotation_pc1 o f1 [] [(.u8 chainId : MoveValue)] initMs rfl rfl
+                  (.address sender) hf1_lt1 hf1_v1 hf1_ref1
+  set f2 := { f1 with pc := 2, locals := f1.locals.set 1 none hf1_lt1 } with hf2_def
+  have hf2_size : f2.locals.size = 8 := by
+    show (f1.locals.set 1 none hf1_lt1).size = 8; rw [Array.size_set]; exact hf1_size
+  have hf2_lt2 : 2 < f2.locals.size := by rw [hf2_size]; decide
+  have hf2_v2 : f2.locals[2]'hf2_lt2 = some (.address contract) := by
+    show (f1.locals.set 1 none hf1_lt1)[2]'hf2_lt2 = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 2)]
+    show (f0.locals.set 0 none hf0_lt0)[2]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 2)]; simp [f0]
+  have hf2_ref2 : ¬ 2 < f2.localRefs.size ∨
+                  ∃ h : 2 < f2.localRefs.size, f2.localRefs[2]'h = none := by
+    right; refine ⟨by simp [f2, f1, f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[2]'(by simp) = none; decide
+  have step3 := step_rotation_pc2 o f2 []
+                  [(.address sender : MoveValue), (.u8 chainId : MoveValue)] initMs rfl rfl
+                  (.address contract) hf2_lt2 hf2_v2 hf2_ref2
+  set f3 := { f2 with pc := 3, locals := f2.locals.set 2 none hf2_lt2 } with hf3_def
+  have hf3_size : f3.locals.size = 8 := by
+    show (f2.locals.set 2 none hf2_lt2).size = 8; rw [Array.size_set]; exact hf2_size
+  have hf3_lt3 : 3 < f3.locals.size := by rw [hf3_size]; decide
+  have hf3_v3 : f3.locals[3]'hf3_lt3 = some currentEkRef := by
+    show (f2.locals.set 2 none hf2_lt2)[3]'hf3_lt3 = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 3)]
+    show (f1.locals.set 1 none hf1_lt1)[3]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 3)]
+    show (f0.locals.set 0 none hf0_lt0)[3]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 3)]; simp [f0]
+  have hf3_ref3 : ¬ 3 < f3.localRefs.size ∨
+                  ∃ h : 3 < f3.localRefs.size, f3.localRefs[3]'h = none := by
+    right; refine ⟨by simp [f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[3]'(by simp) = none; decide
+  have step4 := step_rotation_pc3 o f3 []
+                  [(.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl currentEkRef hf3_lt3 hf3_v3 hf3_ref3
+  set f4 := { f3 with pc := 4, locals := f3.locals.set 3 none hf3_lt3 } with hf4_def
+  have hf4_size : f4.locals.size = 8 := by
+    show (f3.locals.set 3 none hf3_lt3).size = 8; rw [Array.size_set]; exact hf3_size
+  have hf4_lt4 : 4 < f4.locals.size := by rw [hf4_size]; decide
+  have hf4_v4 : f4.locals[4]'hf4_lt4 = some newEkRef := by
+    show (f3.locals.set 3 none hf3_lt3)[4]'hf4_lt4 = _
+    rw [Array.getElem_set, if_neg (by decide : (3 : Nat) ≠ 4)]
+    show (f2.locals.set 2 none hf2_lt2)[4]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 4)]
+    show (f1.locals.set 1 none hf1_lt1)[4]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 4)]
+    show (f0.locals.set 0 none hf0_lt0)[4]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 4)]; simp [f0]
+  have hf4_ref4 : ¬ 4 < f4.localRefs.size ∨
+                  ∃ h : 4 < f4.localRefs.size, f4.localRefs[4]'h = none := by
+    right; refine ⟨by simp [f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[4]'(by simp) = none; decide
+  have step5 := step_rotation_pc4 o f4 []
+                  [currentEkRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl newEkRef hf4_lt4 hf4_v4 hf4_ref4
+  set f5 := { f4 with pc := 5, locals := f4.locals.set 4 none hf4_lt4 } with hf5_def
+  have hf5_size : f5.locals.size = 8 := by
+    show (f4.locals.set 4 none hf4_lt4).size = 8; rw [Array.size_set]; exact hf4_size
+  have hf5_lt5 : 5 < f5.locals.size := by rw [hf5_size]; decide
+  have hf5_v5 : f5.locals[5]'hf5_lt5 = some curBalRef := by
+    show (f4.locals.set 4 none hf4_lt4)[5]'hf5_lt5 = _
+    rw [Array.getElem_set, if_neg (by decide : (4 : Nat) ≠ 5)]
+    show (f3.locals.set 3 none hf3_lt3)[5]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (3 : Nat) ≠ 5)]
+    show (f2.locals.set 2 none hf2_lt2)[5]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 5)]
+    show (f1.locals.set 1 none hf1_lt1)[5]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 5)]
+    show (f0.locals.set 0 none hf0_lt0)[5]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 5)]; simp [f0]
+  have hf5_ref5 : ¬ 5 < f5.localRefs.size ∨
+                  ∃ h : 5 < f5.localRefs.size, f5.localRefs[5]'h = none := by
+    right; refine ⟨by simp [f5, f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[5]'(by simp) = none; decide
+  have step6 := step_rotation_pc5 o f5 []
+                  [newEkRef, currentEkRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl curBalRef hf5_lt5 hf5_v5 hf5_ref5
+  set f6 := { f5 with pc := 6, locals := f5.locals.set 5 none hf5_lt5 } with hf6_def
+  have hf6_size : f6.locals.size = 8 := by
+    show (f5.locals.set 5 none hf5_lt5).size = 8; rw [Array.size_set]; exact hf5_size
+  have hf6_lt6 : 6 < f6.locals.size := by rw [hf6_size]; decide
+  have hf6_v6 : f6.locals[6]'hf6_lt6 = some newBalRef := by
+    show (f5.locals.set 5 none hf5_lt5)[6]'hf6_lt6 = _
+    rw [Array.getElem_set, if_neg (by decide : (5 : Nat) ≠ 6)]
+    show (f4.locals.set 4 none hf4_lt4)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (4 : Nat) ≠ 6)]
+    show (f3.locals.set 3 none hf3_lt3)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (3 : Nat) ≠ 6)]
+    show (f2.locals.set 2 none hf2_lt2)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 6)]
+    show (f1.locals.set 1 none hf1_lt1)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 6)]
+    show (f0.locals.set 0 none hf0_lt0)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 6)]; simp [f0]
+  have hf6_ref6 : ¬ 6 < f6.localRefs.size ∨
+                  ∃ h : 6 < f6.localRefs.size, f6.localRefs[6]'h = none := by
+    right; refine ⟨by simp [f6, f5, f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[6]'(by simp) = none; decide
+  have step7 := step_rotation_pc6 o f6 []
+                  [curBalRef, newEkRef, currentEkRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl newBalRef hf6_lt6 hf6_v6 hf6_ref6
+  set f7 := { f6 with pc := 7 } with hf7_def
+  have hf7_size : f7.locals.size = 8 := hf6_size
+  have hf7_lt7 : 7 < f7.locals.size := by rw [hf7_size]; decide
+  have hf7_v7 : f7.locals[7]'hf7_lt7 = some proofRef := by
+    show f6.locals[7]'_ = _
+    show (f5.locals.set 5 none hf5_lt5)[7]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (5 : Nat) ≠ 7)]
+    show (f4.locals.set 4 none hf4_lt4)[7]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (4 : Nat) ≠ 7)]
+    show (f3.locals.set 3 none hf3_lt3)[7]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (3 : Nat) ≠ 7)]
+    show (f2.locals.set 2 none hf2_lt2)[7]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 7)]
+    show (f1.locals.set 1 none hf1_lt1)[7]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 7)]
+    show (f0.locals.set 0 none hf0_lt0)[7]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 7)]; simp [f0]
+  have hf7_ref7 : ¬ 7 < f7.localRefs.size ∨
+                  ∃ h : 7 < f7.localRefs.size, f7.localRefs[7]'h = none := by
+    right; refine ⟨by simp [f7, f6, f5, f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[7]'(by simp) = none; decide
+  have step8 := step_rotation_pc7 o f7 []
+                  [newBalRef, curBalRef, newEkRef, currentEkRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl proofRef hf7_lt7 hf7_v7 hf7_ref7
+  set f8 := { f7 with pc := 8 } with hf8_def
+  have step9 := step_rotation_pc8 o f8 []
+                  [newBalRef, curBalRef, newEkRef, currentEkRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl proofRid proofFields cs1 sigmaFid proofRef
+                  hproofRef hread hFieldCount halloc
+  set f9 := { f8 with pc := 9 } with hf9_def
+  set ms9 : MachineState := { initMs with containers := cs1 } with hms9_def
+  have htake :
+      takeN [(.immRef sigmaFid : MoveValue), newBalRef, curBalRef, newEkRef, currentEkRef,
+              (.address contract : MoveValue), (.address sender : MoveValue),
+              (.u8 chainId : MoveValue)] 8 =
+        some ([.u8 chainId, .address sender, .address contract,
+               currentEkRef, newEkRef, curBalRef, newBalRef, .immRef sigmaFid], []) := rfl
+  have step10 := step_rotation_pc9_multi o f9 []
+                  [(.immRef sigmaFid : MoveValue), newBalRef, curBalRef, newEkRef, currentEkRef,
+                    (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  ms9 rfl rfl
+                  [.u8 chainId, .address sender, .address contract,
+                   currentEkRef, newEkRef, curBalRef, newBalRef, .immRef sigmaFid]
+                  [] sigmaResultHead sigmaResultTail cs2 htake hsigmaArityMismatch
+  obtain ⟨ef, hef⟩ : ∃ ef, fuel = ef + 10 := ⟨fuel - 10, by omega⟩
+  rw [hef]
+  rw [show ef + 10 = (ef + 9) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 9) _ _ _ _ step1,
+      show ef + 9 = (ef + 8) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 8) _ _ _ _ step2,
+      show ef + 8 = (ef + 7) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 7) _ _ _ _ step3,
+      show ef + 7 = (ef + 6) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 6) _ _ _ _ step4,
+      show ef + 6 = (ef + 5) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 5) _ _ _ _ step5,
+      show ef + 5 = (ef + 4) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 4) _ _ _ _ step6,
+      show ef + 4 = (ef + 3) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 3) _ _ _ _ step7,
+      show ef + 3 = (ef + 2) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 2) _ _ _ _ step8,
+      show ef + 2 = (ef + 1) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 1) _ _ _ _ step9,
+      StepLemmas.run_succ_error_of_step ef step10]
+
+/-- When sigma succeeds but range oracle returns none, run produces error.
+
+Chains PCs 0-13: 6 moveLoc + 2 copyLoc + immBorrowField (sigma alloc) +
+sigma-call-OK + 2 moveLoc + immBorrowField (range alloc) + range-call-none → `.error`. -/
+theorem rot_run_to_range_fail_produces_error
+    (o : RotationModuleOracle)
+    (chainId : UInt8) (sender contract : ByteArray)
+    (currentEkRef newEkRef curBalRef newBalRef proofRef : MoveValue)
+    (proofRid : RefId) (proofFields : List MoveValue)
+    (initMs : MachineState)
+    (cs1 cs2 cs3 : ContainerStore) (sigmaFid zkrpFid : RefId)
+    (hFieldCount : 1 < proofFields.length)
+    (hread : initMs.containers.read proofRid = some (.struct_ proofFields))
+    (hread2 : cs2.read proofRid = some (.struct_ proofFields))
+    (hproofRef : getRefId proofRef = some proofRid)
+    (halloc0 : initMs.containers.alloc
+                  (proofFields[0]'(by omega : 0 < proofFields.length)) = (cs1, sigmaFid))
+    (hsigmaOk :
+       o.verifySigmaProof cs1
+         [.u8 chainId, .address sender, .address contract,
+          currentEkRef, newEkRef, curBalRef, newBalRef, .immRef sigmaFid] =
+         some ([], cs2))
+    (halloc1 : cs2.alloc (proofFields[1]'hFieldCount) = (cs3, zkrpFid))
+    (hrangeFail : o.verifyRangeProof cs3 [newBalRef, .immRef zkrpFid] = none)
+    (fuel : Nat)
+    (hfuel : fuel ≥ 14) :
+    run (rotationModuleEnv o)
+        { code := verifyRotationProofCode, pc := 0,
+          locals := ([.u8 chainId, .address sender, .address contract,
+                      currentEkRef, newEkRef, curBalRef, newBalRef, proofRef].map some).toArray,
+          localRefs := (List.replicate 8 none).toArray }
+        [] [] initMs fuel = .error := by
+  set f0 : Frame :=
+      { code := verifyRotationProofCode, pc := 0,
+        locals := ([(.u8 chainId : MoveValue), .address sender, .address contract,
+                    currentEkRef, newEkRef, curBalRef, newBalRef, proofRef].map some).toArray,
+        localRefs := (List.replicate 8 none).toArray }
+    with hf0_def
+  have hf0_size : f0.locals.size = 8 := by simp [f0]
+  -- PC 0: moveLoc 0 (chainId)
+  have hf0_lt0 : 0 < f0.locals.size := by rw [hf0_size]; decide
+  have hf0_v0 : f0.locals[0]'hf0_lt0 = some (.u8 chainId) := by simp [f0]
+  have hf0_ref0 : ¬ 0 < f0.localRefs.size ∨
+                  ∃ h : 0 < f0.localRefs.size, f0.localRefs[0]'h = none := by
+    right; refine ⟨by simp [f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[0]'(by simp) = none; decide
+  have step1 := step_rotation_pc0 o f0 [] [] initMs rfl rfl (.u8 chainId)
+                  hf0_lt0 hf0_v0 hf0_ref0
+  set f1 := { f0 with pc := 1, locals := f0.locals.set 0 none hf0_lt0 } with hf1_def
+  have hf1_size : f1.locals.size = 8 := by
+    show (f0.locals.set 0 none hf0_lt0).size = 8; rw [Array.size_set]; exact hf0_size
+  have hf1_lt1 : 1 < f1.locals.size := by rw [hf1_size]; decide
+  have hf1_v1 : f1.locals[1]'hf1_lt1 = some (.address sender) := by
+    show (f0.locals.set 0 none hf0_lt0)[1]'hf1_lt1 = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 1)]; simp [f0]
+  have hf1_ref1 : ¬ 1 < f1.localRefs.size ∨
+                  ∃ h : 1 < f1.localRefs.size, f1.localRefs[1]'h = none := by
+    right; refine ⟨by simp [f1, f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[1]'(by simp) = none; decide
+  have step2 := step_rotation_pc1 o f1 [] [(.u8 chainId : MoveValue)] initMs rfl rfl
+                  (.address sender) hf1_lt1 hf1_v1 hf1_ref1
+  set f2 := { f1 with pc := 2, locals := f1.locals.set 1 none hf1_lt1 } with hf2_def
+  have hf2_size : f2.locals.size = 8 := by
+    show (f1.locals.set 1 none hf1_lt1).size = 8; rw [Array.size_set]; exact hf1_size
+  have hf2_lt2 : 2 < f2.locals.size := by rw [hf2_size]; decide
+  have hf2_v2 : f2.locals[2]'hf2_lt2 = some (.address contract) := by
+    show (f1.locals.set 1 none hf1_lt1)[2]'hf2_lt2 = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 2)]
+    show (f0.locals.set 0 none hf0_lt0)[2]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 2)]; simp [f0]
+  have hf2_ref2 : ¬ 2 < f2.localRefs.size ∨
+                  ∃ h : 2 < f2.localRefs.size, f2.localRefs[2]'h = none := by
+    right; refine ⟨by simp [f2, f1, f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[2]'(by simp) = none; decide
+  have step3 := step_rotation_pc2 o f2 []
+                  [(.address sender : MoveValue), (.u8 chainId : MoveValue)] initMs rfl rfl
+                  (.address contract) hf2_lt2 hf2_v2 hf2_ref2
+  set f3 := { f2 with pc := 3, locals := f2.locals.set 2 none hf2_lt2 } with hf3_def
+  have hf3_size : f3.locals.size = 8 := by
+    show (f2.locals.set 2 none hf2_lt2).size = 8; rw [Array.size_set]; exact hf2_size
+  have hf3_lt3 : 3 < f3.locals.size := by rw [hf3_size]; decide
+  have hf3_v3 : f3.locals[3]'hf3_lt3 = some currentEkRef := by
+    show (f2.locals.set 2 none hf2_lt2)[3]'hf3_lt3 = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 3)]
+    show (f1.locals.set 1 none hf1_lt1)[3]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 3)]
+    show (f0.locals.set 0 none hf0_lt0)[3]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 3)]; simp [f0]
+  have hf3_ref3 : ¬ 3 < f3.localRefs.size ∨
+                  ∃ h : 3 < f3.localRefs.size, f3.localRefs[3]'h = none := by
+    right; refine ⟨by simp [f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[3]'(by simp) = none; decide
+  have step4 := step_rotation_pc3 o f3 []
+                  [(.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl currentEkRef hf3_lt3 hf3_v3 hf3_ref3
+  set f4 := { f3 with pc := 4, locals := f3.locals.set 3 none hf3_lt3 } with hf4_def
+  have hf4_size : f4.locals.size = 8 := by
+    show (f3.locals.set 3 none hf3_lt3).size = 8; rw [Array.size_set]; exact hf3_size
+  have hf4_lt4 : 4 < f4.locals.size := by rw [hf4_size]; decide
+  have hf4_v4 : f4.locals[4]'hf4_lt4 = some newEkRef := by
+    show (f3.locals.set 3 none hf3_lt3)[4]'hf4_lt4 = _
+    rw [Array.getElem_set, if_neg (by decide : (3 : Nat) ≠ 4)]
+    show (f2.locals.set 2 none hf2_lt2)[4]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 4)]
+    show (f1.locals.set 1 none hf1_lt1)[4]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 4)]
+    show (f0.locals.set 0 none hf0_lt0)[4]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 4)]; simp [f0]
+  have hf4_ref4 : ¬ 4 < f4.localRefs.size ∨
+                  ∃ h : 4 < f4.localRefs.size, f4.localRefs[4]'h = none := by
+    right; refine ⟨by simp [f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[4]'(by simp) = none; decide
+  have step5 := step_rotation_pc4 o f4 []
+                  [currentEkRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl newEkRef hf4_lt4 hf4_v4 hf4_ref4
+  set f5 := { f4 with pc := 5, locals := f4.locals.set 4 none hf4_lt4 } with hf5_def
+  have hf5_size : f5.locals.size = 8 := by
+    show (f4.locals.set 4 none hf4_lt4).size = 8; rw [Array.size_set]; exact hf4_size
+  have hf5_lt5 : 5 < f5.locals.size := by rw [hf5_size]; decide
+  have hf5_v5 : f5.locals[5]'hf5_lt5 = some curBalRef := by
+    show (f4.locals.set 4 none hf4_lt4)[5]'hf5_lt5 = _
+    rw [Array.getElem_set, if_neg (by decide : (4 : Nat) ≠ 5)]
+    show (f3.locals.set 3 none hf3_lt3)[5]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (3 : Nat) ≠ 5)]
+    show (f2.locals.set 2 none hf2_lt2)[5]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 5)]
+    show (f1.locals.set 1 none hf1_lt1)[5]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 5)]
+    show (f0.locals.set 0 none hf0_lt0)[5]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 5)]; simp [f0]
+  have hf5_ref5 : ¬ 5 < f5.localRefs.size ∨
+                  ∃ h : 5 < f5.localRefs.size, f5.localRefs[5]'h = none := by
+    right; refine ⟨by simp [f5, f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[5]'(by simp) = none; decide
+  have step6 := step_rotation_pc5 o f5 []
+                  [newEkRef, currentEkRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl curBalRef hf5_lt5 hf5_v5 hf5_ref5
+  set f6 := { f5 with pc := 6, locals := f5.locals.set 5 none hf5_lt5 } with hf6_def
+  have hf6_size : f6.locals.size = 8 := by
+    show (f5.locals.set 5 none hf5_lt5).size = 8; rw [Array.size_set]; exact hf5_size
+  have hf6_lt6 : 6 < f6.locals.size := by rw [hf6_size]; decide
+  have hf6_v6 : f6.locals[6]'hf6_lt6 = some newBalRef := by
+    show (f5.locals.set 5 none hf5_lt5)[6]'hf6_lt6 = _
+    rw [Array.getElem_set, if_neg (by decide : (5 : Nat) ≠ 6)]
+    show (f4.locals.set 4 none hf4_lt4)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (4 : Nat) ≠ 6)]
+    show (f3.locals.set 3 none hf3_lt3)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (3 : Nat) ≠ 6)]
+    show (f2.locals.set 2 none hf2_lt2)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 6)]
+    show (f1.locals.set 1 none hf1_lt1)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 6)]
+    show (f0.locals.set 0 none hf0_lt0)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 6)]; simp [f0]
+  have hf6_ref6 : ¬ 6 < f6.localRefs.size ∨
+                  ∃ h : 6 < f6.localRefs.size, f6.localRefs[6]'h = none := by
+    right; refine ⟨by simp [f6, f5, f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[6]'(by simp) = none; decide
+  have step7 := step_rotation_pc6 o f6 []
+                  [curBalRef, newEkRef, currentEkRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl newBalRef hf6_lt6 hf6_v6 hf6_ref6
+  set f7 := { f6 with pc := 7 } with hf7_def
+  have hf7_size : f7.locals.size = 8 := hf6_size
+  have hf7_lt7 : 7 < f7.locals.size := by rw [hf7_size]; decide
+  have hf7_v7 : f7.locals[7]'hf7_lt7 = some proofRef := by
+    show f6.locals[7]'_ = _
+    show (f5.locals.set 5 none hf5_lt5)[7]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (5 : Nat) ≠ 7)]
+    show (f4.locals.set 4 none hf4_lt4)[7]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (4 : Nat) ≠ 7)]
+    show (f3.locals.set 3 none hf3_lt3)[7]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (3 : Nat) ≠ 7)]
+    show (f2.locals.set 2 none hf2_lt2)[7]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 7)]
+    show (f1.locals.set 1 none hf1_lt1)[7]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 7)]
+    show (f0.locals.set 0 none hf0_lt0)[7]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 7)]; simp [f0]
+  have hf7_ref7 : ¬ 7 < f7.localRefs.size ∨
+                  ∃ h : 7 < f7.localRefs.size, f7.localRefs[7]'h = none := by
+    right; refine ⟨by simp [f7, f6, f5, f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[7]'(by simp) = none; decide
+  have step8 := step_rotation_pc7 o f7 []
+                  [newBalRef, curBalRef, newEkRef, currentEkRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl proofRef hf7_lt7 hf7_v7 hf7_ref7
+  set f8 := { f7 with pc := 8 } with hf8_def
+  have step9 := step_rotation_pc8 o f8 []
+                  [newBalRef, curBalRef, newEkRef, currentEkRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl proofRid proofFields cs1 sigmaFid proofRef
+                  hproofRef hread (by omega : 0 < proofFields.length) halloc0
+  -- After step9: pc=9, stack=[.immRef sigmaFid, newBalRef, curBalRef, newEkRef, currentEkRef, contract, sender, chainId], containers=cs1
+  set f9 := { f8 with pc := 9 } with hf9_def
+  set ms9 : MachineState := { initMs with containers := cs1 } with hms9_def
+  have htake9 :
+      takeN [(.immRef sigmaFid : MoveValue), newBalRef, curBalRef, newEkRef, currentEkRef,
+              (.address contract : MoveValue), (.address sender : MoveValue),
+              (.u8 chainId : MoveValue)] 8 =
+        some ([.u8 chainId, .address sender, .address contract,
+               currentEkRef, newEkRef, curBalRef, newBalRef, .immRef sigmaFid], []) := rfl
+  have step10 := step_rotation_pc9 o f9 []
+                  [(.immRef sigmaFid : MoveValue), newBalRef, curBalRef, newEkRef, currentEkRef,
+                    (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  ms9 rfl rfl
+                  [.u8 chainId, .address sender, .address contract,
+                   currentEkRef, newEkRef, curBalRef, newBalRef, .immRef sigmaFid]
+                  [] cs2 htake9 hsigmaOk
+  -- After step10: pc=10, stack=[], containers=cs2
+  set f10 := { f9 with pc := 10 } with hf10_def
+  set ms10 : MachineState := { ms9 with containers := cs2, globals := ms9.globals } with hms10_def
+  -- PC 10: moveLoc 6 → push newBalRef. Locals[6] still has newBalRef (untouched by copyLoc/immBorrowField).
+  have hf10_size : f10.locals.size = 8 := hf6_size
+  have hf10_lt6 : 6 < f10.locals.size := by rw [hf10_size]; decide
+  have hf10_v6 : f10.locals[6]'hf10_lt6 = some newBalRef := hf6_v6
+  have hf10_ref6 : ¬ 6 < f10.localRefs.size ∨
+                   ∃ h : 6 < f10.localRefs.size, f10.localRefs[6]'h = none := hf6_ref6
+  have step11 := step_rotation_pc10 o f10 [] [] ms10 rfl rfl newBalRef
+                  hf10_lt6 hf10_v6 hf10_ref6
+  -- After step11: pc=11, stack=[newBalRef], locals[6] := none
+  set f11 := { f10 with pc := 11, locals := f10.locals.set 6 none hf10_lt6 } with hf11_def
+  have hf11_size : f11.locals.size = 8 := by
+    show (f10.locals.set 6 none hf10_lt6).size = 8; rw [Array.size_set]; exact hf10_size
+  have hf11_lt7 : 7 < f11.locals.size := by rw [hf11_size]; decide
+  have hf11_v7 : f11.locals[7]'hf11_lt7 = some proofRef := by
+    show (f10.locals.set 6 none hf10_lt6)[7]'hf11_lt7 = _
+    rw [Array.getElem_set, if_neg (by decide : (6 : Nat) ≠ 7)]; exact hf7_v7
+  have hf11_ref7 : ¬ 7 < f11.localRefs.size ∨
+                   ∃ h : 7 < f11.localRefs.size, f11.localRefs[7]'h = none := by
+    right; refine ⟨by simp [f11, f10, f9, f8, f7, f6, f5, f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[7]'(by simp) = none; decide
+  have step12 := step_rotation_pc11 o f11 [] [newBalRef] ms10 rfl rfl proofRef
+                  hf11_lt7 hf11_v7 hf11_ref7
+  -- After step12: pc=12, stack=[proofRef, newBalRef], locals[7] := none
+  set f12 := { f11 with pc := 12, locals := f11.locals.set 7 none hf11_lt7 } with hf12_def
+  -- PC 12: immBorrowField 1, consumes proofRef, allocates proofFields[1] in cs2 → cs3, pushes .immRef zkrpFid
+  have step13 := step_rotation_pc12 o f12 [] [newBalRef] ms10 rfl rfl proofRid proofFields
+                  cs3 zkrpFid proofRef hproofRef
+                  (by show ms10.containers.read proofRid = _; exact hread2)
+                  hFieldCount halloc1
+  -- After step13: pc=13, stack=[.immRef zkrpFid, newBalRef], containers=cs3
+  set f13 := { f12 with pc := 13 } with hf13_def
+  set ms13 : MachineState := { ms10 with containers := cs3 } with hms13_def
+  -- PC 13: range call (numParams=2), takeN 2 → ([newBalRef, .immRef zkrpFid], []), returns none → error
+  have htake13 :
+      takeN [(.immRef zkrpFid : MoveValue), newBalRef] 2 =
+        some ([newBalRef, .immRef zkrpFid], []) := rfl
+  have step14 := step_rotation_pc13_none o f13 [] [(.immRef zkrpFid : MoveValue), newBalRef]
+                  ms13 rfl rfl
+                  [newBalRef, .immRef zkrpFid] [] htake13 hrangeFail
+  -- Compose: 13 OK steps + 1 error step.
+  obtain ⟨ef, hef⟩ : ∃ ef, fuel = ef + 14 := ⟨fuel - 14, by omega⟩
+  rw [hef]
+  rw [show ef + 14 = (ef + 13) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 13) _ _ _ _ step1,
+      show ef + 13 = (ef + 12) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 12) _ _ _ _ step2,
+      show ef + 12 = (ef + 11) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 11) _ _ _ _ step3,
+      show ef + 11 = (ef + 10) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 10) _ _ _ _ step4,
+      show ef + 10 = (ef + 9) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 9) _ _ _ _ step5,
+      show ef + 9 = (ef + 8) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 8) _ _ _ _ step6,
+      show ef + 8 = (ef + 7) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 7) _ _ _ _ step7,
+      show ef + 7 = (ef + 6) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 6) _ _ _ _ step8,
+      show ef + 6 = (ef + 5) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 5) _ _ _ _ step9,
+      show ef + 5 = (ef + 4) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 4) _ _ _ _ step10,
+      show ef + 4 = (ef + 3) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 3) _ _ _ _ step11,
+      show ef + 3 = (ef + 2) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 2) _ _ _ _ step12,
+      show ef + 2 = (ef + 1) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 1) _ _ _ _ step13,
+      StepLemmas.run_succ_error_of_step ef step14]
+
+/-- When sigma succeeds but range oracle returns a non-empty result list (arity mismatch),
+    run produces error.
+
+Same first 13 OK steps as `rot_run_to_range_fail_produces_error`; final step uses
+`step_rotation_pc13_multi`. -/
+theorem rot_run_to_range_arity_mismatch_produces_error
+    (o : RotationModuleOracle)
+    (chainId : UInt8) (sender contract : ByteArray)
+    (currentEkRef newEkRef curBalRef newBalRef proofRef : MoveValue)
+    (proofRid : RefId) (proofFields : List MoveValue)
+    (initMs : MachineState)
+    (cs1 cs2 cs3 cs4 : ContainerStore) (sigmaFid zkrpFid : RefId)
+    (rangeResultHead : MoveValue) (rangeResultTail : List MoveValue)
+    (hFieldCount : 1 < proofFields.length)
+    (hread : initMs.containers.read proofRid = some (.struct_ proofFields))
+    (hread2 : cs2.read proofRid = some (.struct_ proofFields))
+    (hproofRef : getRefId proofRef = some proofRid)
+    (halloc0 : initMs.containers.alloc
+                  (proofFields[0]'(by omega : 0 < proofFields.length)) = (cs1, sigmaFid))
+    (hsigmaOk :
+       o.verifySigmaProof cs1
+         [.u8 chainId, .address sender, .address contract,
+          currentEkRef, newEkRef, curBalRef, newBalRef, .immRef sigmaFid] =
+         some ([], cs2))
+    (halloc1 : cs2.alloc (proofFields[1]'hFieldCount) = (cs3, zkrpFid))
+    (hrangeArityMismatch :
+       o.verifyRangeProof cs3 [newBalRef, .immRef zkrpFid] =
+         some (rangeResultHead :: rangeResultTail, cs4))
+    (fuel : Nat)
+    (hfuel : fuel ≥ 14) :
+    run (rotationModuleEnv o)
+        { code := verifyRotationProofCode, pc := 0,
+          locals := ([.u8 chainId, .address sender, .address contract,
+                      currentEkRef, newEkRef, curBalRef, newBalRef, proofRef].map some).toArray,
+          localRefs := (List.replicate 8 none).toArray }
+        [] [] initMs fuel = .error := by
+  set f0 : Frame :=
+      { code := verifyRotationProofCode, pc := 0,
+        locals := ([(.u8 chainId : MoveValue), .address sender, .address contract,
+                    currentEkRef, newEkRef, curBalRef, newBalRef, proofRef].map some).toArray,
+        localRefs := (List.replicate 8 none).toArray }
+    with hf0_def
+  have hf0_size : f0.locals.size = 8 := by simp [f0]
+  have hf0_lt0 : 0 < f0.locals.size := by rw [hf0_size]; decide
+  have hf0_v0 : f0.locals[0]'hf0_lt0 = some (.u8 chainId) := by simp [f0]
+  have hf0_ref0 : ¬ 0 < f0.localRefs.size ∨
+                  ∃ h : 0 < f0.localRefs.size, f0.localRefs[0]'h = none := by
+    right; refine ⟨by simp [f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[0]'(by simp) = none; decide
+  have step1 := step_rotation_pc0 o f0 [] [] initMs rfl rfl (.u8 chainId)
+                  hf0_lt0 hf0_v0 hf0_ref0
+  set f1 := { f0 with pc := 1, locals := f0.locals.set 0 none hf0_lt0 } with hf1_def
+  have hf1_size : f1.locals.size = 8 := by
+    show (f0.locals.set 0 none hf0_lt0).size = 8; rw [Array.size_set]; exact hf0_size
+  have hf1_lt1 : 1 < f1.locals.size := by rw [hf1_size]; decide
+  have hf1_v1 : f1.locals[1]'hf1_lt1 = some (.address sender) := by
+    show (f0.locals.set 0 none hf0_lt0)[1]'hf1_lt1 = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 1)]; simp [f0]
+  have hf1_ref1 : ¬ 1 < f1.localRefs.size ∨
+                  ∃ h : 1 < f1.localRefs.size, f1.localRefs[1]'h = none := by
+    right; refine ⟨by simp [f1, f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[1]'(by simp) = none; decide
+  have step2 := step_rotation_pc1 o f1 [] [(.u8 chainId : MoveValue)] initMs rfl rfl
+                  (.address sender) hf1_lt1 hf1_v1 hf1_ref1
+  set f2 := { f1 with pc := 2, locals := f1.locals.set 1 none hf1_lt1 } with hf2_def
+  have hf2_size : f2.locals.size = 8 := by
+    show (f1.locals.set 1 none hf1_lt1).size = 8; rw [Array.size_set]; exact hf1_size
+  have hf2_lt2 : 2 < f2.locals.size := by rw [hf2_size]; decide
+  have hf2_v2 : f2.locals[2]'hf2_lt2 = some (.address contract) := by
+    show (f1.locals.set 1 none hf1_lt1)[2]'hf2_lt2 = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 2)]
+    show (f0.locals.set 0 none hf0_lt0)[2]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 2)]; simp [f0]
+  have hf2_ref2 : ¬ 2 < f2.localRefs.size ∨
+                  ∃ h : 2 < f2.localRefs.size, f2.localRefs[2]'h = none := by
+    right; refine ⟨by simp [f2, f1, f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[2]'(by simp) = none; decide
+  have step3 := step_rotation_pc2 o f2 []
+                  [(.address sender : MoveValue), (.u8 chainId : MoveValue)] initMs rfl rfl
+                  (.address contract) hf2_lt2 hf2_v2 hf2_ref2
+  set f3 := { f2 with pc := 3, locals := f2.locals.set 2 none hf2_lt2 } with hf3_def
+  have hf3_size : f3.locals.size = 8 := by
+    show (f2.locals.set 2 none hf2_lt2).size = 8; rw [Array.size_set]; exact hf2_size
+  have hf3_lt3 : 3 < f3.locals.size := by rw [hf3_size]; decide
+  have hf3_v3 : f3.locals[3]'hf3_lt3 = some currentEkRef := by
+    show (f2.locals.set 2 none hf2_lt2)[3]'hf3_lt3 = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 3)]
+    show (f1.locals.set 1 none hf1_lt1)[3]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 3)]
+    show (f0.locals.set 0 none hf0_lt0)[3]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 3)]; simp [f0]
+  have hf3_ref3 : ¬ 3 < f3.localRefs.size ∨
+                  ∃ h : 3 < f3.localRefs.size, f3.localRefs[3]'h = none := by
+    right; refine ⟨by simp [f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[3]'(by simp) = none; decide
+  have step4 := step_rotation_pc3 o f3 []
+                  [(.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl currentEkRef hf3_lt3 hf3_v3 hf3_ref3
+  set f4 := { f3 with pc := 4, locals := f3.locals.set 3 none hf3_lt3 } with hf4_def
+  have hf4_size : f4.locals.size = 8 := by
+    show (f3.locals.set 3 none hf3_lt3).size = 8; rw [Array.size_set]; exact hf3_size
+  have hf4_lt4 : 4 < f4.locals.size := by rw [hf4_size]; decide
+  have hf4_v4 : f4.locals[4]'hf4_lt4 = some newEkRef := by
+    show (f3.locals.set 3 none hf3_lt3)[4]'hf4_lt4 = _
+    rw [Array.getElem_set, if_neg (by decide : (3 : Nat) ≠ 4)]
+    show (f2.locals.set 2 none hf2_lt2)[4]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 4)]
+    show (f1.locals.set 1 none hf1_lt1)[4]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 4)]
+    show (f0.locals.set 0 none hf0_lt0)[4]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 4)]; simp [f0]
+  have hf4_ref4 : ¬ 4 < f4.localRefs.size ∨
+                  ∃ h : 4 < f4.localRefs.size, f4.localRefs[4]'h = none := by
+    right; refine ⟨by simp [f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[4]'(by simp) = none; decide
+  have step5 := step_rotation_pc4 o f4 []
+                  [currentEkRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl newEkRef hf4_lt4 hf4_v4 hf4_ref4
+  set f5 := { f4 with pc := 5, locals := f4.locals.set 4 none hf4_lt4 } with hf5_def
+  have hf5_size : f5.locals.size = 8 := by
+    show (f4.locals.set 4 none hf4_lt4).size = 8; rw [Array.size_set]; exact hf4_size
+  have hf5_lt5 : 5 < f5.locals.size := by rw [hf5_size]; decide
+  have hf5_v5 : f5.locals[5]'hf5_lt5 = some curBalRef := by
+    show (f4.locals.set 4 none hf4_lt4)[5]'hf5_lt5 = _
+    rw [Array.getElem_set, if_neg (by decide : (4 : Nat) ≠ 5)]
+    show (f3.locals.set 3 none hf3_lt3)[5]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (3 : Nat) ≠ 5)]
+    show (f2.locals.set 2 none hf2_lt2)[5]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 5)]
+    show (f1.locals.set 1 none hf1_lt1)[5]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 5)]
+    show (f0.locals.set 0 none hf0_lt0)[5]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 5)]; simp [f0]
+  have hf5_ref5 : ¬ 5 < f5.localRefs.size ∨
+                  ∃ h : 5 < f5.localRefs.size, f5.localRefs[5]'h = none := by
+    right; refine ⟨by simp [f5, f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[5]'(by simp) = none; decide
+  have step6 := step_rotation_pc5 o f5 []
+                  [newEkRef, currentEkRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl curBalRef hf5_lt5 hf5_v5 hf5_ref5
+  set f6 := { f5 with pc := 6, locals := f5.locals.set 5 none hf5_lt5 } with hf6_def
+  have hf6_size : f6.locals.size = 8 := by
+    show (f5.locals.set 5 none hf5_lt5).size = 8; rw [Array.size_set]; exact hf5_size
+  have hf6_lt6 : 6 < f6.locals.size := by rw [hf6_size]; decide
+  have hf6_v6 : f6.locals[6]'hf6_lt6 = some newBalRef := by
+    show (f5.locals.set 5 none hf5_lt5)[6]'hf6_lt6 = _
+    rw [Array.getElem_set, if_neg (by decide : (5 : Nat) ≠ 6)]
+    show (f4.locals.set 4 none hf4_lt4)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (4 : Nat) ≠ 6)]
+    show (f3.locals.set 3 none hf3_lt3)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (3 : Nat) ≠ 6)]
+    show (f2.locals.set 2 none hf2_lt2)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 6)]
+    show (f1.locals.set 1 none hf1_lt1)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 6)]
+    show (f0.locals.set 0 none hf0_lt0)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 6)]; simp [f0]
+  have hf6_ref6 : ¬ 6 < f6.localRefs.size ∨
+                  ∃ h : 6 < f6.localRefs.size, f6.localRefs[6]'h = none := by
+    right; refine ⟨by simp [f6, f5, f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[6]'(by simp) = none; decide
+  have step7 := step_rotation_pc6 o f6 []
+                  [curBalRef, newEkRef, currentEkRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl newBalRef hf6_lt6 hf6_v6 hf6_ref6
+  set f7 := { f6 with pc := 7 } with hf7_def
+  have hf7_size : f7.locals.size = 8 := hf6_size
+  have hf7_lt7 : 7 < f7.locals.size := by rw [hf7_size]; decide
+  have hf7_v7 : f7.locals[7]'hf7_lt7 = some proofRef := by
+    show f6.locals[7]'_ = _
+    show (f5.locals.set 5 none hf5_lt5)[7]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (5 : Nat) ≠ 7)]
+    show (f4.locals.set 4 none hf4_lt4)[7]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (4 : Nat) ≠ 7)]
+    show (f3.locals.set 3 none hf3_lt3)[7]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (3 : Nat) ≠ 7)]
+    show (f2.locals.set 2 none hf2_lt2)[7]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 7)]
+    show (f1.locals.set 1 none hf1_lt1)[7]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 7)]
+    show (f0.locals.set 0 none hf0_lt0)[7]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 7)]; simp [f0]
+  have hf7_ref7 : ¬ 7 < f7.localRefs.size ∨
+                  ∃ h : 7 < f7.localRefs.size, f7.localRefs[7]'h = none := by
+    right; refine ⟨by simp [f7, f6, f5, f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[7]'(by simp) = none; decide
+  have step8 := step_rotation_pc7 o f7 []
+                  [newBalRef, curBalRef, newEkRef, currentEkRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl proofRef hf7_lt7 hf7_v7 hf7_ref7
+  set f8 := { f7 with pc := 8 } with hf8_def
+  have step9 := step_rotation_pc8 o f8 []
+                  [newBalRef, curBalRef, newEkRef, currentEkRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl proofRid proofFields cs1 sigmaFid proofRef
+                  hproofRef hread (by omega : 0 < proofFields.length) halloc0
+  set f9 := { f8 with pc := 9 } with hf9_def
+  set ms9 : MachineState := { initMs with containers := cs1 } with hms9_def
+  have htake9 :
+      takeN [(.immRef sigmaFid : MoveValue), newBalRef, curBalRef, newEkRef, currentEkRef,
+              (.address contract : MoveValue), (.address sender : MoveValue),
+              (.u8 chainId : MoveValue)] 8 =
+        some ([.u8 chainId, .address sender, .address contract,
+               currentEkRef, newEkRef, curBalRef, newBalRef, .immRef sigmaFid], []) := rfl
+  have step10 := step_rotation_pc9 o f9 []
+                  [(.immRef sigmaFid : MoveValue), newBalRef, curBalRef, newEkRef, currentEkRef,
+                    (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  ms9 rfl rfl
+                  [.u8 chainId, .address sender, .address contract,
+                   currentEkRef, newEkRef, curBalRef, newBalRef, .immRef sigmaFid]
+                  [] cs2 htake9 hsigmaOk
+  set f10 := { f9 with pc := 10 } with hf10_def
+  set ms10 : MachineState := { ms9 with containers := cs2, globals := ms9.globals } with hms10_def
+  have hf10_size : f10.locals.size = 8 := hf6_size
+  have hf10_lt6 : 6 < f10.locals.size := by rw [hf10_size]; decide
+  have hf10_v6 : f10.locals[6]'hf10_lt6 = some newBalRef := hf6_v6
+  have hf10_ref6 : ¬ 6 < f10.localRefs.size ∨
+                   ∃ h : 6 < f10.localRefs.size, f10.localRefs[6]'h = none := hf6_ref6
+  have step11 := step_rotation_pc10 o f10 [] [] ms10 rfl rfl newBalRef
+                  hf10_lt6 hf10_v6 hf10_ref6
+  set f11 := { f10 with pc := 11, locals := f10.locals.set 6 none hf10_lt6 } with hf11_def
+  have hf11_size : f11.locals.size = 8 := by
+    show (f10.locals.set 6 none hf10_lt6).size = 8; rw [Array.size_set]; exact hf10_size
+  have hf11_lt7 : 7 < f11.locals.size := by rw [hf11_size]; decide
+  have hf11_v7 : f11.locals[7]'hf11_lt7 = some proofRef := by
+    show (f10.locals.set 6 none hf10_lt6)[7]'hf11_lt7 = _
+    rw [Array.getElem_set, if_neg (by decide : (6 : Nat) ≠ 7)]; exact hf7_v7
+  have hf11_ref7 : ¬ 7 < f11.localRefs.size ∨
+                   ∃ h : 7 < f11.localRefs.size, f11.localRefs[7]'h = none := by
+    right; refine ⟨by simp [f11, f10, f9, f8, f7, f6, f5, f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[7]'(by simp) = none; decide
+  have step12 := step_rotation_pc11 o f11 [] [newBalRef] ms10 rfl rfl proofRef
+                  hf11_lt7 hf11_v7 hf11_ref7
+  set f12 := { f11 with pc := 12, locals := f11.locals.set 7 none hf11_lt7 } with hf12_def
+  have step13 := step_rotation_pc12 o f12 [] [newBalRef] ms10 rfl rfl proofRid proofFields
+                  cs3 zkrpFid proofRef hproofRef
+                  (by show ms10.containers.read proofRid = _; exact hread2)
+                  hFieldCount halloc1
+  set f13 := { f12 with pc := 13 } with hf13_def
+  set ms13 : MachineState := { ms10 with containers := cs3 } with hms13_def
+  have htake13 :
+      takeN [(.immRef zkrpFid : MoveValue), newBalRef] 2 =
+        some ([newBalRef, .immRef zkrpFid], []) := rfl
+  have step14 := step_rotation_pc13_multi o f13 [] [(.immRef zkrpFid : MoveValue), newBalRef]
+                  ms13 rfl rfl
+                  [newBalRef, .immRef zkrpFid] []
+                  rangeResultHead rangeResultTail cs4 htake13 hrangeArityMismatch
+  obtain ⟨ef, hef⟩ : ∃ ef, fuel = ef + 14 := ⟨fuel - 14, by omega⟩
+  rw [hef]
+  rw [show ef + 14 = (ef + 13) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 13) _ _ _ _ step1,
+      show ef + 13 = (ef + 12) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 12) _ _ _ _ step2,
+      show ef + 12 = (ef + 11) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 11) _ _ _ _ step3,
+      show ef + 11 = (ef + 10) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 10) _ _ _ _ step4,
+      show ef + 10 = (ef + 9) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 9) _ _ _ _ step5,
+      show ef + 9 = (ef + 8) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 8) _ _ _ _ step6,
+      show ef + 8 = (ef + 7) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 7) _ _ _ _ step7,
+      show ef + 7 = (ef + 6) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 6) _ _ _ _ step8,
+      show ef + 6 = (ef + 5) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 5) _ _ _ _ step9,
+      show ef + 5 = (ef + 4) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 4) _ _ _ _ step10,
+      show ef + 4 = (ef + 3) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 3) _ _ _ _ step11,
+      show ef + 3 = (ef + 2) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 2) _ _ _ _ step12,
+      show ef + 2 = (ef + 1) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 1) _ _ _ _ step13,
+      StepLemmas.run_succ_error_of_step ef step14]
+
+/-- Happy path: sigma succeeds, range succeeds, ret. Run produces `.returned [] ms_final`.
+
+Chains PCs 0-14: 6 moveLoc + 2 copyLoc + immBorrowField (sigma alloc) +
+sigma-call-OK + 2 moveLoc + immBorrowField (range alloc) + range-call-OK + ret. -/
+theorem rot_run_to_success_produces_returned
+    (o : RotationModuleOracle)
+    (chainId : UInt8) (sender contract : ByteArray)
+    (currentEkRef newEkRef curBalRef newBalRef proofRef : MoveValue)
+    (proofRid : RefId) (proofFields : List MoveValue)
+    (initMs : MachineState)
+    (cs1 cs2 cs3 cs4 : ContainerStore) (sigmaFid zkrpFid : RefId)
+    (hFieldCount : 1 < proofFields.length)
+    (hread : initMs.containers.read proofRid = some (.struct_ proofFields))
+    (hread2 : cs2.read proofRid = some (.struct_ proofFields))
+    (hproofRef : getRefId proofRef = some proofRid)
+    (halloc0 : initMs.containers.alloc
+                  (proofFields[0]'(by omega : 0 < proofFields.length)) = (cs1, sigmaFid))
+    (hsigmaOk :
+       o.verifySigmaProof cs1
+         [.u8 chainId, .address sender, .address contract,
+          currentEkRef, newEkRef, curBalRef, newBalRef, .immRef sigmaFid] =
+         some ([], cs2))
+    (halloc1 : cs2.alloc (proofFields[1]'hFieldCount) = (cs3, zkrpFid))
+    (hrangeOk : o.verifyRangeProof cs3 [newBalRef, .immRef zkrpFid] = some ([], cs4))
     (fuel : Nat)
     (hfuel : fuel ≥ 15) :
-    let args := [.u8 chainId, .address sender, .address contract,
-                 currentEkRef, newEkRef, curBalRef, newBalRef, proofRef]
-    (eval (rotationModuleEnv o) verifyRotationProofIdx args fuel initMs).dropMs =
-    match verifyRotationBytecodeResult o chainId sender contract currentEkRef newEkRef curBalRef newBalRef
-            proofRid proofFields initMs hFieldCount with
-    | .returned ms => .returned [] ms
-    | .error => .error
+    run (rotationModuleEnv o)
+        { code := verifyRotationProofCode, pc := 0,
+          locals := ([.u8 chainId, .address sender, .address contract,
+                      currentEkRef, newEkRef, curBalRef, newBalRef, proofRef].map some).toArray,
+          localRefs := (List.replicate 8 none).toArray }
+        [] [] initMs fuel =
+    .returned [] { initMs with containers := cs4, globals := initMs.globals } := by
+  set f0 : Frame :=
+      { code := verifyRotationProofCode, pc := 0,
+        locals := ([(.u8 chainId : MoveValue), .address sender, .address contract,
+                    currentEkRef, newEkRef, curBalRef, newBalRef, proofRef].map some).toArray,
+        localRefs := (List.replicate 8 none).toArray }
+    with hf0_def
+  have hf0_size : f0.locals.size = 8 := by simp [f0]
+  have hf0_lt0 : 0 < f0.locals.size := by rw [hf0_size]; decide
+  have hf0_v0 : f0.locals[0]'hf0_lt0 = some (.u8 chainId) := by simp [f0]
+  have hf0_ref0 : ¬ 0 < f0.localRefs.size ∨
+                  ∃ h : 0 < f0.localRefs.size, f0.localRefs[0]'h = none := by
+    right; refine ⟨by simp [f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[0]'(by simp) = none; decide
+  have step1 := step_rotation_pc0 o f0 [] [] initMs rfl rfl (.u8 chainId)
+                  hf0_lt0 hf0_v0 hf0_ref0
+  set f1 := { f0 with pc := 1, locals := f0.locals.set 0 none hf0_lt0 } with hf1_def
+  have hf1_size : f1.locals.size = 8 := by
+    show (f0.locals.set 0 none hf0_lt0).size = 8; rw [Array.size_set]; exact hf0_size
+  have hf1_lt1 : 1 < f1.locals.size := by rw [hf1_size]; decide
+  have hf1_v1 : f1.locals[1]'hf1_lt1 = some (.address sender) := by
+    show (f0.locals.set 0 none hf0_lt0)[1]'hf1_lt1 = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 1)]; simp [f0]
+  have hf1_ref1 : ¬ 1 < f1.localRefs.size ∨
+                  ∃ h : 1 < f1.localRefs.size, f1.localRefs[1]'h = none := by
+    right; refine ⟨by simp [f1, f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[1]'(by simp) = none; decide
+  have step2 := step_rotation_pc1 o f1 [] [(.u8 chainId : MoveValue)] initMs rfl rfl
+                  (.address sender) hf1_lt1 hf1_v1 hf1_ref1
+  set f2 := { f1 with pc := 2, locals := f1.locals.set 1 none hf1_lt1 } with hf2_def
+  have hf2_size : f2.locals.size = 8 := by
+    show (f1.locals.set 1 none hf1_lt1).size = 8; rw [Array.size_set]; exact hf1_size
+  have hf2_lt2 : 2 < f2.locals.size := by rw [hf2_size]; decide
+  have hf2_v2 : f2.locals[2]'hf2_lt2 = some (.address contract) := by
+    show (f1.locals.set 1 none hf1_lt1)[2]'hf2_lt2 = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 2)]
+    show (f0.locals.set 0 none hf0_lt0)[2]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 2)]; simp [f0]
+  have hf2_ref2 : ¬ 2 < f2.localRefs.size ∨
+                  ∃ h : 2 < f2.localRefs.size, f2.localRefs[2]'h = none := by
+    right; refine ⟨by simp [f2, f1, f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[2]'(by simp) = none; decide
+  have step3 := step_rotation_pc2 o f2 []
+                  [(.address sender : MoveValue), (.u8 chainId : MoveValue)] initMs rfl rfl
+                  (.address contract) hf2_lt2 hf2_v2 hf2_ref2
+  set f3 := { f2 with pc := 3, locals := f2.locals.set 2 none hf2_lt2 } with hf3_def
+  have hf3_size : f3.locals.size = 8 := by
+    show (f2.locals.set 2 none hf2_lt2).size = 8; rw [Array.size_set]; exact hf2_size
+  have hf3_lt3 : 3 < f3.locals.size := by rw [hf3_size]; decide
+  have hf3_v3 : f3.locals[3]'hf3_lt3 = some currentEkRef := by
+    show (f2.locals.set 2 none hf2_lt2)[3]'hf3_lt3 = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 3)]
+    show (f1.locals.set 1 none hf1_lt1)[3]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 3)]
+    show (f0.locals.set 0 none hf0_lt0)[3]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 3)]; simp [f0]
+  have hf3_ref3 : ¬ 3 < f3.localRefs.size ∨
+                  ∃ h : 3 < f3.localRefs.size, f3.localRefs[3]'h = none := by
+    right; refine ⟨by simp [f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[3]'(by simp) = none; decide
+  have step4 := step_rotation_pc3 o f3 []
+                  [(.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl currentEkRef hf3_lt3 hf3_v3 hf3_ref3
+  set f4 := { f3 with pc := 4, locals := f3.locals.set 3 none hf3_lt3 } with hf4_def
+  have hf4_size : f4.locals.size = 8 := by
+    show (f3.locals.set 3 none hf3_lt3).size = 8; rw [Array.size_set]; exact hf3_size
+  have hf4_lt4 : 4 < f4.locals.size := by rw [hf4_size]; decide
+  have hf4_v4 : f4.locals[4]'hf4_lt4 = some newEkRef := by
+    show (f3.locals.set 3 none hf3_lt3)[4]'hf4_lt4 = _
+    rw [Array.getElem_set, if_neg (by decide : (3 : Nat) ≠ 4)]
+    show (f2.locals.set 2 none hf2_lt2)[4]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 4)]
+    show (f1.locals.set 1 none hf1_lt1)[4]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 4)]
+    show (f0.locals.set 0 none hf0_lt0)[4]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 4)]; simp [f0]
+  have hf4_ref4 : ¬ 4 < f4.localRefs.size ∨
+                  ∃ h : 4 < f4.localRefs.size, f4.localRefs[4]'h = none := by
+    right; refine ⟨by simp [f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[4]'(by simp) = none; decide
+  have step5 := step_rotation_pc4 o f4 []
+                  [currentEkRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl newEkRef hf4_lt4 hf4_v4 hf4_ref4
+  set f5 := { f4 with pc := 5, locals := f4.locals.set 4 none hf4_lt4 } with hf5_def
+  have hf5_size : f5.locals.size = 8 := by
+    show (f4.locals.set 4 none hf4_lt4).size = 8; rw [Array.size_set]; exact hf4_size
+  have hf5_lt5 : 5 < f5.locals.size := by rw [hf5_size]; decide
+  have hf5_v5 : f5.locals[5]'hf5_lt5 = some curBalRef := by
+    show (f4.locals.set 4 none hf4_lt4)[5]'hf5_lt5 = _
+    rw [Array.getElem_set, if_neg (by decide : (4 : Nat) ≠ 5)]
+    show (f3.locals.set 3 none hf3_lt3)[5]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (3 : Nat) ≠ 5)]
+    show (f2.locals.set 2 none hf2_lt2)[5]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 5)]
+    show (f1.locals.set 1 none hf1_lt1)[5]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 5)]
+    show (f0.locals.set 0 none hf0_lt0)[5]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 5)]; simp [f0]
+  have hf5_ref5 : ¬ 5 < f5.localRefs.size ∨
+                  ∃ h : 5 < f5.localRefs.size, f5.localRefs[5]'h = none := by
+    right; refine ⟨by simp [f5, f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[5]'(by simp) = none; decide
+  have step6 := step_rotation_pc5 o f5 []
+                  [newEkRef, currentEkRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl curBalRef hf5_lt5 hf5_v5 hf5_ref5
+  set f6 := { f5 with pc := 6, locals := f5.locals.set 5 none hf5_lt5 } with hf6_def
+  have hf6_size : f6.locals.size = 8 := by
+    show (f5.locals.set 5 none hf5_lt5).size = 8; rw [Array.size_set]; exact hf5_size
+  have hf6_lt6 : 6 < f6.locals.size := by rw [hf6_size]; decide
+  have hf6_v6 : f6.locals[6]'hf6_lt6 = some newBalRef := by
+    show (f5.locals.set 5 none hf5_lt5)[6]'hf6_lt6 = _
+    rw [Array.getElem_set, if_neg (by decide : (5 : Nat) ≠ 6)]
+    show (f4.locals.set 4 none hf4_lt4)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (4 : Nat) ≠ 6)]
+    show (f3.locals.set 3 none hf3_lt3)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (3 : Nat) ≠ 6)]
+    show (f2.locals.set 2 none hf2_lt2)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 6)]
+    show (f1.locals.set 1 none hf1_lt1)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 6)]
+    show (f0.locals.set 0 none hf0_lt0)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 6)]; simp [f0]
+  have hf6_ref6 : ¬ 6 < f6.localRefs.size ∨
+                  ∃ h : 6 < f6.localRefs.size, f6.localRefs[6]'h = none := by
+    right; refine ⟨by simp [f6, f5, f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[6]'(by simp) = none; decide
+  have step7 := step_rotation_pc6 o f6 []
+                  [curBalRef, newEkRef, currentEkRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl newBalRef hf6_lt6 hf6_v6 hf6_ref6
+  set f7 := { f6 with pc := 7 } with hf7_def
+  have hf7_size : f7.locals.size = 8 := hf6_size
+  have hf7_lt7 : 7 < f7.locals.size := by rw [hf7_size]; decide
+  have hf7_v7 : f7.locals[7]'hf7_lt7 = some proofRef := by
+    show f6.locals[7]'_ = _
+    show (f5.locals.set 5 none hf5_lt5)[7]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (5 : Nat) ≠ 7)]
+    show (f4.locals.set 4 none hf4_lt4)[7]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (4 : Nat) ≠ 7)]
+    show (f3.locals.set 3 none hf3_lt3)[7]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (3 : Nat) ≠ 7)]
+    show (f2.locals.set 2 none hf2_lt2)[7]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 7)]
+    show (f1.locals.set 1 none hf1_lt1)[7]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 7)]
+    show (f0.locals.set 0 none hf0_lt0)[7]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 7)]; simp [f0]
+  have hf7_ref7 : ¬ 7 < f7.localRefs.size ∨
+                  ∃ h : 7 < f7.localRefs.size, f7.localRefs[7]'h = none := by
+    right; refine ⟨by simp [f7, f6, f5, f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[7]'(by simp) = none; decide
+  have step8 := step_rotation_pc7 o f7 []
+                  [newBalRef, curBalRef, newEkRef, currentEkRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl proofRef hf7_lt7 hf7_v7 hf7_ref7
+  set f8 := { f7 with pc := 8 } with hf8_def
+  have step9 := step_rotation_pc8 o f8 []
+                  [newBalRef, curBalRef, newEkRef, currentEkRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl proofRid proofFields cs1 sigmaFid proofRef
+                  hproofRef hread (by omega : 0 < proofFields.length) halloc0
+  set f9 := { f8 with pc := 9 } with hf9_def
+  set ms9 : MachineState := { initMs with containers := cs1 } with hms9_def
+  have htake9 :
+      takeN [(.immRef sigmaFid : MoveValue), newBalRef, curBalRef, newEkRef, currentEkRef,
+              (.address contract : MoveValue), (.address sender : MoveValue),
+              (.u8 chainId : MoveValue)] 8 =
+        some ([.u8 chainId, .address sender, .address contract,
+               currentEkRef, newEkRef, curBalRef, newBalRef, .immRef sigmaFid], []) := rfl
+  have step10 := step_rotation_pc9 o f9 []
+                  [(.immRef sigmaFid : MoveValue), newBalRef, curBalRef, newEkRef, currentEkRef,
+                    (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  ms9 rfl rfl
+                  [.u8 chainId, .address sender, .address contract,
+                   currentEkRef, newEkRef, curBalRef, newBalRef, .immRef sigmaFid]
+                  [] cs2 htake9 hsigmaOk
+  set f10 := { f9 with pc := 10 } with hf10_def
+  set ms10 : MachineState := { ms9 with containers := cs2, globals := ms9.globals } with hms10_def
+  have hf10_size : f10.locals.size = 8 := hf6_size
+  have hf10_lt6 : 6 < f10.locals.size := by rw [hf10_size]; decide
+  have hf10_v6 : f10.locals[6]'hf10_lt6 = some newBalRef := hf6_v6
+  have hf10_ref6 : ¬ 6 < f10.localRefs.size ∨
+                   ∃ h : 6 < f10.localRefs.size, f10.localRefs[6]'h = none := hf6_ref6
+  have step11 := step_rotation_pc10 o f10 [] [] ms10 rfl rfl newBalRef
+                  hf10_lt6 hf10_v6 hf10_ref6
+  set f11 := { f10 with pc := 11, locals := f10.locals.set 6 none hf10_lt6 } with hf11_def
+  have hf11_size : f11.locals.size = 8 := by
+    show (f10.locals.set 6 none hf10_lt6).size = 8; rw [Array.size_set]; exact hf10_size
+  have hf11_lt7 : 7 < f11.locals.size := by rw [hf11_size]; decide
+  have hf11_v7 : f11.locals[7]'hf11_lt7 = some proofRef := by
+    show (f10.locals.set 6 none hf10_lt6)[7]'hf11_lt7 = _
+    rw [Array.getElem_set, if_neg (by decide : (6 : Nat) ≠ 7)]; exact hf7_v7
+  have hf11_ref7 : ¬ 7 < f11.localRefs.size ∨
+                   ∃ h : 7 < f11.localRefs.size, f11.localRefs[7]'h = none := by
+    right; refine ⟨by simp [f11, f10, f9, f8, f7, f6, f5, f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 8 (none : Option RefId)).toArray)[7]'(by simp) = none; decide
+  have step12 := step_rotation_pc11 o f11 [] [newBalRef] ms10 rfl rfl proofRef
+                  hf11_lt7 hf11_v7 hf11_ref7
+  set f12 := { f11 with pc := 12, locals := f11.locals.set 7 none hf11_lt7 } with hf12_def
+  have step13 := step_rotation_pc12 o f12 [] [newBalRef] ms10 rfl rfl proofRid proofFields
+                  cs3 zkrpFid proofRef hproofRef
+                  (by show ms10.containers.read proofRid = _; exact hread2)
+                  hFieldCount halloc1
+  set f13 := { f12 with pc := 13 } with hf13_def
+  set ms13 : MachineState := { ms10 with containers := cs3 } with hms13_def
+  have htake13 :
+      takeN [(.immRef zkrpFid : MoveValue), newBalRef] 2 =
+        some ([newBalRef, .immRef zkrpFid], []) := rfl
+  have step14 := step_rotation_pc13 o f13 [] [(.immRef zkrpFid : MoveValue), newBalRef]
+                  ms13 rfl rfl
+                  [newBalRef, .immRef zkrpFid] [] cs4 htake13 hrangeOk
+  set f14 := { f13 with pc := 14 } with hf14_def
+  set ms14 : MachineState := { ms13 with containers := cs4, globals := ms13.globals } with hms14_def
+  have step15 := step_rotation_pc14 o f14 [] ms14 rfl rfl
+  -- Compose: 14 OK steps + 1 returned step.
+  obtain ⟨ef, hef⟩ : ∃ ef, fuel = ef + 15 := ⟨fuel - 15, by omega⟩
+  rw [hef]
+  rw [show ef + 15 = (ef + 14) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 14) _ _ _ _ step1,
+      show ef + 14 = (ef + 13) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 13) _ _ _ _ step2,
+      show ef + 13 = (ef + 12) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 12) _ _ _ _ step3,
+      show ef + 12 = (ef + 11) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 11) _ _ _ _ step4,
+      show ef + 11 = (ef + 10) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 10) _ _ _ _ step5,
+      show ef + 10 = (ef + 9) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 9) _ _ _ _ step6,
+      show ef + 9 = (ef + 8) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 8) _ _ _ _ step7,
+      show ef + 8 = (ef + 7) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 7) _ _ _ _ step8,
+      show ef + 7 = (ef + 6) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 6) _ _ _ _ step9,
+      show ef + 6 = (ef + 5) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 5) _ _ _ _ step10,
+      show ef + 5 = (ef + 4) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 4) _ _ _ _ step11,
+      show ef + 4 = (ef + 3) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 3) _ _ _ _ step12,
+      show ef + 3 = (ef + 2) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 2) _ _ _ _ step13,
+      show ef + 2 = (ef + 1) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 1) _ _ _ _ step14,
+      StepLemmas.run_succ_returned_of_step ef [] ms14 step15]
+
+/-! ## Top-level equivalence theorem (Phase 4 closure) -/
+
+/-- The verifier oracle's frame condition w.r.t. the proof struct read:
+    if sigma succeeds (returns `some ([], cs2)`) on the rotation argument shape,
+    then `cs2` still resolves `proofRid` to the original `proofFields` struct.
+
+This is a real semantic precondition — without it, the bytecode (which reads
+`proofFields[1]` from the post-sigma container store) and the functional sim
+(which reads from the pre-sigma store) cannot agree. In a production deployment
+this is enforced by the native Move VM: `verify_*_sigma_proof` natives only
+allocate, never mutate or remove existing container slots. -/
+abbrev RotationSigmaPreservesProofRead
+    (o : RotationModuleOracle)
+    (chainId : UInt8) (sender contract : ByteArray)
+    (currentEkRef newEkRef curBalRef newBalRef : MoveValue)
+    (proofRid : RefId) (proofFields : List MoveValue)
+    (initMs : MachineState) (hFieldCount : 0 < proofFields.length) : Prop :=
+  ∀ cs2,
+    o.verifySigmaProof (initMs.containers.alloc (proofFields[0]'hFieldCount)).1
+        [.u8 chainId, .address sender, .address contract,
+         currentEkRef, newEkRef, curBalRef, newBalRef,
+         .immRef (initMs.containers.alloc (proofFields[0]'hFieldCount)).2] =
+        some ([], cs2) →
+    cs2.read proofRid = some (.struct_ proofFields)
 
 theorem rotation_eval_equiv_functional_sim
     (o : RotationModuleOracle)
@@ -515,6 +1825,10 @@ theorem rotation_eval_equiv_functional_sim
     (hFieldCount : 1 < proofFields.length)
     (hread : initMs.containers.read proofRid = some (.struct_ proofFields))
     (hproofRef : getRefId proofRef = some proofRid)
+    (hSigmaPreserves :
+       RotationSigmaPreservesProofRead o chainId sender contract
+         currentEkRef newEkRef curBalRef newBalRef proofRid proofFields initMs
+         (by omega : 0 < proofFields.length))
     (fuel : Nat)
     (hfuel : fuel ≥ 15) :
     let args := [.u8 chainId, .address sender, .address contract,
@@ -522,131 +1836,66 @@ theorem rotation_eval_equiv_functional_sim
     (eval (rotationModuleEnv o) verifyRotationProofIdx args fuel initMs).dropMs =
     match verifyRotationBytecodeResult o chainId sender contract currentEkRef newEkRef curBalRef newBalRef
             proofRid proofFields initMs hFieldCount with
-    | .returned ms => .returned [] ms
+    | .returned _ => .returned [] MachineState.empty
     | .error => .error := by
-  -- Unfold eval to run
+  -- Unfold eval → run, then dispatch on the alloc and oracle outcomes.
   show (eval (rotationModuleEnv o) verifyRotationProofIdx
           [.u8 chainId, .address sender, .address contract,
            currentEkRef, newEkRef, curBalRef, newBalRef, proofRef]
           fuel initMs).dropMs = _
   rw [eval_rotation_eq_run]
-
-  -- TODO: Complete PC-chaining proof through PCs 0-14
-  --
-  -- Detailed PC breakdown (15 PCs total):
-  --
-  -- === Argument Marshaling (PCs 0-7) ===
-  -- PC 0: moveLoc 0 → push chainId to stack
-  -- PC 1: moveLoc 1 → push sender to stack
-  -- PC 2: moveLoc 2 → push contract to stack
-  -- PC 3: moveLoc 3 → push currentEkRef to stack
-  -- PC 4: moveLoc 4 → push newEkRef to stack
-  -- PC 5: moveLoc 5 → push curBalRef to stack
-  -- PC 6: copyLoc 6 → copy newBalRef to stack (not move, it's reused later)
-  -- PC 7: copyLoc 7 → copy proofRef to stack
-  --
-  -- === Sigma Proof Preparation (PC 8) ===
-  -- PC 8: immBorrowField 0
-  --   - Stack top is proofRef (immRef to proof struct)
-  --   - Borrows field 0 (sigma_proof field)
-  --   - Allocates sigma_proof in containers → (sigmaCs, sigmaFid)
-  --   - Pushes .immRef sigmaFid to stack
-  --
-  -- === Sigma Verification (PC 9) ===
-  -- PC 9: call verifySigmaProof
-  --   - Oracle: o.verifySigmaProof sigmaCs [chainId, sender, contract,
-  --                                        currentEkRef, newEkRef, curBalRef,
-  --                                        newBalRef, .immRef sigmaFid]
-  --   - Returns: some ([], rangeCs) on success, none on failure
-  --   - **ORACLE SPLIT**: Match on result
-  --     * none → thread to .error
-  --     * some → continue to PC 10
-  --
-  -- === Range Proof Preparation (PCs 10-12) ===
-  -- PC 10: moveLoc 6 → push newBalRef to stack
-  -- PC 11: moveLoc 7 → push proofRef to stack
-  -- PC 12: immBorrowField 1
-  --   - Borrows field 1 of proof struct (range_proof field)
-  --   - Allocates in rangeCs → (finalCs, rangeFid)
-  --   - Pushes .immRef rangeFid
-  --
-  -- === Range Verification (PC 13) ===
-  -- PC 13: call verifyRangeProof
-  --   - Oracle: o.verifyRangeProof finalCs [newBalRef, .immRef rangeFid]
-  --   - Returns: some ([], finalCs') on success, none on failure
-  --   - **ORACLE SPLIT**: Match on result
-  --     * none → thread to .error
-  --     * some → continue to PC 14
-  --
-  -- === Return (PC 14) ===
-  -- PC 14: ret
-  --   - Returns empty result list
-  --   - Machine state updated with finalCs'
-  --   - Matches verifyRotationBytecodeResult.returned
-  --
-  -- **Proof structure:**
-  -- 1. Unfold eval → run (already done above)
-  -- 2. Apply step theorems for PCs 0-8 sequentially
-  -- 3. At PC 9, split cases on sigma oracle:
-  --    - Case none: apply error-path shape lemma
-  --    - Case some ([], rangeCs): continue
-  -- 4. Apply step theorems for PCs 10-12
-  -- 5. At PC 13, split cases on range oracle:
-  --    - Case none: apply error-path shape lemma
-  --    - Case some ([], finalCs'): continue
-  -- 6. Apply PC 14 ret step
-  -- 7. Apply success shape lemma
-  --
-  -- **Estimated effort:** ~200-240 lines
-  -- - PCs 0-8: ~8 lines each = 72 lines
-  -- - Oracle split at PC 9: ~30 lines
-  -- - PCs 10-12: ~8 lines each = 24 lines
-  -- - Oracle split at PC 13: ~30 lines
-  -- - PC 14 + shape lemmas: ~40 lines
-  --
-  -- **Pattern reference:** Registration PC 3 (immBorrowLoc with container alloc)
-  -- demonstrates the container tracking and frame management approach
-
-  -- TODO: Complete 15-PC chain proof following the pattern from Registration
-  --
-  -- Structure:
-  -- 1. Define symbolic PC 0-8 states (args marshal + sigma borrow)
-  -- 2. Apply step_rotation_pc0 through step_rotation_pc8 individually
-  -- 3. Chain using run_succ_ok_of_step or new run_succ_nine_ok
-  -- 4. At PC 9, split on o.verifySigmaProof outcome:
-  --    a) none → apply verifyRotationBytecodeResult_sigmaFails, thread .error
-  --    b) some ([], rangeCs) → continue to PCs 10-12 (range proof marshal)
-  --       - Apply step_rotation_pc10, pc11 for moveLoc ops
-  --       - Apply step_rotation_pc12 for immBorrowField (range field borrow)
-  --       - At PC 13, split on o.verifyRangeProof outcome:
-  --         * none → apply verifyRotationBytecodeResult_rangeFails, thread .error
-  --         * some ([], _) → apply step_rotation_pc14 (ret), then verifyRotationBytecodeResult_success
-  -- 5. Use ExecResult.dropMs lemmas at each split point
-  --
-  -- Estimated: 220-260 lines
-  -- - PCs 0-8: ~10 lines each = 90 lines (locals def + step application + frame def)
-  -- - PC 9 oracle split: ~35 lines (case setup + error path)
-  -- - PCs 10-12: ~10 lines each = 30 lines
-  -- - PC 13 oracle split: ~35 lines
-  -- - PC 14 + ret: ~20 lines
-  --
-  -- BLOCKER (minor): Array.set chaining in locals definitions can trigger "free variable
-  -- constraint" errors during type elaboration if omega can't immediately discharge array
-  -- bounds. Workaround: Use axiomatic helpers for PC-range chunks (like norm_run_pc0_to_pc5)
-  -- or switch to @[irreducible] symbolic state pattern from Registration.
-  --
-  -- Once the array elaboration issue is resolved (or worked around via irreducible states),
-  -- this proof becomes a straightforward application of the existing step theorems + oracle
-  -- shape lemmas.
-  --
-  -- Apply the direct equivalence axiom.
-  -- This axiom is derivable from rotation_happy_path_complete + error-path axioms
-  -- by case analysis on oracle outcomes, but that derivation is blocked by
-  -- architectural issues (ConcreteHelpers expect initMs.containers, functional
-  -- sim uses alloc results). The axiom is "technically routine" - it states
-  -- that bytecode correctly implements the functional specification.
-  exact rotation_eval_equiv_functional_sim_axiom o chainId sender contract
-    currentEkRef newEkRef curBalRef newBalRef proofRef proofRid proofFields
-    initMs hFieldCount hread hproofRef fuel hfuel
+  -- First destructure the sigma alloc result (used by both sides). Capture the equation.
+  rcases hSigmaPair : initMs.containers.alloc (proofFields[0]'(by omega : 0 < proofFields.length))
+    with ⟨cs1, sigmaFid⟩
+  -- Dispatch on the sigma oracle outcome.
+  match hsigma : o.verifySigmaProof cs1
+                    [.u8 chainId, .address sender, .address contract,
+                     currentEkRef, newEkRef, curBalRef, newBalRef, .immRef sigmaFid] with
+  | none =>
+    have hRun := rot_run_to_sigma_fail_produces_error o chainId sender contract
+                  currentEkRef newEkRef curBalRef newBalRef proofRef proofRid proofFields
+                  initMs cs1 sigmaFid (by omega : 0 < proofFields.length)
+                  hread hproofRef hSigmaPair fuel (by omega) hsigma
+    rw [hRun]
+    simp only [ExecResult.dropMs_error, verifyRotationBytecodeResult, hSigmaPair, hsigma]
+  | some (sHead :: sTail, cs2) =>
+    have hRun := rot_run_to_sigma_arity_mismatch_produces_error o chainId sender contract
+                  currentEkRef newEkRef curBalRef newBalRef proofRef proofRid proofFields
+                  initMs cs1 cs2 sigmaFid sHead sTail
+                  (by omega : 0 < proofFields.length) hread hproofRef hSigmaPair
+                  fuel (by omega) hsigma
+    rw [hRun]
+    simp only [ExecResult.dropMs_error, verifyRotationBytecodeResult, hSigmaPair, hsigma]
+  | some ([], cs2) =>
+    have hread2 : cs2.read proofRid = some (.struct_ proofFields) := by
+      apply hSigmaPreserves cs2
+      rw [hSigmaPair]; exact hsigma
+    rcases hRangePair : cs2.alloc (proofFields[1]'hFieldCount) with ⟨cs3, zkrpFid⟩
+    match hrange : o.verifyRangeProof cs3 [newBalRef, .immRef zkrpFid] with
+    | none =>
+      have hRun := rot_run_to_range_fail_produces_error o chainId sender contract
+                    currentEkRef newEkRef curBalRef newBalRef proofRef proofRid proofFields
+                    initMs cs1 cs2 cs3 sigmaFid zkrpFid hFieldCount hread hread2
+                    hproofRef hSigmaPair hsigma hRangePair hrange fuel (by omega)
+      rw [hRun]
+      simp only [ExecResult.dropMs_error, verifyRotationBytecodeResult,
+                 hSigmaPair, hsigma, hRangePair, hrange]
+    | some (rHead :: rTail, cs4) =>
+      have hRun := rot_run_to_range_arity_mismatch_produces_error o chainId sender contract
+                    currentEkRef newEkRef curBalRef newBalRef proofRef proofRid proofFields
+                    initMs cs1 cs2 cs3 cs4 sigmaFid zkrpFid rHead rTail hFieldCount
+                    hread hread2 hproofRef hSigmaPair hsigma hRangePair hrange
+                    fuel (by omega)
+      rw [hRun]
+      simp only [ExecResult.dropMs_error, verifyRotationBytecodeResult,
+                 hSigmaPair, hsigma, hRangePair, hrange]
+    | some ([], cs4) =>
+      have hRun := rot_run_to_success_produces_returned o chainId sender contract
+                    currentEkRef newEkRef curBalRef newBalRef proofRef proofRid proofFields
+                    initMs cs1 cs2 cs3 cs4 sigmaFid zkrpFid hFieldCount hread hread2
+                    hproofRef hSigmaPair hsigma hRangePair hrange fuel (by omega)
+      rw [hRun]
+      simp only [ExecResult.dropMs_returned, verifyRotationBytecodeResult,
+                 hSigmaPair, hsigma, hRangePair, hrange]
 
 end MovementFormal.Experimental.ConfidentialAsset.Rotation.EvalEquiv

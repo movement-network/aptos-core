@@ -26,33 +26,6 @@ namespace MovementFormal.Experimental.ConfidentialAsset.Helpers.FunctionalSimBri
 
 open MovementFormal.MoveModel
 
-/-! ## Oracle call rewriting with alloc -/
-
-/-- If an oracle succeeds on the container resulting from alloc,
-    we can rewrite to the original container (for ConcreteHelpers application). -/
-axiom oracle_call_with_alloc_success
-    {Oracle : Type}
-    (oracle : ContainerStore → List MoveValue → Option (List MoveValue × ContainerStore))
-    (initCs : ContainerStore)
-    (field : MoveValue)
-    (args : List MoveValue)
-    (result_vals : List MoveValue)
-    (result_cs : ContainerStore)
-    (hsuccess : oracle (initCs.alloc field).1 args = some (result_vals, result_cs)) :
-    ∃ (intermediate_cs : ContainerStore),
-      oracle initCs args = some (result_vals, intermediate_cs)
-
-/-- If an oracle fails on the container resulting from alloc,
-    it also fails on the original container. -/
-axiom oracle_call_with_alloc_none
-    {Oracle : Type}
-    (oracle : ContainerStore → List MoveValue → Option (List MoveValue × ContainerStore))
-    (initCs : ContainerStore)
-    (field : MoveValue)
-    (args : List MoveValue)
-    (hfail : oracle (initCs.alloc field).1 args = none) :
-    oracle initCs args = none
-
 /-! ## Container store threading through alloc -/
 
 /-- Threading containers through multiple allocs is associative. -/

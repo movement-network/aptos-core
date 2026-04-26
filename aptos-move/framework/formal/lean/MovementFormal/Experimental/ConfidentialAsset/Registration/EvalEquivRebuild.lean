@@ -70,21 +70,17 @@ The frame `eval` builds when dispatching to `verifyRegistrationProofIdx` is pure
 from forcing whnf on the literal 19-element `List.replicate` / `.toArray` expression at every
 statement. -/
 
-/-- The initial-frame construction for `eval (registrationModuleEnv o) verifyRegistrationProofIdx args`. -/
-@[irreducible]
+/-- The initial-frame construction for `eval (registrationModuleEnv o) verifyRegistrationProofIdx args`.
+
+    Previously `@[irreducible]` to control whnf cost. Removed so that `(registrationInitFrame args).code`
+    etc. reduce by `rfl` directly — needed to unblock the `set f0 + rfl` pattern in chain proofs
+    (e.g., `compressedPoint_nonSingleton`). The projection `@[simp]` lemmas below remain available
+    for callers that prefer them. -/
 def registrationInitFrame (args : List MoveValue) : Frame :=
   { code := verifyRegistrationProofCode,
     pc := 0,
     locals := (args.map some ++ List.replicate (19 - 7) none).toArray,
     localRefs := (List.replicate 19 none).toArray }
-
-/-- Exposed form of the initial-frame definition so `simp` can reduce uses when desired. -/
-axiom registrationInitFrame_def (args : List MoveValue) :
-    registrationInitFrame args =
-      { code := verifyRegistrationProofCode,
-        pc := 0,
-        locals := (args.map some ++ List.replicate 12 none).toArray,
-        localRefs := (List.replicate 19 none).toArray }
 
 /-! ## `eval` entry-point unfolding
 
@@ -93,18 +89,25 @@ frame. This is the boundary between "top-level entry" and "per-PC bytecode trace
 rebuild lemma operates on `run` outputs, not on `eval`. -/
 
 /-- `(registrationModuleEnv o).functions` has 18 entries (indices 0..17). -/
-axiom registrationModuleEnv_functions_size (o : RegistrationNativeOracle) :
-    (registrationModuleEnv o).functions.size = 18
+theorem registrationModuleEnv_functions_size (o : RegistrationNativeOracle) :
+    (registrationModuleEnv o).functions.size = 18 := rfl
 
-axiom registrationModuleEnv_idx17 (o : RegistrationNativeOracle)
-    (h : verifyRegistrationProofIdx < (registrationModuleEnv o).functions.size) :
-    (registrationModuleEnv o).functions[verifyRegistrationProofIdx]'h =
-      verifyRegistrationProofDesc
+theorem registrationModuleEnv_fn17_body (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[17]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).body =
+      .bytecode verifyRegistrationProofCode 19 := by rfl
 
-axiom eval_registration_eq_run (o : RegistrationNativeOracle) (args : List MoveValue)
+theorem registrationModuleEnv_fn17_numParams (o : RegistrationNativeOracle) :
+    ((registrationModuleEnv o).functions[17]'(by
+      rw [registrationModuleEnv_functions_size]; decide)).numParams = 7 := by rfl
+
+theorem eval_registration_eq_run (o : RegistrationNativeOracle) (args : List MoveValue)
     (fuel : Nat) (initMs : MachineState) :
     eval (registrationModuleEnv o) verifyRegistrationProofIdx args fuel initMs =
-      run (registrationModuleEnv o) (registrationInitFrame args) [] [] initMs fuel
+      run (registrationModuleEnv o) (registrationInitFrame args) [] [] initMs fuel := by
+  unfold eval verifyRegistrationProofIdx registrationInitFrame
+  simp only [registrationModuleEnv_functions_size, show (17 : Nat) < 18 from by decide, dif_pos,
+             registrationModuleEnv_fn17_body, registrationModuleEnv_fn17_numParams]
 
 /-! ## Frame projection helpers
 
@@ -157,12 +160,6 @@ the initial frame's locals are `args.map some ++ 12×none`, so `locals[5] = some
 The bound-proof dance uses `List.getElem` rather than the `.get]'` idiom, matching plan §4's
 guidance on avoiding dependent-type motive issues during rewrite. -/
 
-/-- `locals[i] = some args[i]` when `i < args.length`, stated via `List.get?` to sidestep
-dependent bound-proof motive issues. -/
-axiom registrationInitFrame_locals_get? (args : List MoveValue) (i : Nat)
-    (h : i < args.length) :
-    (registrationInitFrame args).locals[i]? = some (some args[i])
-
 /-! ## Top-level theorem — sketched, not yet proved
 
 The full `registration_eval_equiv_functional_sim` threads `eval_registration_eq_run` with a
@@ -206,9 +203,9 @@ accesses concretely.
    .vector .u8 (respBa.toList.map .u8)]
 
 /-- The 7-element args list has length 7. -/
-@[simp] axiom registrationArgs_length
+@[simp] theorem registrationArgs_length
     (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray) :
-    (registrationArgs chainId sender contract token ekBa commitBa respBa).length = 7
+    (registrationArgs chainId sender contract token ekBa commitBa respBa).length = 7 := rfl
 
 /-- `args[5]` is the commitment-bytes vector. -/
 @[simp] theorem registrationArgs_get_5
@@ -250,13 +247,6 @@ literal, because `(args.map some ++ 12×none).toArray` is then fully concrete. -
 The first bytecode step moves `commitBa` from `locals[5]` onto the stack.
 Stated against the canonical 7-element args shape where every side condition reduces by `rfl`. -/
 
-/-- Side-condition bundle for PC-0 step (`moveLoc 5`). Packaged as a lemma so the step-rule
-    application can invoke it without re-deriving the bound proofs. -/
-axiom registration_pc0_sides (args : List MoveValue) (hargs6 : 6 ≤ args.length) :
-    (registrationInitFrame args).pc < (registrationInitFrame args).code.size ∧
-    5 < (registrationInitFrame args).locals.size ∧
-    5 < (registrationInitFrame args).localRefs.size
-
 theorem registrationInitFrame_code_pc0_get? (args : List MoveValue) :
     (registrationInitFrame args).code[0]? = some (.moveLoc 5) := by
   simp [registrationInitFrame_code]
@@ -296,26 +286,6 @@ The proof mirrors the pattern that each of the 84 per-PC rebuild lemmas will fol
 unfold `step`, dispatch on the opcode (here `.moveLoc 5`), feed the locals lookup,
 discharge the localRefs-none case, and the result is `rfl`. -/
 
-/-- After one step on the 7-args initial frame, PC moves to 1 and `commitBa` is pushed onto
-the stack. This is the first concrete per-PC step theorem of the rebuild. -/
-axiom step_registration_pc0_7args (env : ModuleEnv) (cs : List Frame)
-    (stack : List MoveValue) (ms : MachineState)
-    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray) :
-    step env
-      (registrationInitFrame
-        (registrationArgs chainId sender contract token ekBa commitBa respBa)) cs stack ms =
-      .ok
-        { code := verifyRegistrationProofCode,
-          pc := 1,
-          locals := (((registrationArgs chainId sender contract token ekBa commitBa respBa).map some ++
-                      List.replicate 12 none).toArray).set 5 none (by
-            show 5 < ((registrationArgs chainId sender contract token ekBa commitBa respBa).map some ++
-                      List.replicate 12 none).length
-            simp [registrationArgs]),
-          localRefs := (List.replicate 19 none).toArray }
-        cs
-        (.vector .u8 (commitBa.toList.map .u8) :: stack) ms
-
 /-! ## PC 2 — `stLoc 7` (store r_point)
 
 PC-2's step is generic: for any frame with `code := verifyRegistrationProofCode`, `pc := 2`,
@@ -325,9 +295,86 @@ The lemma is stated against an arbitrary frame so it composes with PC 1's `.call
 result (the frame at PC 2 is produced by the native call, not by `registrationInitFrame`
 directly). This is the pattern the remaining PC lemmas will follow. -/
 
-/-- PC-2 step: consume `v` off the stack and store to `locals[7]`. Frame-agnostic — takes
-any frame whose code matches `verifyRegistrationProofCode` at PC 2 and whose locals fit. -/
-axiom step_registration_pc2 (env : ModuleEnv) (cs : List Frame)
+/-! ## PC 3 — `immBorrowLoc 7`
+
+Borrows an immutable reference to local 7 (r_point). Generic over frame. -/
+
+/-! ## PC 5 — `brFalse 79` (guard on option::is_some result)
+
+Conditional branch: if top of stack is `.bool false`, jump to PC 79 (abort path); if `.bool true`,
+fall through to PC 6 (continue). Two variants. -/
+
+theorem step_registration_pc5_notTaken (env : ModuleEnv) (cs : List Frame)
+    (rest : List MoveValue) (ms : MachineState) (frame : Frame)
+    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 5) :
+    step env frame cs (.bool true :: rest) ms =
+      .ok { frame with pc := 6 } cs rest ms := by
+  have hpc_lt : frame.pc < frame.code.size := by rw [hpc, hcode]; decide
+  have hc : frame.code[frame.pc]'hpc_lt = .brFalse 79 := by
+    simp only [hcode, hpc]; exact BytecodeLemmas.instr5_eq
+  have h := StepLemmas.step_brFalse_not_taken
+              (frame := frame) (env := env) (cs := cs) (ms := ms)
+              79 rest hpc_lt hc
+  rw [show frame.pc + 1 = 6 from by omega] at h
+  exact h
+
+/-! ## PC 0 — `moveLoc 5` (push commitment bytes) -/
+
+theorem step_registration_pc0 (env : ModuleEnv) (cs : List Frame)
+    (stack : List MoveValue) (ms : MachineState) (frame : Frame) (v : MoveValue)
+    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 0)
+    (hlocals : 5 < frame.locals.size) (hv : frame.locals[5]'hlocals = some v)
+    (hRefNone : ¬ 5 < frame.localRefs.size ∨
+                ∃ h : 5 < frame.localRefs.size, frame.localRefs[5]'h = none) :
+    step env frame cs stack ms =
+      .ok { frame with
+              pc := 1,
+              locals := frame.locals.set 5 none (by omega) }
+           cs (v :: stack) ms := by
+  have hpc_lt : frame.pc < frame.code.size := by rw [hpc, hcode]; decide
+  have hc : frame.code[frame.pc]'hpc_lt = .moveLoc 5 := by
+    simp only [hcode, hpc]; exact BytecodeLemmas.instr0_eq
+  have h := StepLemmas.step_moveLoc_noRef
+              (frame := frame) (env := env) (cs := cs) (stack := stack) (ms := ms)
+              5 v hpc_lt hc hlocals hv hRefNone
+  rw [show frame.pc + 1 = 1 from by omega] at h
+  exact h
+
+/-! ## PC 1 — `call 0` (newCompressedPointFromBytes native) -/
+
+theorem step_registration_pc1 (env_orig : RegistrationNativeOracle)
+    (cs : List Frame) (v resultV : MoveValue) (rest : List MoveValue) (ms : MachineState)
+    (frame : Frame)
+    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 1)
+    (horacle : env_orig.newCompressedPointFromBytes [v] = some [resultV]) :
+    step (registrationModuleEnv env_orig) frame cs (v :: rest) ms =
+      .ok { frame with pc := 2 } cs (resultV :: rest) ms := by
+  have hpc_lt : frame.pc < frame.code.size := by rw [hpc, hcode]; decide
+  have hc : frame.code[frame.pc]'hpc_lt = .call BytecodeLemmas.funcIdx_newCompressedPointFromBytes := by
+    simp only [hcode, hpc]; exact BytecodeLemmas.instr1_eq
+  have hlt : BytecodeLemmas.funcIdx_newCompressedPointFromBytes <
+              (registrationModuleEnv env_orig).functions.size := by
+    rw [registrationModuleEnv_functions_size]; decide
+  have hparams : (registrationModuleEnv env_orig).functions[BytecodeLemmas.funcIdx_newCompressedPointFromBytes].numParams = 1 := rfl
+  have hreturns : (registrationModuleEnv env_orig).functions[BytecodeLemmas.funcIdx_newCompressedPointFromBytes].numReturns = 1 := rfl
+  have hbody : (registrationModuleEnv env_orig).functions[BytecodeLemmas.funcIdx_newCompressedPointFromBytes].body =
+                  .native env_orig.newCompressedPointFromBytes := rfl
+  have htake : takeN (v :: rest) 1 = some ([v], rest) := rfl
+  have h := StepLemmas.step_call_native_ret1
+              (frame := frame) (env := registrationModuleEnv env_orig) (cs := cs) (ms := ms)
+              BytecodeLemmas.funcIdx_newCompressedPointFromBytes [v] rest (v :: rest)
+              env_orig.newCompressedPointFromBytes 1 resultV
+              hpc_lt hc hlt hparams hreturns hbody htake horacle
+  rw [show frame.pc + 1 = 2 from by omega] at h
+  -- step result has containers := ms.containers, globals := ms.globals; need ms (no rebuild)
+  have hms : ({ ms with containers := ms.containers, globals := ms.globals } : MachineState) = ms := by
+    cases ms; rfl
+  rw [hms] at h
+  exact h
+
+/-! ## PC 2 — `stLoc 7` (store r_point) -/
+
+theorem step_registration_pc2 (env : ModuleEnv) (cs : List Frame)
     (v : MoveValue) (rest : List MoveValue) (ms : MachineState) (frame : Frame)
     (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 2)
     (hlocals : 7 < frame.locals.size) :
@@ -335,56 +382,20 @@ axiom step_registration_pc2 (env : ModuleEnv) (cs : List Frame)
       .ok { frame with
               pc := 3,
               locals := frame.locals.set 7 (some v) (by omega) }
-           cs rest ms
-
-/-! ## PC 3 — `immBorrowLoc 7`
-
-Borrows an immutable reference to local 7 (r_point). Generic over frame. -/
-
-axiom step_registration_pc3_existingRef (env : ModuleEnv) (cs : List Frame)
-    (stack : List MoveValue) (ms : MachineState) (frame : Frame)
-    (v : MoveValue) (rid : RefId)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 3)
-    (hlocals : 7 < frame.locals.size)
-    (hv : frame.locals[7]'hlocals = some v)
-    (hltRef : 7 < frame.localRefs.size)
-    (hRef : frame.localRefs[7]'hltRef = some rid) :
-    step env frame cs stack ms =
-      .ok { frame with pc := 4 } cs (.immRef rid :: stack) ms
-
-/-! ## PC 5 — `brFalse 79` (guard on option::is_some result)
-
-Conditional branch: if top of stack is `.bool false`, jump to PC 79 (abort path); if `.bool true`,
-fall through to PC 6 (continue). Two variants. -/
-
-axiom step_registration_pc5_taken (env : ModuleEnv) (cs : List Frame)
-    (rest : List MoveValue) (ms : MachineState) (frame : Frame)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 5) :
-    step env frame cs (.bool false :: rest) ms =
-      .ok { frame with pc := 79 } cs rest ms
-
-axiom step_registration_pc5_notTaken (env : ModuleEnv) (cs : List Frame)
-    (rest : List MoveValue) (ms : MachineState) (frame : Frame)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 5) :
-    step env frame cs (.bool true :: rest) ms =
-      .ok { frame with pc := 6 } cs rest ms
+           cs rest ms := by
+  have hpc_lt : frame.pc < frame.code.size := by rw [hpc, hcode]; decide
+  have hc : frame.code[frame.pc]'hpc_lt = .stLoc 7 := by
+    simp only [hcode, hpc]; exact BytecodeLemmas.instr2_eq
+  have h := StepLemmas.step_stLoc (frame := frame) (env := env) (cs := cs) (ms := ms)
+              7 v rest hpc_lt hc hlocals
+  rw [show frame.pc + 1 = 3 from by omega] at h
+  exact h
 
 /-! ## PC 6 — `mutBorrowLoc 7` (&mut r_point) -/
 
-axiom step_registration_pc6_existingRef (env : ModuleEnv) (cs : List Frame)
-    (stack : List MoveValue) (ms : MachineState) (frame : Frame)
-    (v : MoveValue) (rid : RefId)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 6)
-    (hlocals : 7 < frame.locals.size)
-    (hv : frame.locals[7]'hlocals = some v)
-    (hltRef : 7 < frame.localRefs.size)
-    (hRef : frame.localRefs[7]'hltRef = some rid) :
-    step env frame cs stack ms =
-      .ok { frame with pc := 7 } cs (.mutRef rid :: stack) ms
-
 /-! ## PC 8 — `stLoc 8` (store r_compressed) -/
 
-axiom step_registration_pc8 (env : ModuleEnv) (cs : List Frame)
+theorem step_registration_pc8 (env : ModuleEnv) (cs : List Frame)
     (v : MoveValue) (rest : List MoveValue) (ms : MachineState) (frame : Frame)
     (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 8)
     (hlocals : 8 < frame.locals.size) :
@@ -392,151 +403,98 @@ axiom step_registration_pc8 (env : ModuleEnv) (cs : List Frame)
       .ok { frame with
               pc := 9,
               locals := frame.locals.set 8 (some v) (by omega) }
-           cs rest ms
+           cs rest ms := by
+  have hpc_lt : frame.pc < frame.code.size := by rw [hpc, hcode]; decide
+  have hc : frame.code[frame.pc]'hpc_lt = .stLoc 8 := by
+    simp only [hcode, hpc]; exact BytecodeLemmas.instr8_eq
+  have h := StepLemmas.step_stLoc (frame := frame) (env := env) (cs := cs) (ms := ms)
+              8 v rest hpc_lt hc hlocals
+  rw [show frame.pc + 1 = 9 from by omega] at h
+  exact h
 
 /-! ## PC 9 — `moveLoc 6` (push response_bytes) -/
 
-axiom step_registration_pc9 (env : ModuleEnv) (cs : List Frame)
-    (stack : List MoveValue) (ms : MachineState) (frame : Frame)
-    (v : MoveValue)
+theorem step_registration_pc9 (env : ModuleEnv) (cs : List Frame)
+    (stack : List MoveValue) (ms : MachineState) (frame : Frame) (v : MoveValue)
     (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 9)
-    (hlocals : 6 < frame.locals.size)
-    (hv : frame.locals[6]'hlocals = some v)
+    (hlocals : 6 < frame.locals.size) (hv : frame.locals[6]'hlocals = some v)
     (hRefNone : ¬ 6 < frame.localRefs.size ∨
-        ∃ (h : 6 < frame.localRefs.size), frame.localRefs[6]'h = none) :
+                ∃ h : 6 < frame.localRefs.size, frame.localRefs[6]'h = none) :
     step env frame cs stack ms =
       .ok { frame with
               pc := 10,
               locals := frame.locals.set 6 none (by omega) }
-           cs (v :: stack) ms
+           cs (v :: stack) ms := by
+  have hpc_lt : frame.pc < frame.code.size := by rw [hpc, hcode]; decide
+  have hc : frame.code[frame.pc]'hpc_lt = .moveLoc 6 := by
+    simp only [hcode, hpc]; exact BytecodeLemmas.instr9_eq
+  have h := StepLemmas.step_moveLoc_noRef
+              (frame := frame) (env := env) (cs := cs) (stack := stack) (ms := ms)
+              6 v hpc_lt hc hlocals hv hRefNone
+  rw [show frame.pc + 1 = 10 from by omega] at h
+  exact h
 
 /-! ## PC 11 — `stLoc 9` (store s_opt) -/
 
-axiom step_registration_pc11 (env : ModuleEnv) (cs : List Frame)
+/-! ## PC 17 / 18 / 19 — `stLoc 10` / `ldConst 5` / `stLoc 11` (DST setup) -/
+
+theorem step_registration_pc17 (env : ModuleEnv) (cs : List Frame)
     (v : MoveValue) (rest : List MoveValue) (ms : MachineState) (frame : Frame)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 11)
-    (hlocals : 9 < frame.locals.size) :
+    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 17)
+    (hlocals : 10 < frame.locals.size) :
     step env frame cs (v :: rest) ms =
-      .ok { frame with
-              pc := 12,
-              locals := frame.locals.set 9 (some v) (by omega) }
-           cs rest ms
+      .ok { frame with pc := 18, locals := frame.locals.set 10 (some v) (by omega) }
+           cs rest ms := by
+  have hpc_lt : frame.pc < frame.code.size := by rw [hpc, hcode]; decide
+  have hc : frame.code[frame.pc]'hpc_lt = .stLoc 10 := by
+    simp only [hcode, hpc]; exact BytecodeLemmas.instr17_eq
+  have h := StepLemmas.step_stLoc (frame := frame) (env := env) (cs := cs) (ms := ms)
+              10 v rest hpc_lt hc hlocals
+  rw [show frame.pc + 1 = 18 from by omega] at h
+  exact h
+
+theorem step_registration_pc18 (env : ModuleEnv) (cs : List Frame)
+    (stack : List MoveValue) (ms : MachineState) (frame : Frame)
+    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 18)
+    (hconst : 5 < env.constants.size) :
+    step env frame cs stack ms =
+      .ok { frame with pc := 19 } cs (env.constants[5].value :: stack) ms := by
+  have hpc_lt : frame.pc < frame.code.size := by rw [hpc, hcode]; decide
+  have hc : frame.code[frame.pc]'hpc_lt = .ldConst 5 := by
+    simp only [hcode, hpc]; exact BytecodeLemmas.instr18_eq
+  have h := StepLemmas.step_ldConst (frame := frame) (env := env) (cs := cs) (stack := stack) (ms := ms)
+              5 hpc_lt hc hconst
+  rw [show frame.pc + 1 = 19 from by omega] at h
+  exact h
+
+theorem step_registration_pc19 (env : ModuleEnv) (cs : List Frame)
+    (v : MoveValue) (rest : List MoveValue) (ms : MachineState) (frame : Frame)
+    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 19)
+    (hlocals : 11 < frame.locals.size) :
+    step env frame cs (v :: rest) ms =
+      .ok { frame with pc := 20, locals := frame.locals.set 11 (some v) (by omega) }
+           cs rest ms := by
+  have hpc_lt : frame.pc < frame.code.size := by rw [hpc, hcode]; decide
+  have hc : frame.code[frame.pc]'hpc_lt = .stLoc 11 := by
+    simp only [hcode, hpc]; exact BytecodeLemmas.instr19_eq
+  have h := StepLemmas.step_stLoc (frame := frame) (env := env) (cs := cs) (ms := ms)
+              11 v rest hpc_lt hc hlocals
+  rw [show frame.pc + 1 = 20 from by omega] at h
+  exact h
 
 /-! ## PC 14 — `brFalse 74` (guard on option::is_some for scalar deserialization) -/
 
-axiom step_registration_pc14_taken (env : ModuleEnv) (cs : List Frame)
-    (rest : List MoveValue) (ms : MachineState) (frame : Frame)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 14) :
-    step env frame cs (.bool false :: rest) ms =
-      .ok { frame with pc := 74 } cs rest ms
-
-axiom step_registration_pc14_notTaken (env : ModuleEnv) (cs : List Frame)
-    (rest : List MoveValue) (ms : MachineState) (frame : Frame)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 14) :
-    step env frame cs (.bool true :: rest) ms =
-      .ok { frame with pc := 15 } cs rest ms
-
 /-! ## PC 69 — `brFalse 71` (guard on final `point_equals` result) -/
-
-axiom step_registration_pc69_taken (env : ModuleEnv) (cs : List Frame)
-    (rest : List MoveValue) (ms : MachineState) (frame : Frame)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 69) :
-    step env frame cs (.bool false :: rest) ms =
-      .ok { frame with pc := 71 } cs rest ms
-
-axiom step_registration_pc69_notTaken (env : ModuleEnv) (cs : List Frame)
-    (rest : List MoveValue) (ms : MachineState) (frame : Frame)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 69) :
-    step env frame cs (.bool true :: rest) ms =
-      .ok { frame with pc := 70 } cs rest ms
 
 /-! ## PC 70 — `ret` (successful return with empty callStack) -/
 
-axiom step_registration_pc70 (env : ModuleEnv) (stack : List MoveValue) (ms : MachineState)
-    (frame : Frame)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 70) :
-    step env frame [] stack ms = .returned stack ms
-
 /-! ## PC 71 / 76 / 81 — `ldU64 1` (push abort code 1 before `error::invalid_argument`) -/
-
-axiom step_registration_pc71 (env : ModuleEnv) (cs : List Frame) (stack : List MoveValue)
-    (ms : MachineState) (frame : Frame)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 71) :
-    step env frame cs stack ms =
-      .ok { frame with pc := 72 } cs (.u64 1 :: stack) ms
-
-axiom step_registration_pc76 (env : ModuleEnv) (cs : List Frame) (stack : List MoveValue)
-    (ms : MachineState) (frame : Frame)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 76) :
-    step env frame cs stack ms =
-      .ok { frame with pc := 77 } cs (.u64 1 :: stack) ms
-
-axiom step_registration_pc81 (env : ModuleEnv) (cs : List Frame) (stack : List MoveValue)
-    (ms : MachineState) (frame : Frame)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 81) :
-    step env frame cs stack ms =
-      .ok { frame with pc := 82 } cs (.u64 1 :: stack) ms
 
 /-! ## PC 74 / 79 — `moveLoc 3` (push ek ref) on scalar-parse-fail / point-parse-fail paths -/
 
-axiom step_registration_pc74 (env : ModuleEnv) (cs : List Frame) (stack : List MoveValue)
-    (ms : MachineState) (frame : Frame)
-    (v : MoveValue)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 74)
-    (hlocals : 3 < frame.locals.size)
-    (hv : frame.locals[3]'hlocals = some v)
-    (hRefNone : ¬ 3 < frame.localRefs.size ∨
-        ∃ (h : 3 < frame.localRefs.size), frame.localRefs[3]'h = none) :
-    step env frame cs stack ms =
-      .ok { frame with
-              pc := 75,
-              locals := frame.locals.set 3 none (by omega) }
-           cs (v :: stack) ms
-
-axiom step_registration_pc79 (env : ModuleEnv) (cs : List Frame) (stack : List MoveValue)
-    (ms : MachineState) (frame : Frame)
-    (v : MoveValue)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 79)
-    (hlocals : 3 < frame.locals.size)
-    (hv : frame.locals[3]'hlocals = some v)
-    (hRefNone : ¬ 3 < frame.localRefs.size ∨
-        ∃ (h : 3 < frame.localRefs.size), frame.localRefs[3]'h = none) :
-    step env frame cs stack ms =
-      .ok { frame with
-              pc := 80,
-              locals := frame.locals.set 3 none (by omega) }
-           cs (v :: stack) ms
-
 /-! ## PC 75 / 80 — `pop` (drop ek ref on error paths) -/
 
-axiom step_registration_pc75 (env : ModuleEnv) (cs : List Frame) (v : MoveValue)
-    (rest : List MoveValue) (ms : MachineState) (frame : Frame)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 75) :
-    step env frame cs (v :: rest) ms =
-      .ok { frame with pc := 76 } cs rest ms
-
-axiom step_registration_pc80 (env : ModuleEnv) (cs : List Frame) (v : MoveValue)
-    (rest : List MoveValue) (ms : MachineState) (frame : Frame)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 80) :
-    step env frame cs (v :: rest) ms =
-      .ok { frame with pc := 81 } cs rest ms
-
 /-! ## PC 73 / 78 / 83 — `abort_` (the three abort sinks on error paths) -/
-
-axiom step_registration_pc73 (env : ModuleEnv) (cs : List Frame)
-    (code : UInt64) (rest : List MoveValue) (ms : MachineState) (frame : Frame)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 73) :
-    step env frame cs (.u64 code :: rest) ms = .aborted code
-
-axiom step_registration_pc78 (env : ModuleEnv) (cs : List Frame)
-    (code : UInt64) (rest : List MoveValue) (ms : MachineState) (frame : Frame)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 78) :
-    step env frame cs (.u64 code :: rest) ms = .aborted code
-
-axiom step_registration_pc83 (env : ModuleEnv) (cs : List Frame)
-    (code : UInt64) (rest : List MoveValue) (ms : MachineState) (frame : Frame)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 83) :
-    step env frame cs (.u64 code :: rest) ms = .aborted code
 
 /-! ## Bulk Fiat-Shamir / point-arithmetic per-PC step theorems
 
@@ -548,58 +506,13 @@ via `simp only [hcode, hpc]; rfl`, (3) apply the relevant step-lemma and arithme
 
 /-! ### PC 12 — `immBorrowLoc 9` (&s_opt) -/
 
-axiom step_registration_pc12 (env : ModuleEnv) (cs : List Frame)
-    (stack : List MoveValue) (ms : MachineState) (frame : Frame)
-    (v : MoveValue) (rid : RefId)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 12)
-    (hlocals : 9 < frame.locals.size)
-    (hv : frame.locals[9]'hlocals = some v)
-    (hltRef : 9 < frame.localRefs.size)
-    (hRef : frame.localRefs[9]'hltRef = some rid) :
-    step env frame cs stack ms =
-      .ok { frame with pc := 13 } cs (.immRef rid :: stack) ms
-
 /-! ### PC 15 — `mutBorrowLoc 9` (&mut s_opt) -/
-
-axiom step_registration_pc15 (env : ModuleEnv) (cs : List Frame)
-    (stack : List MoveValue) (ms : MachineState) (frame : Frame)
-    (v : MoveValue) (rid : RefId)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 15)
-    (hlocals : 9 < frame.locals.size)
-    (hv : frame.locals[9]'hlocals = some v)
-    (hltRef : 9 < frame.localRefs.size)
-    (hRef : frame.localRefs[9]'hltRef = some rid) :
-    step env frame cs stack ms =
-      .ok { frame with pc := 16 } cs (.mutRef rid :: stack) ms
 
 /-! ### PC 17 — `stLoc 10` (store s) -/
 
-axiom step_registration_pc17 (env : ModuleEnv) (cs : List Frame)
-    (v : MoveValue) (rest : List MoveValue) (ms : MachineState) (frame : Frame)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 17)
-    (hlocals : 10 < frame.locals.size) :
-    step env frame cs (v :: rest) ms =
-      .ok { frame with pc := 18, locals := frame.locals.set 10 (some v) (by omega) }
-           cs rest ms
-
 /-! ### PC 18 — `ldConst 5` (push DST bytes) -/
 
-axiom step_registration_pc18 (env : ModuleEnv) (cs : List Frame)
-    (stack : List MoveValue) (ms : MachineState) (frame : Frame)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 18)
-    (hconstants : 5 < env.constants.size) :
-    step env frame cs stack ms =
-      .ok { frame with pc := 19 } cs (env.constants[5].value :: stack) ms
-
 /-! ### PC 19 — `stLoc 11` (store msg) -/
-
-axiom step_registration_pc19 (env : ModuleEnv) (cs : List Frame)
-    (v : MoveValue) (rest : List MoveValue) (ms : MachineState) (frame : Frame)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 19)
-    (hlocals : 11 < frame.locals.size) :
-    step env frame cs (v :: rest) ms =
-      .ok { frame with pc := 20, locals := frame.locals.set 11 (some v) (by omega) }
-           cs rest ms
 
 /-! ### PC 20, 23, 27, 31, 35, 39 — all `mutBorrowLoc 11` (repeatedly &mut msg) -/
 
@@ -619,323 +532,29 @@ private theorem step_registration_mutBorrowLoc11_helper
     (frame := frame) (env := env) (cs := cs) (stack := stack) (ms := ms)
     11 v rid hpc_lt hc hlocals hv hltRef hRef
 
-axiom step_registration_pc20 (env : ModuleEnv) (cs : List Frame)
-    (stack : List MoveValue) (ms : MachineState) (frame : Frame)
-    (v : MoveValue) (rid : RefId)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 20)
-    (hlocals : 11 < frame.locals.size)
-    (hv : frame.locals[11]'hlocals = some v)
-    (hltRef : 11 < frame.localRefs.size)
-    (hRef : frame.localRefs[11]'hltRef = some rid) :
-    step env frame cs stack ms =
-      .ok { frame with pc := 21 } cs (.mutRef rid :: stack) ms
-
-axiom step_registration_pc23 (env : ModuleEnv) (cs : List Frame)
-    (stack : List MoveValue) (ms : MachineState) (frame : Frame)
-    (v : MoveValue) (rid : RefId)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 23)
-    (hlocals : 11 < frame.locals.size)
-    (hv : frame.locals[11]'hlocals = some v)
-    (hltRef : 11 < frame.localRefs.size)
-    (hRef : frame.localRefs[11]'hltRef = some rid) :
-    step env frame cs stack ms =
-      .ok { frame with pc := 24 } cs (.mutRef rid :: stack) ms
-
-axiom step_registration_pc27 (env : ModuleEnv) (cs : List Frame)
-    (stack : List MoveValue) (ms : MachineState) (frame : Frame)
-    (v : MoveValue) (rid : RefId)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 27)
-    (hlocals : 11 < frame.locals.size)
-    (hv : frame.locals[11]'hlocals = some v)
-    (hltRef : 11 < frame.localRefs.size)
-    (hRef : frame.localRefs[11]'hltRef = some rid) :
-    step env frame cs stack ms =
-      .ok { frame with pc := 28 } cs (.mutRef rid :: stack) ms
-
-axiom step_registration_pc31 (env : ModuleEnv) (cs : List Frame)
-    (stack : List MoveValue) (ms : MachineState) (frame : Frame)
-    (v : MoveValue) (rid : RefId)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 31)
-    (hlocals : 11 < frame.locals.size)
-    (hv : frame.locals[11]'hlocals = some v)
-    (hltRef : 11 < frame.localRefs.size)
-    (hRef : frame.localRefs[11]'hltRef = some rid) :
-    step env frame cs stack ms =
-      .ok { frame with pc := 32 } cs (.mutRef rid :: stack) ms
-
-axiom step_registration_pc35 (env : ModuleEnv) (cs : List Frame)
-    (stack : List MoveValue) (ms : MachineState) (frame : Frame)
-    (v : MoveValue) (rid : RefId)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 35)
-    (hlocals : 11 < frame.locals.size)
-    (hv : frame.locals[11]'hlocals = some v)
-    (hltRef : 11 < frame.localRefs.size)
-    (hRef : frame.localRefs[11]'hltRef = some rid) :
-    step env frame cs stack ms =
-      .ok { frame with pc := 36 } cs (.mutRef rid :: stack) ms
-
-axiom step_registration_pc39 (env : ModuleEnv) (cs : List Frame)
-    (stack : List MoveValue) (ms : MachineState) (frame : Frame)
-    (v : MoveValue) (rid : RefId)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 39)
-    (hlocals : 11 < frame.locals.size)
-    (hv : frame.locals[11]'hlocals = some v)
-    (hltRef : 11 < frame.localRefs.size)
-    (hRef : frame.localRefs[11]'hltRef = some rid) :
-    step env frame cs stack ms =
-      .ok { frame with pc := 40 } cs (.mutRef rid :: stack) ms
-
 /-! ### PC 21 — `moveLoc 0` (push chainId) -/
-
-axiom step_registration_pc21 (env : ModuleEnv) (cs : List Frame)
-    (stack : List MoveValue) (ms : MachineState) (frame : Frame)
-    (v : MoveValue)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 21)
-    (hlocals : 0 < frame.locals.size)
-    (hv : frame.locals[0]'hlocals = some v)
-    (hRefNone : ¬ 0 < frame.localRefs.size ∨
-        ∃ (h : 0 < frame.localRefs.size), frame.localRefs[0]'h = none) :
-    step env frame cs stack ms =
-      .ok { frame with pc := 22, locals := frame.locals.set 0 none (by omega) }
-           cs (v :: stack) ms
 
 /-! ### PC 24 — `immBorrowLoc 1` (&sender) -/
 
-axiom step_registration_pc24 (env : ModuleEnv) (cs : List Frame)
-    (stack : List MoveValue) (ms : MachineState) (frame : Frame)
-    (v : MoveValue) (rid : RefId)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 24)
-    (hlocals : 1 < frame.locals.size)
-    (hv : frame.locals[1]'hlocals = some v)
-    (hltRef : 1 < frame.localRefs.size)
-    (hRef : frame.localRefs[1]'hltRef = some rid) :
-    step env frame cs stack ms =
-      .ok { frame with pc := 25 } cs (.immRef rid :: stack) ms
-
 /-! ### PC 28 — `immBorrowLoc 2` (&contract_address) -/
-
-axiom step_registration_pc28 (env : ModuleEnv) (cs : List Frame)
-    (stack : List MoveValue) (ms : MachineState) (frame : Frame)
-    (v : MoveValue) (rid : RefId)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 28)
-    (hlocals : 2 < frame.locals.size)
-    (hv : frame.locals[2]'hlocals = some v)
-    (hltRef : 2 < frame.localRefs.size)
-    (hRef : frame.localRefs[2]'hltRef = some rid) :
-    step env frame cs stack ms =
-      .ok { frame with pc := 29 } cs (.immRef rid :: stack) ms
 
 /-! ### PC 32 — `immBorrowLoc 4` (&token_address) -/
 
-axiom step_registration_pc32 (env : ModuleEnv) (cs : List Frame)
-    (stack : List MoveValue) (ms : MachineState) (frame : Frame)
-    (v : MoveValue) (rid : RefId)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 32)
-    (hlocals : 4 < frame.locals.size)
-    (hv : frame.locals[4]'hlocals = some v)
-    (hltRef : 4 < frame.localRefs.size)
-    (hRef : frame.localRefs[4]'hltRef = some rid) :
-    step env frame cs stack ms =
-      .ok { frame with pc := 33 } cs (.immRef rid :: stack) ms
-
 /-! ### PC 43 — `moveLoc 11` (push msg, consumes it) -/
-
-axiom step_registration_pc43 (env : ModuleEnv) (cs : List Frame)
-    (stack : List MoveValue) (ms : MachineState) (frame : Frame)
-    (v : MoveValue)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 43)
-    (hlocals : 11 < frame.locals.size)
-    (hv : frame.locals[11]'hlocals = some v)
-    (hRefNone : ¬ 11 < frame.localRefs.size ∨
-        ∃ (h : 11 < frame.localRefs.size), frame.localRefs[11]'h = none) :
-    step env frame cs stack ms =
-      .ok { frame with pc := 44, locals := frame.locals.set 11 none (by omega) }
-           cs (v :: stack) ms
 
 /-! ### PC 45 — `stLoc 12` (store e) -/
 
-axiom step_registration_pc45 (env : ModuleEnv) (cs : List Frame)
-    (v : MoveValue) (rest : List MoveValue) (ms : MachineState) (frame : Frame)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 45)
-    (hlocals : 12 < frame.locals.size) :
-    step env frame cs (v :: rest) ms =
-      .ok { frame with pc := 46, locals := frame.locals.set 12 (some v) (by omega) }
-           cs rest ms
-
 /-! ### PC 47 — `stLoc 13` (store h) -/
-
-axiom step_registration_pc47 (env : ModuleEnv) (cs : List Frame)
-    (v : MoveValue) (rest : List MoveValue) (ms : MachineState) (frame : Frame)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 47)
-    (hlocals : 13 < frame.locals.size) :
-    step env frame cs (v :: rest) ms =
-      .ok { frame with pc := 48, locals := frame.locals.set 13 (some v) (by omega) }
-           cs rest ms
 
 /-! ### PC 48 — `moveLoc 3` (push ek ref, consumes it) -/
 
-axiom step_registration_pc48 (env : ModuleEnv) (cs : List Frame)
-    (stack : List MoveValue) (ms : MachineState) (frame : Frame)
-    (v : MoveValue)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 48)
-    (hlocals : 3 < frame.locals.size)
-    (hv : frame.locals[3]'hlocals = some v)
-    (hRefNone : ¬ 3 < frame.localRefs.size ∨
-        ∃ (h : 3 < frame.localRefs.size), frame.localRefs[3]'h = none) :
-    step env frame cs stack ms =
-      .ok { frame with pc := 49, locals := frame.locals.set 3 none (by omega) }
-           cs (v :: stack) ms
-
 /-! ### PC 50 — `stLoc 14` (store ek_point) -/
-
-axiom step_registration_pc50 (env : ModuleEnv) (cs : List Frame)
-    (v : MoveValue) (rest : List MoveValue) (ms : MachineState) (frame : Frame)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 50)
-    (hlocals : 14 < frame.locals.size) :
-    step env frame cs (v :: rest) ms =
-      .ok { frame with pc := 51, locals := frame.locals.set 14 (some v) (by omega) }
-           cs rest ms
 
 /-! ### PCs 51, 52, 55, 56, 57, 60, 63, 66, 67 — immBorrowLoc of various locals -/
 
-axiom step_registration_pc51 (env : ModuleEnv) (cs : List Frame)
-    (stack : List MoveValue) (ms : MachineState) (frame : Frame)
-    (v : MoveValue) (rid : RefId)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 51)
-    (hlocals : 13 < frame.locals.size) (hv : frame.locals[13]'hlocals = some v)
-    (hltRef : 13 < frame.localRefs.size) (hRef : frame.localRefs[13]'hltRef = some rid) :
-    step env frame cs stack ms =
-      .ok { frame with pc := 52 } cs (.immRef rid :: stack) ms
-
-axiom step_registration_pc52 (env : ModuleEnv) (cs : List Frame)
-    (stack : List MoveValue) (ms : MachineState) (frame : Frame)
-    (v : MoveValue) (rid : RefId)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 52)
-    (hlocals : 10 < frame.locals.size) (hv : frame.locals[10]'hlocals = some v)
-    (hltRef : 10 < frame.localRefs.size) (hRef : frame.localRefs[10]'hltRef = some rid) :
-    step env frame cs stack ms =
-      .ok { frame with pc := 53 } cs (.immRef rid :: stack) ms
-
-axiom step_registration_pc54 (env : ModuleEnv) (cs : List Frame)
-    (v : MoveValue) (rest : List MoveValue) (ms : MachineState) (frame : Frame)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 54)
-    (hlocals : 15 < frame.locals.size) :
-    step env frame cs (v :: rest) ms =
-      .ok { frame with pc := 55, locals := frame.locals.set 15 (some v) (by omega) }
-           cs rest ms
-
-axiom step_registration_pc55 (env : ModuleEnv) (cs : List Frame)
-    (stack : List MoveValue) (ms : MachineState) (frame : Frame)
-    (v : MoveValue) (rid : RefId)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 55)
-    (hlocals : 15 < frame.locals.size) (hv : frame.locals[15]'hlocals = some v)
-    (hltRef : 15 < frame.localRefs.size) (hRef : frame.localRefs[15]'hltRef = some rid) :
-    step env frame cs stack ms =
-      .ok { frame with pc := 56 } cs (.immRef rid :: stack) ms
-
-axiom step_registration_pc56 (env : ModuleEnv) (cs : List Frame)
-    (stack : List MoveValue) (ms : MachineState) (frame : Frame)
-    (v : MoveValue) (rid : RefId)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 56)
-    (hlocals : 14 < frame.locals.size) (hv : frame.locals[14]'hlocals = some v)
-    (hltRef : 14 < frame.localRefs.size) (hRef : frame.localRefs[14]'hltRef = some rid) :
-    step env frame cs stack ms =
-      .ok { frame with pc := 57 } cs (.immRef rid :: stack) ms
-
-axiom step_registration_pc57 (env : ModuleEnv) (cs : List Frame)
-    (stack : List MoveValue) (ms : MachineState) (frame : Frame)
-    (v : MoveValue) (rid : RefId)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 57)
-    (hlocals : 12 < frame.locals.size) (hv : frame.locals[12]'hlocals = some v)
-    (hltRef : 12 < frame.localRefs.size) (hRef : frame.localRefs[12]'hltRef = some rid) :
-    step env frame cs stack ms =
-      .ok { frame with pc := 58 } cs (.immRef rid :: stack) ms
-
-axiom step_registration_pc59 (env : ModuleEnv) (cs : List Frame)
-    (v : MoveValue) (rest : List MoveValue) (ms : MachineState) (frame : Frame)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 59)
-    (hlocals : 16 < frame.locals.size) :
-    step env frame cs (v :: rest) ms =
-      .ok { frame with pc := 60, locals := frame.locals.set 16 (some v) (by omega) }
-           cs rest ms
-
-axiom step_registration_pc60 (env : ModuleEnv) (cs : List Frame)
-    (stack : List MoveValue) (ms : MachineState) (frame : Frame)
-    (v : MoveValue) (rid : RefId)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 60)
-    (hlocals : 16 < frame.locals.size) (hv : frame.locals[16]'hlocals = some v)
-    (hltRef : 16 < frame.localRefs.size) (hRef : frame.localRefs[16]'hltRef = some rid) :
-    step env frame cs stack ms =
-      .ok { frame with pc := 61 } cs (.immRef rid :: stack) ms
-
-axiom step_registration_pc62 (env : ModuleEnv) (cs : List Frame)
-    (v : MoveValue) (rest : List MoveValue) (ms : MachineState) (frame : Frame)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 62)
-    (hlocals : 17 < frame.locals.size) :
-    step env frame cs (v :: rest) ms =
-      .ok { frame with pc := 63, locals := frame.locals.set 17 (some v) (by omega) }
-           cs rest ms
-
-axiom step_registration_pc63 (env : ModuleEnv) (cs : List Frame)
-    (stack : List MoveValue) (ms : MachineState) (frame : Frame)
-    (v : MoveValue) (rid : RefId)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 63)
-    (hlocals : 8 < frame.locals.size) (hv : frame.locals[8]'hlocals = some v)
-    (hltRef : 8 < frame.localRefs.size) (hRef : frame.localRefs[8]'hltRef = some rid) :
-    step env frame cs stack ms =
-      .ok { frame with pc := 64 } cs (.immRef rid :: stack) ms
-
-axiom step_registration_pc65 (env : ModuleEnv) (cs : List Frame)
-    (v : MoveValue) (rest : List MoveValue) (ms : MachineState) (frame : Frame)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 65)
-    (hlocals : 18 < frame.locals.size) :
-    step env frame cs (v :: rest) ms =
-      .ok { frame with pc := 66, locals := frame.locals.set 18 (some v) (by omega) }
-           cs rest ms
-
-axiom step_registration_pc66 (env : ModuleEnv) (cs : List Frame)
-    (stack : List MoveValue) (ms : MachineState) (frame : Frame)
-    (v : MoveValue) (rid : RefId)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 66)
-    (hlocals : 17 < frame.locals.size) (hv : frame.locals[17]'hlocals = some v)
-    (hltRef : 17 < frame.localRefs.size) (hRef : frame.localRefs[17]'hltRef = some rid) :
-    step env frame cs stack ms =
-      .ok { frame with pc := 67 } cs (.immRef rid :: stack) ms
-
-axiom step_registration_pc67 (env : ModuleEnv) (cs : List Frame)
-    (stack : List MoveValue) (ms : MachineState) (frame : Frame)
-    (v : MoveValue) (rid : RefId)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 67)
-    (hlocals : 18 < frame.locals.size) (hv : frame.locals[18]'hlocals = some v)
-    (hltRef : 18 < frame.localRefs.size) (hRef : frame.localRefs[18]'hltRef = some rid) :
-    step env frame cs stack ms =
-      .ok { frame with pc := 68 } cs (.immRef rid :: stack) ms
-
 /-! ### PC 36 — `copyLoc 3` (copy ek ref without consuming) -/
 
-axiom step_registration_pc36 (env : ModuleEnv) (cs : List Frame)
-    (stack : List MoveValue) (ms : MachineState) (frame : Frame)
-    (v : MoveValue)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 36)
-    (hlocals : 3 < frame.locals.size)
-    (hv : frame.locals[3]'hlocals = some v)
-    (hRefNone : ¬ 3 < frame.localRefs.size ∨
-        ∃ (h : 3 < frame.localRefs.size), frame.localRefs[3]'h = none) :
-    step env frame cs stack ms =
-      .ok { frame with pc := 37 } cs (v :: stack) ms
-
 /-! ### PC 40 — `copyLoc 8` (copy r_compressed value without consuming) -/
-
-axiom step_registration_pc40 (env : ModuleEnv) (cs : List Frame)
-    (stack : List MoveValue) (ms : MachineState) (frame : Frame)
-    (v : MoveValue)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 40)
-    (hlocals : 8 < frame.locals.size)
-    (hv : frame.locals[8]'hlocals = some v)
-    (hRefNone : ¬ 8 < frame.localRefs.size ∨
-        ∃ (h : 8 < frame.localRefs.size), frame.localRefs[8]'h = none) :
-    step env frame cs stack ms =
-      .ok { frame with pc := 41 } cs (v :: stack) ms
 
 /-! ## Native-call PCs — oracle-result case splits
 
@@ -944,33 +563,6 @@ Each `.call <natIdx>` dispatches to a native body. The step lemma below instanti
 concrete function descriptors. Each lemma takes the oracle result as an explicit hypothesis —
 the caller case-splits on the oracle response (`some [mv]` vs `none`) and threads each branch
 through the rest of the proof. -/
-
-/-- PC 1: `.call 0` dispatching to `newCompressedPointFromBytes`. Happy path: oracle returns
-`some [mv]` for a singleton compressed-point result. -/
-axiom step_registration_pc1_some (env_orig : RegistrationNativeOracle)
-    (cs : List Frame) (v : MoveValue) (rest : List MoveValue)
-    (ms : MachineState) (frame : Frame) (mv : MoveValue)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 1)
-    (horacle : env_orig.newCompressedPointFromBytes [v] = some [mv]) :
-    step (registrationModuleEnv env_orig) frame cs (v :: rest) ms =
-      .ok { frame with pc := 2 } cs (mv :: rest)
-           { ms with containers := ms.containers, globals := ms.globals }
-
-axiom step_registration_pc1_none (env_orig : RegistrationNativeOracle)
-    (cs : List Frame) (v : MoveValue) (rest : List MoveValue)
-    (ms : MachineState) (frame : Frame)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 1)
-    (horacle : env_orig.newCompressedPointFromBytes [v] = none) :
-    step (registrationModuleEnv env_orig) frame cs (v :: rest) ms = .error
-
-axiom step_registration_pc10_some (env_orig : RegistrationNativeOracle)
-    (cs : List Frame) (v : MoveValue) (rest : List MoveValue)
-    (ms : MachineState) (frame : Frame) (sv : MoveValue)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 10)
-    (horacle : env_orig.newScalarFromBytes [v] = some [sv]) :
-    step (registrationModuleEnv env_orig) frame cs (v :: rest) ms =
-      .ok { frame with pc := 11 } cs (sv :: rest)
-           { ms with containers := ms.containers, globals := ms.globals }
 
 /-! ## Per-function-descriptor facts for `registrationModuleEnv`
 
@@ -1066,282 +658,59 @@ theorem registrationModuleEnv_fn6_numParams (o : RegistrationNativeOracle) :
     ((registrationModuleEnv o).functions[6]'(by
       rw [registrationModuleEnv_functions_size]; decide)).numParams = 2 := by rfl
 
-axiom registrationModuleEnv_fn6_numReturns (o : RegistrationNativeOracle) :
-    ((registrationModuleEnv o).functions[6]'(by
-      rw [registrationModuleEnv_functions_size]; decide)).numReturns = 0
-
-axiom registrationModuleEnv_fn6_body (o : RegistrationNativeOracle) :
-    ((registrationModuleEnv o).functions[6]'(by
-      rw [registrationModuleEnv_functions_size]; decide)).body =
-      .nativeRef vectorAppendU8Ref
-
 /-! Fn7 = pubkeyToBytes wrapper (nativeRef, 1→1) -/
-axiom registrationModuleEnv_fn7_numParams (o : RegistrationNativeOracle) :
-    ((registrationModuleEnv o).functions[7]'(by
-      rw [registrationModuleEnv_functions_size]; decide)).numParams = 1
-
-axiom registrationModuleEnv_fn7_numReturns (o : RegistrationNativeOracle) :
-    ((registrationModuleEnv o).functions[7]'(by
-      rw [registrationModuleEnv_functions_size]; decide)).numReturns = 1
-
-axiom registrationModuleEnv_fn7_body (o : RegistrationNativeOracle) :
-    ((registrationModuleEnv o).functions[7]'(by
-      rw [registrationModuleEnv_functions_size]; decide)).body =
-      .nativeRef (wrapOracleImmRef1 o.pubkeyToBytes)
-
 /-! Fn8 = compressedPointToBytes (native, 1→1) -/
-axiom registrationModuleEnv_fn8_numParams (o : RegistrationNativeOracle) :
-    ((registrationModuleEnv o).functions[8]'(by
-      rw [registrationModuleEnv_functions_size]; decide)).numParams = 1
-
-axiom registrationModuleEnv_fn8_numReturns (o : RegistrationNativeOracle) :
-    ((registrationModuleEnv o).functions[8]'(by
-      rw [registrationModuleEnv_functions_size]; decide)).numReturns = 1
-
-axiom registrationModuleEnv_fn8_body (o : RegistrationNativeOracle) :
-    ((registrationModuleEnv o).functions[8]'(by
-      rw [registrationModuleEnv_functions_size]; decide)).body =
-      .native o.compressedPointToBytes
-
 /-! Fn9 = newScalarFromSha2_512Desc (native, 1→1) -/
-axiom registrationModuleEnv_fn9_numParams (o : RegistrationNativeOracle) :
-    ((registrationModuleEnv o).functions[9]'(by
-      rw [registrationModuleEnv_functions_size]; decide)).numParams = 1
-
-axiom registrationModuleEnv_fn9_numReturns (o : RegistrationNativeOracle) :
-    ((registrationModuleEnv o).functions[9]'(by
-      rw [registrationModuleEnv_functions_size]; decide)).numReturns = 1
-
-axiom registrationModuleEnv_fn9_body (o : RegistrationNativeOracle) :
-    ((registrationModuleEnv o).functions[9]'(by
-      rw [registrationModuleEnv_functions_size]; decide)).body =
-      .native newScalarFromSha2_512
-
 /-! Fn10 = hashToPointBase (native, 0→1) -/
-axiom registrationModuleEnv_fn10_numParams (o : RegistrationNativeOracle) :
-    ((registrationModuleEnv o).functions[10]'(by
-      rw [registrationModuleEnv_functions_size]; decide)).numParams = 0
-
-axiom registrationModuleEnv_fn10_numReturns (o : RegistrationNativeOracle) :
-    ((registrationModuleEnv o).functions[10]'(by
-      rw [registrationModuleEnv_functions_size]; decide)).numReturns = 1
-
-axiom registrationModuleEnv_fn10_body (o : RegistrationNativeOracle) :
-    ((registrationModuleEnv o).functions[10]'(by
-      rw [registrationModuleEnv_functions_size]; decide)).body =
-      .native o.hashToPointBase
-
 /-! Fn11 = pubkeyToPoint wrapper (nativeRef, 1→1) -/
-axiom registrationModuleEnv_fn11_numParams (o : RegistrationNativeOracle) :
-    ((registrationModuleEnv o).functions[11]'(by
-      rw [registrationModuleEnv_functions_size]; decide)).numParams = 1
-
-axiom registrationModuleEnv_fn11_numReturns (o : RegistrationNativeOracle) :
-    ((registrationModuleEnv o).functions[11]'(by
-      rw [registrationModuleEnv_functions_size]; decide)).numReturns = 1
-
-axiom registrationModuleEnv_fn11_body (o : RegistrationNativeOracle) :
-    ((registrationModuleEnv o).functions[11]'(by
-      rw [registrationModuleEnv_functions_size]; decide)).body =
-      .nativeRef (wrapOracleImmRef1 o.pubkeyToPoint)
-
 /-! Fn12 = pointMul wrapper (nativeRef, 2→1) -/
-axiom registrationModuleEnv_fn12_numParams (o : RegistrationNativeOracle) :
-    ((registrationModuleEnv o).functions[12]'(by
-      rw [registrationModuleEnv_functions_size]; decide)).numParams = 2
-
-axiom registrationModuleEnv_fn12_numReturns (o : RegistrationNativeOracle) :
-    ((registrationModuleEnv o).functions[12]'(by
-      rw [registrationModuleEnv_functions_size]; decide)).numReturns = 1
-
-axiom registrationModuleEnv_fn12_body (o : RegistrationNativeOracle) :
-    ((registrationModuleEnv o).functions[12]'(by
-      rw [registrationModuleEnv_functions_size]; decide)).body =
-      .nativeRef (wrapOracleImmRef2 o.pointMul)
-
 /-! Fn13 = pointAdd wrapper (nativeRef, 2→1) -/
-axiom registrationModuleEnv_fn13_numParams (o : RegistrationNativeOracle) :
-    ((registrationModuleEnv o).functions[13]'(by
-      rw [registrationModuleEnv_functions_size]; decide)).numParams = 2
-
-axiom registrationModuleEnv_fn13_numReturns (o : RegistrationNativeOracle) :
-    ((registrationModuleEnv o).functions[13]'(by
-      rw [registrationModuleEnv_functions_size]; decide)).numReturns = 1
-
-axiom registrationModuleEnv_fn13_body (o : RegistrationNativeOracle) :
-    ((registrationModuleEnv o).functions[13]'(by
-      rw [registrationModuleEnv_functions_size]; decide)).body =
-      .nativeRef (wrapOracleImmRef2 o.pointAdd)
-
 /-! Fn14 = pointDecompress wrapper (nativeRef, 1→1) -/
-axiom registrationModuleEnv_fn14_numParams (o : RegistrationNativeOracle) :
-    ((registrationModuleEnv o).functions[14]'(by
-      rw [registrationModuleEnv_functions_size]; decide)).numParams = 1
-
-axiom registrationModuleEnv_fn14_numReturns (o : RegistrationNativeOracle) :
-    ((registrationModuleEnv o).functions[14]'(by
-      rw [registrationModuleEnv_functions_size]; decide)).numReturns = 1
-
-axiom registrationModuleEnv_fn14_body (o : RegistrationNativeOracle) :
-    ((registrationModuleEnv o).functions[14]'(by
-      rw [registrationModuleEnv_functions_size]; decide)).body =
-      .nativeRef (wrapOracleImmRef1 o.pointDecompress)
-
 /-! Fn15 = pointEquals wrapper (nativeRef, 2→1) -/
-axiom registrationModuleEnv_fn15_numParams (o : RegistrationNativeOracle) :
-    ((registrationModuleEnv o).functions[15]'(by
-      rw [registrationModuleEnv_functions_size]; decide)).numParams = 2
-
-axiom registrationModuleEnv_fn15_numReturns (o : RegistrationNativeOracle) :
-    ((registrationModuleEnv o).functions[15]'(by
-      rw [registrationModuleEnv_functions_size]; decide)).numReturns = 1
-
-axiom registrationModuleEnv_fn15_body (o : RegistrationNativeOracle) :
-    ((registrationModuleEnv o).functions[15]'(by
-      rw [registrationModuleEnv_functions_size]; decide)).body =
-      .nativeRef (wrapOracleImmRef2 o.pointEquals)
-
 /-! ### PC 4 / 13 — `.call 1` (option::is_some<T>, nativeRef, 1→1) -/
 
-axiom step_registration_pc4 (env_orig : RegistrationNativeOracle)
+theorem step_registration_pc4 (env_orig : RegistrationNativeOracle)
     (cs : List Frame) (v : MoveValue) (rest : List MoveValue)
     (ms : MachineState) (frame : Frame) (resultV : MoveValue) (containers' : ContainerStore)
     (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 4)
     (horacle : optionIsSomeRef ms.containers [v] = some ([resultV], containers')) :
     step (registrationModuleEnv env_orig) frame cs (v :: rest) ms =
       .ok { frame with pc := 5 } cs (resultV :: rest)
-           { ms with containers := containers', globals := ms.globals }
-
-axiom step_registration_pc13 (env_orig : RegistrationNativeOracle)
-    (cs : List Frame) (v : MoveValue) (rest : List MoveValue)
-    (ms : MachineState) (frame : Frame) (resultV : MoveValue) (containers' : ContainerStore)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 13)
-    (horacle : optionIsSomeRef ms.containers [v] = some ([resultV], containers')) :
-    step (registrationModuleEnv env_orig) frame cs (v :: rest) ms =
-      .ok { frame with pc := 14 } cs (resultV :: rest)
-           { ms with containers := containers', globals := ms.globals }
+           { ms with containers := containers', globals := ms.globals } := by
+  have hpc_lt : frame.pc < frame.code.size := by rw [hpc, hcode]; decide
+  have hc : frame.code[frame.pc]'hpc_lt = .call BytecodeLemmas.funcIdx_optionIsSome := by
+    simp only [hcode, hpc]; exact BytecodeLemmas.instr4_eq
+  have hlt : BytecodeLemmas.funcIdx_optionIsSome < (registrationModuleEnv env_orig).functions.size := by
+    rw [registrationModuleEnv_functions_size]; decide
+  have hparams : (registrationModuleEnv env_orig).functions[BytecodeLemmas.funcIdx_optionIsSome].numParams = 1 := rfl
+  have hreturns : (registrationModuleEnv env_orig).functions[BytecodeLemmas.funcIdx_optionIsSome].numReturns = 1 := rfl
+  have hbody : (registrationModuleEnv env_orig).functions[BytecodeLemmas.funcIdx_optionIsSome].body =
+                  .nativeRef optionIsSomeRef := rfl
+  have htake : takeN (v :: rest) 1 = some ([v], rest) := rfl
+  have h := StepLemmas.step_call_nativeRef_ret1
+              (frame := frame) (env := registrationModuleEnv env_orig) (cs := cs) (ms := ms)
+              BytecodeLemmas.funcIdx_optionIsSome [v] rest (v :: rest) optionIsSomeRef 1 resultV containers'
+              hpc_lt hc hlt hparams hreturns hbody htake horacle
+  rw [show frame.pc + 1 = 5 from by omega] at h
+  exact h
 
 /-! ### PC 7 / 16 — `.call 2` (option::extract<T>, nativeRef, 1→1) -/
 
-axiom step_registration_pc7 (env_orig : RegistrationNativeOracle)
-    (cs : List Frame) (v : MoveValue) (rest : List MoveValue)
-    (ms : MachineState) (frame : Frame) (resultV : MoveValue) (containers' : ContainerStore)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 7)
-    (horacle : optionExtractRef ms.containers [v] = some ([resultV], containers')) :
-    step (registrationModuleEnv env_orig) frame cs (v :: rest) ms =
-      .ok { frame with pc := 8 } cs (resultV :: rest)
-           { ms with containers := containers', globals := ms.globals }
-
-axiom step_registration_pc16 (env_orig : RegistrationNativeOracle)
-    (cs : List Frame) (v : MoveValue) (rest : List MoveValue)
-    (ms : MachineState) (frame : Frame) (resultV : MoveValue) (containers' : ContainerStore)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 16)
-    (horacle : optionExtractRef ms.containers [v] = some ([resultV], containers')) :
-    step (registrationModuleEnv env_orig) frame cs (v :: rest) ms =
-      .ok { frame with pc := 17 } cs (resultV :: rest)
-           { ms with containers := containers', globals := ms.globals }
-
 /-! ### PC 72 / 77 / 82 — `.call 16` (error::invalid_argument, native, 1→1) -/
-
-axiom step_registration_pc72 (env_orig : RegistrationNativeOracle)
-    (cs : List Frame) (reason : UInt64) (rest : List MoveValue)
-    (ms : MachineState) (frame : Frame)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 72) :
-    step (registrationModuleEnv env_orig) frame cs (.u64 reason :: rest) ms =
-      .ok { frame with pc := 73 } cs (.u64 (65536 + reason) :: rest)
-           { ms with containers := ms.containers, globals := ms.globals }
-
-axiom step_registration_pc77 (env_orig : RegistrationNativeOracle)
-    (cs : List Frame) (reason : UInt64) (rest : List MoveValue)
-    (ms : MachineState) (frame : Frame)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 77) :
-    step (registrationModuleEnv env_orig) frame cs (.u64 reason :: rest) ms =
-      .ok { frame with pc := 78 } cs (.u64 (65536 + reason) :: rest)
-           { ms with containers := ms.containers, globals := ms.globals }
-
-axiom step_registration_pc82 (env_orig : RegistrationNativeOracle)
-    (cs : List Frame) (reason : UInt64) (rest : List MoveValue)
-    (ms : MachineState) (frame : Frame)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 82) :
-    step (registrationModuleEnv env_orig) frame cs (.u64 reason :: rest) ms =
-      .ok { frame with pc := 83 } cs (.u64 (65536 + reason) :: rest)
-           { ms with containers := ms.containers, globals := ms.globals }
 
 /-! ### PC 46 — `.call 10` (hashToPointBase, native, 0→1)
 
 Zero-argument native: `impl []` produces the base point. -/
 
-axiom step_registration_pc46 (env_orig : RegistrationNativeOracle)
-    (cs : List Frame) (stack : List MoveValue) (ms : MachineState) (frame : Frame) (hPoint : MoveValue)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 46)
-    (horacle : env_orig.hashToPointBase [] = some [hPoint]) :
-    step (registrationModuleEnv env_orig) frame cs stack ms =
-      .ok { frame with pc := 47 } cs (hPoint :: stack)
-           { ms with containers := ms.containers, globals := ms.globals }
-
 /-! ### PC 41 — `.call 8` (compressedPointToBytes, native, 1→1) -/
 
-axiom step_registration_pc41 (env_orig : RegistrationNativeOracle)
-    (cs : List Frame) (v : MoveValue) (rest : List MoveValue) (ms : MachineState) (frame : Frame)
-    (bytesV : MoveValue)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 41)
-    (horacle : env_orig.compressedPointToBytes [v] = some [bytesV]) :
-    step (registrationModuleEnv env_orig) frame cs (v :: rest) ms =
-      .ok { frame with pc := 42 } cs (bytesV :: rest)
-           { ms with containers := ms.containers, globals := ms.globals }
-
 /-! ### PC 44 — `.call 9` (newScalarFromSha2_512, native, 1→1) -/
-
-axiom step_registration_pc44 (env_orig : RegistrationNativeOracle)
-    (cs : List Frame) (v : MoveValue) (rest : List MoveValue) (ms : MachineState) (frame : Frame)
-    (eScalar : MoveValue)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 44)
-    (horacle : newScalarFromSha2_512 [v] = some [eScalar]) :
-    step (registrationModuleEnv env_orig) frame cs (v :: rest) ms =
-      .ok { frame with pc := 45 } cs (eScalar :: rest)
-           { ms with containers := ms.containers, globals := ms.globals }
 
 /-! ### PC 22 — `.call 4` (vectorPushBackU8Ref, nativeRef, 2→0)
 
 Consumes `&mut msg` and `u8` (chainId) from the stack, pushes nothing. -/
 
-axiom step_registration_pc22 (env_orig : RegistrationNativeOracle)
-    (cs : List Frame) (a b : MoveValue) (rest : List MoveValue)
-    (ms : MachineState) (frame : Frame) (containers' : ContainerStore)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 22)
-    (horacle : vectorPushBackU8Ref ms.containers [a, b] = some ([], containers')) :
-    step (registrationModuleEnv env_orig) frame cs (b :: a :: rest) ms =
-      .ok { frame with pc := 23 } cs rest
-           { ms with containers := containers', globals := ms.globals }
-
 /-! ### PC 25 / 29 / 33 — `.call 5` (bcsToBytesAddressRef, nativeRef, 1→1) -/
-
-axiom step_registration_pc25 (env_orig : RegistrationNativeOracle)
-    (cs : List Frame) (v : MoveValue) (rest : List MoveValue)
-    (ms : MachineState) (frame : Frame) (resultV : MoveValue) (containers' : ContainerStore)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 25)
-    (horacle : bcsToBytesAddressRef ms.containers [v] = some ([resultV], containers')) :
-    step (registrationModuleEnv env_orig) frame cs (v :: rest) ms =
-      .ok { frame with pc := 26 } cs (resultV :: rest)
-           { ms with containers := containers', globals := ms.globals }
-
-axiom step_registration_pc29 (env_orig : RegistrationNativeOracle)
-    (cs : List Frame) (v : MoveValue) (rest : List MoveValue)
-    (ms : MachineState) (frame : Frame) (resultV : MoveValue) (containers' : ContainerStore)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 29)
-    (horacle : bcsToBytesAddressRef ms.containers [v] = some ([resultV], containers')) :
-    step (registrationModuleEnv env_orig) frame cs (v :: rest) ms =
-      .ok { frame with pc := 30 } cs (resultV :: rest)
-           { ms with containers := containers', globals := ms.globals }
-
-axiom step_registration_pc33 (env_orig : RegistrationNativeOracle)
-    (cs : List Frame) (v : MoveValue) (rest : List MoveValue)
-    (ms : MachineState) (frame : Frame) (resultV : MoveValue) (containers' : ContainerStore)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 33)
-    (horacle : bcsToBytesAddressRef ms.containers [v] = some ([resultV], containers')) :
-    step (registrationModuleEnv env_orig) frame cs (v :: rest) ms =
-      .ok { frame with pc := 34 } cs (resultV :: rest)
-           { ms with containers := containers', globals := ms.globals }
 
 /-! ### PC 26 / 30 / 34 / 38 / 42 — `.call 6` (vectorAppendU8Ref, nativeRef, 2→0) -/
 
@@ -1368,114 +737,15 @@ private theorem step_registration_call6_apply (env_orig : RegistrationNativeOrac
     6 [a, b] rest (b :: a :: rest) vectorAppendU8Ref 2 containers'
     hpc_lt hc hlt hparams hreturns hbody htake horacle
 
-axiom step_registration_pc26 (env_orig : RegistrationNativeOracle)
-    (cs : List Frame) (a b : MoveValue) (rest : List MoveValue)
-    (ms : MachineState) (frame : Frame) (containers' : ContainerStore)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 26)
-    (horacle : vectorAppendU8Ref ms.containers [a, b] = some ([], containers')) :
-    step (registrationModuleEnv env_orig) frame cs (b :: a :: rest) ms =
-      .ok { frame with pc := 27 } cs rest
-           { ms with containers := containers', globals := ms.globals }
-
-axiom step_registration_pc30 (env_orig : RegistrationNativeOracle)
-    (cs : List Frame) (a b : MoveValue) (rest : List MoveValue)
-    (ms : MachineState) (frame : Frame) (containers' : ContainerStore)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 30)
-    (horacle : vectorAppendU8Ref ms.containers [a, b] = some ([], containers')) :
-    step (registrationModuleEnv env_orig) frame cs (b :: a :: rest) ms =
-      .ok { frame with pc := 31 } cs rest
-           { ms with containers := containers', globals := ms.globals }
-
-axiom step_registration_pc34 (env_orig : RegistrationNativeOracle)
-    (cs : List Frame) (a b : MoveValue) (rest : List MoveValue)
-    (ms : MachineState) (frame : Frame) (containers' : ContainerStore)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 34)
-    (horacle : vectorAppendU8Ref ms.containers [a, b] = some ([], containers')) :
-    step (registrationModuleEnv env_orig) frame cs (b :: a :: rest) ms =
-      .ok { frame with pc := 35 } cs rest
-           { ms with containers := containers', globals := ms.globals }
-
-axiom step_registration_pc38 (env_orig : RegistrationNativeOracle)
-    (cs : List Frame) (a b : MoveValue) (rest : List MoveValue)
-    (ms : MachineState) (frame : Frame) (containers' : ContainerStore)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 38)
-    (horacle : vectorAppendU8Ref ms.containers [a, b] = some ([], containers')) :
-    step (registrationModuleEnv env_orig) frame cs (b :: a :: rest) ms =
-      .ok { frame with pc := 39 } cs rest
-           { ms with containers := containers', globals := ms.globals }
-
-axiom step_registration_pc42 (env_orig : RegistrationNativeOracle)
-    (cs : List Frame) (a b : MoveValue) (rest : List MoveValue)
-    (ms : MachineState) (frame : Frame) (containers' : ContainerStore)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 42)
-    (horacle : vectorAppendU8Ref ms.containers [a, b] = some ([], containers')) :
-    step (registrationModuleEnv env_orig) frame cs (b :: a :: rest) ms =
-      .ok { frame with pc := 43 } cs rest
-           { ms with containers := containers', globals := ms.globals }
-
 /-! ### PC 37 — `.call 7` (pubkeyToBytes, nativeRef via wrapOracleImmRef1, 1→1) -/
-
-axiom step_registration_pc37 (env_orig : RegistrationNativeOracle)
-    (cs : List Frame) (v : MoveValue) (rest : List MoveValue)
-    (ms : MachineState) (frame : Frame) (resultV : MoveValue) (containers' : ContainerStore)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 37)
-    (horacle : wrapOracleImmRef1 env_orig.pubkeyToBytes ms.containers [v] = some ([resultV], containers')) :
-    step (registrationModuleEnv env_orig) frame cs (v :: rest) ms =
-      .ok { frame with pc := 38 } cs (resultV :: rest)
-           { ms with containers := containers', globals := ms.globals }
 
 /-! ### PC 49 — `.call 11` (pubkeyToPoint, nativeRef via wrapOracleImmRef1, 1→1) -/
 
-axiom step_registration_pc49 (env_orig : RegistrationNativeOracle)
-    (cs : List Frame) (v : MoveValue) (rest : List MoveValue)
-    (ms : MachineState) (frame : Frame) (resultV : MoveValue) (containers' : ContainerStore)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 49)
-    (horacle : wrapOracleImmRef1 env_orig.pubkeyToPoint ms.containers [v] = some ([resultV], containers')) :
-    step (registrationModuleEnv env_orig) frame cs (v :: rest) ms =
-      .ok { frame with pc := 50 } cs (resultV :: rest)
-           { ms with containers := containers', globals := ms.globals }
-
 /-! ### PC 64 — `.call 14` (pointDecompress, nativeRef via wrapOracleImmRef1, 1→1) -/
-
-axiom step_registration_pc64 (env_orig : RegistrationNativeOracle)
-    (cs : List Frame) (v : MoveValue) (rest : List MoveValue)
-    (ms : MachineState) (frame : Frame) (resultV : MoveValue) (containers' : ContainerStore)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 64)
-    (horacle : wrapOracleImmRef1 env_orig.pointDecompress ms.containers [v] = some ([resultV], containers')) :
-    step (registrationModuleEnv env_orig) frame cs (v :: rest) ms =
-      .ok { frame with pc := 65 } cs (resultV :: rest)
-           { ms with containers := containers', globals := ms.globals }
 
 /-! ### PC 53 / 58 — `.call 12` (pointMul, nativeRef via wrapOracleImmRef2, 2→1) -/
 
-axiom step_registration_pc53 (env_orig : RegistrationNativeOracle)
-    (cs : List Frame) (a b : MoveValue) (rest : List MoveValue)
-    (ms : MachineState) (frame : Frame) (resultV : MoveValue) (containers' : ContainerStore)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 53)
-    (horacle : wrapOracleImmRef2 env_orig.pointMul ms.containers [a, b] = some ([resultV], containers')) :
-    step (registrationModuleEnv env_orig) frame cs (b :: a :: rest) ms =
-      .ok { frame with pc := 54 } cs (resultV :: rest)
-           { ms with containers := containers', globals := ms.globals }
-
-axiom step_registration_pc58 (env_orig : RegistrationNativeOracle)
-    (cs : List Frame) (a b : MoveValue) (rest : List MoveValue)
-    (ms : MachineState) (frame : Frame) (resultV : MoveValue) (containers' : ContainerStore)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 58)
-    (horacle : wrapOracleImmRef2 env_orig.pointMul ms.containers [a, b] = some ([resultV], containers')) :
-    step (registrationModuleEnv env_orig) frame cs (b :: a :: rest) ms =
-      .ok { frame with pc := 59 } cs (resultV :: rest)
-           { ms with containers := containers', globals := ms.globals }
-
 /-! ### PC 61 — `.call 13` (pointAdd, nativeRef via wrapOracleImmRef2, 2→1) -/
-
-axiom step_registration_pc61 (env_orig : RegistrationNativeOracle)
-    (cs : List Frame) (a b : MoveValue) (rest : List MoveValue)
-    (ms : MachineState) (frame : Frame) (resultV : MoveValue) (containers' : ContainerStore)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 61)
-    (horacle : wrapOracleImmRef2 env_orig.pointAdd ms.containers [a, b] = some ([resultV], containers')) :
-    step (registrationModuleEnv env_orig) frame cs (b :: a :: rest) ms =
-      .ok { frame with pc := 62 } cs (resultV :: rest)
-           { ms with containers := containers', globals := ms.globals }
 
 /-! ## Error-path (`_none`) variants
 
@@ -1487,74 +757,7 @@ Only the natives whose `none` result is semantically meaningful are covered — 
 `optionIsSomeRef` / `vectorAppendU8Ref` don't meaningfully fail on well-typed input, so their
 `_none` variants are omitted. -/
 
-axiom step_registration_pc10_none (env_orig : RegistrationNativeOracle)
-    (cs : List Frame) (v : MoveValue) (rest : List MoveValue)
-    (ms : MachineState) (frame : Frame)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 10)
-    (horacle : env_orig.newScalarFromBytes [v] = none) :
-    step (registrationModuleEnv env_orig) frame cs (v :: rest) ms = .error
-
-axiom step_registration_pc46_none (env_orig : RegistrationNativeOracle)
-    (cs : List Frame) (stack : List MoveValue) (ms : MachineState) (frame : Frame)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 46)
-    (horacle : env_orig.hashToPointBase [] = none) :
-    step (registrationModuleEnv env_orig) frame cs stack ms = .error
-
-axiom step_registration_pc41_none (env_orig : RegistrationNativeOracle)
-    (cs : List Frame) (v : MoveValue) (rest : List MoveValue) (ms : MachineState) (frame : Frame)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 41)
-    (horacle : env_orig.compressedPointToBytes [v] = none) :
-    step (registrationModuleEnv env_orig) frame cs (v :: rest) ms = .error
-
-axiom step_registration_pc44_none (env_orig : RegistrationNativeOracle)
-    (cs : List Frame) (v : MoveValue) (rest : List MoveValue) (ms : MachineState) (frame : Frame)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 44)
-    (horacle : newScalarFromSha2_512 [v] = none) :
-    step (registrationModuleEnv env_orig) frame cs (v :: rest) ms = .error
-
-axiom step_registration_pc49_none (env_orig : RegistrationNativeOracle)
-    (cs : List Frame) (v : MoveValue) (rest : List MoveValue) (ms : MachineState) (frame : Frame)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 49)
-    (horacle : wrapOracleImmRef1 env_orig.pubkeyToPoint ms.containers [v] = none) :
-    step (registrationModuleEnv env_orig) frame cs (v :: rest) ms = .error
-
-axiom step_registration_pc53_none (env_orig : RegistrationNativeOracle)
-    (cs : List Frame) (a b : MoveValue) (rest : List MoveValue)
-    (ms : MachineState) (frame : Frame)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 53)
-    (horacle : wrapOracleImmRef2 env_orig.pointMul ms.containers [a, b] = none) :
-    step (registrationModuleEnv env_orig) frame cs (b :: a :: rest) ms = .error
-
-axiom step_registration_pc61_none (env_orig : RegistrationNativeOracle)
-    (cs : List Frame) (a b : MoveValue) (rest : List MoveValue)
-    (ms : MachineState) (frame : Frame)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 61)
-    (horacle : wrapOracleImmRef2 env_orig.pointAdd ms.containers [a, b] = none) :
-    step (registrationModuleEnv env_orig) frame cs (b :: a :: rest) ms = .error
-
-axiom step_registration_pc64_none (env_orig : RegistrationNativeOracle)
-    (cs : List Frame) (v : MoveValue) (rest : List MoveValue) (ms : MachineState) (frame : Frame)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 64)
-    (horacle : wrapOracleImmRef1 env_orig.pointDecompress ms.containers [v] = none) :
-    step (registrationModuleEnv env_orig) frame cs (v :: rest) ms = .error
-
-axiom step_registration_pc68_none (env_orig : RegistrationNativeOracle)
-    (cs : List Frame) (a b : MoveValue) (rest : List MoveValue)
-    (ms : MachineState) (frame : Frame)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 68)
-    (horacle : wrapOracleImmRef2 env_orig.pointEquals ms.containers [a, b] = none) :
-    step (registrationModuleEnv env_orig) frame cs (b :: a :: rest) ms = .error
-
 /-! ### PC 68 — `.call 15` (pointEquals, nativeRef via wrapOracleImmRef2, 2→1) -/
-
-axiom step_registration_pc68 (env_orig : RegistrationNativeOracle)
-    (cs : List Frame) (a b : MoveValue) (rest : List MoveValue)
-    (ms : MachineState) (frame : Frame) (resultV : MoveValue) (containers' : ContainerStore)
-    (hcode : frame.code = verifyRegistrationProofCode) (hpc : frame.pc = 68)
-    (horacle : wrapOracleImmRef2 env_orig.pointEquals ms.containers [a, b] = some ([resultV], containers')) :
-    step (registrationModuleEnv env_orig) frame cs (b :: a :: rest) ms =
-      .ok { frame with pc := 69 } cs (resultV :: rest)
-           { ms with containers := containers', globals := ms.globals }
 
 /-! ## Early-error composition — `newCompressedPointFromBytes` returns `none`
 
@@ -1566,26 +769,7 @@ registration entry produces `.error`. Threads PC 0 (`moveLoc 5`) + PC 1 `_none` 
 The statement is about `run` rather than `eval` because `eval_registration_eq_run` bridges them
 — combining this with `eval_registration_eq_run` gives the `eval = .error` form directly. -/
 
-axiom registration_early_error_compressedPoint_none
-    (o : RegistrationNativeOracle)
-    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
-    (fuel : Nat) (hfuel : 2 ≤ fuel)
-    (hnone : o.newCompressedPointFromBytes
-        [.vector .u8 (commitBa.toList.map .u8)] = none) :
-    (run (registrationModuleEnv o)
-        (registrationInitFrame
-          (registrationArgs chainId sender contract token ekBa commitBa respBa))
-        [] [] MachineState.empty fuel) = .error
-
 /-! ## Fuel-exhaustion corollaries -/
-
-/-- With fuel = 0, `run` trivially returns `.error`. -/
-axiom run_registration_fuel_zero (o : RegistrationNativeOracle) (args : List MoveValue) :
-    run (registrationModuleEnv o) (registrationInitFrame args) [] [] MachineState.empty 0 = .error
-
-/-- Consequence of `eval_registration_eq_run`: `eval` at fuel 0 is `.error`. -/
-axiom eval_registration_fuel_zero (o : RegistrationNativeOracle) (args : List MoveValue) :
-    eval (registrationModuleEnv o) verifyRegistrationProofIdx args 0 MachineState.empty = .error
 
 /-! ## Smoke: `registrationInitFrame` field-access sanity
 
@@ -1600,59 +784,17 @@ expected — useful as `simp`-warm lemmas for future composition work. -/
     (registrationInitFrame args).locals.size = args.length + 12 :=
   registrationInitFrame_locals_size args
 
-/-- `eval` form of the early-error composition — combines `eval_registration_eq_run` with
-`registration_early_error_compressedPoint_none` so callers can see the top-level statement. -/
-axiom eval_registration_early_error_compressedPoint_none
-    (o : RegistrationNativeOracle)
-    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
-    (fuel : Nat) (hfuel : 2 ≤ fuel)
-    (hnone : o.newCompressedPointFromBytes
-        [.vector .u8 (commitBa.toList.map .u8)] = none) :
-    eval (registrationModuleEnv o) verifyRegistrationProofIdx
-        (registrationArgs chainId sender contract token ekBa commitBa respBa)
-        fuel MachineState.empty = .error
-
-axiom eval_registration_early_error_compressedPoint_none_dropMs
-    (o : RegistrationNativeOracle)
-    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
-    (fuel : Nat) (hfuel : 2 ≤ fuel)
-    (hnone : o.newCompressedPointFromBytes
-        [.vector .u8 (commitBa.toList.map .u8)] = none) :
-    (eval (registrationModuleEnv o) verifyRegistrationProofIdx
-        (registrationArgs chainId sender contract token ekBa commitBa respBa)
-        fuel MachineState.empty).dropMs = .error
-
 /-! ## Functional-sim side of the early-error case
 
 When `o.newCompressedPointFromBytes [...] = none`, the functional-sim `verifyRegistrationBytecodeResult`
 returns `.error` (its first pattern-match branch on `single?` gives `none`, falling through to
 the `| _ => .error` case). -/
 
-axiom verifyRegistrationBytecodeResult_compressedPoint_none
-    (o : RegistrationNativeOracle)
-    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
-    (hnone : o.newCompressedPointFromBytes
-        [.vector .u8 (commitBa.toList.map .u8)] = none) :
-    verifyRegistrationBytecodeResult o
-        (registrationArgs chainId sender contract token ekBa commitBa respBa) = .error
-
 /-! ## Partial `registration_eval_equiv_functional_sim` — `compressedPoint = none` case
 
 Closes the `newCompressedPointFromBytes = none` branch of the top-level functional-sim
 equivalence. Both sides reduce to `.error`. This is the first complete branch of the final
 axiom — the `some` branch remains open (threads all 84 PCs). -/
-
-axiom registration_eval_equiv_functional_sim_compressedPoint_none
-    (o : RegistrationNativeOracle)
-    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
-    (fuel : Nat) (hfuel : 2 ≤ fuel)
-    (hnone : o.newCompressedPointFromBytes
-        [.vector .u8 (commitBa.toList.map .u8)] = none) :
-    (eval (registrationModuleEnv o) verifyRegistrationProofIdx
-        (registrationArgs chainId sender contract token ekBa commitBa respBa)
-        fuel MachineState.empty).dropMs =
-    verifyRegistrationBytecodeResult o
-        (registrationArgs chainId sender contract token ekBa commitBa respBa)
 
 /-! ## Second complete branch — `compressedPoint` returns empty or multi-element list
 
@@ -1661,70 +803,6 @@ both sides of the top-level theorem reduce to `.error`. On the Lean side, the st
 produces `.error` because `handleNativeResult` sees `numReturns = 1` but the impl returned a
 wrong-arity list. On the functional-sim side, `single?` returns `none` on non-singletons,
 triggering the same `.error` fallthrough as the full-none case. -/
-
-/-- Eval-side closure for empty-list oracle: `eval` returns `.error`. -/
-axiom eval_registration_early_error_compressedPoint_empty
-    (o : RegistrationNativeOracle)
-    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
-    (fuel : Nat) (hfuel : 2 ≤ fuel)
-    (hempty : o.newCompressedPointFromBytes
-        [.vector .u8 (commitBa.toList.map .u8)] = some []) :
-    eval (registrationModuleEnv o) verifyRegistrationProofIdx
-        (registrationArgs chainId sender contract token ekBa commitBa respBa)
-        fuel MachineState.empty = .error
-
-axiom eval_registration_early_error_compressedPoint_multi
-    (o : RegistrationNativeOracle)
-    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
-    (fuel : Nat) (hfuel : 2 ≤ fuel)
-    (v1 v2 : MoveValue) (rest : List MoveValue)
-    (hmulti : o.newCompressedPointFromBytes
-        [.vector .u8 (commitBa.toList.map .u8)] = some (v1 :: v2 :: rest)) :
-    eval (registrationModuleEnv o) verifyRegistrationProofIdx
-        (registrationArgs chainId sender contract token ekBa commitBa respBa)
-        fuel MachineState.empty = .error
-
-axiom verifyRegistrationBytecodeResult_compressedPoint_empty
-    (o : RegistrationNativeOracle)
-    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
-    (hempty : o.newCompressedPointFromBytes
-        [.vector .u8 (commitBa.toList.map .u8)] = some []) :
-    verifyRegistrationBytecodeResult o
-        (registrationArgs chainId sender contract token ekBa commitBa respBa) = .error
-
-axiom verifyRegistrationBytecodeResult_compressedPoint_multi
-    (o : RegistrationNativeOracle)
-    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
-    (v1 v2 : MoveValue) (rest : List MoveValue)
-    (hmulti : o.newCompressedPointFromBytes
-        [.vector .u8 (commitBa.toList.map .u8)] = some (v1 :: v2 :: rest)) :
-    verifyRegistrationBytecodeResult o
-        (registrationArgs chainId sender contract token ekBa commitBa respBa) = .error
-
-axiom registration_eval_equiv_functional_sim_compressedPoint_empty
-    (o : RegistrationNativeOracle)
-    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
-    (fuel : Nat) (hfuel : 2 ≤ fuel)
-    (hempty : o.newCompressedPointFromBytes
-        [.vector .u8 (commitBa.toList.map .u8)] = some []) :
-    (eval (registrationModuleEnv o) verifyRegistrationProofIdx
-        (registrationArgs chainId sender contract token ekBa commitBa respBa)
-        fuel MachineState.empty).dropMs =
-    verifyRegistrationBytecodeResult o
-        (registrationArgs chainId sender contract token ekBa commitBa respBa)
-
-axiom registration_eval_equiv_functional_sim_compressedPoint_multi
-    (o : RegistrationNativeOracle)
-    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
-    (fuel : Nat) (hfuel : 2 ≤ fuel)
-    (v1 v2 : MoveValue) (rest : List MoveValue)
-    (hmulti : o.newCompressedPointFromBytes
-        [.vector .u8 (commitBa.toList.map .u8)] = some (v1 :: v2 :: rest)) :
-    (eval (registrationModuleEnv o) verifyRegistrationProofIdx
-        (registrationArgs chainId sender contract token ekBa commitBa respBa)
-        fuel MachineState.empty).dropMs =
-    verifyRegistrationBytecodeResult o
-        (registrationArgs chainId sender contract token ekBa commitBa respBa)
 
 /-! ## Unified non-singleton branch
 
@@ -1738,150 +816,16 @@ Concrete full-reduction lemmas for specific singleton-sub-case oracle shapes. Ea
 that `verifyRegistrationBytecodeResult` reduces to a specific `.error` / `.aborted code` /
 `blockB …` result for a given concrete oracle output shape. -/
 
-/-- When `newCompressedPointFromBytes` returns `some [.struct_ [.bool false]]` (wrapped None),
-the functional sim aborts with `ESIGMA_PROTOCOL_VERIFY_FAILED_ABORT_CODE` (= 65537).
-
-The proof unfolds `verifyRegistrationBytecodeResult` + inlines `single?` / `optionIsSome`
-matches via `simp only`. The `.struct_ [.bool false]` shape makes `optionIsSome` return
-`.bool false`, taking the abort branch. -/
-axiom verifyRegistrationBytecodeResult_rOpt_wrappedNone
-    (o : RegistrationNativeOracle)
-    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
-    (hsome : o.newCompressedPointFromBytes
-        [.vector .u8 (commitBa.toList.map .u8)] = some [.struct_ [.bool false]]) :
-    verifyRegistrationBytecodeResult o
-        (registrationArgs chainId sender contract token ekBa commitBa respBa) =
-    .aborted ESIGMA_PROTOCOL_VERIFY_FAILED_ABORT_CODE
-
-axiom verifyRegistrationBytecodeResult_rOpt_wrappedSome
-    (o : RegistrationNativeOracle)
-    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
-    (rCompressed : MoveValue) (rest : List MoveValue)
-    (hsome : o.newCompressedPointFromBytes
-        [.vector .u8 (commitBa.toList.map .u8)] = some [.struct_ (.bool true :: rCompressed :: rest)]) :
-    verifyRegistrationBytecodeResult o
-        (registrationArgs chainId sender contract token ekBa commitBa respBa) =
-    verifyRegistrationBytecodeResult.blockB o chainId sender contract token
-      (.struct_ [.vector .u8 (ekBa.toList.map .u8)]) rCompressed
-      (.vector .u8 (respBa.toList.map .u8))
-
 /-! ## blockB shape reductions
 
 `blockB`'s outer match is on `single? (o.newScalarFromBytes [respBytes])`. The following
 lemmas close each outcome of that match in the same pattern as the outer `verifyRegistrationBytecodeResult`
 reductions above. -/
 
-/-- `blockB` with `newScalarFromBytes = none` reduces to `.error`. -/
-axiom verifyRegistrationBytecodeResult_blockB_scalarNone
-    (o : RegistrationNativeOracle)
-    (chainId : UInt8) (sender contract token : ByteArray)
-    (ek rCompressed : MoveValue) (respBytes : MoveValue)
-    (hnone : o.newScalarFromBytes [respBytes] = none) :
-    verifyRegistrationBytecodeResult.blockB o chainId sender contract token
-      ek rCompressed respBytes = .error
-
-axiom verifyRegistrationBytecodeResult_blockB_scalarEmpty
-    (o : RegistrationNativeOracle)
-    (chainId : UInt8) (sender contract token : ByteArray)
-    (ek rCompressed : MoveValue) (respBytes : MoveValue)
-    (hempty : o.newScalarFromBytes [respBytes] = some []) :
-    verifyRegistrationBytecodeResult.blockB o chainId sender contract token
-      ek rCompressed respBytes = .error
-
-axiom verifyRegistrationBytecodeResult_blockB_sOpt_wrappedNone
-    (o : RegistrationNativeOracle)
-    (chainId : UInt8) (sender contract token : ByteArray)
-    (ek rCompressed : MoveValue) (respBytes : MoveValue)
-    (hsome : o.newScalarFromBytes [respBytes] = some [.struct_ [.bool false]]) :
-    verifyRegistrationBytecodeResult.blockB o chainId sender contract token
-      ek rCompressed respBytes = .aborted ESIGMA_PROTOCOL_VERIFY_FAILED_ABORT_CODE
-
-axiom verifyRegistrationBytecodeResult_blockB_sOpt_wrappedSome
-    (o : RegistrationNativeOracle)
-    (chainId : UInt8) (sender contract token : ByteArray)
-    (ek rCompressed : MoveValue) (respBytes : MoveValue)
-    (s : MoveValue) (sRest : List MoveValue)
-    (hsome : o.newScalarFromBytes [respBytes] = some [.struct_ (.bool true :: s :: sRest)]) :
-    verifyRegistrationBytecodeResult.blockB o chainId sender contract token
-      ek rCompressed respBytes =
-    verifyRegistrationBytecodeResult.blockCDE o chainId sender contract token
-      ek rCompressed s
-
-axiom verifyRegistrationBytecodeResult_blockB_scalarMulti
-    (o : RegistrationNativeOracle)
-    (chainId : UInt8) (sender contract token : ByteArray)
-    (ek rCompressed : MoveValue) (respBytes : MoveValue)
-    (v1 v2 : MoveValue) (rest : List MoveValue)
-    (hmulti : o.newScalarFromBytes [respBytes] = some (v1 :: v2 :: rest)) :
-    verifyRegistrationBytecodeResult.blockB o chainId sender contract token
-      ek rCompressed respBytes = .error
-
 /-! ## blockCDE shape reductions
 
 `blockCDE` first runs `buildFSMessageMv` (pure, no oracle case-split). If that returns `none`,
 the whole block fails to `.error`. Each subsequent oracle native is dispatched similarly. -/
-
-/-- `blockCDE` with `buildFSMessageMv = none` reduces to `.error`. -/
-axiom verifyRegistrationBytecodeResult_blockCDE_fsMsgNone
-    (o : RegistrationNativeOracle)
-    (chainId : UInt8) (sender contract token : ByteArray)
-    (ek rCompressed s : MoveValue)
-    (hnone : buildFSMessageMv o chainId sender contract token ek rCompressed = none) :
-    verifyRegistrationBytecodeResult.blockCDE o chainId sender contract token
-      ek rCompressed s = .error
-
-axiom verifyRegistrationBytecodeResult_blockCDE_eNone
-    (o : RegistrationNativeOracle)
-    (chainId : UInt8) (sender contract token : ByteArray)
-    (ek rCompressed s : MoveValue) (msgVal : MoveValue)
-    (hfs : buildFSMessageMv o chainId sender contract token ek rCompressed = some msgVal)
-    (hnone : newScalarFromSha2_512 [msgVal] = none) :
-    verifyRegistrationBytecodeResult.blockCDE o chainId sender contract token
-      ek rCompressed s = .error
-
-axiom verifyRegistrationBytecodeResult_blockCDE_hNone
-    (o : RegistrationNativeOracle)
-    (chainId : UInt8) (sender contract token : ByteArray)
-    (ek rCompressed s : MoveValue) (msgVal e : MoveValue)
-    (hfs : buildFSMessageMv o chainId sender contract token ek rCompressed = some msgVal)
-    (he : newScalarFromSha2_512 [msgVal] = some [e])
-    (hnone : o.hashToPointBase [] = none) :
-    verifyRegistrationBytecodeResult.blockCDE o chainId sender contract token
-      ek rCompressed s = .error
-
-axiom verifyRegistrationBytecodeResult_blockCDE_success
-    (o : RegistrationNativeOracle)
-    (chainId : UInt8) (sender contract token : ByteArray)
-    (ek rCompressed s : MoveValue)
-    (msgVal e h ekPt hs eke lhs rhs : MoveValue)
-    (hfs : buildFSMessageMv o chainId sender contract token ek rCompressed = some msgVal)
-    (he : newScalarFromSha2_512 [msgVal] = some [e])
-    (hh : o.hashToPointBase [] = some [h])
-    (hek : o.pubkeyToPoint [ek] = some [ekPt])
-    (hhs : o.pointMul [h, s] = some [hs])
-    (heke : o.pointMul [ekPt, e] = some [eke])
-    (hadd : o.pointAdd [hs, eke] = some [lhs])
-    (hdec : o.pointDecompress [rCompressed] = some [rhs])
-    (heq : o.pointEquals [lhs, rhs] = some [.bool true]) :
-    verifyRegistrationBytecodeResult.blockCDE o chainId sender contract token
-      ek rCompressed s = .returned [] MachineState.empty
-
-axiom verifyRegistrationBytecodeResult_blockCDE_verifyFailed
-    (o : RegistrationNativeOracle)
-    (chainId : UInt8) (sender contract token : ByteArray)
-    (ek rCompressed s : MoveValue)
-    (msgVal e h ekPt hs eke lhs rhs : MoveValue)
-    (hfs : buildFSMessageMv o chainId sender contract token ek rCompressed = some msgVal)
-    (he : newScalarFromSha2_512 [msgVal] = some [e])
-    (hh : o.hashToPointBase [] = some [h])
-    (hek : o.pubkeyToPoint [ek] = some [ekPt])
-    (hhs : o.pointMul [h, s] = some [hs])
-    (heke : o.pointMul [ekPt, e] = some [eke])
-    (hadd : o.pointAdd [hs, eke] = some [lhs])
-    (hdec : o.pointDecompress [rCompressed] = some [rhs])
-    (heq : o.pointEquals [lhs, rhs] = some [.bool false]) :
-    verifyRegistrationBytecodeResult.blockCDE o chainId sender contract token
-      ek rCompressed s = .aborted ESIGMA_PROTOCOL_VERIFY_FAILED_ABORT_CODE
 
 /-! ## Abort code constants
 
@@ -1913,89 +857,6 @@ the concrete u64 value without chasing the definition. -/
 Complete coverage of every oracle-failure point in `blockCDE` so every branch has a
 reduction lemma. Each follows the same `unfold + simp only [hfs, single?, ...]` pattern. -/
 
-/-- `blockCDE` with `pubkeyToPoint` returning `none` (ek decode fails) → `.error`. -/
-axiom verifyRegistrationBytecodeResult_blockCDE_ekPtNone
-    (o : RegistrationNativeOracle)
-    (chainId : UInt8) (sender contract token : ByteArray)
-    (ek rCompressed s : MoveValue) (msgVal e h : MoveValue)
-    (hfs : buildFSMessageMv o chainId sender contract token ek rCompressed = some msgVal)
-    (he : newScalarFromSha2_512 [msgVal] = some [e])
-    (hh : o.hashToPointBase [] = some [h])
-    (hnone : o.pubkeyToPoint [ek] = none) :
-    verifyRegistrationBytecodeResult.blockCDE o chainId sender contract token
-      ek rCompressed s = .error
-
-axiom verifyRegistrationBytecodeResult_blockCDE_hsNone
-    (o : RegistrationNativeOracle)
-    (chainId : UInt8) (sender contract token : ByteArray)
-    (ek rCompressed s : MoveValue) (msgVal e h ekPt : MoveValue)
-    (hfs : buildFSMessageMv o chainId sender contract token ek rCompressed = some msgVal)
-    (he : newScalarFromSha2_512 [msgVal] = some [e])
-    (hh : o.hashToPointBase [] = some [h])
-    (hek : o.pubkeyToPoint [ek] = some [ekPt])
-    (hnone : o.pointMul [h, s] = none) :
-    verifyRegistrationBytecodeResult.blockCDE o chainId sender contract token
-      ek rCompressed s = .error
-
-axiom verifyRegistrationBytecodeResult_blockCDE_ekeNone
-    (o : RegistrationNativeOracle)
-    (chainId : UInt8) (sender contract token : ByteArray)
-    (ek rCompressed s : MoveValue) (msgVal e h ekPt hs : MoveValue)
-    (hfs : buildFSMessageMv o chainId sender contract token ek rCompressed = some msgVal)
-    (he : newScalarFromSha2_512 [msgVal] = some [e])
-    (hh : o.hashToPointBase [] = some [h])
-    (hek : o.pubkeyToPoint [ek] = some [ekPt])
-    (hhs : o.pointMul [h, s] = some [hs])
-    (hnone : o.pointMul [ekPt, e] = none) :
-    verifyRegistrationBytecodeResult.blockCDE o chainId sender contract token
-      ek rCompressed s = .error
-
-axiom verifyRegistrationBytecodeResult_blockCDE_addNone
-    (o : RegistrationNativeOracle)
-    (chainId : UInt8) (sender contract token : ByteArray)
-    (ek rCompressed s : MoveValue) (msgVal e h ekPt hs eke : MoveValue)
-    (hfs : buildFSMessageMv o chainId sender contract token ek rCompressed = some msgVal)
-    (he : newScalarFromSha2_512 [msgVal] = some [e])
-    (hh : o.hashToPointBase [] = some [h])
-    (hek : o.pubkeyToPoint [ek] = some [ekPt])
-    (hhs : o.pointMul [h, s] = some [hs])
-    (heke : o.pointMul [ekPt, e] = some [eke])
-    (hnone : o.pointAdd [hs, eke] = none) :
-    verifyRegistrationBytecodeResult.blockCDE o chainId sender contract token
-      ek rCompressed s = .error
-
-axiom verifyRegistrationBytecodeResult_blockCDE_decNone
-    (o : RegistrationNativeOracle)
-    (chainId : UInt8) (sender contract token : ByteArray)
-    (ek rCompressed s : MoveValue) (msgVal e h ekPt hs eke lhs : MoveValue)
-    (hfs : buildFSMessageMv o chainId sender contract token ek rCompressed = some msgVal)
-    (he : newScalarFromSha2_512 [msgVal] = some [e])
-    (hh : o.hashToPointBase [] = some [h])
-    (hek : o.pubkeyToPoint [ek] = some [ekPt])
-    (hhs : o.pointMul [h, s] = some [hs])
-    (heke : o.pointMul [ekPt, e] = some [eke])
-    (hadd : o.pointAdd [hs, eke] = some [lhs])
-    (hnone : o.pointDecompress [rCompressed] = none) :
-    verifyRegistrationBytecodeResult.blockCDE o chainId sender contract token
-      ek rCompressed s = .error
-
-axiom verifyRegistrationBytecodeResult_blockCDE_eqNone
-    (o : RegistrationNativeOracle)
-    (chainId : UInt8) (sender contract token : ByteArray)
-    (ek rCompressed s : MoveValue)
-    (msgVal e h ekPt hs eke lhs rhs : MoveValue)
-    (hfs : buildFSMessageMv o chainId sender contract token ek rCompressed = some msgVal)
-    (he : newScalarFromSha2_512 [msgVal] = some [e])
-    (hh : o.hashToPointBase [] = some [h])
-    (hek : o.pubkeyToPoint [ek] = some [ekPt])
-    (hhs : o.pointMul [h, s] = some [hs])
-    (heke : o.pointMul [ekPt, e] = some [eke])
-    (hadd : o.pointAdd [hs, eke] = some [lhs])
-    (hdec : o.pointDecompress [rCompressed] = some [rhs])
-    (hnone : o.pointEquals [lhs, rhs] = none) :
-    verifyRegistrationBytecodeResult.blockCDE o chainId sender contract token
-      ek rCompressed s = .error
-
 /-! ## PC 3 (immBorrowLoc 7) composition — deferred
 
 Extending the PC-threading through PC 3 requires capturing the `ContainerStore.alloc` side-effect,
@@ -2004,7 +865,7 @@ step lemma `StepLemmas.Refs.step_immBorrowLoc_fresh` is in place; the compositio
 requires more careful frame-threading than the straightforward stLoc / moveLoc compositions
 above. Parked as future work — not blocking the non-singleton closure below. -/
 
-axiom registration_eval_equiv_functional_sim_compressedPoint_nonSingleton
+theorem registration_eval_equiv_functional_sim_compressedPoint_nonSingleton
     (o : RegistrationNativeOracle)
     (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
     (fuel : Nat) (hfuel : 2 ≤ fuel)
@@ -2014,8 +875,101 @@ axiom registration_eval_equiv_functional_sim_compressedPoint_nonSingleton
         (registrationArgs chainId sender contract token ekBa commitBa respBa)
         fuel MachineState.empty).dropMs =
     verifyRegistrationBytecodeResult o
+        (registrationArgs chainId sender contract token ekBa commitBa respBa) := by
+  have hRHS : verifyRegistrationBytecodeResult o
+      (registrationArgs chainId sender contract token ekBa commitBa respBa) = .error := by
+    unfold verifyRegistrationBytecodeResult registrationArgs
+    simp [hns]
+  have hLHS : eval (registrationModuleEnv o) verifyRegistrationProofIdx
         (registrationArgs chainId sender contract token ekBa commitBa respBa)
-
+        fuel MachineState.empty = .error := by
+    rw [eval_registration_eq_run]
+    set f0 := registrationInitFrame
+                (registrationArgs chainId sender contract token ekBa commitBa respBa)
+      with hf0_def
+    have hf0_code : f0.code = verifyRegistrationProofCode := rfl
+    have hf0_pc : f0.pc = 0 := rfl
+    have hf0_locals_size : 5 < f0.locals.size := by
+      show 5 < ((registrationArgs chainId sender contract token ekBa commitBa respBa).map some ++
+                List.replicate (19 - 7) none).toArray.size
+      simp [registrationArgs]
+    have hf0_locals_5 : f0.locals[5]'hf0_locals_size =
+        some (.vector .u8 (commitBa.toList.map .u8)) := by
+      show ((registrationArgs chainId sender contract token ekBa commitBa respBa).map some ++
+            List.replicate (19 - 7) none).toArray[5]'hf0_locals_size = _
+      simp [registrationArgs]
+    have hf0_localRefs : f0.localRefs = (List.replicate 19 none).toArray := rfl
+    have hf0_refNone :
+        ¬ 5 < f0.localRefs.size ∨
+        ∃ h : 5 < f0.localRefs.size, f0.localRefs[5]'h = none := by
+      right
+      refine ⟨?_, ?_⟩
+      · show 5 < (List.replicate 19 (none : Option RefId)).toArray.size
+        simp
+      · show ((List.replicate 19 (none : Option RefId)).toArray)[5]'(by simp) = none
+        decide
+    have step1 := step_registration_pc0 (registrationModuleEnv o) [] []
+                    MachineState.empty f0 (.vector .u8 (commitBa.toList.map .u8))
+                    hf0_code hf0_pc hf0_locals_size hf0_locals_5 hf0_refNone
+    set f1 : Frame := { f0 with pc := 1, locals := f0.locals.set 5 none (by omega) }
+      with hf1_def
+    have hf1_code : f1.code = verifyRegistrationProofCode := hf0_code
+    have hf1_pc : f1.pc = 1 := rfl
+    have hpc_lt : f1.pc < f1.code.size := by rw [hf1_pc, hf1_code]; decide
+    have hc : f1.code[f1.pc]'hpc_lt = .call BytecodeLemmas.funcIdx_newCompressedPointFromBytes := by
+      simp only [hf1_code, hf1_pc]; exact BytecodeLemmas.instr1_eq
+    have hlt : BytecodeLemmas.funcIdx_newCompressedPointFromBytes <
+                (registrationModuleEnv o).functions.size := by
+      rw [registrationModuleEnv_functions_size]; decide
+    have hparams : (registrationModuleEnv o).functions[BytecodeLemmas.funcIdx_newCompressedPointFromBytes].numParams = 1 := rfl
+    have hreturns : (registrationModuleEnv o).functions[BytecodeLemmas.funcIdx_newCompressedPointFromBytes].numReturns = 1 := rfl
+    have hbody : (registrationModuleEnv o).functions[BytecodeLemmas.funcIdx_newCompressedPointFromBytes].body =
+                    .native o.newCompressedPointFromBytes := rfl
+    have htake : takeN ([(.vector .u8 (commitBa.toList.map .u8) : MoveValue)]) 1 =
+                    some ([.vector .u8 (commitBa.toList.map .u8)], []) := rfl
+    obtain ⟨ef, hef⟩ : ∃ ef, fuel = ef + 2 := ⟨fuel - 2, by omega⟩
+    rw [hef]
+    rcases hOracle :
+        o.newCompressedPointFromBytes [.vector .u8 (commitBa.toList.map .u8)] with
+      _ | results
+    · have step_err := StepLemmas.step_call_native_none
+        (frame := f1) (env := registrationModuleEnv o) (cs := [])
+        (ms := MachineState.empty)
+        BytecodeLemmas.funcIdx_newCompressedPointFromBytes
+        [.vector .u8 (commitBa.toList.map .u8)] []
+        [.vector .u8 (commitBa.toList.map .u8)]
+        o.newCompressedPointFromBytes 1
+        hpc_lt hc hlt hparams hbody htake hOracle
+      exact StepLemmas.run_succ_ok_then_error (env := registrationModuleEnv o) (frame := f0)
+              (cs := []) (stack := []) (ms := MachineState.empty) ef _ _ _ _ step1 step_err
+    · match results, hOracle with
+      | [], hOracle =>
+        have step_err := StepLemmas.step_call_native_empty_ret1_mismatch
+          (frame := f1) (env := registrationModuleEnv o) (cs := [])
+          (ms := MachineState.empty)
+          BytecodeLemmas.funcIdx_newCompressedPointFromBytes
+          [.vector .u8 (commitBa.toList.map .u8)] []
+          [.vector .u8 (commitBa.toList.map .u8)]
+          o.newCompressedPointFromBytes 1
+          hpc_lt hc hlt hparams hreturns hbody htake hOracle
+        exact StepLemmas.run_succ_ok_then_error (env := registrationModuleEnv o) (frame := f0)
+                (cs := []) (stack := []) (ms := MachineState.empty) ef _ _ _ _ step1 step_err
+      | [v], hOracle =>
+        exfalso
+        rw [hOracle] at hns
+        simp [single?] at hns
+      | hd :: hd' :: tl', hOracle =>
+        have step_err := StepLemmas.step_call_native_multi_ret1_mismatch
+          (frame := f1) (env := registrationModuleEnv o) (cs := [])
+          (ms := MachineState.empty)
+          BytecodeLemmas.funcIdx_newCompressedPointFromBytes
+          [.vector .u8 (commitBa.toList.map .u8)] []
+          [.vector .u8 (commitBa.toList.map .u8)]
+          o.newCompressedPointFromBytes 1 hd hd' tl'
+          hpc_lt hc hlt hparams hreturns hbody htake hOracle
+        exact StepLemmas.run_succ_ok_then_error (env := registrationModuleEnv o) (frame := f0)
+                (cs := []) (stack := []) (ms := MachineState.empty) ef _ _ _ _ step1 step_err
+  rw [hLHS, hRHS]; rfl
 /-! The `Run` helpers (`run_succ_ok_of_step`, `run_succ_error_of_step`, etc.) in
 `StepLemmas/Run.lean` provide a cleaner pattern for future compositions. Each PC becomes a
 one-line `rw` rather than manual `unfold run`. See the PC-0/1 inline proof above for the manual
@@ -2026,27 +980,6 @@ form; future composition theorems should prefer the `Run` helpers. -/
 When the commitment oracle returns `some [mv]`, after 2 steps the `run` equals `run` on a frame
 at PC 2 (with locals[5] cleared) and `mv` on the operand stack. Stated with `fuel = extraFuel + 2`
 so the subtraction doesn't complicate the proof. -/
-
-axiom registration_run_through_pc1_some
-    (o : RegistrationNativeOracle)
-    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
-    (mv : MoveValue) (extraFuel : Nat)
-    (horacle : o.newCompressedPointFromBytes
-        [.vector .u8 (commitBa.toList.map .u8)] = some [mv]) :
-    run (registrationModuleEnv o)
-        (registrationInitFrame
-          (registrationArgs chainId sender contract token ekBa commitBa respBa))
-        [] [] MachineState.empty (extraFuel + 2) =
-    run (registrationModuleEnv o)
-        { code := verifyRegistrationProofCode,
-          pc := 2,
-          locals := (((registrationArgs chainId sender contract token ekBa commitBa respBa).map some ++
-                      List.replicate 12 none).toArray).set 5 none (by
-            show 5 < ((registrationArgs chainId sender contract token ekBa commitBa respBa).map some ++
-                      List.replicate 12 none).length
-            simp [registrationArgs]),
-          localRefs := (List.replicate 19 none).toArray }
-        [] [mv] MachineState.empty extraFuel
 
 /-! ## Happy-path 3-PC composition — extends to PC 2 (stLoc 7)
 
@@ -2065,11 +998,6 @@ This helper can chain multiple PCs to reduce boilerplate. -/
 /-
 Future helper axiom for PC 6-10 chain (commented out due to type complexity): True
 
-axiom registration_run_through_pc10_singleton : ...
-  Chains PCs 6-10: pop, optionExtractRef call, stLoc, and subsequent operations.
-  Would reduce ~40-50 lines of boilerplate in main proof.
--/
-
 /-! ## Helper: PC 3 through PC 5 for singleton case
 
 After PC 2, the singleton value `v` is in locals[7]. PCs 3-5 are:
@@ -2079,14 +1007,7 @@ After PC 2, the singleton value `v` is in locals[7]. PCs 3-5 are:
 
 This helper advances from PC 3 to PC 6 (after brFalse doesn't branch). -/
 
-axiom registration_run_through_pc5_singleton
-    (o : RegistrationNativeOracle)
-    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
-    (v : MoveValue) (extraFuel : Nat)
-    (h_fuel : 3 ≤ extraFuel)
-    (h_oracle : o.newCompressedPointFromBytes [.vector .u8 (commitBa.toList.map .u8)] = some [v]) : True
-
-axiom registration_run_through_pc2
+theorem registration_run_through_pc2
     (o : RegistrationNativeOracle)
     (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
     (mv : MoveValue) (extraFuel : Nat)
@@ -2108,7 +1029,62 @@ axiom registration_run_through_pc2
                          List.replicate 12 none).toArray).size
               simp [registrationArgs]),
           localRefs := (List.replicate 19 none).toArray }
-        [] [] MachineState.empty extraFuel
+        [] [] MachineState.empty extraFuel := by
+  -- Setup: name the initial frame
+  set f0 := registrationInitFrame (registrationArgs chainId sender contract token ekBa commitBa respBa)
+    with hf0_def
+  have hf0_code : f0.code = verifyRegistrationProofCode := rfl
+  have hf0_pc : f0.pc = 0 := rfl
+  -- locals[5] in f0 is the commitBa value
+  have hf0_locals_size : 5 < f0.locals.size := by
+    show 5 < ((registrationArgs chainId sender contract token ekBa commitBa respBa).map some ++
+              List.replicate (19 - 7) none).toArray.size
+    simp [registrationArgs]
+  have hf0_locals_5 : f0.locals[5]'hf0_locals_size =
+      some (.vector .u8 (commitBa.toList.map .u8)) := by
+    show ((registrationArgs chainId sender contract token ekBa commitBa respBa).map some ++
+          List.replicate (19 - 7) none).toArray[5]'hf0_locals_size = _
+    simp [registrationArgs]
+  have hf0_localRefs : f0.localRefs = (List.replicate 19 none).toArray := rfl
+  -- localRefs[5] = none at the initial frame
+  have hf0_refNone :
+      ¬ 5 < f0.localRefs.size ∨
+      ∃ h : 5 < f0.localRefs.size, f0.localRefs[5]'h = none := by
+    right
+    refine ⟨?_, ?_⟩
+    · rw [hf0_localRefs]; simp
+    · rw [hf0_localRefs]; simp
+  -- Step 1: PC 0 moveLoc 5
+  have step1 := step_registration_pc0 (registrationModuleEnv o) [] []
+                  MachineState.empty f0 (.vector .u8 (commitBa.toList.map .u8))
+                  hf0_code hf0_pc hf0_locals_size hf0_locals_5 hf0_refNone
+  -- Frame after step 1
+  set f1 : Frame := { f0 with pc := 1, locals := f0.locals.set 5 none (by omega) }
+    with hf1_def
+  have hf1_code : f1.code = verifyRegistrationProofCode := hf0_code
+  have hf1_pc : f1.pc = 1 := rfl
+  -- Step 2: PC 1 call newCompressedPointFromBytes
+  have step2 := step_registration_pc1 o [] (.vector .u8 (commitBa.toList.map .u8)) mv []
+                  MachineState.empty f1 hf1_code hf1_pc horacle
+  -- Frame after step 2
+  set f2 : Frame := { f1 with pc := 2 } with hf2_def
+  have hf2_code : f2.code = verifyRegistrationProofCode := hf1_code
+  have hf2_pc : f2.pc = 2 := rfl
+  have hf2_locals_size : 7 < f2.locals.size := by
+    show 7 < (f0.locals.set 5 none (by omega)).size
+    rw [Array.size_set]
+    show 7 < f0.locals.size
+    simp [f0, registrationInitFrame, registrationArgs]
+  -- Step 3: PC 2 stLoc 7
+  have step3 := step_registration_pc2 (registrationModuleEnv o) [] mv []
+                  MachineState.empty f2 hf2_code hf2_pc hf2_locals_size
+  -- Compose via run_succ_three_ok
+  have hres := StepLemmas.run_succ_three_ok
+                 (env := registrationModuleEnv o) (frame := f0) (cs := []) (stack := [])
+                 (ms := MachineState.empty) extraFuel
+                 _ _ _ _ _ _ _ _ _ _ _ _
+                 step1 step2 step3
+  exact hres
 
 /-! ## Helper: PC 8 through PC 12 for value storage chain
 
@@ -2121,10 +1097,16 @@ After PC 7 extracts the compressed point, PCs 8-12 handle:
 
 This helper chains simple stack operations, avoiding ref borrowing complexity. -/
 
-axiom registration_run_through_pc12_from_pc8
+/-- Chain PC 8 (stLoc 8) + PC 9 (moveLoc 6) starting from PC 8.
+
+    Note: signature fixed from original axiom — the original claimed for any free
+    `respBa_val` on the resulting stack, but `moveLoc 6` always produces the value at
+    `locals[6]` which is fixed by the registrationArgs shape (the response-bytes vector).
+    So `respBa_val` is now inlined as `.vector .u8 (respBa.toList.map .u8)`. -/
+theorem registration_run_through_pc12_from_pc8
     (o : RegistrationNativeOracle)
     (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
-    (v rCompressed respBa_val : MoveValue)
+    (v rCompressed : MoveValue)
     (containers_at_pc8 : ContainerStore)
     (extraFuel : Nat) (h_fuel : 5 ≤ extraFuel) :
     let locals_at_pc8 := ((((registrationArgs chainId sender contract token ekBa commitBa respBa).map some ++
@@ -2139,18 +1121,72 @@ axiom registration_run_through_pc12_from_pc8
         { code := verifyRegistrationProofCode, pc := 8,
           locals := locals_at_pc8,
           localRefs := (List.replicate 19 none).toArray }
-        ([] : List Frame)  -- callStack
-        ([rCompressed] : List MoveValue)  -- stack
+        ([] : List Frame)
+        ([rCompressed] : List MoveValue)
         ({ MachineState.empty with containers := containers_at_pc8 } : MachineState)
         (extraFuel + 2)) =
     (run (registrationModuleEnv o)
         { code := verifyRegistrationProofCode, pc := 10,
           locals := (locals_at_pc8.set 8 (some rCompressed) (by simp [locals_at_pc8, registrationArgs])).set 6 none (by simp [locals_at_pc8, registrationArgs]),
           localRefs := (List.replicate 19 none).toArray }
-        ([] : List Frame)  -- callStack
-        ([respBa_val] : List MoveValue)  -- stack
+        ([] : List Frame)
+        ([(.vector .u8 (respBa.toList.map .u8) : MoveValue)] : List MoveValue)
         ({ MachineState.empty with containers := containers_at_pc8 } : MachineState)
-        extraFuel)
+        extraFuel) := by
+  set f8 : Frame :=
+      { code := verifyRegistrationProofCode, pc := 8,
+        locals := ((((registrationArgs chainId sender contract token ekBa commitBa respBa).map some ++
+                      List.replicate 12 none).toArray).set 5 none (by
+                  show 5 < ((registrationArgs chainId sender contract token ekBa commitBa respBa).map some ++
+                            List.replicate 12 none).length
+                  simp [registrationArgs])).set 7 (some v) (by
+                    show 7 < (((registrationArgs chainId sender contract token ekBa commitBa respBa).map some ++
+                               List.replicate 12 none).toArray).size
+                    simp [registrationArgs]),
+        localRefs := (List.replicate 19 none).toArray }
+    with hf8_def
+  have hf8_code : f8.code = verifyRegistrationProofCode := rfl
+  have hf8_pc : f8.pc = 8 := rfl
+  have hf8_locals_size : 8 < f8.locals.size := by
+    show 8 < (_ : Array (Option MoveValue)).size
+    simp [Array.size_set, registrationArgs]
+  have step1 := step_registration_pc8 (registrationModuleEnv o) [] rCompressed []
+                  ({ MachineState.empty with containers := containers_at_pc8 })
+                  f8 hf8_code hf8_pc hf8_locals_size
+  set f9 : Frame := { f8 with pc := 9, locals := f8.locals.set 8 (some rCompressed) (by omega) }
+    with hf9_def
+  have hf9_code : f9.code = verifyRegistrationProofCode := hf8_code
+  have hf9_pc : f9.pc = 9 := rfl
+  have hf9_locals_size_6 : 6 < f9.locals.size := by
+    show 6 < (f8.locals.set 8 (some rCompressed) _).size
+    rw [Array.size_set]; show 6 < f8.locals.size
+    simp [Array.size_set, registrationArgs]
+  have hf9_locals_6 :
+      f9.locals[6]'hf9_locals_size_6 = some (.vector .u8 (respBa.toList.map .u8)) := by
+    show (f8.locals.set 8 (some rCompressed) _)[6]'_ = _
+    rw [Array.getElem_set_ne (h := by omega)]
+    show ((((registrationArgs chainId sender contract token ekBa commitBa respBa).map some ++
+              List.replicate 12 none).toArray).set 5 none _).set 7 (some v) _ |>.getElem 6 _ = _
+    rw [Array.getElem_set_ne (h := by omega)]
+    rw [Array.getElem_set_ne (h := by omega)]
+    show ((registrationArgs chainId sender contract token ekBa commitBa respBa).map some ++
+            List.replicate 12 none).toArray[6]'_ = _
+    simp [registrationArgs]
+  have hf9_refNone :
+      ¬ 6 < f9.localRefs.size ∨
+      ∃ h : 6 < f9.localRefs.size, f9.localRefs[6]'h = none := by
+    right
+    refine ⟨?_, ?_⟩
+    · show 6 < (List.replicate 19 (none : Option RefId)).toArray.size; simp
+    · show ((List.replicate 19 (none : Option RefId)).toArray)[6]'(by simp) = none; decide
+  have step2 := step_registration_pc9 (registrationModuleEnv o) [] []
+                  ({ MachineState.empty with containers := containers_at_pc8 })
+                  f9 (.vector .u8 (respBa.toList.map .u8))
+                  hf9_code hf9_pc hf9_locals_size_6 hf9_locals_6 hf9_refNone
+  exact StepLemmas.run_succ_two_ok (env := registrationModuleEnv o) (frame := f8) (cs := [])
+          (stack := [rCompressed])
+          (ms := { MachineState.empty with containers := containers_at_pc8 })
+          extraFuel _ _ _ _ _ _ _ _ step1 step2
 
 /-! ## Helper: PC 17 through PC 19 for message construction
 
@@ -2161,7 +1197,7 @@ After PC 16 (scalar extract), PCs 17-19 handle:
 
 This helper chains simple stack and local operations. -/
 
-axiom registration_run_through_pc19_from_pc17
+theorem registration_run_through_pc19_from_pc17
     (o : RegistrationNativeOracle)
     (scalar dstBytes : MoveValue)
     (locals_at_pc17 : Array (Option MoveValue))
@@ -2187,7 +1223,49 @@ axiom registration_run_through_pc19_from_pc17
         ([] : List Frame)
         ([] : List MoveValue)
         ({ MachineState.empty with containers := containers_at_pc17 } : MachineState)
-        extraFuel)
+        extraFuel) := by
+  set f17 : Frame :=
+      { code := verifyRegistrationProofCode, pc := 17,
+        locals := locals_at_pc17,
+        localRefs := (List.replicate 19 none).toArray }
+    with hf17_def
+  have hf17_code : f17.code = verifyRegistrationProofCode := rfl
+  have hf17_pc : f17.pc = 17 := rfl
+  have hf17_locals_size : 10 < f17.locals.size := h_locals17_10
+  -- Step 1: PC 17 stLoc 10
+  have step1 := step_registration_pc17 (registrationModuleEnv o) [] scalar []
+                  ({ MachineState.empty with containers := containers_at_pc17 })
+                  f17 hf17_code hf17_pc hf17_locals_size
+  set f18 : Frame :=
+      { f17 with pc := 18, locals := f17.locals.set 10 (some scalar) (by omega) }
+    with hf18_def
+  have hf18_code : f18.code = verifyRegistrationProofCode := hf17_code
+  have hf18_pc : f18.pc = 18 := rfl
+  -- Step 2: PC 18 ldConst 5
+  have step2 := step_registration_pc18 (registrationModuleEnv o) [] []
+                  ({ MachineState.empty with containers := containers_at_pc17 })
+                  f18 hf18_code hf18_pc h_constants_5
+  set f19 : Frame := { f18 with pc := 19 } with hf19_def
+  have hf19_code : f19.code = verifyRegistrationProofCode := hf18_code
+  have hf19_pc : f19.pc = 19 := rfl
+  have hf19_locals_size : 11 < f19.locals.size := by
+    show 11 < (locals_at_pc17.set 10 (some scalar) (by omega)).size
+    rw [Array.size_set]; exact h_locals17_11
+  -- Step 3: PC 19 stLoc 11 — but the value popped is constants[5].value, which equals dstBytes
+  have step3 := step_registration_pc19 (registrationModuleEnv o) []
+                  ((registrationModuleEnv o).constants[5].value) []
+                  ({ MachineState.empty with containers := containers_at_pc17 })
+                  f19 hf19_code hf19_pc hf19_locals_size
+  -- Compose
+  have hres := StepLemmas.run_succ_three_ok
+                 (env := registrationModuleEnv o) (frame := f17) (cs := [])
+                 (stack := [scalar])
+                 (ms := { MachineState.empty with containers := containers_at_pc17 })
+                 extraFuel
+                 _ _ _ _ _ _ _ _ _ _ _ _
+                 step1 step2 step3
+  rw [h_constants_5_val] at hres
+  exact hres
 
 /-! ## Helper: PC 22 through PC 26 for message ref operations
 
@@ -2200,7 +1278,7 @@ After PC 21 pushes chainId, PCs 22-26 handle message ref operations:
 
 This helper demonstrates native call + ref operation chains. -/
 
-axiom registration_run_through_pc26_from_pc22
+theorem registration_run_through_pc26_from_pc22
     (o : RegistrationNativeOracle)
     (chainId sender : MoveValue)
     (msgBuf : MoveValue) (rid_msg : RefId)
@@ -2211,7 +1289,7 @@ axiom registration_run_through_pc26_from_pc22
     (h_locals22_11_val : locals_at_pc22[11]'h_locals22_11 = some msgBuf)
     (h_locals22_1 : 1 < locals_at_pc22.size)
     (h_localRefs22_11 : 11 < (List.replicate 19 (none : Option MoveValue)).toArray.size)
-    (h_localRefs22_1 : 1 < (List.replicate 19 (none : Option MoveValue)).toArray.size) : True
+    (h_localRefs22_1 : 1 < (List.replicate 19 (none : Option MoveValue)).toArray.size) : True := trivial
 
 /-! ## Helper: PC 36 through PC 42 for encryption key processing
 
@@ -2226,7 +1304,7 @@ After earlier message fields, PCs 36-42 handle encryption key:
 
 This helper demonstrates pop operations and point conversion. -/
 
-axiom registration_run_through_pc42_from_pc36
+theorem registration_run_through_pc42_from_pc36
     (o : RegistrationNativeOracle)
     (ekPoint : MoveValue)
     (msgBuf : MoveValue) (rid_msg : RefId)
@@ -2237,7 +1315,7 @@ axiom registration_run_through_pc42_from_pc36
     (h_locals36_11 : 11 < locals_at_pc36.size)
     (h_locals36_3 : 3 < locals_at_pc36.size)
     (h_locals36_3_val : locals_at_pc36[3]'h_locals36_3 = some ekPoint)
-    (h_locals36_15 : 15 < locals_at_pc36.size) : True
+    (h_locals36_15 : 15 < locals_at_pc36.size) : True := trivial
 
 /-! ## Helper: PC 60 through PC 67 for final verification
 
@@ -2249,7 +1327,7 @@ Final PCs before proof verification:
 
 This helper completes the message construction chain. -/
 
-axiom registration_run_through_pc67_from_pc60
+theorem registration_run_through_pc67_from_pc60
     (o : RegistrationNativeOracle)
     (sender contract finalMsg : MoveValue)
     (locals_at_pc60 : Array (Option MoveValue))
@@ -2257,23 +1335,31 @@ axiom registration_run_through_pc67_from_pc60
     (stack_at_pc60 : List MoveValue)
     (extraFuel : Nat) (h_fuel : 8 ≤ extraFuel)
     (h_locals60_1 : 1 < locals_at_pc60.size)
-    (h_locals60_2 : 2 < locals_at_pc60.size) : True
+    (h_locals60_2 : 2 < locals_at_pc60.size) : True := trivial
 
 /-! ## Helper: Simple 2-PC chain PC 54-55 (stLoc + immBorrowLoc)
 
 Demonstrates minimal complete helper: store value then borrow it.
 This pattern appears multiple times in the bytecode. -/
 
-axiom registration_run_simple_pc54_to_pc55
+/-- Chain PC 54 (stLoc 15) + PC 55 (immBorrowLoc 15).
+
+    Note: signature fixed from original axiom — the original claimed `localRefs.set 15 …`
+    after the chain, but `step_immBorrowLoc_fresh` does NOT update `localRefs`; it only
+    updates `containers` via the alloc. The fixed signature takes the alloc result as a
+    hypothesis (rid_15 = (containers'.alloc ekBytes).2) and produces the correct post-state.
+    The locals[15] update happens at PC 54 (stLoc 15); the immRef push is the only PC 55
+    side-effect on the frame, with the alloc'd container threading through MachineState. -/
+theorem registration_run_simple_pc54_to_pc55
     (o : RegistrationNativeOracle)
     (ekBytes : MoveValue)
-    (rid_15 : RefId)
     (locals_at_pc54 : Array (Option MoveValue))
-    (containers_at_pc54 : ContainerStore)
+    (containers_at_pc54 cs' : ContainerStore)
+    (rid_15 : RefId)
     (stack_at_pc54 : List MoveValue)
     (extraFuel : Nat) (h_fuel : 2 ≤ extraFuel)
     (h_locals54_15 : 15 < locals_at_pc54.size)
-    (h_localRefs54_15 : 15 < (List.replicate 19 (none : Option MoveValue)).toArray.size) :
+    (halloc : (containers_at_pc54.alloc ekBytes) = (cs', rid_15)) :
     (run (registrationModuleEnv o)
         { code := verifyRegistrationProofCode, pc := 54,
           locals := locals_at_pc54,
@@ -2285,29 +1371,64 @@ axiom registration_run_simple_pc54_to_pc55
     (run (registrationModuleEnv o)
         { code := verifyRegistrationProofCode, pc := 56,
           locals := locals_at_pc54.set 15 (some ekBytes) (by omega),
-          localRefs := ((List.replicate 19 none).toArray).set 15 (some rid_15) (by simp) }
+          localRefs := (List.replicate 19 none).toArray }
         ([] : List Frame)
         (.immRef rid_15 :: stack_at_pc54)
-        ({ MachineState.empty with containers := containers_at_pc54 } : MachineState)
-        extraFuel)
+        ({ MachineState.empty with containers := cs' } : MachineState)
+        extraFuel) := by
+  set f54 : Frame :=
+      { code := verifyRegistrationProofCode, pc := 54,
+        locals := locals_at_pc54,
+        localRefs := (List.replicate 19 none).toArray }
+    with hf54_def
+  have hf54_code : f54.code = verifyRegistrationProofCode := rfl
+  have hf54_pc : f54.pc = 54 := rfl
+  -- Step 1: PC 54 stLoc 15
+  have hpc_lt_54 : f54.pc < f54.code.size := by rw [hf54_pc, hf54_code]; decide
+  have hc_54 : f54.code[f54.pc]'hpc_lt_54 = .stLoc 15 := by
+    simp only [hf54_code, hf54_pc]; exact BytecodeLemmas.instr54_eq
+  have step1 := StepLemmas.step_stLoc (frame := f54) (env := registrationModuleEnv o) (cs := [])
+                  (ms := { MachineState.empty with containers := containers_at_pc54 })
+                  15 ekBytes stack_at_pc54 hpc_lt_54 hc_54 h_locals54_15
+  rw [show f54.pc + 1 = 55 from by omega] at step1
+  -- Frame after step 1.
+  set f55 : Frame :=
+      { f54 with pc := 55, locals := f54.locals.set 15 (some ekBytes) h_locals54_15 }
+    with hf55_def
+  have hf55_code : f55.code = verifyRegistrationProofCode := hf54_code
+  have hf55_pc : f55.pc = 55 := rfl
+  have hpc_lt_55 : f55.pc < f55.code.size := by rw [hf55_pc, hf55_code]; decide
+  have hc_55 : f55.code[f55.pc]'hpc_lt_55 = .immBorrowLoc 15 := by
+    simp only [hf55_code, hf55_pc]; exact BytecodeLemmas.instr55_eq
+  have hf55_locals_size_15 : 15 < f55.locals.size := by
+    show 15 < (f54.locals.set 15 (some ekBytes) h_locals54_15).size
+    rw [Array.size_set]; exact h_locals54_15
+  have hf55_locals_15 : f55.locals[15]'hf55_locals_size_15 = some ekBytes := by
+    show (f54.locals.set 15 (some ekBytes) h_locals54_15)[15]'hf55_locals_size_15 = _
+    rw [Array.getElem_set_self]
+  have hf55_refNone :
+      ¬ 15 < f55.localRefs.size ∨
+      ∃ h : 15 < f55.localRefs.size, f55.localRefs[15]'h = none := by
+    right
+    refine ⟨?_, ?_⟩
+    · show 15 < (List.replicate 19 (none : Option RefId)).toArray.size; simp
+    · show ((List.replicate 19 (none : Option RefId)).toArray)[15]'(by simp) = none; decide
+  -- Step 2: PC 55 immBorrowLoc 15 (fresh alloc).
+  have step2 := StepLemmas.step_immBorrowLoc_fresh
+                  (frame := f55) (env := registrationModuleEnv o) (cs := [])
+                  (stack := stack_at_pc54)
+                  (ms := { MachineState.empty with containers := containers_at_pc54 })
+                  15 ekBytes cs' rid_15 hpc_lt_55 hc_55 hf55_locals_size_15 hf55_locals_15
+                  halloc hf55_refNone
+  rw [show f55.pc + 1 = 56 from by omega] at step2
+  exact StepLemmas.run_succ_two_ok (env := registrationModuleEnv o) (frame := f54)
+          (cs := []) (stack := ekBytes :: stack_at_pc54)
+          (ms := { MachineState.empty with containers := containers_at_pc54 })
+          extraFuel _ _ _ _ _ _ _ _ step1 step2
 
 /-! ## Helper: Simple 2-PC chain for stLoc operations
 
 Another minimal pattern: two consecutive stLoc operations. -/
-
-axiom registration_run_simple_consecutive_stLoc
-    (o : RegistrationNativeOracle)
-    (val1 val2 : MoveValue)
-    (locals_at_start : Array (Option MoveValue))
-    (containers_at_start : ContainerStore)
-    (extraFuel : Nat) (h_fuel : 2 ≤ extraFuel)
-    (h_pc_start : Nat) (h_pc_mid : Nat) (h_pc_end : Nat)
-    (h_locals_idx1 : Nat) (h_locals_idx2 : Nat)
-    (h_locals_bound1 : h_locals_idx1 < locals_at_start.size)
-    (h_locals_bound2 : h_locals_idx2 < locals_at_start.size) :
-    -- Generic pattern: two stLoc operations in sequence
-    -- Demonstrates reusable proof structure
-    True
 
 /-! ## Comprehensive helper composition strategy
 
@@ -2362,7 +1483,7 @@ After message buffer setup, PCs 43-48 handle field writes:
 
 This helper chains message construction operations. -/
 
-axiom registration_run_through_pc48_from_pc43
+theorem registration_run_through_pc48_from_pc43
     (o : RegistrationNativeOracle)
     (msgBuf : MoveValue)
     (locals_at_pc43 : Array (Option MoveValue))
@@ -2370,7 +1491,7 @@ axiom registration_run_through_pc48_from_pc43
     (stack_at_pc43 : List MoveValue)
     (extraFuel : Nat) (h_fuel : 1 ≤ extraFuel)
     (h_locals43_11 : 11 < locals_at_pc43.size)
-    (h_locals43_11_val : locals_at_pc43[11]'h_locals43_11 = some msgBuf) : True
+    (h_locals43_11_val : locals_at_pc43[11]'h_locals43_11 = some msgBuf) : True := trivial
 
 /-! ## Helper: PC 50 through PC 54 for continuation
 
@@ -2383,14 +1504,14 @@ After scalar serialization, PCs 50-54 continue message construction:
 
 This helper demonstrates stLoc/moveLoc chains. -/
 
-axiom registration_run_through_pc54_from_pc50
+theorem registration_run_through_pc54_from_pc50
     (o : RegistrationNativeOracle)
     (val_on_stack : MoveValue)
     (locals_at_pc50 : Array (Option MoveValue))
     (containers_at_pc50 : ContainerStore)
     (rest_of_stack : List MoveValue)
     (extraFuel : Nat) (h_fuel : 2 ≤ extraFuel)
-    (h_locals50_14 : 14 < locals_at_pc50.size) : True
+    (h_locals50_14 : 14 < locals_at_pc50.size) : True := trivial
 
 /-! ## Helper: PC 56 through PC 60 for message finalization
 
@@ -2402,17 +1523,6 @@ Final message construction steps:
 - PC 60: (next operation)
 
 This helper chains final stLoc/moveLoc operations. -/
-
-axiom registration_run_through_pc60_from_pc56
-    (o : RegistrationNativeOracle)
-    (sender intermediateVal : MoveValue)
-    (locals_at_pc56 : Array (Option MoveValue))
-    (containers_at_pc56 : ContainerStore)
-    (stack_at_pc56 : List MoveValue)
-    (extraFuel : Nat) (h_fuel : 5 ≤ extraFuel)
-    (h_locals56_14 : 14 < locals_at_pc56.size)
-    (h_locals56_1 : 1 < locals_at_pc56.size)
-    (h_locals56_1_val : locals_at_pc56[1]'h_locals56_1 = some sender) : True
 
 /-! ## Full theorem — replaces EvalEquiv.lean axiom
 
@@ -2430,7 +1540,24 @@ which handles all cases via pattern matching:
 The nonSingleton theorem requires `single? = none`, which is always satisfied
 when we don't assume anything about the oracle result. -/
 
-axiom registration_eval_equiv_functional_sim
+/-- Granular axiom for the singleton-output case of the commitment-decompression oracle.
+    The non-singleton case is now proved (`compressedPoint_nonSingleton` above); only the
+    happy-path branch where the oracle returns `some [rCompressed]` remains as a TEMPORARY
+    axiom, requiring the full 84-PC chain proof through Schnorr verification. -/
+axiom registration_eval_equiv_functional_sim_compressedPoint_singleton
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (fuel : Nat) (hfuel : fuel ≥ 200)
+    (rOpt : MoveValue)
+    (hsing : single? (o.newCompressedPointFromBytes
+        [.vector .u8 (commitBa.toList.map .u8)]) = some rOpt) :
+    (eval (registrationModuleEnv o) verifyRegistrationProofIdx
+        (registrationArgs chainId sender contract token ekBa commitBa respBa)
+        fuel MachineState.empty).dropMs =
+    verifyRegistrationBytecodeResult o
+        (registrationArgs chainId sender contract token ekBa commitBa respBa)
+
+theorem registration_eval_equiv_functional_sim
     (o : RegistrationNativeOracle)
     (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
     (fuel : Nat) (hfuel : fuel ≥ 200) :
@@ -2446,7 +1573,19 @@ axiom registration_eval_equiv_functional_sim
          .struct_ [.vector .u8 (ekBa.toList.map .u8)],
          .address token,
          .vector .u8 (commitBa.toList.map .u8),
-         .vector .u8 (respBa.toList.map .u8)]
+         .vector .u8 (respBa.toList.map .u8)] := by
+  -- Rewrite literal args to the named `registrationArgs` form.
+  show (eval (registrationModuleEnv o) verifyRegistrationProofIdx
+            (registrationArgs chainId sender contract token ekBa commitBa respBa)
+            fuel MachineState.empty).dropMs =
+        verifyRegistrationBytecodeResult o
+            (registrationArgs chainId sender contract token ekBa commitBa respBa)
+  rcases h : single? (o.newCompressedPointFromBytes
+                        [.vector .u8 (commitBa.toList.map .u8)]) with _ | rOpt
+  · exact registration_eval_equiv_functional_sim_compressedPoint_nonSingleton
+            o chainId sender contract token ekBa commitBa respBa fuel (by omega) h
+  · exact registration_eval_equiv_functional_sim_compressedPoint_singleton
+            o chainId sender contract token ekBa commitBa respBa fuel hfuel rOpt h
 
 /-! ## Oracle Correspondence Lemmas
 
@@ -2456,193 +1595,60 @@ They are needed to discharge the oracle-dependent step lemmas.
 
 /-! ### optionIsSomeRef correspondence -/
 
-/-- When containers.read returns a struct with .bool true first field,
-    optionIsSomeRef returns some [.bool true]. -/
-axiom optionIsSomeRef_immRef_read_true
-    (o : RegistrationNativeOracle)
-    (containers : ContainerStore)
-    (rid : RefId)
-    (data : List MoveValue)
-    (hread : containers.read rid = some (MoveValue.struct_ (MoveValue.bool true :: data))) :
-    optionIsSomeRef containers [MoveValue.immRef rid] =
-    some ([MoveValue.bool true], containers)
-
-axiom optionIsSomeRef_immRef_read_false
-    (o : RegistrationNativeOracle)
-    (containers : ContainerStore)
-    (rid : RefId)
-    (data : List MoveValue)
-    (hread : containers.read rid = some (MoveValue.struct_ (MoveValue.bool false :: data))) :
-    optionIsSomeRef containers [MoveValue.immRef rid] =
-    some ([MoveValue.bool false], containers)
-
-axiom optionIsSomeRef_immRef_read_malformed
-    (o : RegistrationNativeOracle)
-    (containers : ContainerStore)
-    (rid : RefId)
-    (v : MoveValue)
-    (hread : containers.read rid = some v)
-    (hmalformed : ∀ (tag : Bool) (data : List MoveValue),
-                   v ≠ MoveValue.struct_ (MoveValue.bool tag :: data)) :
-    optionIsSomeRef containers [MoveValue.immRef rid] = none
-
 /-! ### optionExtractRef correspondence -/
-
-/-- When containers.read returns a Some struct, optionExtractRef extracts the data. -/
-axiom optionExtractRef_mutRef_read
-    (o : RegistrationNativeOracle)
-    (containers : ContainerStore)
-    (rid : RefId)
-    (extracted : MoveValue)
-    (rest : List MoveValue)
-    (hread : containers.read rid =
-             some (MoveValue.struct_ (MoveValue.bool true :: extracted :: rest))) :
-    ∃ (containers' : ContainerStore),
-      optionExtractRef containers [MoveValue.mutRef rid] =
-      some ([extracted], containers')
 
 /-! ### scalarFromBytes correspondence -/
 
-/-- scalarFromBytes on valid bytes returns Some(scalar_struct). -/
-axiom scalarFromBytes_valid
-    (o : RegistrationNativeOracle)
-    (bytes : MoveValue)
-    (result : MoveValue)
-    (hvalid : True)  -- Placeholder for validity condition
-    (horacle : o.newScalarFromBytes [bytes] = some [result]) :
-    ∃ (tag : Bool) (scalar : MoveValue) (rest : List MoveValue),
-      result = MoveValue.struct_ (MoveValue.bool tag :: scalar :: rest)
-
-axiom newScalarFromBytes_success_is_some
-    (o : RegistrationNativeOracle)
-    (bytes : MoveValue)
-    (scalar : MoveValue)
-    (horacle : o.newScalarFromBytes [bytes] = some [.struct_ [.bool true, scalar]]) :
-    True
-
-axiom scalarFromBytes_some_extractable
-    (o : RegistrationNativeOracle)
-    (bytes scalar : MoveValue)
-    (horacle : o.newScalarFromBytes [bytes] = some [.struct_ [.bool true, scalar]]) :
-    ∃ v, v = scalar
-
 /-! ### vectorAppend correspondence -/
 
-/-- vectorAppendU8Ref always succeeds when given valid refs and returns unit. -/
-axiom vectorAppendU8Ref_success
-    (containers : ContainerStore)
-    (rid : RefId)
-    (vec : List MoveValue)
-    (appended : List MoveValue)
-    (hread : containers.read rid = some (.vector .u8 vec)) :
-    ∃ containers',
-      vectorAppendU8Ref containers [MoveValue.mutRef rid, .vector .u8 appended] =
-      some ([], containers')
-
-axiom vectorAppendU8Ref_preserves_type
-    (containers containers' : ContainerStore)
-    (rid : RefId)
-    (vec appended : List MoveValue)
-    (happend : vectorAppendU8Ref containers [MoveValue.mutRef rid, .vector .u8 appended] =
-               some ([], containers')) :
-    ∃ vec', containers'.read rid = some (.vector .u8 vec')
-
-axiom vectorAppendU8Ref_concatenates
+theorem vectorAppendU8Ref_concatenates
     (containers containers' : ContainerStore)
     (rid : RefId)
     (vec appended : List MoveValue)
     (hread : containers.read rid = some (.vector .u8 vec))
     (happend : vectorAppendU8Ref containers [MoveValue.mutRef rid, .vector .u8 appended] =
                some ([], containers')) :
-    containers'.read rid = some (.vector .u8 (vec ++ appended))
+    containers'.read rid = some (.vector .u8 (vec ++ appended)) := by
+  unfold vectorAppendU8Ref at happend
+  rw [hread] at happend
+  have hlt : rid < containers.store.size := by
+    unfold ContainerStore.read at hread
+    split at hread
+    · assumption
+    · simp at hread
+  unfold ContainerStore.write at happend
+  rw [dif_pos hlt] at happend
+  injection happend with hres
+  injection hres with _ hcs
+  rw [← hcs]
+  unfold ContainerStore.read
+  simp [hlt, Array.getElem_set_self]
 
 /-! ### Point operation correspondences -/
 
-/-- compressedPointToBytes on a valid point returns bytes. -/
-axiom compressedPointToBytes_valid
-    (o : RegistrationNativeOracle)
-    (point : MoveValue)
-    (bytes : MoveValue)
-    (horacle : o.compressedPointToBytes [point] = some [bytes]) :
-    ∃ (data : List MoveValue),
-      bytes = MoveValue.vector MoveType.u8 data
-
-axiom pointMul_valid
+theorem pointMul_valid
     (o : RegistrationNativeOracle)
     (point scalar result : MoveValue)
     (horacle : o.pointMul [point, scalar] = some [result]) :
-    True
-
-axiom pointAdd_valid
+    True := trivial
+theorem pointAdd_valid
     (o : RegistrationNativeOracle)
     (point1 point2 result : MoveValue)
     (horacle : o.pointAdd [point1, point2] = some [result]) :
-    True
-
-axiom pointDecompress_valid
+    True := trivial
+theorem pointDecompress_valid
     (o : RegistrationNativeOracle)
     (compressed result : MoveValue)
     (horacle : o.pointDecompress [compressed] = some [result]) :
-    True
-
-axiom pointEquals_returns_bool
-    (o : RegistrationNativeOracle)
-    (point1 point2 : MoveValue)
-    (result : MoveValue)
-    (horacle : o.pointEquals [point1, point2] = some [result]) :
-    ∃ b : Bool, result = MoveValue.bool b
-
-axiom pubkeyToPoint_valid
+    True := trivial
+theorem pubkeyToPoint_valid
     (o : RegistrationNativeOracle)
     (pubkey result : MoveValue)
     (horacle : o.pubkeyToPoint [pubkey] = some [result]) :
-    True
-
-axiom hashToPointBase_valid
-    (o : RegistrationNativeOracle)
-    (result : MoveValue)
-    (horacle : o.hashToPointBase [] = some [result]) :
-    True
-
+    True := trivial
 /-! ### Cryptographic operation sequencing -/
 
-/-- Successful sigma protocol verification sequence. -/
-axiom sigma_protocol_success_chain
-    (o : RegistrationNativeOracle)
-    (msg challenge base_h ek_point scalar : MoveValue)
-    (h_s ek_e lhs rhs : MoveValue)
-    (h_challenge : newScalarFromSha2_512 [msg] = some [challenge])
-    (h_base : o.hashToPointBase [] = some [base_h])
-    (h_ek : o.pubkeyToPoint [ek_point] = some [ek_point])  -- Actually converts
-    (h_mul1 : o.pointMul [base_h, scalar] = some [h_s])
-    (h_mul2 : o.pointMul [ek_point, challenge] = some [ek_e])
-    (h_add : o.pointAdd [h_s, ek_e] = some [lhs])
-    (h_dec : o.pointDecompress [rhs] = some [rhs])  -- Actually decompresses
-    (h_eq : o.pointEquals [lhs, rhs] = some [.bool true]) :
-    True
-
 /-! ### Message assembly helpers -/
-
-/-- Appending to empty vector. -/
-axiom vectorAppend_to_empty
-    (containers containers' : ContainerStore)
-    (rid : RefId)
-    (appended : List MoveValue)
-    (hread : containers.read rid = some (.vector .u8 []))
-    (happend : vectorAppendU8Ref containers [MoveValue.mutRef rid, .vector .u8 appended] =
-               some ([], containers')) :
-    containers'.read rid = some (.vector .u8 appended)
-
-axiom vectorAppend_sequence_preserves_order
-    (containers cs1 cs2 : ContainerStore)
-    (rid : RefId)
-    (vec part1 part2 : List MoveValue)
-    (hread : containers.read rid = some (.vector .u8 vec))
-    (happend1 : vectorAppendU8Ref containers [MoveValue.mutRef rid, .vector .u8 part1] =
-                some ([], cs1))
-    (happend2 : vectorAppendU8Ref cs1 [MoveValue.mutRef rid, .vector .u8 part2] =
-                some ([], cs2)) :
-    cs2.read rid = some (.vector .u8 (vec ++ part1 ++ part2))
 
 /-! ### BCS serialization helpers -/
 
@@ -2653,48 +1659,9 @@ axiom vectorAppend_sequence_preserves_order
     (addr.toList.map MoveValue.u8).length = 32 := by
   simp [List.length_map, h]
 
-axiom bcsToBytesAddressRef_identity
-    (containers : ContainerStore)
-    (rid : RefId)
-    (addr : ByteArray)
-    (hread : containers.read rid = some (.address addr)) :
-    bcsToBytesAddressRef containers [.immRef rid] =
-    some ([.vector .u8 (addr.toList.map .u8)], containers)
-
 /-! ### Fiat-Shamir message structure -/
 
-/-- Complete Fiat-Shamir message has expected structure. -/
-axiom fiatShamir_message_structure
-    (dst : List MoveValue)
-    (chainId : UInt8)
-    (sender contract token : ByteArray)
-    (ek_bytes r_bytes : List MoveValue)
-    (msg : MoveValue)
-    (h : msg = .vector .u8 (dst ++ [.u8 chainId] ++
-                            (sender.toList.map .u8) ++
-                            (contract.toList.map .u8) ++
-                            (token.toList.map .u8) ++
-                            ek_bytes ++
-                            r_bytes)) :
-    ∃ (data : List MoveValue),
-      msg = .vector .u8 data ∧
-      data.length = dst.length + 1 + 32 + 32 + 32 + ek_bytes.length + r_bytes.length
-
 /-! ### Challenge computation -/
-
-/-- newScalarFromSha2_512 is deterministic. -/
-axiom newScalarFromSha2_512_deterministic
-    (msg : MoveValue)
-    (result1 result2 : MoveValue)
-    (h1 : newScalarFromSha2_512 [msg] = some [result1])
-    (h2 : newScalarFromSha2_512 [msg] = some [result2]) :
-    result1 = result2
-
-axiom newScalarFromSha2_512_produces_scalar
-    (msg result : MoveValue)
-    (h : newScalarFromSha2_512 [msg] = some [result]) :
-    ∃ (scalar_bytes : List MoveValue),
-      result = .struct_ [.vector .u8 scalar_bytes]
 
 /-! ### Additional Native Call Correspondence Lemmas
 
@@ -2702,647 +1669,47 @@ These lemmas establish correspondence between native function calls and their
 execution semantics in the step relation.
 -/
 
-/-- Native call to newScalarFromSha2_512 succeeds and produces scalar. -/
-axiom step_native_newScalarFromSha2_512
-    (env : ModuleEnv)
-    (frame : Frame)
-    (msg result : MoveValue)
-    (h_pc : frame.code.get? frame.pc = some (MoveInstr.call 9))  -- Function index 9
-    (h_oracle : newScalarFromSha2_512 [msg] = some [result])
-    (ms : MachineState) :
-    step env [] frame [msg] ms =
-    .ok [] { frame with pc := frame.pc + 1 } [result] ms
-
-axiom step_native_hashToPointBase
-    (o : RegistrationNativeOracle)
-    (env : ModuleEnv)
-    (frame : Frame)
-    (result : MoveValue)
-    (h_pc : frame.code.get? frame.pc = some (MoveInstr.call 10))  -- Function index 10
-    (h_oracle : o.hashToPointBase [] = some [result])
-    (ms : MachineState) :
-    step env [] frame [] ms =
-    .ok [] { frame with pc := frame.pc + 1 } [result] ms
-
 /-! ### Ref Wrapper Correspondence
 
 These lemmas relate the ref-aware wrappers to their underlying oracles.
 -/
-
-/-- wrapOracleImmRef1 dereferences and applies oracle. -/
-axiom wrapOracleImmRef1_correspondence
-    (oracle : List MoveValue → Option (List MoveValue))
-    (containers : ContainerStore)
-    (rid : RefId)
-    (v result : MoveValue)
-    (h_read : containers.read rid = some v)
-    (h_oracle : oracle [v] = some [result]) :
-    wrapOracleImmRef1 oracle containers [.immRef rid] =
-    some ([result], containers)
-
-axiom wrapOracleImmRef2_correspondence
-    (oracle : List MoveValue → Option (List MoveValue))
-    (containers : ContainerStore)
-    (rid1 rid2 : RefId)
-    (v1 v2 result : MoveValue)
-    (h_read1 : containers.read rid1 = some v1)
-    (h_read2 : containers.read rid2 = some v2)
-    (h_oracle : oracle [v1, v2] = some [result]) :
-    wrapOracleImmRef2 oracle containers [.immRef rid1, .immRef rid2] =
-    some ([result], containers)
 
 /-! ### BCS Serialization Correspondences
 
 BCS (Binary Canonical Serialization) for Move types.
 -/
 
-/-- bcsToBytesAddressRef serializes address to bytes. -/
-axiom step_native_bcsToBytesAddressRef
-    (env : ModuleEnv)
-    (frame : Frame)
-    (rid : RefId)
-    (addr : ByteArray)
-    (h_pc : frame.code.get? frame.pc = some (MoveInstr.call 5))  -- Function index 5
-    (h_read : ms.containers.read rid = some (.address addr))
-    (ms : MachineState) :
-    step env [] frame [.immRef rid] ms =
-    .ok [] { frame with pc := frame.pc + 1 }
-
 /-! ### Vector Operation Correspondences
 
 Vector operations (append, push_back, etc.) through refs.
 -/
-
-/-- vectorAppendU8Ref appends to vector through mut ref. -/
-axiom step_native_vectorAppendU8Ref
-    (env : ModuleEnv)
-    (frame : Frame)
-    (rid : RefId)
-    (existing appended : List MoveValue)
-    (containers containers' : ContainerStore)
-    (h_pc : frame.code.get? frame.pc = some (MoveInstr.call 6))  -- Function index 6
-    (h_read : containers.read rid = some (.vector .u8 existing))
-    (h_write : containers.write rid (.vector .u8 (existing ++ appended)) = some containers')
-    (ms : MachineState) :
-    step env [] frame [.mutRef rid, .vector .u8 appended]
-         { ms with containers := containers } =
-    .ok [] { frame with pc := frame.pc + 1 } [.struct_ []]
-        { ms with containers := containers' }
-
-axiom step_native_vectorPushBackU8Ref
-    (env : ModuleEnv)
-    (frame : Frame)
-    (rid : RefId)
-    (existing : List MoveValue)
-    (byte : UInt8)
-    (containers containers' : ContainerStore)
-    (h_pc : frame.code.get? frame.pc = some (MoveInstr.call 4))  -- Function index 4
-    (h_read : containers.read rid = some (.vector .u8 existing))
-    (h_write : containers.write rid (.vector .u8 (existing ++ [.u8 byte])) = some containers')
-    (ms : MachineState) :
-    step env [] frame [.mutRef rid, .u8 byte]
-         { ms with containers := containers } =
-    .ok [] { frame with pc := frame.pc + 1 } [.struct_ []]
-        { ms with containers := containers' }
 
 /-! ### Option Operation Correspondences
 
 Option operations (is_some, extract) through refs.
 -/
 
-/-- optionIsSomeRef returns tag through immRef. -/
-axiom step_native_optionIsSomeRef
-    (env : ModuleEnv)
-    (frame : Frame)
-    (rid : RefId)
-    (tag : Bool)
-    (rest : List MoveValue)
-    (h_pc : frame.code.get? frame.pc = some (MoveInstr.call 1))  -- Function index 1
-    (h_read : ms.containers.read rid = some (.struct_ (.bool tag :: rest)))
-    (ms : MachineState) :
-    step env [] frame [.immRef rid] ms =
-
-axiom step_native_optionExtractRef
-    (env : ModuleEnv)
-    (frame : Frame)
-    (rid : RefId)
-    (extracted rest : List MoveValue)
-    (containers containers' : ContainerStore)
-    (h_pc : frame.code.get? frame.pc = some (MoveInstr.call 2))  -- Function index 2
-    (h_read : containers.read rid = some (.struct_ (.bool true :: extracted :: rest)))
-    (h_write : containers.write rid (.struct_ [.bool false]) = some containers')
-    (ms : MachineState) :
-    step env [] frame [.mutRef rid]
-         { ms with containers := containers } =
-    .ok [] { frame with pc := frame.pc + 1 } [extracted]
-        { ms with containers := containers' }
-
-axiom newScalarFromSha2_512_valid
-    (o : RegistrationNativeOracle)
-    (containers : ContainerStore)
-    (msg : MoveValue)
-    (scalar : MoveValue)
-    (horacle : newScalarFromSha2_512 containers [msg] = some ([scalar], containers)) :
-    True
-
-axiom hashToPointBase_returns_h
-    (o : RegistrationNativeOracle)
-    (containers : ContainerStore)
-    (h : MoveValue)
-    (horacle : o.hashToPointBase containers [] = some ([h], containers)) :
-    True
-
-axiom pubkeyToPoint_valid
-    (o : RegistrationNativeOracle)
-    (containers : ContainerStore)
-    (pubkey : MoveValue)
-    (point : MoveValue)
-    (horacle : o.pubkeyToPoint containers [pubkey] = some ([point], containers)) :
-    True
-
-axiom pointMul_valid
-    (o : RegistrationNativeOracle)
-    (containers : ContainerStore)
-    (point scalar result : MoveValue)
-    (horacle : o.pointMul containers [point, scalar] = some ([result], containers)) :
-    True
-
-axiom pointAdd_valid
-    (o : RegistrationNativeOracle)
-    (containers : ContainerStore)
-    (p1 p2 result : MoveValue)
-    (horacle : o.pointAdd containers [p1, p2] = some ([result], containers)) :
-    True
-
-axiom pointDecompress_valid
-    (o : RegistrationNativeOracle)
-    (containers : ContainerStore)
-    (compressed point : MoveValue)
-    (horacle : o.pointDecompress containers [compressed] = some ([point], containers)) :
-    True
-
-axiom pointEquals_returns_bool
-    (o : RegistrationNativeOracle)
-    (containers : ContainerStore)
-    (p1 p2 : MoveValue)
-    (result : Bool)
-    (horacle : o.pointEquals containers [p1, p2] =
-               some ([MoveValue.bool result], containers)) :
-    True
-
-/-! ## Helper Theorems for Multi-PC Chains
-
-These theorems prove composed PC ranges to avoid deep nesting in the main proof.
-Each theorem takes a starting state and produces an ending state after multiple PCs.
--/
-
-/-! ### Helper: PC 4-6 (optionIsSomeRef check and branch) -/
-
-/-- From PC 4 with v = Some(data) in containers, execute through PC 6.
-    PC 4: optionIsSomeRef returns true
-    PC 5: brFalse not taken (continue to PC 6)
-    PC 6: Ready for optionExtractRef -/
-axiom helper_pc4_to_pc6_some
-    (o : RegistrationNativeOracle)
-    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
-    (v : MoveValue)
-    (rid_v : RefId)
-    (containers_at_pc4 : ContainerStore)
-    (data : List MoveValue)
-    (hv : v = MoveValue.struct_ (MoveValue.bool true :: data))
-    (hread : containers_at_pc4.read rid_v = some v)
-    (fuel : Nat) (hfuel : 70 ≤ fuel) :
-    ∃ (containers_at_pc6 : ContainerStore) (fuel_at_pc6 : Nat),
-      containers_at_pc6 = containers_at_pc4 ∧
-      fuel_at_pc6 = fuel - 2 ∧
-      fuel_at_pc6 ≥ 68
-
-/-! ### Helper: PC 6-8 (optionExtractRef to get rCompressed) -/
-
-/-- From PC 6, extract rCompressed via optionExtractRef.
-    PC 6: mutBorrowLoc 7 (push mutRef to v)
-    PC 7: call optionExtractRef
-    PC 8: stLoc 8 (store rCompressed) -/
-axiom helper_pc6_to_pc8_extract_r
-    (o : RegistrationNativeOracle)
-    (v : MoveValue)
-    (rid_v : RefId)
-    (rCompressed : MoveValue)
-    (rest_data : List MoveValue)
-    (containers_at_pc6 : ContainerStore)
-    (hv : v = MoveValue.struct_ (MoveValue.bool true :: rCompressed :: rest_data))
-    (hread : containers_at_pc6.read rid_v = some v)
-    (fuel : Nat) (hfuel : 68 ≤ fuel) :
-    ∃ (containers_at_pc8 : ContainerStore) (fuel_at_pc8 : Nat),
-      containers_at_pc8 = containers_at_pc6 ∧
-      fuel_at_pc8 = fuel - 2 ∧
-      fuel_at_pc8 ≥ 66
-
-/-! ### Helper: PC 9-11 (newScalarFromBytes call) -/
-
-/-- From PC 9 with respBytes in local 6, call newScalarFromBytes.
-    PC 9: moveLoc 6 (push respBytes)
-    PC 10: call newScalarFromBytes
-    PC 11: stLoc 9 (store scalar option) -/
-axiom helper_pc9_to_pc11_scalar
-    (o : RegistrationNativeOracle)
-    (respBa_val : MoveValue)
-    (scalar_opt : MoveValue)
-    (containers_at_pc9 : ContainerStore)
-    (horacle : o.newScalarFromBytes containers_at_pc9 [respBa_val] =
-               some ([scalar_opt], containers_at_pc9))
-    (fuel : Nat) (hfuel : 66 ≤ fuel) :
-    ∃ (containers_at_pc11 : ContainerStore) (fuel_at_pc11 : Nat),
-      containers_at_pc11 = containers_at_pc9 ∧
-      fuel_at_pc11 = fuel - 2 ∧
-      fuel_at_pc11 ≥ 64
-
-/-! ### Helper: PC 12-17 (extract scalar from option) -/
-
-/-- Extract scalar from scalar_opt (similar to extracting rCompressed).
-    PC 12: immBorrowLoc 9 (borrow scalar_opt)
-    PC 13: call optionIsSomeRef
-    PC 14: brFalse (not taken for happy path)
-    PC 15: mutBorrowLoc 9
-    PC 16: call optionExtractRef
-    PC 17: stLoc 10 (store scalar) -/
-axiom helper_pc12_to_pc17_extract_scalar
-    (o : RegistrationNativeOracle)
-    (scalar_opt : MoveValue)
-    (rid_scalar : RefId)
-    (scalar : MoveValue)
-    (rest_scalar_data : List MoveValue)
-    (containers_at_pc12 : ContainerStore)
-    (hscalar_opt : scalar_opt = MoveValue.struct_ (MoveValue.bool true :: scalar :: rest_scalar_data))
-    (hread : containers_at_pc12.read rid_scalar = some scalar_opt)
-    (fuel : Nat) (hfuel : 64 ≤ fuel) :
-    ∃ (containers_at_pc17 : ContainerStore) (fuel_at_pc17 : Nat),
-      containers_at_pc17 = containers_at_pc12 ∧
-      fuel_at_pc17 = fuel - 5 ∧
-      fuel_at_pc17 ≥ 59
-
-/-! ### Helper: PC 18-20 (initialize message buffer) -/
-
-/-- Initialize empty message buffer for Fiat-Shamir.
-    PC 18: ldConst (empty vector)
-    PC 19: stLoc 11 (store as msgBuf)
-    PC 20: Ready to append DST -/
-axiom helper_pc18_to_pc20_init_msg
-    (o : RegistrationNativeOracle)
-    (containers_at_pc18 : ContainerStore)
-    (fuel : Nat) (hfuel : 59 ≤ fuel) :
-    ∃ (msgBuf : MoveValue) (containers_at_pc20 : ContainerStore) (fuel_at_pc20 : Nat),
-      msgBuf = MoveValue.vector MoveType.u8 [] ∧
-      containers_at_pc20 = containers_at_pc18 ∧
-      fuel_at_pc20 = fuel - 2 ∧
-      fuel_at_pc20 ≥ 57
-
-/-! ### Helper: PC 20-43 (Fiat-Shamir message assembly) -/
-
-/-- Assemble complete Fiat-Shamir message from components.
-    This is a long sequence of vectorAppend calls.
-    PC 20-25: Append DST and chainId
-    PC 26-30: Append sender
-    PC 31-35: Append contract
-    PC 36-40: Append token
-    PC 41-43: Append ek bytes and r_compressed -/
-axiom helper_pc20_to_pc43_assemble_message
-    (o : RegistrationNativeOracle)
-    (chainId : UInt8)
-    (sender contract token : ByteArray)
-    (rCompressed : MoveValue)
-    (ekPoint : MoveValue)
-    (msgBuf : MoveValue)
-    (rid_msg : RefId)
-    (containers_at_pc20 : ContainerStore)
-    (dst : MoveValue)
-    (ek_bytes : MoveValue)
-    -- Oracle hypotheses for all appends
-    (horacle_dst : vectorAppendU8 containers_at_pc20 [MoveValue.mutRef rid_msg, dst] =
-                   some ([MoveValue.struct_ []], containers_at_pc20))
-    (horacle_chainId : vectorAppendU8 containers_at_pc20
-                        [MoveValue.mutRef rid_msg, MoveValue.u8 chainId] =
-                       some ([MoveValue.struct_ []], containers_at_pc20))
-    (horacle_sender : vectorAppendU8 containers_at_pc20
-                       [MoveValue.mutRef rid_msg, MoveValue.address sender] =
-                      some ([MoveValue.struct_ []], containers_at_pc20))
-    (horacle_contract : vectorAppendU8 containers_at_pc20
-                         [MoveValue.mutRef rid_msg, MoveValue.address contract] =
-                        some ([MoveValue.struct_ []], containers_at_pc20))
-    (horacle_token : vectorAppendU8 containers_at_pc20
-                      [MoveValue.mutRef rid_msg, MoveValue.address token] =
-                     some ([MoveValue.struct_ []], containers_at_pc20))
-    (horacle_ek_bytes : o.compressedPointToBytes containers_at_pc20 [ekPoint] =
-                        some ([ek_bytes], containers_at_pc20))
-    (horacle_ek_append : vectorAppendU8 containers_at_pc20
-                          [MoveValue.mutRef rid_msg, ek_bytes] =
-                         some ([MoveValue.struct_ []], containers_at_pc20))
-    (horacle_r_append : vectorAppendU8 containers_at_pc20
-                         [MoveValue.mutRef rid_msg, rCompressed] =
-                        some ([MoveValue.struct_ []], containers_at_pc20))
-    (fuel : Nat) (hfuel : 57 ≤ fuel) :
-    ∃ (msgBuf_complete : MoveValue) (containers_at_pc43 : ContainerStore) (fuel_at_pc43 : Nat),
-      containers_at_pc43 = containers_at_pc20 ∧
-      fuel_at_pc43 = fuel - 23 ∧
-      fuel_at_pc43 ≥ 34
-
-/-! ### Helper: PC 44-50 (compute challenge and prepare point operations) -/
-
-/-- Compute Fiat-Shamir challenge e and get base point h, convert ek to point.
-    PC 44: call newScalarFromSha2_512 (e = H(msg))
-    PC 45: stLoc 12 (store e)
-    PC 46: call hashToPointBase (h = G)
-    PC 47: stLoc 13 (store h)
-    PC 48: immBorrowLoc 3 (borrow ek_point)
-    PC 49: call pubkeyToPoint (convert ek to point)
-    PC 50: stLoc 14 (store ek as point) -/
-axiom helper_pc44_to_pc50_challenge_and_points
-    (o : RegistrationNativeOracle)
-    (msgBuf_complete : MoveValue)
-    (ekPoint : MoveValue)
-    (challenge_e base_point_h ek_as_point : MoveValue)
-    (containers_at_pc44 : ContainerStore)
-    (horacle_challenge : newScalarFromSha2_512 containers_at_pc44 [msgBuf_complete] =
-                         some ([challenge_e], containers_at_pc44))
-    (horacle_base : o.hashToPointBase containers_at_pc44 [] =
-                    some ([base_point_h], containers_at_pc44))
-    (horacle_ek_to_point : o.pubkeyToPoint containers_at_pc44 [ekPoint] =
-                           some ([ek_as_point], containers_at_pc44))
-    (fuel : Nat) (hfuel : 34 ≤ fuel) :
-    ∃ (containers_at_pc50 : ContainerStore) (fuel_at_pc50 : Nat),
-      containers_at_pc50 = containers_at_pc44 ∧
-      fuel_at_pc50 = fuel - 6 ∧
-      fuel_at_pc50 ≥ 28
-
-/-! ### Helper: PC 51-59 (point multiplications h*s and ek*e) -/
-
-/-- Compute the two scalar multiplications for sigma verification.
-    PC 51-54: h * s → h_times_s
-    PC 55-59: ek * e → ek_times_e -/
-axiom helper_pc51_to_pc59_point_muls
-    (o : RegistrationNativeOracle)
-    (base_point_h scalar challenge_e ek_as_point : MoveValue)
-    (h_times_s ek_times_e : MoveValue)
-    (containers_at_pc51 : ContainerStore)
-    (horacle_h_mul_s : o.pointMul containers_at_pc51 [base_point_h, scalar] =
-                       some ([h_times_s], containers_at_pc51))
-    (horacle_ek_mul_e : o.pointMul containers_at_pc51 [ek_as_point, challenge_e] =
-                        some ([ek_times_e], containers_at_pc51))
-    (fuel : Nat) (hfuel : 28 ≤ fuel) :
-    ∃ (containers_at_pc59 : ContainerStore) (fuel_at_pc59 : Nat),
-      containers_at_pc59 = containers_at_pc51 ∧
-      fuel_at_pc59 = fuel - 8 ∧
-      fuel_at_pc59 ≥ 20
-
-/-! ### Helper: PC 60-66 (point addition and decompression) -/
-
-/-- Compute lhs = h*s + ek*e and rhs = decompress(r_compressed).
-    PC 60-62: point_add(h*s, ek*e) → lhs
-    PC 63-65: point_decompress(r_compressed) → rhs
-    PC 66: Ready for equality check -/
-axiom helper_pc60_to_pc66_add_and_decompress
-    (o : RegistrationNativeOracle)
-    (h_times_s ek_times_e rCompressed : MoveValue)
-    (lhs rhs : MoveValue)
-    (containers_at_pc60 : ContainerStore)
-    (horacle_add : o.pointAdd containers_at_pc60 [h_times_s, ek_times_e] =
-                   some ([lhs], containers_at_pc60))
-    (horacle_decompress : o.pointDecompress containers_at_pc60 [rCompressed] =
-                          some ([rhs], containers_at_pc60))
-    (fuel : Nat) (hfuel : 20 ≤ fuel) :
-    ∃ (containers_at_pc66 : ContainerStore) (fuel_at_pc66 : Nat),
-      containers_at_pc66 = containers_at_pc60 ∧
-      fuel_at_pc66 = fuel - 6 ∧
-      fuel_at_pc66 ≥ 14
-
-/-! ### Helper: PC 67-70 (final equality check and return for happy path) -/
-
-/-- Final sigma verification: check if lhs == rhs.
-    If true, return success at PC 70.
-    PC 67-69: point_equals(lhs, rhs)
-    PC 70: brFalse not taken (result is true)
-    PC 71: ret (success!) -/
-axiom helper_pc67_to_pc70_equals_and_ret_success
-    (o : RegistrationNativeOracle)
-    (lhs rhs : MoveValue)
-    (containers_at_pc67 : ContainerStore)
-    (horacle_equals : o.pointEquals containers_at_pc67 [lhs, rhs] =
-                      some ([MoveValue.bool true], containers_at_pc67))
-    (fuel : Nat) (hfuel : 14 ≤ fuel) :
-    ∃ (result : ExecResult),
-      result = ExecResult.returned [] MachineState.empty
-
-/-! ### Helper: PC 67-73 (equality check false, abort) -/
-
-/-- When point_equals returns false, jump to abort path.
-    PC 67-69: point_equals(lhs, rhs) → false
-    PC 70: brFalse 72 (TAKEN, jump to error)
-    PC 72-73: abort with ESIGMA_PROTOCOL_VERIFY_FAILED -/
-axiom helper_pc67_to_pc73_equals_and_abort_verify_failed
-    (o : RegistrationNativeOracle)
-    (lhs rhs : MoveValue)
-    (containers_at_pc67 : ContainerStore)
-    (horacle_equals : o.pointEquals containers_at_pc67 [lhs, rhs] =
-                      some ([MoveValue.bool false], containers_at_pc67))
-    (fuel : Nat) (hfuel : 14 ≤ fuel) :
-    ∃ (result : ExecResult),
-      result = ExecResult.aborted 65537
-
-/-! ## Main Composition: Full PC 4-70 Happy Path
-
-This theorem composes all the helper theorems to prove the complete
-singleton branch from PC 4 through PC 70 for the success case.
--/
-
-/-- Complete singleton branch happy path composition.
-    Proves PC 4 → 70 executes correctly and returns success
-    when all oracle calls succeed and final point equality holds. -/
-axiom singleton_branch_pc4_to_pc70_happy_path_composition
-    (o : RegistrationNativeOracle)
-    (chainId : UInt8)
-    (sender contract token ekBa commitBa respBa : ByteArray)
-    (v rCompressed scalar : MoveValue)
-    (rest_data rest_scalar_data : List MoveValue)
-    (rid_v rid_scalar rid_msg : RefId)
-    (containers_at_pc4 : ContainerStore)
-    (respBa_val msgBuf dst ekPoint ek_bytes : MoveValue)
-    (challenge_e base_point_h ek_as_point : MoveValue)
-    (h_times_s ek_times_e lhs rhs : MoveValue)
-    (msgBuf_complete : MoveValue)
-    (fuel : Nat) (hfuel : 70 ≤ fuel)
-    -- Structural hypotheses
-    (hv : v = MoveValue.struct_ (MoveValue.bool true :: rCompressed :: rest_data))
-    (hread_v : containers_at_pc4.read rid_v = some v)
-    (hscalar : scalar = MoveValue.struct_ (MoveValue.bool true :: rest_scalar_data))
-    -- Oracle hypotheses (all success cases)
-    (horacle_scalar : o.newScalarFromBytes containers_at_pc4 [respBa_val] =
-                      some ([MoveValue.struct_ (MoveValue.bool true :: scalar :: rest_scalar_data)],
-                            containers_at_pc4))
-    (horacle_dst : vectorAppendU8 containers_at_pc4 [MoveValue.mutRef rid_msg, dst] =
-                   some ([MoveValue.struct_ []], containers_at_pc4))
-    (horacle_chainId : vectorAppendU8 containers_at_pc4
-                        [MoveValue.mutRef rid_msg, MoveValue.u8 chainId] =
-                       some ([MoveValue.struct_ []], containers_at_pc4))
-    (horacle_sender : vectorAppendU8 containers_at_pc4
-                       [MoveValue.mutRef rid_msg, MoveValue.address sender] =
-                      some ([MoveValue.struct_ []], containers_at_pc4))
-    (horacle_contract : vectorAppendU8 containers_at_pc4
-                         [MoveValue.mutRef rid_msg, MoveValue.address contract] =
-                        some ([MoveValue.struct_ []], containers_at_pc4))
-    (horacle_token : vectorAppendU8 containers_at_pc4
-                      [MoveValue.mutRef rid_msg, MoveValue.address token] =
-                     some ([MoveValue.struct_ []], containers_at_pc4))
-    (horacle_ek_bytes : o.compressedPointToBytes containers_at_pc4 [ekPoint] =
-                        some ([ek_bytes], containers_at_pc4))
-    (horacle_ek_append : vectorAppendU8 containers_at_pc4
-                          [MoveValue.mutRef rid_msg, ek_bytes] =
-                         some ([MoveValue.struct_ []], containers_at_pc4))
-    (horacle_r_append : vectorAppendU8 containers_at_pc4
-                         [MoveValue.mutRef rid_msg, rCompressed] =
-                        some ([MoveValue.struct_ []], containers_at_pc4))
-    (horacle_challenge : newScalarFromSha2_512 containers_at_pc4 [msgBuf_complete] =
-                         some ([challenge_e], containers_at_pc4))
-    (horacle_base : o.hashToPointBase containers_at_pc4 [] =
-                    some ([base_point_h], containers_at_pc4))
-    (horacle_ek_to_point : o.pubkeyToPoint containers_at_pc4 [ekPoint] =
-                           some ([ek_as_point], containers_at_pc4))
-    (horacle_h_mul_s : o.pointMul containers_at_pc4 [base_point_h, scalar] =
-                       some ([h_times_s], containers_at_pc4))
-    (horacle_ek_mul_e : o.pointMul containers_at_pc4 [ek_as_point, challenge_e] =
-                        some ([ek_times_e], containers_at_pc4))
-    (horacle_add : o.pointAdd containers_at_pc4 [h_times_s, ek_times_e] =
-                   some ([lhs], containers_at_pc4))
-    (horacle_decompress : o.pointDecompress containers_at_pc4 [rCompressed] =
-                          some ([rhs], containers_at_pc4))
-    (horacle_equals : o.pointEquals containers_at_pc4 [lhs, rhs] =
-                      some ([MoveValue.bool true], containers_at_pc4)) :
-    ∃ (result : ExecResult),
-      result = ExecResult.returned [] MachineState.empty
-
-/-! ## Error Path Theorems
-
-These theorems prove the error branches of the singleton case:
-- None branches (when Option.isSome returns false)
 - Oracle failure branches (when oracle calls return none)
 - Malformed data branches
 -/
 
 /-! ### PC 4-5 error path: v is None (optionIsSomeRef returns false) -/
 
-/-- When v = Option.None, optionIsSomeRef returns false and we branch to abort.
-    PC 4: optionIsSomeRef → false
-    PC 5: brFalse 79 (TAKEN, jump to error)
-    PC 79-83: abort with ESIGMA_PROTOCOL_VERIFY_FAILED -/
-axiom helper_pc4_to_pc83_option_none_abort
-    (o : RegistrationNativeOracle)
-    (v : MoveValue)
-    (rid_v : RefId)
-    (containers_at_pc4 : ContainerStore)
-    (rest : List MoveValue)
-    (hv : v = MoveValue.struct_ (MoveValue.bool false :: rest))
-    (hread : containers_at_pc4.read rid_v = some v)
-    (fuel : Nat) (hfuel : 70 ≤ fuel) :
-    ∃ (result : ExecResult),
-      result = ExecResult.aborted 65537
-
 /-! ### PC 10 error path: newScalarFromBytes returns none -/
-
-/-- When newScalarFromBytes fails (invalid bytes), return error.
-    PC 10: call newScalarFromBytes → none
-    Step fails with .error -/
-axiom helper_pc10_scalar_none_error
-    (o : RegistrationNativeOracle)
-    (respBa_val : MoveValue)
-    (containers_at_pc10 : ContainerStore)
-    (horacle : o.newScalarFromBytes containers_at_pc10 [respBa_val] = none)
-    (fuel : Nat) (hfuel : 66 ≤ fuel) :
-    ∃ (result : ExecResult),
-      result = ExecResult.error
 
 /-! ### PC 13-14 error path: scalar option is None -/
 
-/-- When scalar extraction fails (scalar_opt is None), jump to abort.
-    PC 13: optionIsSomeRef → false
-    PC 14: brFalse 74 (TAKEN, jump to error)
-    PC 74-78: abort with ESIGMA_PROTOCOL_VERIFY_FAILED -/
-axiom helper_pc13_to_pc78_scalar_none_abort
-    (o : RegistrationNativeOracle)
-    (scalar_opt : MoveValue)
-    (rid_scalar : RefId)
-    (containers_at_pc13 : ContainerStore)
-    (rest : List MoveValue)
-    (hscalar_opt : scalar_opt = MoveValue.struct_ (MoveValue.bool false :: rest))
-    (hread : containers_at_pc13.read rid_scalar = some scalar_opt)
-    (fuel : Nat) (hfuel : 64 ≤ fuel) :
-    ∃ (result : ExecResult),
-      result = ExecResult.aborted 65537
-
 /-! ### Oracle failure error paths -/
-
-/-- When any point operation oracle returns none, execution errors. -/
-axiom helper_point_operation_none_error
-    (o : RegistrationNativeOracle)
-    (containers : ContainerStore)
-    (args : List MoveValue)
-    (horacle_none : True)  -- Placeholder for oracle = none condition
-    (fuel : Nat) (hfuel : 10 ≤ fuel) :
-    ∃ (result : ExecResult),
-      result = ExecResult.error
 
 /-! ## Frame Construction Lemmas
 
 These lemmas construct the frame states at key PCs from the initial arguments.
 -/
 
-/-- Construct frame at PC 3 after initial setup.
-    This is the state immediately before the singleton branch analysis begins. -/
-axiom construct_frame_at_pc3
-    (o : RegistrationNativeOracle)
-    (chainId : UInt8)
-    (sender contract token ekBa commitBa respBa : ByteArray)
-    (v : MoveValue)
-    (rid_v : RefId)
-    (containers_at_pc3 : ContainerStore)
-    (hread : containers_at_pc3.read rid_v = some v)
-    (fuel : Nat) (hfuel : 70 ≤ fuel) :
-    ∃ (frame_at_pc3 : Frame),
-      frame_at_pc3.pc = 3 ∧
-      frame_at_pc3.locals.size ≥ 8 ∧
-      True
-
-axiom advance_pc3_to_pc4
-    (o : RegistrationNativeOracle)
-    (frame_at_pc3 : Frame)
-    (v : MoveValue)
-    (rid_v : RefId)
-    (containers_at_pc3 : ContainerStore)
-    (hpc : frame_at_pc3.pc = 3)
-    (fuel : Nat) (hfuel : 70 ≤ fuel) :
-    ∃ (frame_at_pc4 : Frame) (containers_at_pc4 : ContainerStore) (fuel_at_pc4 : Nat),
-      frame_at_pc4.pc = 4 ∧
-      containers_at_pc4 = containers_at_pc3 ∧
-      fuel_at_pc4 = fuel - 1
-
 /-! ## Fuel Management Lemmas
 
 These lemmas track fuel consumption through PC ranges.
 -/
-
-/-- Fuel is sufficient for complete singleton branch (PC 4-70). -/
-axiom fuel_sufficient_for_singleton_branch
-    (fuel : Nat)
-    (hfuel : 70 ≤ fuel) :
-    -- Each sub-range has sufficient fuel
-    (fuel - 2 ≥ 68) ∧  -- After PC 4-6
-    (fuel - 4 ≥ 66) ∧  -- After PC 6-8
-    (fuel - 6 ≥ 64) ∧  -- After PC 9-11
-    (fuel - 11 ≥ 59) ∧  -- After PC 12-17
-    (fuel - 13 ≥ 57) ∧  -- After PC 18-20
-    (fuel - 36 ≥ 34) ∧  -- After PC 20-43
-    (fuel - 42 ≥ 28) ∧  -- After PC 44-50
-    (fuel - 50 ≥ 20) ∧  -- After PC 51-59
-    (fuel - 56 ≥ 14) ∧  -- After PC 60-66
-    (fuel - 70 ≥ 0)
 
 theorem fuel_monotonic
     (fuel_start fuel_end : Nat)
@@ -3355,15 +1722,6 @@ theorem fuel_monotonic
 
 These lemmas establish that containers remain unchanged through pure operations.
 -/
-
-/-- Containers are unchanged through oracle calls that don't mutate state. -/
-axiom containers_unchanged_through_oracle_call
-    (o : RegistrationNativeOracle)
-    (containers_before containers_after : ContainerStore)
-    (args result : List MoveValue)
-    (horacle : True)  -- Placeholder for oracle call
-    (hcontainers : containers_after = containers_before) :
-    containers_after = containers_before
 
 theorem read_preserves_containers
     (containers : ContainerStore)
@@ -3378,109 +1736,20 @@ theorem read_preserves_containers
 These lemmas track the evolution of stack and locals through execution.
 -/
 
-/-- After stLoc, the local is updated and stack is popped. -/
-axiom stLoc_updates_local_and_pops_stack
-    (frame : Frame)
-    (idx : Nat)
-    (v : MoveValue)
-    (hstack : sorry -- frame.stack removed = [v])
-    (hbound : idx < frame.locals.size) : True
-
-axiom moveLoc_pushes_to_stack
-    (frame : Frame)
-    (idx : Nat)
-    (v : MoveValue)
-    (hlocal : frame.locals.get? idx = some v) : True
-
-axiom immBorrowLoc_pushes_immRef
-    (frame : Frame)
-    (idx : Nat)
-    (v : MoveValue)
-    (rid : RefId)
-    (containers containers' : ContainerStore)
-    (hlocal : frame.locals.get? idx = some v)
-    (halloc : containers.alloc v = (containers', rid)) : True
-
-axiom mutBorrowLoc_pushes_mutRef
-    (frame : Frame)
-    (idx : Nat)
-    (v : MoveValue)
-    (rid : RefId)
-    (containers containers' : ContainerStore)
-    (hlocal : frame.locals.get? idx = some v)
-    (halloc : containers.alloc v = (containers', rid)) : True
-
 /-! ## Native Call Patterns
 
 These lemmas capture common patterns for native function calls.
 -/
-
-/-- Pattern for 1-argument native call that returns 1 result. -/
-axiom native_call_1_to_1_pattern
-    (o : RegistrationNativeOracle)
-    (nativeIdx : Nat)
-    (arg result : MoveValue)
-    (containers : ContainerStore)
-    (frame : Frame)
-    (hstack : sorry -- frame.stack removed = [arg])
-    (horacle : True)  -- Placeholder for specific oracle call
-    : True
-
-axiom native_call_2_to_1_pattern
-    (o : RegistrationNativeOracle)
-    (nativeIdx : Nat)
-    (arg1 arg2 result : MoveValue)
-    (containers : ContainerStore)
-    (frame : Frame)
-    (hstack : sorry -- frame.stack removed = [arg2, arg1])
-    (horacle : True)  -- Placeholder for specific oracle call
-    : True
 
 /-! ## Branch Instruction Patterns
 
 These lemmas handle brFalse instruction behavior.
 -/
 
-/-- brFalse when condition is true (don't branch, continue). -/
-axiom brFalse_not_taken
-    (frame : Frame)
-    (target : Nat)
-    (hstack : sorry -- frame.stack removed = [MoveValue.bool true])
-    : True
-
-axiom brFalse_taken
-    (frame : Frame)
-    (target : Nat)
-    (hstack : sorry -- frame.stack removed = [MoveValue.bool false])
-    : True
-
 /-! ## Integration: Connecting Functional Simulation to Bytecode
 
 These theorems bridge the functional simulation results to the bytecode execution results.
 -/
-
-/-- When bytecode execution returns success, it matches functional sim success. -/
-axiom bytecode_success_matches_functional_sim_success
-    (o : RegistrationNativeOracle)
-    (chainId : UInt8)
-    (sender contract token ekBa commitBa respBa : ByteArray)
-    (fuel : Nat) (hfuel : 70 ≤ fuel)
-    (hbytecode : True)  -- Placeholder for bytecode execution result
-    (hfunctional : True)  -- Placeholder for functional sim result
-    :
-    ExecResult.returned [] MachineState.empty =
-    ExecResult.returned [] MachineState.empty
-
-axiom bytecode_abort_matches_functional_sim_verify_failed
-    (o : RegistrationNativeOracle)
-    (chainId : UInt8)
-    (sender contract token ekBa commitBa respBa : ByteArray)
-    (fuel : Nat) (hfuel : 70 ≤ fuel)
-    (hbytecode : True)  -- Placeholder for bytecode execution result
-    (hfunctional : True)  -- Placeholder for functional sim result
-    :
-    ExecResult.aborted 65537 =
-    ExecResult.aborted 65537
 
 /-! ## PC-by-PC Step Lemma Applications (Detailed Proofs)
 
@@ -3490,154 +1759,18 @@ for specific PC ranges, showing the exact pattern to follow.
 
 /-! ### Detailed: PC 4 execution -/
 
-/-- PC 4: call optionIsSomeRef (detailed step-by-step). -/
-axiom detailed_pc4_optionIsSomeRef_some
-    (o : RegistrationNativeOracle)
-    (frame_at_pc4 : Frame)
-    (v : MoveValue)
-    (rid_v : RefId)
-    (data : List MoveValue)
-    (containers_at_pc4 : ContainerStore)
-    (ms_at_pc4 : MachineState)
-    (hpc : frame_at_pc4.pc = 4)
-    (hstack : frame_at_pc4.stack = [MoveValue.immRef rid_v])
-    (hv : v = MoveValue.struct_ (MoveValue.bool true :: data))
-    (hread : containers_at_pc4.read rid_v = some v)
-    (hms : ms_at_pc4 = { containers := containers_at_pc4, callStack := [] })
-    (fuel : Nat) (hfuel : 70 ≤ fuel) :
-    ∃ (frame_at_pc5 : Frame) (ms_at_pc5 : MachineState) (fuel_at_pc5 : Nat),
-      frame_at_pc5.pc = 5 ∧
-      frame_at_pc5.stack = [MoveValue.bool true] ∧
-      ms_at_pc5.containers = containers_at_pc4 ∧
-      fuel_at_pc5 = fuel - 1
-
 /-! ### Detailed: PC 5 execution (brFalse not taken) -/
-
-/-- PC 5: brFalse 79 (not taken, condition is true). -/
-axiom detailed_pc5_brFalse_not_taken
-    (o : RegistrationNativeOracle)
-    (frame_at_pc5 : Frame)
-    (containers_at_pc5 : ContainerStore)
-    (ms_at_pc5 : MachineState)
-    (hpc : frame_at_pc5.pc = 5)
-    (hstack : frame_at_pc5.stack = [MoveValue.bool true])
-    (hms : ms_at_pc5 = { containers := containers_at_pc5, callStack := [] })
-    (fuel : Nat) (hfuel : 69 ≤ fuel) :
-    ∃ (frame_at_pc6 : Frame) (ms_at_pc6 : MachineState) (fuel_at_pc6 : Nat),
-      frame_at_pc6.pc = 6 ∧
-      frame_at_pc6.stack = [] ∧
-      ms_at_pc6.containers = containers_at_pc5 ∧
-      fuel_at_pc6 = fuel - 1
 
 /-! ### Detailed: PC 6 execution (mutBorrowLoc) -/
 
-/-- PC 6: mutBorrowLoc 7 (borrow local 7 mutably). -/
-axiom detailed_pc6_mutBorrowLoc
-    (o : RegistrationNativeOracle)
-    (frame_at_pc6 : Frame)
-    (v : MoveValue)
-    (containers_at_pc6 : ContainerStore)
-    (ms_at_pc6 : MachineState)
-    (hpc : frame_at_pc6.pc = 6)
-    (hlocal7 : frame_at_pc6.locals.get? 7 = some v)
-    (hms : ms_at_pc6 = { containers := containers_at_pc6, callStack := [] })
-    (fuel : Nat) (hfuel : 68 ≤ fuel) :
-    ∃ (frame_at_pc7 : Frame) (ms_at_pc7 : MachineState) (fuel_at_pc7 : Nat) (rid : RefId),
-      frame_at_pc7.pc = 7 ∧
-      frame_at_pc7.stack = [MoveValue.mutRef rid] ∧
-      ms_at_pc7.containers.read rid = some v ∧
-      fuel_at_pc7 = fuel - 1
-
 /-! ### Detailed: PC 7 execution (optionExtractRef) -/
 
-/-- PC 7: call optionExtractRef (extract value from Some). -/
-axiom detailed_pc7_optionExtractRef
-    (o : RegistrationNativeOracle)
-    (frame_at_pc7 : Frame)
-    (v rCompressed : MoveValue)
-    (rest_data : List MoveValue)
-    (rid_v : RefId)
-    (containers_at_pc7 : ContainerStore)
-    (ms_at_pc7 : MachineState)
-    (hpc : frame_at_pc7.pc = 7)
-    (hstack : frame_at_pc7.stack = [MoveValue.mutRef rid_v])
-    (hv : v = MoveValue.struct_ (MoveValue.bool true :: rCompressed :: rest_data))
-    (hread : containers_at_pc7.read rid_v = some v)
-    (hms : ms_at_pc7 = { containers := containers_at_pc7, callStack := [] })
-    (fuel : Nat) (hfuel : 67 ≤ fuel) :
-    ∃ (frame_at_pc8 : Frame) (ms_at_pc8 : MachineState) (fuel_at_pc8 : Nat),
-      frame_at_pc8.pc = 8 ∧
-      frame_at_pc8.stack = [rCompressed] ∧
-      ms_at_pc8.containers = containers_at_pc7 ∧
-      fuel_at_pc8 = fuel - 1
-
 /-! ### Detailed: PC 8 execution (stLoc) -/
-
-/-- PC 8: stLoc 8 (store rCompressed in local 8). -/
-axiom detailed_pc8_stLoc
-    (o : RegistrationNativeOracle)
-    (frame_at_pc8 : Frame)
-    (rCompressed : MoveValue)
-    (containers_at_pc8 : ContainerStore)
-    (ms_at_pc8 : MachineState)
-    (hpc : frame_at_pc8.pc = 8)
-    (hstack : frame_at_pc8.stack = [rCompressed])
-    (hbound : 8 < frame_at_pc8.locals.size)
-    (hms : ms_at_pc8 = { containers := containers_at_pc8, callStack := [] })
-    (fuel : Nat) (hfuel : 66 ≤ fuel) :
-    ∃ (frame_at_pc9 : Frame) (ms_at_pc9 : MachineState) (fuel_at_pc9 : Nat),
-      frame_at_pc9.pc = 9 ∧
-      frame_at_pc9.locals.get? 8 = some rCompressed ∧
-      frame_at_pc9.stack = [] ∧
-      ms_at_pc9.containers = containers_at_pc8 ∧
-      fuel_at_pc9 = fuel - 1
 
 /-! ## Additional Container Store Infrastructure
 
 These lemmas support reasoning about ContainerStore operations during bytecode execution.
 -/
-
-/-- Reading after alloc returns the allocated value. -/
-axiom containers_read_after_alloc
-    (containers : ContainerStore)
-    (v : MoveValue)
-    (rid : RefId)
-    (containers' : ContainerStore)
-    (halloc : containers.alloc v = some (rid, containers')) :
-    containers'.read rid = some v
-
-axiom containers_read_preserved_by_alloc
-    (containers : ContainerStore)
-    (v : MoveValue)
-    (rid rid' : RefId)
-    (containers' : ContainerStore)
-    (halloc : containers.alloc v = some (rid', containers'))
-    (hne : rid ≠ rid')
-    (hread_old : containers.read rid = some v_old) :
-    containers'.read rid = some v_old
-
-axiom containers_write_succeeds_on_valid_ref
-    (containers : ContainerStore)
-    (rid : RefId)
-    (v_old v_new : MoveValue)
-    (hread : containers.read rid = some v_old) :
-    ∃ containers', containers.write rid v_new = some containers'
-
-axiom containers_read_after_write_same
-    (containers containers' : ContainerStore)
-    (rid : RefId)
-    (v : MoveValue)
-    (hwrite : containers.write rid v = some containers') :
-    containers'.read rid = some v
-
-axiom containers_read_after_write_diff
-    (containers containers' : ContainerStore)
-    (rid rid' : RefId)
-    (v v_old : MoveValue)
-    (hne : rid ≠ rid')
-    (hwrite : containers.write rid v = some containers')
-    (hread_old : containers.read rid' = some v_old) :
-    containers'.read rid' = some v_old
 
 /-! ## Frame and Locals Management Infrastructure
 
@@ -3719,13 +1852,6 @@ theorem fuel_sub_add_cancel
     (h2 : m ≤ fuel - n) :
     fuel - n - m = fuel - (n + m) := by
   omega
-
-axiom fuel_sufficient_after
-    (fuel : Nat)
-    (consumed : Nat)
-    (required : Nat)
-    (h1 : consumed + required ≤ fuel) :
-    required ≤ fuel - consumed
 
 /-! ## Registration Locals Construction
 
@@ -3825,202 +1951,16 @@ def buildRegistrationLocals
 These helpers enable composition of multiple consecutive steps.
 -/
 
-/-- Running through two consecutive steps. -/
-axiom run_two_consecutive_steps
-    (env : ModuleEnv)
-    (cs : List Frame)
-    (frame1 frame2 frame3 : Frame)
-    (stack1 stack2 stack3 : List MoveValue)
-    (ms1 ms2 ms3 : MachineState)
-    (fuel : Nat)
-    (step1 : step env frame cs1 stack1 ms1 = .ok cs frame2 stack2 ms2)
-    (step2 : step env frame cs2 stack2 ms2 = .ok cs frame3 stack3 ms3)
-    (hfuel : 2 ≤ fuel) :
-    run env frame cs1 stack1 ms1 fuel =
-    run env frame cs3 stack3 ms3 (fuel - 2)
-
-axiom run_three_consecutive_steps
-    (env : ModuleEnv)
-    (cs : List Frame)
-    (frame1 frame2 frame3 frame4 : Frame)
-    (stack1 stack2 stack3 stack4 : List MoveValue)
-    (ms1 ms2 ms3 ms4 : MachineState)
-    (fuel : Nat)
-    (step1 : step env frame cs1 stack1 ms1 = .ok cs frame2 stack2 ms2)
-    (step2 : step env frame cs2 stack2 ms2 = .ok cs frame3 stack3 ms3)
-    (step3 : step env frame cs3 stack3 ms3 = .ok cs frame4 stack4 ms4)
-    (hfuel : 3 ≤ fuel) :
-    run env frame cs1 stack1 ms1 fuel =
-    run env frame cs4 stack4 ms4 (fuel - 3)
-
-axiom run_four_consecutive_steps
-    (env : ModuleEnv)
-    (cs : List Frame)
-    (frame1 frame2 frame3 frame4 frame5 : Frame)
-    (stack1 stack2 stack3 stack4 stack5 : List MoveValue)
-    (ms1 ms2 ms3 ms4 ms5 : MachineState)
-    (fuel : Nat)
-    (step1 : step env frame cs1 stack1 ms1 = .ok cs frame2 stack2 ms2)
-    (step2 : step env frame cs2 stack2 ms2 = .ok cs frame3 stack3 ms3)
-    (step3 : step env frame cs3 stack3 ms3 = .ok cs frame4 stack4 ms4)
-    (step4 : step env frame cs4 stack4 ms4 = .ok cs frame5 stack5 ms5)
-    (hfuel : 4 ≤ fuel) :
-    run env frame cs1 stack1 ms1 fuel =
-    run env frame cs5 stack5 ms5 (fuel - 4)
-
-axiom run_five_consecutive_steps
-    (env : ModuleEnv)
-    (cs : List Frame)
-    (frame1 frame2 frame3 frame4 frame5 frame6 : Frame)
-    (stack1 stack2 stack3 stack4 stack5 stack6 : List MoveValue)
-    (ms1 ms2 ms3 ms4 ms5 ms6 : MachineState)
-    (fuel : Nat)
-    (step1 : step env frame cs1 stack1 ms1 = .ok cs frame2 stack2 ms2)
-    (step2 : step env frame cs2 stack2 ms2 = .ok cs frame3 stack3 ms3)
-    (step3 : step env frame cs3 stack3 ms3 = .ok cs frame4 stack4 ms4)
-    (step4 : step env frame cs4 stack4 ms4 = .ok cs frame5 stack5 ms5)
-    (step5 : step env frame cs5 stack5 ms5 = .ok cs frame6 stack6 ms6)
-    (hfuel : 5 ≤ fuel) :
-    run env frame cs1 stack1 ms1 fuel =
-    run env frame cs6 stack6 ms6 (fuel - 5)
-
 /-! ## Error Path Execution Theorems
 
 These theorems characterize execution when oracle calls fail or return error values,
 completing the proof coverage for all execution paths.
 -/
 
-/-- When newCompressedPointFromBytes returns None, execution aborts at PC 1. -/
-axiom newCompressedPointFromBytes_none_produces_error
-    (o : RegistrationNativeOracle)
-    (commitBa : ByteArray)
-    (commitBa_vec : MoveValue)
-    (h_vec : commitBa_vec = .vector .u8 (commitBa.toList.map .u8))
-    (h_none : o.newCompressedPointFromBytes [commitBa_vec] = none)
-    (fuel : Nat)
-    (h_fuel : fuel ≥ 3) :
-    ∃ (result : ExecResult),
-      result = .error
-
-axiom optionIsSomeRef_false_pc4_branches_to_abort
-    (o : RegistrationNativeOracle)
-    (containers : ContainerStore)
-    (rid : RefId)
-    (horacle : optionIsSomeRef containers [.immRef rid] =
-               some ([.bool false], containers))
-    (fuel : Nat)
-    (h_fuel : fuel ≥ 15) :
-    ∃ (result : ExecResult),
-      result = .aborted 65537
-
-axiom newScalarFromBytes_none_option_pc10_branches_to_abort
-    (o : RegistrationNativeOracle)
-    (respBa_vec : MoveValue)
-    (h_result : o.newScalarFromBytes [respBa_vec] = some [.struct_ [.bool false]])
-    (fuel : Nat)
-    (h_fuel : fuel ≥ 20) :
-    ∃ (result : ExecResult),
-      result = .aborted 65537
-
-axiom pubkeyToPoint_none_pc49_produces_error
-    (o : RegistrationNativeOracle)
-    (ek_point : MoveValue)
-    (h_none : o.pubkeyToPoint [ek_point] = none)
-    (fuel : Nat)
-    (h_fuel : fuel ≥ 50) :
-    ∃ (result : ExecResult),
-      result = .error
-
-axiom pointMul_h_s_none_produces_error
-    (o : RegistrationNativeOracle)
-    (h s : MoveValue)
-    (h_none : o.pointMul [h, s] = none)
-    (fuel : Nat)
-    (h_fuel : fuel ≥ 55) :
-    ∃ (result : ExecResult),
-      result = .error
-
-axiom pointMul_ek_e_none_produces_error
-    (o : RegistrationNativeOracle)
-    (ek e : MoveValue)
-    (h_none : o.pointMul [ek, e] = none)
-    (fuel : Nat)
-    (h_fuel : fuel ≥ 58) :
-    ∃ (result : ExecResult),
-      result = .error
-
-axiom pointAdd_none_produces_error
-    (o : RegistrationNativeOracle)
-    (point1 point2 : MoveValue)
-    (h_none : o.pointAdd [point1, point2] = none)
-    (fuel : Nat)
-    (h_fuel : fuel ≥ 62) :
-    ∃ (result : ExecResult),
-      result = .error
-
-axiom pointDecompress_none_produces_error
-    (o : RegistrationNativeOracle)
-    (compressed : MoveValue)
-    (h_none : o.pointDecompress [compressed] = none)
-    (fuel : Nat)
-    (h_fuel : fuel ≥ 65) :
-    ∃ (result : ExecResult),
-      result = .error
-
-axiom pointEquals_none_produces_error
-    (o : RegistrationNativeOracle)
-    (lhs rhs : MoveValue)
-    (h_none : o.pointEquals [lhs, rhs] = none)
-    (fuel : Nat)
-    (h_fuel : fuel ≥ 68) :
-    ∃ (result : ExecResult),
-      result = .error
-
-axiom pointEquals_false_pc69_branches_to_abort
-    (o : RegistrationNativeOracle)
-    (lhs rhs : MoveValue)
-    (h_false : o.pointEquals [lhs, rhs] = some [.bool false])
-    (fuel : Nat)
-    (h_fuel : fuel ≥ 73) :
-    ∃ (result : ExecResult),
-      result = .aborted 65537
-
 /-! ## Malformed Input Handling
 
 Theorems for handling malformed or invalid input data.
 -/
-
-/-- Non-struct value to optionIsSomeRef produces none. -/
-axiom optionIsSomeRef_non_struct_produces_none
-    (containers : ContainerStore)
-    (rid : RefId)
-    (v : MoveValue)
-    (hread : containers.read rid = some v)
-    (hnot_struct : ∀ fields, v ≠ .struct_ fields) :
-    optionIsSomeRef containers [.immRef rid] = none
-
-axiom optionIsSomeRef_malformed_struct_produces_none
-    (containers : ContainerStore)
-    (rid : RefId)
-    (fields : List MoveValue)
-    (hread : containers.read rid = some (.struct_ fields))
-    (hmal : ∀ b rest, fields ≠ .bool b :: rest) :
-    optionIsSomeRef containers [.immRef rid] = none
-
-axiom optionExtractRef_none_tagged_produces_none
-    (containers : ContainerStore)
-    (rid : RefId)
-    (rest : List MoveValue)
-    (hread : containers.read rid = some (.struct_ (.bool false :: rest))) :
-    optionExtractRef containers [.mutRef rid] = none
-
-axiom optionExtractRef_malformed_produces_none
-    (containers : ContainerStore)
-    (rid : RefId)
-    (fields : List MoveValue)
-    (hread : containers.read rid = some (.struct_ fields))
-    (hmal : ∀ v rest, fields ≠ .bool true :: v :: rest) :
-    optionExtractRef containers [.mutRef rid] = none
 
 /-! ## Container Store Edge Cases
 
@@ -4037,13 +1977,6 @@ theorem containers_read_nonexistent_returns_none
   · rfl
   · exact absurd h (h_not_allocated _)
 
-axiom containers_write_nonexistent_fails
-    (containers : ContainerStore)
-    (rid : RefId)
-    (v : MoveValue)
-    (h_not_allocated : containers.read rid = none) :
-    containers.write rid v = none
-
 /-! ## Abort Code Verification
 
 Theorems verifying the specific abort codes produced by different error conditions.
@@ -4057,15 +1990,6 @@ Theorems verifying the specific abort codes produced by different error conditio
 @[simp] theorem error_invalid_argument_1_eq_sigma_failed :
     errorInvalidArgument [.u64 1] = some [.u64 65537] := by
   unfold errorInvalidArgument; rfl
-
-axiom pc73_abort_has_correct_code
-    (env : ModuleEnv)
-    (frame_pc73 : Frame)
-    (fuel : Nat)
-    (h_pc : frame_pc73.pc = 73)
-    (h_fuel : 1 ≤ fuel) :
-    ∃ (result : ExecResult),
-      result = .aborted 65537
 
 /-! ## Comprehensive Frame Construction Helpers
 
@@ -4155,23 +2079,6 @@ theorem stack_pop_twice
 Comprehensive helpers for locals array updates during execution.
 -/
 
-/-- Setting multiple locals preserves independence. -/
-axiom locals_set_multiple_independent
-    (locals : Array (Option MoveValue))
-    (idx1 idx2 : Nat)
-    (v1 v2 : MoveValue)
-    (hne : idx1 ≠ idx2)
-    (h1 : idx1 < locals.size)
-    (h2 : idx2 < locals.size) :
-    ((locals.set! idx1 (some v1)).set! idx2 (some v2))[idx1]? = some (some v1) ∧
-    ((locals.set! idx1 (some v1)).set! idx2 (some v2))[idx2]? = some (some v2)
-
-axiom locals_clear
-    (locals : Array (Option MoveValue))
-    (idx : Nat)
-    (h : idx < locals.size) :
-    (locals.set! idx none)[idx]? = some none
-
 @[simp] theorem locals_set_preserves_size
     (locals : Array (Option MoveValue))
     (idx : Nat)
@@ -4192,28 +2099,10 @@ theorem fuel_for_n_steps
     ∃ fuel', fuel' = fuel - n ∧ fuel' + n = fuel := by
   exact ⟨fuel - n, rfl, Nat.sub_add_cancel h⟩
 
-axiom fuel_three_phase_composition
-    (fuel n1 n2 n3 : Nat)
-    (h : n1 + n2 + n3 ≤ fuel) :
-    fuel - n1 - n2 - n3 = fuel - (n1 + n2 + n3)
-
-axiom fuel_sufficient_for_sub_phases
-    (fuel total n1 n2 n3 : Nat)
-    (h_total : total = n1 + n2 + n3)
-    (h_fuel : total ≤ fuel) :
-    n1 ≤ fuel ∧ n2 ≤ fuel - n1 ∧ n3 ≤ fuel - n1 - n2
-
 /-! ## MachineState Update Helpers
 
 Helpers for updating MachineState components.
 -/
-
-/-- Updating containers preserves other components. -/
-axiom machineState_update_containers_preserves
-    (ms : MachineState)
-    (containers' : ContainerStore) :
-    { ms with containers := containers' }.callStack = ms.callStack ∧
-    { ms with containers := containers' }.gasUsed = ms.gasUsed
 
 @[simp] theorem machineState_empty_containers :
     MachineState.empty.containers = ContainerStore.empty := by
@@ -4223,37 +2112,6 @@ axiom machineState_update_containers_preserves
 
 Large-scale PC range composition helpers.
 -/
-
-/-- Running from PC i to PC j consumes j-i fuel. -/
-axiom fuel_consumed_equals_pc_difference
-    (fuel_before fuel_after : Nat)
-    (pc_start pc_end : Nat)
-    (h_fuel : fuel_after = fuel_before - (pc_end - pc_start))
-    (h_pc : pc_start < pc_end) :
-    fuel_before - fuel_after = pc_end - pc_start
-
-axiom execution_deterministic
-    (env : ModuleEnv)
-    (cs : List Frame)
-    (frame : Frame)
-    (stack : List MoveValue)
-    (ms : MachineState)
-    (result1 result2 : StepResult)
-    (h1 : step env frame cs stack ms = result1)
-    (h2 : step env frame cs stack ms = result2) :
-    result1 = result2
-
-axiom run_deterministic
-    (env : ModuleEnv)
-    (cs : List Frame)
-    (frame : Frame)
-    (stack : List MoveValue)
-    (ms : MachineState)
-    (fuel : Nat)
-    (result1 result2 : ExecResult)
-    (h1 : run env frame cs stack ms fuel = result1)
-    (h2 : run env frame cs stack ms fuel = result2) :
-    result1 = result2
 
 /-! ## Comprehensive PC Range Helpers for Singleton Branch
 
@@ -4281,7 +2139,7 @@ This helper demonstrates:
 
 -- Note: This theorem structure documents the PC 3-8 chain but is simplified to True for now
 -- Full signature would specify the exact run equations before/after
-axiom registration_run_through_pc8_from_pc3
+theorem registration_run_through_pc8_from_pc3
     (o : RegistrationNativeOracle)
     (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
     (v rCompressed : MoveValue)
@@ -4289,15 +2147,7 @@ axiom registration_run_through_pc8_from_pc3
     (extraFuel : Nat) (h_fuel : 6 ≤ extraFuel) :
     True
 
-axiom registration_run_through_pc8_from_pc3_structure
-    (o : RegistrationNativeOracle)
-    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
-    (v rCompressed : MoveValue)
-    (restData : List MoveValue)
-    (extraFuel : Nat) :
-    True
-
-/-! Proof body sketch (for future completion): True
+/-! Proof body sketch (for future completion): True := trivial
 
   let locals3 := ((((registrationArgs chainId sender contract token ekBa commitBa respBa).map some ++
                     List.replicate 12 none).toArray).set 5 none (by
@@ -4477,14 +2327,12 @@ This helper demonstrates scalar deserialization and option handling pattern.
 
 -- Note: Full signature would specify PC 10 → 18 run equation
 -- Simplified to True for clean build
-axiom registration_run_through_pc17_from_pc10
+theorem registration_run_through_pc17_from_pc10
     (o : RegistrationNativeOracle)
     (respBa_val scalar : MoveValue)
     (restScalarData : List MoveValue)
     (extraFuel : Nat) :
-    True
-
-axiom registration_run_through_pc17_from_pc10_full : ...
+    True := trivial
 
 /-! ### Helper: PC 27 through PC 35 — Message field continuation
 
@@ -4504,14 +2352,12 @@ This demonstrates repetitive pattern of: mutBorrow → moveLoc → append → po
 
 -- Note: Full signature would specify PC 27 → 36 run equation
 -- Simplified to True for clean build
-axiom registration_run_through_pc35_from_pc27
+theorem registration_run_through_pc35_from_pc27
     (o : RegistrationNativeOracle)
     (contract token ekPoint msgBuf : MoveValue)
     (rid_msg : RefId)
     (extraFuel : Nat) :
-    True
-
-axiom registration_run_through_pc35_from_pc27_full : ...
+    True := trivial
 
 /-! ### Helper: PC 60 through PC 67 — Final verification setup
 
@@ -4530,17 +2376,15 @@ After PC 67, stack has all arguments ready for sigma protocol call at PC 68.
 
 -- Note: Full signature would specify PC 60 → 68 run equation
 -- Simplified to True for clean build
-axiom registration_run_through_pc67_from_pc60
+theorem registration_run_through_pc67_from_pc60
     (o : RegistrationNativeOracle)
     (commitPoint commitBytes : MoveValue)
     (extraFuel : Nat) :
     True
 
-axiom registration_run_through_pc67_from_pc60_full : ...
-
 /-! ### Additional composition patterns
 
-The helpers above can be composed in the main theorem like: True
+The helpers above can be composed in the main theorem like: True := trivial
 
 ```lean
 rw [registration_run_through_pc2]              -- PC 0 → 3
@@ -4563,3 +2407,56 @@ Remaining to complete singleton branch: ~200-300 lines for final composition
 -/
 
 -/
+
+/-! ## Real top-level Registration equivalence (added 2026-04-26)
+
+Earlier doc-comment text in this file referenced
+`registration_eval_equiv_functional_sim` and
+`registration_eval_equiv_functional_sim_compressedPoint_singleton` as if they
+existed as Lean declarations, but they were inside doc comments — phantom names
+that `grep ^axiom` matched but `#check` could not resolve.
+
+The two declarations below make the actual Lean state match the documented
+audit/AXIOM_INVENTORY.md inventory:
+
+* `registration_eval_equiv_functional_sim_compressedPoint_singleton` — the one
+  remaining real, user-defined CA Lean axiom. Captures the residual gap: the
+  bytecode-vs-functional-sim equivalence on the happy path, where the
+  compressed-point oracle returns exactly one element. Proving it requires the
+  full ~84-PC chain through Schnorr verification, gated on the architectural
+  redesign described in plan §4.
+
+* `registration_eval_equiv_functional_sim` — the top-level equivalence theorem,
+  composed by case-splitting `single?` on the oracle output:
+  - non-singleton → discharged by `compressedPoint_nonSingleton` (proven, no
+    user-defined axioms).
+  - singleton → discharged by the axiom above. -/
+
+axiom registration_eval_equiv_functional_sim_compressedPoint_singleton
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (fuel : Nat) (hfuel : 2 ≤ fuel)
+    (rOpt : MoveValue)
+    (hsing : single? (o.newCompressedPointFromBytes
+        [.vector .u8 (commitBa.toList.map .u8)]) = some rOpt) :
+    (eval (registrationModuleEnv o) verifyRegistrationProofIdx
+        (registrationArgs chainId sender contract token ekBa commitBa respBa)
+        fuel MachineState.empty).dropMs =
+    verifyRegistrationBytecodeResult o
+        (registrationArgs chainId sender contract token ekBa commitBa respBa)
+
+theorem registration_eval_equiv_functional_sim
+    (o : RegistrationNativeOracle)
+    (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
+    (fuel : Nat) (hfuel : 2 ≤ fuel) :
+    (eval (registrationModuleEnv o) verifyRegistrationProofIdx
+        (registrationArgs chainId sender contract token ekBa commitBa respBa)
+        fuel MachineState.empty).dropMs =
+    verifyRegistrationBytecodeResult o
+        (registrationArgs chainId sender contract token ekBa commitBa respBa) := by
+  rcases h : single? (o.newCompressedPointFromBytes
+                        [.vector .u8 (commitBa.toList.map .u8)]) with _ | rOpt
+  · exact registration_eval_equiv_functional_sim_compressedPoint_nonSingleton
+            o chainId sender contract token ekBa commitBa respBa fuel hfuel h
+  · exact registration_eval_equiv_functional_sim_compressedPoint_singleton
+            o chainId sender contract token ekBa commitBa respBa fuel hfuel rOpt h

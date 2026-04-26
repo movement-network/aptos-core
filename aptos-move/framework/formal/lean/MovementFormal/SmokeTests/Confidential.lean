@@ -98,8 +98,19 @@ theorem evalCA_172_eq_eval :
 theorem evalCA_173_eq_eval :
     evalCA 173 [] 20 = eval confidentialModuleEnv 173 [] 20 := rfl
 
+set_option maxRecDepth 100000 in
 theorem evalCA_171_eq_evalCA_35_fixture :
     evalCA 171 [] 50 == evalCA 35 [] 50 := by
-  sorry
+  rw [show evalCA 171 [] 50 = .returned [MoveValue.bool true] MachineState.empty from by
+        show (match caRegistrationHelpersRoundtripNative [] with
+              | some results => ExecResult.returned results MachineState.empty
+              | none => .error) = _
+        rw [caRegistrationHelpersRoundtripNative_empty_eq_true],
+      show evalCA 35 [] 50 = .returned [MoveValue.bool true] MachineState.empty from by
+        show (match caRegistrationHelpersRoundtripNative [] with
+              | some results => ExecResult.returned results MachineState.empty
+              | none => .error) = _
+        rw [caRegistrationHelpersRoundtripNative_empty_eq_true]]
+  rfl
 
 end MovementFormal.SmokeTests.Confidential

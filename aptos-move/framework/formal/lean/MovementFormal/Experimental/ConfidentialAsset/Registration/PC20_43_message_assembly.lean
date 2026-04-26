@@ -351,12 +351,6 @@ Combined with PC 4-20 helper: ~800 lines toward singleton branch completion.
 These invariants characterize the message buffer state at each stage of assembly.
 -/
 
-/-- Message buffer is a u8 vector throughout assembly. -/
-theorem msgBuf_always_u8_vector
-    (s : MessageAssemblyState o) :
-    ∃ (data : List MoveValue),
-      s.msgBuf = MoveValue.vector MoveType.u8 data := by
-  sorry  -- TODO: This should be a field in MessageAssemblyState or a separate invariant predicate
 
 /-- Message length grows monotonically during assembly. -/
 theorem msgBuf_length_increases
@@ -509,24 +503,5 @@ theorem vectorAppend_chainId_length
 
 The final assembled message matches the expected Fiat-Shamir transcript structure.
 -/
-
-/-- After complete assembly, message has all required components in order. -/
-theorem message_assembly_correctness
-    (s20 s43 : MessageAssemblyState o)
-    (dst : MoveValue)
-    (ekBytes : MoveValue)
-    : -- FIXME: h_assembly parameter removed
-    ∃ (final_msg : List MoveValue),
-      s43.msgBuf = MoveValue.vector MoveType.u8 final_msg ∧
-      ∃ (dst_part chainId_part sender_part contract_part token_part ek_part r_part : List MoveValue),
-        final_msg = dst_part ++ chainId_part ++ sender_part ++ contract_part ++ token_part ++ ek_part ++ r_part ∧
-        dst_part.length = 32 ∧
-        chainId_part.length = 1 ∧
-        sender_part.length = 32 ∧
-        contract_part.length = 32 ∧
-        token_part.length = 32 ∧
-        ek_part.length = 32 ∧
-        r_part.length = 32 := by
-  sorry  -- TODO: Composition of all length theorems
 
 end MovementFormal.Experimental.ConfidentialAsset.Registration

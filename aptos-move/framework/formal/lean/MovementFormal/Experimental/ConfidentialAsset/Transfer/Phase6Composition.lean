@@ -52,6 +52,14 @@ theorem transfer_is_formally_verified
     (hFieldCount : 2 < proofFields.length)
     (hread : initMs.containers.read proofRid = some (.struct_ proofFields))
     (hproofRef : getRefId proofRef = some proofRid)
+    (hSigmaPreserves :
+       TransferSigmaPreservesProofRead o chainId sender contract
+         senderEkRef recipientEkRef curBalRef newBalRef
+         senderAmountRef recipientAmountRef
+         auditorEksRef auditorAmountsRef senderAuditorHintRef
+         proofRid proofFields initMs (by omega : 0 < proofFields.length))
+    (hNewBalRangePreserves :
+       TransferNewBalRangePreservesProofRead o newBalRef proofRid proofFields)
     (fuel : Nat)
     (hfuel : fuel ≥ 24) :
     let args := [.u8 chainId, .address sender, .address contract,
@@ -64,13 +72,14 @@ theorem transfer_is_formally_verified
             senderAmountRef recipientAmountRef
             auditorEksRef auditorAmountsRef senderAuditorHintRef
             proofRid proofFields initMs hFieldCount with
-    | .returned ms => .returned [] ms
+    | .returned _ => .returned [] MachineState.empty
     | .error => .error :=
   transfer_eval_equiv_functional_sim o chainId sender contract
     senderEkRef recipientEkRef curBalRef newBalRef
     senderAmountRef recipientAmountRef
     auditorEksRef auditorAmountsRef senderAuditorHintRef proofRef
-    proofRid proofFields initMs hFieldCount hread hproofRef fuel hfuel
+    proofRid proofFields initMs hFieldCount hread hproofRef
+    hSigmaPreserves hNewBalRangePreserves fuel hfuel
 
 /-- Verification: the theorem above is the composition claim. -/
 example (o : TransferModuleOracle)
@@ -83,6 +92,14 @@ example (o : TransferModuleOracle)
     (hFieldCount : 2 < proofFields.length)
     (hread : initMs.containers.read proofRid = some (.struct_ proofFields))
     (hproofRef : getRefId proofRef = some proofRid)
+    (hSigmaPreserves :
+       TransferSigmaPreservesProofRead o chainId sender contract
+         senderEkRef recipientEkRef curBalRef newBalRef
+         senderAmountRef recipientAmountRef
+         auditorEksRef auditorAmountsRef senderAuditorHintRef
+         proofRid proofFields initMs (by omega : 0 < proofFields.length))
+    (hNewBalRangePreserves :
+       TransferNewBalRangePreservesProofRead o newBalRef proofRid proofFields)
     (fuel : Nat)
     (hfuel : fuel ≥ 24) :
     let args := [.u8 chainId, .address sender, .address contract,
@@ -95,12 +112,13 @@ example (o : TransferModuleOracle)
             senderAmountRef recipientAmountRef
             auditorEksRef auditorAmountsRef senderAuditorHintRef
             proofRid proofFields initMs hFieldCount with
-    | .returned ms => .returned [] ms
+    | .returned _ => .returned [] MachineState.empty
     | .error => .error :=
   transfer_eval_equiv_functional_sim o chainId sender contract
     senderEkRef recipientEkRef curBalRef newBalRef
     senderAmountRef recipientAmountRef
     auditorEksRef auditorAmountsRef senderAuditorHintRef proofRef
-    proofRid proofFields initMs hFieldCount hread hproofRef fuel hfuel
+    proofRid proofFields initMs hFieldCount hread hproofRef
+    hSigmaPreserves hNewBalRangePreserves fuel hfuel
 
 end MovementFormal.Experimental.ConfidentialAsset.Transfer.Phase6Composition

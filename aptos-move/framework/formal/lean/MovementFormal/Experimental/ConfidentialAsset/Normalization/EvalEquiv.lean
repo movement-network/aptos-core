@@ -6,6 +6,8 @@ import MovementFormal.MoveModel.StepLemmas.Calls
 import MovementFormal.MoveModel.StepLemmas.Run
 import MovementFormal.MoveModel.ExecResultDropMs
 import MovementFormal.Experimental.ConfidentialAsset.Normalization.BytecodeLemmas
+import Mathlib.Tactic.Common
+import Mathlib.Tactic.Set
 
 /-!
 # Bytecode eval ≡ functional simulation for `verify_normalization_proof` — Phase 4
@@ -296,6 +298,25 @@ theorem step_normalization_pc8
   simp only [normalizationModuleEnv_fn0_numReturns, beq_self_eq_true, ↓reduceIte]
   rw [show frame.pc + 1 = 9 from by omega]
 
+theorem step_normalization_pc8_multi
+    (o : NormalizationModuleOracle)
+    (frame : Frame) (cs : List Frame) (stack : List MoveValue) (ms : MachineState)
+    (hcode : frame.code = verifyNormalizationProofCode) (hpc : frame.pc = 8)
+    (args : List MoveValue) (rest : List MoveValue) (v : MoveValue) (vs : List MoveValue)
+    (containers' : ContainerStore)
+    (htake : takeN stack 7 = some (args, rest))
+    (himpl : o.verifySigmaProof ms.containers args = some (v :: vs, containers')) :
+    step (normalizationModuleEnv o) frame cs stack ms = .error := by
+  have hpc_lt : frame.pc < frame.code.size := by rw [hpc, hcode]; decide
+  have hc : frame.code[frame.pc]'hpc_lt = .call 0 := by
+    simp only [hcode, hpc]; exact code_pc8
+  simp only [step, dif_pos hpc_lt, hc, dif_pos (show 0 < (normalizationModuleEnv o).functions.size by simp)]
+  simp only [normalizationModuleEnv_fn0_numParams, htake, normalizationModuleEnv_fn0_body, himpl]
+  unfold handleNativeResult
+  cases vs with
+  | nil => simp [normalizationModuleEnv_fn0_numReturns]
+  | cons w ws => simp [normalizationModuleEnv_fn0_numReturns]
+
 theorem step_normalization_pc8_none
     (o : NormalizationModuleOracle)
     (frame : Frame) (cs : List Frame) (stack : List MoveValue) (ms : MachineState)
@@ -388,6 +409,25 @@ theorem step_normalization_pc12
   unfold handleNativeResult
   simp only [normalizationModuleEnv_fn1_numReturns, beq_self_eq_true, ↓reduceIte]
   rw [show frame.pc + 1 = 13 from by omega]
+
+theorem step_normalization_pc12_multi
+    (o : NormalizationModuleOracle)
+    (frame : Frame) (cs : List Frame) (stack : List MoveValue) (ms : MachineState)
+    (hcode : frame.code = verifyNormalizationProofCode) (hpc : frame.pc = 12)
+    (args : List MoveValue) (rest : List MoveValue) (v : MoveValue) (vs : List MoveValue)
+    (containers' : ContainerStore)
+    (htake : takeN stack 2 = some (args, rest))
+    (himpl : o.verifyRangeProof ms.containers args = some (v :: vs, containers')) :
+    step (normalizationModuleEnv o) frame cs stack ms = .error := by
+  have hpc_lt : frame.pc < frame.code.size := by rw [hpc, hcode]; decide
+  have hc : frame.code[frame.pc]'hpc_lt = .call 1 := by
+    simp only [hcode, hpc]; exact code_pc12
+  simp only [step, dif_pos hpc_lt, hc, dif_pos (show 1 < (normalizationModuleEnv o).functions.size by simp)]
+  simp only [normalizationModuleEnv_fn1_numParams, htake, normalizationModuleEnv_fn1_body, himpl]
+  unfold handleNativeResult
+  cases vs with
+  | nil => simp [normalizationModuleEnv_fn1_numReturns]
+  | cons w ws => simp [normalizationModuleEnv_fn1_numReturns]
 
 theorem step_normalization_pc12_none
     (o : NormalizationModuleOracle)
@@ -529,7 +569,7 @@ Final state: stack has [curBalRef, ekRef, contract, sender, chainId], locals[0-4
 -- "Expected type must not contain free variables" constraint blocks completion
 -- of array indexing proofs in by-tactic context. Next steps: research workarounds
 -- (term-mode construction, revert/intro patterns, or alternative proof structuring).
-axiom norm_run_pc0_to_pc5
+theorem norm_run_pc0_to_pc5
     (o : NormalizationModuleOracle)
     (chainId : UInt8) (sender contract : ByteArray)
     (ekRef curBalRef newBalRef proofRef : MoveValue)
@@ -550,16 +590,130 @@ axiom norm_run_pc0_to_pc5
         []
         [curBalRef, ekRef, .address contract, .address sender, .u8 chainId]
         initMs
-        (fuel - 5)
+        (fuel - 5) := by
+  intro args
+  -- Initial frame
+  let f0 : Frame :=
+      { code := verifyNormalizationProofCode, pc := 0,
+        locals := (args.map some).toArray,
+        localRefs := (List.replicate 7 none).toArray }
+  have hf0_size : f0.locals.size = 7 := by
+    show (args.map some).toArray.size = 7; simp [args, normalizationArgs]
+  -- Step 1 at PC 0 (moveLoc 0 → push chainId, locals[0] := none)
+  have hf0_lt0 : 0 < f0.locals.size := by rw [hf0_size]; decide
+  have hf0_v0 : f0.locals[0]'hf0_lt0 = some (.u8 chainId) := by
+    show (args.map some).toArray[0]'hf0_lt0 = _; simp [args, normalizationArgs]
+  have hf0_ref0 : ¬ 0 < f0.localRefs.size ∨
+                  ∃ h : 0 < f0.localRefs.size, f0.localRefs[0]'h = none := by
+    right; refine ⟨by simp [f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[0]'(by simp) = none; decide
+  have step1 := step_normalization_pc0 o f0 [] [] initMs rfl rfl (.u8 chainId)
+                  hf0_lt0 hf0_v0 hf0_ref0
+  -- f1 frame derived from step1's RHS
+  set f1 := { f0 with pc := 1, locals := f0.locals.set 0 none hf0_lt0 } with hf1_def
+  have hf1_size : f1.locals.size = 7 := by
+    show (f0.locals.set 0 none hf0_lt0).size = 7
+    rw [Array.size_set]; exact hf0_size
+  have hf1_lt1 : 1 < f1.locals.size := by rw [hf1_size]; decide
+  have hf1_v1 : f1.locals[1]'hf1_lt1 = some (.address sender) := by
+    show (f0.locals.set 0 none hf0_lt0)[1]'hf1_lt1 = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 1)]
+    show (args.map some).toArray[1]'_ = _; simp [args, normalizationArgs]
+  have hf1_ref1 : ¬ 1 < f1.localRefs.size ∨
+                  ∃ h : 1 < f1.localRefs.size, f1.localRefs[1]'h = none := by
+    right; refine ⟨by simp [f1, f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[1]'(by simp) = none; decide
+  have step2 := step_normalization_pc1 o f1 [] [(.u8 chainId : MoveValue)] initMs rfl rfl
+                  (.address sender) hf1_lt1 hf1_v1 hf1_ref1
+  set f2 := { f1 with pc := 2, locals := f1.locals.set 1 none hf1_lt1 } with hf2_def
+  have hf2_size : f2.locals.size = 7 := by
+    show (f1.locals.set 1 none hf1_lt1).size = 7
+    rw [Array.size_set]; exact hf1_size
+  have hf2_lt2 : 2 < f2.locals.size := by rw [hf2_size]; decide
+  have hf2_v2 : f2.locals[2]'hf2_lt2 = some (.address contract) := by
+    show (f1.locals.set 1 none hf1_lt1)[2]'hf2_lt2 = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 2)]
+    show (f0.locals.set 0 none hf0_lt0)[2]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 2)]
+    show (args.map some).toArray[2]'_ = _; simp [args, normalizationArgs]
+  have hf2_ref2 : ¬ 2 < f2.localRefs.size ∨
+                  ∃ h : 2 < f2.localRefs.size, f2.localRefs[2]'h = none := by
+    right; refine ⟨by simp [f2, f1, f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[2]'(by simp) = none; decide
+  have step3 := step_normalization_pc2 o f2 []
+                  [(.address sender : MoveValue), (.u8 chainId : MoveValue)] initMs rfl rfl
+                  (.address contract) hf2_lt2 hf2_v2 hf2_ref2
+  set f3 := { f2 with pc := 3, locals := f2.locals.set 2 none hf2_lt2 } with hf3_def
+  have hf3_size : f3.locals.size = 7 := by
+    show (f2.locals.set 2 none hf2_lt2).size = 7
+    rw [Array.size_set]; exact hf2_size
+  have hf3_lt3 : 3 < f3.locals.size := by rw [hf3_size]; decide
+  have hf3_v3 : f3.locals[3]'hf3_lt3 = some ekRef := by
+    show (f2.locals.set 2 none hf2_lt2)[3]'hf3_lt3 = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 3)]
+    show (f1.locals.set 1 none hf1_lt1)[3]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 3)]
+    show (f0.locals.set 0 none hf0_lt0)[3]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 3)]
+    show (args.map some).toArray[3]'_ = _; simp [args, normalizationArgs]
+  have hf3_ref3 : ¬ 3 < f3.localRefs.size ∨
+                  ∃ h : 3 < f3.localRefs.size, f3.localRefs[3]'h = none := by
+    right; refine ⟨by simp [f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[3]'(by simp) = none; decide
+  have step4 := step_normalization_pc3 o f3 []
+                  [(.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl ekRef hf3_lt3 hf3_v3 hf3_ref3
+  set f4 := { f3 with pc := 4, locals := f3.locals.set 3 none hf3_lt3 } with hf4_def
+  have hf4_size : f4.locals.size = 7 := by
+    show (f3.locals.set 3 none hf3_lt3).size = 7
+    rw [Array.size_set]; exact hf3_size
+  have hf4_lt4 : 4 < f4.locals.size := by rw [hf4_size]; decide
+  have hf4_v4 : f4.locals[4]'hf4_lt4 = some curBalRef := by
+    show (f3.locals.set 3 none hf3_lt3)[4]'hf4_lt4 = _
+    rw [Array.getElem_set, if_neg (by decide : (3 : Nat) ≠ 4)]
+    show (f2.locals.set 2 none hf2_lt2)[4]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 4)]
+    show (f1.locals.set 1 none hf1_lt1)[4]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 4)]
+    show (f0.locals.set 0 none hf0_lt0)[4]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 4)]
+    show (args.map some).toArray[4]'_ = _; simp [args, normalizationArgs]
+  have hf4_ref4 : ¬ 4 < f4.localRefs.size ∨
+                  ∃ h : 4 < f4.localRefs.size, f4.localRefs[4]'h = none := by
+    right; refine ⟨by simp [f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[4]'(by simp) = none; decide
+  have step5 := step_normalization_pc4 o f4 []
+                  [ekRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl curBalRef hf4_lt4 hf4_v4 hf4_ref4
+  -- Provide the witness for the existential and chain 5 steps.
+  refine ⟨f4.locals.set 4 none hf4_lt4, ?_⟩
+  obtain ⟨ef, hef⟩ : ∃ ef, fuel = ef + 5 := ⟨fuel - 5, by omega⟩
+  rw [hef]
+  rw [show ef + 5 = (ef + 4) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 4) _ _ _ _ step1,
+      show ef + 4 = (ef + 3) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 3) _ _ _ _ step2,
+      show ef + 3 = (ef + 2) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 2) _ _ _ _ step3,
+      show ef + 2 = (ef + 1) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 1) _ _ _ _ step4,
+      StepLemmas.run_succ_ok_of_step ef _ _ _ _ step5]
+  -- After 5 unfolds, fuel arithmetic and frame structure both need normalization.
+  show run (normalizationModuleEnv o)
+        { code := f4.code, pc := 5, locals := f4.locals.set 4 none hf4_lt4,
+          localRefs := f4.localRefs } []
+        [curBalRef, ekRef, .address contract, .address sender, .u8 chainId] initMs
+        (ef + 1 + 1 + 1 + 1 + 1 - 5) = _
+  have hf4_code : f4.code = verifyNormalizationProofCode := rfl
+  have hf4_refs : f4.localRefs = (List.replicate 7 none).toArray := rfl
+  rw [hf4_code, hf4_refs, show (ef + 1 + 1 + 1 + 1 + 1 - 5) = ef from by omega]
 
-/-- Chain PCs 5-7: copyLoc newBalRef, copyLoc proofRef, immBorrowField 0 (get sigma_proof field).
+/-- Chain PCs 5-7: copyLoc 5 (newBalRef), copyLoc 6 (proofRef), immBorrowField 0
+    (allocate ref to sigma_proof field of the proof struct).
 
-This chains 3 operations:
-- PC 5: copyLoc 5 (newBalRef) - pushes copy of newBalRef, locals unchanged
-- PC 6: copyLoc 6 (proofRef) - pushes copy of proofRef, locals unchanged
-- PC 7: immBorrowField 0 - borrows first field of proof struct (sigma_proof), allocates new ref
-
-Final state: stack has [sigma_proof_ref, proofRef, newBalRef, ...rest], containers updated with alloc. -/
+PC 7 consumes the proofRef from the top of the stack and replaces it with `.immRef sigmaFid`.
+The locals don't change across these three steps (copyLoc and immBorrowField are
+non-destructive on locals). -/
 theorem norm_run_pc5_to_pc8
     (o : NormalizationModuleOracle)
     (chainId : UInt8) (sender contract : ByteArray)
@@ -567,12 +721,15 @@ theorem norm_run_pc5_to_pc8
     (proofRid : RefId) (proofFields : List MoveValue)
     (initMs : MachineState)
     (locals5 : Array (Option MoveValue))
-    (hFieldCount : 1 < proofFields.length)
+    (hSize : locals5.size = 7)
+    (hLocal5 : locals5[5]'(by rw [hSize]; decide) = some newBalRef)
+    (hLocal6 : locals5[6]'(by rw [hSize]; decide) = some proofRef)
+    (hFieldCount : 0 < proofFields.length)
     (hread : initMs.containers.read proofRid = some (.struct_ proofFields))
     (hproofRef : getRefId proofRef = some proofRid)
     (fuel : Nat)
     (hfuel : fuel ≥ 3) :
-    let (sigmaCs, sigmaFid) := initMs.containers.alloc (proofFields[0]'(by omega))
+    let (sigmaCs, sigmaFid) := initMs.containers.alloc (proofFields[0]'hFieldCount)
     run (normalizationModuleEnv o)
         { code := verifyNormalizationProofCode, pc := 5,
           locals := locals5,
@@ -585,29 +742,57 @@ theorem norm_run_pc5_to_pc8
           locals := locals5,
           localRefs := (List.replicate 7 none).toArray }
         []
-        [.immRef sigmaFid, proofRef, newBalRef, curBalRef, ekRef,
+        [.immRef sigmaFid, newBalRef, curBalRef, ekRef,
          .address contract, .address sender, .u8 chainId]
         { initMs with containers := sigmaCs }
         (fuel - 3) := by
-  -- ATTEMPT (2026-04-23): Try to prove this step-by-step
-  -- Even though locals5 properties aren't known (from axiom norm_run_pc0_to_pc5),
-  -- we can still show the proof structure
-
-  -- The let-binding defines sigmaCs and sigmaFid from the alloc result
-  -- We need to work with this in the proof
-
-  -- First, assume locals5 has the right shape (would come from norm_run_pc0_to_pc5)
-  have hlocals5_size : 7 ≤ locals5.size := by sorry  -- from norm_run_pc0_to_pc5
-  have hlocals5_5 : locals5[5]'(by omega : 5 < locals5.size) = some newBalRef := by sorry  -- from norm_run_pc0_to_pc5
-  have hlocals5_6 : locals5[6]'(by omega : 6 < locals5.size) = some proofRef := by sorry  -- from norm_run_pc0_to_pc5
-
-  -- Now try the PC chain
-  -- The issue: we can't refer to sigmaCs and sigmaFid from the let-binding
-  -- because they're not in scope for the proof tactics
-
-  sorry  -- BLOCKER: Cannot refer to let-bound variables sigmaCs, sigmaFid in proof
-  -- Even with assumptions about locals5, the architectural issue remains
-
+  set f5 : Frame :=
+      { code := verifyNormalizationProofCode, pc := 5,
+        locals := locals5,
+        localRefs := (List.replicate 7 none).toArray } with hf5_def
+  -- PC 5: copyLoc 5 (newBalRef)
+  have hf5_lt5 : 5 < f5.locals.size := by show 5 < locals5.size; rw [hSize]; decide
+  have hf5_v5 : f5.locals[5]'hf5_lt5 = some newBalRef := hLocal5
+  have hf5_ref5 : ¬ 5 < f5.localRefs.size ∨
+                  ∃ h : 5 < f5.localRefs.size, f5.localRefs[5]'h = none := by
+    right; refine ⟨by simp [f5], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[5]'(by simp) = none; decide
+  have step1 := step_normalization_pc5 o f5 []
+                  [curBalRef, ekRef, (.address contract : MoveValue),
+                   (.address sender : MoveValue), (.u8 chainId : MoveValue)] initMs rfl rfl
+                  newBalRef hf5_lt5 hf5_v5 hf5_ref5
+  -- f6 frame at PC 6: same locals, just pc bumped
+  set f6 := { f5 with pc := 6 } with hf6_def
+  have hf6_lt6 : 6 < f6.locals.size := by show 6 < locals5.size; rw [hSize]; decide
+  have hf6_v6 : f6.locals[6]'hf6_lt6 = some proofRef := hLocal6
+  have hf6_ref6 : ¬ 6 < f6.localRefs.size ∨
+                  ∃ h : 6 < f6.localRefs.size, f6.localRefs[6]'h = none := by
+    right; refine ⟨by simp [f6, f5], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[6]'(by simp) = none; decide
+  have step2 := step_normalization_pc6 o f6 []
+                  [newBalRef, curBalRef, ekRef, (.address contract : MoveValue),
+                   (.address sender : MoveValue), (.u8 chainId : MoveValue)] initMs rfl rfl
+                  proofRef hf6_lt6 hf6_v6 hf6_ref6
+  -- f7 frame at PC 7: still same locals, pc bumped to 7
+  set f7 := { f6 with pc := 7 } with hf7_def
+  have step3 := step_normalization_pc7 o f7 []
+                  [newBalRef, curBalRef, ekRef, (.address contract : MoveValue),
+                   (.address sender : MoveValue), (.u8 chainId : MoveValue)] initMs rfl rfl
+                  proofRid proofFields
+                  (initMs.containers.alloc (proofFields[0]'hFieldCount)).1
+                  (initMs.containers.alloc (proofFields[0]'hFieldCount)).2
+                  proofRef hproofRef hread hFieldCount rfl
+  -- Chain three steps via run_succ_ok_of_step
+  obtain ⟨ef, hef⟩ : ∃ ef, fuel = ef + 3 := ⟨fuel - 3, by omega⟩
+  show run (normalizationModuleEnv o) f5 [] _ initMs fuel = _
+  rw [hef]
+  rw [show ef + 3 = (ef + 2) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 2) _ _ _ _ step1,
+      show ef + 2 = (ef + 1) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 1) _ _ _ _ step2,
+      StepLemmas.run_succ_ok_of_step ef _ _ _ _ step3]
+  rw [show (ef + 1 + 1 + 1 - 3) = ef from by omega]
+  rfl
 /-! ## Top-level composition theorem (Phase 6)
 
 The full eval↔functional-sim equivalence. Currently deferred with architectural notes.
@@ -629,33 +814,1143 @@ The full eval↔functional-sim equivalence. Currently deferred with architectura
 **Estimated**: 150-200 additional lines to complete main proof body.
 -/
 
-/-! ## Direct equivalence axiom (to bypass architectural blockers) -/
+/-! ## Error- and success-path PC chain helpers (Phase-4 closure scaffolding) -/
 
-/-- Axiom: eval result matches functional simulation result for Normalization.
-
-Same rationale as rotation_eval_equiv_functional_sim_axiom: derivable in principle
-from ConcreteHelpers by case analysis, but blocked by architectural mismatch between
-ConcreteHelpers (oracle called on initMs.containers) and functional sim (oracle
-called on alloc result). This axiom is "technically routine" - verifiable by
-inspection of the bytecode transcription and functional simulation.
--/
-axiom normalization_eval_equiv_functional_sim_axiom
+/-- When sigma oracle returns none, normalization run produces error. -/
+theorem norm_run_to_sigma_fail_produces_error
     (o : NormalizationModuleOracle)
     (chainId : UInt8) (sender contract : ByteArray)
     (ekRef curBalRef newBalRef proofRef : MoveValue)
     (proofRid : RefId) (proofFields : List MoveValue)
     (initMs : MachineState)
-    (hFieldCount : 1 < proofFields.length)
+    (cs1 : ContainerStore) (sigmaFid : RefId)
+    (hFieldCount : 0 < proofFields.length)
     (hread : initMs.containers.read proofRid = some (.struct_ proofFields))
     (hproofRef : getRefId proofRef = some proofRid)
+    (halloc : initMs.containers.alloc (proofFields[0]'hFieldCount) = (cs1, sigmaFid))
+    (fuel : Nat)
+    (hfuel : fuel ≥ 9)
+    (hsigmaFail :
+       o.verifySigmaProof cs1 [.u8 chainId, .address sender, .address contract,
+                                ekRef, curBalRef, newBalRef,
+                                .immRef sigmaFid] = none) :
+    run (normalizationModuleEnv o)
+        { code := verifyNormalizationProofCode, pc := 0,
+          locals := ([.u8 chainId, .address sender, .address contract,
+                      ekRef, curBalRef, newBalRef, proofRef].map some).toArray,
+          localRefs := (List.replicate 7 none).toArray }
+        [] [] initMs fuel = .error := by
+  set f0 : Frame :=
+      { code := verifyNormalizationProofCode, pc := 0,
+        locals := ([(.u8 chainId : MoveValue), .address sender, .address contract,
+                    ekRef, curBalRef, newBalRef, proofRef].map some).toArray,
+        localRefs := (List.replicate 7 none).toArray }
+    with hf0_def
+  have hf0_size : f0.locals.size = 7 := by simp [f0]
+  have hf0_lt0 : 0 < f0.locals.size := by rw [hf0_size]; decide
+  have hf0_v0 : f0.locals[0]'hf0_lt0 = some (.u8 chainId) := by simp [f0]
+  have hf0_ref0 : ¬ 0 < f0.localRefs.size ∨
+                  ∃ h : 0 < f0.localRefs.size, f0.localRefs[0]'h = none := by
+    right; refine ⟨by simp [f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[0]'(by simp) = none; decide
+  have step1 := step_normalization_pc0 o f0 [] [] initMs rfl rfl (.u8 chainId)
+                  hf0_lt0 hf0_v0 hf0_ref0
+  set f1 := { f0 with pc := 1, locals := f0.locals.set 0 none hf0_lt0 } with hf1_def
+  have hf1_size : f1.locals.size = 7 := by
+    show (f0.locals.set 0 none hf0_lt0).size = 7; rw [Array.size_set]; exact hf0_size
+  have hf1_lt1 : 1 < f1.locals.size := by rw [hf1_size]; decide
+  have hf1_v1 : f1.locals[1]'hf1_lt1 = some (.address sender) := by
+    show (f0.locals.set 0 none hf0_lt0)[1]'hf1_lt1 = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 1)]; simp [f0]
+  have hf1_ref1 : ¬ 1 < f1.localRefs.size ∨
+                  ∃ h : 1 < f1.localRefs.size, f1.localRefs[1]'h = none := by
+    right; refine ⟨by simp [f1, f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[1]'(by simp) = none; decide
+  have step2 := step_normalization_pc1 o f1 [] [(.u8 chainId : MoveValue)] initMs rfl rfl
+                  (.address sender) hf1_lt1 hf1_v1 hf1_ref1
+  set f2 := { f1 with pc := 2, locals := f1.locals.set 1 none hf1_lt1 } with hf2_def
+  have hf2_size : f2.locals.size = 7 := by
+    show (f1.locals.set 1 none hf1_lt1).size = 7; rw [Array.size_set]; exact hf1_size
+  have hf2_lt2 : 2 < f2.locals.size := by rw [hf2_size]; decide
+  have hf2_v2 : f2.locals[2]'hf2_lt2 = some (.address contract) := by
+    show (f1.locals.set 1 none hf1_lt1)[2]'hf2_lt2 = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 2)]
+    show (f0.locals.set 0 none hf0_lt0)[2]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 2)]; simp [f0]
+  have hf2_ref2 : ¬ 2 < f2.localRefs.size ∨
+                  ∃ h : 2 < f2.localRefs.size, f2.localRefs[2]'h = none := by
+    right; refine ⟨by simp [f2, f1, f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[2]'(by simp) = none; decide
+  have step3 := step_normalization_pc2 o f2 []
+                  [(.address sender : MoveValue), (.u8 chainId : MoveValue)] initMs rfl rfl
+                  (.address contract) hf2_lt2 hf2_v2 hf2_ref2
+  set f3 := { f2 with pc := 3, locals := f2.locals.set 2 none hf2_lt2 } with hf3_def
+  have hf3_size : f3.locals.size = 7 := by
+    show (f2.locals.set 2 none hf2_lt2).size = 7; rw [Array.size_set]; exact hf2_size
+  have hf3_lt3 : 3 < f3.locals.size := by rw [hf3_size]; decide
+  have hf3_v3 : f3.locals[3]'hf3_lt3 = some ekRef := by
+    show (f2.locals.set 2 none hf2_lt2)[3]'hf3_lt3 = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 3)]
+    show (f1.locals.set 1 none hf1_lt1)[3]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 3)]
+    show (f0.locals.set 0 none hf0_lt0)[3]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 3)]; simp [f0]
+  have hf3_ref3 : ¬ 3 < f3.localRefs.size ∨
+                  ∃ h : 3 < f3.localRefs.size, f3.localRefs[3]'h = none := by
+    right; refine ⟨by simp [f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[3]'(by simp) = none; decide
+  have step4 := step_normalization_pc3 o f3 []
+                  [(.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl ekRef hf3_lt3 hf3_v3 hf3_ref3
+  set f4 := { f3 with pc := 4, locals := f3.locals.set 3 none hf3_lt3 } with hf4_def
+  have hf4_size : f4.locals.size = 7 := by
+    show (f3.locals.set 3 none hf3_lt3).size = 7; rw [Array.size_set]; exact hf3_size
+  have hf4_lt4 : 4 < f4.locals.size := by rw [hf4_size]; decide
+  have hf4_v4 : f4.locals[4]'hf4_lt4 = some curBalRef := by
+    show (f3.locals.set 3 none hf3_lt3)[4]'hf4_lt4 = _
+    rw [Array.getElem_set, if_neg (by decide : (3 : Nat) ≠ 4)]
+    show (f2.locals.set 2 none hf2_lt2)[4]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 4)]
+    show (f1.locals.set 1 none hf1_lt1)[4]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 4)]
+    show (f0.locals.set 0 none hf0_lt0)[4]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 4)]; simp [f0]
+  have hf4_ref4 : ¬ 4 < f4.localRefs.size ∨
+                  ∃ h : 4 < f4.localRefs.size, f4.localRefs[4]'h = none := by
+    right; refine ⟨by simp [f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[4]'(by simp) = none; decide
+  have step5 := step_normalization_pc4 o f4 []
+                  [ekRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl curBalRef hf4_lt4 hf4_v4 hf4_ref4
+  -- f5 at PC 5 (copyLoc 5 newBalRef — locals unchanged after this OK step)
+  set f5 := { f4 with pc := 5, locals := f4.locals.set 4 none hf4_lt4 } with hf5_def
+  have hf5_size : f5.locals.size = 7 := by
+    show (f4.locals.set 4 none hf4_lt4).size = 7; rw [Array.size_set]; exact hf4_size
+  have hf5_lt5 : 5 < f5.locals.size := by rw [hf5_size]; decide
+  have hf5_v5 : f5.locals[5]'hf5_lt5 = some newBalRef := by
+    show (f4.locals.set 4 none hf4_lt4)[5]'hf5_lt5 = _
+    rw [Array.getElem_set, if_neg (by decide : (4 : Nat) ≠ 5)]
+    show (f3.locals.set 3 none hf3_lt3)[5]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (3 : Nat) ≠ 5)]
+    show (f2.locals.set 2 none hf2_lt2)[5]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 5)]
+    show (f1.locals.set 1 none hf1_lt1)[5]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 5)]
+    show (f0.locals.set 0 none hf0_lt0)[5]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 5)]; simp [f0]
+  have hf5_ref5 : ¬ 5 < f5.localRefs.size ∨
+                  ∃ h : 5 < f5.localRefs.size, f5.localRefs[5]'h = none := by
+    right; refine ⟨by simp [f5, f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[5]'(by simp) = none; decide
+  have step6 := step_normalization_pc5 o f5 []
+                  [curBalRef, ekRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl newBalRef hf5_lt5 hf5_v5 hf5_ref5
+  -- f6 at PC 6 (copyLoc unchanged locals)
+  set f6 := { f5 with pc := 6 } with hf6_def
+  have hf6_size : f6.locals.size = 7 := hf5_size
+  have hf6_lt6 : 6 < f6.locals.size := by rw [hf6_size]; decide
+  have hf6_v6 : f6.locals[6]'hf6_lt6 = some proofRef := by
+    show f5.locals[6]'_ = _
+    show (f4.locals.set 4 none hf4_lt4)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (4 : Nat) ≠ 6)]
+    show (f3.locals.set 3 none hf3_lt3)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (3 : Nat) ≠ 6)]
+    show (f2.locals.set 2 none hf2_lt2)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 6)]
+    show (f1.locals.set 1 none hf1_lt1)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 6)]
+    show (f0.locals.set 0 none hf0_lt0)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 6)]; simp [f0]
+  have hf6_ref6 : ¬ 6 < f6.localRefs.size ∨
+                  ∃ h : 6 < f6.localRefs.size, f6.localRefs[6]'h = none := by
+    right; refine ⟨by simp [f6, f5, f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[6]'(by simp) = none; decide
+  have step7 := step_normalization_pc6 o f6 []
+                  [newBalRef, curBalRef, ekRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl proofRef hf6_lt6 hf6_v6 hf6_ref6
+  -- f7 at PC 7 (immBorrowField 0 — alloc sigmaFid, consume proofRef)
+  set f7 := { f6 with pc := 7 } with hf7_def
+  have step8 := step_normalization_pc7 o f7 []
+                  [newBalRef, curBalRef, ekRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl proofRid proofFields cs1 sigmaFid proofRef
+                  hproofRef hread hFieldCount halloc
+  -- f8 at PC 8 (sigma call, none → error)
+  set f8 := { f7 with pc := 8 } with hf8_def
+  set ms8 : MachineState := { initMs with containers := cs1 } with hms8_def
+  have htake :
+      takeN [(.immRef sigmaFid : MoveValue), newBalRef, curBalRef, ekRef,
+              (.address contract : MoveValue), (.address sender : MoveValue),
+              (.u8 chainId : MoveValue)] 7 =
+        some ([.u8 chainId, .address sender, .address contract,
+               ekRef, curBalRef, newBalRef, .immRef sigmaFid], []) := rfl
+  have step9 := step_normalization_pc8_none o f8 []
+                  [(.immRef sigmaFid : MoveValue), newBalRef, curBalRef, ekRef,
+                    (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  ms8 rfl rfl
+                  [.u8 chainId, .address sender, .address contract,
+                   ekRef, curBalRef, newBalRef, .immRef sigmaFid]
+                  [] htake hsigmaFail
+  obtain ⟨ef, hef⟩ : ∃ ef, fuel = ef + 9 := ⟨fuel - 9, by omega⟩
+  rw [hef]
+  rw [show ef + 9 = (ef + 8) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 8) _ _ _ _ step1,
+      show ef + 8 = (ef + 7) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 7) _ _ _ _ step2,
+      show ef + 7 = (ef + 6) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 6) _ _ _ _ step3,
+      show ef + 6 = (ef + 5) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 5) _ _ _ _ step4,
+      show ef + 5 = (ef + 4) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 4) _ _ _ _ step5,
+      show ef + 4 = (ef + 3) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 3) _ _ _ _ step6,
+      show ef + 3 = (ef + 2) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 2) _ _ _ _ step7,
+      show ef + 2 = (ef + 1) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 1) _ _ _ _ step8,
+      StepLemmas.run_succ_error_of_step ef step9]
+
+/-- When sigma oracle returns a non-empty result list (arity mismatch), run produces error. -/
+theorem norm_run_to_sigma_arity_mismatch_produces_error
+    (o : NormalizationModuleOracle)
+    (chainId : UInt8) (sender contract : ByteArray)
+    (ekRef curBalRef newBalRef proofRef : MoveValue)
+    (proofRid : RefId) (proofFields : List MoveValue)
+    (initMs : MachineState)
+    (cs1 cs2 : ContainerStore) (sigmaFid : RefId)
+    (sigmaResultHead : MoveValue) (sigmaResultTail : List MoveValue)
+    (hFieldCount : 0 < proofFields.length)
+    (hread : initMs.containers.read proofRid = some (.struct_ proofFields))
+    (hproofRef : getRefId proofRef = some proofRid)
+    (halloc : initMs.containers.alloc (proofFields[0]'hFieldCount) = (cs1, sigmaFid))
+    (fuel : Nat)
+    (hfuel : fuel ≥ 9)
+    (hsigmaArityMismatch :
+       o.verifySigmaProof cs1 [.u8 chainId, .address sender, .address contract,
+                                ekRef, curBalRef, newBalRef, .immRef sigmaFid] =
+         some (sigmaResultHead :: sigmaResultTail, cs2)) :
+    run (normalizationModuleEnv o)
+        { code := verifyNormalizationProofCode, pc := 0,
+          locals := ([.u8 chainId, .address sender, .address contract,
+                      ekRef, curBalRef, newBalRef, proofRef].map some).toArray,
+          localRefs := (List.replicate 7 none).toArray }
+        [] [] initMs fuel = .error := by
+  set f0 : Frame :=
+      { code := verifyNormalizationProofCode, pc := 0,
+        locals := ([(.u8 chainId : MoveValue), .address sender, .address contract,
+                    ekRef, curBalRef, newBalRef, proofRef].map some).toArray,
+        localRefs := (List.replicate 7 none).toArray }
+    with hf0_def
+  have hf0_size : f0.locals.size = 7 := by simp [f0]
+  have hf0_lt0 : 0 < f0.locals.size := by rw [hf0_size]; decide
+  have hf0_v0 : f0.locals[0]'hf0_lt0 = some (.u8 chainId) := by simp [f0]
+  have hf0_ref0 : ¬ 0 < f0.localRefs.size ∨
+                  ∃ h : 0 < f0.localRefs.size, f0.localRefs[0]'h = none := by
+    right; refine ⟨by simp [f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[0]'(by simp) = none; decide
+  have step1 := step_normalization_pc0 o f0 [] [] initMs rfl rfl (.u8 chainId)
+                  hf0_lt0 hf0_v0 hf0_ref0
+  set f1 := { f0 with pc := 1, locals := f0.locals.set 0 none hf0_lt0 } with hf1_def
+  have hf1_size : f1.locals.size = 7 := by
+    show (f0.locals.set 0 none hf0_lt0).size = 7; rw [Array.size_set]; exact hf0_size
+  have hf1_lt1 : 1 < f1.locals.size := by rw [hf1_size]; decide
+  have hf1_v1 : f1.locals[1]'hf1_lt1 = some (.address sender) := by
+    show (f0.locals.set 0 none hf0_lt0)[1]'hf1_lt1 = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 1)]; simp [f0]
+  have hf1_ref1 : ¬ 1 < f1.localRefs.size ∨
+                  ∃ h : 1 < f1.localRefs.size, f1.localRefs[1]'h = none := by
+    right; refine ⟨by simp [f1, f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[1]'(by simp) = none; decide
+  have step2 := step_normalization_pc1 o f1 [] [(.u8 chainId : MoveValue)] initMs rfl rfl
+                  (.address sender) hf1_lt1 hf1_v1 hf1_ref1
+  set f2 := { f1 with pc := 2, locals := f1.locals.set 1 none hf1_lt1 } with hf2_def
+  have hf2_size : f2.locals.size = 7 := by
+    show (f1.locals.set 1 none hf1_lt1).size = 7; rw [Array.size_set]; exact hf1_size
+  have hf2_lt2 : 2 < f2.locals.size := by rw [hf2_size]; decide
+  have hf2_v2 : f2.locals[2]'hf2_lt2 = some (.address contract) := by
+    show (f1.locals.set 1 none hf1_lt1)[2]'hf2_lt2 = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 2)]
+    show (f0.locals.set 0 none hf0_lt0)[2]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 2)]; simp [f0]
+  have hf2_ref2 : ¬ 2 < f2.localRefs.size ∨
+                  ∃ h : 2 < f2.localRefs.size, f2.localRefs[2]'h = none := by
+    right; refine ⟨by simp [f2, f1, f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[2]'(by simp) = none; decide
+  have step3 := step_normalization_pc2 o f2 []
+                  [(.address sender : MoveValue), (.u8 chainId : MoveValue)] initMs rfl rfl
+                  (.address contract) hf2_lt2 hf2_v2 hf2_ref2
+  set f3 := { f2 with pc := 3, locals := f2.locals.set 2 none hf2_lt2 } with hf3_def
+  have hf3_size : f3.locals.size = 7 := by
+    show (f2.locals.set 2 none hf2_lt2).size = 7; rw [Array.size_set]; exact hf2_size
+  have hf3_lt3 : 3 < f3.locals.size := by rw [hf3_size]; decide
+  have hf3_v3 : f3.locals[3]'hf3_lt3 = some ekRef := by
+    show (f2.locals.set 2 none hf2_lt2)[3]'hf3_lt3 = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 3)]
+    show (f1.locals.set 1 none hf1_lt1)[3]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 3)]
+    show (f0.locals.set 0 none hf0_lt0)[3]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 3)]; simp [f0]
+  have hf3_ref3 : ¬ 3 < f3.localRefs.size ∨
+                  ∃ h : 3 < f3.localRefs.size, f3.localRefs[3]'h = none := by
+    right; refine ⟨by simp [f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[3]'(by simp) = none; decide
+  have step4 := step_normalization_pc3 o f3 []
+                  [(.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl ekRef hf3_lt3 hf3_v3 hf3_ref3
+  set f4 := { f3 with pc := 4, locals := f3.locals.set 3 none hf3_lt3 } with hf4_def
+  have hf4_size : f4.locals.size = 7 := by
+    show (f3.locals.set 3 none hf3_lt3).size = 7; rw [Array.size_set]; exact hf3_size
+  have hf4_lt4 : 4 < f4.locals.size := by rw [hf4_size]; decide
+  have hf4_v4 : f4.locals[4]'hf4_lt4 = some curBalRef := by
+    show (f3.locals.set 3 none hf3_lt3)[4]'hf4_lt4 = _
+    rw [Array.getElem_set, if_neg (by decide : (3 : Nat) ≠ 4)]
+    show (f2.locals.set 2 none hf2_lt2)[4]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 4)]
+    show (f1.locals.set 1 none hf1_lt1)[4]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 4)]
+    show (f0.locals.set 0 none hf0_lt0)[4]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 4)]; simp [f0]
+  have hf4_ref4 : ¬ 4 < f4.localRefs.size ∨
+                  ∃ h : 4 < f4.localRefs.size, f4.localRefs[4]'h = none := by
+    right; refine ⟨by simp [f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[4]'(by simp) = none; decide
+  have step5 := step_normalization_pc4 o f4 []
+                  [ekRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl curBalRef hf4_lt4 hf4_v4 hf4_ref4
+  set f5 := { f4 with pc := 5, locals := f4.locals.set 4 none hf4_lt4 } with hf5_def
+  have hf5_size : f5.locals.size = 7 := by
+    show (f4.locals.set 4 none hf4_lt4).size = 7; rw [Array.size_set]; exact hf4_size
+  have hf5_lt5 : 5 < f5.locals.size := by rw [hf5_size]; decide
+  have hf5_v5 : f5.locals[5]'hf5_lt5 = some newBalRef := by
+    show (f4.locals.set 4 none hf4_lt4)[5]'hf5_lt5 = _
+    rw [Array.getElem_set, if_neg (by decide : (4 : Nat) ≠ 5)]
+    show (f3.locals.set 3 none hf3_lt3)[5]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (3 : Nat) ≠ 5)]
+    show (f2.locals.set 2 none hf2_lt2)[5]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 5)]
+    show (f1.locals.set 1 none hf1_lt1)[5]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 5)]
+    show (f0.locals.set 0 none hf0_lt0)[5]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 5)]; simp [f0]
+  have hf5_ref5 : ¬ 5 < f5.localRefs.size ∨
+                  ∃ h : 5 < f5.localRefs.size, f5.localRefs[5]'h = none := by
+    right; refine ⟨by simp [f5, f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[5]'(by simp) = none; decide
+  have step6 := step_normalization_pc5 o f5 []
+                  [curBalRef, ekRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl newBalRef hf5_lt5 hf5_v5 hf5_ref5
+  set f6 := { f5 with pc := 6 } with hf6_def
+  have hf6_size : f6.locals.size = 7 := hf5_size
+  have hf6_lt6 : 6 < f6.locals.size := by rw [hf6_size]; decide
+  have hf6_v6 : f6.locals[6]'hf6_lt6 = some proofRef := by
+    show f5.locals[6]'_ = _
+    show (f4.locals.set 4 none hf4_lt4)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (4 : Nat) ≠ 6)]
+    show (f3.locals.set 3 none hf3_lt3)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (3 : Nat) ≠ 6)]
+    show (f2.locals.set 2 none hf2_lt2)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 6)]
+    show (f1.locals.set 1 none hf1_lt1)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 6)]
+    show (f0.locals.set 0 none hf0_lt0)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 6)]; simp [f0]
+  have hf6_ref6 : ¬ 6 < f6.localRefs.size ∨
+                  ∃ h : 6 < f6.localRefs.size, f6.localRefs[6]'h = none := by
+    right; refine ⟨by simp [f6, f5, f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[6]'(by simp) = none; decide
+  have step7 := step_normalization_pc6 o f6 []
+                  [newBalRef, curBalRef, ekRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl proofRef hf6_lt6 hf6_v6 hf6_ref6
+  set f7 := { f6 with pc := 7 } with hf7_def
+  have step8 := step_normalization_pc7 o f7 []
+                  [newBalRef, curBalRef, ekRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl proofRid proofFields cs1 sigmaFid proofRef
+                  hproofRef hread hFieldCount halloc
+  set f8 := { f7 with pc := 8 } with hf8_def
+  set ms8 : MachineState := { initMs with containers := cs1 } with hms8_def
+  have htake :
+      takeN [(.immRef sigmaFid : MoveValue), newBalRef, curBalRef, ekRef,
+              (.address contract : MoveValue), (.address sender : MoveValue),
+              (.u8 chainId : MoveValue)] 7 =
+        some ([.u8 chainId, .address sender, .address contract,
+               ekRef, curBalRef, newBalRef, .immRef sigmaFid], []) := rfl
+  have step9 := step_normalization_pc8_multi o f8 []
+                  [(.immRef sigmaFid : MoveValue), newBalRef, curBalRef, ekRef,
+                    (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  ms8 rfl rfl
+                  [.u8 chainId, .address sender, .address contract,
+                   ekRef, curBalRef, newBalRef, .immRef sigmaFid]
+                  [] sigmaResultHead sigmaResultTail cs2 htake hsigmaArityMismatch
+  obtain ⟨ef, hef⟩ : ∃ ef, fuel = ef + 9 := ⟨fuel - 9, by omega⟩
+  rw [hef]
+  rw [show ef + 9 = (ef + 8) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 8) _ _ _ _ step1,
+      show ef + 8 = (ef + 7) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 7) _ _ _ _ step2,
+      show ef + 7 = (ef + 6) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 6) _ _ _ _ step3,
+      show ef + 6 = (ef + 5) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 5) _ _ _ _ step4,
+      show ef + 5 = (ef + 4) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 4) _ _ _ _ step5,
+      show ef + 4 = (ef + 3) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 3) _ _ _ _ step6,
+      show ef + 3 = (ef + 2) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 2) _ _ _ _ step7,
+      show ef + 2 = (ef + 1) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 1) _ _ _ _ step8,
+      StepLemmas.run_succ_error_of_step ef step9]
+
+/-- When sigma succeeds but range oracle returns none, run produces error. -/
+theorem norm_run_to_range_fail_produces_error
+    (o : NormalizationModuleOracle)
+    (chainId : UInt8) (sender contract : ByteArray)
+    (ekRef curBalRef newBalRef proofRef : MoveValue)
+    (proofRid : RefId) (proofFields : List MoveValue)
+    (initMs : MachineState)
+    (cs1 cs2 cs3 : ContainerStore) (sigmaFid zkrpFid : RefId)
+    (hFieldCount : 1 < proofFields.length)
+    (hread : initMs.containers.read proofRid = some (.struct_ proofFields))
+    (hread2 : cs2.read proofRid = some (.struct_ proofFields))
+    (hproofRef : getRefId proofRef = some proofRid)
+    (halloc0 : initMs.containers.alloc
+                  (proofFields[0]'(by omega : 0 < proofFields.length)) = (cs1, sigmaFid))
+    (hsigmaOk :
+       o.verifySigmaProof cs1
+         [.u8 chainId, .address sender, .address contract,
+          ekRef, curBalRef, newBalRef, .immRef sigmaFid] =
+         some ([], cs2))
+    (halloc1 : cs2.alloc (proofFields[1]'hFieldCount) = (cs3, zkrpFid))
+    (hrangeFail : o.verifyRangeProof cs3 [newBalRef, .immRef zkrpFid] = none)
+    (fuel : Nat)
+    (hfuel : fuel ≥ 13) :
+    run (normalizationModuleEnv o)
+        { code := verifyNormalizationProofCode, pc := 0,
+          locals := ([.u8 chainId, .address sender, .address contract,
+                      ekRef, curBalRef, newBalRef, proofRef].map some).toArray,
+          localRefs := (List.replicate 7 none).toArray }
+        [] [] initMs fuel = .error := by
+  set f0 : Frame :=
+      { code := verifyNormalizationProofCode, pc := 0,
+        locals := ([(.u8 chainId : MoveValue), .address sender, .address contract,
+                    ekRef, curBalRef, newBalRef, proofRef].map some).toArray,
+        localRefs := (List.replicate 7 none).toArray }
+    with hf0_def
+  have hf0_size : f0.locals.size = 7 := by simp [f0]
+  have hf0_lt0 : 0 < f0.locals.size := by rw [hf0_size]; decide
+  have hf0_v0 : f0.locals[0]'hf0_lt0 = some (.u8 chainId) := by simp [f0]
+  have hf0_ref0 : ¬ 0 < f0.localRefs.size ∨
+                  ∃ h : 0 < f0.localRefs.size, f0.localRefs[0]'h = none := by
+    right; refine ⟨by simp [f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[0]'(by simp) = none; decide
+  have step1 := step_normalization_pc0 o f0 [] [] initMs rfl rfl (.u8 chainId)
+                  hf0_lt0 hf0_v0 hf0_ref0
+  set f1 := { f0 with pc := 1, locals := f0.locals.set 0 none hf0_lt0 } with hf1_def
+  have hf1_size : f1.locals.size = 7 := by
+    show (f0.locals.set 0 none hf0_lt0).size = 7; rw [Array.size_set]; exact hf0_size
+  have hf1_lt1 : 1 < f1.locals.size := by rw [hf1_size]; decide
+  have hf1_v1 : f1.locals[1]'hf1_lt1 = some (.address sender) := by
+    show (f0.locals.set 0 none hf0_lt0)[1]'hf1_lt1 = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 1)]; simp [f0]
+  have hf1_ref1 : ¬ 1 < f1.localRefs.size ∨
+                  ∃ h : 1 < f1.localRefs.size, f1.localRefs[1]'h = none := by
+    right; refine ⟨by simp [f1, f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[1]'(by simp) = none; decide
+  have step2 := step_normalization_pc1 o f1 [] [(.u8 chainId : MoveValue)] initMs rfl rfl
+                  (.address sender) hf1_lt1 hf1_v1 hf1_ref1
+  set f2 := { f1 with pc := 2, locals := f1.locals.set 1 none hf1_lt1 } with hf2_def
+  have hf2_size : f2.locals.size = 7 := by
+    show (f1.locals.set 1 none hf1_lt1).size = 7; rw [Array.size_set]; exact hf1_size
+  have hf2_lt2 : 2 < f2.locals.size := by rw [hf2_size]; decide
+  have hf2_v2 : f2.locals[2]'hf2_lt2 = some (.address contract) := by
+    show (f1.locals.set 1 none hf1_lt1)[2]'hf2_lt2 = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 2)]
+    show (f0.locals.set 0 none hf0_lt0)[2]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 2)]; simp [f0]
+  have hf2_ref2 : ¬ 2 < f2.localRefs.size ∨
+                  ∃ h : 2 < f2.localRefs.size, f2.localRefs[2]'h = none := by
+    right; refine ⟨by simp [f2, f1, f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[2]'(by simp) = none; decide
+  have step3 := step_normalization_pc2 o f2 []
+                  [(.address sender : MoveValue), (.u8 chainId : MoveValue)] initMs rfl rfl
+                  (.address contract) hf2_lt2 hf2_v2 hf2_ref2
+  set f3 := { f2 with pc := 3, locals := f2.locals.set 2 none hf2_lt2 } with hf3_def
+  have hf3_size : f3.locals.size = 7 := by
+    show (f2.locals.set 2 none hf2_lt2).size = 7; rw [Array.size_set]; exact hf2_size
+  have hf3_lt3 : 3 < f3.locals.size := by rw [hf3_size]; decide
+  have hf3_v3 : f3.locals[3]'hf3_lt3 = some ekRef := by
+    show (f2.locals.set 2 none hf2_lt2)[3]'hf3_lt3 = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 3)]
+    show (f1.locals.set 1 none hf1_lt1)[3]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 3)]
+    show (f0.locals.set 0 none hf0_lt0)[3]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 3)]; simp [f0]
+  have hf3_ref3 : ¬ 3 < f3.localRefs.size ∨
+                  ∃ h : 3 < f3.localRefs.size, f3.localRefs[3]'h = none := by
+    right; refine ⟨by simp [f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[3]'(by simp) = none; decide
+  have step4 := step_normalization_pc3 o f3 []
+                  [(.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl ekRef hf3_lt3 hf3_v3 hf3_ref3
+  set f4 := { f3 with pc := 4, locals := f3.locals.set 3 none hf3_lt3 } with hf4_def
+  have hf4_size : f4.locals.size = 7 := by
+    show (f3.locals.set 3 none hf3_lt3).size = 7; rw [Array.size_set]; exact hf3_size
+  have hf4_lt4 : 4 < f4.locals.size := by rw [hf4_size]; decide
+  have hf4_v4 : f4.locals[4]'hf4_lt4 = some curBalRef := by
+    show (f3.locals.set 3 none hf3_lt3)[4]'hf4_lt4 = _
+    rw [Array.getElem_set, if_neg (by decide : (3 : Nat) ≠ 4)]
+    show (f2.locals.set 2 none hf2_lt2)[4]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 4)]
+    show (f1.locals.set 1 none hf1_lt1)[4]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 4)]
+    show (f0.locals.set 0 none hf0_lt0)[4]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 4)]; simp [f0]
+  have hf4_ref4 : ¬ 4 < f4.localRefs.size ∨
+                  ∃ h : 4 < f4.localRefs.size, f4.localRefs[4]'h = none := by
+    right; refine ⟨by simp [f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[4]'(by simp) = none; decide
+  have step5 := step_normalization_pc4 o f4 []
+                  [ekRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl curBalRef hf4_lt4 hf4_v4 hf4_ref4
+  set f5 := { f4 with pc := 5, locals := f4.locals.set 4 none hf4_lt4 } with hf5_def
+  have hf5_size : f5.locals.size = 7 := by
+    show (f4.locals.set 4 none hf4_lt4).size = 7; rw [Array.size_set]; exact hf4_size
+  have hf5_lt5 : 5 < f5.locals.size := by rw [hf5_size]; decide
+  have hf5_v5 : f5.locals[5]'hf5_lt5 = some newBalRef := by
+    show (f4.locals.set 4 none hf4_lt4)[5]'hf5_lt5 = _
+    rw [Array.getElem_set, if_neg (by decide : (4 : Nat) ≠ 5)]
+    show (f3.locals.set 3 none hf3_lt3)[5]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (3 : Nat) ≠ 5)]
+    show (f2.locals.set 2 none hf2_lt2)[5]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 5)]
+    show (f1.locals.set 1 none hf1_lt1)[5]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 5)]
+    show (f0.locals.set 0 none hf0_lt0)[5]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 5)]; simp [f0]
+  have hf5_ref5 : ¬ 5 < f5.localRefs.size ∨
+                  ∃ h : 5 < f5.localRefs.size, f5.localRefs[5]'h = none := by
+    right; refine ⟨by simp [f5, f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[5]'(by simp) = none; decide
+  have step6 := step_normalization_pc5 o f5 []
+                  [curBalRef, ekRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl newBalRef hf5_lt5 hf5_v5 hf5_ref5
+  set f6 := { f5 with pc := 6 } with hf6_def
+  have hf6_size : f6.locals.size = 7 := hf5_size
+  have hf6_lt6 : 6 < f6.locals.size := by rw [hf6_size]; decide
+  have hf6_v6 : f6.locals[6]'hf6_lt6 = some proofRef := by
+    show f5.locals[6]'_ = _
+    show (f4.locals.set 4 none hf4_lt4)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (4 : Nat) ≠ 6)]
+    show (f3.locals.set 3 none hf3_lt3)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (3 : Nat) ≠ 6)]
+    show (f2.locals.set 2 none hf2_lt2)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 6)]
+    show (f1.locals.set 1 none hf1_lt1)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 6)]
+    show (f0.locals.set 0 none hf0_lt0)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 6)]; simp [f0]
+  have hf6_ref6 : ¬ 6 < f6.localRefs.size ∨
+                  ∃ h : 6 < f6.localRefs.size, f6.localRefs[6]'h = none := by
+    right; refine ⟨by simp [f6, f5, f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[6]'(by simp) = none; decide
+  have step7 := step_normalization_pc6 o f6 []
+                  [newBalRef, curBalRef, ekRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl proofRef hf6_lt6 hf6_v6 hf6_ref6
+  set f7 := { f6 with pc := 7 } with hf7_def
+  have step8 := step_normalization_pc7 o f7 []
+                  [newBalRef, curBalRef, ekRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl proofRid proofFields cs1 sigmaFid proofRef
+                  hproofRef hread (by omega : 0 < proofFields.length) halloc0
+  set f8 := { f7 with pc := 8 } with hf8_def
+  set ms8 : MachineState := { initMs with containers := cs1 } with hms8_def
+  have htake_pc8 :
+      takeN [(.immRef sigmaFid : MoveValue), newBalRef, curBalRef, ekRef,
+              (.address contract : MoveValue), (.address sender : MoveValue),
+              (.u8 chainId : MoveValue)] 7 =
+        some ([.u8 chainId, .address sender, .address contract,
+               ekRef, curBalRef, newBalRef, .immRef sigmaFid], []) := rfl
+  have step9 := step_normalization_pc8 o f8 []
+                  [(.immRef sigmaFid : MoveValue), newBalRef, curBalRef, ekRef,
+                    (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  ms8 rfl rfl
+                  [.u8 chainId, .address sender, .address contract,
+                   ekRef, curBalRef, newBalRef, .immRef sigmaFid]
+                  [] cs2 htake_pc8 hsigmaOk
+  -- After step9: pc=9, stack=[], containers=cs2.
+  set f9 := { f8 with pc := 9 } with hf9_def
+  set ms9 : MachineState := { ms8 with containers := cs2, globals := ms8.globals } with hms9_def
+  have hf9_lt5 : 5 < f9.locals.size := hf5_lt5
+  have hf9_v5 : f9.locals[5]'hf9_lt5 = some newBalRef := hf5_v5
+  have hf9_ref5 : ¬ 5 < f9.localRefs.size ∨
+                  ∃ h : 5 < f9.localRefs.size, f9.localRefs[5]'h = none := hf5_ref5
+  have step10 := step_normalization_pc9 o f9 [] [] ms9 rfl rfl newBalRef
+                   hf9_lt5 hf9_v5 hf9_ref5
+  -- After step10: pc=10, stack=[newBalRef], locals[5]:=none.
+  set f10 := { f9 with pc := 10, locals := f9.locals.set 5 none hf9_lt5 } with hf10_def
+  have hf10_size : f10.locals.size = 7 := by
+    show (f9.locals.set 5 none hf9_lt5).size = 7; rw [Array.size_set]; exact hf6_size
+  have hf10_lt6 : 6 < f10.locals.size := by rw [hf10_size]; decide
+  have hf10_v6 : f10.locals[6]'hf10_lt6 = some proofRef := by
+    show (f9.locals.set 5 none hf9_lt5)[6]'hf10_lt6 = _
+    rw [Array.getElem_set, if_neg (by decide : (5 : Nat) ≠ 6)]; exact hf6_v6
+  have hf10_ref6 : ¬ 6 < f10.localRefs.size ∨
+                   ∃ h : 6 < f10.localRefs.size, f10.localRefs[6]'h = none := by
+    right; refine ⟨by simp [f10, f9, f8, f7, f6, f5, f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[6]'(by simp) = none; decide
+  have step11 := step_normalization_pc10 o f10 [] [newBalRef] ms9 rfl rfl proofRef
+                   hf10_lt6 hf10_v6 hf10_ref6
+  -- After step11: pc=11, stack=[proofRef, newBalRef], locals[6]:=none.
+  set f11 := { f10 with pc := 11, locals := f10.locals.set 6 none hf10_lt6 } with hf11_def
+  have hms9_read : ms9.containers.read proofRid = some (.struct_ proofFields) := by
+    show cs2.read proofRid = _; exact hread2
+  have step12 := step_normalization_pc11 o f11 [] [newBalRef] ms9 rfl rfl proofRid proofFields
+                   cs3 zkrpFid proofRef hproofRef hms9_read hFieldCount
+                   (show ms9.containers.alloc _ = (cs3, zkrpFid) from
+                     show cs2.alloc _ = (cs3, zkrpFid) from halloc1)
+  -- After step12: pc=12, stack=[.immRef zkrpFid, newBalRef], containers=cs3.
+  set f12 := { f11 with pc := 12 } with hf12_def
+  set ms12 : MachineState := { ms9 with containers := cs3 } with hms12_def
+  have htake_pc12 :
+      takeN [(.immRef zkrpFid : MoveValue), newBalRef] 2 =
+        some ([newBalRef, .immRef zkrpFid], []) := rfl
+  have step13 := step_normalization_pc12_none o f12 []
+                   [(.immRef zkrpFid : MoveValue), newBalRef]
+                   ms12 rfl rfl
+                   [newBalRef, .immRef zkrpFid] [] htake_pc12 hrangeFail
+  obtain ⟨ef, hef⟩ : ∃ ef, fuel = ef + 13 := ⟨fuel - 13, by omega⟩
+  rw [hef]
+  rw [show ef + 13 = (ef + 12) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 12) _ _ _ _ step1,
+      show ef + 12 = (ef + 11) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 11) _ _ _ _ step2,
+      show ef + 11 = (ef + 10) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 10) _ _ _ _ step3,
+      show ef + 10 = (ef + 9) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 9) _ _ _ _ step4,
+      show ef + 9 = (ef + 8) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 8) _ _ _ _ step5,
+      show ef + 8 = (ef + 7) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 7) _ _ _ _ step6,
+      show ef + 7 = (ef + 6) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 6) _ _ _ _ step7,
+      show ef + 6 = (ef + 5) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 5) _ _ _ _ step8,
+      show ef + 5 = (ef + 4) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 4) _ _ _ _ step9,
+      show ef + 4 = (ef + 3) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 3) _ _ _ _ step10,
+      show ef + 3 = (ef + 2) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 2) _ _ _ _ step11,
+      show ef + 2 = (ef + 1) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 1) _ _ _ _ step12,
+      StepLemmas.run_succ_error_of_step ef step13]
+
+/-- When sigma succeeds but range oracle returns a non-empty result list, run produces error. -/
+theorem norm_run_to_range_arity_mismatch_produces_error
+    (o : NormalizationModuleOracle)
+    (chainId : UInt8) (sender contract : ByteArray)
+    (ekRef curBalRef newBalRef proofRef : MoveValue)
+    (proofRid : RefId) (proofFields : List MoveValue)
+    (initMs : MachineState)
+    (cs1 cs2 cs3 cs4 : ContainerStore) (sigmaFid zkrpFid : RefId)
+    (rangeResultHead : MoveValue) (rangeResultTail : List MoveValue)
+    (hFieldCount : 1 < proofFields.length)
+    (hread : initMs.containers.read proofRid = some (.struct_ proofFields))
+    (hread2 : cs2.read proofRid = some (.struct_ proofFields))
+    (hproofRef : getRefId proofRef = some proofRid)
+    (halloc0 : initMs.containers.alloc
+                  (proofFields[0]'(by omega : 0 < proofFields.length)) = (cs1, sigmaFid))
+    (hsigmaOk :
+       o.verifySigmaProof cs1
+         [.u8 chainId, .address sender, .address contract,
+          ekRef, curBalRef, newBalRef, .immRef sigmaFid] =
+         some ([], cs2))
+    (halloc1 : cs2.alloc (proofFields[1]'hFieldCount) = (cs3, zkrpFid))
+    (hrangeArityMismatch :
+       o.verifyRangeProof cs3 [newBalRef, .immRef zkrpFid] =
+         some (rangeResultHead :: rangeResultTail, cs4))
+    (fuel : Nat)
+    (hfuel : fuel ≥ 13) :
+    run (normalizationModuleEnv o)
+        { code := verifyNormalizationProofCode, pc := 0,
+          locals := ([.u8 chainId, .address sender, .address contract,
+                      ekRef, curBalRef, newBalRef, proofRef].map some).toArray,
+          localRefs := (List.replicate 7 none).toArray }
+        [] [] initMs fuel = .error := by
+  set f0 : Frame :=
+      { code := verifyNormalizationProofCode, pc := 0,
+        locals := ([(.u8 chainId : MoveValue), .address sender, .address contract,
+                    ekRef, curBalRef, newBalRef, proofRef].map some).toArray,
+        localRefs := (List.replicate 7 none).toArray }
+    with hf0_def
+  have hf0_size : f0.locals.size = 7 := by simp [f0]
+  have hf0_lt0 : 0 < f0.locals.size := by rw [hf0_size]; decide
+  have hf0_v0 : f0.locals[0]'hf0_lt0 = some (.u8 chainId) := by simp [f0]
+  have hf0_ref0 : ¬ 0 < f0.localRefs.size ∨
+                  ∃ h : 0 < f0.localRefs.size, f0.localRefs[0]'h = none := by
+    right; refine ⟨by simp [f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[0]'(by simp) = none; decide
+  have step1 := step_normalization_pc0 o f0 [] [] initMs rfl rfl (.u8 chainId)
+                  hf0_lt0 hf0_v0 hf0_ref0
+  set f1 := { f0 with pc := 1, locals := f0.locals.set 0 none hf0_lt0 } with hf1_def
+  have hf1_size : f1.locals.size = 7 := by
+    show (f0.locals.set 0 none hf0_lt0).size = 7; rw [Array.size_set]; exact hf0_size
+  have hf1_lt1 : 1 < f1.locals.size := by rw [hf1_size]; decide
+  have hf1_v1 : f1.locals[1]'hf1_lt1 = some (.address sender) := by
+    show (f0.locals.set 0 none hf0_lt0)[1]'hf1_lt1 = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 1)]; simp [f0]
+  have hf1_ref1 : ¬ 1 < f1.localRefs.size ∨
+                  ∃ h : 1 < f1.localRefs.size, f1.localRefs[1]'h = none := by
+    right; refine ⟨by simp [f1, f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[1]'(by simp) = none; decide
+  have step2 := step_normalization_pc1 o f1 [] [(.u8 chainId : MoveValue)] initMs rfl rfl
+                  (.address sender) hf1_lt1 hf1_v1 hf1_ref1
+  set f2 := { f1 with pc := 2, locals := f1.locals.set 1 none hf1_lt1 } with hf2_def
+  have hf2_size : f2.locals.size = 7 := by
+    show (f1.locals.set 1 none hf1_lt1).size = 7; rw [Array.size_set]; exact hf1_size
+  have hf2_lt2 : 2 < f2.locals.size := by rw [hf2_size]; decide
+  have hf2_v2 : f2.locals[2]'hf2_lt2 = some (.address contract) := by
+    show (f1.locals.set 1 none hf1_lt1)[2]'hf2_lt2 = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 2)]
+    show (f0.locals.set 0 none hf0_lt0)[2]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 2)]; simp [f0]
+  have hf2_ref2 : ¬ 2 < f2.localRefs.size ∨
+                  ∃ h : 2 < f2.localRefs.size, f2.localRefs[2]'h = none := by
+    right; refine ⟨by simp [f2, f1, f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[2]'(by simp) = none; decide
+  have step3 := step_normalization_pc2 o f2 []
+                  [(.address sender : MoveValue), (.u8 chainId : MoveValue)] initMs rfl rfl
+                  (.address contract) hf2_lt2 hf2_v2 hf2_ref2
+  set f3 := { f2 with pc := 3, locals := f2.locals.set 2 none hf2_lt2 } with hf3_def
+  have hf3_size : f3.locals.size = 7 := by
+    show (f2.locals.set 2 none hf2_lt2).size = 7; rw [Array.size_set]; exact hf2_size
+  have hf3_lt3 : 3 < f3.locals.size := by rw [hf3_size]; decide
+  have hf3_v3 : f3.locals[3]'hf3_lt3 = some ekRef := by
+    show (f2.locals.set 2 none hf2_lt2)[3]'hf3_lt3 = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 3)]
+    show (f1.locals.set 1 none hf1_lt1)[3]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 3)]
+    show (f0.locals.set 0 none hf0_lt0)[3]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 3)]; simp [f0]
+  have hf3_ref3 : ¬ 3 < f3.localRefs.size ∨
+                  ∃ h : 3 < f3.localRefs.size, f3.localRefs[3]'h = none := by
+    right; refine ⟨by simp [f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[3]'(by simp) = none; decide
+  have step4 := step_normalization_pc3 o f3 []
+                  [(.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl ekRef hf3_lt3 hf3_v3 hf3_ref3
+  set f4 := { f3 with pc := 4, locals := f3.locals.set 3 none hf3_lt3 } with hf4_def
+  have hf4_size : f4.locals.size = 7 := by
+    show (f3.locals.set 3 none hf3_lt3).size = 7; rw [Array.size_set]; exact hf3_size
+  have hf4_lt4 : 4 < f4.locals.size := by rw [hf4_size]; decide
+  have hf4_v4 : f4.locals[4]'hf4_lt4 = some curBalRef := by
+    show (f3.locals.set 3 none hf3_lt3)[4]'hf4_lt4 = _
+    rw [Array.getElem_set, if_neg (by decide : (3 : Nat) ≠ 4)]
+    show (f2.locals.set 2 none hf2_lt2)[4]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 4)]
+    show (f1.locals.set 1 none hf1_lt1)[4]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 4)]
+    show (f0.locals.set 0 none hf0_lt0)[4]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 4)]; simp [f0]
+  have hf4_ref4 : ¬ 4 < f4.localRefs.size ∨
+                  ∃ h : 4 < f4.localRefs.size, f4.localRefs[4]'h = none := by
+    right; refine ⟨by simp [f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[4]'(by simp) = none; decide
+  have step5 := step_normalization_pc4 o f4 []
+                  [ekRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl curBalRef hf4_lt4 hf4_v4 hf4_ref4
+  set f5 := { f4 with pc := 5, locals := f4.locals.set 4 none hf4_lt4 } with hf5_def
+  have hf5_size : f5.locals.size = 7 := by
+    show (f4.locals.set 4 none hf4_lt4).size = 7; rw [Array.size_set]; exact hf4_size
+  have hf5_lt5 : 5 < f5.locals.size := by rw [hf5_size]; decide
+  have hf5_v5 : f5.locals[5]'hf5_lt5 = some newBalRef := by
+    show (f4.locals.set 4 none hf4_lt4)[5]'hf5_lt5 = _
+    rw [Array.getElem_set, if_neg (by decide : (4 : Nat) ≠ 5)]
+    show (f3.locals.set 3 none hf3_lt3)[5]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (3 : Nat) ≠ 5)]
+    show (f2.locals.set 2 none hf2_lt2)[5]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 5)]
+    show (f1.locals.set 1 none hf1_lt1)[5]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 5)]
+    show (f0.locals.set 0 none hf0_lt0)[5]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 5)]; simp [f0]
+  have hf5_ref5 : ¬ 5 < f5.localRefs.size ∨
+                  ∃ h : 5 < f5.localRefs.size, f5.localRefs[5]'h = none := by
+    right; refine ⟨by simp [f5, f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[5]'(by simp) = none; decide
+  have step6 := step_normalization_pc5 o f5 []
+                  [curBalRef, ekRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl newBalRef hf5_lt5 hf5_v5 hf5_ref5
+  set f6 := { f5 with pc := 6 } with hf6_def
+  have hf6_size : f6.locals.size = 7 := hf5_size
+  have hf6_lt6 : 6 < f6.locals.size := by rw [hf6_size]; decide
+  have hf6_v6 : f6.locals[6]'hf6_lt6 = some proofRef := by
+    show f5.locals[6]'_ = _
+    show (f4.locals.set 4 none hf4_lt4)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (4 : Nat) ≠ 6)]
+    show (f3.locals.set 3 none hf3_lt3)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (3 : Nat) ≠ 6)]
+    show (f2.locals.set 2 none hf2_lt2)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 6)]
+    show (f1.locals.set 1 none hf1_lt1)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 6)]
+    show (f0.locals.set 0 none hf0_lt0)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 6)]; simp [f0]
+  have hf6_ref6 : ¬ 6 < f6.localRefs.size ∨
+                  ∃ h : 6 < f6.localRefs.size, f6.localRefs[6]'h = none := by
+    right; refine ⟨by simp [f6, f5, f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[6]'(by simp) = none; decide
+  have step7 := step_normalization_pc6 o f6 []
+                  [newBalRef, curBalRef, ekRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl proofRef hf6_lt6 hf6_v6 hf6_ref6
+  set f7 := { f6 with pc := 7 } with hf7_def
+  have step8 := step_normalization_pc7 o f7 []
+                  [newBalRef, curBalRef, ekRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl proofRid proofFields cs1 sigmaFid proofRef
+                  hproofRef hread (by omega : 0 < proofFields.length) halloc0
+  set f8 := { f7 with pc := 8 } with hf8_def
+  set ms8 : MachineState := { initMs with containers := cs1 } with hms8_def
+  have htake_pc8 :
+      takeN [(.immRef sigmaFid : MoveValue), newBalRef, curBalRef, ekRef,
+              (.address contract : MoveValue), (.address sender : MoveValue),
+              (.u8 chainId : MoveValue)] 7 =
+        some ([.u8 chainId, .address sender, .address contract,
+               ekRef, curBalRef, newBalRef, .immRef sigmaFid], []) := rfl
+  have step9 := step_normalization_pc8 o f8 []
+                  [(.immRef sigmaFid : MoveValue), newBalRef, curBalRef, ekRef,
+                    (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  ms8 rfl rfl
+                  [.u8 chainId, .address sender, .address contract,
+                   ekRef, curBalRef, newBalRef, .immRef sigmaFid]
+                  [] cs2 htake_pc8 hsigmaOk
+  set f9 := { f8 with pc := 9 } with hf9_def
+  set ms9 : MachineState := { ms8 with containers := cs2, globals := ms8.globals } with hms9_def
+  have hf9_lt5 : 5 < f9.locals.size := hf5_lt5
+  have hf9_v5 : f9.locals[5]'hf9_lt5 = some newBalRef := hf5_v5
+  have hf9_ref5 : ¬ 5 < f9.localRefs.size ∨
+                  ∃ h : 5 < f9.localRefs.size, f9.localRefs[5]'h = none := hf5_ref5
+  have step10 := step_normalization_pc9 o f9 [] [] ms9 rfl rfl newBalRef
+                   hf9_lt5 hf9_v5 hf9_ref5
+  set f10 := { f9 with pc := 10, locals := f9.locals.set 5 none hf9_lt5 } with hf10_def
+  have hf10_size : f10.locals.size = 7 := by
+    show (f9.locals.set 5 none hf9_lt5).size = 7; rw [Array.size_set]; exact hf6_size
+  have hf10_lt6 : 6 < f10.locals.size := by rw [hf10_size]; decide
+  have hf10_v6 : f10.locals[6]'hf10_lt6 = some proofRef := by
+    show (f9.locals.set 5 none hf9_lt5)[6]'hf10_lt6 = _
+    rw [Array.getElem_set, if_neg (by decide : (5 : Nat) ≠ 6)]; exact hf6_v6
+  have hf10_ref6 : ¬ 6 < f10.localRefs.size ∨
+                   ∃ h : 6 < f10.localRefs.size, f10.localRefs[6]'h = none := by
+    right; refine ⟨by simp [f10, f9, f8, f7, f6, f5, f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[6]'(by simp) = none; decide
+  have step11 := step_normalization_pc10 o f10 [] [newBalRef] ms9 rfl rfl proofRef
+                   hf10_lt6 hf10_v6 hf10_ref6
+  set f11 := { f10 with pc := 11, locals := f10.locals.set 6 none hf10_lt6 } with hf11_def
+  have hms9_read : ms9.containers.read proofRid = some (.struct_ proofFields) := by
+    show cs2.read proofRid = _; exact hread2
+  have step12 := step_normalization_pc11 o f11 [] [newBalRef] ms9 rfl rfl proofRid proofFields
+                   cs3 zkrpFid proofRef hproofRef hms9_read hFieldCount
+                   (show ms9.containers.alloc _ = (cs3, zkrpFid) from
+                     show cs2.alloc _ = (cs3, zkrpFid) from halloc1)
+  set f12 := { f11 with pc := 12 } with hf12_def
+  set ms12 : MachineState := { ms9 with containers := cs3 } with hms12_def
+  have htake_pc12 :
+      takeN [(.immRef zkrpFid : MoveValue), newBalRef] 2 =
+        some ([newBalRef, .immRef zkrpFid], []) := rfl
+  have step13 := step_normalization_pc12_multi o f12 []
+                   [(.immRef zkrpFid : MoveValue), newBalRef]
+                   ms12 rfl rfl
+                   [newBalRef, .immRef zkrpFid] []
+                   rangeResultHead rangeResultTail cs4 htake_pc12 hrangeArityMismatch
+  obtain ⟨ef, hef⟩ : ∃ ef, fuel = ef + 13 := ⟨fuel - 13, by omega⟩
+  rw [hef]
+  rw [show ef + 13 = (ef + 12) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 12) _ _ _ _ step1,
+      show ef + 12 = (ef + 11) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 11) _ _ _ _ step2,
+      show ef + 11 = (ef + 10) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 10) _ _ _ _ step3,
+      show ef + 10 = (ef + 9) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 9) _ _ _ _ step4,
+      show ef + 9 = (ef + 8) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 8) _ _ _ _ step5,
+      show ef + 8 = (ef + 7) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 7) _ _ _ _ step6,
+      show ef + 7 = (ef + 6) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 6) _ _ _ _ step7,
+      show ef + 6 = (ef + 5) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 5) _ _ _ _ step8,
+      show ef + 5 = (ef + 4) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 4) _ _ _ _ step9,
+      show ef + 4 = (ef + 3) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 3) _ _ _ _ step10,
+      show ef + 3 = (ef + 2) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 2) _ _ _ _ step11,
+      show ef + 2 = (ef + 1) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 1) _ _ _ _ step12,
+      StepLemmas.run_succ_error_of_step ef step13]
+
+/-- Happy path: sigma succeeds, range succeeds, ret. Run produces `.returned [] ms_final`. -/
+theorem norm_run_to_success_produces_returned
+    (o : NormalizationModuleOracle)
+    (chainId : UInt8) (sender contract : ByteArray)
+    (ekRef curBalRef newBalRef proofRef : MoveValue)
+    (proofRid : RefId) (proofFields : List MoveValue)
+    (initMs : MachineState)
+    (cs1 cs2 cs3 cs4 : ContainerStore) (sigmaFid zkrpFid : RefId)
+    (hFieldCount : 1 < proofFields.length)
+    (hread : initMs.containers.read proofRid = some (.struct_ proofFields))
+    (hread2 : cs2.read proofRid = some (.struct_ proofFields))
+    (hproofRef : getRefId proofRef = some proofRid)
+    (halloc0 : initMs.containers.alloc
+                  (proofFields[0]'(by omega : 0 < proofFields.length)) = (cs1, sigmaFid))
+    (hsigmaOk :
+       o.verifySigmaProof cs1
+         [.u8 chainId, .address sender, .address contract,
+          ekRef, curBalRef, newBalRef, .immRef sigmaFid] =
+         some ([], cs2))
+    (halloc1 : cs2.alloc (proofFields[1]'hFieldCount) = (cs3, zkrpFid))
+    (hrangeOk : o.verifyRangeProof cs3 [newBalRef, .immRef zkrpFid] = some ([], cs4))
     (fuel : Nat)
     (hfuel : fuel ≥ 14) :
-    let args := normalizationArgs chainId sender contract ekRef curBalRef newBalRef proofRef
-    (eval (normalizationModuleEnv o) verifyNormalizationProofIdx args fuel initMs).dropMs =
-    match verifyNormalizationBytecodeResult o chainId sender contract ekRef curBalRef newBalRef
-            proofRid proofFields initMs hFieldCount with
-    | .returned ms => .returned [] ms
-    | .error => .error
+    run (normalizationModuleEnv o)
+        { code := verifyNormalizationProofCode, pc := 0,
+          locals := ([.u8 chainId, .address sender, .address contract,
+                      ekRef, curBalRef, newBalRef, proofRef].map some).toArray,
+          localRefs := (List.replicate 7 none).toArray }
+        [] [] initMs fuel =
+    .returned [] { initMs with containers := cs4, globals := initMs.globals } := by
+  set f0 : Frame :=
+      { code := verifyNormalizationProofCode, pc := 0,
+        locals := ([(.u8 chainId : MoveValue), .address sender, .address contract,
+                    ekRef, curBalRef, newBalRef, proofRef].map some).toArray,
+        localRefs := (List.replicate 7 none).toArray }
+    with hf0_def
+  have hf0_size : f0.locals.size = 7 := by simp [f0]
+  have hf0_lt0 : 0 < f0.locals.size := by rw [hf0_size]; decide
+  have hf0_v0 : f0.locals[0]'hf0_lt0 = some (.u8 chainId) := by simp [f0]
+  have hf0_ref0 : ¬ 0 < f0.localRefs.size ∨
+                  ∃ h : 0 < f0.localRefs.size, f0.localRefs[0]'h = none := by
+    right; refine ⟨by simp [f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[0]'(by simp) = none; decide
+  have step1 := step_normalization_pc0 o f0 [] [] initMs rfl rfl (.u8 chainId)
+                  hf0_lt0 hf0_v0 hf0_ref0
+  set f1 := { f0 with pc := 1, locals := f0.locals.set 0 none hf0_lt0 } with hf1_def
+  have hf1_size : f1.locals.size = 7 := by
+    show (f0.locals.set 0 none hf0_lt0).size = 7; rw [Array.size_set]; exact hf0_size
+  have hf1_lt1 : 1 < f1.locals.size := by rw [hf1_size]; decide
+  have hf1_v1 : f1.locals[1]'hf1_lt1 = some (.address sender) := by
+    show (f0.locals.set 0 none hf0_lt0)[1]'hf1_lt1 = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 1)]; simp [f0]
+  have hf1_ref1 : ¬ 1 < f1.localRefs.size ∨
+                  ∃ h : 1 < f1.localRefs.size, f1.localRefs[1]'h = none := by
+    right; refine ⟨by simp [f1, f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[1]'(by simp) = none; decide
+  have step2 := step_normalization_pc1 o f1 [] [(.u8 chainId : MoveValue)] initMs rfl rfl
+                  (.address sender) hf1_lt1 hf1_v1 hf1_ref1
+  set f2 := { f1 with pc := 2, locals := f1.locals.set 1 none hf1_lt1 } with hf2_def
+  have hf2_size : f2.locals.size = 7 := by
+    show (f1.locals.set 1 none hf1_lt1).size = 7; rw [Array.size_set]; exact hf1_size
+  have hf2_lt2 : 2 < f2.locals.size := by rw [hf2_size]; decide
+  have hf2_v2 : f2.locals[2]'hf2_lt2 = some (.address contract) := by
+    show (f1.locals.set 1 none hf1_lt1)[2]'hf2_lt2 = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 2)]
+    show (f0.locals.set 0 none hf0_lt0)[2]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 2)]; simp [f0]
+  have hf2_ref2 : ¬ 2 < f2.localRefs.size ∨
+                  ∃ h : 2 < f2.localRefs.size, f2.localRefs[2]'h = none := by
+    right; refine ⟨by simp [f2, f1, f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[2]'(by simp) = none; decide
+  have step3 := step_normalization_pc2 o f2 []
+                  [(.address sender : MoveValue), (.u8 chainId : MoveValue)] initMs rfl rfl
+                  (.address contract) hf2_lt2 hf2_v2 hf2_ref2
+  set f3 := { f2 with pc := 3, locals := f2.locals.set 2 none hf2_lt2 } with hf3_def
+  have hf3_size : f3.locals.size = 7 := by
+    show (f2.locals.set 2 none hf2_lt2).size = 7; rw [Array.size_set]; exact hf2_size
+  have hf3_lt3 : 3 < f3.locals.size := by rw [hf3_size]; decide
+  have hf3_v3 : f3.locals[3]'hf3_lt3 = some ekRef := by
+    show (f2.locals.set 2 none hf2_lt2)[3]'hf3_lt3 = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 3)]
+    show (f1.locals.set 1 none hf1_lt1)[3]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 3)]
+    show (f0.locals.set 0 none hf0_lt0)[3]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 3)]; simp [f0]
+  have hf3_ref3 : ¬ 3 < f3.localRefs.size ∨
+                  ∃ h : 3 < f3.localRefs.size, f3.localRefs[3]'h = none := by
+    right; refine ⟨by simp [f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[3]'(by simp) = none; decide
+  have step4 := step_normalization_pc3 o f3 []
+                  [(.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl ekRef hf3_lt3 hf3_v3 hf3_ref3
+  set f4 := { f3 with pc := 4, locals := f3.locals.set 3 none hf3_lt3 } with hf4_def
+  have hf4_size : f4.locals.size = 7 := by
+    show (f3.locals.set 3 none hf3_lt3).size = 7; rw [Array.size_set]; exact hf3_size
+  have hf4_lt4 : 4 < f4.locals.size := by rw [hf4_size]; decide
+  have hf4_v4 : f4.locals[4]'hf4_lt4 = some curBalRef := by
+    show (f3.locals.set 3 none hf3_lt3)[4]'hf4_lt4 = _
+    rw [Array.getElem_set, if_neg (by decide : (3 : Nat) ≠ 4)]
+    show (f2.locals.set 2 none hf2_lt2)[4]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 4)]
+    show (f1.locals.set 1 none hf1_lt1)[4]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 4)]
+    show (f0.locals.set 0 none hf0_lt0)[4]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 4)]; simp [f0]
+  have hf4_ref4 : ¬ 4 < f4.localRefs.size ∨
+                  ∃ h : 4 < f4.localRefs.size, f4.localRefs[4]'h = none := by
+    right; refine ⟨by simp [f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[4]'(by simp) = none; decide
+  have step5 := step_normalization_pc4 o f4 []
+                  [ekRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl curBalRef hf4_lt4 hf4_v4 hf4_ref4
+  set f5 := { f4 with pc := 5, locals := f4.locals.set 4 none hf4_lt4 } with hf5_def
+  have hf5_size : f5.locals.size = 7 := by
+    show (f4.locals.set 4 none hf4_lt4).size = 7; rw [Array.size_set]; exact hf4_size
+  have hf5_lt5 : 5 < f5.locals.size := by rw [hf5_size]; decide
+  have hf5_v5 : f5.locals[5]'hf5_lt5 = some newBalRef := by
+    show (f4.locals.set 4 none hf4_lt4)[5]'hf5_lt5 = _
+    rw [Array.getElem_set, if_neg (by decide : (4 : Nat) ≠ 5)]
+    show (f3.locals.set 3 none hf3_lt3)[5]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (3 : Nat) ≠ 5)]
+    show (f2.locals.set 2 none hf2_lt2)[5]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 5)]
+    show (f1.locals.set 1 none hf1_lt1)[5]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 5)]
+    show (f0.locals.set 0 none hf0_lt0)[5]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 5)]; simp [f0]
+  have hf5_ref5 : ¬ 5 < f5.localRefs.size ∨
+                  ∃ h : 5 < f5.localRefs.size, f5.localRefs[5]'h = none := by
+    right; refine ⟨by simp [f5, f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[5]'(by simp) = none; decide
+  have step6 := step_normalization_pc5 o f5 []
+                  [curBalRef, ekRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl newBalRef hf5_lt5 hf5_v5 hf5_ref5
+  set f6 := { f5 with pc := 6 } with hf6_def
+  have hf6_size : f6.locals.size = 7 := hf5_size
+  have hf6_lt6 : 6 < f6.locals.size := by rw [hf6_size]; decide
+  have hf6_v6 : f6.locals[6]'hf6_lt6 = some proofRef := by
+    show f5.locals[6]'_ = _
+    show (f4.locals.set 4 none hf4_lt4)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (4 : Nat) ≠ 6)]
+    show (f3.locals.set 3 none hf3_lt3)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (3 : Nat) ≠ 6)]
+    show (f2.locals.set 2 none hf2_lt2)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (2 : Nat) ≠ 6)]
+    show (f1.locals.set 1 none hf1_lt1)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (1 : Nat) ≠ 6)]
+    show (f0.locals.set 0 none hf0_lt0)[6]'_ = _
+    rw [Array.getElem_set, if_neg (by decide : (0 : Nat) ≠ 6)]; simp [f0]
+  have hf6_ref6 : ¬ 6 < f6.localRefs.size ∨
+                  ∃ h : 6 < f6.localRefs.size, f6.localRefs[6]'h = none := by
+    right; refine ⟨by simp [f6, f5, f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[6]'(by simp) = none; decide
+  have step7 := step_normalization_pc6 o f6 []
+                  [newBalRef, curBalRef, ekRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl proofRef hf6_lt6 hf6_v6 hf6_ref6
+  set f7 := { f6 with pc := 7 } with hf7_def
+  have step8 := step_normalization_pc7 o f7 []
+                  [newBalRef, curBalRef, ekRef, (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  initMs rfl rfl proofRid proofFields cs1 sigmaFid proofRef
+                  hproofRef hread (by omega : 0 < proofFields.length) halloc0
+  set f8 := { f7 with pc := 8 } with hf8_def
+  set ms8 : MachineState := { initMs with containers := cs1 } with hms8_def
+  have htake_pc8 :
+      takeN [(.immRef sigmaFid : MoveValue), newBalRef, curBalRef, ekRef,
+              (.address contract : MoveValue), (.address sender : MoveValue),
+              (.u8 chainId : MoveValue)] 7 =
+        some ([.u8 chainId, .address sender, .address contract,
+               ekRef, curBalRef, newBalRef, .immRef sigmaFid], []) := rfl
+  have step9 := step_normalization_pc8 o f8 []
+                  [(.immRef sigmaFid : MoveValue), newBalRef, curBalRef, ekRef,
+                    (.address contract : MoveValue), (.address sender : MoveValue), (.u8 chainId : MoveValue)]
+                  ms8 rfl rfl
+                  [.u8 chainId, .address sender, .address contract,
+                   ekRef, curBalRef, newBalRef, .immRef sigmaFid]
+                  [] cs2 htake_pc8 hsigmaOk
+  set f9 := { f8 with pc := 9 } with hf9_def
+  set ms9 : MachineState := { ms8 with containers := cs2, globals := ms8.globals } with hms9_def
+  have hf9_lt5 : 5 < f9.locals.size := hf5_lt5
+  have hf9_v5 : f9.locals[5]'hf9_lt5 = some newBalRef := hf5_v5
+  have hf9_ref5 : ¬ 5 < f9.localRefs.size ∨
+                  ∃ h : 5 < f9.localRefs.size, f9.localRefs[5]'h = none := hf5_ref5
+  have step10 := step_normalization_pc9 o f9 [] [] ms9 rfl rfl newBalRef
+                   hf9_lt5 hf9_v5 hf9_ref5
+  set f10 := { f9 with pc := 10, locals := f9.locals.set 5 none hf9_lt5 } with hf10_def
+  have hf10_size : f10.locals.size = 7 := by
+    show (f9.locals.set 5 none hf9_lt5).size = 7; rw [Array.size_set]; exact hf6_size
+  have hf10_lt6 : 6 < f10.locals.size := by rw [hf10_size]; decide
+  have hf10_v6 : f10.locals[6]'hf10_lt6 = some proofRef := by
+    show (f9.locals.set 5 none hf9_lt5)[6]'hf10_lt6 = _
+    rw [Array.getElem_set, if_neg (by decide : (5 : Nat) ≠ 6)]; exact hf6_v6
+  have hf10_ref6 : ¬ 6 < f10.localRefs.size ∨
+                   ∃ h : 6 < f10.localRefs.size, f10.localRefs[6]'h = none := by
+    right; refine ⟨by simp [f10, f9, f8, f7, f6, f5, f4, f3, f2, f1, f0], ?_⟩
+    show ((List.replicate 7 (none : Option RefId)).toArray)[6]'(by simp) = none; decide
+  have step11 := step_normalization_pc10 o f10 [] [newBalRef] ms9 rfl rfl proofRef
+                   hf10_lt6 hf10_v6 hf10_ref6
+  set f11 := { f10 with pc := 11, locals := f10.locals.set 6 none hf10_lt6 } with hf11_def
+  have hms9_read : ms9.containers.read proofRid = some (.struct_ proofFields) := by
+    show cs2.read proofRid = _; exact hread2
+  have step12 := step_normalization_pc11 o f11 [] [newBalRef] ms9 rfl rfl proofRid proofFields
+                   cs3 zkrpFid proofRef hproofRef hms9_read hFieldCount
+                   (show ms9.containers.alloc _ = (cs3, zkrpFid) from
+                     show cs2.alloc _ = (cs3, zkrpFid) from halloc1)
+  set f12 := { f11 with pc := 12 } with hf12_def
+  set ms12 : MachineState := { ms9 with containers := cs3 } with hms12_def
+  have htake_pc12 :
+      takeN [(.immRef zkrpFid : MoveValue), newBalRef] 2 =
+        some ([newBalRef, .immRef zkrpFid], []) := rfl
+  have step13 := step_normalization_pc12 o f12 []
+                   [(.immRef zkrpFid : MoveValue), newBalRef]
+                   ms12 rfl rfl
+                   [newBalRef, .immRef zkrpFid] [] cs4 htake_pc12 hrangeOk
+  set f13 := { f12 with pc := 13 } with hf13_def
+  set ms13 : MachineState := { ms12 with containers := cs4, globals := ms12.globals } with hms13_def
+  have step14 := step_normalization_pc13 o f13 [] ms13 rfl rfl
+  obtain ⟨ef, hef⟩ : ∃ ef, fuel = ef + 14 := ⟨fuel - 14, by omega⟩
+  rw [hef]
+  rw [show ef + 14 = (ef + 13) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 13) _ _ _ _ step1,
+      show ef + 13 = (ef + 12) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 12) _ _ _ _ step2,
+      show ef + 12 = (ef + 11) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 11) _ _ _ _ step3,
+      show ef + 11 = (ef + 10) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 10) _ _ _ _ step4,
+      show ef + 10 = (ef + 9) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 9) _ _ _ _ step5,
+      show ef + 9 = (ef + 8) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 8) _ _ _ _ step6,
+      show ef + 8 = (ef + 7) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 7) _ _ _ _ step7,
+      show ef + 7 = (ef + 6) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 6) _ _ _ _ step8,
+      show ef + 6 = (ef + 5) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 5) _ _ _ _ step9,
+      show ef + 5 = (ef + 4) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 4) _ _ _ _ step10,
+      show ef + 4 = (ef + 3) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 3) _ _ _ _ step11,
+      show ef + 3 = (ef + 2) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 2) _ _ _ _ step12,
+      show ef + 2 = (ef + 1) + 1 from rfl,
+      StepLemmas.run_succ_ok_of_step (ef + 1) _ _ _ _ step13,
+      StepLemmas.run_succ_returned_of_step ef [] ms13 step14]
+
+/-! ## Top-level equivalence theorem (Phase 4 closure) -/
+
+/-- The normalization sigma oracle's frame condition. Same rationale as Rotation/Withdrawal. -/
+abbrev NormalizationSigmaPreservesProofRead
+    (o : NormalizationModuleOracle)
+    (chainId : UInt8) (sender contract : ByteArray)
+    (ekRef curBalRef newBalRef : MoveValue)
+    (proofRid : RefId) (proofFields : List MoveValue)
+    (initMs : MachineState) (hFieldCount : 0 < proofFields.length) : Prop :=
+  ∀ cs2,
+    o.verifySigmaProof (initMs.containers.alloc (proofFields[0]'hFieldCount)).1
+        [.u8 chainId, .address sender, .address contract,
+         ekRef, curBalRef, newBalRef,
+         .immRef (initMs.containers.alloc (proofFields[0]'hFieldCount)).2] =
+        some ([], cs2) →
+    cs2.read proofRid = some (.struct_ proofFields)
 
 theorem normalization_eval_equiv_functional_sim
     (o : NormalizationModuleOracle)
@@ -666,54 +1961,70 @@ theorem normalization_eval_equiv_functional_sim
     (hFieldCount : 1 < proofFields.length)
     (hread : initMs.containers.read proofRid = some (.struct_ proofFields))
     (hproofRef : getRefId proofRef = some proofRid)
+    (hSigmaPreserves :
+       NormalizationSigmaPreservesProofRead o chainId sender contract
+         ekRef curBalRef newBalRef proofRid proofFields initMs
+         (by omega : 0 < proofFields.length))
     (fuel : Nat)
     (hfuel : fuel ≥ 14) :
     let args := normalizationArgs chainId sender contract ekRef curBalRef newBalRef proofRef
     (eval (normalizationModuleEnv o) verifyNormalizationProofIdx args fuel initMs).dropMs =
     match verifyNormalizationBytecodeResult o chainId sender contract ekRef curBalRef newBalRef
             proofRid proofFields initMs hFieldCount with
-    | .returned ms => .returned [] ms
+    | .returned _ => .returned [] MachineState.empty
     | .error => .error := by
-  -- Main proof structure: chain 14 PCs through bytecode execution
-  --
-  -- **Execution flow:**
-  -- PCs 0-4:  moveLoc instructions (load args onto stack)
-  -- PCs 5-7:  copyLoc + immBorrowField (prepare sigma proof call args)
-  -- PC 8:     call verifySigmaProof → split on oracle outcome
-  -- PCs 9-10: moveLoc (load range proof args if sigma succeeded)
-  -- PC 11:    immBorrowField (get range_proof field)
-  -- PC 12:    call verifyRangeProof → split on oracle outcome
-  -- PC 13:    ret
-  --
-  -- **Proof strategy:**
-  -- 1. Unfold `eval` to `run` via eval_normalization_eq_run
-  -- 2. Use norm_run_pc0_to_pc5 to chain PCs 0-4 (consumes 5 fuel)
-  -- 3. Use norm_run_pc5_to_pc8 to chain PCs 5-7 (consumes 3 fuel)
-  -- 4. Apply step_normalization_pc8 for sigma call (consumes 1 fuel)
-  -- 5. Split on o.verifySigmaProof result:
-  --    a) none: thread error through remaining PCs, apply verifyNormalizationBytecodeResult_sigmaFails
-  --    b) some: continue to PC 9
-  -- 6. For sigma success branch:
-  --    - Apply step_normalization_pc9, pc10 for moveLoc ops (2 fuel)
-  --    - Apply step_normalization_pc11 for immBorrowField (1 fuel)
-  --    - Apply step_normalization_pc12 for range call (1 fuel)
-  --    - Split on o.verifyRangeProof result:
-  --      * none: apply verifyNormalizationBytecodeResult_rangeFails
-  --      * some: apply step_normalization_pc13 (ret), then verifyNormalizationBytecodeResult_success
-  -- 7. Use ExecResultDropMs lemmas to connect ExecResult.dropMs at each split point
-  --
-  -- **Current blockers:**
-  -- - norm_run_pc0_to_pc5: axiom due to array free-variable constraints
-  -- - norm_run_pc5_to_pc8: axiom (similar array issues)
-  -- Once these helpers are proven, the main composition follows mechanically by
-  -- applying the helpers + step theorems + shape lemmas in sequence.
-  --
-  -- **Estimated remaining effort:** 150-200 lines once helpers complete (mostly
-  -- boilerplate applications of run_succ_ok_of_step, split cases, and shape lemma rewrites).
-
-  -- Apply the direct equivalence axiom to bypass architectural blockers.
-  exact normalization_eval_equiv_functional_sim_axiom o chainId sender contract
-    ekRef curBalRef newBalRef proofRef proofRid proofFields initMs
-    hFieldCount hread hproofRef fuel hfuel
+  show (eval (normalizationModuleEnv o) verifyNormalizationProofIdx
+          (normalizationArgs chainId sender contract ekRef curBalRef newBalRef proofRef)
+          fuel initMs).dropMs = _
+  rw [eval_normalization_eq_run]
+  unfold normalizationArgs verifyNormalizationBytecodeResult
+  rcases hSigmaPair : initMs.containers.alloc (proofFields[0]'(by omega : 0 < proofFields.length))
+    with ⟨cs1, sigmaFid⟩
+  match hsigma : o.verifySigmaProof cs1
+                    [.u8 chainId, .address sender, .address contract,
+                     ekRef, curBalRef, newBalRef, .immRef sigmaFid] with
+  | none =>
+    have hRun := norm_run_to_sigma_fail_produces_error o chainId sender contract
+                  ekRef curBalRef newBalRef proofRef proofRid proofFields
+                  initMs cs1 sigmaFid (by omega : 0 < proofFields.length)
+                  hread hproofRef hSigmaPair fuel (by omega) hsigma
+    rw [hRun]
+    simp only [ExecResult.dropMs_error, hSigmaPair, hsigma]
+  | some (sHead :: sTail, cs2) =>
+    have hRun := norm_run_to_sigma_arity_mismatch_produces_error o chainId sender contract
+                  ekRef curBalRef newBalRef proofRef proofRid proofFields
+                  initMs cs1 cs2 sigmaFid sHead sTail
+                  (by omega : 0 < proofFields.length) hread hproofRef hSigmaPair
+                  fuel (by omega) hsigma
+    rw [hRun]
+    simp only [ExecResult.dropMs_error, hSigmaPair, hsigma]
+  | some ([], cs2) =>
+    have hread2 : cs2.read proofRid = some (.struct_ proofFields) := by
+      apply hSigmaPreserves cs2
+      rw [hSigmaPair]; exact hsigma
+    rcases hRangePair : cs2.alloc (proofFields[1]'hFieldCount) with ⟨cs3, zkrpFid⟩
+    match hrange : o.verifyRangeProof cs3 [newBalRef, .immRef zkrpFid] with
+    | none =>
+      have hRun := norm_run_to_range_fail_produces_error o chainId sender contract
+                    ekRef curBalRef newBalRef proofRef proofRid proofFields
+                    initMs cs1 cs2 cs3 sigmaFid zkrpFid hFieldCount hread hread2
+                    hproofRef hSigmaPair hsigma hRangePair hrange fuel (by omega)
+      rw [hRun]
+      simp only [ExecResult.dropMs_error, hSigmaPair, hsigma, hRangePair, hrange]
+    | some (rHead :: rTail, cs4) =>
+      have hRun := norm_run_to_range_arity_mismatch_produces_error o chainId sender contract
+                    ekRef curBalRef newBalRef proofRef proofRid proofFields
+                    initMs cs1 cs2 cs3 cs4 sigmaFid zkrpFid rHead rTail hFieldCount
+                    hread hread2 hproofRef hSigmaPair hsigma hRangePair hrange
+                    fuel (by omega)
+      rw [hRun]
+      simp only [ExecResult.dropMs_error, hSigmaPair, hsigma, hRangePair, hrange]
+    | some ([], cs4) =>
+      have hRun := norm_run_to_success_produces_returned o chainId sender contract
+                    ekRef curBalRef newBalRef proofRef proofRid proofFields
+                    initMs cs1 cs2 cs3 cs4 sigmaFid zkrpFid hFieldCount hread hread2
+                    hproofRef hSigmaPair hsigma hRangePair hrange fuel (by omega)
+      rw [hRun]
+      simp only [ExecResult.dropMs_returned, hSigmaPair, hsigma, hRangePair, hrange]
 
 end MovementFormal.Experimental.ConfidentialAsset.Normalization.EvalEquiv

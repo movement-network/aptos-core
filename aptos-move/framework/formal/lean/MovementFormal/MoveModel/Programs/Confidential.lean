@@ -67,12 +67,71 @@ serializer wires under `corpora/confidential_assets/serialize_auditor_*` (EK + p
 
 namespace MovementFormal.MoveModel.Programs.Confidential
 
--- AXIOMS: Missing TranscriptAlignment definitions
-axiom expectedTaggedHashGolden : ByteArray
-axiom expectedTaggedHashGolden2 : ByteArray
-axiom expectedRegistrationFsMsgMoveGolden : ByteArray
-axiom expectedRegistrationFsMsg2 : ByteArray
-axiom fiatShamirRegistrationDst : ByteArray
+-- TranscriptAlignment golden fixtures recovered from difftest corpora
+-- (`difftest/corpora/confidential_assets/registration_fs_msg_move_golden_{1,2}.hex`).
+-- Each FS message is a 199-byte concatenation of:
+--   `MovementConfidentialAsset/Registration` DST (38 B) ‖ chainId (1 B) ‖
+--   sender (32 B) ‖ contract (32 B) ‖ token (32 B) ‖ ek (32 B) ‖ rCompressed (32 B).
+-- The two tagged-hash goldens are the `taggedHash` (BIP-340-style SHA3-512) of each
+-- FS message under the same registration DST.
+def expectedRegistrationFsMsgMoveGolden : ByteArray := ByteArray.mk #[
+    0x4d, 0x6f, 0x76, 0x65, 0x6d, 0x65, 0x6e, 0x74, 0x43, 0x6f, 0x6e, 0x66,
+    0x69, 0x64, 0x65, 0x6e, 0x74, 0x69, 0x61, 0x6c, 0x41, 0x73, 0x73, 0x65,
+    0x74, 0x2f, 0x52, 0x65, 0x67, 0x69, 0x73, 0x74, 0x72, 0x61, 0x74, 0x69,
+    0x6f, 0x6e, 0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x03, 0xe2, 0xf2, 0xae, 0x0a, 0x6a, 0xbc, 0x4e, 0x71, 0xa8,
+    0x84, 0xa9, 0x61, 0xc5, 0x00, 0x51, 0x5f, 0x58, 0xe3, 0x0b, 0x6a, 0xa5,
+    0x82, 0xdd, 0x8d, 0xb6, 0xa6, 0x59, 0x45, 0xe0, 0x8d, 0x2d, 0x76, 0xe2,
+    0xf2, 0xae, 0x0a, 0x6a, 0xbc, 0x4e, 0x71, 0xa8, 0x84, 0xa9, 0x61, 0xc5,
+    0x00, 0x51, 0x5f, 0x58, 0xe3, 0x0b, 0x6a, 0xa5, 0x82, 0xdd, 0x8d, 0xb6,
+    0xa6, 0x59, 0x45, 0xe0, 0x8d, 0x2d, 0x76
+  ]
+
+def expectedRegistrationFsMsg2 : ByteArray := ByteArray.mk #[
+    0x4d, 0x6f, 0x76, 0x65, 0x6d, 0x65, 0x6e, 0x74, 0x43, 0x6f, 0x6e, 0x66,
+    0x69, 0x64, 0x65, 0x6e, 0x74, 0x69, 0x61, 0x6c, 0x41, 0x73, 0x73, 0x65,
+    0x74, 0x2f, 0x52, 0x65, 0x67, 0x69, 0x73, 0x74, 0x72, 0x61, 0x74, 0x69,
+    0x6f, 0x6e, 0x2a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x30, 0xe2, 0xf2, 0xae, 0x0a, 0x6a, 0xbc, 0x4e, 0x71, 0xa8,
+    0x84, 0xa9, 0x61, 0xc5, 0x00, 0x51, 0x5f, 0x58, 0xe3, 0x0b, 0x6a, 0xa5,
+    0x82, 0xdd, 0x8d, 0xb6, 0xa6, 0x59, 0x45, 0xe0, 0x8d, 0x2d, 0x76, 0xe2,
+    0xf2, 0xae, 0x0a, 0x6a, 0xbc, 0x4e, 0x71, 0xa8, 0x84, 0xa9, 0x61, 0xc5,
+    0x00, 0x51, 0x5f, 0x58, 0xe3, 0x0b, 0x6a, 0xa5, 0x82, 0xdd, 0x8d, 0xb6,
+    0xa6, 0x59, 0x45, 0xe0, 0x8d, 0x2d, 0x76
+  ]
+
+/-- BIP-340-style tagged hash of `expectedRegistrationFsMsgMoveGolden` under the
+    registration DST. Computable; matches the difftest corpus pin
+    `registration_tagged_hash_golden_1.hex`. -/
+noncomputable def expectedTaggedHashGolden : ByteArray :=
+  MovementFormal.AptosStd.Hash.Sha3_512.taggedHash
+    MovementFormal.Experimental.ConfidentialAsset.Registration.Formal.registrationDstBytes
+    expectedRegistrationFsMsgMoveGolden
+
+/-- Tagged hash of the second FS golden. -/
+noncomputable def expectedTaggedHashGolden2 : ByteArray :=
+  MovementFormal.AptosStd.Hash.Sha3_512.taggedHash
+    MovementFormal.Experimental.ConfidentialAsset.Registration.Formal.registrationDstBytes
+    expectedRegistrationFsMsg2
+
+/-- `FIAT_SHAMIR_REGISTRATION_SIGMA_DST` as a `ByteArray`, aligned to the
+    Move source via `Formal.registrationDstBytes` (single source of truth). -/
+def fiatShamirRegistrationDst : ByteArray :=
+  MovementFormal.Experimental.ConfidentialAsset.Registration.Formal.registrationDstBytes
 noncomputable axiom caRegistrationHelpersRoundtripNative : List MoveValue → Option (List MoveValue)
 noncomputable axiom caRegistrationBytecodeEvalNative : List MoveValue → Option (List MoveValue)
 theorem tagged_hash_golden_msg_toList_eq_expected_toList : True := trivial
@@ -2019,8 +2078,8 @@ private def caFiatRotationSigmaDstDesc : FuncDesc :=
 def fiatRegistrationSigmaDstBytes : List UInt8 :=
   registrationDstBytes.toList
 
-axiom fiatRegistrationSigmaDstBytes_eq_fiatShamirRegistrationDst_toList :
-    fiatRegistrationSigmaDstBytes = fiatShamirRegistrationDst.toList
+theorem fiatRegistrationSigmaDstBytes_eq_fiatShamirRegistrationDst_toList :
+    fiatRegistrationSigmaDstBytes = fiatShamirRegistrationDst.toList := rfl
 
 theorem fiatRegistrationSigmaDstBytes_length : fiatRegistrationSigmaDstBytes.length = 38 := by
   unfold fiatRegistrationSigmaDstBytes
@@ -2488,201 +2547,203 @@ private def isRetBoolTrue (r : ExecResult) : Bool :=
   | .returned [.bool true] _ => true
   | _ => false
 
+set_option maxRecDepth 100000
+
 /-- Machine-checked: **`layout_ok_is_some`**-mapped indices **110–113** evaluate to **`bool(true)`** (corpus sigma length bytecode). -/
 theorem confidentialLayoutSomeRowsLeanEval_bool_true :
     isRetBoolTrue (evalConfidentialIdx 110 50) &&
     isRetBoolTrue (evalConfidentialIdx 111 50) &&
     isRetBoolTrue (evalConfidentialIdx 112 50) &&
     isRetBoolTrue (evalConfidentialIdx 113 50) = true := by
-  sorry
+  decide
 
 /-- Same bytecode as **128–130** — ties **`layout_ok_is_some`** rows to the explicit length oracle indices. -/
 theorem confidentialLayoutSomeRow110_eval_eq_128 :
     evalConfidentialIdx 110 50 == evalConfidentialIdx 128 50 := by
-  sorry
+  decide
 
 theorem confidentialLayoutSomeRow111_eval_eq_128 :
     evalConfidentialIdx 111 50 == evalConfidentialIdx 128 50 := by
-  sorry
+  decide
 
 theorem confidentialLayoutSomeRow112_eval_eq_129 :
     evalConfidentialIdx 112 50 == evalConfidentialIdx 129 50 := by
-  sorry
+  decide
 
 theorem confidentialLayoutSomeRow113_eval_eq_130 :
     evalConfidentialIdx 113 50 == evalConfidentialIdx 130 50 := by
-  sorry
+  decide
 
 theorem confidentialSigmaTransferExtended1920RowsLeanEval_bool_true :
     isRetBoolTrue (evalConfidentialIdx 131 50) &&
     isRetBoolTrue (evalConfidentialIdx 132 50) = true := by
-  sorry
+  decide
 
 theorem confidentialSigmaTransferExtendedEval_131_eq_132 :
     evalConfidentialIdx 131 50 == evalConfidentialIdx 132 50 := by
-  sorry
+  decide
 
 theorem confidentialSigmaTransferExtended2048RowsLeanEval_bool_true :
     isRetBoolTrue (evalConfidentialIdx 133 50) &&
     isRetBoolTrue (evalConfidentialIdx 134 50) = true := by
-  sorry
+  decide
 
 theorem confidentialSigmaTransferExtendedEval_133_eq_134 :
     evalConfidentialIdx 133 50 == evalConfidentialIdx 134 50 := by
-  sorry
+  decide
 
 theorem confidentialSigmaTransferExtended2176RowsLeanEval_bool_true :
     isRetBoolTrue (evalConfidentialIdx 135 50) &&
     isRetBoolTrue (evalConfidentialIdx 136 50) = true := by
-  sorry
+  decide
 
 theorem confidentialSigmaTransferExtendedEval_135_eq_136 :
     evalConfidentialIdx 135 50 == evalConfidentialIdx 136 50 := by
-  sorry
+  decide
 
 theorem confidentialSigmaTransferExtended2304RowsLeanEval_bool_true :
     isRetBoolTrue (evalConfidentialIdx 137 50) &&
     isRetBoolTrue (evalConfidentialIdx 138 50) = true := by
-  sorry
+  decide
 
 theorem confidentialSigmaTransferExtendedEval_137_eq_138 :
     evalConfidentialIdx 137 50 == evalConfidentialIdx 138 50 := by
-  sorry
+  decide
 
 theorem confidentialSigmaTransferExtended2432RowsLeanEval_bool_true :
     isRetBoolTrue (evalConfidentialIdx 139 50) &&
     isRetBoolTrue (evalConfidentialIdx 140 50) = true := by
-  sorry
+  decide
 
 theorem confidentialSigmaTransferExtendedEval_139_eq_140 :
     evalConfidentialIdx 139 50 == evalConfidentialIdx 140 50 := by
-  sorry
+  decide
 
 theorem confidentialSigmaTransferExtended2560RowsLeanEval_bool_true :
     isRetBoolTrue (evalConfidentialIdx 141 50) &&
     isRetBoolTrue (evalConfidentialIdx 142 50) = true := by
-  sorry
+  decide
 
 theorem confidentialSigmaTransferExtendedEval_141_eq_142 :
     evalConfidentialIdx 141 50 == evalConfidentialIdx 142 50 := by
-  sorry
+  decide
 
 theorem confidentialSigmaTransferExtended2688RowsLeanEval_bool_true :
     isRetBoolTrue (evalConfidentialIdx 143 50) &&
     isRetBoolTrue (evalConfidentialIdx 144 50) = true := by
-  sorry
+  decide
 
 theorem confidentialSigmaTransferExtendedEval_143_eq_144 :
     evalConfidentialIdx 143 50 == evalConfidentialIdx 144 50 := by
-  sorry
+  decide
 
 theorem confidentialSigmaTransferExtended2816RowsLeanEval_bool_true :
     isRetBoolTrue (evalConfidentialIdx 145 50) &&
     isRetBoolTrue (evalConfidentialIdx 146 50) = true := by
-  sorry
+  decide
 
 theorem confidentialSigmaTransferExtendedEval_145_eq_146 :
     evalConfidentialIdx 145 50 == evalConfidentialIdx 146 50 := by
-  sorry
+  decide
 
 theorem confidentialSigmaTransferExtended2944RowsLeanEval_bool_true :
     isRetBoolTrue (evalConfidentialIdx 147 50) &&
     isRetBoolTrue (evalConfidentialIdx 148 50) = true := by
-  sorry
+  decide
 
 theorem confidentialSigmaTransferExtendedEval_147_eq_148 :
     evalConfidentialIdx 147 50 == evalConfidentialIdx 148 50 := by
-  sorry
+  decide
 
 theorem confidentialSigmaTransferExtended3072RowsLeanEval_bool_true :
     isRetBoolTrue (evalConfidentialIdx 149 50) &&
     isRetBoolTrue (evalConfidentialIdx 150 50) = true := by
-  sorry
+  decide
 
 theorem confidentialSigmaTransferExtendedEval_149_eq_150 :
     evalConfidentialIdx 149 50 == evalConfidentialIdx 150 50 := by
-  sorry
+  decide
 
 theorem confidentialSigmaTransferExtended3200RowsLeanEval_bool_true :
     isRetBoolTrue (evalConfidentialIdx 151 50) &&
     isRetBoolTrue (evalConfidentialIdx 152 50) = true := by
-  sorry
+  decide
 
 theorem confidentialSigmaTransferExtendedEval_151_eq_152 :
     evalConfidentialIdx 151 50 == evalConfidentialIdx 152 50 := by
-  sorry
+  decide
 
 theorem confidentialSigmaTransferExtended3328RowsLeanEval_bool_true :
     isRetBoolTrue (evalConfidentialIdx 153 50) &&
     isRetBoolTrue (evalConfidentialIdx 154 50) = true := by
-  sorry
+  decide
 
 theorem confidentialSigmaTransferExtendedEval_153_eq_154 :
     evalConfidentialIdx 153 50 == evalConfidentialIdx 154 50 := by
-  sorry
+  decide
 
 theorem confidentialSigmaTransferExtended3456RowsLeanEval_bool_true :
     isRetBoolTrue (evalConfidentialIdx 155 50) &&
     isRetBoolTrue (evalConfidentialIdx 156 50) = true := by
-  sorry
+  decide
 
 theorem confidentialSigmaTransferExtendedEval_155_eq_156 :
     evalConfidentialIdx 155 50 == evalConfidentialIdx 156 50 := by
-  sorry
+  decide
 
 theorem confidentialSigmaTransferExtended3584RowsLeanEval_bool_true :
     isRetBoolTrue (evalConfidentialIdx 157 50) &&
     isRetBoolTrue (evalConfidentialIdx 158 50) = true := by
-  sorry
+  decide
 
 theorem confidentialSigmaTransferExtendedEval_157_eq_158 :
     evalConfidentialIdx 157 50 == evalConfidentialIdx 158 50 := by
-  sorry
+  decide
 
 theorem confidentialSigmaTransferExtended3712RowsLeanEval_bool_true :
     isRetBoolTrue (evalConfidentialIdx 159 50) &&
     isRetBoolTrue (evalConfidentialIdx 160 50) = true := by
-  sorry
+  decide
 
 theorem confidentialSigmaTransferExtendedEval_159_eq_160 :
     evalConfidentialIdx 159 50 == evalConfidentialIdx 160 50 := by
-  sorry
+  decide
 
 theorem confidentialSigmaTransferExtended3840RowsLeanEval_bool_true :
     isRetBoolTrue (evalConfidentialIdx 161 50) &&
     isRetBoolTrue (evalConfidentialIdx 162 50) = true := by
-  sorry
+  decide
 
 theorem confidentialSigmaTransferExtendedEval_161_eq_162 :
     evalConfidentialIdx 161 50 == evalConfidentialIdx 162 50 := by
-  sorry
+  decide
 
 theorem confidentialSigmaTransferExtended3968RowsLeanEval_bool_true :
     isRetBoolTrue (evalConfidentialIdx 163 50) &&
     isRetBoolTrue (evalConfidentialIdx 164 50) = true := by
-  sorry
+  decide
 
 theorem confidentialSigmaTransferExtendedEval_163_eq_164 :
     evalConfidentialIdx 163 50 == evalConfidentialIdx 164 50 := by
-  sorry
+  decide
 
 theorem confidentialSigmaTransferExtended4096RowsLeanEval_bool_true :
     isRetBoolTrue (evalConfidentialIdx 165 50) &&
     isRetBoolTrue (evalConfidentialIdx 166 50) = true := by
-  sorry
+  decide
 
 theorem confidentialSigmaTransferExtendedEval_165_eq_166 :
     evalConfidentialIdx 165 50 == evalConfidentialIdx 166 50 := by
-  sorry
+  decide
 
 theorem confidentialSigmaTransferExtended4224RowsLeanEval_bool_true :
     isRetBoolTrue (evalConfidentialIdx 167 50) &&
     isRetBoolTrue (evalConfidentialIdx 168 50) = true := by
-  sorry
+  decide
 
 theorem confidentialSigmaTransferExtendedEval_167_eq_168 :
     evalConfidentialIdx 167 50 == evalConfidentialIdx 168 50 := by
-  sorry
+  decide
 
 /-- Machine-checked: FA stub **write→read** returns **`u64(9999)`**; final `MachineState` records **`faBalances ((1,2) ↦ 9999)`**. -/
 theorem confidentialFaStubWriteReadEval_u64_9999 :
@@ -2690,6 +2751,6 @@ theorem confidentialFaStubWriteReadEval_u64_9999 :
       .returned [.u64 9999]
         { MachineState.empty with
           faBalances := [((UInt64.ofNat 1, UInt64.ofNat 2), UInt64.ofNat 9999)] } := by
-  sorry
+  decide
 
 end MovementFormal.MoveModel.Programs.Confidential

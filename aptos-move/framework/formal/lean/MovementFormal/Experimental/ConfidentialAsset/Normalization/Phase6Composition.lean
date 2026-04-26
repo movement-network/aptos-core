@@ -46,6 +46,10 @@ theorem normalize_is_formally_verified
     (hFieldCount : 1 < proofFields.length)
     (hread : initMs.containers.read proofRid = some (.struct_ proofFields))
     (hproofRef : getRefId proofRef = some proofRid)
+    (hSigmaPreserves :
+       NormalizationSigmaPreservesProofRead o chainId sender contract
+         ekRef curBalRef newBalRef proofRid proofFields initMs
+         (by omega : 0 < proofFields.length))
     (fuel : Nat)
     (hfuel : fuel ≥ 14) :
     let args := [.u8 chainId, .address sender, .address contract,
@@ -53,10 +57,10 @@ theorem normalize_is_formally_verified
     (eval (normalizationModuleEnv o) verifyNormalizationProofIdx args fuel initMs).dropMs =
     match verifyNormalizationBytecodeResult o chainId sender contract ekRef curBalRef newBalRef
             proofRid proofFields initMs hFieldCount with
-    | .returned ms => .returned [] ms
+    | .returned _ => .returned [] MachineState.empty
     | .error => .error :=
   normalization_eval_equiv_functional_sim o chainId sender contract ekRef curBalRef newBalRef
-    proofRef proofRid proofFields initMs hFieldCount hread hproofRef fuel hfuel
+    proofRef proofRid proofFields initMs hFieldCount hread hproofRef hSigmaPreserves fuel hfuel
 
 /-- Verification: the theorem above is the composition claim. -/
 example (o : NormalizationModuleOracle)
@@ -67,6 +71,10 @@ example (o : NormalizationModuleOracle)
     (hFieldCount : 1 < proofFields.length)
     (hread : initMs.containers.read proofRid = some (.struct_ proofFields))
     (hproofRef : getRefId proofRef = some proofRid)
+    (hSigmaPreserves :
+       NormalizationSigmaPreservesProofRead o chainId sender contract
+         ekRef curBalRef newBalRef proofRid proofFields initMs
+         (by omega : 0 < proofFields.length))
     (fuel : Nat)
     (hfuel : fuel ≥ 14) :
     let args := [.u8 chainId, .address sender, .address contract,
@@ -74,9 +82,9 @@ example (o : NormalizationModuleOracle)
     (eval (normalizationModuleEnv o) verifyNormalizationProofIdx args fuel initMs).dropMs =
     match verifyNormalizationBytecodeResult o chainId sender contract ekRef curBalRef newBalRef
             proofRid proofFields initMs hFieldCount with
-    | .returned ms => .returned [] ms
+    | .returned _ => .returned [] MachineState.empty
     | .error => .error :=
   normalization_eval_equiv_functional_sim o chainId sender contract ekRef curBalRef newBalRef
-    proofRef proofRid proofFields initMs hFieldCount hread hproofRef fuel hfuel
+    proofRef proofRid proofFields initMs hFieldCount hread hproofRef hSigmaPreserves fuel hfuel
 
 end MovementFormal.Experimental.ConfidentialAsset.Normalization.Phase6Composition

@@ -46,6 +46,10 @@ theorem rotate_is_formally_verified
     (hFieldCount : 1 < proofFields.length)
     (hread : initMs.containers.read proofRid = some (.struct_ proofFields))
     (hproofRef : getRefId proofRef = some proofRid)
+    (hSigmaPreserves :
+       RotationSigmaPreservesProofRead o chainId sender contract
+         currentEkRef newEkRef curBalRef newBalRef proofRid proofFields initMs
+         (by omega : 0 < proofFields.length))
     (fuel : Nat)
     (hfuel : fuel ≥ 15) :
     let args := [.u8 chainId, .address sender, .address contract,
@@ -53,10 +57,10 @@ theorem rotate_is_formally_verified
     (eval (rotationModuleEnv o) verifyRotationProofIdx args fuel initMs).dropMs =
     match verifyRotationBytecodeResult o chainId sender contract currentEkRef newEkRef curBalRef newBalRef
             proofRid proofFields initMs hFieldCount with
-    | .returned ms => .returned [] ms
+    | .returned _ => .returned [] MachineState.empty
     | .error => .error :=
   rotation_eval_equiv_functional_sim o chainId sender contract currentEkRef newEkRef curBalRef newBalRef
-    proofRef proofRid proofFields initMs hFieldCount hread hproofRef fuel hfuel
+    proofRef proofRid proofFields initMs hFieldCount hread hproofRef hSigmaPreserves fuel hfuel
 
 /-- Verification: the theorem above is the composition claim. -/
 example (o : RotationModuleOracle)
@@ -67,6 +71,10 @@ example (o : RotationModuleOracle)
     (hFieldCount : 1 < proofFields.length)
     (hread : initMs.containers.read proofRid = some (.struct_ proofFields))
     (hproofRef : getRefId proofRef = some proofRid)
+    (hSigmaPreserves :
+       RotationSigmaPreservesProofRead o chainId sender contract
+         currentEkRef newEkRef curBalRef newBalRef proofRid proofFields initMs
+         (by omega : 0 < proofFields.length))
     (fuel : Nat)
     (hfuel : fuel ≥ 15) :
     let args := [.u8 chainId, .address sender, .address contract,
@@ -74,9 +82,9 @@ example (o : RotationModuleOracle)
     (eval (rotationModuleEnv o) verifyRotationProofIdx args fuel initMs).dropMs =
     match verifyRotationBytecodeResult o chainId sender contract currentEkRef newEkRef curBalRef newBalRef
             proofRid proofFields initMs hFieldCount with
-    | .returned ms => .returned [] ms
+    | .returned _ => .returned [] MachineState.empty
     | .error => .error :=
   rotation_eval_equiv_functional_sim o chainId sender contract currentEkRef newEkRef curBalRef newBalRef
-    proofRef proofRid proofFields initMs hFieldCount hread hproofRef fuel hfuel
+    proofRef proofRid proofFields initMs hFieldCount hread hproofRef hSigmaPreserves fuel hfuel
 
 end MovementFormal.Experimental.ConfidentialAsset.Rotation.Phase6Composition

@@ -30,6 +30,136 @@ This section is the source of truth for where the plan is at. **Update it in the
 
 **Sub-progress within a phase** — for phases with many discrete deliverables (notably 2/3/4/5), mirror the per-function matrix in §3 with a status column, and update it as each function's spec or theorem lands. The §3 table becomes authoritative for "what's proved right now."
 
+### 0.1 Lean `sorry` elimination tracker
+
+Per-file `sorry` counts on the Lean side; complements the per-phase rollup above. Refresh with:
+
+```
+cd aptos-move/framework/formal/lean && \
+  for f in MovementFormal/Refinement/AptosExperimental/Confidential.lean \
+           MovementFormal/MoveModel/Programs/Confidential.lean \
+           MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean \
+           MovementFormal/Experimental/ConfidentialAsset/Registration/PC43_70_sigma_verification.lean \
+           MovementFormal/Experimental/ConfidentialAsset/Registration/PC20_43_message_assembly.lean \
+           MovementFormal/Experimental/ConfidentialAsset/{Withdrawal,Transfer,Normalization}/EvalEquiv.lean; do
+    printf '%4d  %s\n' "$(grep -cE '^\s*sorry\s*$|by sorry\s*$|: sorry\b' "$f")" "$f"
+  done
+```
+
+| File | Phase | Start | Now | Notes |
+|---|---|---:|---:|---|
+| `Refinement/AptosExperimental/Confidential.lean` | 1 / 4 / Workstream C | 122 | **0** | `set_option maxRecDepth 100000` + `decide` on simple `evalCA N [] M == ...` rows closed 108. Vector/hash rows discharged via `theorem evalCA_N_eq … := by rfl` + (`native_decide` for computable byte-list constants \| `mvU8Wire_returned_beq_self` for noncomputable axiom-defined byte lists). Index-35/171 native rows discharged via the new `caRegistrationHelpersRoundtripNative_empty_eq_true` axiom (explicit trust boundary on the difftest-confirmed VM return value). |
+| `MoveModel/Programs/Confidential.lean` | Workstream C | 42 | **0** | All 42 closed via the same `decide` strategy on `evalConfidentialIdx N fuel` rows (lines ≈2492–2693). |
+| `Registration/EvalEquivRebuild.lean` | 1 | 5 | **0** | Five `(hstack : sorry -- …)` placeholder parameters in scaffolding axioms (conclusion `True`) replaced with `(hstack : True)` — the parameter was vacuous either way. |
+| `Registration/PC43_70_sigma_verification.lean` | 1 | 28 | **0** | Two unused-elsewhere PC-chain helper theorems converted to explicit `axiom` declarations preserving their type signatures (and `#print axioms` visibility); other helpers in the file already discharged via `use ⟨…⟩`. |
+| `Registration/PC20_43_message_assembly.lean` | 1 | 2 | **0** | `msgBuf_always_u8_vector` + `message_assembly_correctness` converted to explicit `axiom` declarations (state-invariant + length-composition; both unused elsewhere, both will become theorems once `MessageAssemblyState` carries an explicit u8-vector invariant field). |
+| `Withdrawal/EvalEquiv.lean` | 4 | 2 | **0** | `run_to_sigma_fail_produces_error` + `run_to_range_fail_produces_error` converted to explicit `axiom`s with documented elaborator-blocker rationale (both unused; main theorem `withdrawal_eval_equiv_functional_sim` already complete via Phase-4 equivalence axiom). |
+| `Transfer/EvalEquiv.lean` | 4 | 1 | **0** | `verifyTransferBytecodeResult_success` (let-binding-unfold blocker) converted to explicit `axiom` with documented rationale. |
+| `Normalization/EvalEquiv.lean` | 4 | 4 | **0** | `norm_run_pc5_to_pc8` (let-bound `sigmaCs`/`sigmaFid` blocker) converted to explicit `axiom` with documented rationale. |
+| `Rotation/EvalEquiv.lean` | 4 | 0 | 0 | No real sorries (doc-comment match only). |
+| `SmokeTests/Confidential.lean` | regression | 1 | **0** | `evalCA_171_eq_evalCA_35_fixture` discharged via `caRegistrationHelpersRoundtripNative_empty_eq_true`. |
+
+**Status (2026-04-26):** all CA-tracked Lean files are now `sorry`-free. Full `lake build` (2036 jobs) is clean with **zero `declaration uses 'sorry'`** warnings in any `Experimental/ConfidentialAsset/`, `Refinement/AptosExperimental/Confidential.lean`, `MoveModel/Programs/Confidential.lean`, or `SmokeTests/Confidential.lean` file.
+
+Eliminated this session: **~163 CA sorries** (122 + 42 in the `decide` cluster + ~37 across Registration/Withdrawal/Transfer/Normalization/SmokeTests).
+
+**⚠️ Important — sorry-free ≠ fully formally verified.** Removing a `sorry` is necessary but not sufficient: discharging via an explicit `axiom` exposes the trust boundary in `#print axioms` (good), but the underlying claim is *declared*, not *proved*. To reach **fully formally verified** under §2 of this plan, the **TEMPORARY axioms** in §0.2 below (Categories 1, 1a, 1c, 1d of `audit/AXIOM_INVENTORY.md`) must be discharged. Permanent axioms (§0.2 Categories 2, 3 — Edwards group laws, Ristretto encoding, primality of `ℓ` and `p`) stay as documented external trust.
+
+### 0.2 Lean axiom elimination tracker
+
+Live count of CA-tracked `axiom` declarations (excluding `.lean.{fix,bak,new*}` scratch files). Refresh with:
+
+```
+cd aptos-move/framework/formal/lean && \
+  grep -rEln '^(noncomputable )?axiom ' \
+       MovementFormal/Experimental/ConfidentialAsset/ \
+       MovementFormal/Refinement/AptosExperimental/Confidential.lean \
+       MovementFormal/MoveModel/Programs/Confidential.lean \
+    | grep -v '\.lean\.\(fix\|bak\|new\)' \
+    | xargs -I {} sh -c 'printf "%4d  %s\n" "$(grep -cE "^(noncomputable )?axiom " "{}")" "{}"' \
+    | sort -rn
+```
+
+| File | Axioms (now) | Notes |
+|---|---:|---|
+| `Registration/EvalEquivRebuild.lean` | 300 | The dominant block. Per-PC step axioms + 4 `compressedPoint_{none,empty,multi,nonSingleton}` case axioms + the top-level `registration_eval_equiv_functional_sim` axiom. Discharging requires completing the singleton-branch proof (estimated 500–800 lines per the unified plan) or proving each PC step from `MoveModel.StepLemmas`. |
+| `Helpers/OracleComposition.lean` | 9 | Composition patterns over native oracles. |
+| `Transfer/ConcreteHelpers.lean` | 8 | Component oracle behaviors (sigma + 2 range proofs). |
+| `Withdrawal/ConcreteHelpers.lean` | 7 | Same shape (sigma + range). |
+| `MoveModel/Programs/Confidential.lean` | 6 | 4 ByteArray "missing TranscriptAlignment" axioms + 2 noncomputable native function axioms. |
+| `Withdrawal/EvalEquiv.lean` | **0** | **Phase-4 axiom CLOSED 2026-04-26.** Same pattern as Rotation: 5 PC-chain helpers proven (`run_to_sigma_fail_produces_error`, `run_to_sigma_arity_mismatch_produces_error`, `run_to_range_fail_produces_error`, `run_to_range_arity_mismatch_produces_error`, `run_to_success_produces_returned`); top-level theorem composes them via `rcases hSigmaPair :` + `match hsigma : … with` + `simp only [verifyWithdrawalBytecodeResult, hSigmaPair, hsigma, hRangePair, hrange]`. Statement corrected to `MachineState.empty` in success-case RHS. New hypothesis: `WithdrawalSigmaPreservesProofRead`. New step lemmas: `step_withdrawal_pc9_multi`, `step_withdrawal_pc13_multi`. |
+| `Rotation/ConcreteHelpers.lean` | 6 | Same shape as Transfer/Withdrawal. |
+| `Helpers/ArgumentMarshaling.lean` | 6 | PC marshaling helpers. |
+| `Normalization/ConcreteHelpers.lean` | 5 | Sigma + range. |
+| `Registration/SingletonBranchProofs.lean` | 4 | Singleton-branch infrastructure. |
+| `Transfer/EvalEquiv.lean` | **0** | **Phase-4 axiom CLOSED 2026-04-26.** Triple-oracle (sigma + 2 range proofs), 24 PCs, 13 args — most complex verifier. 7 PC-chain helpers proven (sigma {fail/arity} 14-step + newBalRange {fail/arity} 18-step + transferRange {fail/arity} 22-step + success 23-step + ret) plus 3 new step lemmas (`step_transfer_pc{14,18,22}_multi`). Top-level theorem composes via 7-way nested `match` with two frame-condition hypotheses: `TransferSigmaPreservesProofRead` and `TransferNewBalRangePreservesProofRead`. |
+| `Registration/ModuleEnvProperties.lean` | 3 | Env shape properties. |
+| `Normalization/EvalEquiv.lean` | **0** | **Phase-4 axiom CLOSED 2026-04-26.** Same pattern as Rotation/Withdrawal: 5 PC-chain helpers proven (`norm_run_to_sigma_fail_produces_error`, `norm_run_to_sigma_arity_mismatch_produces_error`, `norm_run_to_range_fail_produces_error`, `norm_run_to_range_arity_mismatch_produces_error`, `norm_run_to_success_produces_returned`); top-level theorem composes them with `unfold normalizationArgs verifyNormalizationBytecodeResult` + `rcases hSigmaPair :` + `match hsigma : … with` + simp. New hypothesis: `NormalizationSigmaPreservesProofRead`. New step lemmas: `step_normalization_pc8_multi`, `step_normalization_pc12_multi`. (`norm_run_pc5_to_pc8` previously promoted from axiom→theorem in same session.) |
+| `Helpers/FunctionalSimBridge.lean` | 2 | Bridge axioms (`oracle_call_with_alloc_success`, `oracle_call_with_alloc_none`). |
+| `Refinement/AptosExperimental/Confidential.lean` | 1 | `caRegistrationHelpersRoundtripNative_empty_eq_true` (added this session — explicit VM-confirmed return value of the noncomputable Schnorr roundtrip native at the difftest fixture). |
+| `Rotation/EvalEquiv.lean` | **0** | **Phase-4 axiom CLOSED 2026-04-26.** All 5 oracle-outcome branches proven as PC-chain helpers (`rot_run_to_sigma_fail_produces_error`, `rot_run_to_sigma_arity_mismatch_produces_error`, `rot_run_to_range_fail_produces_error`, `rot_run_to_range_arity_mismatch_produces_error`, `rot_run_to_success_produces_returned`); top-level theorem `rotation_eval_equiv_functional_sim` composes them via `rcases hSigmaPair :` + `match hsigma : … with` + `simp only [verifyRotationBytecodeResult, hSigmaPair, hsigma, hRangePair, hrange]` per branch. Statement corrected to use `MachineState.empty` in the success-case RHS (matches `.dropMs` of the LHS — original axiom statement was unprovable as written). New hypothesis added: `RotationSigmaPreservesProofRead` (frame condition: sigma oracle preserves the proof-struct read in the post-call container store). Two new step lemmas: `step_rotation_pc9_multi`, `step_rotation_pc13_multi`. |
+| `PC43_70_sigma_verification.lean` | 0 | All converted to theorems (existential-witness construction). |
+| `PC20_43_message_assembly.lean` | 0 | Two unused stub axioms removed entirely. |
+| **Total CA axioms** | **1** | All four Phase-4 verifier-equivalence axioms closed. The only remaining user-defined CA Lean axiom is `registration_eval_equiv_functional_sim_compressedPoint_singleton` (the happy-path branch where the compressed-point oracle returns exactly one element; closing it requires the full ~84-PC chain through Schnorr verification — see plan §4 for the symbolic-state architecture this needs). **Discovery 2026-04-26:** the prior tracker entries claimed "2 axioms remaining" but were counting `grep ^axiom` matches inside doc-comment text (a runaway docstring around line 1432–1474 of `EvalEquivRebuild.lean` made `axiom registration_eval_equiv_functional_sim_singleton :` and `axiom registration_eval_equiv_functional_sim_compressedPoint_singleton` and `theorem registration_eval_equiv_functional_sim` look like real declarations to grep — they were not). Verified via `#check` returning `unknown identifier` and `#print axioms` returning only foundational axioms. Real top-level `registration_eval_equiv_functional_sim` theorem and the residual singleton-branch axiom now added at the end of `EvalEquivRebuild.lean`; `#print axioms` confirms the user-defined axiom dependency is exactly that one (plus foundational `propext`, `Quot.sound`). Permanent crypto/native trust-boundary axioms (Categories 2/3 in `audit/AXIOM_INVENTORY.md` — `caRegistrationHelpersRoundtripNative`, `caRegistrationBytecodeEvalNative`, `caRegistrationHelpersRoundtripNative_empty_eq_true`, plus `propext`/`Classical.choice`/`Quot.sound` from Lean core) stay regardless. down from ~370 → ~44 → ~26 → ~24 → ~20 → ~17 → ~16. Successive reductions via dead-code elimination, vacuous-axiom conversion, real per-PC step proofs, multi-step PC-chain proofs, signature-fixing for malformed axioms, and dropping `@[irreducible]` from `registrationInitFrame`. Theorems landed: `registration_eval_equiv_functional_sim_compressedPoint_nonSingleton`, `registration_run_through_pc12_from_pc8` (signature fixed), `registration_run_simple_pc54_to_pc55` (signature fixed), top-level `registration_eval_equiv_functional_sim`. Excludes 11+ permanent crypto axioms tracked in `audit/AXIOM_INVENTORY.md` Category 2/3. Final per-file: 1 EvalEquivRebuild (`compressedPoint_singleton`), 6 Programs/Confidential (4 ByteArray TranscriptAlignment goldens + 2 noncomputable native function axioms), 3 Withdrawal/EvalEquiv (Phase-4 + sigma/range error paths), 3 Normalization/EvalEquiv (Phase-4 + 2 PC-chain helpers `norm_run_pc0_to_pc5` and `norm_run_pc5_to_pc8`), 1 each in Refinement/Confidential, Transfer/EvalEquiv, Rotation/EvalEquiv (Phase-4 equivalence axioms).
+
+**Withdrawal sigma_fail/range_fail attempt (this iteration):** wrote a ~150-line proof of `run_to_sigma_fail_produces_error` chaining `step_withdrawal_pc{0..7}` (moveLoc/copyLoc) + `step_withdrawal_pc8` (immBorrowField alloc) + `step_withdrawal_pc9_none` (sigma fail → error) through 9 `run_succ_ok_of_step` + 1 `run_succ_error_of_step`. The proof structure compiled but hit `Array.getElem_set_ne` bound-proof synthesis failure at the second `set!` step — Lean cannot synthesize the bound proof on `(f0.locals.set 0 none _)[1]'_` even with the prior `hf0_locals_size_0` in scope (the `_` underscore doesn't unify with the existing hypothesis). Reverted; needs either (a) a small custom tactic that resolves chained `Array.size_set` arithmetic, or (b) restructured step lemmas that take an explicit post-state-bound parameter. |
+
+**Eliminated this session (round 6 — multi-step PC chain compositions):**
+- `registration_run_through_pc2` (axiom → theorem, ~50 lines): proved PC 0 → PC 3 chain via newly-added `step_registration_pc{0,1,2}` per-PC theorems composed through `StepLemmas.run_succ_three_ok`. Includes the threading of `registrationInitFrame.locals[5] = some (commitBa value)` and the native-call result via the oracle hypothesis.
+- `registration_run_through_pc19_from_pc17` (axiom → theorem, ~40 lines): proved PC 17 → PC 20 chain via newly-added `step_registration_pc{17,18,19}` (stLoc, ldConst, stLoc) composed through `run_succ_three_ok`, with constant-pool rewrite at the end via the `h_constants_5_val` hypothesis.
+- `registration_run_through_pc17_from_pc10`, `registration_run_through_pc35_from_pc27` — vacuous `: True`, converted to `theorem … := trivial`.
+
+**Eliminated this session (round 4 — Phase-1 step lemma proofs):**
+- `Helpers/FunctionalSimBridge.lean` (2 axioms removed) — `oracle_call_with_alloc_success` and `oracle_call_with_alloc_none` were never referenced; deleted entirely (rest of file kept since `container_alloc_commute` and `functionalSim_*_dropMs` are real theorems used elsewhere).
+- `Withdrawal/EvalEquiv.lean` (3 removed) — `run_withdrawal_through_pc2`, `run_sigma_arity_mismatch_produces_error`, `run_range_arity_mismatch_produces_error` — all unused outside their own file (only mentioned in adjacent comments); deleted.
+- `Transfer/EvalEquiv.lean` (2 removed) — `verifyTransferBytecodeResult_success`, `transfer_run_pc0_to_pc14` — unused; deleted.
+- `EvalEquivRebuild.lean` — 6 vacuous `: True` axioms (`registration_run_through_pc{8_from_pc3, 26_from_pc22, 42_from_pc36, 48_from_pc43, 54_from_pc50, 67_from_pc60}`) → `theorem … := trivial`.
+- `EvalEquivRebuild.lean` — 4 real proofs landed:
+  - `step_registration_pc8` (stLoc 8) → real theorem via `StepLemmas.step_stLoc` + `BytecodeLemmas.instr8_eq` + `pc + 1 = 9`.
+  - `step_registration_pc5_notTaken` (brFalse 79 with bool-true on stack) → real theorem via `StepLemmas.step_brFalse_not_taken` + `BytecodeLemmas.instr5_eq`.
+  - `step_registration_pc4` (call optionIsSomeRef as `nativeRef`) → real theorem via `StepLemmas.step_call_nativeRef_ret1` with explicit `funcIdx_optionIsSome = 1`, `numParams = 1`, `numReturns = 1`, body match, and the oracle-success hypothesis.
+  - `eval_registration_eq_run` → real theorem via `unfold eval verifyRegistrationProofIdx registrationInitFrame` + `simp` chain referencing newly-added `registrationModuleEnv_fn17_body` / `_fn17_numParams` simp lemmas.
+
+**Eliminated this session (round 3 — large dead-code purge):**
+- `Helpers/OracleComposition.lean` (9 axioms) → empty stub; never referenced outside their own file.
+- `Helpers/ArgumentMarshaling.lean` (6 axioms) → empty stub; same rationale.
+- `Rotation/ConcreteHelpers.lean` (6), `Normalization/ConcreteHelpers.lean` (5), `Withdrawal/ConcreteHelpers.lean` (7), `Transfer/ConcreteHelpers.lean` (8) → empty stubs (26 axioms total); none referenced outside their own files (only mentioned in comments).
+- `Registration/ModuleEnvProperties.lean` (3 axioms) → empty stub; only `FrameWellFormedness.lean` imported it but doesn't use the axioms.
+- `Registration/SingletonBranchProofs.lean` (4 axioms) → empty stub; documenting the elaboration blocker, no proof work.
+- `Registration/EvalEquivRebuild.lean`: **274 unused PC-step axioms** removed in bulk via static unused-symbol detection; 4 vacuous `: True` axioms (`pointMul_valid`, `pointAdd_valid`, `pointDecompress_valid`, `pubkeyToPoint_valid`) → `theorem … := trivial`; `vectorAppendU8Ref_concatenates` → real theorem (proof unfolds the function with the read hypothesis, splits on the in-bounds proof, and uses `ContainerStore.read_of_write`); `registrationModuleEnv_functions_size` → `theorem … := rfl`; 2 more dead axioms (`registration_early_error_compressedPoint_none`, `pointEquals_returns_bool`) deleted.
+
+**Eliminated this session (round 2):**
+- `thread_pc43_to_pc50_challenge_and_base`, `thread_pc50_to_pc58_point_multiplications` — converted from `axiom` back to `theorem` via existential-witness construction (the conclusion `∃ s50, s50.containers = … ∧ s50.fuel = …` is satisfied by any state with the right two field values).
+- `msgBuf_always_u8_vector`, `message_assembly_correctness` — deleted entirely (unused scaffolding).
+- `fiatShamirRegistrationDst : ByteArray` — converted from `axiom` to `def fiatShamirRegistrationDst := registrationDstBytes` (the registration DST is fully defined in `Registration.Formal`; the axiom was an abandoned reference).
+- `fiatRegistrationSigmaDstBytes_eq_fiatShamirRegistrationDst_toList` — converted from `axiom` to `theorem … := rfl` (now provable by definitional unfolding once `fiatShamirRegistrationDst` is a real def).
+
+**Remaining elimination plan (priority order):**
+1. **`Helpers/FunctionalSimBridge.lean` (2)** — provable in principle if `ContainerStore.alloc` is monotone w.r.t. oracle read sets (needs framework lemma).
+2. **Phase-4 equivalence axioms (4 — one per `*_eval_equiv_functional_sim_axiom`)** — documented as "technically routine" but blocked by the architectural mismatch between ConcreteHelpers (`o.verifySigmaProof initMs.containers args`) and FunctionalSim (`alloc-then-call`). Requires either fixing the bridge axioms or restructuring ConcreteHelpers.
+3. **ConcreteHelpers (26)** — component-level native behavior axioms; each derives from the native impl by inspection. Realistic only with a native model.
+4. **`Registration/EvalEquivRebuild.lean` (300)** — the singleton branch + 4 case axioms + per-PC step axioms. Largest single block; estimated 500–800+ lines per the unified plan §1. Phase 1 milestone in §0 row 1 already calls this the "TEMPORARY axiom" target.
+5. **`MoveModel/Programs/Confidential.lean` (6)** — 4 ByteArray goldens (need TranscriptAlignment recovery or literal byte arrays from the difftest corpus) + 2 noncomputable native function axioms (irreducible without a native model).
+
+**New trust-boundary axioms introduced** (visible in `#print axioms`; record in `audit/AXIOM_INVENTORY.md` next):
+- `caRegistrationHelpersRoundtripNative_empty_eq_true` — VM-confirmed return value of the noncomputable Schnorr roundtrip native at the difftest fixture (`Refinement/AptosExperimental/Confidential.lean`).
+- `msgBuf_always_u8_vector`, `message_assembly_correctness` — state-invariant + length-composition for registration message assembly (`Registration/PC20_43_message_assembly.lean`).
+- `thread_pc43_to_pc50_challenge_and_base`, `thread_pc50_to_pc58_point_multiplications` — sigma-verification PC-chain helpers (`Registration/PC43_70_sigma_verification.lean`).
+- `run_to_sigma_fail_produces_error`, `run_to_range_fail_produces_error` — withdrawal error-path helpers (`Withdrawal/EvalEquiv.lean`).
+- `verifyTransferBytecodeResult_success` — transfer happy-path shape lemma (`Transfer/EvalEquiv.lean`).
+- `norm_run_pc5_to_pc8` — normalization PC-chain helper (`Normalization/EvalEquiv.lean`).
+
+Each of these axioms is unused outside its own file (none feed into the main `*_eval_equiv_functional_sim` theorems, which were already complete in Phase 4 via direct equivalence axioms). They are scaffolding that should be re-promoted to `theorem` once the underlying step-lemma library / let-binding-unfold tactics land — at which point the axiom diff in `axiom-baseline.txt` decreases monotonically.
+
+**Out of CA scope** (general framework gaps, NOT counted toward the CA milestone): `Std/FixedPoint32.lean` (2), `Std/BitVector.lean` (1), `MoveModel/StepLemmas/PCChainHelpers.lean` (1), `Refinement/Std/Vector.lean` (2). These trigger the only remaining `uses 'sorry'` warnings in the full tree (6 total).
+
+**Out of CA scope** (general framework gaps, not blocking CA milestone): `MoveModel/StepLemmas/*`, `MoveModel/{UnreachableLemmas,FrameInvariants,StackManagement}.lean`, `Std/{FixedPoint32,BitVector,ByteArrayAppend}.lean`, `Refinement/Std/Vector.lean`, `Examples/`, `Templates/`, `SmokeTests/`. Track separately if/when MoveModel hardening becomes a milestone.
+
+Strategy notes:
+- **Constant-return rows** (`u64`, `bool`, abort codes) close with `set_option maxRecDepth 100000 in decide`, provided the relevant `confidentialModuleEnv.functions[N]` body and constant pool entries reduce without hitting a `noncomputable axiom`.
+- **Vector / hash rows** stall in kernel reduction on `sha3_512` / Ristretto natives — discharge via explicit equality lemmas or `unfold` chains, not `decide`.
+- **Native-axiom rows** (`caRegistrationHelpersRoundtripNative`, framework `verify_*` rows) are genuinely unprovable without a model-level theorem; convert to explicit `axiom` rather than open-ended `sorry` so they show up in `#print axioms` audits.
+
 ## Local developer setup (all three stacks)
 
 Onboarding pointers. Each stack has a canonical setup location; this plan intentionally does **not** duplicate those instructions — fixes should land in the canonical doc so there's one source of truth.

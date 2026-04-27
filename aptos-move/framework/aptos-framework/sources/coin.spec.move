@@ -304,14 +304,6 @@ spec aptos_framework::coin {
         pragma verify = false;
         let addr = type_info::type_of<CoinType>().account_address;
         modifies global<CoinInfo<CoinType>>(addr);
-        modifies global<object::ObjectCore>(@aptos_framework);
-        modifies global<primary_fungible_store::DeriveRefPod>(@aptos_framework);
-        modifies global<fungible_asset::ConcurrentSupply>(@aptos_framework);
-        modifies global<fungible_asset::Supply>(@aptos_framework);
-        modifies global<fungible_asset::Metadata>(@aptos_framework);
-        modifies global<CoinConversionMap>(@aptos_framework);
-        modifies global<PairedCoinType>(@aptos_framework);
-        modifies global<PairedFungibleAssetRefs>(@aptos_framework);
     }
 
     spec fungible_asset_to_coin<CoinType>(fungible_asset: FungibleAsset): Coin<CoinType> {
@@ -530,20 +522,6 @@ spec aptos_framework::coin {
         pragma verify = false;
         include WithdrawAbortsIf<CoinType>;
         modifies global<CoinStore<CoinType>>(account_addr);
-        modifies global<CoinInfo<CoinType>>(@aptos_framework);
-        modifies global<CoinConversionMap>(@aptos_framework);
-        modifies global<PairedCoinType>(@aptos_framework);
-        modifies global<PairedFungibleAssetRefs>(@aptos_framework);
-        modifies global<primary_fungible_store::DeriveRefPod>(@aptos_framework);
-        modifies global<object::ObjectCore>(@aptos_framework);
-        modifies global<object::TombStone>(@aptos_framework);
-        modifies global<object::Untransferable>(@aptos_framework);
-        modifies global<fungible_asset::FungibleStore>(@aptos_framework);
-        modifies global<fungible_asset::ConcurrentFungibleBalance>(@aptos_framework);
-        modifies global<fungible_asset::ConcurrentSupply>(@aptos_framework);
-        modifies global<fungible_asset::Supply>(@aptos_framework);
-        modifies global<fungible_asset::Metadata>(@aptos_framework);
-        modifies global<aptos_framework::permissioned_signer::PermissionStorage>(@aptos_framework);
         let account_addr = signer::address_of(account);
         let coin_store = global<CoinStore<CoinType>>(account_addr);
         let balance = coin_store.coin.value;

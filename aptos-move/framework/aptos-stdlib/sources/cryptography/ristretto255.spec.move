@@ -109,15 +109,16 @@ spec aptos_std::ristretto255 {
 
     spec scalar_from_u64_internal {
         pragma opaque;
+        pragma bv=b"0";
         aborts_if [abstract] false;
-        // Phase 0 patch: ensures clause removed to avoid bv64 vs int mismatch in Boogie
-        // (CA modules calling with bv encoding pass bv64, but spec function expects int)
+        ensures result == spec_scalar_from_u64_internal(num);
     }
 
     spec scalar_from_u128_internal {
         pragma opaque;
+        pragma bv=b"0";
         aborts_if [abstract] false;
-        // Phase 0 patch: ensures clause removed to avoid bv128 vs int mismatch in Boogie
+        ensures result == spec_scalar_from_u128_internal(num);
     }
 
     spec scalar_reduced_from_32_bytes_internal {
@@ -174,16 +175,19 @@ spec aptos_std::ristretto255 {
     }
 
     spec new_scalar_from_u32 {
+        pragma bv=b"0";
         aborts_if false;
-        ensures result.data == spec_scalar_from_u64_internal(four_bytes);
+        ensures result.data == spec_scalar_from_u64_internal((four_bytes as u64));
     }
 
     spec new_scalar_from_u64 {
+        pragma bv=b"0";
         aborts_if false;
         ensures result.data == spec_scalar_from_u64_internal(eight_bytes);
     }
 
     spec new_scalar_from_u128 {
+        pragma bv=b"0";
         aborts_if false;
         ensures result.data == spec_scalar_from_u128_internal(sixteen_bytes);
     }
@@ -313,11 +317,9 @@ spec aptos_std::ristretto255 {
 
     spec fun spec_scalar_is_canonical_internal(s: vector<u8>): bool;
 
-    // Phase 0 patch Bug 1: use `num` type to avoid bv64/bv128 vs int encoding mismatch
-    // (see PHASE_0_RISTRETTO255_PATCH_NOTES.md Bug 1, Candidate patch C)
-    spec fun spec_scalar_from_u64_internal(num: num): vector<u8>;
+    spec fun spec_scalar_from_u64_internal(num: u64): vector<u8>;
 
-    spec fun spec_scalar_from_u128_internal(num: num): vector<u8>;
+    spec fun spec_scalar_from_u128_internal(num: u128): vector<u8>;
 
     spec fun spec_scalar_reduced_from_32_bytes_internal(bytes: vector<u8>): vector<u8>;
 

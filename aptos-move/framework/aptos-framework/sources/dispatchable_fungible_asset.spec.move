@@ -1,4 +1,5 @@
 spec aptos_framework::dispatchable_fungible_asset {
+    use aptos_framework::permissioned_signer;
     spec module {
         pragma verify = false;
     }
@@ -19,17 +20,14 @@ spec aptos_framework::dispatchable_fungible_asset {
         pragma opaque;
     }
 
-    spec transfer {
-        pragma opaque;
-        modifies global<fungible_asset::FungibleStore>(@aptos_framework);
-        modifies global<fungible_asset::ConcurrentFungibleBalance>(@aptos_framework);
-        modifies global<aptos_framework::permissioned_signer::PermissionStorage>(@aptos_framework);
+    spec withdraw {
+        modifies global<permissioned_signer::PermissionStorage>(permissioned_signer::spec_permission_address(owner));
+        modifies global<fungible_asset::FungibleStore>(object::object_address(store));
+        modifies global<fungible_asset::ConcurrentFungibleBalance>(object::object_address(store));
     }
 
-    spec transfer_assert_minimum_deposit {
-        pragma opaque;
-        modifies global<fungible_asset::FungibleStore>(@aptos_framework);
-        modifies global<fungible_asset::ConcurrentFungibleBalance>(@aptos_framework);
-        modifies global<aptos_framework::permissioned_signer::PermissionStorage>(@aptos_framework);
+    spec deposit {
+        modifies global<fungible_asset::FungibleStore>(object::object_address(store));
+        modifies global<fungible_asset::ConcurrentFungibleBalance>(object::object_address(store));
     }
 }

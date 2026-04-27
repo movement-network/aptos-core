@@ -138,29 +138,4 @@ spec aptos_framework::primary_fungible_store {
         object::spec_create_user_derived_object_address(owner, metadata_addr)
     }
 
-    spec ensure_primary_store_exists {
-        pragma opaque;
-        modifies global<fungible_asset::FungibleStore>(@aptos_framework);
-        modifies global<fungible_asset::ConcurrentFungibleBalance>(@aptos_framework);
-        modifies global<object::ObjectCore>(@aptos_framework);
-        modifies global<object::Untransferable>(@aptos_framework);
-    }
-
-    spec deposit {
-        pragma opaque;
-        modifies global<fungible_asset::FungibleStore>(@aptos_framework);
-        modifies global<fungible_asset::ConcurrentFungibleBalance>(@aptos_framework);
-        modifies global<object::ObjectCore>(@aptos_framework);
-        modifies global<object::Untransferable>(@aptos_framework);
-    }
-
-    spec transfer {
-        pragma opaque;
-        modifies global<fungible_asset::FungibleStore>(@aptos_framework);
-        modifies global<fungible_asset::ConcurrentFungibleBalance>(@aptos_framework);
-        modifies global<object::ObjectCore>(@aptos_framework);
-        modifies global<object::TombStone>(@aptos_framework);
-        modifies global<object::Untransferable>(@aptos_framework);
-        modifies global<aptos_framework::permissioned_signer::PermissionStorage>(@aptos_framework);
-    }
 }

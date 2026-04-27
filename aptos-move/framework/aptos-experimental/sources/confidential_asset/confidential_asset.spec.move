@@ -272,7 +272,14 @@ spec aptos_experimental::confidential_asset {
     spec get_fa_config_signer {
         pragma aborts_if_is_strict = false;
         pragma opaque;
-        modifies global<object::ObjectCore>(@aptos_framework);
+    }
+
+    /// `ensure_pool_fa_store` — ensures the pool's primary FA store exists for the given token.
+    /// Marked opaque; modifies set covers the FA store object resources that
+    /// `primary_fungible_store::ensure_primary_store_exists` may create. Full composition in Phase 5.
+    spec ensure_pool_fa_store {
+        pragma aborts_if_is_strict = false;
+        pragma opaque;
     }
 
     /// `ensure_fa_config_exists` — creates FAConfig if it doesn't exist, returns its address.
@@ -283,7 +290,6 @@ spec aptos_experimental::confidential_asset {
         let fa_config_addr = spec_get_fa_config_address(token);
         ensures result == fa_config_addr;
         modifies global<FAConfig>(fa_config_addr);
-        modifies global<object::ObjectCore>(fa_config_addr);
     }
 
     spec enable_token {
@@ -297,7 +303,6 @@ spec aptos_experimental::confidential_asset {
         // exact aborts_if for the post-ensure_fa_config_exists FAConfig is captured in Phase 5.
 
         modifies global<FAConfig>(fa_config_addr);
-        modifies global<object::ObjectCore>(fa_config_addr);
     }
 
     spec disable_token {
@@ -309,7 +314,6 @@ spec aptos_experimental::confidential_asset {
         aborts_if signer::address_of(aptos_framework) != @aptos_framework;
 
         modifies global<FAConfig>(fa_config_addr);
-        modifies global<object::ObjectCore>(fa_config_addr);
     }
 
     spec set_auditor {
@@ -324,7 +328,6 @@ spec aptos_experimental::confidential_asset {
         // specs are filled in.
 
         modifies global<FAConfig>(fa_config_addr);
-        modifies global<object::ObjectCore>(fa_config_addr);
     }
 
     //
@@ -367,7 +370,6 @@ spec aptos_experimental::confidential_asset {
     /// `get_user_signer` — helper to create user-derived signer for store object.
     spec get_user_signer {
         pragma opaque;
-        modifies global<object::ObjectCore>(@aptos_framework);
     }
 
     /// `register_internal` — creates a fresh ConfidentialAssetStore for (user, token).
@@ -400,7 +402,6 @@ spec aptos_experimental::confidential_asset {
             == confidential_balance::ACTUAL_BALANCE_CHUNKS;
 
         modifies global<ConfidentialAssetStore>(store_addr);
-        modifies global<object::ObjectCore>(@aptos_framework);
     }
 
     /// `ensure_sufficient_fa` — helper that converts CoinType to FA if needed.
@@ -408,21 +409,6 @@ spec aptos_experimental::confidential_asset {
     spec ensure_sufficient_fa {
         pragma aborts_if_is_strict = false;
         pragma opaque;
-        modifies global<object::ObjectCore>(@aptos_framework);
-        modifies global<object::TombStone>(@aptos_framework);
-        modifies global<object::Untransferable>(@aptos_framework);
-        modifies global<aptos_framework::permissioned_signer::PermissionStorage>(@aptos_framework);
-        modifies global<aptos_framework::fungible_asset::FungibleStore>(@aptos_framework);
-        modifies global<aptos_framework::fungible_asset::ConcurrentFungibleBalance>(@aptos_framework);
-        modifies global<aptos_framework::fungible_asset::Metadata>(@aptos_framework);
-        modifies global<aptos_framework::fungible_asset::Supply>(@aptos_framework);
-        modifies global<aptos_framework::fungible_asset::ConcurrentSupply>(@aptos_framework);
-        modifies global<aptos_framework::primary_fungible_store::DeriveRefPod>(@aptos_framework);
-        modifies global<aptos_framework::coin::CoinConversionMap>(@aptos_framework);
-        modifies global<aptos_framework::coin::CoinInfo<CoinType>>(@aptos_framework);
-        modifies global<aptos_framework::coin::CoinStore<CoinType>>(@aptos_framework);
-        modifies global<aptos_framework::coin::PairedCoinType>(@aptos_framework);
-        modifies global<aptos_framework::coin::PairedFungibleAssetRefs>(@aptos_framework);
     }
 
     /// `deposit_to_internal` — receives an amount into the recipient's pending balance.
@@ -456,11 +442,6 @@ spec aptos_experimental::confidential_asset {
             == len(old(global<ConfidentialAssetStore>(recipient_store)).actual_balance.chunks);
 
         modifies global<ConfidentialAssetStore>(recipient_store);
-        modifies global<object::ObjectCore>(@aptos_framework);
-        modifies global<object::Untransferable>(@aptos_framework);
-        modifies global<aptos_framework::permissioned_signer::PermissionStorage>(@aptos_framework);
-        modifies global<aptos_framework::fungible_asset::FungibleStore>(@aptos_framework);
-        modifies global<aptos_framework::fungible_asset::ConcurrentFungibleBalance>(@aptos_framework);
     }
 
     /// `withdraw_to_internal` — burns from sender's actual balance after proof acceptance.
@@ -494,12 +475,6 @@ spec aptos_experimental::confidential_asset {
             == len(old(global<ConfidentialAssetStore>(sender_store)).actual_balance.chunks);
 
         modifies global<ConfidentialAssetStore>(sender_store);
-        modifies global<object::ObjectCore>(@aptos_framework);
-        modifies global<object::TombStone>(@aptos_framework);
-        modifies global<object::Untransferable>(@aptos_framework);
-        modifies global<aptos_framework::permissioned_signer::PermissionStorage>(@aptos_framework);
-        modifies global<aptos_framework::fungible_asset::FungibleStore>(@aptos_framework);
-        modifies global<aptos_framework::fungible_asset::ConcurrentFungibleBalance>(@aptos_framework);
     }
 
     /// `rotate_encryption_key_internal` — updates `ek` and `actual_balance`, re-normalizes.
@@ -717,7 +692,6 @@ spec aptos_experimental::confidential_asset {
         // emits Registered { addr: user, asset_type: token_addr, ek: ... } to sender;
 
         modifies global<ConfidentialAssetStore>(store_addr);
-        modifies global<object::ObjectCore>(@aptos_framework);
     }
 
     /// `deposit_to` entry — delegates to `deposit_to_internal`.
@@ -736,11 +710,6 @@ spec aptos_experimental::confidential_asset {
             == old(global<ConfidentialAssetStore>(recipient_store)).pending_counter + 1;
 
         modifies global<ConfidentialAssetStore>(recipient_store);
-        modifies global<aptos_framework::fungible_asset::FungibleStore>(@aptos_framework);
-        modifies global<aptos_framework::fungible_asset::ConcurrentFungibleBalance>(@aptos_framework);
-        modifies global<object::ObjectCore>(@aptos_framework);
-        modifies global<object::Untransferable>(@aptos_framework);
-        modifies global<aptos_framework::permissioned_signer::PermissionStorage>(@aptos_framework);
     }
 
     /// `deposit_coins_to` entry — converts `CoinType` to FA then delegates to `deposit_to_internal`.
@@ -755,21 +724,6 @@ spec aptos_experimental::confidential_asset {
         // `token` is a local obtained from ensure_sufficient_fa — not available in spec scope.
         // Full composition with upstream coin/FA specs deferred to Phase 5.
         modifies global<ConfidentialAssetStore>(@aptos_framework);
-        modifies global<object::ObjectCore>(@aptos_framework);
-        modifies global<object::TombStone>(@aptos_framework);
-        modifies global<object::Untransferable>(@aptos_framework);
-        modifies global<aptos_framework::permissioned_signer::PermissionStorage>(@aptos_framework);
-        modifies global<aptos_framework::fungible_asset::FungibleStore>(@aptos_framework);
-        modifies global<aptos_framework::fungible_asset::ConcurrentFungibleBalance>(@aptos_framework);
-        modifies global<aptos_framework::fungible_asset::Metadata>(@aptos_framework);
-        modifies global<aptos_framework::fungible_asset::Supply>(@aptos_framework);
-        modifies global<aptos_framework::fungible_asset::ConcurrentSupply>(@aptos_framework);
-        modifies global<aptos_framework::primary_fungible_store::DeriveRefPod>(@aptos_framework);
-        modifies global<aptos_framework::coin::CoinConversionMap>(@aptos_framework);
-        modifies global<aptos_framework::coin::CoinInfo<CoinType>>(@aptos_framework);
-        modifies global<aptos_framework::coin::CoinStore<CoinType>>(@aptos_framework);
-        modifies global<aptos_framework::coin::PairedCoinType>(@aptos_framework);
-        modifies global<aptos_framework::coin::PairedFungibleAssetRefs>(@aptos_framework);
     }
 
     /// `deposit_coins` entry — to self.
@@ -779,21 +733,6 @@ spec aptos_experimental::confidential_asset {
         pragma aborts_if_is_strict = false;
         pragma opaque;
         modifies global<ConfidentialAssetStore>(@aptos_framework);
-        modifies global<object::ObjectCore>(@aptos_framework);
-        modifies global<object::TombStone>(@aptos_framework);
-        modifies global<object::Untransferable>(@aptos_framework);
-        modifies global<aptos_framework::permissioned_signer::PermissionStorage>(@aptos_framework);
-        modifies global<aptos_framework::fungible_asset::FungibleStore>(@aptos_framework);
-        modifies global<aptos_framework::fungible_asset::ConcurrentFungibleBalance>(@aptos_framework);
-        modifies global<aptos_framework::fungible_asset::Metadata>(@aptos_framework);
-        modifies global<aptos_framework::fungible_asset::Supply>(@aptos_framework);
-        modifies global<aptos_framework::fungible_asset::ConcurrentSupply>(@aptos_framework);
-        modifies global<aptos_framework::primary_fungible_store::DeriveRefPod>(@aptos_framework);
-        modifies global<aptos_framework::coin::CoinConversionMap>(@aptos_framework);
-        modifies global<aptos_framework::coin::CoinInfo<CoinType>>(@aptos_framework);
-        modifies global<aptos_framework::coin::CoinStore<CoinType>>(@aptos_framework);
-        modifies global<aptos_framework::coin::PairedCoinType>(@aptos_framework);
-        modifies global<aptos_framework::coin::PairedFungibleAssetRefs>(@aptos_framework);
     }
 
     /// `deposit` entry — deposits to self. `to = address_of(sender)` path.
@@ -813,11 +752,6 @@ spec aptos_experimental::confidential_asset {
             == old(global<ConfidentialAssetStore>(store_addr)).pending_counter + 1;
 
         modifies global<ConfidentialAssetStore>(store_addr);
-        modifies global<object::ObjectCore>(@aptos_framework);
-        modifies global<object::Untransferable>(@aptos_framework);
-        modifies global<aptos_framework::permissioned_signer::PermissionStorage>(@aptos_framework);
-        modifies global<aptos_framework::fungible_asset::FungibleStore>(@aptos_framework);
-        modifies global<aptos_framework::fungible_asset::ConcurrentFungibleBalance>(@aptos_framework);
     }
 
     /// `withdraw_to` entry — deserializes balance + proof, delegates to `withdraw_to_internal`.
@@ -834,12 +768,6 @@ spec aptos_experimental::confidential_asset {
 
         ensures global<ConfidentialAssetStore>(store_addr).normalized;
         modifies global<ConfidentialAssetStore>(store_addr);
-        modifies global<object::ObjectCore>(@aptos_framework);
-        modifies global<object::TombStone>(@aptos_framework);
-        modifies global<object::Untransferable>(@aptos_framework);
-        modifies global<aptos_framework::permissioned_signer::PermissionStorage>(@aptos_framework);
-        modifies global<aptos_framework::fungible_asset::FungibleStore>(@aptos_framework);
-        modifies global<aptos_framework::fungible_asset::ConcurrentFungibleBalance>(@aptos_framework);
     }
 
     /// `withdraw` entry — withdraws to self.
@@ -856,12 +784,6 @@ spec aptos_experimental::confidential_asset {
 
         ensures global<ConfidentialAssetStore>(store_addr).normalized;
         modifies global<ConfidentialAssetStore>(store_addr);
-        modifies global<object::ObjectCore>(@aptos_framework);
-        modifies global<object::TombStone>(@aptos_framework);
-        modifies global<object::Untransferable>(@aptos_framework);
-        modifies global<aptos_framework::permissioned_signer::PermissionStorage>(@aptos_framework);
-        modifies global<aptos_framework::fungible_asset::FungibleStore>(@aptos_framework);
-        modifies global<aptos_framework::fungible_asset::ConcurrentFungibleBalance>(@aptos_framework);
     }
 
     /// `confidential_transfer` entry — delegates to `confidential_transfer_internal`.

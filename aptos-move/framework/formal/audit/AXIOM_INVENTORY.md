@@ -1,5 +1,70 @@
 # CA Lean axiom inventory — Phase 8 working doc
 
+## Document scope and references
+
+This document enumerates the `axiom` declarations that the Lean-side proofs of Confidential Asset (CA) verification depend on. It is one of three working documents that together describe what "formally verified" means for CA at this checkpoint:
+
+* **`aptos-move/framework/formal/CONFIDENTIAL_ASSETS_UNIFIED_VERIFICATION_PLAN.md`** (referred to below as *the unified plan*) — describes the three-stack proof strategy (Move Prover for source-level state invariants, Lean for bytecode-vs-functional-simulation equivalence, `move-lean-difftest` for Move-VM ground truth), the per-operation tool assignment, and the phasing. Section numbers cited below (e.g. "unified plan §2", "unified plan §4") refer to that document.
+* **`aptos-move/framework/formal/CONFIDENTIAL_ASSETS_DIFFERENTIAL_TESTING_PLAN.md`** — describes the difftest corpus.
+* This document — enumerates Lean-side axioms.
+
+The **"Phase N"** language used in this file (e.g. "Phase 4 closure", "Phase 8 task") refers to the named phases in the unified plan §6. In short: **Phase 4** = bytecode-vs-functional-simulation equivalence proofs for the four non-Registration crypto verifiers (rotation / withdrawal / normalization / transfer); **Phase 8** = remaining-axiom elimination and closure work, which is the activity this document tracks.
+
+## Lean-side axiom inventory — current state (last refreshed 2026-04-26)
+
+This section is the authoritative inventory of user-defined axioms in the CA Lean tree. It supersedes the older categorized inventory further down in this file (which is dated 2026-04-23 and predates the Phase 4 closure work and a phantom-axiom audit, both summarized at the bottom of this section). To independently confirm the contents, run `lake build` in `aptos-move/framework/formal/lean/`, then for each named theorem invoke `#print axioms <fully.qualified.name>` and compare against the dependency lists below.
+
+### Top-level CA verifier theorems
+
+These five theorems each state that the corresponding Move bytecode (`verify_*_proof`) is semantically equivalent to a Lean functional simulation. The "Depends on" column is the literal `#print axioms` output for each:
+
+| Theorem (fully qualified) | Depends on |
+|---|---|
+| `MovementFormal.Experimental.ConfidentialAsset.Rotation.Phase6Composition.rotate_is_formally_verified` | `[propext, Classical.choice, Quot.sound]` |
+| `MovementFormal.Experimental.ConfidentialAsset.Withdrawal.Phase6Composition.withdraw_is_formally_verified` | `[propext, Classical.choice, Quot.sound]` |
+| `MovementFormal.Experimental.ConfidentialAsset.Normalization.Phase6Composition.normalize_is_formally_verified` | `[propext, Classical.choice, Quot.sound]` |
+| `MovementFormal.Experimental.ConfidentialAsset.Transfer.Phase6Composition.transfer_is_formally_verified` | `[propext, Classical.choice, Quot.sound]` |
+| `MovementFormal.Experimental.ConfidentialAsset.Registration.EvalEquivRebuild.registration_eval_equiv_functional_sim` | `[propext, Quot.sound, registration_eval_equiv_functional_sim_compressedPoint_singleton]` |
+
+`propext`, `Classical.choice`, and `Quot.sound` are Lean 4's three foundational axioms (propositional extensionality, the axiom of choice, and quotient soundness). They are part of the Lean kernel's trusted base and are not user-defined; the standard practice in Lean-based formal verification is to list them but not count them against the user inventory.
+
+The four verifiers Rotation / Withdrawal / Normalization / Transfer therefore **depend on no user-defined axioms**. Registration depends additionally on exactly one user-defined CA axiom, `registration_eval_equiv_functional_sim_compressedPoint_singleton`, described in §B below.
+
+### A. Permanent trust-boundary axioms (native-function bindings)
+
+These axioms bind Lean opaque functions to specific underlying Move native functions. They are not intended for elimination; the unified verification plan §2 accepts them as documented external trust boundaries on the same footing as the cryptographic-primitive axioms tabulated in the older "Categorized inventory" section further down in this file (Group-theory axioms, Ristretto-encoding axioms, and Bulletproofs axioms — those entries remain accurate and unchanged). Each axiom in the table below is anchored to the difftest VM-output corpus, which independently re-checks the binding byte-for-byte against a real Move VM execution.
+
+| Axiom | File:line | What it states | Anchor |
+|---|---|---|---|
+| `caRegistrationHelpersRoundtripNative` | `MoveModel/Programs/Confidential.lean:135` | Existence of an opaque `List MoveValue → Option (List MoveValue)` function representing the Schnorr-roundtrip native `confidential_proof_helpers::roundtrip_test`. | Difftest oracle `test_registration_helpers_roundtrip` (cited in `Refinement/AptosExperimental/Confidential.lean:339`) cross-checks the Lean opaque against a VM run. |
+| `caRegistrationBytecodeEvalNative` | `MoveModel/Programs/Confidential.lean:136` | Same shape for the registration bytecode-eval native. | Difftest oracle `test_registration_proof_framework_deterministic_verify_roundtrip` (cited in `Refinement/AptosExperimental/Confidential.lean:339`). |
+| `caRegistrationHelpersRoundtripNative_empty_eq_true` | `Refinement/AptosExperimental/Confidential.lean:342` | The above opaque, applied to the empty argument list, returns `some [MoveValue.bool true]`. | Same difftest fixtures; the empty-input case is the one used by the smoke-test theorems at indices 35 / 171 in the Lean evaluation matrix. |
+
+### B. Documented residual axiom — Lean bytecode equivalence, Registration singleton case
+
+| Axiom | File:line | Status | Trust-boundary justification |
+|---|---|---|---|
+| `registration_eval_equiv_functional_sim_compressedPoint_singleton` | `Registration/EvalEquivRebuild.lean:2435` | Documented permanent trust boundary; pending architectural redesign described in unified plan §4. | The axiom asserts that for any `RegistrationNativeOracle` `o` and any input bytes, *if* `o.newCompressedPointFromBytes` returns exactly one MoveValue (the "singleton" case), *then* running the `verify_registration_proof` Move bytecode for fuel ≥ 200 from an empty machine state produces the same `.returned` / `.aborted` / `.error` outcome (modulo final machine state) as the Lean functional simulation `verifyRegistrationBytecodeResult` (defined in `Registration/FunctionalSim.lean:84`). The bytecode is a hand-checked transcription of `confidential_proof.move::verify_registration_proof`. The functional simulation is constructed to mirror that bytecode's dispatch shape line-by-line. The `move-lean-difftest` 87-row CA corpus binds both representations to the Move VM's actual output byte-for-byte, providing independent corroboration on real inputs. Closing the axiom inside Lean would require the architectural redesign in unified plan §4 — symbolic state with `@[irreducible]` boundaries, per-instruction-class step lemmas, `Array.get?` instead of `.locals[K]'<bound>` — which is multi-week scope. The chained-frame approach used to close the four Phase 4 verifier-equivalence axioms (Rotation, Withdrawal, Normalization, Transfer) hit Lean's `maxHeartbeats 1.2M` at the 24-PC / 13-argument scale of Transfer; Registration is 84 PCs / 7 arguments and additionally features mutating container operations (`mutBorrowLoc` + native `vector::append`, four times each, for the Fiat-Shamir transcript construction), so the same approach does not scale. |
+
+The non-singleton case of the same equivalence (`...compressedPoint_nonSingleton`, declared in the same file) is already proven as a kernel-checked theorem with no user-defined axiom dependencies, covering the cases where the compressed-point oracle returns 0 or 2+ candidates.
+
+### Public claim about CA Lean-side verification
+
+The following claim is supportable purely from the contents of this inventory plus a `lake build` plus the per-theorem `#print axioms` outputs cited above:
+
+> Confidential Asset is formally verified at the Lean bytecode-equivalence level for `verify_rotation_proof`, `verify_withdrawal_proof`, `verify_normalization_proof`, and `verify_transfer_proof`, with each top-level theorem depending only on Lean's foundational kernel axioms. For `verify_registration_proof`, the bytecode-vs-functional-simulation equivalence is proven on the failure path (compressed-point oracle returns 0 or 2+ candidates) and asserted on the singleton happy path subject to one documented trust-boundary axiom (`registration_eval_equiv_functional_sim_compressedPoint_singleton`, §B above). Cryptographic soundness assumptions (Ristretto255 group laws and discrete-log hardness, SHA-2/3 collision resistance, Bulletproofs soundness/completeness) and three noncomputable native-function bindings (§A above) are listed as documented external trust boundaries per the unified verification plan §2. The 87-row `move-lean-difftest` Confidential Asset corpus binds all five verifiers to the Move VM's output byte-for-byte.
+
+### Audit-trail notes
+
+A 2026-04-26 audit of `Registration/EvalEquivRebuild.lean` found that three names previously matched by `grep ^axiom` against this file — `registration_eval_equiv_functional_sim`, `registration_eval_equiv_functional_sim_singleton`, and `registration_eval_equiv_functional_sim_compressedPoint_singleton` — were inside a doc-comment region (a `/-! … -/` block whose closing marker was many hundred lines further down than its opener) and were therefore not recognized by the Lean parser as declarations. `#check` reported `unknown identifier` for each; they were never load-bearing in the proof tree. The same audit added a real, kernel-recognized `registration_eval_equiv_functional_sim` theorem (composing the proven non-singleton sub-theorem with the residual singleton-case axiom in §B above) to make the file's declared content match what was being claimed elsewhere in the documentation.
+
+The same audit also ratified that the four Phase 4 verifier-equivalence axioms previously listed in this document (rotation / normalization / withdrawal / transfer `_eval_equiv_functional_sim_axiom`) had been replaced by kernel-checked theorems with the same statements (modulo a corrected `MachineState.empty` on the success-case right-hand side, since the original axiom statements were unprovable for non-empty initial machine states because the left-hand side `.dropMs` strips the result's machine state to empty). The four `Phase6Composition.lean` `is_formally_verified` files now derive cleanly from those theorems with no remaining axioms beyond Lean's foundational kernel ones.
+
+---
+
+## Categorized inventory (dated 2026-04-23, pre-Phase-4-closure — superseded by the section above; retained for change-history reference only)
+
+
 Complete enumeration of `axiom` declarations in the CA Lean tree (`MovementFormal/Experimental/ConfidentialAsset/*` + the `AptosStd/Crypto/*` dependencies it pulls in). Regenerate with:
 
 ```

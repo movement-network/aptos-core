@@ -2435,7 +2435,7 @@ audit/AXIOM_INVENTORY.md inventory:
 axiom registration_eval_equiv_functional_sim_compressedPoint_singleton
     (o : RegistrationNativeOracle)
     (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
-    (fuel : Nat) (hfuel : 2 ≤ fuel)
+    (fuel : Nat) (hfuel : fuel ≥ 200)
     (rOpt : MoveValue)
     (hsing : single? (o.newCompressedPointFromBytes
         [.vector .u8 (commitBa.toList.map .u8)]) = some rOpt) :
@@ -2448,7 +2448,7 @@ axiom registration_eval_equiv_functional_sim_compressedPoint_singleton
 theorem registration_eval_equiv_functional_sim
     (o : RegistrationNativeOracle)
     (chainId : UInt8) (sender contract token ekBa commitBa respBa : ByteArray)
-    (fuel : Nat) (hfuel : 2 ≤ fuel) :
+    (fuel : Nat) (hfuel : fuel ≥ 200) :
     (eval (registrationModuleEnv o) verifyRegistrationProofIdx
         (registrationArgs chainId sender contract token ekBa commitBa respBa)
         fuel MachineState.empty).dropMs =
@@ -2457,6 +2457,6 @@ theorem registration_eval_equiv_functional_sim
   rcases h : single? (o.newCompressedPointFromBytes
                         [.vector .u8 (commitBa.toList.map .u8)]) with _ | rOpt
   · exact registration_eval_equiv_functional_sim_compressedPoint_nonSingleton
-            o chainId sender contract token ekBa commitBa respBa fuel hfuel h
+            o chainId sender contract token ekBa commitBa respBa fuel (by omega) h
   · exact registration_eval_equiv_functional_sim_compressedPoint_singleton
             o chainId sender contract token ekBa commitBa respBa fuel hfuel rOpt h

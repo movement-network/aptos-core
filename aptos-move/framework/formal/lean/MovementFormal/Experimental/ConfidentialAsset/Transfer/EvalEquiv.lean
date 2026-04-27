@@ -4122,7 +4122,7 @@ theorem transfer_eval_equiv_functional_sim
                   (by omega : 0 < proofFields.length) hread hproofRef hSigmaPair
                   fuel (by omega) hsigma
     rw [hRun]
-    simp only [ExecResult.dropMs_error, hSigmaPair, hsigma]
+    simp only [ExecResult.dropMs_error, hsigma]
   | some (sHead :: sTail, cs2) =>
     have hRun := tr_run_to_sigma_arity_mismatch_produces_error o chainId sender contract
                   senderEkRef recipientEkRef curBalRef newBalRef
@@ -4132,7 +4132,7 @@ theorem transfer_eval_equiv_functional_sim
                   (by omega : 0 < proofFields.length) hread hproofRef hSigmaPair
                   fuel (by omega) hsigma
     rw [hRun]
-    simp only [ExecResult.dropMs_error, hSigmaPair, hsigma]
+    simp only [ExecResult.dropMs_error, hsigma]
   | some ([], cs2) =>
     have hread2 : cs2.read proofRid = some (.struct_ proofFields) := by
       apply hSigmaPreserves cs2
@@ -4149,7 +4149,7 @@ theorem transfer_eval_equiv_functional_sim
                     (by omega : 1 < proofFields.length) hread hread2 hproofRef
                     hSigmaPair hsigma hRangePair1 hNewBalRange fuel (by omega)
       rw [hRun]
-      simp only [ExecResult.dropMs_error, hSigmaPair, hsigma, hRangePair1, hNewBalRange]
+      simp only [ExecResult.dropMs_error, hsigma, hRangePair1, hNewBalRange]
     | some (rHead :: rTail, cs4) =>
       have hRun := tr_run_to_newBalRange_arity_mismatch_produces_error o chainId sender contract
                     senderEkRef recipientEkRef curBalRef newBalRef
@@ -4159,7 +4159,7 @@ theorem transfer_eval_equiv_functional_sim
                     rHead rTail (by omega : 1 < proofFields.length) hread hread2
                     hproofRef hSigmaPair hsigma hRangePair1 hNewBalRange fuel (by omega)
       rw [hRun]
-      simp only [ExecResult.dropMs_error, hSigmaPair, hsigma, hRangePair1, hNewBalRange]
+      simp only [ExecResult.dropMs_error, hsigma, hRangePair1, hNewBalRange]
     | some ([], cs4) =>
       have hread4 : cs4.read proofRid = some (.struct_ proofFields) :=
         hNewBalRangePreserves cs2 (proofFields[1]'(by omega : 1 < proofFields.length))
@@ -4179,7 +4179,7 @@ theorem transfer_eval_equiv_functional_sim
                       hSigmaPair hsigma hRangePair1 hNewBalRange hRangePair2
                       hTransferRange fuel (by omega)
         rw [hRun]
-        simp only [ExecResult.dropMs_error, hSigmaPair, hsigma, hRangePair1,
+        simp only [ExecResult.dropMs_error, hsigma, hRangePair1,
                    hNewBalRange, hRangePair2, hTransferRange]
       | some (tHead :: tTail, cs6) =>
         have hRun := tr_run_to_transferRange_arity_mismatch_produces_error o chainId sender contract
@@ -4192,7 +4192,7 @@ theorem transfer_eval_equiv_functional_sim
                       hSigmaPair hsigma hRangePair1 hNewBalRange hRangePair2
                       hTransferRange fuel (by omega)
         rw [hRun]
-        simp only [ExecResult.dropMs_error, hSigmaPair, hsigma, hRangePair1,
+        simp only [ExecResult.dropMs_error, hsigma, hRangePair1,
                    hNewBalRange, hRangePair2, hTransferRange]
       | some ([], cs6) =>
         have hRun := tr_run_to_success_produces_returned o chainId sender contract
@@ -4205,7 +4205,7 @@ theorem transfer_eval_equiv_functional_sim
                       hSigmaPair hsigma hRangePair1 hNewBalRange hRangePair2
                       hTransferRange fuel (by omega)
         rw [hRun]
-        simp only [ExecResult.dropMs_returned, hSigmaPair, hsigma, hRangePair1,
+        simp only [ExecResult.dropMs_returned, hsigma, hRangePair1,
                    hNewBalRange, hRangePair2, hTransferRange]
 
 /-! ## Helper axioms for PC-range chaining (Transfer-specific)

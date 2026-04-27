@@ -1989,7 +1989,7 @@ theorem normalization_eval_equiv_functional_sim
                   initMs cs1 sigmaFid (by omega : 0 < proofFields.length)
                   hread hproofRef hSigmaPair fuel (by omega) hsigma
     rw [hRun]
-    simp only [ExecResult.dropMs_error, hSigmaPair, hsigma]
+    simp only [ExecResult.dropMs_error, hsigma]
   | some (sHead :: sTail, cs2) =>
     have hRun := norm_run_to_sigma_arity_mismatch_produces_error o chainId sender contract
                   ekRef curBalRef newBalRef proofRef proofRid proofFields
@@ -1997,7 +1997,7 @@ theorem normalization_eval_equiv_functional_sim
                   (by omega : 0 < proofFields.length) hread hproofRef hSigmaPair
                   fuel (by omega) hsigma
     rw [hRun]
-    simp only [ExecResult.dropMs_error, hSigmaPair, hsigma]
+    simp only [ExecResult.dropMs_error, hsigma]
   | some ([], cs2) =>
     have hread2 : cs2.read proofRid = some (.struct_ proofFields) := by
       apply hSigmaPreserves cs2
@@ -2010,7 +2010,7 @@ theorem normalization_eval_equiv_functional_sim
                     initMs cs1 cs2 cs3 sigmaFid zkrpFid hFieldCount hread hread2
                     hproofRef hSigmaPair hsigma hRangePair hrange fuel (by omega)
       rw [hRun]
-      simp only [ExecResult.dropMs_error, hSigmaPair, hsigma, hRangePair, hrange]
+      simp only [ExecResult.dropMs_error, hsigma, hRangePair, hrange]
     | some (rHead :: rTail, cs4) =>
       have hRun := norm_run_to_range_arity_mismatch_produces_error o chainId sender contract
                     ekRef curBalRef newBalRef proofRef proofRid proofFields
@@ -2018,13 +2018,13 @@ theorem normalization_eval_equiv_functional_sim
                     hread hread2 hproofRef hSigmaPair hsigma hRangePair hrange
                     fuel (by omega)
       rw [hRun]
-      simp only [ExecResult.dropMs_error, hSigmaPair, hsigma, hRangePair, hrange]
+      simp only [ExecResult.dropMs_error, hsigma, hRangePair, hrange]
     | some ([], cs4) =>
       have hRun := norm_run_to_success_produces_returned o chainId sender contract
                     ekRef curBalRef newBalRef proofRef proofRid proofFields
                     initMs cs1 cs2 cs3 cs4 sigmaFid zkrpFid hFieldCount hread hread2
                     hproofRef hSigmaPair hsigma hRangePair hrange fuel (by omega)
       rw [hRun]
-      simp only [ExecResult.dropMs_returned, hSigmaPair, hsigma, hRangePair, hrange]
+      simp only [ExecResult.dropMs_returned, hsigma, hRangePair, hrange]
 
 end MovementFormal.Experimental.ConfidentialAsset.Normalization.EvalEquiv

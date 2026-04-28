@@ -134,6 +134,7 @@ theorem pc79_inbounds : 79 < verifyRegistrationProofCode.size := by decide
 theorem pc80_inbounds : 80 < verifyRegistrationProofCode.size := by decide
 theorem pc81_inbounds : 81 < verifyRegistrationProofCode.size := by decide
 theorem pc82_inbounds : 82 < verifyRegistrationProofCode.size := by decide
+theorem pc83_inbounds : 83 < verifyRegistrationProofCode.size := by decide
 
 /-! ## Instruction Lemmas
 
@@ -231,5 +232,6 @@ theorem instr79_eq : verifyRegistrationProofCode[79]'pc79_inbounds = .moveLoc 3 
 theorem instr80_eq : verifyRegistrationProofCode[80]'pc80_inbounds = .pop := by rfl
 theorem instr81_eq : verifyRegistrationProofCode[81]'pc81_inbounds = .ldU64 1 := by rfl
 theorem instr82_eq : verifyRegistrationProofCode[82]'pc82_inbounds = .call funcIdx_errorInvalidArgument := by rfl
+theorem instr83_eq : verifyRegistrationProofCode[83]'pc83_inbounds = .abort_ := by rfl
 
 end MovementFormal.Experimental.ConfidentialAsset.Registration.BytecodeLemmas

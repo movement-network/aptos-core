@@ -1601,12 +1601,6 @@ to O(n).
         f(iter.<a href="big_ordered_map.md#0x1_big_ordered_map_iter_borrow_key">iter_borrow_key</a>(), iter.<a href="big_ordered_map.md#0x1_big_ordered_map_iter_borrow">iter_borrow</a>(self));
         iter = iter.<a href="big_ordered_map.md#0x1_big_ordered_map_iter_next">iter_next</a>(self);
     };
-
-    // self.<a href="big_ordered_map.md#0x1_big_ordered_map_for_each_leaf_node_ref">for_each_leaf_node_ref</a>(|node| {
-    //     node.children.<a href="big_ordered_map.md#0x1_big_ordered_map_for_each_ref_friend">for_each_ref_friend</a>(|k: &K, v: &<a href="big_ordered_map.md#0x1_big_ordered_map_Child">Child</a>&lt;V&gt;| {
-    //         f(k, &v.value);
-    //     });
-    // })
 }
 </code></pre>
 

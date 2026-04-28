@@ -348,15 +348,12 @@ impl PipelinedBlock {
     //   https://github.com/aptos-labs/aptos-core/pull/18699  (upstream optimization that introduced the cycle)
     //   https://github.com/aptos-labs/aptos-core/pull/19359  (corrective patch)
     //   https://github.com/aptos-labs/aptos-core/commit/fefcfade3edf26f0396d63963f7ea04364f3666f
-    //   RAND_DEADLOCK_19359_BACKGROUND.md  (full analysis with diagrams)
+    //   https://github.com/movementlabsxyz/aptos-core/pull/322  (full analysis with diagrams)
     //
     // If a similar change is ever introduced here — anything that makes
     // rand aggregation wait on a pipeline-derived future — this function
-    // MUST also eagerly forward `rand_tx`, similar to the #19359 fix:
-    //
-    //   if let Some(tx) = self.pipeline_tx().lock().as_mut() {
-    //       let _ = tx.rand_tx.take().map(|tx| tx.send(self.randomness().cloned()));
-    //   }
+    // MUST also eagerly forward `rand_tx`, similar as in
+    // https://github.com/aptos-labs/aptos-core/blob/fefcfade3edf26f0396d63963f7ea04364f3666f/consensus/consensus-types/src/pipelined_block.rs#L368-L380
     pub fn set_randomness(&self, randomness: Randomness) {
         assert!(self.randomness.set(randomness.clone()).is_ok());
     }

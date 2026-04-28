@@ -7,6 +7,7 @@ use crate::{
     docgen::DocgenOptions, path_in_crate, release_builder::RELEASE_BUNDLE_EXTENSION,
     release_bundle::ReleaseBundle, BuildOptions, ReleaseOptions,
 };
+use aptos_types::account_address::AccountAddress;
 use clap::ValueEnum;
 use move_command_line_common::address::NumericalAddress;
 use once_cell::sync::Lazy;
@@ -110,6 +111,11 @@ impl ReleaseTarget {
             .iter()
             .map(|(_, _, latest_language)| *latest_language)
             .collect();
+        let mut named_addresses = BTreeMap::new();
+        named_addresses.insert(
+            "aptos_experimental".to_owned(),
+            AccountAddress::from_hex_literal("0x7").expect("0x7 parses"),
+        );
         ReleaseOptions {
             build_options: BuildOptions {
                 with_srcs,
@@ -126,6 +132,7 @@ impl ReleaseTarget {
                     output_format: None,
                 }),
                 skip_fetch_latest_git_deps: true,
+                named_addresses,
                 ..BuildOptions::default()
             },
             packages: packages

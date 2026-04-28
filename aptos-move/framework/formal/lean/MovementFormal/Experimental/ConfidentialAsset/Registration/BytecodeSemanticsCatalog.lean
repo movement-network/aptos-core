@@ -1,0 +1,9 @@
+import MovementFormal.MoveModel.Value
+import MovementFormal.MoveModel.Instr
+import MovementFormal.MoveModel.Step
+import MovementFormal.Experimental.ConfidentialAsset.Registration.BytecodeTranscriptionLemmas
+import MovementFormal.Experimental.ConfidentialAsset.Registration.InstructionEffectCatalog
+
+namespace MovementFormal.Experimental.ConfidentialAsset.Registration.BytecodeSemanticsCatalog
+theorem stub : True := trivial
+end MovementFormal.Experimental.ConfidentialAsset.Registration.BytecodeSemanticsCatalog

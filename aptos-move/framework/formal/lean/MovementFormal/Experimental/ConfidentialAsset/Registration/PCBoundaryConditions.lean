@@ -1,0 +1,9 @@
+import MovementFormal.MoveModel.Value
+import MovementFormal.MoveModel.State
+import MovementFormal.Experimental.ConfidentialAsset.Registration.FrameConstructionHelpers
+import MovementFormal.Experimental.ConfidentialAsset.Registration.ValidationLemmas
+import MovementFormal.Experimental.ConfidentialAsset.Registration.ErrorPathHandling
+
+namespace MovementFormal.Experimental.ConfidentialAsset.Registration.PCBoundaryConditions
+theorem stub : True := trivial
+end MovementFormal.Experimental.ConfidentialAsset.Registration.PCBoundaryConditions

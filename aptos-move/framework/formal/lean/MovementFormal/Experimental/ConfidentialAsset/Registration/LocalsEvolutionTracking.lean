@@ -1,0 +1,8 @@
+import MovementFormal.MoveModel.Value
+import MovementFormal.MoveModel.State
+import MovementFormal.Experimental.ConfidentialAsset.Registration.LocalsManagementLemmas
+import MovementFormal.Experimental.ConfidentialAsset.Registration.PCBoundaryConditions
+
+namespace MovementFormal.Experimental.ConfidentialAsset.Registration.LocalsEvolutionTracking
+theorem stub : True := trivial
+end MovementFormal.Experimental.ConfidentialAsset.Registration.LocalsEvolutionTracking

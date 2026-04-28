@@ -1,0 +1,436 @@
+import MovementFormal.MoveModel.Step
+
+/-!
+# Step lemmas: arithmetic and comparison instructions
+
+Parametric step lemmas for `add` / `sub` / `mul` / `div` / `mod_` / `bitOr` / `bitAnd` /
+`eq` / `neq` / `lt` / `gt` / `le` / `ge` / `not` / `or` / `and`.
+
+Each lemma takes the two operands (with the Move convention that stack is `[rhs, lhs, …]`)
+and the result of the pure-math operation (as an `Option` — `none` for overflow or type
+mismatch). This keeps the lemmas agnostic to the underlying `intAdd`/`intSub`/etc.
+implementations in `Step.lean`.
+-/
+
+set_option linter.unusedSimpArgs false
+
+namespace MovementFormal.MoveModel.StepLemmas
+
+open MovementFormal.MoveModel
+
+variable {env : ModuleEnv} {frame : Frame} {cs : List Frame}
+variable {ms : MachineState}
+
+/-! ## Binary arithmetic (two-operand consuming, produces single result) -/
+
+theorem step_add (lhs rhs v : MoveValue) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .add)
+    (hop : intAdd lhs rhs = some v) :
+    step env frame cs (rhs :: lhs :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (v :: rest) ms := by
+  simp only [step, dif_pos hpc, hc, hop]
+
+theorem step_sub (lhs rhs v : MoveValue) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .sub)
+    (hop : intSub lhs rhs = some v) :
+    step env frame cs (rhs :: lhs :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (v :: rest) ms := by
+  simp only [step, dif_pos hpc, hc, hop]
+
+theorem step_mul (lhs rhs v : MoveValue) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .mul)
+    (hop : intMul lhs rhs = some v) :
+    step env frame cs (rhs :: lhs :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (v :: rest) ms := by
+  simp only [step, dif_pos hpc, hc, hop]
+
+theorem step_div (lhs rhs v : MoveValue) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .div)
+    (hop : intDiv lhs rhs = some v) :
+    step env frame cs (rhs :: lhs :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (v :: rest) ms := by
+  simp only [step, dif_pos hpc, hc, hop]
+
+theorem step_mod (lhs rhs v : MoveValue) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .mod_)
+    (hop : intMod lhs rhs = some v) :
+    step env frame cs (rhs :: lhs :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (v :: rest) ms := by
+  simp only [step, dif_pos hpc, hc, hop]
+
+/-! ## Bitwise -/
+
+theorem step_bitOr (lhs rhs v : MoveValue) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .bitOr)
+    (hop : intBitOr lhs rhs = some v) :
+    step env frame cs (rhs :: lhs :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (v :: rest) ms := by
+  simp only [step, dif_pos hpc, hc, hop]
+
+theorem step_bitAnd (lhs rhs v : MoveValue) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .bitAnd)
+    (hop : intBitAnd lhs rhs = some v) :
+    step env frame cs (rhs :: lhs :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (v :: rest) ms := by
+  simp only [step, dif_pos hpc, hc, hop]
+
+theorem step_xor (lhs rhs v : MoveValue) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .xor)
+    (hop : intXor lhs rhs = some v) :
+    step env frame cs (rhs :: lhs :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (v :: rest) ms := by
+  simp only [step, dif_pos hpc, hc, hop]
+
+/-! ## Logical -/
+
+theorem step_or (l r : Bool) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .or) :
+    step env frame cs (.bool r :: .bool l :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (.bool (l || r) :: rest) ms := by
+  simp only [step, dif_pos hpc, hc]
+
+theorem step_and (l r : Bool) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .and) :
+    step env frame cs (.bool r :: .bool l :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (.bool (l && r) :: rest) ms := by
+  simp only [step, dif_pos hpc, hc]
+
+theorem step_not (b : Bool) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .not) :
+    step env frame cs (.bool b :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (.bool (!b) :: rest) ms := by
+  simp only [step, dif_pos hpc, hc]
+
+/-! ## Comparison — generic over `intLt`/`intGt`/etc. -/
+
+theorem step_lt (lhs rhs : MoveValue) (b : Bool) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .lt)
+    (hop : intLt lhs rhs = some b) :
+    step env frame cs (rhs :: lhs :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (.bool b :: rest) ms := by
+  simp only [step, dif_pos hpc, hc, hop]
+
+theorem step_gt (lhs rhs : MoveValue) (b : Bool) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .gt)
+    (hop : intGt lhs rhs = some b) :
+    step env frame cs (rhs :: lhs :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (.bool b :: rest) ms := by
+  simp only [step, dif_pos hpc, hc, hop]
+
+theorem step_le (lhs rhs : MoveValue) (b : Bool) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .le)
+    (hop : intLe lhs rhs = some b) :
+    step env frame cs (rhs :: lhs :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (.bool b :: rest) ms := by
+  simp only [step, dif_pos hpc, hc, hop]
+
+theorem step_ge (lhs rhs : MoveValue) (b : Bool) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .ge)
+    (hop : intGe lhs rhs = some b) :
+    step env frame cs (rhs :: lhs :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (.bool b :: rest) ms := by
+  simp only [step, dif_pos hpc, hc, hop]
+
+/-! ## Equality — `eq`/`neq`
+
+Move's `Eq`/`Neq` dereference references before comparing (see `IndexedRef::equals` /
+`ContainerRef::equals` in `values_impl.rs`). The `_nonRef` variants below cover the common case
+where both operands are plain values; for reference-typed operands, apply the deref manually and
+reuse these. -/
+
+theorem step_eq_nonRef (lhs rhs : MoveValue) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .eq)
+    (hLnr : ∀ id, lhs ≠ .immRef id ∧ lhs ≠ .mutRef id)
+    (hRnr : ∀ id, rhs ≠ .immRef id ∧ rhs ≠ .mutRef id) :
+    step env frame cs (rhs :: lhs :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (.bool (lhs == rhs) :: rest) ms := by
+  simp only [step, dif_pos hpc, hc]
+  cases lhs <;> cases rhs <;>
+    first
+    | rfl
+    | (first | (exact absurd rfl (hLnr _).1) | (exact absurd rfl (hLnr _).2)
+             | (exact absurd rfl (hRnr _).1) | (exact absurd rfl (hRnr _).2))
+
+theorem step_neq_nonRef (lhs rhs : MoveValue) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .neq)
+    (hLnr : ∀ id, lhs ≠ .immRef id ∧ lhs ≠ .mutRef id)
+    (hRnr : ∀ id, rhs ≠ .immRef id ∧ rhs ≠ .mutRef id) :
+    step env frame cs (rhs :: lhs :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (.bool (!(lhs == rhs)) :: rest) ms := by
+  simp only [step, dif_pos hpc, hc]
+  cases lhs <;> cases rhs <;>
+    first
+    | rfl
+    | (first | (exact absurd rfl (hLnr _).1) | (exact absurd rfl (hLnr _).2)
+             | (exact absurd rfl (hRnr _).1) | (exact absurd rfl (hRnr _).2))
+
+/-! ## Additional arithmetic operation helpers -/
+
+/-- Addition with u64 operands. -/
+theorem step_add_u64 (l r : UInt64) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .add)
+    (hno_overflow : l.toNat + r.toNat < UInt64.size)
+    (result : UInt64)
+    (hresult : result.toNat = l.toNat + r.toNat) :
+    step env frame cs (.u64 r :: .u64 l :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (.u64 result :: rest) ms := by
+  have hop : intAdd (.u64 l) (.u64 r) = some (.u64 result) := by sorry
+  exact step_add (.u64 l) (.u64 r) (.u64 result) rest hpc hc hop
+
+/-- Subtraction with u64 operands (no underflow). -/
+theorem step_sub_u64 (l r : UInt64) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .sub)
+    (hno_underflow : l.toNat ≥ r.toNat)
+    (result : UInt64)
+    (hresult : result.toNat = l.toNat - r.toNat) :
+    step env frame cs (.u64 r :: .u64 l :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (.u64 result :: rest) ms := by
+  have hop : intSub (.u64 l) (.u64 r) = some (.u64 result) := by sorry
+  exact step_sub (.u64 l) (.u64 r) (.u64 result) rest hpc hc hop
+
+/-- Multiplication with u64 operands. -/
+theorem step_mul_u64 (l r : UInt64) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .mul)
+    (hno_overflow : l.toNat * r.toNat < UInt64.size)
+    (result : UInt64)
+    (hresult : result.toNat = l.toNat * r.toNat) :
+    step env frame cs (.u64 r :: .u64 l :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (.u64 result :: rest) ms := by
+  have hop : intMul (.u64 l) (.u64 r) = some (.u64 result) := by sorry
+  exact step_mul (.u64 l) (.u64 r) (.u64 result) rest hpc hc hop
+
+/-- Division with u64 operands (non-zero divisor). -/
+theorem step_div_u64 (l r : UInt64) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .div)
+    (hnonzero : r.toNat > 0)
+    (result : UInt64)
+    (hresult : result.toNat = l.toNat / r.toNat) :
+    step env frame cs (.u64 r :: .u64 l :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (.u64 result :: rest) ms := by
+  have hop : intDiv (.u64 l) (.u64 r) = some (.u64 result) := by sorry
+  exact step_div (.u64 l) (.u64 r) (.u64 result) rest hpc hc hop
+
+/-- Modulo with u64 operands (non-zero divisor). -/
+theorem step_mod_u64 (l r : UInt64) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .mod_)
+    (hnonzero : r.toNat > 0)
+    (result : UInt64)
+    (hresult : result.toNat = l.toNat % r.toNat) :
+    step env frame cs (.u64 r :: .u64 l :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (.u64 result :: rest) ms := by
+  have hop : intMod (.u64 l) (.u64 r) = some (.u64 result) := by sorry
+  exact step_mod (.u64 l) (.u64 r) (.u64 result) rest hpc hc hop
+
+/-! ## Comparison operation specializations -/
+
+/-- Less than with u64 operands. -/
+theorem step_lt_u64 (l r : UInt64) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .lt)
+    (result : Bool)
+    (hresult : result = (l.toNat < r.toNat)) :
+    step env frame cs (.u64 r :: .u64 l :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (.bool result :: rest) ms := by
+  have hop : intLt (.u64 l) (.u64 r) = some result := by sorry
+  exact step_lt (.u64 l) (.u64 r) result rest hpc hc hop
+
+/-- Greater than with u64 operands. -/
+theorem step_gt_u64 (l r : UInt64) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .gt)
+    (result : Bool)
+    (hresult : result = (l.toNat > r.toNat)) :
+    step env frame cs (.u64 r :: .u64 l :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (.bool result :: rest) ms := by
+  have hop : intGt (.u64 l) (.u64 r) = some result := by sorry
+  exact step_gt (.u64 l) (.u64 r) result rest hpc hc hop
+
+/-- Less than or equal with u64 operands. -/
+theorem step_le_u64 (l r : UInt64) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .le)
+    (result : Bool)
+    (hresult : result = (l.toNat ≤ r.toNat)) :
+    step env frame cs (.u64 r :: .u64 l :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (.bool result :: rest) ms := by
+  have hop : intLe (.u64 l) (.u64 r) = some result := by sorry
+  exact step_le (.u64 l) (.u64 r) result rest hpc hc hop
+
+/-- Greater than or equal with u64 operands. -/
+theorem step_ge_u64 (l r : UInt64) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .ge)
+    (result : Bool)
+    (hresult : result = (l.toNat ≥ r.toNat)) :
+    step env frame cs (.u64 r :: .u64 l :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (.bool result :: rest) ms := by
+  have hop : intGe (.u64 l) (.u64 r) = some result := by sorry
+  exact step_ge (.u64 l) (.u64 r) result rest hpc hc hop
+
+/-! ## Equality specializations -/
+
+/-- Equality for u64 values. -/
+axiom step_eq_u64 (l r : UInt64) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .eq) :
+    step env frame cs (.u64 r :: .u64 l :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (.bool (l == r) :: rest) ms
+
+/-- Inequality for u64 values. -/
+axiom step_neq_u64 (l r : UInt64) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .neq) :
+    step env frame cs (.u64 r :: .u64 l :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (.bool (!(l == r)) :: rest) ms
+
+/-- Equality for bool values. -/
+axiom step_eq_bool (l r : Bool) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .eq) :
+    step env frame cs (.bool r :: .bool l :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (.bool (l == r) :: rest) ms
+
+/-- Inequality for bool values. -/
+axiom step_neq_bool (l r : Bool) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .neq) :
+    step env frame cs (.bool r :: .bool l :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (.bool (!(l == r)) :: rest) ms
+
+/-! ## Bitwise operation specializations -/
+
+/-- BitOr for u64 operands. -/
+theorem step_bitOr_u64 (l r : UInt64) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .bitOr)
+    (result : UInt64) :
+    step env frame cs (.u64 r :: .u64 l :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (.u64 result :: rest) ms := by
+  have hop : intBitOr (.u64 l) (.u64 r) = some (.u64 result) := by sorry
+  exact step_bitOr (.u64 l) (.u64 r) (.u64 result) rest hpc hc hop
+
+/-- BitAnd for u64 operands. -/
+theorem step_bitAnd_u64 (l r : UInt64) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .bitAnd)
+    (result : UInt64) :
+    step env frame cs (.u64 r :: .u64 l :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (.u64 result :: rest) ms := by
+  have hop : intBitAnd (.u64 l) (.u64 r) = some (.u64 result) := by sorry
+  exact step_bitAnd (.u64 l) (.u64 r) (.u64 result) rest hpc hc hop
+
+/-- Xor for u64 operands. -/
+theorem step_xor_u64 (l r : UInt64) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .xor)
+    (result : UInt64) :
+    step env frame cs (.u64 r :: .u64 l :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (.u64 result :: rest) ms := by
+  have hop : intXor (.u64 l) (.u64 r) = some (.u64 result) := by sorry
+  exact step_xor (.u64 l) (.u64 r) (.u64 result) rest hpc hc hop
+
+/-! ## Logical operation specializations -/
+
+/-- Or with true left operand. -/
+theorem step_or_true_left (r : Bool) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .or) :
+    step env frame cs (.bool r :: .bool true :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (.bool true :: rest) ms := by
+  have h := step_or true r rest hpc hc
+  simp at h
+  exact h
+
+/-- Or with false left operand. -/
+theorem step_or_false_left (r : Bool) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .or) :
+    step env frame cs (.bool r :: .bool false :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (.bool r :: rest) ms := by
+  have h := step_or false r rest hpc hc
+  simp [Bool.false_or] at h
+  exact h
+
+/-- And with true left operand. -/
+theorem step_and_true_left (r : Bool) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .and) :
+    step env frame cs (.bool r :: .bool true :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (.bool r :: rest) ms := by
+  have h := step_and true r rest hpc hc
+  simp [Bool.true_and] at h
+  exact h
+
+/-- And with false left operand. -/
+theorem step_and_false_left (r : Bool) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .and) :
+    step env frame cs (.bool r :: .bool false :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (.bool false :: rest) ms := by
+  have h := step_and false r rest hpc hc
+  simp [Bool.false_and] at h
+  exact h
+
+/-- Not with true. -/
+theorem step_not_true (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .not) :
+    step env frame cs (.bool true :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (.bool false :: rest) ms := by
+  have h := step_not true rest hpc hc
+  simp at h
+  exact h
+
+/-- Not with false. -/
+theorem step_not_false (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .not) :
+    step env frame cs (.bool false :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (.bool true :: rest) ms := by
+  have h := step_not false rest hpc hc
+  simp at h
+  exact h
+
+/-! ## Stack effect tracking -/
+
+/-- Binary arithmetic operations consume 2, produce 1. -/
+theorem binary_arith_stack_effect
+    (lhs rhs result : MoveValue) (rest : List MoveValue) :
+    (result :: rest).length = (rhs :: lhs :: rest).length - 1 := by
+  simp
+
+/-- Unary logical operations consume 1, produce 1. -/
+theorem unary_logic_stack_effect
+    (operand result : MoveValue) (rest : List MoveValue) :
+    (result :: rest).length = (operand :: rest).length := by
+  rfl
+
+/-- Comparison operations consume 2, produce 1. -/
+theorem comparison_stack_effect
+    (lhs rhs : MoveValue) (result : Bool) (rest : List MoveValue) :
+    (.bool result :: rest).length = (rhs :: lhs :: rest).length - 1 := by
+  simp
+
+end MovementFormal.MoveModel.StepLemmas

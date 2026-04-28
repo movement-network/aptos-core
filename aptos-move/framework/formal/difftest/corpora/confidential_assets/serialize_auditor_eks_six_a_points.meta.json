@@ -1,0 +1,9 @@
+{
+  "name": "serialize_auditor_eks_six_a_points",
+  "length_bytes": 192,
+  "encoding": "hex",
+  "bytes_file": "serialize_auditor_eks_six_a_points.hex",
+  "move_anchor": "0x1::difftest_confidential_asset_layer::test_serialize_auditor_eks_six_a_points_framework → 6× same **A_POINT** `CompressedPubkey`",
+  "lean_def": "MovementFormal.MoveModel.Programs.Confidential.serializeAuditorEksSixApointWireBytes",
+  "lean_theorem": "MovementFormal.MoveModel.Programs.Confidential.serializeAuditorEksSixApointWireBytes_length"
+}

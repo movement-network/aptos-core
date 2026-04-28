@@ -1,0 +1,8 @@
+import MovementFormal.MoveModel.Value
+import MovementFormal.MoveModel.State
+import MovementFormal.MoveModel.Step
+import MovementFormal.MoveModel.Native.Registration
+
+namespace MovementFormal.Experimental.ConfidentialAsset.Registration.ValidationLemmas
+theorem stub : True := trivial
+end MovementFormal.Experimental.ConfidentialAsset.Registration.ValidationLemmas

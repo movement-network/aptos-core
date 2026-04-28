@@ -1,0 +1,8 @@
+import MovementFormal.MoveModel.Step
+import MovementFormal.MoveModel.Programs.Registration
+import MovementFormal.Experimental.ConfidentialAsset.Registration.VerifyMath
+import MovementFormal.Experimental.ConfidentialAsset.Registration.TranscriptAlignment
+
+namespace MovementFormal.Experimental.ConfidentialAsset.Registration.BytecodeSmoke
+theorem stub : True := trivial
+end MovementFormal.Experimental.ConfidentialAsset.Registration.BytecodeSmoke

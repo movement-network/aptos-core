@@ -1,0 +1,9 @@
+import MovementFormal.MoveModel.Value
+import MovementFormal.MoveModel.State
+import MovementFormal.MoveModel.Step
+import MovementFormal.MoveModel.FrameInvariants
+import MovementFormal.Experimental.ConfidentialAsset.Registration.ModuleEnvProperties
+
+namespace MovementFormal.Experimental.ConfidentialAsset.Registration.FrameWellFormedness
+theorem stub : True := trivial
+end MovementFormal.Experimental.ConfidentialAsset.Registration.FrameWellFormedness

@@ -13,7 +13,7 @@ module aptos_experimental::confidential_asset {
     use aptos_framework::coin;
     use aptos_framework::event;
     use aptos_framework::dispatchable_fungible_asset;
-    use aptos_framework::fungible_asset::{Metadata};
+    use aptos_framework::fungible_asset::{Self, FungibleStore, Metadata};
     use aptos_framework::object::{Self, ExtendRef, Object};
     use aptos_framework::primary_fungible_store;
     use aptos_framework::system_addresses;
@@ -82,9 +82,22 @@ module aptos_experimental::confidential_asset {
     /// Sender and recipient amounts encrypt different transfer amounts
     const EINVALID_SENDER_AMOUNT: u64 = 17;
 
+    /// `sender_auditor_hint` exceeds [`MAX_SENDER_AUDITOR_HINT_BYTES`].
+    const EAUDITOR_HINT_TOO_LONG: u64 = 18;
+
+    /// Dispatchable fungible asset types (those with custom withdraw, deposit, balance, or
+    /// supply hooks) are not yet supported in confidential transfers.
+    const EUNSAFE_DISPATCHABLE_FA: u64 = 19;
+
+    /// No confidential asset pool exists for the given asset type.
+    const ENO_CONFIDENTIAL_ASSET_POOL: u64 = 20;
+
     //
     // Constants
     //
+
+    /// Maximum length (bytes) of the opaque `sender_auditor_hint` passed to [`confidential_transfer`].
+    const MAX_SENDER_AUDITOR_HINT_BYTES: u64 = 256;
 
     /// The maximum number of transactions can be aggregated on the pending balance before rollover is required.
     const MAX_TRANSFERS_BEFORE_ROLLOVER: u64 = 65534;
@@ -161,11 +174,24 @@ module aptos_experimental::confidential_asset {
     //
 
     #[event]
+    /// Emitted when a new confidential asset store is registered.
+    struct Registered has drop, store {
+        addr: address,
+        /// Fungible asset metadata object address.
+        asset_type: address,
+        ek: twisted_elgamal::CompressedPubkey,
+    }
+
+    #[event]
     /// Emitted when tokens are brought into the protocol.
     struct Deposited has drop, store {
         from: address,
         to: address,
-        amount: u64
+        /// Fungible asset metadata object address.
+        asset_type: address,
+        amount: u64,
+        /// Recipient's new pending balance after the deposit.
+        new_pending_balance: confidential_balance::CompressedConfidentialBalance,
     }
 
     #[event]
@@ -173,15 +199,96 @@ module aptos_experimental::confidential_asset {
     struct Withdrawn has drop, store {
         from: address,
         to: address,
-        amount: u64
+        /// Fungible asset metadata object address.
+        asset_type: address,
+        amount: u64,
+        /// Sender's new available (actual) balance after the withdrawal.
+        new_available_balance: confidential_balance::CompressedConfidentialBalance,
     }
 
     #[event]
-    /// Emitted when tokens are transferred within the protocol between users' confidential balances.
-    /// Note that a numeric amount is not included, as it is hidden.
+    /// Emitted after a successful `confidential_transfer` between two registered confidential accounts.
+    ///
+    /// This is the primary on-chain signal for indexers and tooling: **plaintext amounts are not** included;
+    /// fields carry **compressed Twisted-ElGamal ciphertexts** and a **subset of sigma commitment bytes** copied
+    /// from the verified proof. See the technical whitepaper (`whitepaper.md`, §5) for a field-by-field guide.
     struct Transferred has drop, store {
+        /// Address of the sender's confidential account (the `signer` of the transfer entry).
         from: address,
-        to: address
+        /// Recipient confidential account address.
+        to: address,
+        /// Fungible-asset metadata object address (`object::object_address(&token)`); identifies which token moved.
+        asset_type: address,
+        /// Encrypted transfer amount under the recipient key (pending-balance / four-chunk layout).
+        amount: confidential_balance::CompressedConfidentialBalance,
+        /// Flattened **transfer sigma `x7s`** commitments taken from the verified `TransferProof`: for each
+        /// auditor encryption key row in the proof, exactly **four** compressed Ristretto points (32 bytes each),
+        /// concatenated in **row-major** order (auditor index, then inner index 0..3). Empty when the proof carries
+        /// **no** auditor rows. Total byte length is always **`128 × n`** with `n` = number of auditor rows
+        /// (`confidential_proof::auditors_count_in_transfer_proof` / `proof.sigma_proof.xs.x7s.length()`).
+        ek_volun_auds: vector<u8>,
+        /// Opaque sender-supplied bytes (bounded by [`MAX_SENDER_AUDITOR_HINT_BYTES`]); same bytes bound into
+        /// the transfer sigma Fiat–Shamir challenge and passed as the `sender_auditor_hint` entry argument.
+        sender_auditor_hint: vector<u8>,
+        /// Sender's new **actual** (spendable) balance ciphertext after the debit, compressed for storage/events.
+        new_sender_available_balance: confidential_balance::CompressedConfidentialBalance,
+        /// Recipient's new **pending** balance ciphertext after the credit, compressed for storage/events.
+        new_recip_pending_balance: confidential_balance::CompressedConfidentialBalance,
+        /// Reserved memo payload for future or off-chain conventions; currently emitted as an empty `vector`.
+        memo: vector<u8>,
+    }
+
+    #[event]
+    /// Emitted when the available balance is re-encrypted to normalize chunk bounds.
+    struct Normalized has drop, store {
+        addr: address,
+        asset_type: address,
+        new_available_balance: confidential_balance::CompressedConfidentialBalance,
+    }
+
+    #[event]
+    /// Emitted when the pending balance is rolled over into the available balance.
+    struct RolledOver has drop, store {
+        addr: address,
+        asset_type: address,
+        new_available_balance: confidential_balance::CompressedConfidentialBalance,
+    }
+
+    #[event]
+    /// Emitted when the encryption key is rotated and the balance is re-encrypted.
+    struct KeyRotated has drop, store {
+        addr: address,
+        asset_type: address,
+        new_ek: twisted_elgamal::CompressedPubkey,
+        new_available_balance: confidential_balance::CompressedConfidentialBalance,
+    }
+
+    #[event]
+    /// Emitted when a confidential account's incoming-transfer pause state changes (freeze/unfreeze).
+    struct FreezeChanged has drop, store {
+        addr: address,
+        asset_type: address,
+        frozen: bool,
+    }
+
+    #[event]
+    /// Emitted when the global allow list is enabled or disabled.
+    struct AllowListChanged has drop, store {
+        enabled: bool,
+    }
+
+    #[event]
+    /// Emitted when a token's confidential-transfer permission is toggled.
+    struct TokenAllowChanged has drop, store {
+        asset_type: address,
+        allowed: bool,
+    }
+
+    #[event]
+    /// Emitted when the asset-specific auditor is set or removed.
+    struct AuditorChanged has drop, store {
+        asset_type: address,
+        new_auditor_ek: Option<twisted_elgamal::CompressedPubkey>,
     }
 
     //
@@ -215,9 +322,24 @@ module aptos_experimental::confidential_asset {
     public entry fun register(
         sender: &signer,
         token: Object<Metadata>,
-        ek: vector<u8>) acquires FAController, FAConfig
+        ek: vector<u8>,
+        registration_proof_commitment: vector<u8>,
+        registration_proof_response: vector<u8>) acquires FAController, FAConfig
     {
         let ek = twisted_elgamal::new_pubkey_from_bytes(ek).extract();
+
+        // Verify registration proof (ZKPoK of decryption key)
+        let cid = (chain_id::get() as u8);
+        let user = signer::address_of(sender);
+        confidential_proof::verify_registration_proof(
+            cid,
+            user,
+            @aptos_experimental,
+            &ek,
+            object::object_address(&token),
+            registration_proof_commitment,
+            registration_proof_response
+        );
 
         register_internal(sender, token, ek);
     }
@@ -283,8 +405,6 @@ module aptos_experimental::confidential_asset {
         let proof = confidential_proof::deserialize_withdrawal_proof(sigma_proof, zkrp_new_balance).extract();
 
         withdraw_to_internal(sender, token, to, amount, new_balance, proof);
-
-        event::emit(Withdrawn { from: signer::address_of(sender), to, amount });
     }
 
     /// The same as `withdraw_to`, but the recipient is the sender.
@@ -312,10 +432,14 @@ module aptos_experimental::confidential_asset {
     /// The sender encrypts the transferred amount with the recipient's encryption key and the function updates the
     /// recipient's confidential balance homomorphically.
     /// Additionally, the sender encrypts the transferred amount with the auditors' EKs, allowing auditors to decrypt
-    /// the it on their side.
+    /// it on their side.
     /// The sender provides their new normalized confidential balance, encrypted with fresh randomness to preserve privacy.
     /// Warning: If the auditor feature is enabled, the sender must include the auditor as the first element in the
     /// `auditor_eks` vector.
+    ///
+    /// `sender_auditor_hint` is emitted on [`Transferred`] and is **bound into the transfer sigma Fiat–Shamir
+    /// transcript** (must match the hint used when generating the proof). Length must not exceed
+    /// [`MAX_SENDER_AUDITOR_HINT_BYTES`].
     public entry fun confidential_transfer(
         sender: &signer,
         token: Object<Metadata>,
@@ -327,7 +451,8 @@ module aptos_experimental::confidential_asset {
         auditor_amounts: vector<u8>,
         zkrp_new_balance: vector<u8>,
         zkrp_transfer_amount: vector<u8>,
-        sigma_proof: vector<u8>) acquires ConfidentialAssetStore, FAConfig, FAController
+        sigma_proof: vector<u8>,
+        sender_auditor_hint: vector<u8>) acquires ConfidentialAssetStore, FAConfig, FAController
     {
         let new_balance = confidential_balance::new_actual_balance_from_bytes(new_balance).extract();
         let sender_amount = confidential_balance::new_pending_balance_from_bytes(sender_amount).extract();
@@ -349,8 +474,15 @@ module aptos_experimental::confidential_asset {
             recipient_amount,
             auditor_eks,
             auditor_amounts,
-            proof
+            proof,
+            sender_auditor_hint
         )
+    }
+
+    #[view]
+    /// Returns the maximum allowed `sender_auditor_hint` length for [`confidential_transfer`].
+    public fun max_sender_auditor_hint_bytes(): u64 {
+        MAX_SENDER_AUDITOR_HINT_BYTES
     }
 
     /// Rotates the encryption key for the user's confidential balance, updating it to a new encryption key.
@@ -447,6 +579,8 @@ module aptos_experimental::confidential_asset {
         assert!(!fa_controller.allow_list_enabled, error::invalid_state(EALLOW_LIST_ENABLED));
 
         fa_controller.allow_list_enabled = true;
+
+        event::emit(AllowListChanged { enabled: true });
     }
 
     /// Disables the allow list, allowing confidential transfers for all tokens.
@@ -458,6 +592,8 @@ module aptos_experimental::confidential_asset {
         assert!(fa_controller.allow_list_enabled, error::invalid_state(EALLOW_LIST_DISABLED));
 
         fa_controller.allow_list_enabled = false;
+
+        event::emit(AllowListChanged { enabled: false });
     }
 
     /// Enables confidential transfers for the specified token.
@@ -469,6 +605,11 @@ module aptos_experimental::confidential_asset {
         assert!(!fa_config.allowed, error::invalid_state(ETOKEN_ENABLED));
 
         fa_config.allowed = true;
+
+        event::emit(TokenAllowChanged {
+            asset_type: object::object_address(&token),
+            allowed: true,
+        });
     }
 
     /// Disables confidential transfers for the specified token.
@@ -480,6 +621,11 @@ module aptos_experimental::confidential_asset {
         assert!(fa_config.allowed, error::invalid_state(ETOKEN_DISABLED));
 
         fa_config.allowed = false;
+
+        event::emit(TokenAllowChanged {
+            asset_type: object::object_address(&token),
+            allowed: false,
+        });
     }
 
     /// Sets the auditor's public key for the specified token.
@@ -499,6 +645,11 @@ module aptos_experimental::confidential_asset {
             assert!(new_auditor_ek.is_some(), error::invalid_argument(EAUDITOR_EK_DESERIALIZATION_FAILED));
             new_auditor_ek
         };
+
+        event::emit(AuditorChanged {
+            asset_type: object::object_address(&token),
+            new_auditor_ek: fa_config.auditor_ek,
+        });
     }
 
     //
@@ -606,10 +757,7 @@ module aptos_experimental::confidential_asset {
     #[view]
     /// Returns the circulating supply of the confidential asset.
     public fun confidential_asset_balance(token: Object<Metadata>): u64 acquires FAController {
-        let fa_store_address = get_fa_store_address();
-        assert!(primary_fungible_store::primary_store_exists(fa_store_address, token), EINTERNAL_ERROR);
-
-        primary_fungible_store::balance(fa_store_address, token)
+        fungible_asset::balance(get_pool_fa_store(token))
     }
 
     //
@@ -623,6 +771,7 @@ module aptos_experimental::confidential_asset {
         token: Object<Metadata>,
         ek: twisted_elgamal::CompressedPubkey) acquires FAController, FAConfig
     {
+        assert!(is_safe_for_confidentiality(&token), error::invalid_argument(EUNSAFE_DISPATCHABLE_FA));
         assert!(is_token_allowed(token), error::invalid_argument(ETOKEN_DISABLED));
 
         let user = signer::address_of(sender);
@@ -639,6 +788,12 @@ module aptos_experimental::confidential_asset {
         };
 
         move_to(&get_user_signer(sender, token), ca_store);
+
+        event::emit(Registered {
+            addr: user,
+            asset_type: object::object_address(&token),
+            ek,
+        });
     }
 
     /// Implementation of the `deposit_to` entry function.
@@ -648,15 +803,17 @@ module aptos_experimental::confidential_asset {
         to: address,
         amount: u64) acquires ConfidentialAssetStore, FAController, FAConfig
     {
+        assert!(is_safe_for_confidentiality(&token), error::invalid_argument(EUNSAFE_DISPATCHABLE_FA));
         assert!(is_token_allowed(token), error::invalid_argument(ETOKEN_DISABLED));
         assert!(!is_frozen(to, token), error::invalid_state(EALREADY_FROZEN));
 
         let from = signer::address_of(sender);
 
-        let sender_fa_store = primary_fungible_store::ensure_primary_store_exists(from, token);
-        let ca_fa_store = primary_fungible_store::ensure_primary_store_exists(get_fa_store_address(), token);
+        let pool_fa_store = ensure_pool_fa_store(token);
 
-        dispatchable_fungible_asset::transfer(sender, sender_fa_store, ca_fa_store, amount);
+        let pool_before = fungible_asset::balance(pool_fa_store);
+        let sender_fa_store = primary_fungible_store::primary_store(from, token);
+        dispatchable_fungible_asset::transfer(sender, sender_fa_store, pool_fa_store, amount);
 
         let ca_store = borrow_global_mut<ConfidentialAssetStore>(get_user_address(to, token));
         let pending_balance = confidential_balance::decompress_balance(&ca_store.pending_balance);
@@ -675,7 +832,18 @@ module aptos_experimental::confidential_asset {
 
         ca_store.pending_counter += 1;
 
-        event::emit(Deposited { from, to, amount });
+        event::emit(Deposited {
+            from,
+            to,
+            asset_type: object::object_address(&token),
+            amount,
+            new_pending_balance: ca_store.pending_balance,
+        });
+
+        assert!(
+            amount == fungible_asset::balance(pool_fa_store) - pool_before,
+            error::invalid_argument(EUNSAFE_DISPATCHABLE_FA)
+        );
     }
 
     /// Implementation of the `withdraw_to` entry function.
@@ -688,6 +856,8 @@ module aptos_experimental::confidential_asset {
         new_balance: confidential_balance::ConfidentialBalance,
         proof: WithdrawalProof) acquires ConfidentialAssetStore, FAController
     {
+        assert!(is_safe_for_confidentiality(&token), error::invalid_argument(EUNSAFE_DISPATCHABLE_FA));
+
         let from = signer::address_of(sender);
 
         let sender_ek = encryption_key(from, token);
@@ -695,12 +865,38 @@ module aptos_experimental::confidential_asset {
         let ca_store = borrow_global_mut<ConfidentialAssetStore>(get_user_address(from, token));
         let current_balance = confidential_balance::decompress_balance(&ca_store.actual_balance);
 
-        confidential_proof::verify_withdrawal_proof(&sender_ek, amount, &current_balance, &new_balance, &proof);
+        let cid = (chain_id::get() as u8);
+        confidential_proof::verify_withdrawal_proof(
+            cid,
+            from,
+            @aptos_experimental,
+            &sender_ek,
+            amount,
+            &current_balance,
+            &new_balance,
+            &proof
+        );
 
         ca_store.normalized = true;
         ca_store.actual_balance = confidential_balance::compress_balance(&new_balance);
 
-        primary_fungible_store::transfer(&get_fa_store_signer(), token, to, amount);
+        let pool_fa_store = get_pool_fa_store(token);
+        let pool_before = fungible_asset::balance(pool_fa_store);
+        let recipient_fa_store = primary_fungible_store::ensure_primary_store_exists(to, token);
+        dispatchable_fungible_asset::transfer(&get_fa_store_signer(), pool_fa_store, recipient_fa_store, amount);
+
+        event::emit(Withdrawn {
+            from,
+            to,
+            asset_type: object::object_address(&token),
+            amount,
+            new_available_balance: ca_store.actual_balance,
+        });
+
+        assert!(
+            amount == pool_before - fungible_asset::balance(pool_fa_store),
+            error::invalid_argument(EUNSAFE_DISPATCHABLE_FA)
+        );
     }
 
     /// Implementation of the `confidential_transfer` entry function.
@@ -713,8 +909,10 @@ module aptos_experimental::confidential_asset {
         recipient_amount: confidential_balance::ConfidentialBalance,
         auditor_eks: vector<twisted_elgamal::CompressedPubkey>,
         auditor_amounts: vector<confidential_balance::ConfidentialBalance>,
-        proof: TransferProof) acquires ConfidentialAssetStore, FAConfig, FAController
+        proof: TransferProof,
+        sender_auditor_hint: vector<u8>) acquires ConfidentialAssetStore, FAConfig, FAController
     {
+        assert!(is_safe_for_confidentiality(&token), error::invalid_argument(EUNSAFE_DISPATCHABLE_FA));
         assert!(is_token_allowed(token), error::invalid_argument(ETOKEN_DISABLED));
         assert!(!is_frozen(to, token), error::invalid_state(EALREADY_FROZEN));
         assert!(
@@ -724,6 +922,10 @@ module aptos_experimental::confidential_asset {
         assert!(
             confidential_balance::balance_c_equals(&sender_amount, &recipient_amount),
             error::invalid_argument(EINVALID_SENDER_AMOUNT)
+        );
+        assert!(
+            sender_auditor_hint.length() <= MAX_SENDER_AUDITOR_HINT_BYTES,
+            error::invalid_argument(EAUDITOR_HINT_TOO_LONG)
         );
 
         let from = signer::address_of(sender);
@@ -737,7 +939,11 @@ module aptos_experimental::confidential_asset {
             &sender_ca_store.actual_balance
         );
 
+        let cid = (chain_id::get() as u8);
         confidential_proof::verify_transfer_proof(
+            cid,
+            from,
+            @aptos_experimental,
             &sender_ek,
             &recipient_ek,
             &sender_current_actual_balance,
@@ -746,10 +952,15 @@ module aptos_experimental::confidential_asset {
             &recipient_amount,
             &auditor_eks,
             &auditor_amounts,
+            &sender_auditor_hint,
             &proof);
 
         sender_ca_store.normalized = true;
-        sender_ca_store.actual_balance = confidential_balance::compress_balance(&new_balance);
+        let new_sender_available_balance = confidential_balance::compress_balance(&new_balance);
+        sender_ca_store.actual_balance = new_sender_available_balance;
+
+        let amount = confidential_balance::compress_balance(&recipient_amount);
+        let ek_volun_auds = confidential_proof::transfer_proof_ek_volun_auds_flat_bytes(&proof);
 
         // Cannot create multiple mutable references to the same type, so we need to drop it
         let ConfidentialAssetStore { .. } = sender_ca_store;
@@ -767,9 +978,20 @@ module aptos_experimental::confidential_asset {
         confidential_balance::add_balances_mut(&mut recipient_pending_balance, &recipient_amount);
 
         recipient_ca_store.pending_counter += 1;
-        recipient_ca_store.pending_balance = confidential_balance::compress_balance(&recipient_pending_balance);
+        let new_recip_pending_balance = confidential_balance::compress_balance(&recipient_pending_balance);
+        recipient_ca_store.pending_balance = new_recip_pending_balance;
 
-        event::emit(Transferred { from, to });
+        event::emit(Transferred {
+            from,
+            to,
+            asset_type: object::object_address(&token),
+            amount,
+            ek_volun_auds,
+            sender_auditor_hint,
+            new_sender_available_balance,
+            new_recip_pending_balance,
+            memo: vector[],
+        });
     }
 
     /// Implementation of the `rotate_encryption_key` entry function.
@@ -793,12 +1015,29 @@ module aptos_experimental::confidential_asset {
 
         let current_balance = confidential_balance::decompress_balance(&ca_store.actual_balance);
 
-        confidential_proof::verify_rotation_proof(&current_ek, &new_ek, &current_balance, &new_balance, &proof);
+        let cid = (chain_id::get() as u8);
+        confidential_proof::verify_rotation_proof(
+            cid,
+            user,
+            @aptos_experimental,
+            &current_ek,
+            &new_ek,
+            &current_balance,
+            &new_balance,
+            &proof
+        );
 
         ca_store.ek = new_ek;
         // We don't need to update the pending balance here, as it has been asserted to be zero.
         ca_store.actual_balance = confidential_balance::compress_balance(&new_balance);
         ca_store.normalized = true;
+
+        event::emit(KeyRotated {
+            addr: user,
+            asset_type: object::object_address(&token),
+            new_ek,
+            new_available_balance: ca_store.actual_balance,
+        });
     }
 
     /// Implementation of the `normalize` entry function.
@@ -817,10 +1056,25 @@ module aptos_experimental::confidential_asset {
 
         let current_balance = confidential_balance::decompress_balance(&ca_store.actual_balance);
 
-        confidential_proof::verify_normalization_proof(&sender_ek, &current_balance, &new_balance, &proof);
+        let cid = (chain_id::get() as u8);
+        confidential_proof::verify_normalization_proof(
+            cid,
+            user,
+            @aptos_experimental,
+            &sender_ek,
+            &current_balance,
+            &new_balance,
+            &proof
+        );
 
         ca_store.actual_balance = confidential_balance::compress_balance(&new_balance);
         ca_store.normalized = true;
+
+        event::emit(Normalized {
+            addr: user,
+            asset_type: object::object_address(&token),
+            new_available_balance: ca_store.actual_balance,
+        });
     }
 
     /// Implementation of the `rollover_pending_balance` entry function.
@@ -845,6 +1099,12 @@ module aptos_experimental::confidential_asset {
         ca_store.pending_counter = 0;
         ca_store.actual_balance = confidential_balance::compress_balance(&actual_balance);
         ca_store.pending_balance = confidential_balance::new_compressed_pending_balance_no_randomness();
+
+        event::emit(RolledOver {
+            addr: user,
+            asset_type: object::object_address(&token),
+            new_available_balance: ca_store.actual_balance,
+        });
     }
 
     /// Implementation of the `freeze_token` entry function.
@@ -861,6 +1121,12 @@ module aptos_experimental::confidential_asset {
         assert!(!ca_store.frozen, error::invalid_state(EALREADY_FROZEN));
 
         ca_store.frozen = true;
+
+        event::emit(FreezeChanged {
+            addr: user,
+            asset_type: object::object_address(&token),
+            frozen: true,
+        });
     }
 
     /// Implementation of the `unfreeze_token` entry function.
@@ -877,11 +1143,27 @@ module aptos_experimental::confidential_asset {
         assert!(ca_store.frozen, error::invalid_state(ENOT_FROZEN));
 
         ca_store.frozen = false;
+
+        event::emit(FreezeChanged {
+            addr: user,
+            asset_type: object::object_address(&token),
+            frozen: false,
+        });
     }
 
     //
     // Private functions.
     //
+
+    /// Returns whether the given asset type is safe for use in confidential transfers.
+    ///
+    /// Dispatchable fungible assets can override withdraw, deposit, balance, or supply
+    /// behaviour in ways that are incompatible with encrypted on-chain balances (e.g.,
+    /// fee-on-transfer tokens, rebasing balances, custom supply hooks). Until a safe
+    /// integration path exists, only standard (non-dispatchable) FA types are accepted.
+    fun is_safe_for_confidentiality(token: &Object<Metadata>): bool {
+        !fungible_asset::is_asset_type_dispatchable(*token)
+    }
 
     /// Ensures that the `FAConfig` object exists for the specified token.
     /// If the object does not exist, creates it.
@@ -909,6 +1191,18 @@ module aptos_experimental::confidential_asset {
     /// Returns the address that handles all the FA primary stores.
     fun get_fa_store_address(): address acquires FAController {
         object::address_from_extend_ref(&borrow_global<FAController>(@aptos_experimental).extend_ref)
+    }
+
+    /// Returns the pool's primary fungible store for the given token, aborting if it does not exist.
+    fun get_pool_fa_store(token: Object<Metadata>): Object<FungibleStore> acquires FAController {
+        let pool_addr = get_fa_store_address();
+        assert!(primary_fungible_store::primary_store_exists(pool_addr, token), error::not_found(ENO_CONFIDENTIAL_ASSET_POOL));
+        primary_fungible_store::primary_store(pool_addr, token)
+    }
+
+    /// Returns the pool's primary fungible store for the given token, creating it if necessary.
+    fun ensure_pool_fa_store(token: Object<Metadata>): Object<FungibleStore> acquires FAController {
+        primary_fungible_store::ensure_primary_store_exists(get_fa_store_address(), token)
     }
 
     /// Returns an object for handling the `ConfidentialAssetStore` and returns a signer for it.
@@ -1053,7 +1347,7 @@ module aptos_experimental::confidential_asset {
     }
 
     /// Converts coins to missing FA.
-    /// Returns `Some(Object<Metadata>)` if user has a suffucient amount of FA to proceed, otherwise `None`.
+    /// Returns `Some(Object<Metadata>)` if user has a sufficient amount of FA to proceed, otherwise `None`.
     fun ensure_sufficient_fa<CoinType>(sender: &signer, amount: u64): Option<Object<Metadata>> {
         let user = signer::address_of(sender);
         let fa = coin::paired_metadata<CoinType>();
@@ -1090,6 +1384,17 @@ module aptos_experimental::confidential_asset {
     }
 
     #[test_only]
+    /// Register without requiring a registration proof (for test convenience).
+    public fun register_for_testing(
+        sender: &signer,
+        token: Object<Metadata>,
+        ek: vector<u8>) acquires FAController, FAConfig
+    {
+        let ek = twisted_elgamal::new_pubkey_from_bytes(ek).extract();
+        register_internal(sender, token, ek);
+    }
+
+    #[test_only]
     public fun verify_pending_balance(
         user: address,
         token: Object<Metadata>,
@@ -1115,7 +1420,8 @@ module aptos_experimental::confidential_asset {
         confidential_balance::verify_actual_balance(&actual_balance, user_dk, amount)
     }
 
-    #[test_only]
+    /// Pure serialization helpers (no `borrow_global`). Public so off-chain tooling and
+    /// tooling can exercise the same entrypoints as tests without `#[test_only]` harness modules.
     public fun serialize_auditor_eks(auditor_eks: &vector<twisted_elgamal::CompressedPubkey>): vector<u8> {
         let auditor_eks_bytes = vector[];
 
@@ -1126,7 +1432,6 @@ module aptos_experimental::confidential_asset {
         auditor_eks_bytes
     }
 
-    #[test_only]
     public fun serialize_auditor_amounts(
         auditor_amounts: &vector<confidential_balance::ConfidentialBalance>
     ): vector<u8> {
@@ -1137,5 +1442,160 @@ module aptos_experimental::confidential_asset {
         });
 
         auditor_amounts_bytes
+    }
+
+    #[test_only]
+    /// Asserts the last emitted `Transferred` matches `from` / `to` / `asset_type`, the expected
+    /// `sender_auditor_hint`, `ek_volun_auds` length (`128 * expected_auditor_entry_count` bytes,
+    /// i.e. four 32-byte compressed points per auditor row), and on-chain `new_sender_available_balance` /
+    /// `new_recip_pending_balance` against `actual_balance` / `pending_balance`. Does not assert `amount`
+    /// or `memo` (memo is always empty in production transfers today).
+    public fun assert_last_transferred_event_matches_state(
+        token: Object<Metadata>,
+        expected_from: address,
+        expected_to: address,
+        expected_auditor_entry_count: u64,
+        expected_sender_auditor_hint: vector<u8>,
+    ) acquires ConfidentialAssetStore {
+        let evts = event::emitted_events<Transferred>();
+        let len = vector::length(&evts);
+        assert!(len > 0, 1);
+        let e = vector::borrow(&evts, len - 1);
+        assert!(e.from == expected_from, 2);
+        assert!(e.to == expected_to, 3);
+        assert!(e.asset_type == object::object_address(&token), 4);
+        assert!(e.sender_auditor_hint == expected_sender_auditor_hint, 9);
+        assert!(
+            e.ek_volun_auds.length() == 32 * 4 * expected_auditor_entry_count,
+            8
+        );
+        let on_chain_sender = actual_balance(expected_from, token);
+        let on_chain_recip_pending = pending_balance(expected_to, token);
+        assert!(e.new_sender_available_balance == on_chain_sender, 6);
+        assert!(e.new_recip_pending_balance == on_chain_recip_pending, 7);
+    }
+
+    #[test_only]
+    public fun assert_last_registered_event(
+        token: Object<Metadata>,
+        expected_addr: address,
+    ) {
+        let evts = event::emitted_events<Registered>();
+        assert!(evts.length() > 0, 100);
+        let e = &evts[evts.length() - 1];
+        assert!(e.addr == expected_addr, 101);
+        assert!(e.asset_type == object::object_address(&token), 102);
+    }
+
+    #[test_only]
+    public fun assert_last_deposited_event_matches_state(
+        token: Object<Metadata>,
+        expected_to: address,
+        expected_amount: u64,
+    ) acquires ConfidentialAssetStore {
+        let evts = event::emitted_events<Deposited>();
+        assert!(evts.length() > 0, 110);
+        let e = &evts[evts.length() - 1];
+        assert!(e.to == expected_to, 111);
+        assert!(e.asset_type == object::object_address(&token), 112);
+        assert!(e.amount == expected_amount, 113);
+        assert!(e.new_pending_balance == pending_balance(expected_to, token), 114);
+    }
+
+    #[test_only]
+    public fun assert_last_withdrawn_event_matches_state(
+        token: Object<Metadata>,
+        expected_from: address,
+        expected_amount: u64,
+    ) acquires ConfidentialAssetStore {
+        let evts = event::emitted_events<Withdrawn>();
+        assert!(evts.length() > 0, 120);
+        let e = &evts[evts.length() - 1];
+        assert!(e.from == expected_from, 121);
+        assert!(e.asset_type == object::object_address(&token), 122);
+        assert!(e.amount == expected_amount, 123);
+        assert!(e.new_available_balance == actual_balance(expected_from, token), 124);
+    }
+
+    #[test_only]
+    public fun assert_last_normalized_event_matches_state(
+        token: Object<Metadata>,
+        expected_addr: address,
+    ) acquires ConfidentialAssetStore {
+        let evts = event::emitted_events<Normalized>();
+        assert!(evts.length() > 0, 130);
+        let e = &evts[evts.length() - 1];
+        assert!(e.addr == expected_addr, 131);
+        assert!(e.asset_type == object::object_address(&token), 132);
+        assert!(e.new_available_balance == actual_balance(expected_addr, token), 133);
+    }
+
+    #[test_only]
+    public fun assert_last_rolled_over_event_matches_state(
+        token: Object<Metadata>,
+        expected_addr: address,
+    ) acquires ConfidentialAssetStore {
+        let evts = event::emitted_events<RolledOver>();
+        assert!(evts.length() > 0, 140);
+        let e = &evts[evts.length() - 1];
+        assert!(e.addr == expected_addr, 141);
+        assert!(e.asset_type == object::object_address(&token), 142);
+        assert!(e.new_available_balance == actual_balance(expected_addr, token), 143);
+    }
+
+    #[test_only]
+    public fun assert_last_key_rotated_event_matches_state(
+        token: Object<Metadata>,
+        expected_addr: address,
+    ) acquires ConfidentialAssetStore {
+        let evts = event::emitted_events<KeyRotated>();
+        assert!(evts.length() > 0, 150);
+        let e = &evts[evts.length() - 1];
+        assert!(e.addr == expected_addr, 151);
+        assert!(e.asset_type == object::object_address(&token), 152);
+        assert!(e.new_available_balance == actual_balance(expected_addr, token), 153);
+        assert!(e.new_ek == encryption_key(expected_addr, token), 154);
+    }
+
+    #[test_only]
+    public fun assert_last_freeze_changed_event(
+        token: Object<Metadata>,
+        expected_addr: address,
+        expected_frozen: bool,
+    ) {
+        let evts = event::emitted_events<FreezeChanged>();
+        assert!(evts.length() > 0, 160);
+        let e = &evts[evts.length() - 1];
+        assert!(e.addr == expected_addr, 161);
+        assert!(e.asset_type == object::object_address(&token), 162);
+        assert!(e.frozen == expected_frozen, 163);
+    }
+
+    #[test_only]
+    public fun assert_last_allow_list_changed_event(expected_enabled: bool) {
+        let evts = event::emitted_events<AllowListChanged>();
+        assert!(evts.length() > 0, 170);
+        let e = &evts[evts.length() - 1];
+        assert!(e.enabled == expected_enabled, 171);
+    }
+
+    #[test_only]
+    public fun assert_last_token_allow_changed_event(
+        token: Object<Metadata>,
+        expected_allowed: bool,
+    ) {
+        let evts = event::emitted_events<TokenAllowChanged>();
+        assert!(evts.length() > 0, 180);
+        let e = &evts[evts.length() - 1];
+        assert!(e.asset_type == object::object_address(&token), 181);
+        assert!(e.allowed == expected_allowed, 182);
+    }
+
+    #[test_only]
+    public fun assert_last_auditor_changed_event(token: Object<Metadata>) {
+        let evts = event::emitted_events<AuditorChanged>();
+        assert!(evts.length() > 0, 190);
+        let e = &evts[evts.length() - 1];
+        assert!(e.asset_type == object::object_address(&token), 191);
     }
 }

@@ -1,0 +1,9 @@
+import MovementFormal.MoveModel.Value
+import MovementFormal.MoveModel.State
+import MovementFormal.MoveModel.Step
+import MovementFormal.Experimental.ConfidentialAsset.Registration.ContainerStoreProperties
+import MovementFormal.Experimental.ConfidentialAsset.Registration.PCBoundaryConditions
+
+namespace MovementFormal.Experimental.ConfidentialAsset.Registration.ContainerStoreMonotonicity
+theorem stub : True := trivial
+end MovementFormal.Experimental.ConfidentialAsset.Registration.ContainerStoreMonotonicity

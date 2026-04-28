@@ -1,0 +1,81 @@
+{
+  "test_id": "registration_happy_path_001",
+  "operation": "register_internal",
+  "description": "Happy path: successful registration with valid Schnorr and HMAC proofs",
+  "inputs": {
+    "owner_address": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+    "encryption_pubkey": "0x5566778899aabbccddeeff00112233445566778899aabbccddeeff0011223344",
+    "encryption_pubkey_uncompressed": {
+      "x": "0x55667788",
+      "y": "0x99aabbcc"
+    },
+    "schnorr_proof": {
+      "public_key": "0x5566778899aabbccddeeff00112233445566778899aabbccddeeff0011223344",
+      "message": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+      "signature": {
+        "s": "0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+        "e": "0xfedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+      }
+    },
+    "hmac_proof": {
+      "key": "0xaabbccddeeff00112233445566778899aabbccddeeff00112233445566778899",
+      "message": "0x5566778899aabbccddeeff00112233445566778899aabbccddeeff0011223344",
+      "hmac": "0x1111222233334444555566667777888899990000aaabbbbcccdddeeefff00001"
+    },
+    "container_store_before": {}
+  },
+  "expected_output": {
+    "status": "success",
+    "container_store_after": {
+      "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef": {
+        "type": "ConfidentialAssetStore",
+        "encryption_pubkey": "0x5566778899aabbccddeeff00112233445566778899aabbccddeeff0011223344",
+        "pending_balance": [],
+        "actual_balance": [],
+        "frozen": false,
+        "allow_list_enabled": false
+      }
+    },
+    "events": [
+      {
+        "type": "RegistrationEvent",
+        "owner": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+        "encryption_pubkey": "0x5566778899aabbccddeeff00112233445566778899aabbccddeeff0011223344"
+      }
+    ]
+  },
+  "vm_execution_trace": {
+    "gas_used": "325000",
+    "num_instructions": 97,
+    "num_native_calls": 2,
+    "native_calls": [
+      "verify_schnorr_proof",
+      "verify_hmac_proof"
+    ]
+  },
+  "lean_model_trace": {
+    "eval_result": "returned",
+    "num_steps": 97,
+    "oracle_calls": [
+      {
+        "name": "verifySchnorrProof",
+        "result": "some"
+      },
+      {
+        "name": "verifyHmacProof",
+        "result": "some"
+      }
+    ]
+  },
+  "test_purpose": "Validates that registration with valid Schnorr and HMAC proofs successfully creates a ConfidentialAssetStore with correct initial state",
+  "coverage_tags": ["happy_path", "registration", "store_creation", "schnorr", "hmac"],
+  "related_theorems": [
+    "registration_eval_equiv_functional_sim",
+    "registration_store_creation_correctness",
+    "registration_schnorr_soundness",
+    "registration_hmac_soundness"
+  ],
+  "related_msl_specs": [
+    "spec register_internal { ensures exists<ConfidentialAssetStore>(owner_addr); ensures global<ConfidentialAssetStore>(owner_addr).encryption_pubkey == pubkey; }"
+  ]
+}

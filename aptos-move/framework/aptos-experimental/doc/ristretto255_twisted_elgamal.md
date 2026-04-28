@@ -39,6 +39,27 @@ and <code>r, r'</code> are random scalars.
 -  [Function `ciphertext_clone`](#0x7_ristretto255_twisted_elgamal_ciphertext_clone)
 -  [Function `ciphertext_equals`](#0x7_ristretto255_twisted_elgamal_ciphertext_equals)
 -  [Function `get_value_component`](#0x7_ristretto255_twisted_elgamal_get_value_component)
+-  [Specification](#@Specification_0)
+    -  [Function `new_pubkey_from_bytes`](#@Specification_0_new_pubkey_from_bytes)
+    -  [Function `pubkey_to_bytes`](#@Specification_0_pubkey_to_bytes)
+    -  [Function `pubkey_to_point`](#@Specification_0_pubkey_to_point)
+    -  [Function `pubkey_to_compressed_point`](#@Specification_0_pubkey_to_compressed_point)
+    -  [Function `new_ciphertext_from_bytes`](#@Specification_0_new_ciphertext_from_bytes)
+    -  [Function `new_ciphertext_no_randomness`](#@Specification_0_new_ciphertext_no_randomness)
+    -  [Function `ciphertext_from_points`](#@Specification_0_ciphertext_from_points)
+    -  [Function `ciphertext_from_compressed_points`](#@Specification_0_ciphertext_from_compressed_points)
+    -  [Function `ciphertext_to_bytes`](#@Specification_0_ciphertext_to_bytes)
+    -  [Function `ciphertext_into_points`](#@Specification_0_ciphertext_into_points)
+    -  [Function `ciphertext_as_points`](#@Specification_0_ciphertext_as_points)
+    -  [Function `compress_ciphertext`](#@Specification_0_compress_ciphertext)
+    -  [Function `decompress_ciphertext`](#@Specification_0_decompress_ciphertext)
+    -  [Function `ciphertext_add`](#@Specification_0_ciphertext_add)
+    -  [Function `ciphertext_add_assign`](#@Specification_0_ciphertext_add_assign)
+    -  [Function `ciphertext_sub`](#@Specification_0_ciphertext_sub)
+    -  [Function `ciphertext_sub_assign`](#@Specification_0_ciphertext_sub_assign)
+    -  [Function `ciphertext_clone`](#@Specification_0_ciphertext_clone)
+    -  [Function `ciphertext_equals`](#@Specification_0_ciphertext_equals)
+    -  [Function `get_value_component`](#@Specification_0_get_value_component)
 
 
 <pre><code><b>use</b> <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option">0x1::option</a>;
@@ -702,6 +723,356 @@ Returns the <code>RistrettoPoint</code> in the ciphertext that contains the encr
 
 
 </details>
+
+<a id="@Specification_0"></a>
+
+## Specification
+
+
+
+<pre><code><b>pragma</b> verify = <b>true</b>;
+<b>pragma</b> aborts_if_is_strict = <b>false</b>;
+</code></pre>
+
+
+
+<a id="@Specification_0_new_pubkey_from_bytes"></a>
+
+### Function `new_pubkey_from_bytes`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_new_pubkey_from_bytes">new_pubkey_from_bytes</a>(bytes: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_Option">option::Option</a>&lt;<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedPubkey">ristretto255_twisted_elgamal::CompressedPubkey</a>&gt;
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>aborts_if</b> <b>false</b>;
+</code></pre>
+
+
+
+<a id="@Specification_0_pubkey_to_bytes"></a>
+
+### Function `pubkey_to_bytes`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_pubkey_to_bytes">pubkey_to_bytes</a>(pubkey: &<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedPubkey">ristretto255_twisted_elgamal::CompressedPubkey</a>): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>aborts_if</b> <b>false</b>;
+</code></pre>
+
+
+
+<a id="@Specification_0_pubkey_to_point"></a>
+
+### Function `pubkey_to_point`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_pubkey_to_point">pubkey_to_point</a>(pubkey: &<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedPubkey">ristretto255_twisted_elgamal::CompressedPubkey</a>): <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_RistrettoPoint">ristretto255::RistrettoPoint</a>
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>aborts_if</b> <b>false</b>;
+</code></pre>
+
+
+
+<a id="@Specification_0_pubkey_to_compressed_point"></a>
+
+### Function `pubkey_to_compressed_point`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_pubkey_to_compressed_point">pubkey_to_compressed_point</a>(pubkey: &<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedPubkey">ristretto255_twisted_elgamal::CompressedPubkey</a>): <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_CompressedRistretto">ristretto255::CompressedRistretto</a>
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>aborts_if</b> <b>false</b>;
+</code></pre>
+
+
+
+<a id="@Specification_0_new_ciphertext_from_bytes"></a>
+
+### Function `new_ciphertext_from_bytes`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_new_ciphertext_from_bytes">new_ciphertext_from_bytes</a>(bytes: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_Option">option::Option</a>&lt;<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_Ciphertext">ristretto255_twisted_elgamal::Ciphertext</a>&gt;
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>aborts_if</b> <b>false</b>;
+</code></pre>
+
+
+
+<a id="@Specification_0_new_ciphertext_no_randomness"></a>
+
+### Function `new_ciphertext_no_randomness`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_new_ciphertext_no_randomness">new_ciphertext_no_randomness</a>(val: &<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_Scalar">ristretto255::Scalar</a>): <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_Ciphertext">ristretto255_twisted_elgamal::Ciphertext</a>
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>aborts_if</b> <b>false</b>;
+</code></pre>
+
+
+
+<a id="@Specification_0_ciphertext_from_points"></a>
+
+### Function `ciphertext_from_points`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_ciphertext_from_points">ciphertext_from_points</a>(left: <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_RistrettoPoint">ristretto255::RistrettoPoint</a>, right: <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_RistrettoPoint">ristretto255::RistrettoPoint</a>): <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_Ciphertext">ristretto255_twisted_elgamal::Ciphertext</a>
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>aborts_if</b> <b>false</b>;
+</code></pre>
+
+
+
+<a id="@Specification_0_ciphertext_from_compressed_points"></a>
+
+### Function `ciphertext_from_compressed_points`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_ciphertext_from_compressed_points">ciphertext_from_compressed_points</a>(left: <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_CompressedRistretto">ristretto255::CompressedRistretto</a>, right: <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_CompressedRistretto">ristretto255::CompressedRistretto</a>): <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedCiphertext">ristretto255_twisted_elgamal::CompressedCiphertext</a>
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>aborts_if</b> <b>false</b>;
+</code></pre>
+
+
+
+<a id="@Specification_0_ciphertext_to_bytes"></a>
+
+### Function `ciphertext_to_bytes`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_ciphertext_to_bytes">ciphertext_to_bytes</a>(ct: &<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_Ciphertext">ristretto255_twisted_elgamal::Ciphertext</a>): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>aborts_if</b> <b>false</b>;
+</code></pre>
+
+
+
+<a id="@Specification_0_ciphertext_into_points"></a>
+
+### Function `ciphertext_into_points`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_ciphertext_into_points">ciphertext_into_points</a>(c: <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_Ciphertext">ristretto255_twisted_elgamal::Ciphertext</a>): (<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_RistrettoPoint">ristretto255::RistrettoPoint</a>, <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_RistrettoPoint">ristretto255::RistrettoPoint</a>)
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>aborts_if</b> <b>false</b>;
+</code></pre>
+
+
+
+<a id="@Specification_0_ciphertext_as_points"></a>
+
+### Function `ciphertext_as_points`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_ciphertext_as_points">ciphertext_as_points</a>(c: &<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_Ciphertext">ristretto255_twisted_elgamal::Ciphertext</a>): (&<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_RistrettoPoint">ristretto255::RistrettoPoint</a>, &<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_RistrettoPoint">ristretto255::RistrettoPoint</a>)
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>aborts_if</b> <b>false</b>;
+</code></pre>
+
+
+
+<a id="@Specification_0_compress_ciphertext"></a>
+
+### Function `compress_ciphertext`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_compress_ciphertext">compress_ciphertext</a>(ct: &<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_Ciphertext">ristretto255_twisted_elgamal::Ciphertext</a>): <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedCiphertext">ristretto255_twisted_elgamal::CompressedCiphertext</a>
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>aborts_if</b> <b>false</b>;
+</code></pre>
+
+
+
+<a id="@Specification_0_decompress_ciphertext"></a>
+
+### Function `decompress_ciphertext`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_decompress_ciphertext">decompress_ciphertext</a>(ct: &<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedCiphertext">ristretto255_twisted_elgamal::CompressedCiphertext</a>): <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_Ciphertext">ristretto255_twisted_elgamal::Ciphertext</a>
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>aborts_if</b> <b>false</b>;
+</code></pre>
+
+
+
+<a id="@Specification_0_ciphertext_add"></a>
+
+### Function `ciphertext_add`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_ciphertext_add">ciphertext_add</a>(lhs: &<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_Ciphertext">ristretto255_twisted_elgamal::Ciphertext</a>, rhs: &<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_Ciphertext">ristretto255_twisted_elgamal::Ciphertext</a>): <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_Ciphertext">ristretto255_twisted_elgamal::Ciphertext</a>
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>aborts_if</b> <b>false</b>;
+</code></pre>
+
+
+
+<a id="@Specification_0_ciphertext_add_assign"></a>
+
+### Function `ciphertext_add_assign`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_ciphertext_add_assign">ciphertext_add_assign</a>(lhs: &<b>mut</b> <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_Ciphertext">ristretto255_twisted_elgamal::Ciphertext</a>, rhs: &<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_Ciphertext">ristretto255_twisted_elgamal::Ciphertext</a>)
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>aborts_if</b> <b>false</b>;
+</code></pre>
+
+
+
+<a id="@Specification_0_ciphertext_sub"></a>
+
+### Function `ciphertext_sub`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_ciphertext_sub">ciphertext_sub</a>(lhs: &<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_Ciphertext">ristretto255_twisted_elgamal::Ciphertext</a>, rhs: &<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_Ciphertext">ristretto255_twisted_elgamal::Ciphertext</a>): <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_Ciphertext">ristretto255_twisted_elgamal::Ciphertext</a>
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>aborts_if</b> <b>false</b>;
+</code></pre>
+
+
+
+<a id="@Specification_0_ciphertext_sub_assign"></a>
+
+### Function `ciphertext_sub_assign`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_ciphertext_sub_assign">ciphertext_sub_assign</a>(lhs: &<b>mut</b> <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_Ciphertext">ristretto255_twisted_elgamal::Ciphertext</a>, rhs: &<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_Ciphertext">ristretto255_twisted_elgamal::Ciphertext</a>)
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>aborts_if</b> <b>false</b>;
+</code></pre>
+
+
+
+<a id="@Specification_0_ciphertext_clone"></a>
+
+### Function `ciphertext_clone`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_ciphertext_clone">ciphertext_clone</a>(c: &<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_Ciphertext">ristretto255_twisted_elgamal::Ciphertext</a>): <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_Ciphertext">ristretto255_twisted_elgamal::Ciphertext</a>
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>aborts_if</b> <b>false</b>;
+</code></pre>
+
+
+
+<a id="@Specification_0_ciphertext_equals"></a>
+
+### Function `ciphertext_equals`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_ciphertext_equals">ciphertext_equals</a>(lhs: &<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_Ciphertext">ristretto255_twisted_elgamal::Ciphertext</a>, rhs: &<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_Ciphertext">ristretto255_twisted_elgamal::Ciphertext</a>): bool
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>aborts_if</b> <b>false</b>;
+</code></pre>
+
+
+
+<a id="@Specification_0_get_value_component"></a>
+
+### Function `get_value_component`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_get_value_component">get_value_component</a>(ct: &<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_Ciphertext">ristretto255_twisted_elgamal::Ciphertext</a>): &<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_RistrettoPoint">ristretto255::RistrettoPoint</a>
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>aborts_if</b> <b>false</b>;
+</code></pre>
 
 
 [move-book]: https://aptos.dev/move/book/SUMMARY

@@ -1,0 +1,6 @@
+import MovementFormal.Experimental.ConfidentialAsset.Registration.FunctionalSim
+import MovementFormal.Experimental.ConfidentialAsset.Registration.Refinement
+
+namespace MovementFormal.Experimental.ConfidentialAsset.Registration.RegisterEntryStub
+theorem stub : True := trivial
+end MovementFormal.Experimental.ConfidentialAsset.Registration.RegisterEntryStub

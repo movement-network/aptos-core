@@ -1,0 +1,9 @@
+{
+  "name": "registration_fiat_shamir_msg_move_golden_2",
+  "length_bytes": 161,
+  "encoding": "hex",
+  "bytes_file": "registration_fs_msg_move_golden_2.hex",
+  "move_anchor": "aptos-move/framework/aptos-experimental/tests/confidential_asset/formal_goldens_registration.move",
+  "lean_def": "MovementFormal.Experimental.ConfidentialAsset.Registration.TranscriptAlignment.expectedRegistrationFsMsg2",
+  "notes": "Second public-input scenario (chain_id=42, addresses 0x10/0x20/0x30, basepoint ek/R)."
+}

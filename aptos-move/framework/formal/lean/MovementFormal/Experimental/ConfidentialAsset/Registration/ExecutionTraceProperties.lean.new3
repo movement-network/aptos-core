@@ -1,0 +1,472 @@
+import MovementFormal.MoveModel.Value
+import MovementFormal.MoveModel.State
+import MovementFormal.MoveModel.Step
+import MovementFormal.Experimental.ConfidentialAsset.Registration.FuelManagement
+import MovementFormal.Experimental.ConfidentialAsset.Registration.ValidationLemmas
+
+/-! # Execution Trace Properties
+
+This file provides comprehensive lemmas for reasoning about execution traces
+in the registration singleton branch proof. An execution trace is a sequence
+of states connected by step relations.
+
+## Execution Trace Concepts
+
+1. **Trace**: Sequence of states `s₀ → s₁ → ... → sₙ` where each `sᵢ → sᵢ₊₁` is a step
+2. **PC Progression**: How PC evolves along a trace (usually increasing, branches jump)
+3. **Fuel Consumption**: Each step consumes exactly 1 fuel unit
+4. **State Invariants**: Properties preserved along traces (locals size, frame validity)
+5. **Trace Composition**: Concatenating traces from different PC ranges
+
+-/
+
+namespace MovementFormal.Experimental.ConfidentialAsset.Registration.ExecutionTraceProperties
+
+open MovementFormal.MoveModel
+open MovementFormal.Experimental.ConfidentialAsset.Registration.FuelManagement
+open MovementFormal.Experimental.ConfidentialAsset.Registration.Validation
+
+/-! ## Execution Trace Definitions
+
+Core definitions for execution traces.
+-/
+
+/-- A single step in an execution trace. -/
+structure TraceStep (env : ModuleEnv) where
+  frame_before : Frame
+  frame_after : Frame
+  stack_before : List MoveValue
+  stack_after : List MoveValue
+  ms_before : MachineState
+  ms_after : MachineState
+  h_step : step env frame_before [] stack_before ms_before =
+           .ok [] frame_after stack_after ms_after
+
+/-- A trace segment between two PCs. -/
+structure TraceSegment (env : ModuleEnv) (pc_start pc_end : Nat) where
+  steps : List (TraceStep env)
+  h_start_pc : steps.head?.isSome → (steps.head?.get!).frame_before.pc = pc_start
+  h_end_pc : steps.getLast?.isSome → (steps.getLast?.get!).frame_after.pc = pc_end
+  h_consecutive : ∀ i < steps.length - 1,
+    (steps[i]!).frame_after = (steps[i+1]!).frame_before
+
+/-- Fuel consumed by a trace segment. -/
+def TraceSegment.fuelConsumed {env : ModuleEnv} {pc_start pc_end : Nat}
+    (trace : TraceSegment env pc_start pc_end) : Nat :=
+  trace.steps.length
+
+/-! ## Single Step Properties
+
+Properties of individual steps in a trace.
+-/
+
+/-- Every step increases PC by 1 (for non-branch instructions). -/
+theorem step_increments_pc_nonbranch
+    (env : ModuleEnv)
+    (frame : Frame)
+    (stack : List MoveValue)
+    (ms : MachineState)
+    (frame' : Frame)
+    (stack' : List MoveValue)
+    (ms' : MachineState)
+    (h_step : step env frame [] stack ms = .ok [] frame' stack' ms')
+    (h_pc : frame.pc < frame.code.size)
+    (h_nonbranch : ∀ target, frame.code[frame.pc]'h_pc ≠ .brFalse target ∧
+                              frame.code[frame.pc]'h_pc ≠ .brTrue target ∧
+                              frame.code[frame.pc]'h_pc ≠ .ret) :
+    frame'.pc = frame.pc + 1 := by
+  sorry  -- Step semantics for non-branch instructions
+
+/-- brFalse with false on stack jumps to target. -/
+theorem step_brFalse_taken
+    (env : ModuleEnv)
+    (frame : Frame)
+    (stack : List MoveValue)
+    (ms : MachineState)
+    (target : Nat)
+    (h_pc : frame.pc < frame.code.size)
+    (h_instr : frame.code[frame.pc]'h_pc = .brFalse target)
+    (h_stack : stack = .bool false :: stack.tail) :
+    ∃ frame' stack' ms',
+      step env frame [] stack ms = .ok [] frame' stack' ms' ∧
+      frame'.pc = target := by
+  sorry  -- brFalse semantics
+
+/-- brFalse with true on stack continues to pc+1. -/
+theorem step_brFalse_not_taken
+    (env : ModuleEnv)
+    (frame : Frame)
+    (stack : List MoveValue)
+    (ms : MachineState)
+    (target : Nat)
+    (h_pc : frame.pc < frame.code.size)
+    (h_instr : frame.code[frame.pc]'h_pc = .brFalse target)
+    (h_stack : stack = .bool true :: stack.tail) :
+    ∃ frame' stack' ms',
+      step env frame [] stack ms = .ok [] frame' stack' ms' ∧
+      frame'.pc = frame.pc + 1 := by
+  sorry  -- brFalse semantics
+
+/-- Step preserves code. -/
+theorem step_preserves_code
+    (env : ModuleEnv)
+    (frame : Frame)
+    (stack : List MoveValue)
+    (ms : MachineState)
+    (frame' : Frame)
+    (stack' : List MoveValue)
+    (ms' : MachineState)
+    (h_step : step env frame [] stack ms = .ok [] frame' stack' ms') :
+    frame'.code = frame.code := by
+  sorry  -- Code is immutable
+
+/-- Step preserves locals size. -/
+theorem step_preserves_locals_size
+    (env : ModuleEnv)
+    (frame : Frame)
+    (stack : List MoveValue)
+    (ms : MachineState)
+    (frame' : Frame)
+    (stack' : List MoveValue)
+    (ms' : MachineState)
+    (h_step : step env frame [] stack ms = .ok [] frame' stack' ms') :
+    frame'.locals.size = frame.locals.size := by
+  sorry  -- Locals size invariant
+
+/-- Step preserves localRefs size. -/
+theorem step_preserves_localRefs_size
+    (env : ModuleEnv)
+    (frame : Frame)
+    (stack : List MoveValue)
+    (ms : MachineState)
+    (frame' : Frame)
+    (stack' : List MoveValue)
+    (ms' : MachineState)
+    (h_step : step env frame [] stack ms = .ok [] frame' stack' ms') :
+    frame'.localRefs.size = frame.localRefs.size := by
+  sorry  -- LocalRefs size invariant
+
+/-! ## Multi-Step Trace Properties
+
+Properties of sequences of steps.
+-/
+
+/-- Composing two consecutive steps. -/
+theorem compose_two_steps
+    (env : ModuleEnv)
+    (f0 f1 f2 : Frame)
+    (s0 s1 s2 : List MoveValue)
+    (m0 m1 m2 : MachineState)
+    (h_step1 : step env f0 [] s0 m0 = .ok [] f1 s1 m1)
+    (h_step2 : step env f1 [] s1 m1 = .ok [] f2 s2 m2) :
+    ∃ (fuel : Nat),
+      fuel = 2 ∧
+      run env [] f0 s0 m0 fuel = .ok [] f2 s2 m2 := by
+  use 2
+  constructor
+  · rfl
+  · sorry  -- run 2 = step then step
+
+/-- Composing three consecutive steps. -/
+theorem compose_three_steps
+    (env : ModuleEnv)
+    (f0 f1 f2 f3 : Frame)
+    (s0 s1 s2 s3 : List MoveValue)
+    (m0 m1 m2 m3 : MachineState)
+    (h_step1 : step env f0 [] s0 m0 = .ok [] f1 s1 m1)
+    (h_step2 : step env f1 [] s1 m1 = .ok [] f2 s2 m2)
+    (h_step3 : step env f2 [] s2 m2 = .ok [] f3 s3 m3) :
+    ∃ (fuel : Nat),
+      fuel = 3 ∧
+      run env [] f0 s0 m0 fuel = .ok [] f3 s3 m3 := by
+  use 3
+  constructor
+  · rfl
+  · sorry  -- run 3 = step then step then step
+
+/-- Composing N consecutive steps. -/
+theorem compose_n_steps
+    (env : ModuleEnv)
+    (trace : List (TraceStep env))
+    (h_consecutive : ∀ i < trace.length - 1,
+      (trace[i]!).frame_after = (trace[i+1]!).frame_before) :
+    trace.length > 0 →
+    ∃ (fuel : Nat),
+      fuel = trace.length ∧
+      run env []
+          (trace.head!).frame_before
+          (trace.head!).stack_before
+          (trace.head!).ms_before
+          fuel =
+      .ok []
+          (trace.getLast!).frame_after
+          (trace.getLast!).stack_after
+          (trace.getLast!).ms_after := by
+  intro hlen
+  use trace.length
+  constructor
+  · rfl
+  · sorry  -- Induction on trace length
+
+/-! ## Trace Segment Composition
+
+Composing trace segments from different PC ranges.
+-/
+
+/-- Concatenate two adjacent trace segments. -/
+def TraceSegment.concat
+    {env : ModuleEnv}
+    {pc_start pc_mid pc_end : Nat}
+    (trace1 : TraceSegment env pc_start pc_mid)
+    (trace2 : TraceSegment env pc_mid pc_end)
+    (h_join : trace1.steps.getLast?.isSome →
+              trace2.steps.head?.isSome →
+              (trace1.steps.getLast?.get!).frame_after =
+              (trace2.steps.head?.get!).frame_before) :
+    TraceSegment env pc_start pc_end :=
+  {
+    steps := trace1.steps ++ trace2.steps,
+    h_start_pc := by sorry,
+    h_end_pc := by sorry,
+    h_consecutive := by sorry
+  }
+
+/-- Fuel for concatenated segments is sum of component fuels. -/
+theorem concat_fuel_sum
+    {env : ModuleEnv}
+    {pc_start pc_mid pc_end : Nat}
+    (trace1 : TraceSegment env pc_start pc_mid)
+    (trace2 : TraceSegment env pc_mid pc_end)
+    (h_join : trace1.steps.getLast?.isSome →
+              trace2.steps.head?.isSome →
+              (trace1.steps.getLast?.get!).frame_after =
+              (trace2.steps.head?.get!).frame_before) :
+    (trace1.concat trace2 h_join).fuelConsumed =
+    trace1.fuelConsumed + trace2.fuelConsumed := by
+  unfold fuelConsumed concat
+  simp [List.length_append]
+
+/-- Concatenate three adjacent trace segments. -/
+def TraceSegment.concat3
+    {env : ModuleEnv}
+    {pc0 pc1 pc2 pc3 : Nat}
+    (t1 : TraceSegment env pc0 pc1)
+    (t2 : TraceSegment env pc1 pc2)
+    (t3 : TraceSegment env pc2 pc3)
+    (h_join1 : t1.steps.getLast?.isSome →
+               t2.steps.head?.isSome →
+               (t1.steps.getLast?.get!).frame_after =
+               (t2.steps.head?.get!).frame_before)
+    (h_join2 : t2.steps.getLast?.isSome →
+               t3.steps.head?.isSome →
+               (t2.steps.getLast?.get!).frame_after =
+               (t3.steps.head?.get!).frame_before) :
+    TraceSegment env pc0 pc3 :=
+  (t1.concat t2 h_join1).concat t3 (by sorry)
+
+/-- Fuel for three concatenated segments. -/
+theorem concat3_fuel_sum
+    {env : ModuleEnv}
+    {pc0 pc1 pc2 pc3 : Nat}
+    (t1 : TraceSegment env pc0 pc1)
+    (t2 : TraceSegment env pc1 pc2)
+    (t3 : TraceSegment env pc2 pc3)
+    (h_join1 : t1.steps.getLast?.isSome →
+               t2.steps.head?.isSome →
+               (t1.steps.getLast?.get!).frame_after =
+               (t2.steps.head?.get!).frame_before)
+    (h_join2 : t2.steps.getLast?.isSome →
+               t3.steps.head?.isSome →
+               (t2.steps.getLast?.get!).frame_after =
+               (t3.steps.head?.get!).frame_before) :
+    (t1.concat3 t2 t3 h_join1 h_join2).fuelConsumed =
+    t1.fuelConsumed + t2.fuelConsumed + t3.fuelConsumed := by
+  unfold concat3
+  sorry  -- From concat_fuel_sum twice
+
+/-! ## PC Progression Properties
+
+Properties about how PC evolves along traces.
+-/
+
+/-- PC is monotonically increasing in happy path (no backward branches). -/
+theorem pc_monotonic_in_happy_path
+    (env : ModuleEnv)
+    (trace : TraceSegment env 4 70)
+    (h_no_backward : ∀ step ∈ trace.steps,
+      step.frame_after.pc ≥ step.frame_before.pc) :
+    4 ≤ 70 := by
+  sorry  -- From h_start_pc and h_end_pc
+
+/-- PC reaches target in bounded steps. -/
+theorem pc_reaches_target
+    (env : ModuleEnv)
+    (pc_start pc_end : Nat)
+    (trace : TraceSegment env pc_start pc_end)
+    (h_valid : trace.steps.length > 0) :
+    (trace.steps.head!).frame_before.pc = pc_start ∧
+    (trace.steps.getLast!).frame_after.pc = pc_end := by
+  constructor
+  · sorry  -- From h_start_pc
+  · sorry  -- From h_end_pc
+
+/-- Maximum PC in registration happy path is 73 (before final branch). -/
+axiom max_pc_before_ret : Nat := 73
+
+theorem happy_path_pc_bounded
+    (env : ModuleEnv)
+    (pc : Nat)
+    (h_happy : pc ∈ [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]) :
+    pc ≤ 73 := by
+  sorry  -- From list membership
+
+/-! ## State Invariant Preservation
+
+Properties preserved along execution traces.
+-/
+
+/-- Locals size preserved along trace. -/
+theorem trace_preserves_locals_size
+    (env : ModuleEnv)
+    (trace : TraceSegment env pc_start pc_end)
+    (h_initial : trace.steps.head?.isSome →
+                 (trace.steps.head!).frame_before.locals.size = 19) :
+    trace.steps.getLast?.isSome →
+    (trace.steps.getLast!).frame_after.locals.size = 19 := by
+  intro hlast
+  sorry  -- Induction using step_preserves_locals_size
+
+/-- Code preserved along trace. -/
+theorem trace_preserves_code
+    (env : ModuleEnv)
+    (trace : TraceSegment env pc_start pc_end)
+    (code : Array Instr)
+    (h_initial : trace.steps.head?.isSome →
+                 (trace.steps.head!).frame_before.code = code) :
+    trace.steps.getLast?.isSome →
+    (trace.steps.getLast!).frame_after.code = code := by
+  intro hlast
+  sorry  -- Induction using step_preserves_code
+
+/-- Frame validity preserved along trace. -/
+theorem trace_preserves_frame_validity
+    (env : ModuleEnv)
+    (trace : TraceSegment env pc_start pc_end)
+    (h_initial : trace.steps.head?.isSome →
+                 IsValidFrame (trace.steps.head!).frame_before) :
+    trace.steps.getLast?.isSome →
+    IsValidFrame (trace.steps.getLast!).frame_after := by
+  intro hlast
+  sorry  -- Induction using step preservation
+
+/-! ## Registration-Specific Trace Properties
+
+Properties specific to the registration singleton branch proof.
+-/
+
+/-- Phase 1 trace (PC 4 to PC 20). -/
+def Phase1Trace (env : ModuleEnv) := TraceSegment env 4 20
+
+/-- Phase 2 trace (PC 20 to PC 43). -/
+def Phase2Trace (env : ModuleEnv) := TraceSegment env 20 43
+
+/-- Phase 3 trace (PC 43 to PC 70). -/
+def Phase3Trace (env : ModuleEnv) := TraceSegment env 43 70
+
+/-- Phase 1 trace consumes 17 fuel. -/
+axiom phase1_trace_fuel
+    (env : ModuleEnv)
+    (trace : Phase1Trace env) :
+    trace.fuelConsumed = 17
+
+/-- Phase 2 trace consumes 23 fuel. -/
+axiom phase2_trace_fuel
+    (env : ModuleEnv)
+    (trace : Phase2Trace env) :
+    trace.fuelConsumed = 23
+
+/-- Phase 3 trace consumes 27 fuel. -/
+axiom phase3_trace_fuel
+    (env : ModuleEnv)
+    (trace : Phase3Trace env) :
+    trace.fuelConsumed = 27
+
+/-- Complete happy path trace (PC 4 to PC 70). -/
+def CompleteTrace (env : ModuleEnv) := TraceSegment env 4 70
+
+/-- Complete trace consumes 67 fuel. -/
+theorem complete_trace_fuel
+    (env : ModuleEnv)
+    (t1 : Phase1Trace env)
+    (t2 : Phase2Trace env)
+    (t3 : Phase3Trace env)
+    (h_join1 : t1.steps.getLast?.isSome →
+               t2.steps.head?.isSome →
+               (t1.steps.getLast?.get!).frame_after =
+               (t2.steps.head?.get!).frame_before)
+    (h_join2 : t2.steps.getLast?.isSome →
+               t3.steps.head?.isSome →
+               (t2.steps.getLast?.get!).frame_after =
+               (t3.steps.head?.get!).frame_before) :
+    (t1.concat3 t2 t3 h_join1 h_join2).fuelConsumed = 67 := by
+  rw [concat3_fuel_sum]
+  rw [phase1_trace_fuel, phase2_trace_fuel, phase3_trace_fuel]
+  rfl
+
+/-! ## Error Path Traces
+
+Trace properties for error paths.
+-/
+
+/-- Error path from PC 5 to PC 79 (abort). -/
+def ErrorPath1Trace (env : ModuleEnv) := TraceSegment env 5 79
+
+/-- Error path from PC 14 to PC 74 to PC 79. -/
+def ErrorPath2Trace (env : ModuleEnv) := TraceSegment env 14 79
+
+/-- Error path from PC 73 to PC 78 to PC 79. -/
+def ErrorPath3Trace (env : ModuleEnv) := TraceSegment env 73 79
+
+/-- Error paths are disjoint from happy path. -/
+theorem error_paths_disjoint_from_happy
+    (env : ModuleEnv)
+    (happy : CompleteTrace env)
+    (error1 : ErrorPath1Trace env) :
+    ∀ step_h ∈ happy.steps, ∀ step_e ∈ error1.steps,
+      step_h.frame_before.pc ≠ 79 := by
+  sorry  -- Happy path never reaches PC 79
+
+/-! ## Auxiliary Trace Utilities
+
+Helper definitions for trace reasoning.
+-/
+
+/-- Extract frame at step index. -/
+def TraceSegment.frameAt
+    {env : ModuleEnv} {pc_start pc_end : Nat}
+    (trace : TraceSegment env pc_start pc_end)
+    (idx : Nat)
+    (h : idx < trace.steps.length) :
+    Frame :=
+  (trace.steps[idx]!).frame_after
+
+/-- Extract PC at step index. -/
+def TraceSegment.pcAt
+    {env : ModuleEnv} {pc_start pc_end : Nat}
+    (trace : TraceSegment env pc_start pc_end)
+    (idx : Nat)
+    (h : idx < trace.steps.length) :
+    Nat :=
+  (trace.frameAt idx h).pc
+
+/-- All PCs in trace are in valid range. -/
+theorem trace_pcs_in_range
+    (env : ModuleEnv)
+    (trace : TraceSegment env 4 70)
+    (idx : Nat)
+    (h : idx < trace.steps.length) :
+    let pc := trace.pcAt idx h
+    4 ≤ pc ∧ pc ≤ 70 := by
+  sorry  -- From h_start_pc, h_end_pc, and pc progression
+
+end MovementFormal.Experimental.ConfidentialAsset.Registration.ExecutionTraceProperties

@@ -44,6 +44,33 @@ directly on encrypted data.
 -  [Function `get_pending_balance_chunks`](#0x7_confidential_balance_get_pending_balance_chunks)
 -  [Function `get_actual_balance_chunks`](#0x7_confidential_balance_get_actual_balance_chunks)
 -  [Function `get_chunk_size_bits`](#0x7_confidential_balance_get_chunk_size_bits)
+-  [Function `verify_actual_balance_for_test`](#0x7_confidential_balance_verify_actual_balance_for_test)
+-  [Function `verify_pending_balance_for_test`](#0x7_confidential_balance_verify_pending_balance_for_test)
+-  [Specification](#@Specification_1)
+    -  [Function `new_pending_balance_no_randomness`](#@Specification_1_new_pending_balance_no_randomness)
+    -  [Function `new_actual_balance_no_randomness`](#@Specification_1_new_actual_balance_no_randomness)
+    -  [Function `new_compressed_pending_balance_no_randomness`](#@Specification_1_new_compressed_pending_balance_no_randomness)
+    -  [Function `new_compressed_actual_balance_no_randomness`](#@Specification_1_new_compressed_actual_balance_no_randomness)
+    -  [Function `new_pending_balance_u64_no_randonmess`](#@Specification_1_new_pending_balance_u64_no_randonmess)
+    -  [Function `new_pending_balance_from_bytes`](#@Specification_1_new_pending_balance_from_bytes)
+    -  [Function `new_actual_balance_from_bytes`](#@Specification_1_new_actual_balance_from_bytes)
+    -  [Function `compress_balance`](#@Specification_1_compress_balance)
+    -  [Function `decompress_balance`](#@Specification_1_decompress_balance)
+    -  [Function `balance_to_bytes`](#@Specification_1_balance_to_bytes)
+    -  [Function `balance_to_points_c`](#@Specification_1_balance_to_points_c)
+    -  [Function `balance_to_points_d`](#@Specification_1_balance_to_points_d)
+    -  [Function `add_balances_mut`](#@Specification_1_add_balances_mut)
+    -  [Function `sub_balances_mut`](#@Specification_1_sub_balances_mut)
+    -  [Function `balance_equals`](#@Specification_1_balance_equals)
+    -  [Function `balance_c_equals`](#@Specification_1_balance_c_equals)
+    -  [Function `is_zero_balance`](#@Specification_1_is_zero_balance)
+    -  [Function `split_into_chunks_u64`](#@Specification_1_split_into_chunks_u64)
+    -  [Function `split_into_chunks_u128`](#@Specification_1_split_into_chunks_u128)
+    -  [Function `get_pending_balance_chunks`](#@Specification_1_get_pending_balance_chunks)
+    -  [Function `get_actual_balance_chunks`](#@Specification_1_get_actual_balance_chunks)
+    -  [Function `get_chunk_size_bits`](#@Specification_1_get_chunk_size_bits)
+    -  [Function `verify_actual_balance_for_test`](#@Specification_1_verify_actual_balance_for_test)
+    -  [Function `verify_pending_balance_for_test`](#@Specification_1_verify_pending_balance_for_test)
 
 
 <pre><code><b>use</b> <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error">0x1::error</a>;
@@ -472,7 +499,7 @@ Serializes a confidential balance into a byte array representation.
 
 ## Function `balance_to_points_c`
 
-Extracts the <code>C</code> value component (<code>a * H + r * G</code>) of each chunk in a confidential balance as a vector of <code>RistrettoPoint</code>s.
+Extracts the <code>C</code> value component (<code>v * G + r * H</code>) of each chunk in a confidential balance as a vector of <code>RistrettoPoint</code>s.
 
 
 <pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_balance_to_points_c">balance_to_points_c</a>(balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_RistrettoPoint">ristretto255::RistrettoPoint</a>&gt;
@@ -578,7 +605,7 @@ The second balance must have fewer or equal chunks compared to the first.
 
     lhs.chunks.enumerate_mut(|i, chunk| {
         <b>if</b> (i &lt; rhs.chunks.length()) {
-            twisted_elgamal::ciphertext_add_assign(chunk, &rhs.chunks[i])
+            twisted_elgamal::ciphertext_sub_assign(chunk, &rhs.chunks[i])
         }
     })
 }
@@ -818,6 +845,533 @@ Returns the number of bits in a single chunk.
 
 
 </details>
+
+<a id="0x7_confidential_balance_verify_actual_balance_for_test"></a>
+
+## Function `verify_actual_balance_for_test`
+
+Like [<code>verify_actual_balance</code>] but exposed as a regular <code><b>public</b></code>
+helper (not <code>#[test_only]</code>) so off-chain tooling and
+<code><b>move</b>-lean-difftest</code> harnesses can pin the decryption-consistency
+check without pulling in <code>testing: <b>true</b></code>. Body is byte-for-byte
+identical to the <code>#[test_only]</code> version (same precedent as
+<code><a href="confidential_proof.md#0x7_confidential_proof_registration_fs_message_for_test">confidential_proof::registration_fs_message_for_test</a></code> — a
+pure-function view over already-public types).
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_verify_actual_balance_for_test">verify_actual_balance_for_test</a>(balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>, dk: &<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_Scalar">ristretto255::Scalar</a>, amount: u128): bool
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_verify_actual_balance_for_test">verify_actual_balance_for_test</a>(
+    balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">ConfidentialBalance</a>,
+    dk: &Scalar,
+    amount: u128,
+): bool {
+    <b>assert</b>!(balance.chunks.length() == <a href="confidential_balance.md#0x7_confidential_balance_ACTUAL_BALANCE_CHUNKS">ACTUAL_BALANCE_CHUNKS</a>, <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_internal">error::internal</a>(<a href="confidential_balance.md#0x7_confidential_balance_EINTERNAL_ERROR">EINTERNAL_ERROR</a>));
+
+    <b>let</b> amount_chunks = <a href="confidential_balance.md#0x7_confidential_balance_split_into_chunks_u128">split_into_chunks_u128</a>(amount);
+    <b>let</b> ok = <b>true</b>;
+
+    balance.chunks.zip_ref(&amount_chunks, |balance, amount| {
+        <b>let</b> (balance_c, balance_d) = twisted_elgamal::ciphertext_as_points(balance);
+        <b>let</b> point_amount = <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_sub">ristretto255::point_sub</a>(balance_c, &<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_mul">ristretto255::point_mul</a>(balance_d, dk));
+
+        ok = ok && <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_equals">ristretto255::point_equals</a>(&point_amount, &<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_basepoint_mul">ristretto255::basepoint_mul</a>(amount));
+    });
+
+    ok
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x7_confidential_balance_verify_pending_balance_for_test"></a>
+
+## Function `verify_pending_balance_for_test`
+
+Public-visibility counterpart of [<code>verify_pending_balance</code>] (see
+[<code>verify_actual_balance_for_test</code>] for the rationale).
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_verify_pending_balance_for_test">verify_pending_balance_for_test</a>(balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>, dk: &<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_Scalar">ristretto255::Scalar</a>, amount: u64): bool
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_verify_pending_balance_for_test">verify_pending_balance_for_test</a>(
+    balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">ConfidentialBalance</a>,
+    dk: &Scalar,
+    amount: u64,
+): bool {
+    <b>assert</b>!(balance.chunks.length() == <a href="confidential_balance.md#0x7_confidential_balance_PENDING_BALANCE_CHUNKS">PENDING_BALANCE_CHUNKS</a>, <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_internal">error::internal</a>(<a href="confidential_balance.md#0x7_confidential_balance_EINTERNAL_ERROR">EINTERNAL_ERROR</a>));
+
+    <b>let</b> amount_chunks = <a href="confidential_balance.md#0x7_confidential_balance_split_into_chunks_u64">split_into_chunks_u64</a>(amount);
+    <b>let</b> ok = <b>true</b>;
+
+    balance.chunks.zip_ref(&amount_chunks, |balance, amount| {
+        <b>let</b> (balance_c, balance_d) = twisted_elgamal::ciphertext_as_points(balance);
+        <b>let</b> point_amount = <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_sub">ristretto255::point_sub</a>(balance_c, &<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_mul">ristretto255::point_mul</a>(balance_d, dk));
+
+        ok = ok && <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_equals">ristretto255::point_equals</a>(&point_amount, &<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_basepoint_mul">ristretto255::basepoint_mul</a>(amount));
+    });
+
+    ok
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="@Specification_1"></a>
+
+## Specification
+
+
+
+<pre><code><b>pragma</b> verify = <b>true</b>;
+<b>pragma</b> aborts_if_is_strict;
+</code></pre>
+
+
+
+<a id="@Specification_1_new_pending_balance_no_randomness"></a>
+
+### Function `new_pending_balance_no_randomness`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_new_pending_balance_no_randomness">new_pending_balance_no_randomness</a>(): <a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>aborts_if</b> <b>false</b>;
+<b>ensures</b> len(result.chunks) == <a href="confidential_balance.md#0x7_confidential_balance_PENDING_BALANCE_CHUNKS">PENDING_BALANCE_CHUNKS</a>;
+<b>ensures</b> <b>forall</b> i in 0..len(result.chunks):
+    result.chunks[i].left.handle == 0 && result.chunks[i].right.handle == 0;
+</code></pre>
+
+
+
+<a id="@Specification_1_new_actual_balance_no_randomness"></a>
+
+### Function `new_actual_balance_no_randomness`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_new_actual_balance_no_randomness">new_actual_balance_no_randomness</a>(): <a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>aborts_if</b> <b>false</b>;
+<b>ensures</b> len(result.chunks) == <a href="confidential_balance.md#0x7_confidential_balance_ACTUAL_BALANCE_CHUNKS">ACTUAL_BALANCE_CHUNKS</a>;
+<b>ensures</b> <b>forall</b> i in 0..len(result.chunks):
+    result.chunks[i].left.handle == 0 && result.chunks[i].right.handle == 0;
+</code></pre>
+
+
+
+<a id="@Specification_1_new_compressed_pending_balance_no_randomness"></a>
+
+### Function `new_compressed_pending_balance_no_randomness`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_new_compressed_pending_balance_no_randomness">new_compressed_pending_balance_no_randomness</a>(): <a href="confidential_balance.md#0x7_confidential_balance_CompressedConfidentialBalance">confidential_balance::CompressedConfidentialBalance</a>
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>aborts_if</b> <b>false</b>;
+<b>ensures</b> len(result.chunks) == <a href="confidential_balance.md#0x7_confidential_balance_PENDING_BALANCE_CHUNKS">PENDING_BALANCE_CHUNKS</a>;
+</code></pre>
+
+
+
+<a id="@Specification_1_new_compressed_actual_balance_no_randomness"></a>
+
+### Function `new_compressed_actual_balance_no_randomness`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_new_compressed_actual_balance_no_randomness">new_compressed_actual_balance_no_randomness</a>(): <a href="confidential_balance.md#0x7_confidential_balance_CompressedConfidentialBalance">confidential_balance::CompressedConfidentialBalance</a>
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>aborts_if</b> <b>false</b>;
+<b>ensures</b> len(result.chunks) == <a href="confidential_balance.md#0x7_confidential_balance_ACTUAL_BALANCE_CHUNKS">ACTUAL_BALANCE_CHUNKS</a>;
+</code></pre>
+
+
+
+<a id="@Specification_1_new_pending_balance_u64_no_randonmess"></a>
+
+### Function `new_pending_balance_u64_no_randonmess`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_new_pending_balance_u64_no_randonmess">new_pending_balance_u64_no_randonmess</a>(amount: u64): <a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>aborts_if</b> <b>false</b>;
+<b>ensures</b> len(result.chunks) == <a href="confidential_balance.md#0x7_confidential_balance_PENDING_BALANCE_CHUNKS">PENDING_BALANCE_CHUNKS</a>;
+</code></pre>
+
+
+
+<a id="@Specification_1_new_pending_balance_from_bytes"></a>
+
+### Function `new_pending_balance_from_bytes`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_new_pending_balance_from_bytes">new_pending_balance_from_bytes</a>(bytes: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_Option">option::Option</a>&lt;<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>&gt;
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>aborts_if</b> <b>false</b>;
+</code></pre>
+
+
+
+<a id="@Specification_1_new_actual_balance_from_bytes"></a>
+
+### Function `new_actual_balance_from_bytes`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_new_actual_balance_from_bytes">new_actual_balance_from_bytes</a>(bytes: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_Option">option::Option</a>&lt;<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>&gt;
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>aborts_if</b> <b>false</b>;
+</code></pre>
+
+
+
+<a id="@Specification_1_compress_balance"></a>
+
+### Function `compress_balance`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_compress_balance">compress_balance</a>(balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>): <a href="confidential_balance.md#0x7_confidential_balance_CompressedConfidentialBalance">confidential_balance::CompressedConfidentialBalance</a>
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>aborts_if</b> <b>false</b>;
+<b>ensures</b> len(result.chunks) == len(balance.chunks);
+</code></pre>
+
+
+
+<a id="@Specification_1_decompress_balance"></a>
+
+### Function `decompress_balance`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_decompress_balance">decompress_balance</a>(balance: &<a href="confidential_balance.md#0x7_confidential_balance_CompressedConfidentialBalance">confidential_balance::CompressedConfidentialBalance</a>): <a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>aborts_if</b> <b>false</b>;
+<b>ensures</b> len(result.chunks) == len(balance.chunks);
+</code></pre>
+
+
+
+<a id="@Specification_1_balance_to_bytes"></a>
+
+### Function `balance_to_bytes`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_balance_to_bytes">balance_to_bytes</a>(balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>aborts_if</b> <b>false</b>;
+</code></pre>
+
+
+
+<a id="@Specification_1_balance_to_points_c"></a>
+
+### Function `balance_to_points_c`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_balance_to_points_c">balance_to_points_c</a>(balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_RistrettoPoint">ristretto255::RistrettoPoint</a>&gt;
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>aborts_if</b> <b>false</b>;
+<b>ensures</b> len(result) == len(balance.chunks);
+</code></pre>
+
+
+
+<a id="@Specification_1_balance_to_points_d"></a>
+
+### Function `balance_to_points_d`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_balance_to_points_d">balance_to_points_d</a>(balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_RistrettoPoint">ristretto255::RistrettoPoint</a>&gt;
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>aborts_if</b> <b>false</b>;
+<b>ensures</b> len(result) == len(balance.chunks);
+</code></pre>
+
+
+
+<a id="@Specification_1_add_balances_mut"></a>
+
+### Function `add_balances_mut`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_add_balances_mut">add_balances_mut</a>(lhs: &<b>mut</b> <a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>, rhs: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>)
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>aborts_if</b> len(lhs.chunks) &lt; len(rhs.chunks) <b>with</b> std::error::INTERNAL;
+<b>ensures</b> len(lhs.chunks) == len(<b>old</b>(lhs).chunks);
+</code></pre>
+
+
+
+<a id="@Specification_1_sub_balances_mut"></a>
+
+### Function `sub_balances_mut`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_sub_balances_mut">sub_balances_mut</a>(lhs: &<b>mut</b> <a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>, rhs: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>)
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>aborts_if</b> len(lhs.chunks) &lt; len(rhs.chunks) <b>with</b> std::error::INTERNAL;
+<b>ensures</b> len(lhs.chunks) == len(<b>old</b>(lhs).chunks);
+</code></pre>
+
+
+
+<a id="@Specification_1_balance_equals"></a>
+
+### Function `balance_equals`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_balance_equals">balance_equals</a>(lhs: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>, rhs: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>): bool
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>aborts_if</b> len(lhs.chunks) != len(rhs.chunks) <b>with</b> std::error::INTERNAL;
+</code></pre>
+
+
+
+<a id="@Specification_1_balance_c_equals"></a>
+
+### Function `balance_c_equals`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_balance_c_equals">balance_c_equals</a>(lhs: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>, rhs: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>): bool
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>aborts_if</b> len(lhs.chunks) != len(rhs.chunks) <b>with</b> std::error::INTERNAL;
+</code></pre>
+
+
+
+<a id="@Specification_1_is_zero_balance"></a>
+
+### Function `is_zero_balance`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_is_zero_balance">is_zero_balance</a>(balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>): bool
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>aborts_if</b> <b>false</b>;
+</code></pre>
+
+
+
+<a id="@Specification_1_split_into_chunks_u64"></a>
+
+### Function `split_into_chunks_u64`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_split_into_chunks_u64">split_into_chunks_u64</a>(amount: u64): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_Scalar">ristretto255::Scalar</a>&gt;
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>aborts_if</b> <b>false</b>;
+<b>ensures</b> len(result) == <a href="confidential_balance.md#0x7_confidential_balance_PENDING_BALANCE_CHUNKS">PENDING_BALANCE_CHUNKS</a>;
+</code></pre>
+
+
+
+<a id="@Specification_1_split_into_chunks_u128"></a>
+
+### Function `split_into_chunks_u128`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_split_into_chunks_u128">split_into_chunks_u128</a>(amount: u128): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_Scalar">ristretto255::Scalar</a>&gt;
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>aborts_if</b> <b>false</b>;
+<b>ensures</b> len(result) == <a href="confidential_balance.md#0x7_confidential_balance_ACTUAL_BALANCE_CHUNKS">ACTUAL_BALANCE_CHUNKS</a>;
+</code></pre>
+
+
+
+<a id="@Specification_1_get_pending_balance_chunks"></a>
+
+### Function `get_pending_balance_chunks`
+
+
+<pre><code>#[view]
+<b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_get_pending_balance_chunks">get_pending_balance_chunks</a>(): u64
+</code></pre>
+
+
+
+
+<pre><code><b>aborts_if</b> <b>false</b>;
+<b>ensures</b> result == <a href="confidential_balance.md#0x7_confidential_balance_PENDING_BALANCE_CHUNKS">PENDING_BALANCE_CHUNKS</a>;
+</code></pre>
+
+
+
+<a id="@Specification_1_get_actual_balance_chunks"></a>
+
+### Function `get_actual_balance_chunks`
+
+
+<pre><code>#[view]
+<b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_get_actual_balance_chunks">get_actual_balance_chunks</a>(): u64
+</code></pre>
+
+
+
+
+<pre><code><b>aborts_if</b> <b>false</b>;
+<b>ensures</b> result == <a href="confidential_balance.md#0x7_confidential_balance_ACTUAL_BALANCE_CHUNKS">ACTUAL_BALANCE_CHUNKS</a>;
+</code></pre>
+
+
+
+<a id="@Specification_1_get_chunk_size_bits"></a>
+
+### Function `get_chunk_size_bits`
+
+
+<pre><code>#[view]
+<b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_get_chunk_size_bits">get_chunk_size_bits</a>(): u64
+</code></pre>
+
+
+
+
+<pre><code><b>aborts_if</b> <b>false</b>;
+<b>ensures</b> result == <a href="confidential_balance.md#0x7_confidential_balance_CHUNK_SIZE_BITS">CHUNK_SIZE_BITS</a>;
+</code></pre>
+
+
+
+<a id="@Specification_1_verify_actual_balance_for_test"></a>
+
+### Function `verify_actual_balance_for_test`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_verify_actual_balance_for_test">verify_actual_balance_for_test</a>(balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>, dk: &<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_Scalar">ristretto255::Scalar</a>, amount: u128): bool
+</code></pre>
+
+
+
+
+<pre><code><b>aborts_if</b> len(balance.chunks) != <a href="confidential_balance.md#0x7_confidential_balance_ACTUAL_BALANCE_CHUNKS">ACTUAL_BALANCE_CHUNKS</a> <b>with</b> std::error::INTERNAL;
+<b>ensures</b> result == <b>true</b> || result == <b>false</b>;
+</code></pre>
+
+
+
+<a id="@Specification_1_verify_pending_balance_for_test"></a>
+
+### Function `verify_pending_balance_for_test`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_verify_pending_balance_for_test">verify_pending_balance_for_test</a>(balance: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>, dk: &<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_Scalar">ristretto255::Scalar</a>, amount: u64): bool
+</code></pre>
+
+
+
+
+<pre><code><b>aborts_if</b> len(balance.chunks) != <a href="confidential_balance.md#0x7_confidential_balance_PENDING_BALANCE_CHUNKS">PENDING_BALANCE_CHUNKS</a> <b>with</b> std::error::INTERNAL;
+<b>ensures</b> result == <b>true</b> || result == <b>false</b>;
+</code></pre>
 
 
 [move-book]: https://aptos.dev/move/book/SUMMARY

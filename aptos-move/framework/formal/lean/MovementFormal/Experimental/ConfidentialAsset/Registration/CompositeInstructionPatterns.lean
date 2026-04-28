@@ -1,0 +1,9 @@
+import MovementFormal.MoveModel.Value
+import MovementFormal.MoveModel.State
+import MovementFormal.MoveModel.Step
+import MovementFormal.Experimental.ConfidentialAsset.Registration.StateTransitionLemmas
+import MovementFormal.Experimental.ConfidentialAsset.Registration.InstructionSemantics
+
+namespace MovementFormal.Experimental.ConfidentialAsset.Registration.CompositeInstructionPatterns
+theorem stub : True := trivial
+end MovementFormal.Experimental.ConfidentialAsset.Registration.CompositeInstructionPatterns

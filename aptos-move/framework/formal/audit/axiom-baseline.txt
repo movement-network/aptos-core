@@ -1,0 +1,771 @@
+==========================================
+  MSL pragma-escape inventory (CA)
+==========================================
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_proof.spec.move:9:/// At the Move Prover boundary, we declare these verifiers as `pragma opaque`: their inputs
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_proof.spec.move:44:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_proof.spec.move:49:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_proof.spec.move:54:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_proof.spec.move:59:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_proof.spec.move:69:        pragma verify = false;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_proof.spec.move:73:        pragma verify = false;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_proof.spec.move:77:        pragma verify = false;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_proof.spec.move:81:        pragma verify = false;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_proof.spec.move:89:        pragma verify = false;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_proof.spec.move:93:        pragma verify = false;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_proof.spec.move:97:        pragma verify = false;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_proof.spec.move:101:        pragma verify = false;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_asset.spec.move:159:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_asset.spec.move:168:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_asset.spec.move:188:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_asset.spec.move:203:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_asset.spec.move:274:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_asset.spec.move:282:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_asset.spec.move:291:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_asset.spec.move:305:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_asset.spec.move:317:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_asset.spec.move:369:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_asset.spec.move:381:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_asset.spec.move:410:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_asset.spec.move:435:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_asset.spec.move:474:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_asset.spec.move:510:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_asset.spec.move:533:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_asset.spec.move:571:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_asset.spec.move:682:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_asset.spec.move:701:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_asset.spec.move:726:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_asset.spec.move:754:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_asset.spec.move:780:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_asset.spec.move:802:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_asset.spec.move:828:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_asset.spec.move:850:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_asset.spec.move:870:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_asset.spec.move:892:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_asset.spec.move:906:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_asset.spec.move:923:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_asset.spec.move:1079:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_asset.spec.move:1093:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/ristretto255_twisted_elgamal.spec.move:5:/// operations are treated as `pragma opaque` at the Move Prover boundary (their semantics are
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/ristretto255_twisted_elgamal.spec.move:27:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/ristretto255_twisted_elgamal.spec.move:32:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/ristretto255_twisted_elgamal.spec.move:41:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/ristretto255_twisted_elgamal.spec.move:46:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/ristretto255_twisted_elgamal.spec.move:51:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/ristretto255_twisted_elgamal.spec.move:60:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/ristretto255_twisted_elgamal.spec.move:65:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/ristretto255_twisted_elgamal.spec.move:74:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/ristretto255_twisted_elgamal.spec.move:79:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/ristretto255_twisted_elgamal.spec.move:84:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/ristretto255_twisted_elgamal.spec.move:89:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/ristretto255_twisted_elgamal.spec.move:94:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/ristretto255_twisted_elgamal.spec.move:99:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/ristretto255_twisted_elgamal.spec.move:108:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/ristretto255_twisted_elgamal.spec.move:113:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/ristretto255_twisted_elgamal.spec.move:118:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/ristretto255_twisted_elgamal.spec.move:123:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/ristretto255_twisted_elgamal.spec.move:128:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/ristretto255_twisted_elgamal.spec.move:133:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/ristretto255_twisted_elgamal.spec.move:138:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/ristretto255_twisted_elgamal.spec.move:147:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/ristretto255_twisted_elgamal.spec.move:153:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/ristretto255_twisted_elgamal.spec.move:158:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/ristretto255_twisted_elgamal.spec.move:163:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_balance.spec.move:15:/// rather than axiomatized via `pragma opaque` — that's a Phase 2/3 decision.
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_balance.spec.move:27:        pragma verify = false;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_balance.spec.move:31:        pragma verify = false;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_balance.spec.move:35:        pragma verify = false;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_balance.spec.move:39:        pragma verify = false;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_balance.spec.move:47:        pragma verify = false;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_balance.spec.move:51:        pragma verify = false;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_balance.spec.move:55:        pragma verify = false;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_balance.spec.move:59:        pragma verify = false;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_balance.spec.move:67:        pragma verify = false;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_balance.spec.move:71:        pragma verify = false;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_balance.spec.move:98:        pragma verify = false;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_balance.spec.move:102:        pragma verify = false;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_balance.spec.move:110:        pragma verify = false;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_balance.spec.move:118:        pragma verify = false;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_balance.spec.move:122:        pragma verify = false;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_balance.spec.move:130:        pragma verify = false;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_balance.spec.move:138:        pragma verify = false;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_balance.spec.move:142:        pragma verify = false;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_balance.spec.move:150:        pragma verify = false;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_balance.spec.move:158:        pragma verify = false;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_balance.spec.move:162:        pragma verify = false;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_balance.spec.move:170:        pragma verify = false;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_balance.spec.move:174:        pragma verify = false;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_balance.spec.move:182:        pragma verify = false;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_balance.spec.move:186:        pragma verify = false;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_balance.spec.move:190:        pragma verify = false;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_balance.spec.move:194:        pragma verify = false;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_gas_e2e_helpers.spec.move:6:/// `pragma opaque` at the module boundary. The `pragma verify = false` disables verification
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_gas_e2e_helpers.spec.move:14:        pragma verify = false;  // test-only module; not verified in CI
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_gas_e2e_helpers.spec.move:18:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_gas_e2e_helpers.spec.move:22:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_gas_e2e_helpers.spec.move:26:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_gas_e2e_helpers.spec.move:30:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-experimental/sources/confidential_asset/confidential_gas_e2e_helpers.spec.move:34:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/single_key.spec.move:3:        pragma verify = false;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/keyless.spec.move:3:        pragma verify = false;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/secp256r1.spec.move:3:        pragma verify = false;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/ristretto255.spec.move:24:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/ristretto255.spec.move:29:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/ristretto255.spec.move:34:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/ristretto255.spec.move:38:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/ristretto255.spec.move:45:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/ristretto255.spec.move:50:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/ristretto255.spec.move:55:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/ristretto255.spec.move:60:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/ristretto255.spec.move:65:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/ristretto255.spec.move:70:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/ristretto255.spec.move:75:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/ristretto255.spec.move:80:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/ristretto255.spec.move:85:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/ristretto255.spec.move:90:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/ristretto255.spec.move:95:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/ristretto255.spec.move:99:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/ristretto255.spec.move:105:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/ristretto255.spec.move:111:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/ristretto255.spec.move:118:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/ristretto255.spec.move:124:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/ristretto255.spec.move:129:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/ristretto255.spec.move:135:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/ristretto255.spec.move:142:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/ristretto255.spec.move:160:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/ristretto255.spec.move:229:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/ristretto255.spec.move:235:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/ristretto255.spec.move:246:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/ristretto255.spec.move:252:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/ristretto255.spec.move:258:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/crypto_algebra.spec.move:9:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/crypto_algebra.spec.move:13:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/crypto_algebra.spec.move:17:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/crypto_algebra.spec.move:21:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/crypto_algebra.spec.move:25:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/crypto_algebra.spec.move:29:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/crypto_algebra.spec.move:33:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/crypto_algebra.spec.move:37:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/crypto_algebra.spec.move:41:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/crypto_algebra.spec.move:45:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/crypto_algebra.spec.move:49:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/crypto_algebra.spec.move:53:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/crypto_algebra.spec.move:57:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/crypto_algebra.spec.move:61:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/crypto_algebra.spec.move:65:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/crypto_algebra.spec.move:69:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/crypto_algebra.spec.move:73:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/crypto_algebra.spec.move:77:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/crypto_algebra.spec.move:81:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/crypto_algebra.spec.move:85:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/crypto_algebra.spec.move:89:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/crypto_algebra.spec.move:93:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/secp256k1.spec.move:40:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/ed25519.spec.move:33:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/ed25519.spec.move:44:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/ed25519.spec.move:54:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/ristretto255_bulletproofs.spec.move:3:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/ristretto255_bulletproofs.spec.move:7:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/federated_keyless.spec.move:3:        pragma verify = false;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/multi_key.spec.move:3:        pragma verify = false;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/multi_ed25519.spec.move:74:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/multi_ed25519.spec.move:84:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/multi_ed25519.spec.move:91:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/multi_ed25519.spec.move:100:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/bls12381.spec.move:10:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/bls12381.spec.move:25:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/bls12381.spec.move:40:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/bls12381.spec.move:52:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/bls12381.spec.move:63:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/bls12381.spec.move:74:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/bls12381.spec.move:85:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/bls12381.spec.move:96:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/bls12381.spec.move:102:        pragma opaque;
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/aptos-stdlib/sources/cryptography/bls12381.spec.move:113:        pragma opaque;
+
+==========================================
+  Lean axiom declarations (CA)
+==========================================
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/ExecutionTracesDetailed.lean:8:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/PCProofChaining.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/InvariantMaintenance.lean:8:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/PC43_55_Implementations.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/BytecodeSemanticsComplete.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/ExecutionTraceComplete.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/CryptoCorrectnessProperties.lean:7:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/RunCompositionLemmas.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/ValueValidationComplete.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/SchnorrCompleteness.lean:8:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/Phase1Complete.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/RegisterEntryStub.lean:5:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/PC16_20_Composition.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/PC31_43_Implementations.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/OracleCorrespondenceComplete.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/CryptoSecurity.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/ValueProvenanceTracking.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/TypeCorrectnessProofs.lean:8:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/ProofTacticsAutomation.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/BytecodeSemanticsCatalog.lean:8:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/FinalIntegrationFramework.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/CompositeInstructionPatterns.lean:8:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/NativeCallPatterns.lean:8:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/PCChainProofs.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/ConcreteProofInstances.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/PC31_43_Composition.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/PCProgressMonotonicity.lean:8:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/ErrorPathCompleteness.lean:8:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/Phase3SchnorrComputation.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/InstructionEncodingVerification.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/ReferenceSafetyComplete.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/AxiomEliminationRoadmap.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/ConcreteWitnessBuilders.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/StackManagementLemmas.lean:6:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/CompleteProofAssembly.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/ReferenceLifetimeAnalysis.lean:9:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/ProofAutomationTactics.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/PCRangeProofs.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/PC11_20_Implementations.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/OracleSemantics.lean:7:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/ProofValidationFramework.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/MemorySafetyComplete.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:81:axiom registrationInitFrame_def (args : List MoveValue) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:95:axiom registrationModuleEnv_functions_size (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:98:axiom registrationModuleEnv_idx17 (o : RegistrationNativeOracle)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:103:axiom eval_registration_eq_run (o : RegistrationNativeOracle) (args : List MoveValue)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:125:axiom registrationInitFrame_localRefs_eq (args : List MoveValue) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:129:axiom registrationInitFrame_localRefs_size (args : List MoveValue) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:132:axiom registrationInitFrame_localRefs_get? (args : List MoveValue) (i : Nat) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:144:axiom registrationCode_pc0 :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:158:axiom registrationInitFrame_locals_get? (args : List MoveValue) (i : Nat)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:166:axiom from `MovementFormal.MoveModel.StepLemmas.*`, following the template demonstrated in
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:210:axiom registrationArgs_get_5
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:216:axiom registrationArgs_get_6
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:227:axiom registrationInitFrame_locals_size (args : List MoveValue) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:230:axiom registrationInitFrame7_locals_size
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:235:axiom registrationInitFrame_code_size (args : List MoveValue) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:245:axiom registration_pc0_sides (args : List MoveValue) (hargs6 : 6 ≤ args.length) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:250:axiom registrationInitFrame_code_pc0_get? (args : List MoveValue) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:253:axiom registrationInitFrame_code_pc1_get? (args : List MoveValue) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:256:axiom registrationInitFrame_code_pc2_get? (args : List MoveValue) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:259:axiom registrationInitFrame_code_pc3_get? (args : List MoveValue) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:262:axiom registrationInitFrame_code_pc4_get? (args : List MoveValue) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:265:axiom registrationInitFrame_code_pc5_get? (args : List MoveValue) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:268:axiom registrationInitFrame_code_pc83_get? (args : List MoveValue) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:283:axiom step_registration_pc0_7args (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:312:axiom step_registration_pc2 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:326:axiom step_registration_pc3_existingRef (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:342:axiom step_registration_pc5_taken (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:348:axiom step_registration_pc5_notTaken (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:356:axiom step_registration_pc6_existingRef (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:369:axiom step_registration_pc8 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:381:axiom step_registration_pc9 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:397:axiom step_registration_pc11 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:409:axiom step_registration_pc14_taken (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:415:axiom step_registration_pc14_notTaken (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:423:axiom step_registration_pc69_taken (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:429:axiom step_registration_pc69_notTaken (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:437:axiom step_registration_pc70 (env : ModuleEnv) (stack : List MoveValue) (ms : MachineState)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:444:axiom step_registration_pc71 (env : ModuleEnv) (cs : List Frame) (stack : List MoveValue)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:450:axiom step_registration_pc76 (env : ModuleEnv) (cs : List Frame) (stack : List MoveValue)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:456:axiom step_registration_pc81 (env : ModuleEnv) (cs : List Frame) (stack : List MoveValue)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:464:axiom step_registration_pc74 (env : ModuleEnv) (cs : List Frame) (stack : List MoveValue)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:478:axiom step_registration_pc79 (env : ModuleEnv) (cs : List Frame) (stack : List MoveValue)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:494:axiom step_registration_pc75 (env : ModuleEnv) (cs : List Frame) (v : MoveValue)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:500:axiom step_registration_pc80 (env : ModuleEnv) (cs : List Frame) (v : MoveValue)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:508:axiom step_registration_pc73 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:513:axiom step_registration_pc78 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:518:axiom step_registration_pc83 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:533:axiom step_registration_pc12 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:546:axiom step_registration_pc15 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:559:axiom step_registration_pc17 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:569:axiom step_registration_pc18 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:578:axiom step_registration_pc19 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:604:axiom step_registration_pc20 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:615:axiom step_registration_pc23 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:626:axiom step_registration_pc27 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:637:axiom step_registration_pc31 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:648:axiom step_registration_pc35 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:659:axiom step_registration_pc39 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:672:axiom step_registration_pc21 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:686:axiom step_registration_pc24 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:699:axiom step_registration_pc28 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:712:axiom step_registration_pc32 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:725:axiom step_registration_pc43 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:739:axiom step_registration_pc45 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:749:axiom step_registration_pc47 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:759:axiom step_registration_pc48 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:773:axiom step_registration_pc50 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:783:axiom step_registration_pc51 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:792:axiom step_registration_pc52 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:801:axiom step_registration_pc54 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:809:axiom step_registration_pc55 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:818:axiom step_registration_pc56 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:827:axiom step_registration_pc57 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:836:axiom step_registration_pc59 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:844:axiom step_registration_pc60 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:853:axiom step_registration_pc62 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:861:axiom step_registration_pc63 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:870:axiom step_registration_pc65 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:878:axiom step_registration_pc66 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:887:axiom step_registration_pc67 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:898:axiom step_registration_pc36 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:911:axiom step_registration_pc40 (env : ModuleEnv) (cs : List Frame)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:932:axiom step_registration_pc1_some (env_orig : RegistrationNativeOracle)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:941:axiom step_registration_pc1_none (env_orig : RegistrationNativeOracle)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:948:axiom step_registration_pc10_some (env_orig : RegistrationNativeOracle)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:963:axiom registrationModuleEnv_fn0_numParams (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:967:axiom registrationModuleEnv_fn0_numReturns (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:971:axiom registrationModuleEnv_fn0_body (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:976:axiom registrationModuleEnv_fn1_numParams (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:980:axiom registrationModuleEnv_fn1_body (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:985:axiom registrationModuleEnv_fn16_body (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:991:axiom registrationModuleEnv_fn2_numParams (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:995:axiom registrationModuleEnv_fn2_numReturns (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:999:axiom registrationModuleEnv_fn2_body (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1005:axiom registrationModuleEnv_fn3_numParams (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1009:axiom registrationModuleEnv_fn3_numReturns (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1013:axiom registrationModuleEnv_fn3_body (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1019:axiom registrationModuleEnv_fn4_numParams (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1023:axiom registrationModuleEnv_fn4_numReturns (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1027:axiom registrationModuleEnv_fn4_body (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1033:axiom registrationModuleEnv_fn5_numParams (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1037:axiom registrationModuleEnv_fn5_numReturns (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1041:axiom registrationModuleEnv_fn5_body (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1047:axiom registrationModuleEnv_fn6_numParams (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1051:axiom registrationModuleEnv_fn6_numReturns (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1055:axiom registrationModuleEnv_fn6_body (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1061:axiom registrationModuleEnv_fn7_numParams (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1065:axiom registrationModuleEnv_fn7_numReturns (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1069:axiom registrationModuleEnv_fn7_body (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1075:axiom registrationModuleEnv_fn8_numParams (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1079:axiom registrationModuleEnv_fn8_numReturns (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1083:axiom registrationModuleEnv_fn8_body (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1089:axiom registrationModuleEnv_fn9_numParams (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1093:axiom registrationModuleEnv_fn9_numReturns (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1097:axiom registrationModuleEnv_fn9_body (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1103:axiom registrationModuleEnv_fn10_numParams (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1107:axiom registrationModuleEnv_fn10_numReturns (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1111:axiom registrationModuleEnv_fn10_body (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1117:axiom registrationModuleEnv_fn11_numParams (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1121:axiom registrationModuleEnv_fn11_numReturns (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1125:axiom registrationModuleEnv_fn11_body (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1131:axiom registrationModuleEnv_fn12_numParams (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1135:axiom registrationModuleEnv_fn12_numReturns (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1139:axiom registrationModuleEnv_fn12_body (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1145:axiom registrationModuleEnv_fn13_numParams (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1149:axiom registrationModuleEnv_fn13_numReturns (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1153:axiom registrationModuleEnv_fn13_body (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1159:axiom registrationModuleEnv_fn14_numParams (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1163:axiom registrationModuleEnv_fn14_numReturns (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1167:axiom registrationModuleEnv_fn14_body (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1173:axiom registrationModuleEnv_fn15_numParams (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1177:axiom registrationModuleEnv_fn15_numReturns (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1181:axiom registrationModuleEnv_fn15_body (o : RegistrationNativeOracle) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1188:axiom step_registration_pc4 (env_orig : RegistrationNativeOracle)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1197:axiom step_registration_pc13 (env_orig : RegistrationNativeOracle)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1208:axiom step_registration_pc7 (env_orig : RegistrationNativeOracle)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1217:axiom step_registration_pc16 (env_orig : RegistrationNativeOracle)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1228:axiom step_registration_pc72 (env_orig : RegistrationNativeOracle)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1236:axiom step_registration_pc77 (env_orig : RegistrationNativeOracle)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1244:axiom step_registration_pc82 (env_orig : RegistrationNativeOracle)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1256:axiom step_registration_pc46 (env_orig : RegistrationNativeOracle)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1266:axiom step_registration_pc41 (env_orig : RegistrationNativeOracle)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1277:axiom step_registration_pc44 (env_orig : RegistrationNativeOracle)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1290:axiom step_registration_pc22 (env_orig : RegistrationNativeOracle)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1301:axiom step_registration_pc25 (env_orig : RegistrationNativeOracle)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1310:axiom step_registration_pc29 (env_orig : RegistrationNativeOracle)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1319:axiom step_registration_pc33 (env_orig : RegistrationNativeOracle)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1353:axiom step_registration_pc26 (env_orig : RegistrationNativeOracle)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1362:axiom step_registration_pc30 (env_orig : RegistrationNativeOracle)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1371:axiom step_registration_pc34 (env_orig : RegistrationNativeOracle)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1380:axiom step_registration_pc38 (env_orig : RegistrationNativeOracle)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1389:axiom step_registration_pc42 (env_orig : RegistrationNativeOracle)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1400:axiom step_registration_pc37 (env_orig : RegistrationNativeOracle)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1411:axiom step_registration_pc49 (env_orig : RegistrationNativeOracle)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1422:axiom step_registration_pc64 (env_orig : RegistrationNativeOracle)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1433:axiom step_registration_pc53 (env_orig : RegistrationNativeOracle)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1442:axiom step_registration_pc58 (env_orig : RegistrationNativeOracle)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1453:axiom step_registration_pc61 (env_orig : RegistrationNativeOracle)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1472:axiom step_registration_pc10_none (env_orig : RegistrationNativeOracle)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1479:axiom step_registration_pc46_none (env_orig : RegistrationNativeOracle)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1485:axiom step_registration_pc41_none (env_orig : RegistrationNativeOracle)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1491:axiom step_registration_pc44_none (env_orig : RegistrationNativeOracle)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1497:axiom step_registration_pc49_none (env_orig : RegistrationNativeOracle)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1503:axiom step_registration_pc53_none (env_orig : RegistrationNativeOracle)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1510:axiom step_registration_pc61_none (env_orig : RegistrationNativeOracle)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1517:axiom step_registration_pc64_none (env_orig : RegistrationNativeOracle)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1523:axiom step_registration_pc68_none (env_orig : RegistrationNativeOracle)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1532:axiom step_registration_pc68 (env_orig : RegistrationNativeOracle)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1551:axiom registration_early_error_compressedPoint_none
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1565:axiom run_registration_fuel_zero (o : RegistrationNativeOracle) (args : List MoveValue) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1569:axiom eval_registration_fuel_zero (o : RegistrationNativeOracle) (args : List MoveValue) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1587:axiom eval_registration_early_error_compressedPoint_none
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1597:axiom eval_registration_early_error_compressedPoint_none_dropMs
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1613:axiom verifyRegistrationBytecodeResult_compressedPoint_none
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1625:axiom — the `some` branch remains open (threads all 84 PCs). -/
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1627:axiom registration_eval_equiv_functional_sim_compressedPoint_none
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1648:axiom eval_registration_early_error_compressedPoint_empty
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1658:axiom eval_registration_early_error_compressedPoint_multi
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1669:axiom verifyRegistrationBytecodeResult_compressedPoint_empty
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1677:axiom verifyRegistrationBytecodeResult_compressedPoint_multi
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1686:axiom registration_eval_equiv_functional_sim_compressedPoint_empty
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1698:axiom registration_eval_equiv_functional_sim_compressedPoint_multi
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1715:axiom in a single statement. -/
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1729:axiom verifyRegistrationBytecodeResult_rOpt_wrappedNone
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1738:axiom verifyRegistrationBytecodeResult_rOpt_wrappedSome
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1757:axiom verifyRegistrationBytecodeResult_blockB_scalarNone
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1765:axiom verifyRegistrationBytecodeResult_blockB_scalarEmpty
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1773:axiom verifyRegistrationBytecodeResult_blockB_sOpt_wrappedNone
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1781:axiom verifyRegistrationBytecodeResult_blockB_sOpt_wrappedSome
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1792:axiom verifyRegistrationBytecodeResult_blockB_scalarMulti
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1807:axiom verifyRegistrationBytecodeResult_blockCDE_fsMsgNone
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1815:axiom verifyRegistrationBytecodeResult_blockCDE_eNone
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1824:axiom verifyRegistrationBytecodeResult_blockCDE_hNone
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1834:axiom verifyRegistrationBytecodeResult_blockCDE_success
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1851:axiom verifyRegistrationBytecodeResult_blockCDE_verifyFailed
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1874:axiom ESIGMA_PROTOCOL_VERIFY_FAILED_ABORT_CODE_value :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1878:axiom ESIGMA_PROTOCOL_VERIFY_FAILED_ABORT_CODE_structured :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1881:axiom errorInvalidArgument_one_eq_abortCode :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1886:axiom errorInvalidArgument_two :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1895:axiom verifyRegistrationBytecodeResult_blockCDE_ekPtNone
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1906:axiom verifyRegistrationBytecodeResult_blockCDE_hsNone
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1918:axiom verifyRegistrationBytecodeResult_blockCDE_ekeNone
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1931:axiom verifyRegistrationBytecodeResult_blockCDE_addNone
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1945:axiom verifyRegistrationBytecodeResult_blockCDE_decNone
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1960:axiom verifyRegistrationBytecodeResult_blockCDE_eqNone
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:1985:axiom registration_eval_equiv_functional_sim_compressedPoint_nonSingleton
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2008:axiom registration_run_through_pc1_some
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2046:axiom registration_run_through_pc10_singleton : ...
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2060:axiom registration_run_through_pc5_singleton
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2067:axiom registration_run_through_pc2
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2102:axiom registration_run_through_pc12_from_pc8
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2142:axiom registration_run_through_pc19_from_pc17
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2181:axiom registration_run_through_pc26_from_pc22
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2207:axiom registration_run_through_pc42_from_pc36
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2230:axiom registration_run_through_pc67_from_pc60
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2245:axiom registration_run_simple_pc54_to_pc55
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2276:axiom registration_run_simple_consecutive_stLoc
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2328:axiom registration_eval_equiv_functional_sim_singleton :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2343:axiom registration_run_through_pc48_from_pc43
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2364:axiom registration_run_through_pc54_from_pc50
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2384:axiom registration_run_through_pc60_from_pc56
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2411:axiom registration_eval_equiv_functional_sim
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2439:axiom optionIsSomeRef_immRef_read_true
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2448:axiom optionIsSomeRef_immRef_read_false
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2457:axiom optionIsSomeRef_immRef_read_malformed
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2470:axiom optionExtractRef_mutRef_read
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2485:axiom scalarFromBytes_valid
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2494:axiom newScalarFromBytes_success_is_some
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2501:axiom scalarFromBytes_some_extractable
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2510:axiom vectorAppendU8Ref_success
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2520:axiom vectorAppendU8Ref_preserves_type
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2528:axiom vectorAppendU8Ref_concatenates
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2540:axiom compressedPointToBytes_valid
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2548:axiom pointMul_valid
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2554:axiom pointAdd_valid
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2560:axiom pointDecompress_valid
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2566:axiom pointEquals_returns_bool
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2573:axiom pubkeyToPoint_valid
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2579:axiom hashToPointBase_valid
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2588:axiom sigma_protocol_success_chain
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2605:axiom vectorAppend_to_empty
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2614:axiom vectorAppend_sequence_preserves_order
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2628:axiom bcs_address_length
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2633:axiom bcsToBytesAddressRef_identity
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2644:axiom fiatShamir_message_structure
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2663:axiom newScalarFromSha2_512_deterministic
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2670:axiom newScalarFromSha2_512_produces_scalar
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2683:axiom step_native_newScalarFromSha2_512
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2693:axiom step_native_hashToPointBase
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2710:axiom wrapOracleImmRef1_correspondence
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2720:axiom wrapOracleImmRef2_correspondence
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2737:axiom step_native_bcsToBytesAddressRef
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2754:axiom step_native_vectorAppendU8Ref
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2769:axiom step_native_vectorPushBackU8Ref
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2791:axiom step_native_optionIsSomeRef
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2802:axiom step_native_optionExtractRef
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2817:axiom newScalarFromSha2_512_valid
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2825:axiom hashToPointBase_returns_h
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2832:axiom pubkeyToPoint_valid
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2840:axiom pointMul_valid
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2847:axiom pointAdd_valid
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2854:axiom pointDecompress_valid
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2861:axiom pointEquals_returns_bool
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2882:axiom helper_pc4_to_pc6_some
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2903:axiom helper_pc6_to_pc8_extract_r
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2924:axiom helper_pc9_to_pc11_scalar
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2946:axiom helper_pc12_to_pc17_extract_scalar
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2967:axiom helper_pc18_to_pc20_init_msg
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2986:axiom helper_pc20_to_pc43_assemble_message
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3036:axiom helper_pc44_to_pc50_challenge_and_points
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3059:axiom helper_pc51_to_pc59_point_muls
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3080:axiom helper_pc60_to_pc66_add_and_decompress
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3102:axiom helper_pc67_to_pc70_equals_and_ret_success
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3118:axiom helper_pc67_to_pc73_equals_and_abort_verify_failed
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3137:axiom singleton_branch_pc4_to_pc70_happy_path_composition
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3213:axiom helper_pc4_to_pc83_option_none_abort
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3230:axiom helper_pc10_scalar_none_error
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3245:axiom helper_pc13_to_pc78_scalar_none_abort
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3260:axiom helper_point_operation_none_error
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3276:axiom construct_frame_at_pc3
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3290:axiom advance_pc3_to_pc4
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3309:axiom fuel_sufficient_for_singleton_branch
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3324:axiom fuel_monotonic
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3336:axiom containers_unchanged_through_oracle_call
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3344:axiom read_preserves_containers
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3357:axiom stLoc_updates_local_and_pops_stack
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3364:axiom moveLoc_pushes_to_stack
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3370:axiom immBorrowLoc_pushes_immRef
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3379:axiom mutBorrowLoc_pushes_mutRef
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3394:axiom native_call_1_to_1_pattern
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3404:axiom native_call_2_to_1_pattern
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3420:axiom brFalse_not_taken
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3426:axiom brFalse_taken
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3438:axiom bytecode_success_matches_functional_sim_success
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3449:axiom bytecode_abort_matches_functional_sim_verify_failed
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3469:axiom detailed_pc4_optionIsSomeRef_some
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3492:axiom detailed_pc5_brFalse_not_taken
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3510:axiom detailed_pc6_mutBorrowLoc
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3529:axiom detailed_pc7_optionExtractRef
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3552:axiom detailed_pc8_stLoc
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3576:axiom containers_read_after_alloc
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3584:axiom containers_read_preserved_by_alloc
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3594:axiom containers_write_succeeds_on_valid_ref
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3601:axiom containers_read_after_write_same
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3608:axiom containers_read_after_write_diff
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3623:axiom locals_set_preserves_others
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3632:axiom locals_get_after_set_same
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3639:axiom moveLoc_clears_local
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3646:axiom stLoc_sets_local
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3656:axiom localRefs_set_preserves_others
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3665:axiom localRefs_get_after_set_same
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3675:axiom fuel_decreases_by_step
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3681:axiom fuel_sub_add_cancel
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3687:axiom fuel_sufficient_after
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3728:axiom buildRegistrationLocals_size
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3732:axiom buildRegistrationLocals_chainId
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3737:axiom buildRegistrationLocals_sender
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3742:axiom buildRegistrationLocals_contract
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3747:axiom buildRegistrationLocals_token
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3752:axiom buildRegistrationLocals_ekBa
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3757:axiom buildRegistrationLocals_commitBa
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3762:axiom buildRegistrationLocals_respBa
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3767:axiom buildRegistrationLocals_v
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3772:axiom buildRegistrationLocals_8_none
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3783:axiom run_two_consecutive_steps
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3796:axiom run_three_consecutive_steps
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3810:axiom run_four_consecutive_steps
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3825:axiom run_five_consecutive_steps
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3848:axiom newCompressedPointFromBytes_none_produces_error
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3859:axiom optionIsSomeRef_false_pc4_branches_to_abort
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3870:axiom newScalarFromBytes_none_option_pc10_branches_to_abort
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3879:axiom pubkeyToPoint_none_pc49_produces_error
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3888:axiom pointMul_h_s_none_produces_error
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3897:axiom pointMul_ek_e_none_produces_error
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3906:axiom pointAdd_none_produces_error
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3915:axiom pointDecompress_none_produces_error
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3924:axiom pointEquals_none_produces_error
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3933:axiom pointEquals_false_pc69_branches_to_abort
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3948:axiom optionIsSomeRef_non_struct_produces_none
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3956:axiom optionIsSomeRef_malformed_struct_produces_none
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3964:axiom optionExtractRef_none_tagged_produces_none
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3971:axiom optionExtractRef_malformed_produces_none
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3985:axiom containers_read_nonexistent_returns_none
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:3991:axiom containers_write_nonexistent_fails
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:4004:axiom abort_code_sigma_verify_failed :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:4007:axiom error_invalid_argument_1_eq_sigma_failed :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:4010:axiom pc73_abort_has_correct_code
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:4083:axiom stack_push_preserves_tail
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:4088:axiom stack_head_after_push
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:4093:axiom stack_pop_twice
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:4105:axiom locals_set_multiple_independent
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:4115:axiom locals_clear
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:4121:axiom locals_set_preserves_size
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:4134:axiom fuel_for_n_steps
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:4139:axiom fuel_three_phase_composition
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:4144:axiom fuel_sufficient_for_sub_phases
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:4156:axiom machineState_update_containers_preserves
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:4162:axiom machineState_empty_containers :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:4171:axiom fuel_consumed_equals_pc_difference
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:4178:axiom execution_deterministic
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:4189:axiom run_deterministic
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:4227:axiom registration_run_through_pc8_from_pc3
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:4235:axiom registration_run_through_pc8_from_pc3_structure
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:4423:axiom registration_run_through_pc17_from_pc10
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:4430:axiom registration_run_through_pc17_from_pc10_full : ...
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:4450:axiom registration_run_through_pc35_from_pc27
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:4457:axiom registration_run_through_pc35_from_pc27_full : ...
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:4476:axiom registration_run_through_pc67_from_pc60
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:4482:axiom registration_run_through_pc67_from_pc60_full : ...
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/BytecodeDifftestBridge.lean:6:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/SingletonBranchIntegration.lean:12:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/ContainerStoreMonotonicity.lean:8:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/InstructionEffectCatalog.lean:8:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/VerifyMath.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/PC56_70_Composition.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalFuelMonotonicity.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/Phase3PCProofs.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/ValidationLemmasRefined.lean:5:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/ConcreteExecutionLemmas.lean:8:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/FuelManagement.lean:7:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/PC4_20_concrete_helper.lean:13:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/StateInvariantTracking.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/MemorySafetyProperties.lean:8:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/IntegrationTestSuite.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/CryptographicValueTracking.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/Refinement.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/FiatShamirSymbolic.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/RefIdManagementLemmas.lean:6:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/StackInvariantPreservation.lean:8:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/Phase2PCProofs.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/OracleCallChains.lean:8:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/PC4_10_Implementations.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/ConcretePCStepTemplates.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/OracleHypothesesCatalog.lean:8:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/ConcreteValueFlowAnalysis.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/DataFlowAnalysis.lean:8:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/FuelBudgetProofs.lean:8:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/PCRangeComposition.lean:8:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/FrameWellFormedness.lean:8:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/OracleCallSpecifications.lean:5:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/LocalsManagementLemmas.lean:5:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/Phase2MessageAssembly.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/BytecodeDifftestEval.lean:8:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/ProgressSummary.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/LocalsEvolutionTracking.lean:7:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/ErrorPathAnalysisComplete.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/OracleInteractionPatterns.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/TypeSystemIntegration.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/WitnessConstruction.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/PhaseBoundaryVerification.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/ProofCompositionComplete.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/ContainerInteractionComplete.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/SingletonBranchImplementation.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/PhaseCompositionProofs.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/ContainerStoreProperties.lean:5:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/WitnessExtraction.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/BytecodeSmoke.lean:7:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/StateTransitionLemmas.lean:8:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/SingletonBranchComplete.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EndToEnd.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/ArrayLemmas.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/FunctionalSim.lean:228:axiom ByteArray.toList_append (a b : ByteArray) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/FunctionalSim.lean:231:axiom ByteArray.toList_mk_singleton (x : UInt8) :
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/IntermediateStateProperties.lean:7:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/StackManipulationComplete.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/StackDepthProofs.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/VerificationStatusSummary.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/PCBoundaryConditions.lean:8:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/Phase1PCProofs.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/ValueTypePreservation.lean:7:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/GroupAxioms.lean:5:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/ErrorPathHandling.lean:8:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/Phase2Complete.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/Operational.lean:5:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/PC4_20_SimpleFacts.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/PC43_56_Composition.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/ModuleEnvProperties.lean:17:axiom IsWellFormedRegistrationEnv : ModuleEnv → Prop
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/ModuleEnvProperties.lean:18:axiom registrationModuleEnv (o : RegistrationNativeOracle) : ModuleEnv
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/ModuleEnvProperties.lean:19:axiom registrationModuleEnv_wellformed (o : RegistrationNativeOracle) : IsWellFormedRegistrationEnv (registrationModuleEnv o)
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/StackDepthAnalysis.lean:8:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/PhaseTransitionTheorems.lean:9:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/ValidationLemmas.lean:7:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/TranscriptAlignment.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/ExecutionTraceProperties.lean:8:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/PC20_30_Implementations.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/ProofCompositionPatterns.lean:9:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/PCProofImplementations.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/PC56_70_Implementations.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/OracleCorrespondenceProofs.lean:7:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/SchnorrProtocolVerification.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/PhaseSpecificInvariants.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/GlobalStateInvariants.lean:8:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/CompleteInvariantSystem.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/FuelOptimality.lean:8:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/InstructionSemantics.lean:7:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/FuelAnalysisComplete.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/PC4_10_Composition.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/PhaseCompositionImplementations.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/Phase3Complete.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquiv.lean:6:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/PC10_16_Composition.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/Phase6Composition.lean:5:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/CodeFacts.lean:5:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/PC20_30_Composition.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/BytecodeTranscriptionComplete.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/CompleteSingletonBranchProof.lean:8:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/BytecodeTranscriptionLemmas.lean:7:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/AxiomEliminationComplete.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/LocalsLifetimeTracking.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/ExampleComposition.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/FrameConstructionHelpers.lean:6:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/ConcreteLemmaInstantiations.lean:8:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Normalization/Composition.lean:4:axiom stub : True
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Normalization/ConcreteHelpers.lean:30:axiom normalization_pc0_to_pc4_concrete
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Normalization/ConcreteHelpers.lean:64:axiom normalization_pc9_to_pc12_range_marshal
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Normalization/ConcreteHelpers.lean:112:axiom normalization_happy_path_complete
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Normalization/ConcreteHelpers.lean:146:axiom normalization_sigma_fails_to_error
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Normalization/ConcreteHelpers.lean:172:axiom normalization_range_fails_to_error
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Normalization/EvalEquiv.lean:546:axiom norm_run_pc0_to_pc5
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Normalization/EvalEquiv.lean:656:axiom normalization_eval_equiv_functional_sim_axiom
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Withdrawal/ConcreteHelpers.lean:36:axiom withdrawal_pc0_to_pc5_concrete
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Withdrawal/ConcreteHelpers.lean:63:axiom withdrawal_pc6_to_pc7_concrete
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Withdrawal/ConcreteHelpers.lean:94:axiom withdrawal_pc8_immBorrowField_sigma
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Withdrawal/ConcreteHelpers.lean:135:axiom withdrawal_pc10_to_pc13_range_marshal
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Withdrawal/ConcreteHelpers.lean:174:axiom withdrawal_happy_path_complete
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Withdrawal/ConcreteHelpers.lean:209:axiom withdrawal_sigma_fails_to_error
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Withdrawal/ConcreteHelpers.lean:236:axiom withdrawal_range_fails_to_error
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Withdrawal/EvalEquiv.lean:432:axiom run_withdrawal_through_pc2
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Withdrawal/EvalEquiv.lean:725:axiom run_sigma_arity_mismatch_produces_error
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Withdrawal/EvalEquiv.lean:756:axiom run_range_arity_mismatch_produces_error
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Withdrawal/EvalEquiv.lean:793:axiom withdrawal_eval_equiv_functional_sim_axiom
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Transfer/ConcreteHelpers.lean:49:axiom transfer_pc0_to_pc12_concrete
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Transfer/ConcreteHelpers.lean:86:axiom transfer_pc13_immBorrowField_sigma
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Transfer/ConcreteHelpers.lean:127:axiom transfer_pc15_to_pc18_new_balance_marshal
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Transfer/ConcreteHelpers.lean:172:axiom transfer_pc19_to_pc22_transfer_amount_marshal
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Transfer/ConcreteHelpers.lean:222:axiom transfer_happy_path_complete
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Transfer/ConcreteHelpers.lean:266:axiom transfer_sigma_fails_to_error
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Transfer/ConcreteHelpers.lean:298:axiom transfer_new_balance_fails_to_error
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Transfer/ConcreteHelpers.lean:335:axiom transfer_transfer_amount_fails_to_error
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Transfer/EvalEquiv.lean:751:axiom transfer_eval_equiv_functional_sim_axiom
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Transfer/EvalEquiv.lean:947:axiom transfer_run_pc0_to_pc14
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Rotation/ConcreteHelpers.lean:27:axiom rotation_pc0_to_pc5_concrete
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Rotation/ConcreteHelpers.lean:53:axiom rotation_pc6_to_pc7_concrete
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Rotation/ConcreteHelpers.lean:84:axiom rotation_pc10_to_pc13_range_marshal
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Rotation/ConcreteHelpers.lean:122:axiom rotation_happy_path_complete
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Rotation/ConcreteHelpers.lean:156:axiom rotation_sigma_fails_to_error
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Rotation/ConcreteHelpers.lean:181:axiom rotation_range_fails_to_error
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Rotation/EvalEquiv.lean:488:axiom rotation_eval_equiv_functional_sim_axiom
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Helpers/FunctionalSimBridge.lean:33:axiom oracle_call_with_alloc_success
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Helpers/FunctionalSimBridge.lean:47:axiom oracle_call_with_alloc_none
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Helpers/FunctionalSimBridge.lean:59:axiom container_alloc_commute
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Helpers/FunctionalSimBridge.lean:69:axiom functionalSim_error_dropMs
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Helpers/FunctionalSimBridge.lean:77:axiom functionalSim_returned_dropMs
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Helpers/OracleComposition.lean:33:axiom normalization_dual_oracle_success
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Helpers/OracleComposition.lean:57:axiom normalization_sigma_fails
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Helpers/OracleComposition.lean:68:axiom normalization_range_fails
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Helpers/OracleComposition.lean:87:axiom rotation_dual_oracle_success
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Helpers/OracleComposition.lean:119:axiom transfer_triple_oracle_success
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Helpers/OracleComposition.lean:144:axiom transfer_sigma_fails
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Helpers/OracleComposition.lean:154:axiom transfer_new_balance_fails
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Helpers/OracleComposition.lean:167:axiom transfer_transfer_range_fails
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Helpers/OracleComposition.lean:188:axiom withdrawal_dual_oracle_success
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Helpers/ArgumentMarshaling.lean:39:axiom normalization_marshal_pc0_to_pc4
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Helpers/ArgumentMarshaling.lean:67:axiom normalization_marshal_pc5_to_pc6
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Helpers/ArgumentMarshaling.lean:92:axiom rotation_marshal_pc0_to_pc5
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Helpers/ArgumentMarshaling.lean:121:axiom rotation_marshal_pc6_to_pc7
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Helpers/ArgumentMarshaling.lean:155:axiom transfer_marshal_pc0_to_pc13
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Helpers/ArgumentMarshaling.lean:184:axiom withdrawal_marshal_pc0_to_pc5
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Helpers/OracleCaseSplitting.lean:51:axiom dual_oracle_cases
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Helpers/OracleCaseSplitting.lean:65:axiom triple_oracle_cases
+
+==========================================
+  Lean @[opaque] declarations (CA oracle boundary)
+==========================================
+(no @[opaque] found)
+
+==========================================
+  TEMPORARY AXIOM markers (work-in-progress)
+==========================================
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:53:See the TEMPORARY AXIOM in `EvalEquiv.lean` for the live dependency. When enough fragments here
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:181:`EvalEquiv.lean` and drop the TEMPORARY AXIOM. -/
+/Users/andygmove/Downloads/repos/aptos-core/aptos-move/framework/formal/lean/MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquivRebuild.lean:2397:This theorem has the exact signature of the TEMPORARY AXIOM in EvalEquiv.lean.

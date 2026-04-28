@@ -25,7 +25,7 @@ module aptos_framework::stake {
     use std::vector;
     use aptos_std::bls12381;
     use aptos_std::math64::min;
-    use aptos_std::table::{Self, Table};
+    use aptos_std::table::Table;
     use aptos_framework::aptos_coin::AptosCoin;
     use aptos_framework::account;
     use aptos_framework::coin::{Self, Coin, MintCapability};

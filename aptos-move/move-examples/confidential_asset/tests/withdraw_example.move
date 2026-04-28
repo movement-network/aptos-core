@@ -48,6 +48,9 @@ module confidential_asset_example::withdraw_example {
         );
 
         let (proof, new_balance) = confidential_proof::prove_withdrawal(
+            4u8,
+            bob_addr,
+            @aptos_experimental,
             &bob_dk,
             &bob_ek,
             transfer_amount,

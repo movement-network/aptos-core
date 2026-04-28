@@ -556,6 +556,7 @@ spec aptos_framework::stake {
 
     spec distribute_rewards {
         pragma aborts_if_is_partial;
+        pragma verify_duration_estimate = 120;
         include ResourceRequirement;
         requires rewards_rate <= MAX_REWARDS_RATE;
         requires rewards_rate_denominator > 0;
@@ -600,7 +601,6 @@ spec aptos_framework::stake {
         let amount = rewards_amount;
         let addr = type_info::type_of<AptosCoin>().account_address;
         aborts_if (rewards_amount > 0) && !exists<coin::CoinInfo<AptosCoin>>(addr);
-        modifies global<coin::CoinInfo<AptosCoin>>(addr);
         include (rewards_amount > 0) ==> coin::CoinAddAbortsIf<AptosCoin> { amount: amount };
     }
 

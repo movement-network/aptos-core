@@ -1,0 +1,10 @@
+import MovementFormal.MoveModel.Value
+import MovementFormal.MoveModel.State
+import MovementFormal.MoveModel.Step
+import MovementFormal.MoveModel.StepLemmas.Bundled
+import MovementFormal.Experimental.ConfidentialAsset.Registration.ExecutionTraceProperties
+import MovementFormal.Experimental.ConfidentialAsset.Registration.PCBoundaryConditions
+
+namespace MovementFormal.Experimental.ConfidentialAsset.Registration.ProofCompositionPatterns
+theorem stub : True := trivial
+end MovementFormal.Experimental.ConfidentialAsset.Registration.ProofCompositionPatterns

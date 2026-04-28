@@ -1,0 +1,49 @@
+# CA formal-verification Docker ignore (audit/.dockerignore)
+#
+# Excludes files from the Docker build context to keep image size reasonable.
+# Most of these are build artifacts that get regenerated inside the container.
+
+# Lean build artifacts
+**/build/
+**/.lake/
+**/lake-packages/
+
+# Move build artifacts
+**/.aptos/
+**/build/
+**/boogie.bpl
+
+# Rust artifacts
+**/target/
+**/.cargo/
+
+# Git metadata (not needed for reproducibility check)
+.git/
+.gitignore
+.gitattributes
+
+# CI/CD (not needed inside container)
+.github/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.log
+*.tmp
+/tmp/
+
+# Documentation (keep essential guides, exclude work-session summaries)
+**/WORK_SESSION_*.md
+
+# Test outputs
+**/test-results/
+**/coverage/

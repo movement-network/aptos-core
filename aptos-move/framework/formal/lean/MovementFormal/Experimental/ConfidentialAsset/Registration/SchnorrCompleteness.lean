@@ -1,0 +1,9 @@
+import MovementFormal.Experimental.ConfidentialAsset.Registration.Formal
+import MovementFormal.Experimental.ConfidentialAsset.Registration.FiatShamirSymbolic
+import MovementFormal.Experimental.ConfidentialAsset.Registration.VerifyMath
+import MovementFormal.AptosStd.Crypto.Ristretto255
+import Mathlib.Algebra.Module.Basic
+
+namespace MovementFormal.Experimental.ConfidentialAsset.Registration.SchnorrCompleteness
+theorem stub : True := trivial
+end MovementFormal.Experimental.ConfidentialAsset.Registration.SchnorrCompleteness

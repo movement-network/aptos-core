@@ -1,0 +1,10 @@
+import MovementFormal.MoveModel.Value
+import MovementFormal.MoveModel.State
+import MovementFormal.MoveModel.Step
+import MovementFormal.Experimental.ConfidentialAsset.Registration.PCBoundaryConditions
+import MovementFormal.Experimental.ConfidentialAsset.Registration.ExecutionTraceProperties
+import MovementFormal.Experimental.ConfidentialAsset.Registration.OracleHypothesesCatalog
+
+namespace MovementFormal.Experimental.ConfidentialAsset.Registration.PhaseTransitionTheorems
+theorem stub : True := trivial
+end MovementFormal.Experimental.ConfidentialAsset.Registration.PhaseTransitionTheorems

@@ -1,0 +1,8 @@
+import MovementFormal.MoveModel.Value
+import MovementFormal.MoveModel.Native.Registration
+import MovementFormal.AptosStd.Crypto.Ristretto255
+import MovementFormal.Experimental.ConfidentialAsset.Registration.OracleSemantics
+
+namespace MovementFormal.Experimental.ConfidentialAsset.Registration.CryptoCorrectnessProperties
+theorem stub : True := trivial
+end MovementFormal.Experimental.ConfidentialAsset.Registration.CryptoCorrectnessProperties

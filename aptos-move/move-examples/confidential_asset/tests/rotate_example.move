@@ -40,6 +40,9 @@ module confidential_asset_example::rotate_example {
         );
 
         let (proof, new_balance) = confidential_proof::prove_rotation(
+            4u8,
+            bob_addr,
+            @aptos_experimental,
             &bob_current_dk,
             &bob_new_dk,
             &bob_current_ek,

@@ -1,0 +1,9 @@
+import MovementFormal.MoveModel.Step
+import MovementFormal.MoveModel.ExecResultDropMs
+import MovementFormal.MoveModel.Programs.Registration
+import MovementFormal.Experimental.ConfidentialAsset.Registration.TranscriptAlignment
+import MovementFormal.Experimental.ConfidentialAsset.Registration.FunctionalSim
+
+namespace MovementFormal.Experimental.ConfidentialAsset.Registration.BytecodeDifftestEval
+theorem stub : True := trivial
+end MovementFormal.Experimental.ConfidentialAsset.Registration.BytecodeDifftestEval

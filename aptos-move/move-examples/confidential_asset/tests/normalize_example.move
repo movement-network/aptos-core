@@ -43,6 +43,9 @@ module confidential_asset_example::normalize_example {
             proof,
             new_balance
         ) = confidential_proof::prove_normalization(
+            4u8,
+            bob_addr,
+            @aptos_experimental,
             &bob_dk,
             &bob_ek,
             bob_amount,

@@ -137,4 +137,5 @@ spec aptos_framework::primary_fungible_store {
         let metadata_addr = object::object_address(metadata);
         object::spec_create_user_derived_object_address(owner, metadata_addr)
     }
+
 }

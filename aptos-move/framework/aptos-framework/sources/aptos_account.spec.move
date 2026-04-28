@@ -274,6 +274,11 @@ spec aptos_framework::aptos_account {
         pragma verify = false;
     }
 
+    spec register_fa_and_apt(account_signer: &signer) {
+        // TODO: temporary mockup.
+        pragma verify = false;
+    }
+
     spec fungible_transfer_only(source: &signer, to: address, amount: u64) {
         // TODO: temporary mockup.
         pragma verify = false;

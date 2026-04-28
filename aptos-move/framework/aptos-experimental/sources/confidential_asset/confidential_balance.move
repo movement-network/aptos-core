@@ -168,7 +168,7 @@ module aptos_experimental::confidential_balance {
         bytes
     }
 
-    /// Extracts the `C` value component (`a * H + r * G`) of each chunk in a confidential balance as a vector of `RistrettoPoint`s.
+    /// Extracts the `C` value component (`v * G + r * H`) of each chunk in a confidential balance as a vector of `RistrettoPoint`s.
     public fun balance_to_points_c(balance: &ConfidentialBalance): vector<RistrettoPoint> {
         balance.chunks.map_ref(|chunk| {
             let (c, _) = twisted_elgamal::ciphertext_as_points(chunk);
@@ -203,7 +203,7 @@ module aptos_experimental::confidential_balance {
 
         lhs.chunks.enumerate_mut(|i, chunk| {
             if (i < rhs.chunks.length()) {
-                twisted_elgamal::ciphertext_add_assign(chunk, &rhs.chunks[i])
+                twisted_elgamal::ciphertext_sub_assign(chunk, &rhs.chunks[i])
             }
         })
     }
@@ -369,6 +369,55 @@ module aptos_experimental::confidential_balance {
     /// Checks that the decryption of each chunk matches the corresponding 16-bit chunk of the provided amount.
     /// Use carefully, as it may return `false` if the balance is not normalized (i.e. has overflowed chunks).
     public fun verify_pending_balance(balance: &ConfidentialBalance, dk: &Scalar, amount: u64): bool {
+        assert!(balance.chunks.length() == PENDING_BALANCE_CHUNKS, error::internal(EINTERNAL_ERROR));
+
+        let amount_chunks = split_into_chunks_u64(amount);
+        let ok = true;
+
+        balance.chunks.zip_ref(&amount_chunks, |balance, amount| {
+            let (balance_c, balance_d) = twisted_elgamal::ciphertext_as_points(balance);
+            let point_amount = ristretto255::point_sub(balance_c, &ristretto255::point_mul(balance_d, dk));
+
+            ok = ok && ristretto255::point_equals(&point_amount, &ristretto255::basepoint_mul(amount));
+        });
+
+        ok
+    }
+
+    /// Like [`verify_actual_balance`] but exposed as a regular `public`
+    /// helper (not `#[test_only]`) so off-chain tooling and
+    /// `move-lean-difftest` harnesses can pin the decryption-consistency
+    /// check without pulling in `testing: true`. Body is byte-for-byte
+    /// identical to the `#[test_only]` version (same precedent as
+    /// `confidential_proof::registration_fs_message_for_test` — a
+    /// pure-function view over already-public types).
+    public fun verify_actual_balance_for_test(
+        balance: &ConfidentialBalance,
+        dk: &Scalar,
+        amount: u128,
+    ): bool {
+        assert!(balance.chunks.length() == ACTUAL_BALANCE_CHUNKS, error::internal(EINTERNAL_ERROR));
+
+        let amount_chunks = split_into_chunks_u128(amount);
+        let ok = true;
+
+        balance.chunks.zip_ref(&amount_chunks, |balance, amount| {
+            let (balance_c, balance_d) = twisted_elgamal::ciphertext_as_points(balance);
+            let point_amount = ristretto255::point_sub(balance_c, &ristretto255::point_mul(balance_d, dk));
+
+            ok = ok && ristretto255::point_equals(&point_amount, &ristretto255::basepoint_mul(amount));
+        });
+
+        ok
+    }
+
+    /// Public-visibility counterpart of [`verify_pending_balance`] (see
+    /// [`verify_actual_balance_for_test`] for the rationale).
+    public fun verify_pending_balance_for_test(
+        balance: &ConfidentialBalance,
+        dk: &Scalar,
+        amount: u64,
+    ): bool {
         assert!(balance.chunks.length() == PENDING_BALANCE_CHUNKS, error::internal(EINTERNAL_ERROR));
 
         let amount_chunks = split_into_chunks_u64(amount);

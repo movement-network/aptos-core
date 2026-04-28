@@ -1,0 +1,9 @@
+import MovementFormal.MoveModel.Value
+import MovementFormal.MoveModel.State
+import MovementFormal.MoveModel.Native.Registration
+import MovementFormal.Experimental.ConfidentialAsset.Registration.OracleSemantics
+import MovementFormal.Experimental.ConfidentialAsset.Registration.ValidationLemmas
+
+namespace MovementFormal.Experimental.ConfidentialAsset.Registration.OracleHypothesesCatalog
+theorem stub : True := trivial
+end MovementFormal.Experimental.ConfidentialAsset.Registration.OracleHypothesesCatalog

@@ -1,0 +1,10 @@
+{
+  "name": "deserialize_sigma_transfer_26_scalars_30_points_plus_eight_auditor_quads",
+  "length_bytes": 2816,
+  "encoding": "hex",
+  "bytes_file": "deserialize_sigma_transfer_26_scalars_30_points_plus_eight_auditor_quads.hex",
+  "move_anchor": "0x1::difftest_confidential_proof::layout_sigma_transfer_eight_auditor_quads_extension",
+  "lean_def": "MovementFormal.MoveModel.Programs.Confidential.deserializeSigmaTransfer26Scalars30PointsPlusEightAuditorQuadsBytes",
+  "lean_theorem": "MovementFormal.MoveModel.Programs.Confidential.deserializeSigmaTransfer26Scalars30PointsPlusEightAuditorQuadsBytes_length",
+  "notes": "Base + **32×A_POINT** (**1024** B); `auditor_xs = 1024`; eight auditor blocks of four **X** points."
+}

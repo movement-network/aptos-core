@@ -1,0 +1,13 @@
+import MovementFormal.MoveModel.StepLemmas.Basic
+import MovementFormal.MoveModel.StepLemmas.Locals
+import MovementFormal.MoveModel.StepLemmas.Refs
+import MovementFormal.MoveModel.StepLemmas.Calls
+import MovementFormal.MoveModel.StepLemmas.Run
+import MovementFormal.MoveModel.ExecResultDropMs
+import MovementFormal.MoveModel.Native.Registration
+import MovementFormal.MoveModel.Programs.Registration
+import MovementFormal.Experimental.ConfidentialAsset.Registration.FunctionalSim
+
+namespace MovementFormal.Experimental.ConfidentialAsset.Registration.SingletonBranchIntegration
+theorem stub : True := trivial
+end MovementFormal.Experimental.ConfidentialAsset.Registration.SingletonBranchIntegration

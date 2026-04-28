@@ -1,0 +1,137 @@
+{
+  "test_id": "transfer_happy_path_001",
+  "operation": "confidential_transfer",
+  "description": "Happy path: successful confidential transfer between two accounts",
+  "inputs": {
+    "sender_address": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+    "recipient_address": "0xfedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321",
+    "amount": "1000",
+    "sender_balance_before": {
+      "pending_balance": [
+        {
+          "compressed_commitment": "0x1a2b3c4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "opening": {
+            "value": "5000",
+            "randomness": "0xaabbccdd11223344556677889900aabbccdd11223344556677889900aabbccdd"
+          }
+        }
+      ],
+      "actual_balance": [],
+      "encryption_pubkey": "0x5566778899aabbccddeeff00112233445566778899aabbccddeeff0011223344",
+      "frozen": false,
+      "allow_list_enabled": false
+    },
+    "recipient_balance_before": {
+      "pending_balance": [
+        {
+          "compressed_commitment": "0x9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba",
+          "opening": {
+            "value": "2000",
+            "randomness": "0x1122334455667788990011223344556677889900112233445566778899001122"
+          }
+        }
+      ],
+      "actual_balance": [],
+      "encryption_pubkey": "0xaabbccddeeff00112233445566778899aabbccddeeff00112233445566778899",
+      "frozen": false,
+      "allow_list_enabled": false
+    },
+    "transfer_proof": {
+      "sender_proof": {
+        "public_inputs": {
+          "old_balance_commitment": "0x1a2b3c4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "new_balance_commitment": "0x2b3c4d5e6f7890a1bcdef234567890a1bcdef234567890a1bcdef234567890a1",
+          "transferred_amount_commitment": "0x3c4d5e6f7890ab12cdef34567890ab12cdef34567890ab12cdef34567890ab12"
+        },
+        "nizk_proof": "0xdeadbeefcafe0001deadbeefcafe0002deadbeefcafe0003deadbeefcafe0004deadbeefcafe0005deadbeefcafe0006deadbeefcafe0007deadbeefcafe0008"
+      },
+      "recipient_proof": {
+        "public_inputs": {
+          "old_balance_commitment": "0x9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba",
+          "new_balance_commitment": "0x8765432101edcba98765432101edcba98765432101edcba98765432101edcba9",
+          "transferred_amount_commitment": "0x3c4d5e6f7890ab12cdef34567890ab12cdef34567890ab12cdef34567890ab12"
+        },
+        "nizk_proof": "0xcafebabe0001cafebabe0002cafebabe0003cafebabe0004cafebabe0005cafebabe0006cafebabe0007cafebabe0008cafebabe0009cafebabe000a"
+      },
+      "amount_equality_proof": {
+        "hash": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+      }
+    }
+  },
+  "expected_output": {
+    "status": "success",
+    "sender_balance_after": {
+      "pending_balance": [
+        {
+          "compressed_commitment": "0x2b3c4d5e6f7890a1bcdef234567890a1bcdef234567890a1bcdef234567890a1",
+          "opening": {
+            "value": "4000",
+            "randomness": "0xbbccdd11223344556677889900aabbccdd11223344556677889900aabbccddee"
+          }
+        }
+      ],
+      "actual_balance": [],
+      "encryption_pubkey": "0x5566778899aabbccddeeff00112233445566778899aabbccddeeff0011223344",
+      "frozen": false,
+      "allow_list_enabled": false
+    },
+    "recipient_balance_after": {
+      "pending_balance": [
+        {
+          "compressed_commitment": "0x8765432101edcba98765432101edcba98765432101edcba98765432101edcba9",
+          "opening": {
+            "value": "3000",
+            "randomness": "0x2233445566778899001122334455667788990011223344556677889900112233"
+          }
+        }
+      ],
+      "actual_balance": [],
+      "encryption_pubkey": "0xaabbccddeeff00112233445566778899aabbccddeeff00112233445566778899",
+      "frozen": false,
+      "allow_list_enabled": false
+    },
+    "events": [
+      {
+        "type": "ConfidentialTransferEvent",
+        "sender": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+        "recipient": "0xfedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321",
+        "encrypted_amount": "0x3c4d5e6f7890ab12cdef34567890ab12cdef34567890ab12cdef34567890ab12"
+      }
+    ]
+  },
+  "vm_execution_trace": {
+    "gas_used": "245000",
+    "num_instructions": 87,
+    "num_native_calls": 3,
+    "native_calls": [
+      "verify_transfer_proof_sender",
+      "verify_transfer_proof_recipient",
+      "verify_amount_equality"
+    ]
+  },
+  "lean_model_trace": {
+    "eval_result": "returned",
+    "num_steps": 87,
+    "oracle_calls": [
+      {
+        "name": "verifyTransferProofSender",
+        "result": "some"
+      },
+      {
+        "name": "verifyTransferProofRecipient",
+        "result": "some"
+      },
+      {
+        "name": "verifyAmountEquality",
+        "result": "some"
+      }
+    ]
+  },
+  "test_purpose": "Validates that a standard confidential transfer with valid proofs succeeds and correctly updates both sender and recipient balances",
+  "coverage_tags": ["happy_path", "transfer", "balance_update", "proof_verification"],
+  "related_theorems": [
+    "transfer_eval_equiv_functional_sim",
+    "transfer_balance_conservation",
+    "transfer_proof_soundness"
+  ]
+}

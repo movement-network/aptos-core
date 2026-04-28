@@ -3,7 +3,9 @@ name = "AptosExperimental"
 version = "1.0.0"
 
 [addresses]
-aptos_experimental = "0x7"
+# Placeholder: resolved to `0x7` in Rust unit tests (`framework/tests/move_unit_test.rs`), release
+# builds (`framework/src/aptos.rs`), and `e2e-move-tests` — not fixed until publish.
+aptos_experimental = "_"
 
 [dependencies]
 AptosFramework = { local = "../aptos-framework" }

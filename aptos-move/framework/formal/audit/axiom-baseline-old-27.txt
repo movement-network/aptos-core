@@ -1,0 +1,59 @@
+# Axiom baseline for the CA Lean tree (Phase 7 §10.5 deliverable)
+#
+# Regenerate with:
+#   ./aptos-move/framework/formal/scripts/check_axioms.sh 2>/dev/null | \
+#     grep -E '^(axiom|/.*:.*axiom |TEMPORARY AXIOM)' | sort
+#
+# CI job checks: `diff -u audit/axiom-baseline.txt <(./scripts/check_axioms.sh | ...)`.
+# Any net-new axiom flips the diff and fails the guard — force-explicit trust-base reviews.
+#
+# Categorization: see audit/AXIOM_INVENTORY.md.
+# Counts as of 2026-04-22:
+#   TEMPORARY: 1 (registration_eval_equiv_functional_sim)
+#   group-theory: 12
+#   Ristretto encoding: 4
+#   Bulletproofs: 5
+#   TOTAL: 22
+
+# === TEMPORARY (target for Phase 1 completion) ===
+axiom registration_eval_equiv_functional_sim
+
+# === Phase 6 composition claims — textual, not proof-theoretic compositions ===
+# Present as axioms for reviewability per plan §6.
+#
+# `register_is_formally_verified` is discharged in-file via an `example` invoking
+# `registration_eval_equiv_functional_sim` (itself a TEMPORARY axiom pending Phase 1
+# completion). The other 4 are pure scaffold until their Phase 4 `_eval_equiv_functional_sim`
+# theorems land.
+axiom register_is_formally_verified
+axiom normalize_is_formally_verified
+axiom rotate_is_formally_verified
+axiom transfer_is_formally_verified
+axiom withdraw_is_formally_verified
+
+# === Group-theory (Edwards curve25519, twisted Edwards group laws) ===
+axiom add_assoc'
+axiom add_zero'
+axiom neg_add_cancel'
+axiom nsmul_subgroup_order
+axiom p_prime
+axiom ristretto_subgroup_order_prime
+axiom scalarSmul_add'
+axiom scalarSmul_assoc'
+axiom scalarSmul_one'
+axiom scalarSmul_pointAdd'
+axiom scalarSmul_smul_zero'
+axiom zero_add'
+
+# === Ristretto255 encoding (compression/decompression) ===
+axiom canonicalEncode_injective
+axiom canonicalEncode_size
+axiom decode_canonicalEncode_roundtrip
+axiom decode_invalid
+
+# === Bulletproofs (external audit, not in-repo verified) ===
+axiom bulletproofs_base_distinguishing
+axiom bulletproofs_dst_distinguishing
+axiom bulletproofs_reject_bad_batch
+axiom bulletproofs_reject_bad_bits
+axiom bulletproofs_reject_malformed

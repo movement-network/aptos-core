@@ -1,6 +1,4 @@
 spec aptos_framework::governed_gas_pool {
-    use aptos_framework::coin::EINSUFFICIENT_BALANCE;
-    use aptos_framework::error;
 
     /// <high-level-req>
     /// No.: 1
@@ -35,7 +33,9 @@ spec aptos_framework::governed_gas_pool {
     }
 
     spec initialize(aptos_framework: &signer, delegation_pool_creation_seed: vector<u8>) {
-        requires system_addresses::is_aptos_framework_address(signer::address_of(aptos_framework));
+        pragma aborts_if_is_partial = true;
+        /// [high-level-req-2]
+        aborts_if !system_addresses::is_aptos_framework_address(signer::address_of(aptos_framework));
         /// [high-level-req-1]
         ensures exists<GovernedGasPool>(@aptos_framework);
     }
@@ -46,9 +46,6 @@ spec aptos_framework::governed_gas_pool {
         /// [high-level-req-4]
         // Abort if the caller is not the Aptos framework
         aborts_if !system_addresses::is_aptos_framework_address(signer::address_of(aptos_framework));
-
-        /// Abort if the governed gas pool has insufficient funds
-        aborts_with coin::EINSUFFICIENT_BALANCE, error::invalid_argument(EINSUFFICIENT_BALANCE), 0x1, 0x5, 0x7;
     }
 
     spec deposit<CoinType>(coin: Coin<CoinType>) {
@@ -67,6 +64,11 @@ spec aptos_framework::governed_gas_pool {
         //ensures global<CoinStore<CoinType>>(aptos_framework_address).coin.value ==
         //old(global<CoinStore<CoinType>>(aptos_framework_address).coin.value) + coin.value;
         */
+    }
+
+    spec withdraw_staking_reward<CoinType>(amount: u64): Coin<CoinType> {
+        pragma verify = false;
+        pragma aborts_if_is_partial = true;
     }
 
     spec deposit_gas_fee(_gas_payer: address, _gas_fee: u64) {

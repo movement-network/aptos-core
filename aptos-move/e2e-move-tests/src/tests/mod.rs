@@ -12,6 +12,7 @@ mod aggregator_v2_runtime_checks;
 mod any;
 mod attributes;
 mod chain_id;
+mod confidential_asset_e2e;
 mod code_publishing;
 mod common;
 mod constructor_args;

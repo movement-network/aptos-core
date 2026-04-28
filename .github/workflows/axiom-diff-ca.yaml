@@ -1,0 +1,43 @@
+---
+# Axiom-diff CI guard for Confidential Assets formal verification.
+#
+# Per plan §10.5: "A CI job runs `#print axioms` on every top-level Lean theorem and every
+# MSL pragma opaque declaration, diffs the output against the baseline, and fails if anything
+# new appears."
+#
+# Implementation: runs `scripts/check_axioms.sh --diff`, which compares the current Lean
+# axiom-declaration set against `audit/axiom-baseline.txt`. Net-new axioms fail the guard —
+# force-explicit trust-base review before merge.
+name: "CA axiom baseline diff"
+
+on:
+  pull_request:
+    paths:
+      - "aptos-move/framework/formal/lean/MovementFormal/**"
+      - "aptos-move/framework/formal/audit/axiom-baseline.txt"
+      - "aptos-move/framework/formal/scripts/check_axioms.sh"
+      - ".github/workflows/axiom-diff-ca.yaml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  axiom-baseline-diff:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run axiom-diff guard
+        run: |
+          ./aptos-move/framework/formal/scripts/check_axioms.sh --diff
+
+      - name: Human-readable inventory (informational, always runs)
+        if: always()
+        run: |
+          echo "=========================================="
+          echo "  Axiom inventory (for review if diff failed)"
+          echo "=========================================="
+          ./aptos-move/framework/formal/scripts/check_axioms.sh

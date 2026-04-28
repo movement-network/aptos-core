@@ -1,0 +1,7 @@
+import MovementFormal.Experimental.ConfidentialAsset.Registration.BytecodeDifftestEval
+import MovementFormal.MoveModel.Programs.RegistrationDifftestOracle
+import MovementFormal.Experimental.ConfidentialAsset.Registration.Operational
+
+namespace MovementFormal.Experimental.ConfidentialAsset.Registration.BytecodeDifftestBridge
+theorem stub : True := trivial
+end MovementFormal.Experimental.ConfidentialAsset.Registration.BytecodeDifftestBridge

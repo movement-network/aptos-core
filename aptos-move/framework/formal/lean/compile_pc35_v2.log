@@ -1,0 +1,12 @@
+MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquiv.lean:7225:106: error: unexpected token 'set_option'; expected 'lemma'
+MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquiv.lean:7256:5: error: (deterministic) timeout at `whnf`, maximum number of heartbeats (3200000) has been reached
+
+Note: Use `set_option maxHeartbeats <num>` to set the limit.
+
+Hint: Additional diagnostic information may be available using the `set_option diagnostics true` command.
+MovementFormal/Experimental/ConfidentialAsset/Registration/EvalEquiv.lean:7227:0: error: (deterministic) timeout at `isDefEq`, maximum number of heartbeats (3200000) has been reached
+
+Note: Use `set_option maxHeartbeats <num>` to set the limit.
+
+Hint: Additional diagnostic information may be available using the `set_option diagnostics true` command.
+EXIT=1

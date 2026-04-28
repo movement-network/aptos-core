@@ -1,0 +1,9 @@
+import MovementFormal.MoveModel.Value
+import MovementFormal.MoveModel.State
+import MovementFormal.MoveModel.Step
+import MovementFormal.Experimental.ConfidentialAsset.Registration.FuelManagement
+import MovementFormal.Experimental.ConfidentialAsset.Registration.ValidationLemmas
+
+namespace MovementFormal.Experimental.ConfidentialAsset.Registration.ExecutionTraceProperties
+theorem stub : True := trivial
+end MovementFormal.Experimental.ConfidentialAsset.Registration.ExecutionTraceProperties

@@ -1,0 +1,96 @@
+{
+  "test_id": "withdrawal_happy_path_001",
+  "operation": "withdraw_to_internal",
+  "description": "Happy path: successful confidential withdrawal with valid proof",
+  "inputs": {
+    "owner_address": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+    "amount": "500",
+    "balance_before": {
+      "pending_balance": [
+        {
+          "compressed_commitment": "0x1a2b3c4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "opening": {
+            "value": "3000",
+            "randomness": "0xaabbccdd11223344556677889900aabbccdd11223344556677889900aabbccdd"
+          }
+        }
+      ],
+      "actual_balance": [],
+      "encryption_pubkey": "0x5566778899aabbccddeeff00112233445566778899aabbccddeeff0011223344",
+      "frozen": false,
+      "allow_list_enabled": false
+    },
+    "withdrawal_proof": {
+      "public_inputs": {
+        "old_balance_commitment": "0x1a2b3c4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890",
+        "new_balance_commitment": "0x2b3c4d5e6f7890a1bcdef234567890a1bcdef234567890a1bcdef234567890a1",
+        "withdrawn_amount": "500"
+      },
+      "nizk_proof": "0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+      "range_proof": {
+        "commitment": "0x2b3c4d5e6f7890a1bcdef234567890a1bcdef234567890a1bcdef234567890a1",
+        "proof_bytes": "0xdeadbeef01deadbeef02deadbeef03deadbeef04deadbeef05deadbeef06deadbeef07deadbeef08deadbeef09deadbeef0adeadbeef0bdeadbeef0c"
+      }
+    }
+  },
+  "expected_output": {
+    "status": "success",
+    "withdrawn_amount": "500",
+    "balance_after": {
+      "pending_balance": [
+        {
+          "compressed_commitment": "0x2b3c4d5e6f7890a1bcdef234567890a1bcdef234567890a1bcdef234567890a1",
+          "opening": {
+            "value": "2500",
+            "randomness": "0xbbccdd11223344556677889900aabbccdd11223344556677889900aabbccddee"
+          }
+        }
+      ],
+      "actual_balance": [],
+      "encryption_pubkey": "0x5566778899aabbccddeeff00112233445566778899aabbccddeeff0011223344",
+      "frozen": false,
+      "allow_list_enabled": false
+    },
+    "events": [
+      {
+        "type": "WithdrawalEvent",
+        "owner": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+        "amount": "500",
+        "new_balance_commitment": "0x2b3c4d5e6f7890a1bcdef234567890a1bcdef234567890a1bcdef234567890a1"
+      }
+    ]
+  },
+  "vm_execution_trace": {
+    "gas_used": "185000",
+    "num_instructions": 52,
+    "num_native_calls": 2,
+    "native_calls": [
+      "verify_withdrawal_proof",
+      "verify_range_proof"
+    ]
+  },
+  "lean_model_trace": {
+    "eval_result": "returned",
+    "num_steps": 52,
+    "oracle_calls": [
+      {
+        "name": "verifyWithdrawalProof",
+        "result": "some"
+      },
+      {
+        "name": "verifyRangeProof",
+        "result": "some"
+      }
+    ]
+  },
+  "test_purpose": "Validates that a withdrawal with valid proof correctly reduces balance and returns the withdrawn amount",
+  "coverage_tags": ["happy_path", "withdrawal", "balance_reduction", "range_proof"],
+  "related_theorems": [
+    "withdrawal_eval_equiv_functional_sim",
+    "withdrawal_balance_conservation",
+    "withdrawal_range_proof_soundness"
+  ],
+  "related_msl_specs": [
+    "spec withdraw_to_internal { ensures old(sum_balance(store.pending_balance)) == sum_balance(store.pending_balance) + amount; }"
+  ]
+}

@@ -95,6 +95,8 @@ docker/compose/indexer-grpc/data-service-grpc-server.key
 
 # Aptos CLI / local testnet files
 .aptos
+# Movement CLI / local testnet (config, logs, embedded node DBs)
+.movement
 **/*.rdb
 
 # VSCode settings
@@ -136,6 +138,9 @@ ecosystem/indexer-grpc/indexer-transaction-generator/*.yaml
 *.bytecode
 !third_party/move/move-prover/tests/xsources/design/*.bytecode
 
+# Move Prover intermediate artifact (regenerated per `move prove` run)
+boogie.bpl
+
 # ignore antithesis
 genesis_antithesis_*/
 
@@ -147,3 +152,4 @@ genesis_antithesis_*/
 
 # Ignore generated credentials from google-github-actions/auth
 gha-creds-*.json
+lakefile.lean.bak*

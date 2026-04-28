@@ -1,4 +1,24 @@
 spec aptos_std::ristretto255 {
+    // Phase 0 patch: force vector-length monomorphization for Ristretto types
+    // so downstream CA modules can reason about vector<CompressedRistretto> lengths
+    // (see PHASE_0_RISTRETTO255_PATCH_NOTES.md Bug 2)
+    //
+    // Helper spec functions that explicitly use vector operations to force Boogie
+    // monomorphization of vector<CompressedRistretto> and vector<RistrettoPoint>.
+    spec fun spec_compressed_vector_len(v: vector<CompressedRistretto>): u64 {
+        len(v)
+    }
+
+    spec fun spec_point_vector_len(v: vector<RistrettoPoint>): u64 {
+        len(v)
+    }
+
+    spec module {
+        // These invariants reference the helper functions above, forcing monomorphization
+        invariant [deactivated] forall v: vector<CompressedRistretto> : spec_compressed_vector_len(v) >= 0;
+        invariant [deactivated] forall v: vector<RistrettoPoint> : spec_point_vector_len(v) >= 0;
+    }
+
     spec point_equals {
         // TODO: temporary mockup.
         pragma opaque;
@@ -89,12 +109,14 @@ spec aptos_std::ristretto255 {
 
     spec scalar_from_u64_internal {
         pragma opaque;
+        pragma bv=b"0";
         aborts_if [abstract] false;
         ensures result == spec_scalar_from_u64_internal(num);
     }
 
     spec scalar_from_u128_internal {
         pragma opaque;
+        pragma bv=b"0";
         aborts_if [abstract] false;
         ensures result == spec_scalar_from_u128_internal(num);
     }
@@ -153,16 +175,19 @@ spec aptos_std::ristretto255 {
     }
 
     spec new_scalar_from_u32 {
+        pragma bv=b"0";
         aborts_if false;
-        ensures result.data == spec_scalar_from_u64_internal(four_bytes);
+        ensures result.data == spec_scalar_from_u64_internal((four_bytes as u64));
     }
 
     spec new_scalar_from_u64 {
+        pragma bv=b"0";
         aborts_if false;
         ensures result.data == spec_scalar_from_u64_internal(eight_bytes);
     }
 
     spec new_scalar_from_u128 {
+        pragma bv=b"0";
         aborts_if false;
         ensures result.data == spec_scalar_from_u128_internal(sixteen_bytes);
     }

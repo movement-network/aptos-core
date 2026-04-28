@@ -1238,6 +1238,8 @@ module aptos_std::ordered_map {
     }
 
     #[test]
+    // Equal-key collisions on both sides with more than one entry per map.
+    // Verifies that overwrite semantics hold across multiple iterations.
 	public fun test_ordered_map_append_2() {
         let map = new_from(vector[1, 2], vector[10, 20]);
         let other = new_from(vector[1, 2], vector[100, 200]);
@@ -1246,6 +1248,8 @@ module aptos_std::ordered_map {
     }
 
     #[test]
+    // Equal-key collisions occurring in the middle of the loop, with
+    // non-overlapping entries surrounding the collision points.
 	public fun test_ordered_map_append_3() {
         let map = new_from(vector[1, 2, 3, 4, 5], vector[10, 20, 30, 40, 50]);
         let other = new_from(vector[2, 4], vector[200, 400]);
@@ -1254,6 +1258,9 @@ module aptos_std::ordered_map {
     }
 
     #[test]
+    // Equal-key collisions combined with entries in `other` that are
+    // smaller than every key in `self`. Exercises the path where `self`
+    // is exhausted while `other` still has entries to prepend.
 	public fun test_ordered_map_append_4() {
         let map = new_from(vector[3, 4, 5, 6, 7], vector[30, 40, 50, 60, 70]);
         let other = new_from(vector[1, 2, 4, 6], vector[100, 200, 400, 600]);
@@ -1262,6 +1269,8 @@ module aptos_std::ordered_map {
     }
 
     #[test]
+    // Fully interleaved keys with no collisions. `other` extends both
+    // above and below `self`'s key range.
 	public fun test_ordered_map_append_5() {
         let map = new_from(vector[1, 3, 5], vector[10, 30, 50]);
         let other = new_from(vector[0, 2, 4, 6], vector[0, 200, 400, 600]);

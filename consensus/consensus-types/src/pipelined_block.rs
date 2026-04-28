@@ -339,6 +339,24 @@ impl PipelinedBlock {
         *self.pre_commit_fut.lock() = Some(Box::pin(async { Ok(()) }));
     }
 
+    // GUARD: keep this function a pure write to `self.randomness`.
+    // `ShareAggregator` runs synchronously here, with no `await` on any
+    // pipeline-derived future. That is what makes a known upstream deadlock
+    // structurally impossible.
+    //
+    // Background:
+    //   https://github.com/aptos-labs/aptos-core/pull/18699  (upstream optimization that introduced the cycle)
+    //   https://github.com/aptos-labs/aptos-core/pull/19359  (corrective patch)
+    //   https://github.com/aptos-labs/aptos-core/commit/fefcfade3edf26f0396d63963f7ea04364f3666f
+    //   RAND_DEADLOCK_19359_BACKGROUND.md  (full analysis with diagrams)
+    //
+    // If a similar change is ever introduced here — anything that makes
+    // rand aggregation wait on a pipeline-derived future — this function
+    // MUST also eagerly forward `rand_tx`, similar to the #19359 fix:
+    //
+    //   if let Some(tx) = self.pipeline_tx().lock().as_mut() {
+    //       let _ = tx.rand_tx.take().map(|tx| tx.send(self.randomness().cloned()));
+    //   }
     pub fn set_randomness(&self, randomness: Randomness) {
         assert!(self.randomness.set(randomness.clone()).is_ok());
     }

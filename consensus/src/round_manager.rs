@@ -106,13 +106,15 @@ impl UnverifiedEvent {
         self_message: bool,
         max_num_batches: usize,
         max_batch_expiry_gap_usecs: u64,
+        max_batch_txns: u64,
+        max_batch_bytes: u64,
     ) -> Result<VerifiedEvent, VerifyError> {
         let start_time = Instant::now();
         Ok(match self {
             //TODO: no need to sign and verify the proposal
             UnverifiedEvent::ProposalMsg(p) => {
                 if !self_message {
-                    p.verify(peer_id, validator, proof_cache, quorum_store_enabled)?;
+                    p.verify(peer_id, validator, proof_cache, quorum_store_enabled, max_batch_txns, max_batch_bytes)?;
                     counters::VERIFY_MSG
                         .with_label_values(&["proposal"])
                         .observe(start_time.elapsed().as_secs_f64());

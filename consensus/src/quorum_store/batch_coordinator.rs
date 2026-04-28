@@ -14,7 +14,7 @@ use crate::{
     },
 };
 use anyhow::ensure;
-use aptos_consensus_types::payload::TDataInfo;
+use aptos_consensus_types::{common::verify_batch_info_limits, payload::TDataInfo};
 use aptos_logger::prelude::*;
 use aptos_short_hex_str::AsShortHexStr;
 use aptos_types::PeerId;
@@ -113,18 +113,11 @@ impl BatchCoordinator {
         let mut total_txns = 0;
         let mut total_bytes = 0;
         for batch in batches.iter() {
-            ensure!(
-                batch.num_txns() <= self.max_batch_txns,
-                "Exceeds batch txn limit {} > {}",
-                batch.num_txns(),
+            verify_batch_info_limits(
+                batch.batch_info(),
                 self.max_batch_txns,
-            );
-            ensure!(
-                batch.num_bytes() <= self.max_batch_bytes,
-                "Exceeds batch bytes limit {} > {}",
-                batch.num_bytes(),
                 self.max_batch_bytes,
-            );
+            )?;
 
             total_txns += batch.num_txns();
             total_bytes += batch.num_bytes();

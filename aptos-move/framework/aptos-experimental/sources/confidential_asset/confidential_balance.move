@@ -196,18 +196,6 @@ module aptos_experimental::confidential_balance {
         })
     }
 
-    /// Subtracts one confidential balance from another homomorphically, mutating the first balance in place.
-    /// The second balance must have fewer or equal chunks compared to the first.
-    public fun sub_balances_mut(lhs: &mut ConfidentialBalance, rhs: &ConfidentialBalance) {
-        assert!(lhs.chunks.length() >= rhs.chunks.length(), error::internal(EINTERNAL_ERROR));
-
-        lhs.chunks.enumerate_mut(|i, chunk| {
-            if (i < rhs.chunks.length()) {
-                twisted_elgamal::ciphertext_sub_assign(chunk, &rhs.chunks[i])
-            }
-        })
-    }
-
     /// Checks if two confidential balances are equivalent, including both value and randomness components.
     public fun balance_equals(lhs: &ConfidentialBalance, rhs: &ConfidentialBalance): bool {
         assert!(lhs.chunks.length() == rhs.chunks.length(), error::internal(EINTERNAL_ERROR));

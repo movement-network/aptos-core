@@ -491,10 +491,36 @@ fn set_asset_auditor(h: &mut MoveHarness, auditor_pubkey_32: &[u8]) {
     bypass_at(
         h,
         "confidential_asset",
-        "set_auditor",
+        "set_asset_auditor",
         vec![],
         args,
     );
+}
+
+fn set_chain_auditor(h: &mut MoveHarness, auditor_pubkey_32: &[u8]) {
+    let args = vec![
+        MoveValue::Signer(AccountAddress::ONE)
+            .simple_serialize()
+            .unwrap(),
+        auditor_pubkey_32.to_vec(),
+    ];
+    bypass_at(
+        h,
+        "confidential_asset",
+        "set_chain_auditor",
+        vec![],
+        args,
+    );
+}
+
+/// Generates a fresh chain auditor keypair and installs it via `set_chain_auditor`.
+/// Used by `fresh_harness` so every confidential transfer in the test suite has a
+/// valid `auditor_eks[0]` available; tests that need to exercise rotation can call
+/// this again to install a successor.
+fn install_default_chain_auditor(h: &mut MoveHarness) {
+    let (_chain_dk, chain_ek) = generate_elgamal_keypair(h);
+    let chain_pk = twisted_pubkey_bytes(h, &chain_ek);
+    set_chain_auditor(h, &chain_pk);
 }
 
 fn pack_transfer_simple(
@@ -521,6 +547,43 @@ fn pack_transfer_simple(
         h,
         "confidential_gas_e2e_helpers",
         "pack_confidential_transfer_proof_simple",
+        vec![],
+        args,
+    );
+    assert_eq!(ret.return_values.len(), 8);
+    std::array::from_fn(|i| ret.return_values[i].0.clone())
+}
+
+fn pack_transfer_audited_verbatim(
+    h: &mut MoveHarness,
+    chain_byte: u8,
+    sender: AccountAddress,
+    recipient: AccountAddress,
+    dk: &[u8],
+    amount: u64,
+    new_balance: u128,
+    auditor_eks: Vec<Vec<u8>>,
+    sender_auditor_hint: Vec<u8>,
+) -> [Vec<u8>; 8] {
+    let auditor_inner: Vec<Vec<u8>> = auditor_eks
+        .iter()
+        .map(|b| raw_bytes_from_move_vector_u8(b))
+        .collect();
+    let args = vec![
+        bcs::to_bytes(&chain_byte).unwrap(),
+        bcs::to_bytes(&sender).unwrap(),
+        bcs::to_bytes(&recipient).unwrap(),
+        dk.to_vec(),
+        bcs::to_bytes(&amount).unwrap(),
+        bcs::to_bytes(&new_balance).unwrap(),
+        bcs::to_bytes(&MOVE_METADATA).unwrap(),
+        bcs::to_bytes(&auditor_inner).unwrap(),
+        bcs::to_bytes(&sender_auditor_hint).unwrap(),
+    ];
+    let ret = bypass_at(
+        h,
+        "confidential_gas_e2e_helpers",
+        "pack_confidential_transfer_proof_verbatim",
         vec![],
         args,
     );
@@ -828,6 +891,11 @@ fn fresh_harness() -> MoveHarness {
     delete_genesis_fa_controller_if_present(&mut h);
     inject_confidential_e2e_modules(&mut h);
     reinit_confidential_asset_module(&mut h);
+    // Every confidential transfer requires a chain-level auditor; install a deterministic
+    // throwaway one here so individual tests don't need to know about it. Tests that
+    // exercise the unset state should call `delete_genesis_fa_controller_if_present` +
+    // `reinit_confidential_asset_module` themselves to get a clean slate.
+    install_default_chain_auditor(&mut h);
     h
 }
 
@@ -1032,4 +1100,114 @@ fn confidential_transfer_rejects_non_matching_asset_auditor_pubkey() {
     );
     let st = run_confidential_transfer(&mut h, &alice, bob_addr, &parts, vec![]);
     assert_kept_failure(&st, "first auditor EK must match asset auditor");
+}
+
+// --- Chain-level auditor scenarios ---
+
+/// Harness variant that *omits* the default chain-auditor install. Tests use this when they
+/// need to exercise either the unset state or installation timing.
+fn fresh_harness_no_chain_auditor() -> MoveHarness {
+    let mut h = MoveHarness::new();
+    enable_confidential_features(&mut h);
+    delete_genesis_fa_controller_if_present(&mut h);
+    inject_confidential_e2e_modules(&mut h);
+    reinit_confidential_asset_module(&mut h);
+    h
+}
+
+#[test]
+fn confidential_transfer_rejects_when_chain_auditor_unset() {
+    let mut h = fresh_harness_no_chain_auditor();
+    let chain = h.executor.get_chain_id().id();
+    let alice_addr = confidential_e2e_addr(0xE9, 1);
+    let bob_addr = confidential_e2e_addr(0xE9, 2);
+    let alice = h.new_account_with_balance_at(alice_addr, 50_000_000_000_000);
+    let bob = h.new_account_with_balance_at(bob_addr, 1_000_000_000);
+
+    let (alice_dk, alice_ek) = generate_elgamal_keypair(&mut h);
+    let (bob_dk, bob_ek) = generate_elgamal_keypair(&mut h);
+    for (acct, addr, dk, ek) in [(&alice, alice_addr, &alice_dk, &alice_ek), (&bob, bob_addr, &bob_dk, &bob_ek)] {
+        let pk = twisted_pubkey_bytes(&mut h, ek);
+        let (c, r) = prove_registration_parts(&mut h, chain, addr, dk, ek, MOVE_METADATA);
+        assert_kept_success(&run_register(&mut h, acct, &pk, &c, &r), "register");
+    }
+    assert_kept_success(&run_deposit(&mut h, &alice, 2_000), "deposit");
+    assert_kept_success(&run_rollover(&mut h, &alice), "rollover");
+
+    // Empty auditor list — chain auditor isn't set on-chain, so any transfer must abort
+    // at the `ECHAIN_AUDITOR_NOT_SET` precondition before slot-matching even runs.
+    let parts = pack_transfer_audited_verbatim(
+        &mut h, chain, alice_addr, bob_addr, &alice_dk, 100, 1900, vec![], vec![]);
+    let st = run_confidential_transfer(&mut h, &alice, bob_addr, &parts, vec![]);
+    assert_kept_failure(&st, "transfer must abort when chain auditor is unset");
+}
+
+#[test]
+fn confidential_transfer_rejects_when_slot0_not_chain_auditor() {
+    let mut h = fresh_harness();
+    let chain = h.executor.get_chain_id().id();
+    let alice_addr = confidential_e2e_addr(0xEA, 1);
+    let bob_addr = confidential_e2e_addr(0xEA, 2);
+    let alice = h.new_account_with_balance_at(alice_addr, 50_000_000_000_000);
+    let bob = h.new_account_with_balance_at(bob_addr, 1_000_000_000);
+
+    let (alice_dk, alice_ek) = generate_elgamal_keypair(&mut h);
+    let (bob_dk, bob_ek) = generate_elgamal_keypair(&mut h);
+    for (acct, addr, dk, ek) in [(&alice, alice_addr, &alice_dk, &alice_ek), (&bob, bob_addr, &bob_dk, &bob_ek)] {
+        let pk = twisted_pubkey_bytes(&mut h, ek);
+        let (c, r) = prove_registration_parts(&mut h, chain, addr, dk, ek, MOVE_METADATA);
+        assert_kept_success(&run_register(&mut h, acct, &pk, &c, &r), "register");
+    }
+    assert_kept_success(&run_deposit(&mut h, &alice, 2_000), "deposit");
+    assert_kept_success(&run_rollover(&mut h, &alice), "rollover");
+
+    // Use a fresh keypair as slot 0 — proof is internally consistent (FS transcript binds
+    // this key) but `validate_auditors` rejects because slot 0 ≠ on-chain chain auditor.
+    let (_dk, wrong_ek) = generate_elgamal_keypair(&mut h);
+    let wrong_pk = twisted_pubkey_bytes(&mut h, &wrong_ek);
+    let parts = pack_transfer_audited_verbatim(
+        &mut h, chain, alice_addr, bob_addr, &alice_dk, 100, 1900, vec![wrong_pk], vec![]);
+    let st = run_confidential_transfer(&mut h, &alice, bob_addr, &parts, vec![]);
+    assert_kept_failure(&st, "slot 0 must equal active chain auditor");
+}
+
+#[test]
+fn confidential_transfer_rejects_after_chain_auditor_rotation() {
+    let mut h = fresh_harness();
+    let chain = h.executor.get_chain_id().id();
+    let alice_addr = confidential_e2e_addr(0xEB, 1);
+    let bob_addr = confidential_e2e_addr(0xEB, 2);
+    let alice = h.new_account_with_balance_at(alice_addr, 50_000_000_000_000);
+    let bob = h.new_account_with_balance_at(bob_addr, 1_000_000_000);
+
+    let (alice_dk, alice_ek) = generate_elgamal_keypair(&mut h);
+    let (bob_dk, bob_ek) = generate_elgamal_keypair(&mut h);
+    for (acct, addr, dk, ek) in [(&alice, alice_addr, &alice_dk, &alice_ek), (&bob, bob_addr, &bob_dk, &bob_ek)] {
+        let pk = twisted_pubkey_bytes(&mut h, ek);
+        let (c, r) = prove_registration_parts(&mut h, chain, addr, dk, ek, MOVE_METADATA);
+        assert_kept_success(&run_register(&mut h, acct, &pk, &c, &r), "register");
+    }
+    assert_kept_success(&run_deposit(&mut h, &alice, 2_000), "deposit");
+    assert_kept_success(&run_rollover(&mut h, &alice), "rollover");
+
+    // Snapshot the chain auditor key in force at proof-generation time, then rotate.
+    // The pre-rotation proof (slot 0 = old chain key) becomes unsubmittable.
+    let old_chain_pk = view_chain_auditor_pubkey(&mut h);
+    let parts = pack_transfer_audited_verbatim(
+        &mut h, chain, alice_addr, bob_addr, &alice_dk, 100, 1900, vec![old_chain_pk], vec![]);
+
+    install_default_chain_auditor(&mut h); // bumps to a new chain auditor key
+
+    let st = run_confidential_transfer(&mut h, &alice, bob_addr, &parts, vec![]);
+    assert_kept_failure(&st, "post-rotation old-key proof must be rejected");
+}
+
+fn view_chain_auditor_pubkey(h: &mut MoveHarness) -> Vec<u8> {
+    let ret = bypass_at(h, "confidential_asset", "get_chain_auditor", vec![], vec![]);
+    assert_eq!(ret.return_values.len(), 1);
+    let opt_struct = ret.return_values[0].0.clone();
+    // `Option<CompressedPubkey>` is BCS `0x01 || pubkey_bytes` when Some.
+    assert!(!opt_struct.is_empty() && opt_struct[0] == 1, "chain auditor must be Some");
+    let inner = opt_struct[1..].to_vec();
+    twisted_pubkey_bytes(h, &inner)
 }

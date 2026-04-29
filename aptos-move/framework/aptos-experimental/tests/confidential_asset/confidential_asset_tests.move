@@ -66,64 +66,11 @@ module aptos_experimental::confidential_asset_tests {
         new_amount: u128,
         sender_auditor_hint: vector<u8>)
     {
-        let from = signer::address_of(sender);
-        let sender_ek = confidential_asset::encryption_key(from, token);
-        let recipient_ek = confidential_asset::encryption_key(to, token);
-        let current_balance = confidential_balance::decompress_balance(
-            &confidential_asset::actual_balance(from, token)
-        );
+        // Every confidential transfer must include the chain-level auditor at slot 0; helper
+        // fetches it from on-chain state so individual tests don't have to thread it through.
+        let chain_auditor_ek = confidential_asset::get_chain_auditor().extract();
+        let auditor_eks = vector[chain_auditor_ek];
 
-        let (
-            proof,
-            new_balance,
-            sender_amount,
-            recipient_amount,
-            _
-        ) = confidential_proof::prove_transfer(
-            4u8, // test chain ID
-            from,
-            @aptos_experimental,
-            object::object_address(&token),
-            sender_dk,
-            &sender_ek,
-            &recipient_ek,
-            amount,
-            new_amount,
-            &current_balance,
-            &vector[],
-            sender_auditor_hint,
-        );
-
-        let (sigma_proof, zkrp_new_balance, zkrp_transfer_amount) = confidential_proof::serialize_transfer_proof(
-            &proof
-        );
-
-        confidential_asset::confidential_transfer(
-            sender,
-            token,
-            to,
-            confidential_balance::balance_to_bytes(&new_balance),
-            confidential_balance::balance_to_bytes(&sender_amount),
-            confidential_balance::balance_to_bytes(&recipient_amount),
-            b"",
-            b"",
-            zkrp_new_balance,
-            zkrp_transfer_amount,
-            sigma_proof,
-            sender_auditor_hint
-        );
-    }
-
-    fun audit_transfer(
-        sender: &signer,
-        sender_dk: &Scalar,
-        token: Object<Metadata>,
-        to: address,
-        amount: u64,
-        new_amount: u128,
-        auditor_eks: &vector<twisted_elgamal::CompressedPubkey>,
-        sender_auditor_hint: vector<u8>): vector<confidential_balance::ConfidentialBalance>
-    {
         let from = signer::address_of(sender);
         let sender_ek = confidential_asset::encryption_key(from, token);
         let recipient_ek = confidential_asset::encryption_key(to, token);
@@ -148,7 +95,7 @@ module aptos_experimental::confidential_asset_tests {
             amount,
             new_amount,
             &current_balance,
-            auditor_eks,
+            &auditor_eks,
             sender_auditor_hint,
         );
 
@@ -163,7 +110,74 @@ module aptos_experimental::confidential_asset_tests {
             confidential_balance::balance_to_bytes(&new_balance),
             confidential_balance::balance_to_bytes(&sender_amount),
             confidential_balance::balance_to_bytes(&recipient_amount),
-            confidential_asset::serialize_auditor_eks(auditor_eks),
+            confidential_asset::serialize_auditor_eks(&auditor_eks),
+            confidential_asset::serialize_auditor_amounts(&auditor_amounts),
+            zkrp_new_balance,
+            zkrp_transfer_amount,
+            sigma_proof,
+            sender_auditor_hint
+        );
+    }
+
+    /// Like `transfer`, but lets the caller append additional auditor keys (asset-level
+    /// and/or voluntary). The chain-level auditor is fetched from on-chain state and
+    /// automatically placed at slot 0; the caller's `extra_auditor_eks` are appended in
+    /// order, so an asset-auditor test should pass `[asset_auditor_ek, vol1, vol2, ...]`
+    /// and a pure-voluntary test should pass `[vol1, vol2, ...]`.
+    fun audit_transfer(
+        sender: &signer,
+        sender_dk: &Scalar,
+        token: Object<Metadata>,
+        to: address,
+        amount: u64,
+        new_amount: u128,
+        extra_auditor_eks: &vector<twisted_elgamal::CompressedPubkey>,
+        sender_auditor_hint: vector<u8>): vector<confidential_balance::ConfidentialBalance>
+    {
+        let chain_auditor_ek = confidential_asset::get_chain_auditor().extract();
+        let auditor_eks = vector[chain_auditor_ek];
+        extra_auditor_eks.for_each_ref(|ek| auditor_eks.push_back(*ek));
+
+        let from = signer::address_of(sender);
+        let sender_ek = confidential_asset::encryption_key(from, token);
+        let recipient_ek = confidential_asset::encryption_key(to, token);
+        let current_balance = confidential_balance::decompress_balance(
+            &confidential_asset::actual_balance(from, token)
+        );
+
+        let (
+            proof,
+            new_balance,
+            sender_amount,
+            recipient_amount,
+            auditor_amounts
+        ) = confidential_proof::prove_transfer(
+            4u8, // test chain ID
+            from,
+            @aptos_experimental,
+            object::object_address(&token),
+            sender_dk,
+            &sender_ek,
+            &recipient_ek,
+            amount,
+            new_amount,
+            &current_balance,
+            &auditor_eks,
+            sender_auditor_hint,
+        );
+
+        let (sigma_proof, zkrp_new_balance, zkrp_transfer_amount) = confidential_proof::serialize_transfer_proof(
+            &proof
+        );
+
+        confidential_asset::confidential_transfer(
+            sender,
+            token,
+            to,
+            confidential_balance::balance_to_bytes(&new_balance),
+            confidential_balance::balance_to_bytes(&sender_amount),
+            confidential_balance::balance_to_bytes(&recipient_amount),
+            confidential_asset::serialize_auditor_eks(&auditor_eks),
             confidential_asset::serialize_auditor_amounts(&auditor_amounts),
             zkrp_new_balance,
             zkrp_transfer_amount,
@@ -277,6 +291,13 @@ module aptos_experimental::confidential_asset_tests {
         confidential_asset::init_module_for_testing(confidential_asset);
 
         features::change_feature_flags_for_testing(aptos_fx, vector[features::get_bulletproofs_feature()], vector[]);
+
+        // Every confidential transfer requires the chain-level auditor to be set, so the
+        // shared setup configures it with a deterministic-but-fresh keypair. Tests that
+        // need direct access to the chain auditor's keys can call
+        // `set_chain_auditor_for_test` themselves to override.
+        let (_chain_dk, chain_ek) = generate_twisted_elgamal_keypair();
+        confidential_asset::set_chain_auditor(aptos_fx, twisted_elgamal::pubkey_to_bytes(&chain_ek));
 
         let token = object::object_from_constructor_ref<Metadata>(ctor_ref);
 
@@ -428,12 +449,16 @@ module aptos_experimental::confidential_asset_tests {
 
         let hint = vector[0x01u8, 0x77u8, 0x61u8]; // arbitrary opaque bytes ("wa" with prefix)
         transfer(&alice, &alice_dk, token, bob_addr, 100, 100, hint);
+        // setup set the chain auditor exactly once (epoch 1); no asset auditor (epoch 0).
+        // ek_volun_auds covers ALL auditors including chain — so 1 row, not 0.
         confidential_asset::assert_last_transferred_event_matches_state(
             token,
             alice_addr,
             bob_addr,
+            1,
+            hint,
+            1,
             0,
-            hint
         );
     }
 
@@ -461,7 +486,7 @@ module aptos_experimental::confidential_asset_tests {
         let (auditor1_dk, auditor1_ek) = generate_twisted_elgamal_keypair();
         let (auditor2_dk, auditor2_ek) = generate_twisted_elgamal_keypair();
 
-        confidential_asset::set_auditor(
+        confidential_asset::set_asset_auditor(
             &aptos_fx,
             token,
             twisted_elgamal::pubkey_to_bytes(&auditor1_ek));
@@ -485,8 +510,9 @@ module aptos_experimental::confidential_asset_tests {
         assert!(confidential_asset::verify_actual_balance(alice_addr, token, &alice_dk, 100), 1);
         assert!(confidential_asset::verify_pending_balance(bob_addr, token, &bob_dk, 100), 1);
 
-        assert!(confidential_balance::verify_pending_balance(&auditor_amounts[0], &auditor1_dk, 100), 1);
-        assert!(confidential_balance::verify_pending_balance(&auditor_amounts[1], &auditor2_dk, 100), 1);
+        // auditor_amounts[0] is the chain auditor's row; the asset & voluntary rows shift to [1]/[2].
+        assert!(confidential_balance::verify_pending_balance(&auditor_amounts[1], &auditor1_dk, 100), 1);
+        assert!(confidential_balance::verify_pending_balance(&auditor_amounts[2], &auditor2_dk, 100), 1);
     }
 
     #[test(
@@ -513,7 +539,7 @@ module aptos_experimental::confidential_asset_tests {
         let (auditor1_dk, auditor1_ek) = generate_twisted_elgamal_keypair();
         let (auditor2_dk, auditor2_ek) = generate_twisted_elgamal_keypair();
 
-        confidential_asset::set_auditor(
+        confidential_asset::set_asset_auditor(
             &aptos_fx,
             token,
             twisted_elgamal::pubkey_to_bytes(&auditor1_ek));
@@ -537,15 +563,19 @@ module aptos_experimental::confidential_asset_tests {
 
         assert!(confidential_asset::verify_actual_balance(alice_addr, token, &alice_dk, 100), 1);
         assert!(confidential_asset::verify_pending_balance(bob_addr, token, &bob_dk, 100), 1);
-        assert!(confidential_balance::verify_pending_balance(&auditor_amounts[0], &auditor1_dk, 100), 2);
-        assert!(confidential_balance::verify_pending_balance(&auditor_amounts[1], &auditor2_dk, 100), 3);
+        // auditor_amounts[0] is the chain auditor's row; the asset & voluntary rows shift to [1]/[2].
+        assert!(confidential_balance::verify_pending_balance(&auditor_amounts[1], &auditor1_dk, 100), 2);
+        assert!(confidential_balance::verify_pending_balance(&auditor_amounts[2], &auditor2_dk, 100), 3);
 
+        // chain auditor + asset auditor + 1 voluntary = 3 auditor rows in ek_volun_auds.
         confidential_asset::assert_last_transferred_event_matches_state(
             token,
             alice_addr,
             bob_addr,
-            2,
-            hint
+            3,
+            hint,
+            1,
+            1,
         );
     }
 
@@ -573,7 +603,7 @@ module aptos_experimental::confidential_asset_tests {
         let (_, auditor1_ek) = generate_twisted_elgamal_keypair();
         let (_, auditor2_ek) = generate_twisted_elgamal_keypair();
 
-        confidential_asset::set_auditor(
+        confidential_asset::set_asset_auditor(
             &aptos_fx,
             token,
             twisted_elgamal::pubkey_to_bytes(&auditor1_ek));
@@ -584,9 +614,10 @@ module aptos_experimental::confidential_asset_tests {
         confidential_asset::deposit(&alice, token, 200);
         confidential_asset::rollover_pending_balance(&alice, token);
 
-        // This fails because the `auditor1` is set for `token`,
-        // so each transfer must include `auditor1` in the auditor list as the FIRST element.
-        // Please, see `confidential_asset::validate_auditors` for more details.
+        // Asset auditor for `token` is `auditor1`, so the first slot in `extra_auditor_eks`
+        // (which becomes `auditor_eks[1]` after the helper prepends the chain auditor at slot 0)
+        // must equal `auditor1`. Passing `auditor2` there is a slot-1 mismatch and is rejected.
+        // See `confidential_asset::validate_auditors`.
         audit_transfer(
             &alice,
             &alice_dk,
@@ -822,17 +853,25 @@ module aptos_experimental::confidential_asset_tests {
         confidential_asset::disable_allow_list(&aptos_fx);
         confidential_asset::assert_last_allow_list_changed_event(false);
 
-        // --- set_auditor emits AuditorChanged ---
+        // --- set_asset_auditor emits AssetAuditorChanged with bumped epoch ---
         let (_, auditor_ek) = generate_twisted_elgamal_keypair();
-        confidential_asset::set_auditor(
+        confidential_asset::set_asset_auditor(
             &aptos_fx,
             token,
             twisted_elgamal::pubkey_to_bytes(&auditor_ek));
-        confidential_asset::assert_last_auditor_changed_event(token);
+        confidential_asset::assert_last_asset_auditor_changed_event(token, 1);
 
-        // remove auditor
-        confidential_asset::set_auditor(&aptos_fx, token, b"");
-        confidential_asset::assert_last_auditor_changed_event(token);
+        // clear asset auditor — still bumps epoch and emits the event
+        confidential_asset::set_asset_auditor(&aptos_fx, token, b"");
+        confidential_asset::assert_last_asset_auditor_changed_event(token, 2);
+
+        // --- set_chain_auditor emits ChainAuditorChanged ---
+        // Setup already set the chain auditor once (epoch 1); rotate to a new key (epoch 2).
+        let (_, new_chain_ek) = generate_twisted_elgamal_keypair();
+        confidential_asset::set_chain_auditor(
+            &aptos_fx,
+            twisted_elgamal::pubkey_to_bytes(&new_chain_ek));
+        confidential_asset::assert_last_chain_auditor_changed_event(2);
     }
 
     #[test(
@@ -1046,5 +1085,270 @@ module aptos_experimental::confidential_asset_tests {
         let (_, alice_ek) = generate_twisted_elgamal_keypair();
         confidential_asset::register_for_testing(&alice, token, twisted_elgamal::pubkey_to_bytes(&alice_ek));
         confidential_asset::deposit(&alice, token, 100);
+    }
+
+    //
+    // Auditor layering: chain-level + per-asset + voluntary auditors.
+    //
+
+    /// Setup variant that does NOT install a chain-level auditor. Used to exercise the
+    /// `ECHAIN_AUDITOR_NOT_SET` precondition on transfers.
+    fun set_up_without_chain_auditor(
+        confidential_asset: &signer,
+        aptos_fx: &signer,
+        fa: &signer,
+        sender: &signer,
+        recipient: &signer,
+        sender_amount: u64,
+        recipient_amount: u64): Object<Metadata>
+    {
+        chain_id::initialize_for_test(aptos_fx, 4);
+        let ctor_ref = &object::create_sticky_object(signer::address_of(fa));
+        primary_fungible_store::create_primary_store_enabled_fungible_asset(
+            ctor_ref, option::none(), utf8(b"NoChainAuditor"), utf8(b"NCA"), 18,
+            utf8(b"https://"), utf8(b"https://"));
+        let mint_ref = fungible_asset::generate_mint_ref(ctor_ref);
+        confidential_asset::init_module_for_testing(confidential_asset);
+        features::change_feature_flags_for_testing(
+            aptos_fx, vector[features::get_bulletproofs_feature()], vector[]);
+        let token = object::object_from_constructor_ref<Metadata>(ctor_ref);
+        let sender_store = primary_fungible_store::ensure_primary_store_exists(
+            signer::address_of(sender), token);
+        fungible_asset::mint_to(&mint_ref, sender_store, sender_amount);
+        let recipient_store = primary_fungible_store::ensure_primary_store_exists(
+            signer::address_of(recipient), token);
+        fungible_asset::mint_to(&mint_ref, recipient_store, recipient_amount);
+        token
+    }
+
+    /// Builds and submits a transfer using the supplied `auditor_eks` *verbatim* — without
+    /// the chain-key prepend that `audit_transfer` performs. Used by tests that need to
+    /// exercise rejection paths (wrong slot 0, missing prefix, post-rotation old proof).
+    fun audit_transfer_raw(
+        sender: &signer,
+        sender_dk: &Scalar,
+        token: Object<Metadata>,
+        to: address,
+        amount: u64,
+        new_amount: u128,
+        auditor_eks: &vector<twisted_elgamal::CompressedPubkey>,
+        sender_auditor_hint: vector<u8>)
+    {
+        let from = signer::address_of(sender);
+        let sender_ek = confidential_asset::encryption_key(from, token);
+        let recipient_ek = confidential_asset::encryption_key(to, token);
+        let current_balance = confidential_balance::decompress_balance(
+            &confidential_asset::actual_balance(from, token));
+        let (proof, new_balance, sender_amount, recipient_amount, auditor_amounts) =
+            confidential_proof::prove_transfer(
+                4u8, from, @aptos_experimental, object::object_address(&token),
+                sender_dk, &sender_ek, &recipient_ek, amount, new_amount,
+                &current_balance, auditor_eks, sender_auditor_hint);
+        let (sigma_proof, zkrp_new_balance, zkrp_transfer_amount) =
+            confidential_proof::serialize_transfer_proof(&proof);
+        confidential_asset::confidential_transfer(
+            sender, token, to,
+            confidential_balance::balance_to_bytes(&new_balance),
+            confidential_balance::balance_to_bytes(&sender_amount),
+            confidential_balance::balance_to_bytes(&recipient_amount),
+            confidential_asset::serialize_auditor_eks(auditor_eks),
+            confidential_asset::serialize_auditor_amounts(&auditor_amounts),
+            zkrp_new_balance, zkrp_transfer_amount, sigma_proof, sender_auditor_hint);
+    }
+
+    #[test(confidential_asset = @aptos_experimental, aptos_fx = @aptos_framework,
+        fa = @0xfa, alice = @0xa1, bob = @0xb0)]
+    #[expected_failure(abort_code = 0x030015, location = confidential_asset)]
+    /// Confidential transfers cannot run before the chain-level auditor has been
+    /// configured. Aborts with `ECHAIN_AUDITOR_NOT_SET`.
+    fun fail_transfer_if_chain_auditor_unset(
+        confidential_asset: signer, aptos_fx: signer, fa: signer,
+        alice: signer, bob: signer)
+    {
+        let token = set_up_without_chain_auditor(
+            &confidential_asset, &aptos_fx, &fa, &alice, &bob, 500, 500);
+        let bob_addr = signer::address_of(&bob);
+        let (alice_dk, alice_ek) = generate_twisted_elgamal_keypair();
+        let (_, bob_ek) = generate_twisted_elgamal_keypair();
+        confidential_asset::register_for_testing(&alice, token, twisted_elgamal::pubkey_to_bytes(&alice_ek));
+        confidential_asset::register_for_testing(&bob, token, twisted_elgamal::pubkey_to_bytes(&bob_ek));
+        confidential_asset::deposit(&alice, token, 200);
+        confidential_asset::rollover_pending_balance(&alice, token);
+
+        // Even an empty auditor list is rejected — chain auditor is mandatory.
+        audit_transfer_raw(&alice, &alice_dk, token, bob_addr, 100, 100, &vector[], vector[]);
+    }
+
+    #[test(confidential_asset = @aptos_experimental, aptos_fx = @aptos_framework,
+        fa = @0xfa, alice = @0xa1, bob = @0xb0)]
+    #[expected_failure(abort_code = 0x010006, location = confidential_asset)]
+    /// Slot 0 of `auditor_eks` must equal the active chain auditor key — a sender cannot
+    /// substitute their own key in that position even if they encrypt a valid auditor
+    /// amount under it.
+    fun fail_transfer_if_slot0_not_chain_auditor(
+        confidential_asset: signer, aptos_fx: signer, fa: signer,
+        alice: signer, bob: signer)
+    {
+        let token = set_up_for_confidential_asset_test(
+            &confidential_asset, &aptos_fx, &fa, &alice, &bob, 500, 500);
+        let bob_addr = signer::address_of(&bob);
+        let (alice_dk, alice_ek) = generate_twisted_elgamal_keypair();
+        let (_, bob_ek) = generate_twisted_elgamal_keypair();
+        confidential_asset::register_for_testing(&alice, token, twisted_elgamal::pubkey_to_bytes(&alice_ek));
+        confidential_asset::register_for_testing(&bob, token, twisted_elgamal::pubkey_to_bytes(&bob_ek));
+        confidential_asset::deposit(&alice, token, 200);
+        confidential_asset::rollover_pending_balance(&alice, token);
+
+        // Use a fresh keypair as slot 0 — proof verifies (consistent transcript) but
+        // `validate_auditors` rejects because slot 0 ≠ on-chain chain auditor.
+        let (_, wrong_ek) = generate_twisted_elgamal_keypair();
+        audit_transfer_raw(&alice, &alice_dk, token, bob_addr, 100, 100,
+            &vector[wrong_ek], vector[]);
+    }
+
+    #[test(confidential_asset = @aptos_experimental, aptos_fx = @aptos_framework,
+        fa = @0xfa, alice = @0xa1, bob = @0xb0)]
+    #[expected_failure(abort_code = 0x010006, location = confidential_asset)]
+    /// When an asset auditor is set, `auditor_eks` must include both the chain auditor
+    /// (slot 0) and the asset auditor (slot 1). Submitting only the chain auditor is
+    /// rejected — the prefix length check in `validate_auditors` catches it.
+    fun fail_transfer_if_asset_auditor_required_but_missing(
+        confidential_asset: signer, aptos_fx: signer, fa: signer,
+        alice: signer, bob: signer)
+    {
+        let token = set_up_for_confidential_asset_test(
+            &confidential_asset, &aptos_fx, &fa, &alice, &bob, 500, 500);
+        let bob_addr = signer::address_of(&bob);
+        let (alice_dk, alice_ek) = generate_twisted_elgamal_keypair();
+        let (_, bob_ek) = generate_twisted_elgamal_keypair();
+        let (_, asset_aud_ek) = generate_twisted_elgamal_keypair();
+        confidential_asset::set_asset_auditor(&aptos_fx, token,
+            twisted_elgamal::pubkey_to_bytes(&asset_aud_ek));
+        confidential_asset::register_for_testing(&alice, token, twisted_elgamal::pubkey_to_bytes(&alice_ek));
+        confidential_asset::register_for_testing(&bob, token, twisted_elgamal::pubkey_to_bytes(&bob_ek));
+        confidential_asset::deposit(&alice, token, 200);
+        confidential_asset::rollover_pending_balance(&alice, token);
+
+        // Helper auto-prepends the chain auditor ⇒ auditor_eks = [chain]. Slot 1 is missing
+        // even though asset auditor is set ⇒ rejected.
+        audit_transfer(&alice, &alice_dk, token, bob_addr, 100, 100, &vector[], vector[]);
+    }
+
+    #[test(confidential_asset = @aptos_experimental, aptos_fx = @aptos_framework,
+        fa = @0xfa, alice = @0xa1, bob = @0xb0)]
+    /// Voluntary auditors at slot 2+ are accepted when no asset auditor is configured —
+    /// the prefix is just `[chain]`, anything after is the sender's choice.
+    fun success_voluntary_auditors_without_asset_auditor(
+        confidential_asset: signer, aptos_fx: signer, fa: signer,
+        alice: signer, bob: signer)
+    {
+        let token = set_up_for_confidential_asset_test(
+            &confidential_asset, &aptos_fx, &fa, &alice, &bob, 500, 500);
+        let alice_addr = signer::address_of(&alice);
+        let bob_addr = signer::address_of(&bob);
+        let (alice_dk, alice_ek) = generate_twisted_elgamal_keypair();
+        let (bob_dk, bob_ek) = generate_twisted_elgamal_keypair();
+        let (vol1_dk, vol1_ek) = generate_twisted_elgamal_keypair();
+        let (vol2_dk, vol2_ek) = generate_twisted_elgamal_keypair();
+        confidential_asset::register_for_testing(&alice, token, twisted_elgamal::pubkey_to_bytes(&alice_ek));
+        confidential_asset::register_for_testing(&bob, token, twisted_elgamal::pubkey_to_bytes(&bob_ek));
+        confidential_asset::deposit(&alice, token, 200);
+        confidential_asset::rollover_pending_balance(&alice, token);
+
+        let auditor_amounts = audit_transfer(&alice, &alice_dk, token, bob_addr, 100, 100,
+            &vector[vol1_ek, vol2_ek], vector[]);
+
+        assert!(confidential_asset::verify_actual_balance(alice_addr, token, &alice_dk, 100), 1);
+        assert!(confidential_asset::verify_pending_balance(bob_addr, token, &bob_dk, 100), 1);
+        // [0] = chain auditor (helper-prepended); [1] = vol1; [2] = vol2.
+        assert!(confidential_balance::verify_pending_balance(&auditor_amounts[1], &vol1_dk, 100), 2);
+        assert!(confidential_balance::verify_pending_balance(&auditor_amounts[2], &vol2_dk, 100), 3);
+    }
+
+    #[test(confidential_asset = @aptos_experimental, aptos_fx = @aptos_framework,
+        fa = @0xfa, alice = @0xa1, bob = @0xb0)]
+    #[expected_failure(abort_code = 0x010006, location = confidential_asset)]
+    /// A proof generated under the previous chain auditor key becomes unsubmittable after
+    /// governance rotates the chain auditor — slot 0 no longer equals the on-chain key.
+    /// This is the explicit "rotation invalidates in-flight proofs" property documented
+    /// on `set_chain_auditor`.
+    fun fail_transfer_after_chain_auditor_rotation(
+        confidential_asset: signer, aptos_fx: signer, fa: signer,
+        alice: signer, bob: signer)
+    {
+        let token = set_up_for_confidential_asset_test(
+            &confidential_asset, &aptos_fx, &fa, &alice, &bob, 500, 500);
+        let bob_addr = signer::address_of(&bob);
+        let (alice_dk, alice_ek) = generate_twisted_elgamal_keypair();
+        let (_, bob_ek) = generate_twisted_elgamal_keypair();
+        confidential_asset::register_for_testing(&alice, token, twisted_elgamal::pubkey_to_bytes(&alice_ek));
+        confidential_asset::register_for_testing(&bob, token, twisted_elgamal::pubkey_to_bytes(&bob_ek));
+        confidential_asset::deposit(&alice, token, 200);
+        confidential_asset::rollover_pending_balance(&alice, token);
+
+        // Capture the chain auditor key in force at proof-generation time, then rotate
+        // before submission to simulate a governance proposal landing mid-flight.
+        let old_chain_ek = confidential_asset::get_chain_auditor().extract();
+        let (_, new_chain_ek) = generate_twisted_elgamal_keypair();
+        confidential_asset::set_chain_auditor(&aptos_fx, twisted_elgamal::pubkey_to_bytes(&new_chain_ek));
+
+        // `audit_transfer_raw` uses the supplied list verbatim — slot 0 is the *old* key,
+        // which no longer matches the on-chain chain auditor.
+        audit_transfer_raw(&alice, &alice_dk, token, bob_addr, 100, 100,
+            &vector[old_chain_ek], vector[]);
+    }
+
+    #[test(confidential_asset = @aptos_experimental, aptos_fx = @aptos_framework,
+        fa = @0xfa, alice = @0xa1, bob = @0xb0)]
+    /// Rotation history: each rotation bumps the epoch, appends to history, and stamps
+    /// the new epoch on subsequent transfers. Past entries close their
+    /// `deactivated_at_epoch` to the successor's `activated_at_epoch`.
+    fun success_chain_auditor_rotation_tracks_history(
+        confidential_asset: signer, aptos_fx: signer, fa: signer,
+        alice: signer, bob: signer)
+    {
+        let token = set_up_for_confidential_asset_test(
+            &confidential_asset, &aptos_fx, &fa, &alice, &bob, 500, 500);
+        let alice_addr = signer::address_of(&alice);
+        let bob_addr = signer::address_of(&bob);
+        let (alice_dk, alice_ek) = generate_twisted_elgamal_keypair();
+        let (_, bob_ek) = generate_twisted_elgamal_keypair();
+        confidential_asset::register_for_testing(&alice, token, twisted_elgamal::pubkey_to_bytes(&alice_ek));
+        confidential_asset::register_for_testing(&bob, token, twisted_elgamal::pubkey_to_bytes(&bob_ek));
+        confidential_asset::deposit(&alice, token, 300);
+        confidential_asset::rollover_pending_balance(&alice, token);
+
+        // Setup installed epoch 1; rotate twice → epochs 2, 3.
+        assert!(confidential_asset::get_chain_auditor_epoch() == 1, 1);
+        let (_, ek2) = generate_twisted_elgamal_keypair();
+        confidential_asset::set_chain_auditor(&aptos_fx, twisted_elgamal::pubkey_to_bytes(&ek2));
+        assert!(confidential_asset::get_chain_auditor_epoch() == 2, 2);
+        let (_, ek3) = generate_twisted_elgamal_keypair();
+        confidential_asset::set_chain_auditor(&aptos_fx, twisted_elgamal::pubkey_to_bytes(&ek3));
+        assert!(confidential_asset::get_chain_auditor_epoch() == 3, 3);
+
+        // History has 3 entries; the first two are deactivated at the successor's epoch,
+        // and the active key has deactivated_at_epoch == 0.
+        let history = confidential_asset::get_chain_auditor_history();
+        assert!(history.length() == 3, 4);
+
+        // Transfer stamps the *current* epoch (3) on the event.
+        transfer(&alice, &alice_dk, token, bob_addr, 100, 200, vector[]);
+        confidential_asset::assert_last_transferred_event_matches_state(
+            token, alice_addr, bob_addr, 1, vector[], 3, 0);
+
+        // Asset auditor history is independent. Set, rotate, clear.
+        let (_, asset_ek1) = generate_twisted_elgamal_keypair();
+        let (_, asset_ek2) = generate_twisted_elgamal_keypair();
+        confidential_asset::set_asset_auditor(&aptos_fx, token, twisted_elgamal::pubkey_to_bytes(&asset_ek1));
+        assert!(confidential_asset::get_asset_auditor_epoch(token) == 1, 5);
+        confidential_asset::set_asset_auditor(&aptos_fx, token, twisted_elgamal::pubkey_to_bytes(&asset_ek2));
+        assert!(confidential_asset::get_asset_auditor_epoch(token) == 2, 6);
+        confidential_asset::set_asset_auditor(&aptos_fx, token, b"");
+        assert!(confidential_asset::get_asset_auditor_epoch(token) == 3, 7);
+        // History contains both prior keys; after the clear there is no active asset auditor.
+        let asset_hist = confidential_asset::get_asset_auditor_history(token);
+        assert!(asset_hist.length() == 2, 8);
+        assert!(confidential_asset::get_asset_auditor(token).is_none(), 9);
     }
 }

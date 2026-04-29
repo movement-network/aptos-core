@@ -43,7 +43,9 @@ module aptos_experimental::confidential_gas_e2e_helpers {
         (new_balance_bytes, zkrp_new_balance, sigma_proof)
     }
 
-    /// Same as `pack_confidential_transfer_proof` with no voluntary auditors (`auditor_eks` empty).
+    /// Builds a transfer proof with no extra auditors. The chain-level auditor is fetched
+    /// from on-chain state and automatically placed at `auditor_eks[0]`, so the resulting
+    /// proof satisfies `validate_auditors` for any token without an asset auditor.
     public fun pack_confidential_transfer_proof_simple(
         chain_id: u8,
         sender: address,
@@ -63,7 +65,7 @@ module aptos_experimental::confidential_gas_e2e_helpers {
         vector<u8>,
         vector<u8>,
     ) {
-        let no_extra_auditors = vector::empty<CompressedPubkey>();
+        let auditors = build_auditor_list_with_chain_prefix(vector::empty<vector<u8>>());
         pack_confidential_transfer_proof_inner(
             chain_id,
             sender,
@@ -72,14 +74,71 @@ module aptos_experimental::confidential_gas_e2e_helpers {
             transfer_amount,
             new_balance_amount,
             token,
-            &no_extra_auditors,
+            &auditors,
             sender_auditor_hint,
         )
     }
 
-    /// Includes voluntary auditors (each 32-byte compressed pubkey) plus optional asset auditor
-    /// (first key) when `set_auditor` was called on-chain.
+    /// Builds a transfer proof and automatically prepends the on-chain chain-level auditor
+    /// at `auditor_eks[0]`. `extra_auditor_eks` (each 32-byte compressed pubkey) becomes
+    /// `auditor_eks[1..]` in order — i.e. the asset auditor (when set) followed by any
+    /// voluntary auditors.
     public fun pack_confidential_transfer_proof_with_auditors(
+        chain_id: u8,
+        sender: address,
+        recipient: address,
+        sender_dk: &Scalar,
+        transfer_amount: u64,
+        new_balance_amount: u128,
+        token: Object<Metadata>,
+        extra_auditor_eks: vector<vector<u8>>,
+        sender_auditor_hint: vector<u8>,
+    ): (
+        vector<u8>,
+        vector<u8>,
+        vector<u8>,
+        vector<u8>,
+        vector<u8>,
+        vector<u8>,
+        vector<u8>,
+        vector<u8>,
+    ) {
+        let auditors = build_auditor_list_with_chain_prefix(extra_auditor_eks);
+        pack_confidential_transfer_proof_inner(
+            chain_id,
+            sender,
+            recipient,
+            sender_dk,
+            transfer_amount,
+            new_balance_amount,
+            token,
+            &auditors,
+            sender_auditor_hint,
+        )
+    }
+
+    fun build_auditor_list_with_chain_prefix(
+        extra_auditor_eks: vector<vector<u8>>): vector<CompressedPubkey>
+    {
+        let chain_ek = confidential_asset::get_chain_auditor().extract();
+        let acc = vector[chain_ek];
+        let len = extra_auditor_eks.length();
+        let i = 0;
+        while (i < len) {
+            vector::push_back(
+                &mut acc,
+                twisted_elgamal::new_pubkey_from_bytes(extra_auditor_eks[i]).extract(),
+            );
+            i = i + 1;
+        };
+        acc
+    }
+
+    /// Like [`pack_confidential_transfer_proof_with_auditors`] but uses `auditor_eks` *verbatim*
+    /// without prepending the chain-level auditor. Used by rejection-path e2e tests that need
+    /// to construct intentionally invalid auditor prefixes (wrong slot 0, missing prefix,
+    /// post-rotation old key).
+    public fun pack_confidential_transfer_proof_verbatim(
         chain_id: u8,
         sender: address,
         recipient: address,
@@ -99,18 +158,15 @@ module aptos_experimental::confidential_gas_e2e_helpers {
         vector<u8>,
         vector<u8>,
     ) {
-        let parsed = {
-            let acc = vector::empty<CompressedPubkey>();
-            let len = auditor_eks.length();
-            let i = 0;
-            while (i < len) {
-                vector::push_back(
-                    &mut acc,
-                    twisted_elgamal::new_pubkey_from_bytes(auditor_eks[i]).extract(),
-                );
-                i = i + 1;
-            };
-            acc
+        let parsed = vector::empty<CompressedPubkey>();
+        let len = auditor_eks.length();
+        let i = 0;
+        while (i < len) {
+            vector::push_back(
+                &mut parsed,
+                twisted_elgamal::new_pubkey_from_bytes(auditor_eks[i]).extract(),
+            );
+            i = i + 1;
         };
         pack_confidential_transfer_proof_inner(
             chain_id,

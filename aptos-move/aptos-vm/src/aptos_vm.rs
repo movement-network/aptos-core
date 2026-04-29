@@ -2481,7 +2481,6 @@ impl AptosVM {
                 )?
             }
         }
-
         Ok(())
     }
 

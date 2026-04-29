@@ -844,7 +844,13 @@ impl TransactionStore {
         start_end_pairs: HashMap<TimelineIndexIdentifier, (u64, u64)>,
     ) -> Vec<(SignedTransaction, u64)> {
         match self.timeline_index.get(&sender_bucket) {
-            None => Vec::new(),
+            None => {
+                error!(
+                    "Unable to get the timeline index for the sender bucket {}",
+                    sender_bucket
+                );
+                Vec::new()
+            },
             Some(index) => index
                 .timeline_range(start_end_pairs)
                 .iter()

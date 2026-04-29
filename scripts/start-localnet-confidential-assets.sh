@@ -545,6 +545,7 @@ run_localnet() {
       --force-restart \
       --assume-yes \
       --do-not-delegate \
+      --with-indexer-api \
       --test-dir "$TEST_DIR" \
       >"$LOCALNET_LOG" 2>&1 &
     echo $! >"$LOCALNET_PID_FILE"
@@ -561,6 +562,7 @@ run_localnet() {
       --force-restart \
       --assume-yes \
       --do-not-delegate \
+      --with-indexer-api \
       --test-dir "$TEST_DIR"
   fi
 }

@@ -39,6 +39,7 @@ module aptos_experimental::confidential_asset_tests {
             cid,
             from,
             @aptos_experimental,
+            object::object_address(&token),
             sender_dk,
             &sender_ek,
             amount,
@@ -82,6 +83,7 @@ module aptos_experimental::confidential_asset_tests {
             4u8, // test chain ID
             from,
             @aptos_experimental,
+            object::object_address(&token),
             sender_dk,
             &sender_ek,
             &recipient_ek,
@@ -139,6 +141,7 @@ module aptos_experimental::confidential_asset_tests {
             4u8, // test chain ID
             from,
             @aptos_experimental,
+            object::object_address(&token),
             sender_dk,
             &sender_ek,
             &recipient_ek,
@@ -189,6 +192,7 @@ module aptos_experimental::confidential_asset_tests {
             4u8, // test chain ID
             from,
             @aptos_experimental,
+            object::object_address(&token),
             sender_dk,
             new_dk,
             &sender_ek,
@@ -225,6 +229,7 @@ module aptos_experimental::confidential_asset_tests {
             4u8, // test chain ID
             from,
             @aptos_experimental,
+            object::object_address(&token),
             sender_dk,
             &sender_ek,
             amount,

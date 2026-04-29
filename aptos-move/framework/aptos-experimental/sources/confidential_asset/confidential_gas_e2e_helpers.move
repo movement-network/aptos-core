@@ -8,7 +8,7 @@ module aptos_experimental::confidential_gas_e2e_helpers {
     use std::vector;
     use aptos_std::ristretto255::Scalar;
     use aptos_framework::fungible_asset::Metadata;
-    use aptos_framework::object::Object;
+    use aptos_framework::object::{Self, Object};
 
     use aptos_experimental::confidential_asset;
     use aptos_experimental::confidential_balance;
@@ -31,6 +31,7 @@ module aptos_experimental::confidential_gas_e2e_helpers {
             chain_id,
             sender,
             @aptos_experimental,
+            object::object_address(&token),
             dk,
             ek,
             withdraw_amount,
@@ -158,6 +159,7 @@ module aptos_experimental::confidential_gas_e2e_helpers {
             chain_id,
             sender,
             @aptos_experimental,
+            object::object_address(&token),
             sender_dk,
             &sender_ek,
             &recipient_ek,
@@ -198,6 +200,7 @@ module aptos_experimental::confidential_gas_e2e_helpers {
             chain_id,
             sender,
             @aptos_experimental,
+            object::object_address(&token),
             sender_dk,
             new_dk,
             &sender_ek,
@@ -231,6 +234,7 @@ module aptos_experimental::confidential_gas_e2e_helpers {
             chain_id,
             sender,
             @aptos_experimental,
+            object::object_address(&token),
             dk,
             &ek,
             amount,

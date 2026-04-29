@@ -203,7 +203,7 @@ module aptos_experimental::confidential_balance {
 
         lhs.chunks.enumerate_mut(|i, chunk| {
             if (i < rhs.chunks.length()) {
-                twisted_elgamal::ciphertext_add_assign(chunk, &rhs.chunks[i])
+                twisted_elgamal::ciphertext_sub_assign(chunk, &rhs.chunks[i])
             }
         })
     }

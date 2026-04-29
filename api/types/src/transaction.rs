@@ -948,7 +948,6 @@ pub enum TransactionPayload {
     // ordering, unfortunately.
     ModuleBundlePayload(DeprecatedModuleBundlePayload),
     MultisigPayload(MultisigPayload),
-    TimelockPayload(TimelockPayload),
 }
 
 impl VerifyInput for TransactionPayload {
@@ -957,7 +956,6 @@ impl VerifyInput for TransactionPayload {
             TransactionPayload::EntryFunctionPayload(inner) => inner.verify(),
             TransactionPayload::ScriptPayload(inner) => inner.verify(),
             TransactionPayload::MultisigPayload(inner) => inner.verify(),
-            TransactionPayload::TimelockPayload(inner) => inner.verify(),
 
             // Deprecated.
             TransactionPayload::ModuleBundlePayload(_) => {
@@ -1053,54 +1051,6 @@ impl VerifyInput for MultisigPayload {
         if let Some(payload) = &self.transaction_payload {
             match payload {
                 MultisigTransactionPayload::EntryFunctionPayload(entry_function) => {
-                    entry_function.function.verify()?;
-                    for type_arg in entry_function.type_arguments.iter() {
-                        type_arg.verify(0)?;
-                    }
-                },
-            }
-        }
-
-        Ok(())
-    }
-}
-
-/// The payload of a timelock transaction (currently only entry functions are supported).
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Union)]
-#[serde(tag = "type", rename_all = "snake_case")]
-#[oai(one_of, discriminator_name = "type", rename_all = "snake_case")]
-pub enum TimelockTransactionPayload {
-    EntryFunctionPayload(EntryFunctionPayload),
-}
-
-/// A timelock transaction that allows an executor of a timelock account to execute a
-/// pre-approved transaction as the timelock account after the timelock delay has elapsed.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Object)]
-pub struct TimelockPayload {
-    pub timelock_address: Address,
-
-    /// Salt used together with the payload to derive the transaction hash.
-    /// The table key (hash) is `keccak256(bcs(payload) || salt)`.
-    pub salt: HexEncodedBytes,
-
-    /// Transaction table key: `keccak256(bcs(payload) || salt)`.
-    /// Required when `transaction_payload` is absent so the VM can look up the
-    /// stored payload via `timelock::get_transaction(timelock_address, hash)`.
-    /// When `transaction_payload` is present the VM derives the hash itself.
-    pub hash: HexEncodedBytes,
-
-    /// Transaction payload. Optional when the payload is already stored on-chain;
-    /// the executor must supply `hash` in that case.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(default)]
-    pub transaction_payload: Option<TimelockTransactionPayload>,
-}
-
-impl VerifyInput for TimelockPayload {
-    fn verify(&self) -> anyhow::Result<()> {
-        if let Some(payload) = &self.transaction_payload {
-            match payload {
-                TimelockTransactionPayload::EntryFunctionPayload(entry_function) => {
                     entry_function.function.verify()?;
                     for type_arg in entry_function.type_arguments.iter() {
                         type_arg.verify(0)?;

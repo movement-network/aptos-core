@@ -70,15 +70,6 @@ pub const SUCCESSFUL_TRANSACTION_EXECUTION_CLEANUP: &IdentStr =
 pub const FAILED_TRANSACTION_EXECUTION_CLEANUP: &IdentStr =
     ident_str!("failed_transaction_execution_cleanup");
 
-pub static TIMELOCK_MODULE: Lazy<ModuleId> = Lazy::new(|| {
-    ModuleId::new(
-        account_config::CORE_CODE_ADDRESS,
-        ident_str!("timelock").to_owned(),
-    )
-});
-pub const VALIDATE_TIMELOCK_TRANSACTION: &IdentStr = ident_str!("validate_timelock_transaction");
-pub const GET_TRANSACTION: &IdentStr = ident_str!("get_transaction");
-
 pub static TRANSACTION_FEE_MODULE: Lazy<ModuleId> = Lazy::new(|| {
     ModuleId::new(
         account_config::CORE_CODE_ADDRESS,

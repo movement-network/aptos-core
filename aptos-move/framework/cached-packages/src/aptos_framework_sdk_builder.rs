@@ -1268,10 +1268,10 @@ pub enum EntryFunctionCall {
 
     /// Cancel a pending transaction. The transaction's executed field is set to true.
     /// Any creator or executor (or creator when executors is empty) can cancel at any time.
-    /// `hash` must be exactly 32 bytes.
+    /// `transaction_hash` must be exactly 32 bytes.
     TimelockCancelTransaction {
         timelock_account: AccountAddress,
-        hash: Vec<u8>,
+        transaction_hash: Vec<u8>,
     },
 
     /// Create a new timelock account with the calling signer as the initial creator.
@@ -1280,7 +1280,7 @@ pub enum EntryFunctionCall {
     ///        included. No duplicates allowed.
     /// @param executors Addresses authorized to execute transactions after the timelock period.
     ///        If empty, creators can also execute.
-    /// @param num_seconds_execute Delay in seconds before a proposed transaction can be executed.
+    /// @param num_seconds_execute Minimum delay in seconds before a proposed transaction can be executed.
     TimelockCreate {
         additional_creators: Vec<AccountAddress>,
         executors: Vec<AccountAddress>,
@@ -1289,22 +1289,13 @@ pub enum EntryFunctionCall {
 
     /// Propose a new transaction to be executed after the timelock period.
     ///
-    /// The payload is stored on-chain and the table key is `keccak256(payload || salt)`.
-    /// `salt` must be exactly 32 bytes. `num_seconds_execute` must be >= `min_num_seconds_execute`.
+    /// `execution_hash` is the keccak256 hash of the resolution script that will perform the
+    /// transaction's effects when submitted. `salt` (32 bytes) disambiguates duplicate
+    /// proposals of the same script. The table key is `keccak256(execution_hash || salt)`.
+    /// `num_seconds_execute` must be >= `min_num_seconds_execute`.
     TimelockCreateTransaction {
         timelock_account: AccountAddress,
-        payload: Vec<u8>,
-        num_seconds_execute: u64,
-        salt: Vec<u8>,
-    },
-
-    /// Propose a new transaction in hash-only mode. The provided hash is used directly as the
-    /// table key, and the executor must supply the full payload at execution time.
-    /// Both `hash` and `salt` must be exactly 32 bytes.
-    /// `num_seconds_execute` must be >= `min_num_seconds_execute`.
-    TimelockCreateTransactionWithHash {
-        timelock_account: AccountAddress,
-        hash: Vec<u8>,
+        execution_hash: Vec<u8>,
         num_seconds_execute: u64,
         salt: Vec<u8>,
     },
@@ -2161,8 +2152,8 @@ impl EntryFunctionCall {
             TimelockAddExecutors { new_executors } => timelock_add_executors(new_executors),
             TimelockCancelTransaction {
                 timelock_account,
-                hash,
-            } => timelock_cancel_transaction(timelock_account, hash),
+                transaction_hash,
+            } => timelock_cancel_transaction(timelock_account, transaction_hash),
             TimelockCreate {
                 additional_creators,
                 executors,
@@ -2170,18 +2161,12 @@ impl EntryFunctionCall {
             } => timelock_create(additional_creators, executors, num_seconds_execute),
             TimelockCreateTransaction {
                 timelock_account,
-                payload,
+                execution_hash,
                 num_seconds_execute,
                 salt,
-            } => timelock_create_transaction(timelock_account, payload, num_seconds_execute, salt),
-            TimelockCreateTransactionWithHash {
+            } => timelock_create_transaction(
                 timelock_account,
-                hash,
-                num_seconds_execute,
-                salt,
-            } => timelock_create_transaction_with_hash(
-                timelock_account,
-                hash,
+                execution_hash,
                 num_seconds_execute,
                 salt,
             ),
@@ -5724,10 +5709,10 @@ pub fn timelock_add_executors(new_executors: Vec<AccountAddress>) -> Transaction
 
 /// Cancel a pending transaction. The transaction's executed field is set to true.
 /// Any creator or executor (or creator when executors is empty) can cancel at any time.
-/// `hash` must be exactly 32 bytes.
+/// `transaction_hash` must be exactly 32 bytes.
 pub fn timelock_cancel_transaction(
     timelock_account: AccountAddress,
-    hash: Vec<u8>,
+    transaction_hash: Vec<u8>,
 ) -> TransactionPayload {
     TransactionPayload::EntryFunction(EntryFunction::new(
         ModuleId::new(
@@ -5741,7 +5726,7 @@ pub fn timelock_cancel_transaction(
         vec![],
         vec![
             bcs::to_bytes(&timelock_account).unwrap(),
-            bcs::to_bytes(&hash).unwrap(),
+            bcs::to_bytes(&transaction_hash).unwrap(),
         ],
     ))
 }
@@ -5752,7 +5737,7 @@ pub fn timelock_cancel_transaction(
 ///        included. No duplicates allowed.
 /// @param executors Addresses authorized to execute transactions after the timelock period.
 ///        If empty, creators can also execute.
-/// @param num_seconds_execute Delay in seconds before a proposed transaction can be executed.
+/// @param num_seconds_execute Minimum delay in seconds before a proposed transaction can be executed.
 pub fn timelock_create(
     additional_creators: Vec<AccountAddress>,
     executors: Vec<AccountAddress>,
@@ -5778,11 +5763,13 @@ pub fn timelock_create(
 
 /// Propose a new transaction to be executed after the timelock period.
 ///
-/// The payload is stored on-chain and the table key is `keccak256(payload || salt)`.
-/// `salt` must be exactly 32 bytes. `num_seconds_execute` must be >= `min_num_seconds_execute`.
+/// `execution_hash` is the keccak256 hash of the resolution script that will perform the
+/// transaction's effects when submitted. `salt` (32 bytes) disambiguates duplicate
+/// proposals of the same script. The table key is `keccak256(execution_hash || salt)`.
+/// `num_seconds_execute` must be >= `min_num_seconds_execute`.
 pub fn timelock_create_transaction(
     timelock_account: AccountAddress,
-    payload: Vec<u8>,
+    execution_hash: Vec<u8>,
     num_seconds_execute: u64,
     salt: Vec<u8>,
 ) -> TransactionPayload {
@@ -5798,36 +5785,7 @@ pub fn timelock_create_transaction(
         vec![],
         vec![
             bcs::to_bytes(&timelock_account).unwrap(),
-            bcs::to_bytes(&payload).unwrap(),
-            bcs::to_bytes(&num_seconds_execute).unwrap(),
-            bcs::to_bytes(&salt).unwrap(),
-        ],
-    ))
-}
-
-/// Propose a new transaction in hash-only mode. The provided hash is used directly as the
-/// table key, and the executor must supply the full payload at execution time.
-/// Both `hash` and `salt` must be exactly 32 bytes.
-/// `num_seconds_execute` must be >= `min_num_seconds_execute`.
-pub fn timelock_create_transaction_with_hash(
-    timelock_account: AccountAddress,
-    hash: Vec<u8>,
-    num_seconds_execute: u64,
-    salt: Vec<u8>,
-) -> TransactionPayload {
-    TransactionPayload::EntryFunction(EntryFunction::new(
-        ModuleId::new(
-            AccountAddress::new([
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 1,
-            ]),
-            ident_str!("timelock").to_owned(),
-        ),
-        ident_str!("create_transaction_with_hash").to_owned(),
-        vec![],
-        vec![
-            bcs::to_bytes(&timelock_account).unwrap(),
-            bcs::to_bytes(&hash).unwrap(),
+            bcs::to_bytes(&execution_hash).unwrap(),
             bcs::to_bytes(&num_seconds_execute).unwrap(),
             bcs::to_bytes(&salt).unwrap(),
         ],
@@ -8247,7 +8205,7 @@ mod decoder {
         if let TransactionPayload::EntryFunction(script) = payload {
             Some(EntryFunctionCall::TimelockCancelTransaction {
                 timelock_account: bcs::from_bytes(script.args().get(0)?).ok()?,
-                hash: bcs::from_bytes(script.args().get(1)?).ok()?,
+                transaction_hash: bcs::from_bytes(script.args().get(1)?).ok()?,
             })
         } else {
             None
@@ -8270,22 +8228,7 @@ mod decoder {
         if let TransactionPayload::EntryFunction(script) = payload {
             Some(EntryFunctionCall::TimelockCreateTransaction {
                 timelock_account: bcs::from_bytes(script.args().get(0)?).ok()?,
-                payload: bcs::from_bytes(script.args().get(1)?).ok()?,
-                num_seconds_execute: bcs::from_bytes(script.args().get(2)?).ok()?,
-                salt: bcs::from_bytes(script.args().get(3)?).ok()?,
-            })
-        } else {
-            None
-        }
-    }
-
-    pub fn timelock_create_transaction_with_hash(
-        payload: &TransactionPayload,
-    ) -> Option<EntryFunctionCall> {
-        if let TransactionPayload::EntryFunction(script) = payload {
-            Some(EntryFunctionCall::TimelockCreateTransactionWithHash {
-                timelock_account: bcs::from_bytes(script.args().get(0)?).ok()?,
-                hash: bcs::from_bytes(script.args().get(1)?).ok()?,
+                execution_hash: bcs::from_bytes(script.args().get(1)?).ok()?,
                 num_seconds_execute: bcs::from_bytes(script.args().get(2)?).ok()?,
                 salt: bcs::from_bytes(script.args().get(3)?).ok()?,
             })
@@ -9196,10 +9139,6 @@ static SCRIPT_FUNCTION_DECODER_MAP: once_cell::sync::Lazy<EntryFunctionDecoderMa
         map.insert(
             "timelock_create_transaction".to_string(),
             Box::new(decoder::timelock_create_transaction),
-        );
-        map.insert(
-            "timelock_create_transaction_with_hash".to_string(),
-            Box::new(decoder::timelock_create_transaction_with_hash),
         );
         map.insert(
             "timelock_remove_creators".to_string(),

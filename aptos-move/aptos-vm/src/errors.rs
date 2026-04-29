@@ -10,12 +10,12 @@ use aptos_vm_types::output::VMOutput;
 use move_binary_format::errors::VMError;
 use move_core_types::vm_status::{AbortLocation, StatusCode, VMStatus};
 
-use crate::system_module_names::{MULTISIG_ACCOUNT_MODULE, TIMELOCK_MODULE};
+use crate::system_module_names::MULTISIG_ACCOUNT_MODULE;
 
 /// Error codes that can be emitted by the prologue. These have special significance to the VM when
 /// they are raised during the prologue.
 /// These errors are expected either from the system account-validation modules or from the
-/// specialized multisig/timelock prologue modules.
+/// specialized multisig prologue module.
 /// The prologue should not emit any other error codes or fail for any reason, doing so will result
 /// in the VM throwing an invariant violation
 // Auth key in transaction is invalid.
@@ -58,19 +58,6 @@ const EMULTISIG_NOT_ENOUGH_APPROVALS: u64 = 2009;
 // Provided target function does not match the payload stored in the on-chain multisig transaction.
 const EMULTISIG_PAYLOAD_DOES_NOT_MATCH: u64 = 2010;
 
-// Specified account is not a timelock account.
-const EACCOUNT_NOT_TIMELOCK: u64 = 2011;
-// The caller is not an executor of the timelock account (or a creator when executors is empty).
-const ENOT_TIMELOCK_EXECUTOR: u64 = 2004;
-// Timelock transaction with specified hash was not found.
-const ETIMELOCK_TRANSACTION_NOT_FOUND: u64 = 2012;
-// Provided payload does not match the payload stored on chain for this timelock transaction.
-const ETIMELOCK_PAYLOAD_DOES_NOT_MATCH: u64 = 2007;
-// The timelock period has not elapsed yet.
-const ETIMELOCK_NOT_EXPIRED: u64 = 2013;
-// Timelock transaction has already been executed or canceled.
-const ETIMELOCK_TRANSACTION_ALREADY_EXECUTED: u64 = 9;
-
 const INVALID_ARGUMENT: u8 = 0x1;
 const LIMIT_EXCEEDED: u8 = 0x2;
 const INVALID_STATE: u8 = 0x3;
@@ -85,10 +72,6 @@ fn error_split(code: u64) -> (u8, u64) {
 
 fn is_multisig_abort(location: &AbortLocation) -> bool {
     location == &AbortLocation::Module((*MULTISIG_ACCOUNT_MODULE).clone())
-}
-
-fn is_timelock_abort(location: &AbortLocation) -> bool {
-    location == &AbortLocation::Module((*TIMELOCK_MODULE).clone())
 }
 
 /// Converts particular Move abort codes to specific validation error codes for the prologue
@@ -121,32 +104,6 @@ pub fn convert_prologue_error(
                 },
                 (category, reason) => {
                     let err_msg = format!("[aptos_vm] Unexpected multisig prologue Move abort: {:?}::{:?} (Category: {:?} Reason: {:?})",
-                    location, code, category, reason);
-                    speculative_error!(log_context, err_msg.clone());
-                    return Err(VMStatus::error(
-                        StatusCode::UNEXPECTED_ERROR_FROM_KNOWN_MOVE_FUNCTION,
-                        Some(err_msg),
-                    ));
-                },
-            };
-            VMStatus::error(new_major_status, None)
-        },
-        VMStatus::MoveAbort(location, code) if is_timelock_abort(&location) => {
-            let new_major_status = match error_split(code) {
-                (INVALID_STATE, EACCOUNT_NOT_TIMELOCK) => StatusCode::ACCOUNT_NOT_TIMELOCK,
-                (PERMISSION_DENIED, ENOT_TIMELOCK_EXECUTOR) => StatusCode::NOT_TIMELOCK_EXECUTOR,
-                (NOT_FOUND, ETIMELOCK_TRANSACTION_NOT_FOUND) => {
-                    StatusCode::TIMELOCK_TRANSACTION_NOT_FOUND
-                },
-                (INVALID_ARGUMENT, ETIMELOCK_PAYLOAD_DOES_NOT_MATCH) => {
-                    StatusCode::TIMELOCK_TRANSACTION_PAYLOAD_DOES_NOT_MATCH
-                },
-                (INVALID_STATE, ETIMELOCK_NOT_EXPIRED) => StatusCode::TIMELOCK_NOT_EXPIRED,
-                (INVALID_STATE, ETIMELOCK_TRANSACTION_ALREADY_EXECUTED) => {
-                    StatusCode::TIMELOCK_TRANSACTION_ALREADY_EXECUTED
-                },
-                (category, reason) => {
-                    let err_msg = format!("[aptos_vm] Unexpected timelock prologue Move abort: {:?}::{:?} (Category: {:?} Reason: {:?})",
                     location, code, category, reason);
                     speculative_error!(log_context, err_msg.clone());
                     return Err(VMStatus::error(

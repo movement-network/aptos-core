@@ -5,7 +5,6 @@ All notable changes to the Aptos Node API will be captured in this file. This ch
 **Note**: The Aptos Node API does not follow semantic version while we are in active development. Instead, breaking changes will be announced with each devnet cut. Once we launch our mainnet, the API will follow semantic versioning closely.
 
 ## Unreleased
-- Added `timelock_payload` variant to the `TransactionPayload` discriminator, plus the new `TimelockPayload`, `TimelockTransactionPayload`, and `TransactionPayload_TimelockPayload` schemas.
 - OpenAPI layout changed slightly in some enum cases, see [#13929](https://github.com/aptos-labs/aptos-core/pull/13929) for more information.
 
 ## 1.2.0 (2022-09-29)

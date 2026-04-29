@@ -1,0 +1,15 @@
+[package]
+name = "StandaloneTimelock"
+version = "0.1.0"
+upgrade_policy = "compatible"
+
+[addresses]
+standalone_timelock = "_"
+deployer = "_"
+
+[dev-addresses]
+standalone_timelock = "0xcafe"
+deployer = "0xabba"
+
+[dependencies]
+AptosFramework = { local = "../../framework/aptos-framework" }

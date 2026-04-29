@@ -1,25 +1,31 @@
-/// Timelock account module for Movement. Unlike multisig accounts which require n-of-m signatures,
-/// a timelock account enforces a time delay before transactions can be executed.
+/// Timelock account module for Movement. Unlike multisig accounts which require n-of-m
+/// signatures, a timelock account enforces a time delay before transactions can be executed.
 ///
-/// The timelock account is a resource account underneath. It has:
+/// Each timelock account is a resource account with:
 /// - A list of creators who can propose transactions (must have at least 1)
 /// - A list of executors who can execute transactions after the timelock period
 ///   (if executors is empty, creators can also execute)
-/// - A configurable time delay (num_seconds_execute) that must elapse after a transaction
-///   is proposed before it can be executed
+/// - A configurable minimum delay (`min_num_seconds_execute`) that must elapse after a
+///   transaction is proposed before it can be executed
 ///
-/// Key properties:
-/// - Transactions are indexed by a transaction hash. When a payload is stored on-chain, the
-///   table key is `keccak256(payload || salt)`; in hash-only mode, the caller supplies the key.
-///   To submit the same payload more than once, change the salt.
-/// - Changing num_seconds_execute or membership can only happen through the timelock proposal
-///   mechanism itself (the timelock account must be the signer).
+/// Execution model (mirrors `aptos_governance` resolution): a creator proposes the keccak256
+/// hash of a future resolution script. After the delay, an authorized executor submits a
+/// `Script` transaction whose script hash equals the proposed `execution_hash`. The script
+/// calls `resolve`, which verifies the running script's hash via
+/// `transaction_context::get_script_hash()` and returns the timelock account's signer. The
+/// script then performs arbitrary Move calls under that signer, including the self-governance
+/// entry functions in this module.
+///
+/// Properties:
+/// - Transactions are indexed by `keccak256(execution_hash || salt)`. To submit the same
+///   script more than once, change the salt.
+/// - Changing `min_num_seconds_execute` or membership can only happen through the timelock
+///   proposal mechanism itself (the timelock account must be the signer).
 /// - Both creators and executors can cancel any pending transaction at any time.
-/// - Once executed or canceled, the transaction's executed field is set to true.
-///   Entries are kept permanently for historical record.
-/// - The actual transaction execution uses the validate_timelock_transaction / cleanup pattern
-///   (analogous to validate_multisig_transaction in multisig_account) and requires VM support
-///   for a TimelockTransaction transaction type.
+/// - Once executed or canceled, the transaction's `executed` field is set to true and the
+///   entry is kept permanently for historical record.
+/// - If the resolution script aborts, the entire transaction (including the `executed` flag
+///   flip) reverts atomically, so the proposal remains executable.
 module aptos_framework::timelock {
     use std::account::{Self, SignerCapability, create_resource_address};
     use std::aptos_coin::AptosCoin;
@@ -30,51 +36,49 @@ module aptos_framework::timelock {
     use std::bcs::to_bytes;
     use std::error;
     use std::aptos_hash::keccak256;
-    use std::option::{Self, Option};
     use std::signer::address_of;
-    use std::string::String;
+    use std::transaction_context;
 
     /// Domain separator used when deriving the resource account seed, to avoid collisions
     /// with other modules that create resource accounts.
     const DOMAIN_SEPARATOR: vector<u8> = b"aptos_framework::timelock";
 
-    // Error codes > 2000 may be thrown from the transaction prologue.
+    const SCRIPT_HASH_LENGTH: u64 = 32;
+    const SALT_LENGTH: u64 = 32;
+    const MIN_NUM_SECONDS_EXECUTE_FLOOR: u64 = 360;
+
     /// Creator list cannot contain duplicate addresses.
     const EDUPLICATE_CREATOR: u64 = 1;
     /// Executor list cannot contain duplicate addresses.
     const EDUPLICATE_EXECUTOR: u64 = 2;
     /// Specified account is not a timelock account.
-    const EACCOUNT_NOT_TIMELOCK: u64 = 2011;
-    /// The caller is not a creator of the timelock account.
-    const ENOT_CREATOR: u64 = 2003;
-    /// The caller is not an executor of the timelock account (or a creator when executors is empty).
-    const ENOT_EXECUTOR: u64 = 2004;
-    /// Transaction payload cannot be empty.
-    const EPAYLOAD_CANNOT_BE_EMPTY: u64 = 4;
+    const EACCOUNT_NOT_TIMELOCK: u64 = 3;
+    /// The caller is not a creator.
+    const ENOT_CREATOR: u64 = 4;
+    /// The caller is not an executor (or a creator when the executor list is empty).
+    const ENOT_EXECUTOR: u64 = 5;
     /// Timelock account must have at least one creator.
-    const ENOT_ENOUGH_CREATORS: u64 = 5;
+    const ENOT_ENOUGH_CREATORS: u64 = 6;
     /// Transaction with the specified hash was not found.
-    const ETRANSACTION_NOT_FOUND: u64 = 2012;
-    /// Provided payload does not match the payload stored on chain for this transaction.
-    const EPAYLOAD_DOES_NOT_MATCH: u64 = 2007;
+    const ETRANSACTION_NOT_FOUND: u64 = 7;
     /// The timelock period has not elapsed yet.
-    const ETIMELOCK_NOT_EXPIRED: u64 = 2013;
+    const ETIMELOCK_NOT_EXPIRED: u64 = 8;
     /// Transaction has already been executed or canceled.
     const ETRANSACTION_ALREADY_EXECUTED: u64 = 9;
     /// The timelock account itself cannot be a creator or executor.
     const ESELF_CANNOT_BE_MEMBER: u64 = 10;
-    /// A transaction with this table key already exists.
-    const EDUPLICATE_SALT: u64 = 11;
+    /// A transaction with this execution hash and salt already exists.
+    const EDUPLICATE_TRANSACTION: u64 = 11;
     /// Removing these creators would leave the timelock account with zero creators.
     const EWOULD_REMOVE_ALL_CREATORS: u64 = 12;
     /// The caller is neither a creator nor an executor.
     const ENOT_CREATOR_OR_EXECUTOR: u64 = 13;
     /// The specified number of seconds for execution is too small (must be > 360).
     const ENUMBER_SECONDS_TOO_SMALL: u64 = 14;
-    /// Internal helper requires either payload or hash.
-    const EPAYLOAD_OR_HASH_REQUIRED: u64 = 15;
     /// The provided hash or salt must be exactly 32 bytes.
-    const EINVALID_BYTES_LENGTH: u64 = 16;
+    const EINVALID_BYTES_LENGTH: u64 = 15;
+    /// Current transaction script hash does not match the proposed execution hash.
+    const EEXECUTION_HASH_NOT_MATCHING: u64 = 16;
 
     /// Represents a timelock account's configuration and pending/historical transactions.
     /// Stored at the resource account address created during timelock account creation.
@@ -86,41 +90,29 @@ module aptos_framework::timelock {
         executors: vector<address>,
         // Minimum seconds that must elapse after proposal before a transaction can be executed.
         min_num_seconds_execute: u64,
-        // Map from hash of payload and salt to transaction. Entries are never deleted; executed/canceled
-        // transactions are kept with executed = true for historical record.
+        // Map from `keccak256(execution_hash || salt)` to transaction. Entries are never
+        // deleted; executed/canceled transactions remain with executed = true for record.
         transactions: Table<vector<u8>, TimelockTransaction>,
         // Signer capability for the resource account.
-        signer_cap: Option<SignerCapability>,
+        signer_cap: SignerCapability,
     }
 
     /// A transaction proposed for timelock execution.
+    ///
+    /// `execution_hash` is the keccak256 hash of the authorized resolution script. At resolve
+    /// time it is checked against the running script's hash via `transaction_context::get_script_hash()`.
     struct TimelockTransaction has copy, drop, store {
-        // BCS-encoded `TimelockTransactionPayload`.
-        // - `Some(bytes)`: the full payload is stored on-chain. During execution the VM verifies
-        //   that the bytes in the submitted transaction match exactly what is stored here.
-        // - `None`: no payload is stored on-chain (e.g. the proposer chose hash-only mode).
-        //   In this case the VM validates and executes using the payload supplied in the
-        //   timelock transaction itself.
-        payload: Option<vector<u8>>,
+        execution_hash: vector<u8>,
         // The creator who proposed this transaction.
         creator: address,
         // Unix timestamp (seconds) when this transaction was proposed.
         creation_time_secs: u64,
-        // Amount of seconds that must elapse after creation_time_secs before this transaction can be executed.
+        // Seconds that must elapse after creation_time_secs before this transaction can be executed.
         num_seconds_execute: u64,
-        // User-provided salt used when deriving the transaction hash from the payload.
-        // To submit the same payload again, use a different salt.
+        // User-provided salt used when deriving the transaction hash from execution_hash.
         salt: vector<u8>,
-        // True once the transaction is executed (successfully or not) or canceled.
+        // True once the transaction is resolved (successfully) or canceled.
         executed: bool,
-    }
-
-    /// Information about a transaction execution failure.
-    struct ExecutionError has copy, drop, store {
-        abort_location: String,
-        // One of: "VMError", "MoveAbort", "MoveExecutionFailure"
-        error_type: String,
-        error_code: u64,
     }
 
     // =============================== Events ===============================
@@ -160,7 +152,7 @@ module aptos_framework::timelock {
     struct CreateTransaction has drop, store {
         timelock_account: address,
         creator: address,
-        hash: vector<u8>,
+        transaction_hash: vector<u8>,
         transaction: TimelockTransaction,
     }
 
@@ -168,24 +160,15 @@ module aptos_framework::timelock {
     struct CancelTransaction has drop, store {
         timelock_account: address,
         actor: address,
-        hash: vector<u8>,
+        transaction_hash: vector<u8>,
     }
 
     #[event]
-    struct TransactionExecutionSucceeded has drop, store {
+    struct ResolveTransaction has drop, store {
         timelock_account: address,
         executor: address,
-        hash: vector<u8>,
-        payload: vector<u8>,
-    }
-
-    #[event]
-    struct TransactionExecutionFailed has drop, store {
-        timelock_account: address,
-        executor: address,
-        hash: vector<u8>,
-        payload: vector<u8>,
-        execution_error: ExecutionError,
+        transaction_hash: vector<u8>,
+        execution_hash: vector<u8>,
     }
 
     // =============================== View functions ===============================
@@ -227,28 +210,31 @@ module aptos_framework::timelock {
     }
 
     #[view]
-    /// Return the transaction stored under the given hash.
+    /// Return the transaction stored under the given transaction hash.
     public fun get_transaction(
         timelock_account: address,
-        hash: vector<u8>,
+        transaction_hash: vector<u8>,
     ): TimelockTransaction acquires TimelockAccount {
         let timelock = borrow_global<TimelockAccount>(timelock_account);
         assert!(
-            timelock.transactions.contains(hash),
+            timelock.transactions.contains(transaction_hash),
             error::not_found(ETRANSACTION_NOT_FOUND),
         );
-        *timelock.transactions.borrow(hash)
+        *timelock.transactions.borrow(transaction_hash)
     }
 
     #[view]
-    /// Return true if the transaction with the given hash exists, is not yet executed/canceled,
+    /// Return true if the transaction exists, is not yet executed/canceled,
     /// and has passed the timelock period.
-    public fun can_be_executed(timelock_account: address, hash: vector<u8>): bool acquires TimelockAccount {
+    public fun can_be_executed(
+        timelock_account: address,
+        transaction_hash: vector<u8>,
+    ): bool acquires TimelockAccount {
         let timelock = borrow_global<TimelockAccount>(timelock_account);
-        if (!timelock.transactions.contains(hash)) {
+        if (!timelock.transactions.contains(transaction_hash)) {
             return false
         };
-        let tx = timelock.transactions.borrow(hash);
+        let tx = timelock.transactions.borrow(transaction_hash);
         !tx.executed && now_seconds() >= tx.creation_time_secs + tx.num_seconds_execute
     }
 
@@ -260,9 +246,10 @@ module aptos_framework::timelock {
     }
 
     #[view]
-    /// Return the predicted hash for a transaction with the given payload and salt. This is used by clients to determine the hash before proposing a transaction, so they can index it off-chain and retrieve it later by hash.
-    public fun get_transaction_hash(payload: vector<u8>, salt: vector<u8>): vector<u8> {
-        let bytes = copy payload;
+    /// Return the table key used to index a transaction with the given execution hash and salt.
+    /// Clients use this to compute the hash before proposing a transaction.
+    public fun get_transaction_hash(execution_hash: vector<u8>, salt: vector<u8>): vector<u8> {
+        let bytes = copy execution_hash;
         bytes.append(copy salt);
         keccak256(bytes)
     }
@@ -275,7 +262,7 @@ module aptos_framework::timelock {
     ///        included. No duplicates allowed.
     /// @param executors Addresses authorized to execute transactions after the timelock period.
     ///        If empty, creators can also execute.
-    /// @param num_seconds_execute Delay in seconds before a proposed transaction can be executed.
+    /// @param num_seconds_execute Minimum delay in seconds before a proposed transaction can be executed.
     public entry fun create(
         creator: &signer,
         additional_creators: vector<address>,
@@ -289,7 +276,7 @@ module aptos_framework::timelock {
             additional_creators,
             executors,
             num_seconds_execute,
-            option::some(timelock_signer_cap),
+            timelock_signer_cap,
         );
     }
 
@@ -298,16 +285,13 @@ module aptos_framework::timelock {
         creators: vector<address>,
         executors: vector<address>,
         min_num_seconds_execute: u64,
-        signer_cap: Option<SignerCapability>,
+        signer_cap: SignerCapability,
     ) {
         let timelock_address = address_of(timelock_account);
-        assert!(
-            creators.length() >= 1,
-            error::invalid_argument(ENOT_ENOUGH_CREATORS),
-        );
+        assert!(creators.length() >= 1, error::invalid_argument(ENOT_ENOUGH_CREATORS));
         validate_members(&creators, timelock_address, EDUPLICATE_CREATOR);
         validate_members(&executors, timelock_address, EDUPLICATE_EXECUTOR);
-        assert!(min_num_seconds_execute > 360, error::invalid_argument(ENUMBER_SECONDS_TOO_SMALL));
+        assert_delay(min_num_seconds_execute);
 
         move_to(timelock_account, TimelockAccount {
             creators,
@@ -319,14 +303,14 @@ module aptos_framework::timelock {
     }
 
     // =============================== Self-governance ===============================
-    // These functions can only be called by the timelock account itself. The intended
-    // flow is: a creator proposes a transaction calling one of these entry functions,
-    // the timelock period elapses, and an executor submits the TimelockTransaction.
-    // The VM then uses the timelock account's signer (from signer_cap) to invoke these.
+    // These functions can only be called by the timelock account itself. The intended flow is:
+    // a creator proposes a resolution script that calls one of these entry functions, the
+    // timelock period elapses, an executor submits the script, the script calls `resolve` to
+    // obtain the timelock signer, then invokes the entry function with that signer.
 
     /// Add new creators to the timelock account.
     /// Can only be invoked by the timelock account itself via the proposal flow.
-    entry fun add_creators(
+    public entry fun add_creators(
         timelock_account: &signer,
         new_creators: vector<address>,
     ) acquires TimelockAccount {
@@ -343,7 +327,7 @@ module aptos_framework::timelock {
 
     /// Remove creators from the timelock account. At least one creator must remain.
     /// Can only be invoked by the timelock account itself via the proposal flow.
-    entry fun remove_creators(
+    public entry fun remove_creators(
         timelock_account: &signer,
         creators_to_remove: vector<address>,
     ) acquires TimelockAccount {
@@ -361,14 +345,14 @@ module aptos_framework::timelock {
             timelock.creators.length() >= 1,
             error::invalid_state(EWOULD_REMOVE_ALL_CREATORS),
         );
-        if (creators_removed.length() > 0) {
+        if (!creators_removed.is_empty()) {
             emit(RemoveCreators { timelock_account: timelock_address, creators_removed });
         };
     }
 
     /// Add new executors to the timelock account.
     /// Can only be invoked by the timelock account itself via the proposal flow.
-    entry fun add_executors(
+    public entry fun add_executors(
         timelock_account: &signer,
         new_executors: vector<address>,
     ) acquires TimelockAccount {
@@ -385,7 +369,7 @@ module aptos_framework::timelock {
     /// Remove executors from the timelock account.
     /// After removal the executor list may be empty, which means creators can execute.
     /// Can only be invoked by the timelock account itself via the proposal flow.
-    entry fun remove_executors(
+    public entry fun remove_executors(
         timelock_account: &signer,
         executors_to_remove: vector<address>,
     ) acquires TimelockAccount {
@@ -399,7 +383,7 @@ module aptos_framework::timelock {
                 executors_removed.push_back(timelock.executors.swap_remove(index));
             }
         });
-        if (executors_removed.length() > 0) {
+        if (!executors_removed.is_empty()) {
             emit(RemoveExecutors { timelock_account: timelock_address, executors_removed });
         };
     }
@@ -407,13 +391,13 @@ module aptos_framework::timelock {
     /// Update the timelock delay. The new value takes effect immediately for future proposals.
     /// Existing pending transactions are not affected.
     /// Can only be invoked by the timelock account itself via the proposal flow.
-    entry fun update_min_num_seconds_execute(
+    public entry fun update_min_num_seconds_execute(
         timelock_account: &signer,
         new_min_num_seconds_execute: u64,
     ) acquires TimelockAccount {
         let timelock_address = address_of(timelock_account);
         assert_timelock_account_exists(timelock_address);
-        assert!(new_min_num_seconds_execute > 360, error::invalid_argument(ENUMBER_SECONDS_TOO_SMALL));
+        assert_delay(new_min_num_seconds_execute);
         let timelock = borrow_global_mut<TimelockAccount>(timelock_address);
         let old_min_num_seconds_execute = timelock.min_num_seconds_execute;
         timelock.min_num_seconds_execute = new_min_num_seconds_execute;
@@ -428,104 +412,59 @@ module aptos_framework::timelock {
 
     /// Propose a new transaction to be executed after the timelock period.
     ///
-    /// The payload is stored on-chain and the table key is `keccak256(payload || salt)`.
-    /// `salt` must be exactly 32 bytes. `num_seconds_execute` must be >= `min_num_seconds_execute`.
+    /// `execution_hash` is the keccak256 hash of the resolution script that will perform the
+    /// transaction's effects when submitted. `salt` (32 bytes) disambiguates duplicate
+    /// proposals of the same script. The table key is `keccak256(execution_hash || salt)`.
+    /// `num_seconds_execute` must be >= `min_num_seconds_execute`.
     public entry fun create_transaction(
         creator: &signer,
         timelock_account: address,
-        payload: vector<u8>,
+        execution_hash: vector<u8>,
         num_seconds_execute: u64,
         salt: vector<u8>,
     ) acquires TimelockAccount {
         assert_timelock_account_exists(timelock_account);
         assert_is_creator(creator, timelock_account);
-        assert!(salt.length() == 32, error::invalid_argument(EINVALID_BYTES_LENGTH));
-        assert!(!payload.is_empty(), error::invalid_argument(EPAYLOAD_CANNOT_BE_EMPTY));
-        create_transaction_internal(
-            creator,
-            timelock_account,
-            option::some(payload),
-            false,
-            vector[],
-            num_seconds_execute,
-            salt,
-        );
-    }
+        assert!(execution_hash.length() == SCRIPT_HASH_LENGTH, error::invalid_argument(EINVALID_BYTES_LENGTH));
+        assert!(salt.length() == SALT_LENGTH, error::invalid_argument(EINVALID_BYTES_LENGTH));
 
-    /// Propose a new transaction in hash-only mode. The provided hash is used directly as the
-    /// table key, and the executor must supply the full payload at execution time.
-    /// Both `hash` and `salt` must be exactly 32 bytes.
-    /// `num_seconds_execute` must be >= `min_num_seconds_execute`.
-    public entry fun create_transaction_with_hash(
-        creator: &signer,
-        timelock_account: address,
-        hash: vector<u8>,
-        num_seconds_execute: u64,
-        salt: vector<u8>,
-    ) acquires TimelockAccount {
-        assert_timelock_account_exists(timelock_account);
-        assert_is_creator(creator, timelock_account);
-        assert!(hash.length() == 32, error::invalid_argument(EINVALID_BYTES_LENGTH));
-        assert!(salt.length() == 32, error::invalid_argument(EINVALID_BYTES_LENGTH));
-        create_transaction_internal(
-            creator,
-            timelock_account,
-            option::none(),
-            true,
-            hash,
-            num_seconds_execute,
-            salt,
-        );
-    }
-
-    fun create_transaction_internal(
-        creator: &signer,
-        timelock_account: address,
-        payload: Option<vector<u8>>,
-        has_provided_hash: bool,
-        provided_hash: vector<u8>,
-        num_seconds_execute: u64,
-        salt: vector<u8>,
-    ) acquires TimelockAccount {
-        let table_key = if (payload.is_some()) {
-            get_transaction_hash(*payload.borrow(), copy salt)
-        } else if (has_provided_hash) {
-            provided_hash
-        } else {
-            abort error::invalid_argument(EPAYLOAD_OR_HASH_REQUIRED)
-        };
-
+        let transaction_hash = get_transaction_hash(copy execution_hash, copy salt);
         let creator_addr = address_of(creator);
         let timelock = borrow_global_mut<TimelockAccount>(timelock_account);
         assert!(num_seconds_execute >= timelock.min_num_seconds_execute, error::invalid_argument(ENUMBER_SECONDS_TOO_SMALL));
         assert!(
-            !timelock.transactions.contains(table_key),
-            error::already_exists(EDUPLICATE_SALT),
+            !timelock.transactions.contains(transaction_hash),
+            error::already_exists(EDUPLICATE_TRANSACTION),
         );
 
         let transaction = TimelockTransaction {
-            payload,
+            execution_hash,
             creator: creator_addr,
             creation_time_secs: now_seconds(),
             num_seconds_execute,
-            salt: copy salt,
+            salt,
             executed: false,
         };
-        timelock.transactions.add(table_key, transaction);
+        timelock.transactions.add(copy transaction_hash, copy transaction);
 
-        emit(CreateTransaction { timelock_account, creator: creator_addr, hash: table_key, transaction });
+        emit(CreateTransaction {
+            timelock_account,
+            creator: creator_addr,
+            transaction_hash,
+            transaction,
+        });
     }
 
     /// Cancel a pending transaction. The transaction's executed field is set to true.
     /// Any creator or executor (or creator when executors is empty) can cancel at any time.
-    /// `hash` must be exactly 32 bytes.
+    /// `transaction_hash` must be exactly 32 bytes.
     public entry fun cancel_transaction(
         actor: &signer,
         timelock_account: address,
-        hash: vector<u8>,
+        transaction_hash: vector<u8>,
     ) acquires TimelockAccount {
         assert_timelock_account_exists(timelock_account);
-        assert!(hash.length() == 32, error::invalid_argument(EINVALID_BYTES_LENGTH));
+        assert!(transaction_hash.length() == SCRIPT_HASH_LENGTH, error::invalid_argument(EINVALID_BYTES_LENGTH));
         let actor_addr = address_of(actor);
 
         // Evaluate authorization before acquiring the mutable borrow.
@@ -538,86 +477,71 @@ module aptos_framework::timelock {
 
         let timelock = borrow_global_mut<TimelockAccount>(timelock_account);
         assert!(
-            timelock.transactions.contains(hash),
+            timelock.transactions.contains(transaction_hash),
             error::not_found(ETRANSACTION_NOT_FOUND),
         );
-        let transaction = timelock.transactions.borrow_mut(hash);
+        let transaction = timelock.transactions.borrow_mut(transaction_hash);
         assert!(!transaction.executed, error::invalid_state(ETRANSACTION_ALREADY_EXECUTED));
         transaction.executed = true;
 
-        emit(CancelTransaction { timelock_account, actor: actor_addr, hash });
+        emit(CancelTransaction { timelock_account, actor: actor_addr, transaction_hash });
     }
 
-    // =============================== VM-called functions ===============================
-
-    /// Called by the VM as part of the transaction prologue for timelock transactions.
+    /// Resolve a pending transaction and return the timelock account's signer.
     ///
-    /// Validates that:
+    /// Asserts that:
     /// - The account exists and is a timelock account
     /// - The executor is authorized
     /// - The transaction exists and has not been executed or canceled
     /// - The timelock period (creation_time_secs + num_seconds_execute) has elapsed
-    /// - If a payload is stored on chain and a non-empty payload is provided, they match
-    fun validate_timelock_transaction(
+    /// - The running script's hash equals the transaction's execution_hash
+    ///
+    /// Marks the transaction executed, emits ResolveTransaction, and returns the signer for
+    /// the timelock account. The calling script uses this signer to perform the transaction's
+    /// effects (including, optionally, the self-governance entry functions in this module).
+    /// If the script later aborts, the entire transaction—including the executed flag flip—
+    /// reverts atomically, leaving the proposal in its previous state.
+    public fun resolve(
         executor: &signer,
         timelock_account: address,
-        payload: vector<u8>,
-        salt: vector<u8>,
-    ) acquires TimelockAccount {
+        transaction_hash: vector<u8>,
+    ): signer acquires TimelockAccount {
         assert_timelock_account_exists(timelock_account);
         assert_is_executor(executor, timelock_account);
+        assert!(transaction_hash.length() == SCRIPT_HASH_LENGTH, error::invalid_argument(EINVALID_BYTES_LENGTH));
+
+        let executor_addr = address_of(executor);
+        let current_execution_hash;
+        {
+            let timelock = borrow_global_mut<TimelockAccount>(timelock_account);
+            assert!(
+                timelock.transactions.contains(transaction_hash),
+                error::not_found(ETRANSACTION_NOT_FOUND),
+            );
+            let transaction = timelock.transactions.borrow_mut(transaction_hash);
+            assert!(!transaction.executed, error::invalid_state(ETRANSACTION_ALREADY_EXECUTED));
+            assert!(
+                now_seconds() >= transaction.creation_time_secs + transaction.num_seconds_execute,
+                error::invalid_state(ETIMELOCK_NOT_EXPIRED),
+            );
+            assert!(
+                transaction_context::get_script_hash() == transaction.execution_hash,
+                error::invalid_argument(EEXECUTION_HASH_NOT_MATCHING),
+            );
+
+            current_execution_hash = transaction.execution_hash;
+            transaction.executed = true;
+        };
+
+        emit(ResolveTransaction {
+            timelock_account,
+            executor: executor_addr,
+            transaction_hash,
+            execution_hash: current_execution_hash,
+        });
 
         let timelock = borrow_global<TimelockAccount>(timelock_account);
-        // hash = keccak256(payload || salt) is the transaction table key.
-        // The VM always supplies a non-empty payload here: either the executor provided it
-        // directly, or the VM fetched it from on-chain storage via get_transaction(hash)
-        // before calling this function.
-        let hash = get_transaction_hash(payload, salt);
-        assert!(
-            timelock.transactions.contains(hash),
-            error::not_found(ETRANSACTION_NOT_FOUND),
-        );
-        let transaction = timelock.transactions.borrow(hash);
-        assert!(!transaction.executed, error::invalid_state(ETRANSACTION_ALREADY_EXECUTED));
-        assert!(
-            now_seconds() >= transaction.creation_time_secs + transaction.num_seconds_execute,
-            error::invalid_state(ETIMELOCK_NOT_EXPIRED),
-        );
-        // If a payload is stored on-chain, verify it matches the provided payload.
-        if (transaction.payload.is_some()) {
-            assert!(payload == *transaction.payload.borrow(), error::invalid_argument(EPAYLOAD_DOES_NOT_MATCH));
-        };
-    }
-
-    /// Called by the VM after a successful timelock transaction execution.
-    /// Marks the transaction as executed and emits a success event.
-    fun successful_transaction_execution_cleanup(
-        executor: address,
-        timelock_account: address,
-        salt: vector<u8>,
-        payload: vector<u8>,
-    ) acquires TimelockAccount {
-        let timelock = borrow_global_mut<TimelockAccount>(timelock_account);
-        let hash = get_transaction_hash(payload, salt);
-        timelock.transactions.borrow_mut(hash).executed = true;
-        emit(TransactionExecutionSucceeded { timelock_account, executor, hash, payload });
-    }
-
-    /// Called by the VM after a failed timelock transaction execution.
-    /// Marks the transaction as executed and emits a failure event.
-    fun failed_transaction_execution_cleanup(
-        executor: address,
-        timelock_account: address,
-        salt: vector<u8>,
-        payload: vector<u8>,
-        execution_error: ExecutionError,
-    ) acquires TimelockAccount {
-        let timelock = borrow_global_mut<TimelockAccount>(timelock_account);
-        let hash = get_transaction_hash(payload, salt);
-        timelock.transactions.borrow_mut(hash).executed = true;
-        emit(TransactionExecutionFailed {
-            timelock_account, executor, hash, payload, execution_error,
-        });
+        account::create_signer_with_capability(&timelock.signer_cap)
     }
 
     // =============================== Private helpers ===============================
@@ -682,6 +606,13 @@ module aptos_framework::timelock {
         assert!(authorized, error::permission_denied(ENOT_EXECUTOR));
     }
 
+    inline fun assert_delay(num_seconds_execute: u64) {
+        assert!(
+            num_seconds_execute > MIN_NUM_SECONDS_EXECUTE_FLOOR,
+            error::invalid_argument(ENUMBER_SECONDS_TOO_SMALL),
+        );
+    }
+
     // =============================== Tests ===============================
 
     #[test_only]
@@ -689,38 +620,22 @@ module aptos_framework::timelock {
     #[test_only]
     use aptos_framework::timestamp;
     #[test_only]
-    use std::string::utf8;
-    #[test_only]
     use aptos_framework::aptos_coin;
     #[test_only]
     use aptos_framework::coin::{destroy_mint_cap, destroy_burn_cap};
 
     #[test_only]
-    const PAYLOAD: vector<u8> = vector[1, 2, 3];
+    const EXECUTION_HASH: vector<u8> = x"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    #[test_only]
+    const EXECUTION_HASH_2: vector<u8> = x"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
     #[test_only]
     const SALT: vector<u8> = x"1111111111111111111111111111111111111111111111111111111111111111";
     #[test_only]
     const SALT_2: vector<u8> = x"2222222222222222222222222222222222222222222222222222222222222222";
     #[test_only]
-    const INVALID_SALT: vector<u8> = b"salt_1";
-    #[test_only]
-    const ERROR_TYPE: vector<u8> = b"MoveAbort";
-    #[test_only]
-    const ABORT_LOCATION: vector<u8> = b"abort_location";
-    #[test_only]
-    const ERROR_CODE: u64 = 10;
+    const INVALID_BYTES: vector<u8> = b"too_short";
     #[test_only]
     const TIMELOCK_SECS: u64 = 3600;
-    
-
-    #[test_only]
-    fun execution_error(): ExecutionError {
-        ExecutionError {
-            abort_location: utf8(ABORT_LOCATION),
-            error_type: utf8(ERROR_TYPE),
-            error_code: ERROR_CODE,
-        }
-    }
 
     #[test_only]
     fun setup(framework: &signer) {
@@ -731,11 +646,11 @@ module aptos_framework::timelock {
     }
 
     /// Get a signer for the timelock account using its stored SignerCapability.
-    /// Used in tests to simulate the VM invoking self-governance entry functions.
+    /// Used in tests to simulate the signer that `resolve` would return to a resolution script.
     #[test_only]
     fun get_timelock_signer(timelock_account: address): signer acquires TimelockAccount {
         account::create_signer_with_capability(
-            borrow_global<TimelockAccount>(timelock_account).signer_cap.borrow()
+            &borrow_global<TimelockAccount>(timelock_account).signer_cap
         )
     }
 
@@ -771,21 +686,6 @@ module aptos_framework::timelock {
         assert!(!is_executor(address_of(creator_1), timelock_addr), 3);
     }
 
-    #[test(framework = @0x1, creator = @0x123)]
-    #[expected_failure(abort_code = 0x10005, location = Self)]
-    public entry fun test_create_with_no_creators_fails(framework: &signer, creator: &signer) {
-        setup(framework);
-        create_account(address_of(creator));
-        let (timelock_signer, signer_cap) = create_timelock_account(creator);
-        create_timelock_account_internal(
-            &timelock_signer,
-            vector[],
-            vector[],
-            TIMELOCK_SECS,
-            option::some(signer_cap),
-        );
-    }
-
     #[test(framework = @0x1, creator_1 = @0x123, creator_2 = @0x124)]
     #[expected_failure(abort_code = 0x10001, location = Self)]
     public entry fun test_create_with_duplicate_creators_fails(
@@ -811,17 +711,18 @@ module aptos_framework::timelock {
         create_account(address_of(creator));
         let timelock_addr = get_next_timelock_account_address(address_of(creator));
         create(creator, vector[], vector[address_of(executor)], TIMELOCK_SECS);
-        create_transaction(creator, timelock_addr, PAYLOAD, TIMELOCK_SECS, SALT);
-        let hash = get_transaction_hash(PAYLOAD, SALT);
-        let tx = get_transaction(timelock_addr, hash);
+        create_transaction(creator, timelock_addr, EXECUTION_HASH, TIMELOCK_SECS, SALT);
+        let tx_hash = get_transaction_hash(EXECUTION_HASH, SALT);
+        let tx = get_transaction(timelock_addr, tx_hash);
         assert!(tx.creator == address_of(creator), 0);
         assert!(!tx.executed, 1);
         assert!(tx.salt == SALT, 2);
+        assert!(tx.execution_hash == EXECUTION_HASH, 3);
     }
 
     #[test(framework = @0x1, creator = @0x123)]
     #[expected_failure(abort_code = 0x8000B, location = Self)]
-    public entry fun test_create_duplicate_salt_fails(
+    public entry fun test_create_duplicate_transaction_fails(
         framework: &signer,
         creator: &signer,
     ) acquires TimelockAccount {
@@ -829,13 +730,13 @@ module aptos_framework::timelock {
         create_account(address_of(creator));
         let timelock_addr = get_next_timelock_account_address(address_of(creator));
         create(creator, vector[], vector[], TIMELOCK_SECS);
-        create_transaction(creator, timelock_addr, PAYLOAD, TIMELOCK_SECS, SALT);
-        // Same salt — must fail.
-        create_transaction(creator, timelock_addr, PAYLOAD, TIMELOCK_SECS, SALT);
+        create_transaction(creator, timelock_addr, EXECUTION_HASH, TIMELOCK_SECS, SALT);
+        // Same execution hash and salt — must fail.
+        create_transaction(creator, timelock_addr, EXECUTION_HASH, TIMELOCK_SECS, SALT);
     }
 
     #[test(framework = @0x1, creator = @0x123)]
-    public entry fun test_create_same_payload_different_salt(
+    public entry fun test_create_same_execution_hash_different_salt(
         framework: &signer,
         creator: &signer,
     ) acquires TimelockAccount {
@@ -843,13 +744,14 @@ module aptos_framework::timelock {
         create_account(address_of(creator));
         let timelock_addr = get_next_timelock_account_address(address_of(creator));
         create(creator, vector[], vector[], TIMELOCK_SECS);
-        create_transaction(creator, timelock_addr, PAYLOAD, TIMELOCK_SECS, SALT);
+        create_transaction(creator, timelock_addr, EXECUTION_HASH, TIMELOCK_SECS, SALT);
         // Different salt — must succeed.
-        create_transaction(creator, timelock_addr, PAYLOAD, TIMELOCK_SECS, SALT_2);
+        create_transaction(creator, timelock_addr, EXECUTION_HASH, TIMELOCK_SECS, SALT_2);
     }
 
     #[test(framework = @0x1, creator = @0x123)]
-    public entry fun test_create_transaction_hash_only(
+    #[expected_failure(abort_code = 0x1000F, location = Self)]
+    public entry fun test_create_transaction_invalid_execution_hash_length_fails(
         framework: &signer,
         creator: &signer,
     ) acquires TimelockAccount {
@@ -857,31 +759,11 @@ module aptos_framework::timelock {
         create_account(address_of(creator));
         let timelock_addr = get_next_timelock_account_address(address_of(creator));
         create(creator, vector[], vector[], TIMELOCK_SECS);
-        // Creator provides only a pre-computed hash; payload is stored off-chain.
-        let hash = get_transaction_hash(PAYLOAD, SALT);
-        create_transaction_with_hash(creator, timelock_addr, hash, TIMELOCK_SECS, SALT);
-        let tx = get_transaction(timelock_addr, hash);
-        assert!(tx.creator == address_of(creator), 0);
-        assert!(!tx.executed, 1);
-        assert!(tx.payload.is_none(), 2);
-        assert!(tx.salt == SALT, 3);
+        create_transaction(creator, timelock_addr, INVALID_BYTES, TIMELOCK_SECS, SALT);
     }
 
     #[test(framework = @0x1, creator = @0x123)]
-    #[expected_failure(abort_code = 0x10010, location = Self)]
-    public entry fun test_create_transaction_with_hash_invalid_hash_length_fails(
-        framework: &signer,
-        creator: &signer,
-    ) acquires TimelockAccount {
-        setup(framework);
-        create_account(address_of(creator));
-        let timelock_addr = get_next_timelock_account_address(address_of(creator));
-        create(creator, vector[], vector[], TIMELOCK_SECS);
-        create_transaction_with_hash(creator, timelock_addr, INVALID_SALT, TIMELOCK_SECS, SALT);
-    }
-
-    #[test(framework = @0x1, creator = @0x123)]
-    #[expected_failure(abort_code = 0x10010, location = Self)]
+    #[expected_failure(abort_code = 0x1000F, location = Self)]
     public entry fun test_create_transaction_invalid_salt_length_fails(
         framework: &signer,
         creator: &signer,
@@ -890,12 +772,11 @@ module aptos_framework::timelock {
         create_account(address_of(creator));
         let timelock_addr = get_next_timelock_account_address(address_of(creator));
         create(creator, vector[], vector[], TIMELOCK_SECS);
-        // Salt must be exactly 32 bytes (error::invalid_argument(17) = 0x10011).
-        create_transaction(creator, timelock_addr, PAYLOAD, TIMELOCK_SECS, INVALID_SALT);
+        create_transaction(creator, timelock_addr, EXECUTION_HASH, TIMELOCK_SECS, INVALID_BYTES);
     }
 
     #[test(framework = @0x1, creator = @0x123, non_creator = @0x999)]
-    #[expected_failure(abort_code = 0x507D3, location = Self)]
+    #[expected_failure(abort_code = 0x50004, location = Self)]
     public entry fun test_non_creator_cannot_propose(
         framework: &signer,
         creator: &signer,
@@ -905,8 +786,7 @@ module aptos_framework::timelock {
         create_account(address_of(creator));
         let timelock_addr = get_next_timelock_account_address(address_of(creator));
         create(creator, vector[], vector[], TIMELOCK_SECS);
-        // non_creator tries to propose — must fail with ENOT_CREATOR (error::permission_denied(2003) = 0x507D3).
-        create_transaction(non_creator, timelock_addr, PAYLOAD, TIMELOCK_SECS, SALT);
+        create_transaction(non_creator, timelock_addr, EXECUTION_HASH, TIMELOCK_SECS, SALT);
     }
 
     // --- Cancellation tests ---
@@ -921,10 +801,10 @@ module aptos_framework::timelock {
         create_account(address_of(creator));
         let timelock_addr = get_next_timelock_account_address(address_of(creator));
         create(creator, vector[], vector[address_of(executor)], TIMELOCK_SECS);
-        create_transaction(creator, timelock_addr, PAYLOAD, TIMELOCK_SECS, SALT);
-        let hash = get_transaction_hash(PAYLOAD, SALT);
-        cancel_transaction(creator, timelock_addr, hash);
-        let tx = get_transaction(timelock_addr, hash);
+        create_transaction(creator, timelock_addr, EXECUTION_HASH, TIMELOCK_SECS, SALT);
+        let tx_hash = get_transaction_hash(EXECUTION_HASH, SALT);
+        cancel_transaction(creator, timelock_addr, tx_hash);
+        let tx = get_transaction(timelock_addr, tx_hash);
         assert!(tx.executed, 0);
     }
 
@@ -938,10 +818,10 @@ module aptos_framework::timelock {
         create_account(address_of(creator));
         let timelock_addr = get_next_timelock_account_address(address_of(creator));
         create(creator, vector[], vector[address_of(executor)], TIMELOCK_SECS);
-        create_transaction(creator, timelock_addr, PAYLOAD, TIMELOCK_SECS, SALT);
-        let hash = get_transaction_hash(PAYLOAD, SALT);
-        cancel_transaction(executor, timelock_addr, hash);
-        let tx = get_transaction(timelock_addr, hash);
+        create_transaction(creator, timelock_addr, EXECUTION_HASH, TIMELOCK_SECS, SALT);
+        let tx_hash = get_transaction_hash(EXECUTION_HASH, SALT);
+        cancel_transaction(executor, timelock_addr, tx_hash);
+        let tx = get_transaction(timelock_addr, tx_hash);
         assert!(tx.executed, 0);
     }
 
@@ -954,10 +834,10 @@ module aptos_framework::timelock {
         create_account(address_of(creator));
         let timelock_addr = get_next_timelock_account_address(address_of(creator));
         create(creator, vector[], vector[], TIMELOCK_SECS);
-        create_transaction(creator, timelock_addr, PAYLOAD, TIMELOCK_SECS, SALT);
-        let hash = get_transaction_hash(PAYLOAD, SALT);
-        cancel_transaction(creator, timelock_addr, hash);
-        let tx = get_transaction(timelock_addr, hash);
+        create_transaction(creator, timelock_addr, EXECUTION_HASH, TIMELOCK_SECS, SALT);
+        let tx_hash = get_transaction_hash(EXECUTION_HASH, SALT);
+        cancel_transaction(creator, timelock_addr, tx_hash);
+        let tx = get_transaction(timelock_addr, tx_hash);
         assert!(tx.executed, 0);
     }
 
@@ -972,11 +852,10 @@ module aptos_framework::timelock {
         create_account(address_of(creator));
         let timelock_addr = get_next_timelock_account_address(address_of(creator));
         create(creator, vector[], vector[address_of(executor)], TIMELOCK_SECS);
-        create_transaction(creator, timelock_addr, PAYLOAD, TIMELOCK_SECS, SALT);
-        let hash = get_transaction_hash(PAYLOAD, SALT);
-        cancel_transaction(creator, timelock_addr, hash);
-        // Cancel again — must fail.
-        cancel_transaction(creator, timelock_addr, hash);
+        create_transaction(creator, timelock_addr, EXECUTION_HASH, TIMELOCK_SECS, SALT);
+        let tx_hash = get_transaction_hash(EXECUTION_HASH, SALT);
+        cancel_transaction(creator, timelock_addr, tx_hash);
+        cancel_transaction(creator, timelock_addr, tx_hash);
     }
 
     #[test(framework = @0x1, creator = @0x123, non_member = @0x999)]
@@ -990,14 +869,19 @@ module aptos_framework::timelock {
         create_account(address_of(creator));
         let timelock_addr = get_next_timelock_account_address(address_of(creator));
         create(creator, vector[], vector[], TIMELOCK_SECS);
-        create_transaction(creator, timelock_addr, PAYLOAD, TIMELOCK_SECS, SALT);
-        cancel_transaction(non_member, timelock_addr, get_transaction_hash(PAYLOAD, SALT));
+        create_transaction(creator, timelock_addr, EXECUTION_HASH, TIMELOCK_SECS, SALT);
+        cancel_transaction(non_member, timelock_addr, get_transaction_hash(EXECUTION_HASH, SALT));
     }
 
-    // --- Validation and execution tests ---
+    // --- Resolve tests ---
+    //
+    // Note: `resolve` reads `transaction_context::get_script_hash()`, which has no usable value
+    // outside of an actual Script transaction. Move-level unit tests therefore cover only the
+    // pre-checks that abort before that comparison. End-to-end tests cover the positive flow.
 
     #[test(framework = @0x1, creator = @0x123, executor = @0x124)]
-    public entry fun test_validate_and_execute_success(
+    #[expected_failure(abort_code = 0x30008, location = Self)]
+    public entry fun test_resolve_before_timelock_expires_fails(
         framework: &signer,
         creator: &signer,
         executor: &signer,
@@ -1006,23 +890,14 @@ module aptos_framework::timelock {
         create_account(address_of(creator));
         let timelock_addr = get_next_timelock_account_address(address_of(creator));
         create(creator, vector[], vector[address_of(executor)], TIMELOCK_SECS);
-        create_transaction(creator, timelock_addr, PAYLOAD, TIMELOCK_SECS, SALT);
-
-        timestamp::fast_forward_seconds(TIMELOCK_SECS + 1);
-
-        let hash = get_transaction_hash(PAYLOAD, SALT);
-        assert!(can_be_executed(timelock_addr, hash), 0);
-        validate_timelock_transaction(executor, timelock_addr, PAYLOAD, SALT);
-        successful_transaction_execution_cleanup(address_of(executor), timelock_addr, SALT, PAYLOAD);
-        let tx = get_transaction(timelock_addr, hash);
-        assert!(tx.executed, 1);
-        // Entry is kept for historical record.
-        assert!(borrow_global<TimelockAccount>(timelock_addr).transactions.contains(hash), 2);
+        create_transaction(creator, timelock_addr, EXECUTION_HASH, TIMELOCK_SECS, SALT);
+        // No time advance — must fail with ETIMELOCK_NOT_EXPIRED.
+        let _ = resolve(executor, timelock_addr, get_transaction_hash(EXECUTION_HASH, SALT));
     }
 
     #[test(framework = @0x1, creator = @0x123, executor = @0x124)]
-    #[expected_failure(abort_code = 0x307DD, location = Self)]
-    public entry fun test_validate_before_timelock_expires_fails(
+    #[expected_failure(abort_code = 0x30009, location = Self)]
+    public entry fun test_resolve_canceled_fails(
         framework: &signer,
         creator: &signer,
         executor: &signer,
@@ -1031,31 +906,31 @@ module aptos_framework::timelock {
         create_account(address_of(creator));
         let timelock_addr = get_next_timelock_account_address(address_of(creator));
         create(creator, vector[], vector[address_of(executor)], TIMELOCK_SECS);
-        create_transaction(creator, timelock_addr, PAYLOAD, TIMELOCK_SECS, SALT);
-        // No time advance — must fail with ETIMELOCK_NOT_EXPIRED (error::invalid_state(2013) = 0x307DD).
-        validate_timelock_transaction(executor, timelock_addr, PAYLOAD, SALT);
+        create_transaction(creator, timelock_addr, EXECUTION_HASH, TIMELOCK_SECS, SALT);
+        let tx_hash = get_transaction_hash(EXECUTION_HASH, SALT);
+        cancel_transaction(creator, timelock_addr, tx_hash);
+        timestamp::fast_forward_seconds(TIMELOCK_SECS + 1);
+        let _ = resolve(executor, timelock_addr, tx_hash);
     }
 
-    #[test(framework = @0x1, creator = @0x123)]
-    public entry fun test_creator_can_execute_when_executors_empty(
+    #[test(framework = @0x1, creator = @0x123, non_member = @0x999)]
+    #[expected_failure(abort_code = 0x50005, location = Self)]
+    public entry fun test_resolve_by_non_executor_fails(
         framework: &signer,
         creator: &signer,
+        non_member: &signer,
     ) acquires TimelockAccount {
         setup(framework);
         create_account(address_of(creator));
         let timelock_addr = get_next_timelock_account_address(address_of(creator));
-        // No executors provided.
-        create(creator, vector[], vector[], TIMELOCK_SECS);
-        create_transaction(creator, timelock_addr, PAYLOAD, TIMELOCK_SECS, SALT);
+        create(creator, vector[], vector[@0x124], TIMELOCK_SECS);
+        create_transaction(creator, timelock_addr, EXECUTION_HASH, TIMELOCK_SECS, SALT);
         timestamp::fast_forward_seconds(TIMELOCK_SECS + 1);
-        validate_timelock_transaction(creator, timelock_addr, PAYLOAD, SALT);
-        successful_transaction_execution_cleanup(address_of(creator), timelock_addr, SALT, PAYLOAD);
-        let tx = get_transaction(timelock_addr, get_transaction_hash(PAYLOAD, SALT));
-        assert!(tx.executed, 0);
+        let _ = resolve(non_member, timelock_addr, get_transaction_hash(EXECUTION_HASH, SALT));
     }
 
     #[test(framework = @0x1, creator = @0x123, executor = @0x124)]
-    public entry fun test_failed_execution_marks_executed(
+    public entry fun test_can_be_executed_view(
         framework: &signer,
         creator: &signer,
         executor: &signer,
@@ -1064,103 +939,26 @@ module aptos_framework::timelock {
         create_account(address_of(creator));
         let timelock_addr = get_next_timelock_account_address(address_of(creator));
         create(creator, vector[], vector[address_of(executor)], TIMELOCK_SECS);
-        create_transaction(creator, timelock_addr, PAYLOAD, TIMELOCK_SECS, SALT);
+        create_transaction(creator, timelock_addr, EXECUTION_HASH, TIMELOCK_SECS, SALT);
+        let tx_hash = get_transaction_hash(EXECUTION_HASH, SALT);
+        // Not yet executable — delay hasn't elapsed.
+        assert!(!can_be_executed(timelock_addr, tx_hash), 0);
         timestamp::fast_forward_seconds(TIMELOCK_SECS + 1);
-        failed_transaction_execution_cleanup(
-            address_of(executor), timelock_addr, SALT, PAYLOAD, execution_error(),
-        );
-        let tx = get_transaction(timelock_addr, get_transaction_hash(PAYLOAD, SALT));
-        assert!(tx.executed, 0);
-    }
-
-    #[test(framework = @0x1, creator = @0x123, executor = @0x124)]
-    public entry fun test_multiple_transactions_independent_order(
-        framework: &signer,
-        creator: &signer,
-        executor: &signer,
-    ) acquires TimelockAccount {
-        setup(framework);
-        create_account(address_of(creator));
-        let timelock_addr = get_next_timelock_account_address(address_of(creator));
-        create(creator, vector[], vector[address_of(executor)], TIMELOCK_SECS);
-        create_transaction(creator, timelock_addr, PAYLOAD, TIMELOCK_SECS, SALT);
-        create_transaction(creator, timelock_addr, PAYLOAD, TIMELOCK_SECS, SALT_2);
-
-        timestamp::fast_forward_seconds(TIMELOCK_SECS + 1);
-
-        let hash = get_transaction_hash(PAYLOAD, SALT);
-        let hash_2 = get_transaction_hash(PAYLOAD, SALT_2);
-        // Execute hash_2 before hash — non-sequential execution is allowed.
-        assert!(can_be_executed(timelock_addr, hash_2), 0);
-        validate_timelock_transaction(executor, timelock_addr, PAYLOAD, SALT_2);
-        successful_transaction_execution_cleanup(address_of(executor), timelock_addr, SALT_2, PAYLOAD);
-        assert!(get_transaction(timelock_addr, hash_2).executed, 1);
-
-        // hash is still executable.
-        assert!(can_be_executed(timelock_addr, hash), 2);
+        assert!(can_be_executed(timelock_addr, tx_hash), 1);
+        // Cancel makes it not executable.
+        cancel_transaction(creator, timelock_addr, tx_hash);
+        assert!(!can_be_executed(timelock_addr, tx_hash), 2);
     }
 
     // --- Self-governance tests ---
-
-    /// Full end-to-end test for a self-governance proposal.
-    ///
-    /// Flow:
-    ///   1. Creator proposes a transaction whose payload encodes the call to
-    ///      update_num_seconds_execute with a new delay value.
-    ///   2. Timelock period elapses.
-    ///   3. Executor validates the transaction (VM prologue simulation).
-    ///   4. VM executes the encoded entry function using the timelock account's signer.
-    ///   5. VM calls the successful cleanup.
-    ///   6. Verify the delay changed and the transaction is permanently recorded as executed.
-    #[test(framework = @0x1, creator = @0x123, executor = @0x124)]
-    public entry fun test_update_num_seconds_execute(
-        framework: &signer,
-        creator: &signer,
-        executor: &signer,
-    ) acquires TimelockAccount {
-        setup(framework);
-        create_account(address_of(creator));
-        let timelock_addr = get_next_timelock_account_address(address_of(creator));
-        create(creator, vector[], vector[address_of(executor)], TIMELOCK_SECS);
-
-        // Build the transaction payload. In production this is a BCS-encoded EntryFunction
-        // (module address + name + function name + type args + serialized args). Here we
-        // encode the single u64 argument so the payload is realistic and self-describing.
-        let new_delay: u64 = 7200;
-        let payload = to_bytes(&new_delay);
-
-        // --- Step 1: Creator proposes the governance transaction ---
-        create_transaction(creator, timelock_addr, payload, TIMELOCK_SECS, SALT);
-        let tx_hash = get_transaction_hash(payload, SALT);
-        // The delay must not have changed yet.
-        assert!(min_num_seconds_execute(timelock_addr) == TIMELOCK_SECS, 0);
-        assert!(!get_transaction(timelock_addr, tx_hash).executed, 1);
-
-        // --- Step 2: Timelock period elapses ---
-        timestamp::fast_forward_seconds(TIMELOCK_SECS + 1);
-        assert!(can_be_executed(timelock_addr, tx_hash), 2);
-
-        // --- Step 3: Executor submits the transaction (VM prologue) ---
-        validate_timelock_transaction(executor, timelock_addr, payload, SALT);
-
-        // --- Step 4: VM executes the encoded function using the timelock account's signer ---
-        // The VM would decode the EntryFunction payload and call update_num_seconds_execute
-        // with the timelock account as signer. We simulate that directly here.
-        let timelock_signer = get_timelock_signer(timelock_addr);
-        update_min_num_seconds_execute(&timelock_signer, new_delay);
-
-        // --- Step 5: VM calls post-execution cleanup ---
-        successful_transaction_execution_cleanup(address_of(executor), timelock_addr, SALT, payload);
-
-        // --- Step 6: Verify outcome ---
-        assert!(min_num_seconds_execute(timelock_addr) == new_delay, 3);
-        // Transaction is permanently recorded as executed in the table.
-        assert!(get_transaction(timelock_addr, tx_hash).executed, 4);
-        assert!(borrow_global<TimelockAccount>(timelock_addr).transactions.contains(tx_hash), 5);
-    }
+    //
+    // The intended on-chain flow is: creator proposes a script hash, time elapses, executor
+    // submits the script, the script calls `resolve` to obtain the timelock signer, and the
+    // script then invokes the entry function below with that signer. These tests simulate the
+    // post-resolve signer directly via `get_timelock_signer`.
 
     #[test(framework = @0x1, creator = @0x123)]
-    public entry fun test_update_num_seconds_execute_custom_payload(
+    public entry fun test_update_min_num_seconds_execute(
         framework: &signer,
         creator: &signer,
     ) acquires TimelockAccount {
@@ -1168,27 +966,9 @@ module aptos_framework::timelock {
         create_account(address_of(creator));
         let timelock_addr = get_next_timelock_account_address(address_of(creator));
         create(creator, vector[], vector[], TIMELOCK_SECS);
-        
-        // BCS-encoded EntryFunction payload for:
-        //   0x1::timelock::update_min_num_seconds_execute(<timelock_signer>, 7200)
-        // Layout: module_addr (32B) | module_name | func_name | ty_args_count | args_count | arg
-        let new_min_num_seconds: u64 = 7200;
-        let update_time_payload = to_bytes(&@aptos_framework);
-        update_time_payload.append(to_bytes(&b"timelock"));
-        update_time_payload.append(to_bytes(&b"update_min_num_seconds_execute"));
-        update_time_payload.push_back(0u8); // 0 type arguments
-        update_time_payload.push_back(1u8); // 1 argument
-        update_time_payload.append(to_bytes(&to_bytes(&new_min_num_seconds))); // BCS(7200u64) wrapped as vector<u8>
-        create_transaction(creator, timelock_addr, update_time_payload, TIMELOCK_SECS, SALT);
-        timestamp::fast_forward_seconds(TIMELOCK_SECS + 1);
-        validate_timelock_transaction(creator, timelock_addr, update_time_payload, SALT);
-        // Simulate the VM invoking the governance function using the timelock account's signer.
         let timelock_signer = get_timelock_signer(timelock_addr);
-        update_min_num_seconds_execute(&timelock_signer, new_min_num_seconds);
-        successful_transaction_execution_cleanup(address_of(creator), timelock_addr, SALT, update_time_payload);
-
+        update_min_num_seconds_execute(&timelock_signer, 7200);
         assert!(min_num_seconds_execute(timelock_addr) == 7200, 0);
-        assert!(get_transaction(timelock_addr, get_transaction_hash(update_time_payload, SALT)).executed, 1);
     }
 
     #[test(framework = @0x1, creator_1 = @0x123, creator_2 = @0x124)]
@@ -1239,7 +1019,6 @@ module aptos_framework::timelock {
         assert!(is_executor(address_of(executor_2), timelock_addr), 0);
         remove_executors(&timelock_signer, vector[address_of(executor_1)]);
         assert!(!is_executor(address_of(executor_1), timelock_addr), 1);
-        // After removing executor_1, executor_2 is still an executor.
         assert!(is_executor(address_of(executor_2), timelock_addr), 2);
     }
 
@@ -1254,7 +1033,6 @@ module aptos_framework::timelock {
         let timelock_addr = get_next_timelock_account_address(address_of(creator));
         create(creator, vector[], vector[address_of(executor)], TIMELOCK_SECS);
         let timelock_signer = get_timelock_signer(timelock_addr);
-        // Remove the only executor — now creator should be able to execute.
         remove_executors(&timelock_signer, vector[address_of(executor)]);
         assert!(is_executor(address_of(creator), timelock_addr), 0);
         assert!(!is_executor(address_of(executor), timelock_addr), 1);

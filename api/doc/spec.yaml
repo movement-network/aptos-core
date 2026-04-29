@@ -13116,53 +13116,6 @@ components:
           $ref: '#/components/schemas/MoveType'
         key:
           description: The value of the table item's key
-    TimelockPayload:
-      type: object
-      description: |-
-        A timelock transaction that allows an executor of a timelock account to execute a
-        pre-approved transaction as the timelock account after the timelock delay has elapsed.
-      required:
-      - timelock_address
-      - salt
-      - hash
-      properties:
-        timelock_address:
-          $ref: '#/components/schemas/Address'
-        salt:
-          $ref: '#/components/schemas/HexEncodedBytes'
-          description: |-
-            Salt used together with the payload to derive the transaction hash.
-            The table key (hash) is `keccak256(bcs(payload) || salt)`.
-        hash:
-          $ref: '#/components/schemas/HexEncodedBytes'
-          description: |-
-            Transaction table key: `keccak256(bcs(payload) || salt)`.
-            Required when `transaction_payload` is absent so the VM can look up the
-            stored payload via `timelock::get_transaction(timelock_address, hash)`.
-            When `transaction_payload` is present the VM derives the hash itself.
-        transaction_payload:
-          $ref: '#/components/schemas/TimelockTransactionPayload'
-    TimelockTransactionPayload:
-      type: object
-      description: The payload of a timelock transaction (currently only entry functions are supported).
-      oneOf:
-      - $ref: '#/components/schemas/TimelockTransactionPayload_EntryFunctionPayload'
-      discriminator:
-        propertyName: type
-        mapping:
-          entry_function_payload: '#/components/schemas/TimelockTransactionPayload_EntryFunctionPayload'
-    TimelockTransactionPayload_EntryFunctionPayload:
-      allOf:
-      - type: object
-        required:
-        - type
-        properties:
-          type:
-            type: string
-            enum:
-            - entry_function_payload
-            example: entry_function_payload
-      - $ref: '#/components/schemas/EntryFunctionPayload'
     Transaction:
       type: object
       description: Enum of the different types of transactions in Aptos
@@ -13192,7 +13145,6 @@ components:
       - $ref: '#/components/schemas/TransactionPayload_ScriptPayload'
       - $ref: '#/components/schemas/TransactionPayload_DeprecatedModuleBundlePayload'
       - $ref: '#/components/schemas/TransactionPayload_MultisigPayload'
-      - $ref: '#/components/schemas/TransactionPayload_TimelockPayload'
       discriminator:
         propertyName: type
         mapping:
@@ -13200,7 +13152,6 @@ components:
           script_payload: '#/components/schemas/TransactionPayload_ScriptPayload'
           module_bundle_payload: '#/components/schemas/TransactionPayload_DeprecatedModuleBundlePayload'
           multisig_payload: '#/components/schemas/TransactionPayload_MultisigPayload'
-          timelock_payload: '#/components/schemas/TransactionPayload_TimelockPayload'
     TransactionPayload_DeprecatedModuleBundlePayload:
       allOf:
       - type: object
@@ -13249,18 +13200,6 @@ components:
             - script_payload
             example: script_payload
       - $ref: '#/components/schemas/ScriptPayload'
-    TransactionPayload_TimelockPayload:
-      allOf:
-      - type: object
-        required:
-        - type
-        properties:
-          type:
-            type: string
-            enum:
-            - timelock_payload
-            example: timelock_payload
-      - $ref: '#/components/schemas/TimelockPayload'
     TransactionSignature:
       type: object
       description: An enum representing the different transaction signatures available

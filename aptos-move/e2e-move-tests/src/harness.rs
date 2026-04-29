@@ -30,9 +30,9 @@ use aptos_types::{
         state_value::{StateValue, StateValueMetadata},
     },
     transaction::{
-        EntryFunction, Multisig, MultisigTransactionPayload, Script, SignedTransaction, Timelock,
-        TimelockTransactionPayload, TransactionArgument, TransactionOutput, TransactionPayload,
-        TransactionStatus, ViewFunctionOutput,
+        EntryFunction, Multisig, MultisigTransactionPayload, Script, SignedTransaction,
+        TransactionArgument, TransactionOutput, TransactionPayload, TransactionStatus,
+        ViewFunctionOutput,
     },
     AptosCoinType,
 };
@@ -480,63 +480,6 @@ impl MoveHarness {
         transaction_payload: Option<MultisigTransactionPayload>,
     ) -> TransactionStatus {
         let txn = self.create_multisig(account, multisig_address, transaction_payload);
-        self.run(txn)
-    }
-
-    /// Compute the timelock transaction hash: `keccak256(bcs(payload) || salt)`.
-    /// This mirrors `timelock::get_transaction_hash` in Move and produces the table key
-    /// used to look up (or store) a transaction in the on-chain `TimelockAccount`.
-    pub fn timelock_transaction_hash(
-        payload: &TimelockTransactionPayload,
-        salt: &[u8],
-    ) -> Vec<u8> {
-        use sha3::{Digest, Keccak256};
-        let payload_bytes =
-            bcs::to_bytes(payload).expect("BCS serialization of TimelockTransactionPayload");
-        let mut hasher = Keccak256::new();
-        hasher.update(&payload_bytes);
-        hasher.update(salt);
-        hasher.finalize().to_vec()
-    }
-
-    /// Create a timelock transaction.
-    ///
-    /// When `transaction_payload` is `Some` the hash (`keccak256(bcs(payload) || salt)`,
-    /// i.e. the on-chain table key) is computed automatically.  When it is `None` the
-    /// caller must supply the hash via `hash`; the VM will use it to fetch the stored
-    /// payload from chain.
-    pub fn create_timelock(
-        &mut self,
-        account: &Account,
-        timelock_address: AccountAddress,
-        salt: Vec<u8>,
-        transaction_payload: Option<TimelockTransactionPayload>,
-    ) -> SignedTransaction {
-        // hash = keccak256(bcs(payload) || salt) is the transaction table key.
-        let hash = transaction_payload
-            .as_ref()
-            .map(|p| Self::timelock_transaction_hash(p, &salt))
-            .unwrap_or_default();
-        self.create_transaction_payload(
-            account,
-            TransactionPayload::Timelock(Timelock {
-                timelock_address,
-                salt,
-                hash,
-                transaction_payload,
-            }),
-        )
-    }
-
-    /// Run a timelock transaction.
-    pub fn run_timelock(
-        &mut self,
-        account: &Account,
-        timelock_address: AccountAddress,
-        salt: Vec<u8>,
-        transaction_payload: Option<TimelockTransactionPayload>,
-    ) -> TransactionStatus {
-        let txn = self.create_timelock(account, timelock_address, salt, transaction_payload);
         self.run(txn)
     }
 

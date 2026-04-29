@@ -608,15 +608,6 @@ pub enum StatusCode {
     RESERVED_VALIDATION_ERROR_14 = 49,
     RESERVED_VALIDATION_ERROR_15 = 50,
 
-    // Timelock account specific error codes
-    ACCOUNT_NOT_TIMELOCK = 51,
-    NOT_TIMELOCK_EXECUTOR = 52,
-    TIMELOCK_TRANSACTION_NOT_FOUND = 53,
-    TIMELOCK_TRANSACTION_PAYLOAD_DOES_NOT_MATCH = 54,
-    TIMELOCK_NOT_EXPIRED = 55,
-    TIMELOCK_TRANSACTION_ALREADY_EXECUTED = 56,
-
-
     // When a code module/script is published it is verified. These are the
     // possible errors that can arise from the verification process.
     // Verification Errors: 1000-1999

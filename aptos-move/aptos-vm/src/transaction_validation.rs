@@ -6,8 +6,8 @@ use crate::{
     errors::{convert_epilogue_error, convert_prologue_error, expect_only_successful_execution},
     move_vm_ext::{AptosMoveResolver, SessionExt},
     system_module_names::{
-        EMIT_FEE_STATEMENT, GET_TRANSACTION, MULTISIG_ACCOUNT_MODULE, TIMELOCK_MODULE,
-        TRANSACTION_FEE_MODULE, VALIDATE_MULTISIG_TRANSACTION, VALIDATE_TIMELOCK_TRANSACTION,
+        EMIT_FEE_STATEMENT, MULTISIG_ACCOUNT_MODULE, TRANSACTION_FEE_MODULE,
+        VALIDATE_MULTISIG_TRANSACTION,
     },
     testing::{maybe_raise_injected_error, InjectedError},
     transaction_metadata::TransactionMetadata,
@@ -18,10 +18,7 @@ use aptos_types::{
     fee_statement::FeeStatement,
     move_utils::as_move_value::AsMoveValue,
     on_chain_config::Features,
-    transaction::{
-        MultisigTransactionPayload, ReplayProtector, TimelockTransactionPayload,
-        TransactionExecutableRef,
-    },
+    transaction::{MultisigTransactionPayload, ReplayProtector, TransactionExecutableRef},
 };
 use aptos_vm_logging::log_schema::AdapterLogSchema;
 use fail::fail_point;
@@ -448,148 +445,6 @@ pub(crate) fn run_multisig_prologue(
         .map(|_return_vals| ())
         .map_err(expect_no_verification_errors)
         .or_else(|err| convert_prologue_error(err, log_context))
-}
-
-/// Run the prologue for a timelock transaction. This needs to verify that:
-/// Validates the timelock transaction:
-/// 1. The executor is authorized for the timelock account
-/// 2. The timelock delay has elapsed since the transaction was proposed
-/// 3. The transaction identified by `hash = keccak256(bcs(payload) || salt)` exists
-/// 4. The provided payload matches the on-chain stored payload (if any)
-///
-/// `validate_timelock_transaction` in Move always receives a non-empty `payload` and the
-/// original `salt`.  When the executor omits the payload (`executable` is `Empty`), the VM
-/// first calls `get_transaction(timelock_address, hash)` to retrieve the on-chain payload
-/// and salt, then passes those to the validator.
-pub(crate) fn run_timelock_prologue(
-    session: &mut SessionExt<impl AptosMoveResolver>,
-    module_storage: &impl ModuleStorage,
-    txn_data: &TransactionMetadata,
-    executable: TransactionExecutableRef,
-    timelock_address: AccountAddress,
-    salt: Vec<u8>,
-    // hash = keccak256(bcs(payload) || salt): the transaction table key.
-    // Required when `executable` is `Empty` so the VM can fetch the stored payload.
-    hash: Vec<u8>,
-    log_context: &AdapterLogSchema,
-    traversal_context: &mut TraversalContext,
-) -> Result<(), VMStatus> {
-    let unreachable_error = VMStatus::error(StatusCode::UNREACHABLE, None);
-
-    // Determine the payload bytes and salt to pass to validate_timelock_transaction.
-    // validate_timelock_transaction always receives a real (non-empty) payload:
-    //   - Executor provided it: use it directly with the original salt.
-    //   - Executor omitted it (Empty): fetch it from on-chain storage using the hash,
-    //     then use the stored payload and the salt from the on-chain transaction.
-    let (payload_bytes, effective_salt) = match executable {
-        TransactionExecutableRef::EntryFunction(entry_function) => {
-            let bytes = bcs::to_bytes(
-                &TimelockTransactionPayload::EntryFunction(entry_function.clone()),
-            )
-            .map_err(|_| unreachable_error.clone())?;
-            (bytes, salt)
-        },
-        TransactionExecutableRef::Empty => {
-            // Fetch the on-chain TimelockTransaction using hash = keccak256(payload||salt).
-            fetch_timelock_on_chain_payload(
-                session,
-                module_storage,
-                timelock_address,
-                hash,
-                traversal_context,
-            )?
-        },
-        TransactionExecutableRef::Script(_) => {
-            return Err(VMStatus::error(
-                StatusCode::FEATURE_UNDER_GATING,
-                Some("Script payload not supported for timelock transactions".to_string()),
-            ));
-        },
-    };
-
-    session
-        .execute_function_bypass_visibility(
-            &TIMELOCK_MODULE,
-            VALIDATE_TIMELOCK_TRANSACTION,
-            vec![],
-            serialize_values(&vec![
-                MoveValue::Signer(txn_data.sender),
-                MoveValue::Address(timelock_address),
-                MoveValue::vector_u8(payload_bytes),
-                MoveValue::vector_u8(effective_salt),
-            ]),
-            &mut UnmeteredGasMeter,
-            traversal_context,
-            module_storage,
-        )
-        .map(|_return_vals| ())
-        .map_err(expect_no_verification_errors)
-        .or_else(|err| convert_prologue_error(err, log_context))
-}
-
-/// Calls `timelock::get_transaction(timelock_address, hash)` and returns the stored
-/// `(payload_bytes, salt)`.  Returns an error if the transaction has no on-chain payload
-/// (hash-only proposals require the executor to supply the payload explicitly).
-pub(crate) fn fetch_timelock_on_chain_payload(
-    session: &mut SessionExt<impl AptosMoveResolver>,
-    module_storage: &impl ModuleStorage,
-    timelock_address: AccountAddress,
-    hash: Vec<u8>,
-    traversal_context: &mut TraversalContext,
-) -> Result<(Vec<u8>, Vec<u8>), VMStatus> {
-    #[derive(serde::Deserialize)]
-    struct TimelockTransactionResult {
-        payload: Option<Vec<u8>>,
-        #[allow(dead_code)]
-        creator: move_core_types::account_address::AccountAddress,
-        #[allow(dead_code)]
-        creation_time_secs: u64,
-        #[allow(dead_code)]
-        num_seconds_execute: u64,
-        salt: Vec<u8>,
-        #[allow(dead_code)]
-        executed: bool,
-    }
-
-    let invariant_error = || {
-        VMStatus::error(
-            StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR,
-            Some("timelock::get_transaction returned unexpected result".to_string()),
-        )
-    };
-
-    let return_values = session
-        .execute_function_bypass_visibility(
-            &TIMELOCK_MODULE,
-            GET_TRANSACTION,
-            vec![],
-            serialize_values(&vec![
-                MoveValue::Address(timelock_address),
-                MoveValue::vector_u8(hash),
-            ]),
-            &mut UnmeteredGasMeter,
-            traversal_context,
-            module_storage,
-        )
-        .map_err(|e| e.into_vm_status())?
-        .return_values;
-
-    let tx_bytes = &return_values.first().ok_or_else(invariant_error)?.0;
-    let tx = bcs::from_bytes::<TimelockTransactionResult>(tx_bytes)
-        .map_err(|_| invariant_error())?;
-
-    let payload_bytes = tx.payload.ok_or_else(|| {
-        VMStatus::error(
-            StatusCode::FAILED_TO_DESERIALIZE_ARGUMENT,
-            Some(
-                "Timelock transaction has no on-chain payload; \
-                 provide the payload explicitly"
-                    .to_string(),
-            ),
-        )
-    })?;
-
-    Ok((payload_bytes, tx.salt))
 }
 
 fn run_epilogue(

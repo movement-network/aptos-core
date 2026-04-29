@@ -48,7 +48,6 @@ mod change_set;
 mod module;
 mod multisig;
 mod script;
-mod timelock;
 pub mod signature_verified_transaction;
 pub mod use_case;
 pub mod user_transaction_context;
@@ -76,7 +75,6 @@ use move_core_types::{
     vm_status::AbortLocation,
 };
 pub use multisig::{ExecutionError, Multisig, MultisigTransactionPayload};
-pub use timelock::{Timelock, TimelockTransactionPayload};
 use once_cell::sync::OnceCell;
 pub use script::{
     ArgumentABI, EntryABI, EntryFunction, EntryFunctionABI, Script, TransactionScriptABI,
@@ -669,9 +667,6 @@ pub enum TransactionPayload {
     /// A multisig transaction that allows an owner of a multisig account to execute a pre-approved
     /// transaction as the multisig account.
     Multisig(Multisig),
-    /// A timelock transaction that allows an executor of a timelock account to execute a
-    /// pre-approved transaction as the timelock account after the delay has elapsed.
-    Timelock(Timelock),
     /// A new transaction payload format with support for versioning.
     /// Contains an executable (script/entry function) along with extra configuration.
     /// Once this new format is fully rolled out, above payload variants will be deprecated.
@@ -755,15 +750,10 @@ impl TransactionPayload {
             TransactionPayload::Script(_) => false,
             TransactionPayload::ModuleBundle(_) => false,
             TransactionPayload::Multisig(_) => true,
-            TransactionPayload::Timelock(_) => false,
             TransactionPayload::Payload(TransactionPayloadInner::V1 { extra_config, .. }) => {
                 extra_config.is_multisig()
             },
         }
-    }
-
-    pub fn is_timelock(&self) -> bool {
-        matches!(self, TransactionPayload::Timelock(_))
     }
 
     pub fn into_entry_function(self) -> EntryFunction {
@@ -789,7 +779,6 @@ impl TransactionPayload {
             },
             TransactionPayload::Script(script) => Ok(TransactionExecutable::Script(script.clone())),
             TransactionPayload::Multisig(multisig) => Ok(multisig.as_transaction_executable()),
-            TransactionPayload::Timelock(timelock) => Ok(timelock.as_transaction_executable()),
             TransactionPayload::Payload(TransactionPayloadInner::V1 { executable, .. }) => {
                 Ok(executable.clone())
             },
@@ -806,7 +795,6 @@ impl TransactionPayload {
             },
             TransactionPayload::Script(script) => Ok(TransactionExecutableRef::Script(script)),
             TransactionPayload::Multisig(multisig) => Ok(multisig.as_transaction_executable_ref()),
-            TransactionPayload::Timelock(timelock) => Ok(timelock.as_transaction_executable_ref()),
             TransactionPayload::Payload(TransactionPayloadInner::V1 { executable, .. }) => {
                 Ok(executable.as_ref())
             },
@@ -820,8 +808,7 @@ impl TransactionPayload {
         match self {
             TransactionPayload::Script(_)
             | TransactionPayload::EntryFunction(_)
-            | TransactionPayload::ModuleBundle(_)
-            | TransactionPayload::Timelock(_) => TransactionExtraConfig::V1 {
+            | TransactionPayload::ModuleBundle(_) => TransactionExtraConfig::V1 {
                 multisig_address: None,
                 replay_protection_nonce: None,
             },
@@ -839,9 +826,6 @@ impl TransactionPayload {
     pub fn payload_type(&self) -> Cow<'static, str> {
         if self.is_multisig() {
             return "multisig".into();
-        }
-        if self.is_timelock() {
-            return "timelock".into();
         }
         match self.executable_ref() {
             Ok(TransactionExecutableRef::EntryFunction(entry_function)) => format!(
@@ -1177,20 +1161,6 @@ impl SignedTransaction {
 
     pub fn multisig_address(&self) -> Option<AccountAddress> {
         self.raw_txn.extra_config().multisig_address()
-    }
-
-    pub fn timelock_address(&self) -> Option<AccountAddress> {
-        match &self.raw_txn.payload {
-            TransactionPayload::Timelock(t) => Some(t.timelock_address),
-            _ => None,
-        }
-    }
-
-    pub fn timelock_salt(&self) -> Option<Vec<u8>> {
-        match &self.raw_txn.payload {
-            TransactionPayload::Timelock(t) => Some(t.salt.clone()),
-            _ => None,
-        }
     }
 
     pub fn is_module_bundle(&self) -> bool {

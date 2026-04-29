@@ -19,18 +19,18 @@ spec aptos_framework::timelock {
     /// Audited that self-reference is rejected (validate_members).
     ///
     /// No.: 3
-    /// Requirement: A transaction can only be executed after the timelock period has fully elapsed.
+    /// Requirement: A transaction can only be resolved after the timelock period has fully elapsed.
     /// Specifically, block time must satisfy: now_seconds >= creation_time_secs + num_seconds_execute.
     /// Criticality: Critical
-    /// Implementation: The validate_timelock_transaction function asserts this time condition before allowing execution.
-    /// Enforcement: Audited that it aborts if the timelock period has not elapsed (validate_timelock_transaction).
+    /// Implementation: The resolve function asserts this time condition before authorizing execution.
+    /// Enforcement: Audited that it aborts if the timelock period has not elapsed (resolve).
     ///
     /// No.: 4
-    /// Requirement: Each transaction proposal is uniquely identified by its transaction hash, which is either the
-    /// caller-provided hash or keccak256(payload || salt) when a payload is stored on chain. Submitting a proposal with
-    /// an already existing transaction hash is rejected. To submit the same payload again, a new salt must be used.
+    /// Requirement: Each transaction proposal is uniquely identified by keccak256(execution_hash || salt). Submitting
+    /// a proposal whose computed key already exists is rejected. To submit the same script again, a new salt must be
+    /// used.
     /// Criticality: High
-    /// Implementation: The create_transaction function computes the table key and asserts that the hash does not
+    /// Implementation: The create_transaction function computes the table key and asserts that the key does not
     /// already exist as a key in the transactions table before adding the new entry.
     /// Enforcement: Audited that it aborts if the computed transaction hash already exists (create_transaction).
     ///
@@ -55,19 +55,18 @@ spec aptos_framework::timelock {
     /// Requirement: Once a transaction's executed field is set to true (either by execution or cancellation), neither
     /// further execution nor further cancellation is permitted. The transaction entry is kept in the table permanently.
     /// Criticality: High
-    /// Implementation: Both validate_timelock_transaction and cancel_transaction assert !transaction.executed before
-    /// proceeding. The cleanup functions set executed = true but do not remove the entry from the table.
-    /// Enforcement: Audited that it aborts if executed is already true (validate_timelock_transaction,
-    /// cancel_transaction). Audited that entries remain in the table after execution (successful_transaction_execution_
-    /// cleanup, failed_transaction_execution_cleanup).
+    /// Implementation: Both resolve and cancel_transaction assert !transaction.executed before proceeding. resolve sets
+    /// executed = true; if the surrounding script aborts, this state change reverts atomically.
+    /// Enforcement: Audited that it aborts if executed is already true (resolve, cancel_transaction). Audited that
+    /// entries remain in the table after execution (resolve).
     ///
     /// No.: 8
     /// Requirement: Changes to num_seconds_execute, the creator list, and the executor list can only be made by the
     /// timelock account itself, enforced by requiring the timelock account signer on the self-governance entry functions.
     /// Criticality: Critical
-    /// Implementation: The self-governance functions (update_num_seconds_execute, add_creators, remove_creators,
-    /// add_executors, remove_executors) all take timelock_account: &signer as first argument. Only the VM, using the
-    /// signer derived from the stored signer_cap, can produce this signer after a timelock proposal executes.
+    /// Implementation: The self-governance functions (update_min_num_seconds_execute, add_creators, remove_creators,
+    /// add_executors, remove_executors) all take timelock_account: &signer as first argument. The signer is produced
+    /// only by `resolve`, which derives it from the stored signer_cap after verifying the running script.
     /// Enforcement: Audited that the signer must be the timelock account address for self-governance functions.
     ///
     /// No.: 9
@@ -81,7 +80,7 @@ spec aptos_framework::timelock {
     ///
     /// No.: 10
     /// Requirement: Only valid creators are allowed to propose transactions. Proposing a transaction stores the
-    /// optional payload, plus the salt, recording the creator and timestamp, with executed = false.
+    /// execution_hash, salt, the proposer, and the proposal timestamp, with executed = false.
     /// Criticality: Critical
     /// Implementation: The create_transaction function validates that the caller is in the creators list before adding
     /// the new TimelockTransaction to the table.
@@ -89,14 +88,13 @@ spec aptos_framework::timelock {
     /// Audited that the transaction is stored correctly with executed = false (create_transaction).
     ///
     /// No.: 11
-    /// Requirement: Only authorized executors (or creators when executors is empty) are allowed to execute transactions
-    /// via the VM prologue validation function. Additionally, the payload must match the stored payload if both are
-    /// non-empty.
+    /// Requirement: Only authorized executors (or creators when executors is empty) are allowed to resolve
+    /// transactions. The running script's hash must equal the proposed execution_hash.
     /// Criticality: Critical
-    /// Implementation: The validate_timelock_transaction function checks executor authorization, transaction existence,
-    /// executed status, timelock expiry, and optional payload match.
-    /// Enforcement: Audited that it aborts if the caller is not an executor (validate_timelock_transaction,
-    /// assert_is_executor). Audited that it aborts if the payload mismatches (validate_timelock_transaction).
+    /// Implementation: The resolve function checks executor authorization, transaction existence, executed status,
+    /// timelock expiry, and equality between transaction_context::get_script_hash() and the stored execution_hash.
+    /// Enforcement: Audited that it aborts if the caller is not an executor (resolve, assert_is_executor). Audited
+    /// that it aborts if the script hash mismatches (resolve).
     /// </high-level-req>
 
     spec module {}
@@ -130,28 +128,28 @@ spec aptos_framework::timelock {
         ensures len(timelock.executors) > 0 ==> result == contains(timelock.executors, addr);
     }
 
-    spec get_transaction(timelock_account: address, hash: vector<u8>): TimelockTransaction {
+    spec get_transaction(timelock_account: address, transaction_hash: vector<u8>): TimelockTransaction {
         let timelock = global<TimelockAccount>(timelock_account);
         aborts_if !exists<TimelockAccount>(timelock_account);
-        aborts_if !table::spec_contains(timelock.transactions, hash);
-        ensures result == table::spec_get(timelock.transactions, hash);
+        aborts_if !table::spec_contains(timelock.transactions, transaction_hash);
+        ensures result == table::spec_get(timelock.transactions, transaction_hash);
     }
 
-    spec can_be_executed(timelock_account: address, hash: vector<u8>): bool {
+    spec can_be_executed(timelock_account: address, transaction_hash: vector<u8>): bool {
         // Only aborts when the timelock account resource does not exist.
         // Returns false (does not abort) when the hash is absent, executed, or delay not elapsed.
         aborts_if !exists<TimelockAccount>(timelock_account);
         let timelock = global<TimelockAccount>(timelock_account);
-        ensures !table::spec_contains(timelock.transactions, hash) ==> !result;
-        ensures table::spec_contains(timelock.transactions, hash) ==> result ==
-            (!table::spec_get(timelock.transactions, hash).executed
+        ensures !table::spec_contains(timelock.transactions, transaction_hash) ==> !result;
+        ensures table::spec_contains(timelock.transactions, transaction_hash) ==> result ==
+            (!table::spec_get(timelock.transactions, transaction_hash).executed
                 && aptos_framework::timestamp::now_seconds()
-                    >= table::spec_get(timelock.transactions, hash).creation_time_secs
-                        + table::spec_get(timelock.transactions, hash).num_seconds_execute);
+                    >= table::spec_get(timelock.transactions, transaction_hash).creation_time_secs
+                        + table::spec_get(timelock.transactions, transaction_hash).num_seconds_execute);
     }
 
-    spec get_transaction_hash(payload: vector<u8>, salt: vector<u8>): vector<u8> {
-        ensures result == aptos_std::aptos_hash::keccak256(concat(payload, salt));
+    spec get_transaction_hash(execution_hash: vector<u8>, salt: vector<u8>): vector<u8> {
+        ensures result == aptos_std::aptos_hash::keccak256(concat(execution_hash, salt));
     }
 
     spec get_next_timelock_account_address(creator: address): address {
@@ -180,7 +178,7 @@ spec aptos_framework::timelock {
         creators: vector<address>,
         executors: vector<address>,
         min_num_seconds_execute: u64,
-        signer_cap: Option<SignerCapability>,
+        signer_cap: SignerCapability,
     ) {
         aborts_if len(creators) < 1;
         aborts_if min_num_seconds_execute <= 360;
@@ -241,7 +239,7 @@ spec aptos_framework::timelock {
     spec create_transaction(
         creator: &signer,
         timelock_account: address,
-        payload: vector<u8>,
+        execution_hash: vector<u8>,
         num_seconds_execute: u64,
         salt: vector<u8>,
     ) {
@@ -249,91 +247,61 @@ spec aptos_framework::timelock {
         let timelock = global<TimelockAccount>(timelock_account);
         aborts_if !exists<TimelockAccount>(timelock_account);
         aborts_if !contains(timelock.creators, address_of(creator));
+        aborts_if len(execution_hash) != 32;
         aborts_if len(salt) != 32;
-        aborts_if len(payload) == 0;
         aborts_if num_seconds_execute < timelock.min_num_seconds_execute;
         aborts_if table::spec_contains(
             global<TimelockAccount>(timelock_account).transactions,
-            aptos_std::aptos_hash::keccak256(concat(payload, salt)),
+            aptos_std::aptos_hash::keccak256(concat(execution_hash, salt)),
         );
         ensures table::spec_contains(
             global<TimelockAccount>(timelock_account).transactions,
-            aptos_std::aptos_hash::keccak256(concat(payload, salt)),
+            aptos_std::aptos_hash::keccak256(concat(execution_hash, salt)),
         );
         ensures table::spec_get(
             global<TimelockAccount>(timelock_account).transactions,
-            aptos_std::aptos_hash::keccak256(concat(payload, salt)),
+            aptos_std::aptos_hash::keccak256(concat(execution_hash, salt)),
         ).creator == address_of(creator);
-        ensures option::is_some(table::spec_get(
-            global<TimelockAccount>(timelock_account).transactions,
-            aptos_std::aptos_hash::keccak256(concat(payload, salt)),
-        ).payload);
-        ensures option::borrow(table::spec_get(
-            global<TimelockAccount>(timelock_account).transactions,
-            aptos_std::aptos_hash::keccak256(concat(payload, salt)),
-        ).payload) == payload;
         ensures table::spec_get(
             global<TimelockAccount>(timelock_account).transactions,
-            aptos_std::aptos_hash::keccak256(concat(payload, salt)),
+            aptos_std::aptos_hash::keccak256(concat(execution_hash, salt)),
+        ).execution_hash == execution_hash;
+        ensures table::spec_get(
+            global<TimelockAccount>(timelock_account).transactions,
+            aptos_std::aptos_hash::keccak256(concat(execution_hash, salt)),
         ).salt == salt;
         ensures table::spec_get(
             global<TimelockAccount>(timelock_account).transactions,
-            aptos_std::aptos_hash::keccak256(concat(payload, salt)),
+            aptos_std::aptos_hash::keccak256(concat(execution_hash, salt)),
         ).num_seconds_execute == num_seconds_execute;
         ensures !table::spec_get(
             global<TimelockAccount>(timelock_account).transactions,
-            aptos_std::aptos_hash::keccak256(concat(payload, salt)),
+            aptos_std::aptos_hash::keccak256(concat(execution_hash, salt)),
         ).executed;
     }
 
-    spec create_transaction_with_hash(
-        creator: &signer,
-        timelock_account: address,
-        hash: vector<u8>,
-        num_seconds_execute: u64,
-        salt: vector<u8>,
-    ) {
-        pragma aborts_if_is_partial;
+    spec cancel_transaction(actor: &signer, timelock_account: address, transaction_hash: vector<u8>) {
         let timelock = global<TimelockAccount>(timelock_account);
         aborts_if !exists<TimelockAccount>(timelock_account);
-        aborts_if !contains(timelock.creators, address_of(creator));
-        aborts_if len(hash) != 32;
-        aborts_if len(salt) != 32;
-        aborts_if num_seconds_execute < timelock.min_num_seconds_execute;
-        aborts_if table::spec_contains(timelock.transactions, hash);
-        ensures table::spec_contains(global<TimelockAccount>(timelock_account).transactions, hash);
-        ensures table::spec_get(global<TimelockAccount>(timelock_account).transactions, hash).creator
-            == address_of(creator);
-        ensures !option::is_some(table::spec_get(global<TimelockAccount>(timelock_account).transactions, hash).payload);
-        ensures table::spec_get(global<TimelockAccount>(timelock_account).transactions, hash).salt
-            == salt;
-        ensures table::spec_get(global<TimelockAccount>(timelock_account).transactions, hash).num_seconds_execute
-            == num_seconds_execute;
-        ensures !table::spec_get(global<TimelockAccount>(timelock_account).transactions, hash).executed;
-    }
-
-    spec cancel_transaction(actor: &signer, timelock_account: address, hash: vector<u8>) {
-        let timelock = global<TimelockAccount>(timelock_account);
-        aborts_if !exists<TimelockAccount>(timelock_account);
+        aborts_if len(transaction_hash) != 32;
         aborts_if !contains(timelock.creators, address_of(actor))
             && (len(timelock.executors) == 0 || !contains(timelock.executors, address_of(actor)));
-        aborts_if !table::spec_contains(timelock.transactions, hash);
-        aborts_if table::spec_get(timelock.transactions, hash).executed;
-        ensures table::spec_get(global<TimelockAccount>(timelock_account).transactions, hash).executed;
+        aborts_if !table::spec_contains(timelock.transactions, transaction_hash);
+        aborts_if table::spec_get(timelock.transactions, transaction_hash).executed;
+        ensures table::spec_get(global<TimelockAccount>(timelock_account).transactions, transaction_hash).executed;
     }
 
-    // =============================== VM-called functions ===============================
-
-    spec validate_timelock_transaction(
+    spec resolve(
         executor: &signer,
         timelock_account: address,
-        payload: vector<u8>,
-        salt: vector<u8>,
-    ) {
+        transaction_hash: vector<u8>,
+    ): signer {
+        // Full verification is disabled because resolve calls the native
+        // transaction_context::get_script_hash, which the prover cannot constrain.
+        pragma verify = false;
         let timelock = global<TimelockAccount>(timelock_account);
-        let hash = aptos_std::aptos_hash::keccak256(concat(payload, salt));
         aborts_if !exists<TimelockAccount>(timelock_account);
-        // Aborts if executor is not authorized (ENOT_EXECUTOR).
+        aborts_if len(transaction_hash) != 32;
         aborts_if {
             let execs = timelock.executors;
             let creators = timelock.creators;
@@ -343,46 +311,13 @@ spec aptos_framework::timelock {
                 !contains(execs, address_of(executor))
             }
         };
-        aborts_if !table::spec_contains(timelock.transactions, hash);
-        aborts_if table::spec_get(timelock.transactions, hash).executed;
-        // Aborts if the timelock period has not yet elapsed (ETIMELOCK_NOT_EXPIRED).
-        aborts_if aptos_framework::timestamp::now_seconds() < table::spec_get(timelock.transactions, hash).creation_time_secs
-            + table::spec_get(timelock.transactions, hash).num_seconds_execute;
-        // Aborts if a stored payload exists and the provided payload is non-empty but mismatches (EPAYLOAD_DOES_NOT_MATCH).
-        aborts_if {
-            let tx = table::spec_get(timelock.transactions, hash);
-            option::is_some(tx.payload) && len(payload) > 0
-                && payload != option::borrow(tx.payload)
-        };
-    }
-
-    spec successful_transaction_execution_cleanup(
-        executor: address,
-        timelock_account: address,
-        salt: vector<u8>,
-        payload: vector<u8>,
-    ) {
-        let hash = aptos_std::aptos_hash::keccak256(concat(payload, salt));
-        aborts_if !exists<TimelockAccount>(timelock_account);
-        aborts_if !table::spec_contains(global<TimelockAccount>(timelock_account).transactions, hash);
-        ensures table::spec_get(global<TimelockAccount>(timelock_account).transactions, hash).executed;
-        // Entry is kept in the table (not deleted).
-        ensures table::spec_contains(global<TimelockAccount>(timelock_account).transactions, hash);
-    }
-
-    spec failed_transaction_execution_cleanup(
-        executor: address,
-        timelock_account: address,
-        salt: vector<u8>,
-        payload: vector<u8>,
-        execution_error: ExecutionError,
-    ) {
-        let hash = aptos_std::aptos_hash::keccak256(concat(payload, salt));
-        aborts_if !exists<TimelockAccount>(timelock_account);
-        aborts_if !table::spec_contains(global<TimelockAccount>(timelock_account).transactions, hash);
-        ensures table::spec_get(global<TimelockAccount>(timelock_account).transactions, hash).executed;
-        // Entry is kept in the table (not deleted).
-        ensures table::spec_contains(global<TimelockAccount>(timelock_account).transactions, hash);
+        aborts_if !table::spec_contains(timelock.transactions, transaction_hash);
+        aborts_if table::spec_get(timelock.transactions, transaction_hash).executed;
+        aborts_if aptos_framework::timestamp::now_seconds() < table::spec_get(timelock.transactions, transaction_hash).creation_time_secs
+            + table::spec_get(timelock.transactions, transaction_hash).num_seconds_execute;
+        // On success, the entry is marked executed and remains in the table.
+        ensures table::spec_get(global<TimelockAccount>(timelock_account).transactions, transaction_hash).executed;
+        ensures table::spec_contains(global<TimelockAccount>(timelock_account).transactions, transaction_hash);
     }
 
     // =============================== Private helpers ===============================

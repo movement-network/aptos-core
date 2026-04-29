@@ -3257,6 +3257,3 @@ tooling can exercise the same entrypoints as tests without <code>#[test_only]</c
 
 
 </details>
-
-
-[move-book]: https://aptos.dev/move/book/SUMMARY

@@ -35,7 +35,6 @@ directly on encrypted data.
 -  [Function `balance_to_points_c`](#0x7_confidential_balance_balance_to_points_c)
 -  [Function `balance_to_points_d`](#0x7_confidential_balance_balance_to_points_d)
 -  [Function `add_balances_mut`](#0x7_confidential_balance_add_balances_mut)
--  [Function `sub_balances_mut`](#0x7_confidential_balance_sub_balances_mut)
 -  [Function `balance_equals`](#0x7_confidential_balance_balance_equals)
 -  [Function `balance_c_equals`](#0x7_confidential_balance_balance_c_equals)
 -  [Function `is_zero_balance`](#0x7_confidential_balance_is_zero_balance)
@@ -556,38 +555,6 @@ The second balance must have fewer or equal chunks compared to the first.
 
 </details>
 
-<a id="0x7_confidential_balance_sub_balances_mut"></a>
-
-## Function `sub_balances_mut`
-
-Subtracts one confidential balance from another homomorphically, mutating the first balance in place.
-The second balance must have fewer or equal chunks compared to the first.
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_sub_balances_mut">sub_balances_mut</a>(lhs: &<b>mut</b> <a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>, rhs: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>)
-</code></pre>
-
-
-
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_sub_balances_mut">sub_balances_mut</a>(lhs: &<b>mut</b> <a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">ConfidentialBalance</a>, rhs: &<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">ConfidentialBalance</a>) {
-    <b>assert</b>!(lhs.chunks.length() &gt;= rhs.chunks.length(), <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_internal">error::internal</a>(<a href="confidential_balance.md#0x7_confidential_balance_EINTERNAL_ERROR">EINTERNAL_ERROR</a>));
-
-    lhs.chunks.enumerate_mut(|i, chunk| {
-        <b>if</b> (i &lt; rhs.chunks.length()) {
-            twisted_elgamal::ciphertext_add_assign(chunk, &rhs.chunks[i])
-        }
-    })
-}
-</code></pre>
-
-
-
-</details>
-
 <a id="0x7_confidential_balance_balance_equals"></a>
 
 ## Function `balance_equals`
@@ -818,6 +785,3 @@ Returns the number of bits in a single chunk.
 
 
 </details>
-
-
-[move-book]: https://aptos.dev/move/book/SUMMARY

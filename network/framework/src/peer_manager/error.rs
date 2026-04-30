@@ -43,6 +43,9 @@ pub enum PeerManagerError {
 
     #[error("Error writing to wire: {0}")]
     WireWriteError(#[from] wire::WriteError),
+
+    #[error("Inbound message exceeds per-peer throttle capacity")]
+    InboundThrottleCapacityExceeded,
 }
 
 impl PeerManagerError {

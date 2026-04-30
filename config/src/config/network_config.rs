@@ -118,6 +118,9 @@ pub struct NetworkConfig {
     pub inbound_rate_limit_config: Option<RateLimitConfig>,
     /// Outbound rate limiting configuration, if not specified, no rate limiting
     pub outbound_rate_limit_config: Option<RateLimitConfig>,
+    /// Per-peer inbound rate limiting for messages and bytes.
+    /// If None, per-peer inbound rate limiting is disabled.
+    pub inbound_peer_rate_limit_config: Option<InboundPeerRateLimitConfig>,
     /// The maximum size of an inbound or outbound message (it may be divided into multiple frame)
     pub max_message_size: usize,
     /// The maximum number of parallel message deserialization tasks that can run (per application)
@@ -158,6 +161,7 @@ impl NetworkConfig {
             max_inbound_connections: MAX_INBOUND_CONNECTIONS,
             inbound_rate_limit_config: None,
             outbound_rate_limit_config: None,
+            inbound_peer_rate_limit_config: None,
             max_message_size: MAX_MESSAGE_SIZE,
             inbound_rx_buffer_size_bytes: None,
             inbound_tx_buffer_size_bytes: None,
@@ -386,6 +390,16 @@ impl Default for RateLimitConfig {
             enabled: true,
         }
     }
+}
+
+/// Per-peer inbound rate limiting configuration
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct InboundPeerRateLimitConfig {
+    /// Max inbound bytes/sec per peer. None = unlimited.
+    pub inbound_bytes_per_second: Option<u64>,
+    /// Max inbound messages/sec per peer. None = unlimited.
+    pub inbound_messages_per_second: Option<u64>,
 }
 
 pub type PeerSet = HashMap<PeerId, Peer>;

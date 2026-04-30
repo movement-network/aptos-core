@@ -15,7 +15,7 @@ use crate::{
     constants,
     counters::{self},
     logging::*,
-    peer::{Peer, PeerRequest},
+    peer::{inbound_throttle::PeerInboundThrottle, Peer, PeerRequest},
     transport::{
         Connection, ConnectionId, ConnectionMetadata, TSocket as TransportTSocket,
         TRANSPORT_TIMEOUT,
@@ -23,7 +23,10 @@ use crate::{
     ProtocolId,
 };
 use aptos_channels::{self, aptos_channel, message_queues::QueueStyle};
-use aptos_config::network_id::{NetworkContext, PeerNetworkId};
+use aptos_config::{
+    config::InboundPeerRateLimitConfig,
+    network_id::{NetworkContext, PeerNetworkId},
+};
 use aptos_logger::prelude::*;
 use aptos_netcore::transport::{ConnectionOrigin, Transport};
 use aptos_short_hex_str::AsShortHexStr;
@@ -117,6 +120,8 @@ where
     max_message_size: usize,
     /// Inbound connection limit separate of outbound connections
     inbound_connection_limit: usize,
+    /// Rate limiting configuration for inbound network traffic per peer
+    inbound_rate_limit_config: Option<InboundPeerRateLimitConfig>,
 }
 
 impl<TTransport, TSocket> PeerManager<TTransport, TSocket>
@@ -144,6 +149,7 @@ where
         max_frame_size: usize,
         max_message_size: usize,
         inbound_connection_limit: usize,
+        inbound_rate_limit_config: Option<InboundPeerRateLimitConfig>,
     ) -> Self {
         let (transport_notifs_tx, transport_notifs_rx) = aptos_channels::new(
             channel_size,
@@ -185,6 +191,7 @@ where
             max_frame_size,
             max_message_size,
             inbound_connection_limit,
+            inbound_rate_limit_config,
         }
     }
 
@@ -662,6 +669,15 @@ where
             Some(&counters::PENDING_NETWORK_REQUESTS),
         );
 
+        // Build a per-peer inbound throttle if the config is present
+        let inbound_throttle = self.inbound_rate_limit_config.as_ref().and_then(|config| {
+            PeerInboundThrottle::new(
+                config.inbound_messages_per_second,
+                config.inbound_bytes_per_second,
+                self.time_service.clone(),
+            )
+        });
+
         // Initialize a new Peer actor for this connection.
         let peer = Peer::new(
             self.network_context,
@@ -676,6 +692,7 @@ where
             constants::MAX_CONCURRENT_OUTBOUND_RPCS,
             self.max_frame_size,
             self.max_message_size,
+            inbound_throttle,
         );
         self.executor.spawn(peer.start());
 

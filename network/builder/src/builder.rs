@@ -85,6 +85,7 @@ impl NetworkBuilder {
         network_channel_size: usize,
         inbound_connection_limit: usize,
         tcp_buffer_cfg: TCPBufferCfg,
+        inbound_peer_rate_limit_config: Option<aptos_config::config::InboundPeerRateLimitConfig>,
     ) -> Self {
         // A network cannot exist without a PeerManager
         // TODO:  construct this in create and pass it to new() as a parameter. The complication is manual construction of NetworkBuilder in various tests.
@@ -101,6 +102,7 @@ impl NetworkBuilder {
             enable_proxy_protocol,
             inbound_connection_limit,
             tcp_buffer_cfg,
+            inbound_peer_rate_limit_config,
         );
 
         NetworkBuilder {
@@ -140,6 +142,7 @@ impl NetworkBuilder {
             NETWORK_CHANNEL_SIZE,
             MAX_INBOUND_CONNECTIONS,
             TCPBufferCfg::default(),
+            None, /* inbound_peer_rate_limit_config */
         );
 
         builder.add_connectivity_manager(
@@ -195,6 +198,7 @@ impl NetworkBuilder {
                 config.outbound_rx_buffer_size_bytes,
                 config.outbound_tx_buffer_size_bytes,
             ),
+            config.inbound_peer_rate_limit_config.clone(),
         );
 
         network_builder.add_connection_monitoring(

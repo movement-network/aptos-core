@@ -21,6 +21,7 @@ use crate::{
         DECLINED_LABEL, FAILED_LABEL, RECEIVED_LABEL, SENT_LABEL, UNKNOWN_LABEL,
     },
     logging::NetworkSchema,
+    peer::inbound_throttle::PeerInboundThrottle,
     peer_manager::{PeerManagerError, TransportNotification},
     protocols::{
         direct_send::Message,
@@ -61,6 +62,8 @@ mod test;
 
 #[cfg(any(test, feature = "fuzzing"))]
 pub mod fuzzing;
+
+pub(crate) mod inbound_throttle;
 
 /// Requests [`Peer`] receives from the [`PeerManager`](crate::peer_manager::PeerManager).
 #[derive(Debug)]
@@ -138,6 +141,8 @@ pub struct Peer<TSocket> {
     max_message_size: usize,
     /// Inbound stream buffer
     inbound_stream: InboundStreamBuffer,
+    /// Optional per-peer inbound rate limiter
+    inbound_throttle: Option<PeerInboundThrottle>,
 }
 
 impl<TSocket> Peer<TSocket>
@@ -160,6 +165,7 @@ where
         max_concurrent_outbound_rpcs: u32,
         max_frame_size: usize,
         max_message_size: usize,
+        inbound_throttle: Option<PeerInboundThrottle>,
     ) -> Self {
         let Connection {
             metadata: connection_metadata,
@@ -193,6 +199,7 @@ where
             max_frame_size,
             max_message_size,
             inbound_stream: InboundStreamBuffer::new(max_fragments),
+            inbound_throttle,
         }
     }
 
@@ -253,6 +260,22 @@ where
                 maybe_message = reader.next() => {
                     match maybe_message {
                         Some(message) =>  {
+                            // Enforce per-peer inbound throttle (if configured)
+                            if let Some(throttle) = &mut self.inbound_throttle {
+                                if let Err(err) = throttle.check_and_wait(&message).await {
+                                    warn!(
+                                        NetworkSchema::new(&self.network_context)
+                                            .connection_metadata(&self.connection_metadata),
+                                        error = %err,
+                                        "{} Inbound message from peer {} rejected by throttle, dropping.",
+                                        self.network_context,
+                                        remote_peer_id.short_str(),
+                                    );
+                                    continue;
+                                }
+                            }
+
+                            // Handle the inbound message
                             if let Err(err) = self.handle_inbound_message(message, &mut write_reqs_tx) {
                                 warn!(
                                     NetworkSchema::new(&self.network_context)

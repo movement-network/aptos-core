@@ -681,3 +681,37 @@ pub fn inbound_queue_delay_observe(protocol_id: ProtocolId, seconds: f64) {
         .with_label_values(&[protocol_id.as_str()])
         .observe(seconds)
 }
+
+/// Number of inbound messages delayed by the per-peer throttle
+pub static APTOS_NETWORK_PEER_THROTTLE_DELAYED_TOTAL: Lazy<IntCounterVec> =
+    Lazy::new(|| {
+        register_int_counter_vec!(
+            "aptos_network_peer_throttle_delayed_total",
+            "Inbound messages delayed by per-peer throttle, by bucket kind",
+            &["bucket"]
+        )
+        .unwrap()
+    });
+
+pub fn inc_peer_throttle_delayed(bucket_label: &str) {
+    APTOS_NETWORK_PEER_THROTTLE_DELAYED_TOTAL
+        .with_label_values(&[bucket_label])
+        .inc();
+}
+
+/// Number of inbound messages dropped because they exceed the per-peer throttle capacity
+pub static APTOS_NETWORK_PEER_THROTTLE_REJECTED_TOTAL: Lazy<IntCounterVec> =
+    Lazy::new(|| {
+        register_int_counter_vec!(
+            "aptos_network_peer_throttle_rejected_total",
+            "Inbound messages dropped because they exceed per-peer throttle capacity",
+            &["bucket"]
+        )
+        .unwrap()
+    });
+
+pub fn inc_peer_throttle_rejected(bucket_label: &str) {
+    APTOS_NETWORK_PEER_THROTTLE_REJECTED_TOTAL
+        .with_label_values(&[bucket_label])
+        .inc();
+}

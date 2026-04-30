@@ -1550,6 +1550,16 @@ module aptos_framework::fungible_asset {
         assert!(!is_asset_type_dispatchable(metadata), 1);
     }
 
+    #[test(creator = @0xcafe)]
+    fun test_is_asset_type_dispatchable_true_with_derived_supply(creator: &signer) {
+        let (creator_ref, token_object) = create_test_token(creator);
+        init_test_metadata(&creator_ref);
+        let metadata = object::convert<TestToken, Metadata>(token_object);
+        assert!(!is_asset_type_dispatchable(metadata), 1);
+        register_derive_supply_dispatch_function(&creator_ref, option::none());
+        assert!(is_asset_type_dispatchable(metadata), 2);
+    }
+
     #[test(creator = @0xcafe, aaron = @0xface)]
     fun test_e2e_basic_flow(
         creator: &signer,

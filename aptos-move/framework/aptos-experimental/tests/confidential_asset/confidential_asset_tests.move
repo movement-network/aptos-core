@@ -487,7 +487,7 @@ module aptos_experimental::confidential_asset_tests {
         let (auditor2_dk, auditor2_ek) = generate_twisted_elgamal_keypair();
 
         confidential_asset::set_asset_auditor(
-            &aptos_fx,
+            &fa,
             token,
             twisted_elgamal::pubkey_to_bytes(&auditor1_ek));
 
@@ -540,7 +540,7 @@ module aptos_experimental::confidential_asset_tests {
         let (auditor2_dk, auditor2_ek) = generate_twisted_elgamal_keypair();
 
         confidential_asset::set_asset_auditor(
-            &aptos_fx,
+            &fa,
             token,
             twisted_elgamal::pubkey_to_bytes(&auditor1_ek));
 
@@ -604,7 +604,7 @@ module aptos_experimental::confidential_asset_tests {
         let (_, auditor2_ek) = generate_twisted_elgamal_keypair();
 
         confidential_asset::set_asset_auditor(
-            &aptos_fx,
+            &fa,
             token,
             twisted_elgamal::pubkey_to_bytes(&auditor1_ek));
 
@@ -856,13 +856,13 @@ module aptos_experimental::confidential_asset_tests {
         // --- set_asset_auditor emits AssetAuditorChanged with bumped epoch ---
         let (_, auditor_ek) = generate_twisted_elgamal_keypair();
         confidential_asset::set_asset_auditor(
-            &aptos_fx,
+            &fa,
             token,
             twisted_elgamal::pubkey_to_bytes(&auditor_ek));
         confidential_asset::assert_last_asset_auditor_changed_event(token, 1);
 
         // clear asset auditor — still bumps epoch and emits the event
-        confidential_asset::set_asset_auditor(&aptos_fx, token, b"");
+        confidential_asset::set_asset_auditor(&fa, token, b"");
         confidential_asset::assert_last_asset_auditor_changed_event(token, 2);
 
         // --- set_chain_auditor emits ChainAuditorChanged ---
@@ -1222,7 +1222,7 @@ module aptos_experimental::confidential_asset_tests {
         let (alice_dk, alice_ek) = generate_twisted_elgamal_keypair();
         let (_, bob_ek) = generate_twisted_elgamal_keypair();
         let (_, asset_aud_ek) = generate_twisted_elgamal_keypair();
-        confidential_asset::set_asset_auditor(&aptos_fx, token,
+        confidential_asset::set_asset_auditor(&fa, token,
             twisted_elgamal::pubkey_to_bytes(&asset_aud_ek));
         confidential_asset::register_for_testing(&alice, token, twisted_elgamal::pubkey_to_bytes(&alice_ek));
         confidential_asset::register_for_testing(&bob, token, twisted_elgamal::pubkey_to_bytes(&bob_ek));
@@ -1340,15 +1340,215 @@ module aptos_experimental::confidential_asset_tests {
         // Asset auditor history is independent. Set, rotate, clear.
         let (_, asset_ek1) = generate_twisted_elgamal_keypair();
         let (_, asset_ek2) = generate_twisted_elgamal_keypair();
-        confidential_asset::set_asset_auditor(&aptos_fx, token, twisted_elgamal::pubkey_to_bytes(&asset_ek1));
+        confidential_asset::set_asset_auditor(&fa, token, twisted_elgamal::pubkey_to_bytes(&asset_ek1));
         assert!(confidential_asset::get_asset_auditor_epoch(token) == 1, 5);
-        confidential_asset::set_asset_auditor(&aptos_fx, token, twisted_elgamal::pubkey_to_bytes(&asset_ek2));
+        confidential_asset::set_asset_auditor(&fa, token, twisted_elgamal::pubkey_to_bytes(&asset_ek2));
         assert!(confidential_asset::get_asset_auditor_epoch(token) == 2, 6);
-        confidential_asset::set_asset_auditor(&aptos_fx, token, b"");
+        confidential_asset::set_asset_auditor(&fa, token, b"");
         assert!(confidential_asset::get_asset_auditor_epoch(token) == 3, 7);
         // History contains both prior keys; after the clear there is no active asset auditor.
         let asset_hist = confidential_asset::get_asset_auditor_history(token);
         assert!(asset_hist.length() == 2, 8);
         assert!(confidential_asset::get_asset_auditor(token).is_none(), 9);
+    }
+
+    // ============================================================================
+    // Asset auditor authorization tests
+    //
+    // `set_asset_auditor` is gated by `object::root_owner(token) == signer::address_of(issuer)`.
+    // For framework-managed FAs (root = @0x1) only governance qualifies; for issuer-deployed
+    // FAs the account at the top of the metadata object's ownership chain qualifies — even
+    // if there are intermediate object owners (the USDCX-style "contract object owns FA,
+    // multisig owns contract" pattern).
+    // ============================================================================
+
+    /// Helper: chain auditor + module init + features, without minting or creating an FA.
+    /// Tests below create their own FA with custom ownership chains.
+    fun set_up_chain_only(confidential_asset: &signer, aptos_fx: &signer) {
+        chain_id::initialize_for_test(aptos_fx, 4);
+        confidential_asset::init_module_for_testing(confidential_asset);
+        features::change_feature_flags_for_testing(
+            aptos_fx, vector[features::get_bulletproofs_feature()], vector[]
+        );
+        let (_, chain_ek) = generate_twisted_elgamal_keypair();
+        confidential_asset::set_chain_auditor(aptos_fx, twisted_elgamal::pubkey_to_bytes(&chain_ek));
+    }
+
+    /// Helper: create a fresh FA owned directly by `creator_addr`.
+    fun create_fa_owned_by(creator_addr: address): Object<Metadata> {
+        let ctor_ref = &object::create_sticky_object(creator_addr);
+        primary_fungible_store::create_primary_store_enabled_fungible_asset(
+            ctor_ref,
+            option::none(),
+            utf8(b"MockToken"),
+            utf8(b"MT"),
+            18,
+            utf8(b"https://"),
+            utf8(b"https://"),
+        );
+        object::object_from_constructor_ref<Metadata>(ctor_ref)
+    }
+
+    #[test(
+        confidential_asset = @aptos_experimental,
+        aptos_fx = @aptos_framework,
+        fa = @0xfa,
+        alice = @0xa1
+    )]
+    /// Direct-ownership case: the FA creator is the root owner of the metadata object,
+    /// so they can rotate the asset auditor. Mirrors the issuer-deployed FA shape where
+    /// no intermediate object sits between the issuer account and the FA.
+    fun success_set_asset_auditor_by_direct_root_owner(
+        confidential_asset: signer, aptos_fx: signer, fa: signer, alice: signer)
+    {
+        set_up_chain_only(&confidential_asset, &aptos_fx);
+        let token = create_fa_owned_by(signer::address_of(&fa));
+
+        // Sanity: direct owner == root owner == fa.
+        assert!(object::owner(token) == signer::address_of(&fa), 1);
+        assert!(object::root_owner(token) == signer::address_of(&fa), 2);
+
+        let (_, ek) = generate_twisted_elgamal_keypair();
+        confidential_asset::set_asset_auditor(&fa, token, twisted_elgamal::pubkey_to_bytes(&ek));
+        assert!(confidential_asset::get_asset_auditor_epoch(token) == 1, 3);
+        assert!(confidential_asset::get_asset_auditor(token).is_some(), 4);
+
+        // Silence unused-binding warning for `alice` (kept in the test signature so the
+        // address space matches sibling tests).
+        let _ = alice;
+    }
+
+    #[test(
+        confidential_asset = @aptos_experimental,
+        aptos_fx = @aptos_framework,
+        fa = @0xfa,
+        alice = @0xa1
+    )]
+    #[expected_failure(abort_code = 0x50016, location = confidential_asset)]
+    /// Negative: a non-owner signer is rejected. `alice` did not create the FA and is not
+    /// in the ownership chain, so root_owner != alice and the call aborts with
+    /// `ENOT_ASSET_ISSUER` (0x16) under permission_denied (category 5).
+    fun fail_set_asset_auditor_if_not_root_owner(
+        confidential_asset: signer, aptos_fx: signer, fa: signer, alice: signer)
+    {
+        set_up_chain_only(&confidential_asset, &aptos_fx);
+        let token = create_fa_owned_by(signer::address_of(&fa));
+
+        let (_, ek) = generate_twisted_elgamal_keypair();
+        // Alice is not the root owner — must abort.
+        confidential_asset::set_asset_auditor(&alice, token, twisted_elgamal::pubkey_to_bytes(&ek));
+    }
+
+    #[test(
+        confidential_asset = @aptos_experimental,
+        aptos_fx = @aptos_framework,
+        fa = @0xfa,
+        alice = @0xa1
+    )]
+    #[expected_failure(abort_code = 0x50016, location = confidential_asset)]
+    /// Negative: governance cannot rotate the auditor of an issuer-deployed FA. This is
+    /// the intended authorization shift — `aptos_framework` no longer has implicit
+    /// authority over per-asset auditors; only the FA's root owner does.
+    fun fail_set_asset_auditor_by_aptos_framework_for_issuer_fa(
+        confidential_asset: signer, aptos_fx: signer, fa: signer, alice: signer)
+    {
+        set_up_chain_only(&confidential_asset, &aptos_fx);
+        let token = create_fa_owned_by(signer::address_of(&fa));
+
+        let (_, ek) = generate_twisted_elgamal_keypair();
+        // root_owner(token) == @0xfa, signer::address_of(&aptos_fx) == @0x1 — mismatch.
+        confidential_asset::set_asset_auditor(&aptos_fx, token, twisted_elgamal::pubkey_to_bytes(&ek));
+
+        let _ = (fa, alice);
+    }
+
+    #[test(
+        confidential_asset = @aptos_experimental,
+        aptos_fx = @aptos_framework,
+        alice = @0xa1
+    )]
+    /// Framework-managed FA: when the FA is created with `@aptos_framework` (= @0x1) as
+    /// the creator, root_owner returns @0x1 and only governance — via the
+    /// `aptos_framework` signer — can rotate the auditor. Models a canonical framework
+    /// FA like APT at @0xa.
+    fun success_set_asset_auditor_for_framework_fa(
+        confidential_asset: signer, aptos_fx: signer, alice: signer)
+    {
+        set_up_chain_only(&confidential_asset, &aptos_fx);
+        // Framework FA: creator is @aptos_framework, so root_owner == @0x1.
+        let token = create_fa_owned_by(@aptos_framework);
+
+        assert!(object::root_owner(token) == @aptos_framework, 1);
+
+        let (_, ek) = generate_twisted_elgamal_keypair();
+        confidential_asset::set_asset_auditor(&aptos_fx, token, twisted_elgamal::pubkey_to_bytes(&ek));
+        assert!(confidential_asset::get_asset_auditor_epoch(token) == 1, 2);
+
+        let _ = alice;
+    }
+
+    #[test(
+        confidential_asset = @aptos_experimental,
+        aptos_fx = @aptos_framework,
+        multisig = @0x9001,
+        alice = @0xa1
+    )]
+    /// Nested-ownership case (USDCX shape): a "contract object" sits between the multisig
+    /// issuer and the FA metadata object. `object::root_owner` walks the chain through
+    /// the contract object to the multisig at the top, so the multisig can call
+    /// `set_asset_auditor` directly without needing the contract's ExtendRef wrapper.
+    fun success_set_asset_auditor_via_nested_object_chain(
+        confidential_asset: signer, aptos_fx: signer, multisig: signer, alice: signer)
+    {
+        set_up_chain_only(&confidential_asset, &aptos_fx);
+
+        // Build the chain: multisig -> contract_obj -> fa_metadata_obj.
+        let contract_ctor = object::create_sticky_object(signer::address_of(&multisig));
+        let contract_signer = object::generate_signer(&contract_ctor);
+        let contract_addr = signer::address_of(&contract_signer);
+
+        let token = create_fa_owned_by(contract_addr);
+
+        // Direct owner is the contract object; root walks past it to the multisig.
+        assert!(object::owner(token) == contract_addr, 1);
+        assert!(object::root_owner(token) == signer::address_of(&multisig), 2);
+
+        // Multisig (root) can rotate directly.
+        let (_, ek) = generate_twisted_elgamal_keypair();
+        confidential_asset::set_asset_auditor(&multisig, token, twisted_elgamal::pubkey_to_bytes(&ek));
+        assert!(confidential_asset::get_asset_auditor_epoch(token) == 1, 3);
+
+        let _ = alice;
+    }
+
+    #[test(
+        confidential_asset = @aptos_experimental,
+        aptos_fx = @aptos_framework,
+        multisig = @0x9001,
+        alice = @0xa1
+    )]
+    #[expected_failure(abort_code = 0x50016, location = confidential_asset)]
+    /// Nested-ownership negative: the *intermediate* object signer (the contract object
+    /// directly above the FA) is not the root owner and is rejected. Only the account at
+    /// the top of the chain has authority.
+    fun fail_set_asset_auditor_by_intermediate_object_in_chain(
+        confidential_asset: signer, aptos_fx: signer, multisig: signer, alice: signer)
+    {
+        set_up_chain_only(&confidential_asset, &aptos_fx);
+
+        let contract_ctor = object::create_sticky_object(signer::address_of(&multisig));
+        let contract_signer = object::generate_signer(&contract_ctor);
+        let contract_addr = signer::address_of(&contract_signer);
+
+        let token = create_fa_owned_by(contract_addr);
+
+        // The contract-object signer is the *direct* owner but not the *root* owner —
+        // root_owner walks past it to the multisig — so this must abort.
+        let (_, ek) = generate_twisted_elgamal_keypair();
+        confidential_asset::set_asset_auditor(
+            &contract_signer, token, twisted_elgamal::pubkey_to_bytes(&ek)
+        );
+
+        let _ = alice;
     }
 }

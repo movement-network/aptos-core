@@ -97,6 +97,11 @@ module aptos_experimental::confidential_asset {
     /// covering every confidential asset on the chain.
     const ECHAIN_AUDITOR_NOT_SET: u64 = 21;
 
+    /// The signer is not authorized to update the asset auditor for this token. The asset
+    /// auditor can only be updated by the root owner of the FA metadata object (see
+    /// [`set_asset_auditor`]).
+    const ENOT_ASSET_ISSUER: u64 = 22;
+
     //
     // Constants
     //
@@ -210,10 +215,13 @@ module aptos_experimental::confidential_asset {
         /// key at `auditor_eks[1]` (immediately after the chain-level auditor at
         /// `auditor_eks[0]`).
         ///
-        /// Asset auditors are appointed by governance on a case-by-case basis for assets
-        /// with specific regulatory obligations (e.g. a stablecoin with a banking
-        /// regulator, or a tokenized security). They are *additive* to the chain-level
-        /// auditor, not a substitute.
+        /// Asset auditors are appointed by the asset issuer on a case-by-case basis for
+        /// assets with specific regulatory obligations (e.g. a stablecoin with a banking
+        /// regulator, or a tokenized security). The "issuer" is the root owner of the FA
+        /// metadata object — for framework-managed FAs (root = `@0x1`) this is governance
+        /// via the `aptos_framework` signer; for issuer-deployed FAs it is the account
+        /// (or multisig) at the top of the metadata object's ownership chain. Asset
+        /// auditors are *additive* to the chain-level auditor, not a substitute.
         asset_auditor_ek: Option<twisted_elgamal::CompressedPubkey>,
 
         /// Monotonic counter, incremented on every successful [`set_asset_auditor`] call.
@@ -728,12 +736,23 @@ module aptos_experimental::confidential_asset {
     /// Fiat–Shamir transcript via the order of `auditor_eks`; rotating the asset auditor
     /// therefore invalidates any user transactions that were already signed under the old
     /// key but not yet executed. Senders must regenerate proofs against the new key.
-    public fun set_asset_auditor(
-        aptos_framework: &signer,
+    ///
+    /// **Authorization.** Callable by the root owner of `token`'s metadata object — i.e.
+    /// the account at the top of the object ownership chain (walked via
+    /// [`object::root_owner`]). For framework-managed FAs whose root owner is `@0x1`,
+    /// this is governance acting through the `aptos_framework` signer. For
+    /// issuer-deployed FAs (including the common pattern where a contract object owns
+    /// the metadata and is in turn owned by a multisig), the multisig at the chain root
+    /// can call this directly. Aborts with [`ENOT_ASSET_ISSUER`] otherwise.
+    public entry fun set_asset_auditor(
+        issuer: &signer,
         token: Object<Metadata>,
         new_auditor_ek: vector<u8>) acquires FAConfig, FAController
     {
-        system_addresses::assert_aptos_framework(aptos_framework);
+        assert!(
+            object::root_owner(token) == signer::address_of(issuer),
+            error::permission_denied(ENOT_ASSET_ISSUER)
+        );
 
         let fa_config = borrow_global_mut<FAConfig>(ensure_fa_config_exists(token));
 

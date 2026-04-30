@@ -292,10 +292,13 @@ module aptos_experimental::confidential_asset_tests {
 
         features::change_feature_flags_for_testing(aptos_fx, vector[features::get_bulletproofs_feature()], vector[]);
 
-        // Every confidential transfer requires the chain-level auditor to be set, so the
-        // shared setup configures it with a deterministic-but-fresh keypair. Tests that
-        // need direct access to the chain auditor's keys can call
-        // `set_chain_auditor_for_test` themselves to override.
+        // Every confidential transfer requires the chain-level auditor to be set. Since
+        // `set_chain_auditor` is now gated on the chain-auditor admin (governance does
+        // *not* hold rotation authority directly), governance first delegates the admin
+        // role to `aptos_fx` itself in tests so the shared setup can install a fresh key
+        // without standing up a separate admin account. Tests that exercise the
+        // governance-vs-admin separation install their own admin.
+        confidential_asset::set_chain_auditor_admin(aptos_fx, signer::address_of(aptos_fx));
         let (_chain_dk, chain_ek) = generate_twisted_elgamal_keypair();
         confidential_asset::set_chain_auditor(aptos_fx, twisted_elgamal::pubkey_to_bytes(&chain_ek));
 
@@ -1370,6 +1373,7 @@ module aptos_experimental::confidential_asset_tests {
         features::change_feature_flags_for_testing(
             aptos_fx, vector[features::get_bulletproofs_feature()], vector[]
         );
+        confidential_asset::set_chain_auditor_admin(aptos_fx, signer::address_of(aptos_fx));
         let (_, chain_ek) = generate_twisted_elgamal_keypair();
         confidential_asset::set_chain_auditor(aptos_fx, twisted_elgamal::pubkey_to_bytes(&chain_ek));
     }
@@ -1459,7 +1463,8 @@ module aptos_experimental::confidential_asset_tests {
         // root_owner(token) == @0xfa, signer::address_of(&aptos_fx) == @0x1 — mismatch.
         confidential_asset::set_asset_auditor(&aptos_fx, token, twisted_elgamal::pubkey_to_bytes(&ek));
 
-        let _ = (fa, alice);
+        let _ = fa;
+        let _ = alice;
     }
 
     #[test(
@@ -1550,5 +1555,189 @@ module aptos_experimental::confidential_asset_tests {
         );
 
         let _ = alice;
+    }
+
+    // ============================================================================
+    // Chain-auditor admin authorization tests
+    //
+    // Movement governance does NOT directly hold rotation authority over the chain-level
+    // auditor key. Instead, governance designates a chain-auditor admin account via
+    // `set_chain_auditor_admin`, and only that account may subsequently call
+    // `set_chain_auditor`.
+    //
+    // The shared `set_up_for_confidential_asset_test` helper papers over this by
+    // designating `aptos_fx` itself as the admin so other tests don't need to know the
+    // detail; the tests below stand up their own state (no shared setup) to exercise the
+    // authorization boundary directly.
+    // ============================================================================
+
+    /// Helper: minimal init without setting the chain-auditor admin or the chain auditor
+    /// itself, so admin-related tests can exercise the bootstrap path explicitly.
+    fun set_up_chain_admin_test(confidential_asset: &signer, aptos_fx: &signer) {
+        chain_id::initialize_for_test(aptos_fx, 4);
+        confidential_asset::init_module_for_testing(confidential_asset);
+        features::change_feature_flags_for_testing(
+            aptos_fx, vector[features::get_bulletproofs_feature()], vector[]
+        );
+    }
+
+    #[test(
+        confidential_asset = @aptos_experimental,
+        aptos_fx = @aptos_framework,
+        ca_admin = @0xCA
+    )]
+    /// Happy path: governance designates a chain-auditor admin, that admin then sets the
+    /// chain auditor. Verifies the admin view, the emitted admin-changed event, and that
+    /// the chain auditor key actually lands.
+    fun success_set_chain_auditor_by_designated_admin(
+        confidential_asset: signer, aptos_fx: signer, ca_admin: signer)
+    {
+        set_up_chain_admin_test(&confidential_asset, &aptos_fx);
+
+        // Admin starts unset.
+        assert!(confidential_asset::get_chain_auditor_admin().is_none(), 1);
+
+        // Governance designates ca_admin.
+        let ca_admin_addr = signer::address_of(&ca_admin);
+        confidential_asset::set_chain_auditor_admin(&aptos_fx, ca_admin_addr);
+        assert!(confidential_asset::get_chain_auditor_admin() == option::some(ca_admin_addr), 2);
+        confidential_asset::assert_last_chain_auditor_admin_changed_event(ca_admin_addr);
+
+        // Designated admin can install a chain auditor.
+        let (_, chain_ek) = generate_twisted_elgamal_keypair();
+        confidential_asset::set_chain_auditor(&ca_admin, twisted_elgamal::pubkey_to_bytes(&chain_ek));
+        assert!(confidential_asset::get_chain_auditor_epoch() == 1, 3);
+        assert!(confidential_asset::get_chain_auditor().is_some(), 4);
+    }
+
+    #[test(
+        confidential_asset = @aptos_experimental,
+        aptos_fx = @aptos_framework,
+        ca_admin = @0xCA
+    )]
+    /// Admin rotation: governance can hand the role to a successor account. The previous
+    /// admin loses authority; the new admin gains it.
+    fun success_chain_auditor_admin_rotation(
+        confidential_asset: signer, aptos_fx: signer, ca_admin: signer)
+    {
+        set_up_chain_admin_test(&confidential_asset, &aptos_fx);
+        let ca_admin_addr = signer::address_of(&ca_admin);
+        confidential_asset::set_chain_auditor_admin(&aptos_fx, ca_admin_addr);
+
+        // Rotate admin to a fresh address.
+        let new_admin_addr = @0xCAFE;
+        confidential_asset::set_chain_auditor_admin(&aptos_fx, new_admin_addr);
+        assert!(confidential_asset::get_chain_auditor_admin() == option::some(new_admin_addr), 1);
+        confidential_asset::assert_last_chain_auditor_admin_changed_event(new_admin_addr);
+
+        let _ = ca_admin;
+    }
+
+    #[test(
+        confidential_asset = @aptos_experimental,
+        aptos_fx = @aptos_framework,
+        not_gov = @0x9999
+    )]
+    #[expected_failure(abort_code = 0x50003, location = aptos_framework::system_addresses)]
+    /// Negative: only governance can designate the chain-auditor admin. A non-governance
+    /// signer hits `assert_aptos_framework` and aborts with the framework's standard
+    /// permission_denied code (0x50003).
+    fun fail_set_chain_auditor_admin_by_non_governance(
+        confidential_asset: signer, aptos_fx: signer, not_gov: signer)
+    {
+        set_up_chain_admin_test(&confidential_asset, &aptos_fx);
+        confidential_asset::set_chain_auditor_admin(&not_gov, @0xCA);
+    }
+
+    #[test(
+        confidential_asset = @aptos_experimental,
+        aptos_fx = @aptos_framework
+    )]
+    #[expected_failure(abort_code = 0x30017, location = confidential_asset)]
+    /// Negative bootstrap: before governance has assigned an admin, no one — not even
+    /// governance itself — can set the chain auditor. Aborts with
+    /// `ECHAIN_AUDITOR_ADMIN_NOT_SET` (0x17) under invalid_state (category 3).
+    fun fail_set_chain_auditor_when_admin_not_set(
+        confidential_asset: signer, aptos_fx: signer)
+    {
+        set_up_chain_admin_test(&confidential_asset, &aptos_fx);
+
+        let (_, chain_ek) = generate_twisted_elgamal_keypair();
+        confidential_asset::set_chain_auditor(&aptos_fx, twisted_elgamal::pubkey_to_bytes(&chain_ek));
+    }
+
+    #[test(
+        confidential_asset = @aptos_experimental,
+        aptos_fx = @aptos_framework,
+        ca_admin = @0xCA
+    )]
+    #[expected_failure(abort_code = 0x50018, location = confidential_asset)]
+    /// The separation property: once governance has designated a separate admin,
+    /// governance itself can no longer rotate the chain auditor. Aborts with
+    /// `ENOT_CHAIN_AUDITOR_ADMIN` (0x18) under permission_denied.
+    fun fail_set_chain_auditor_by_governance_when_admin_is_separate(
+        confidential_asset: signer, aptos_fx: signer, ca_admin: signer)
+    {
+        set_up_chain_admin_test(&confidential_asset, &aptos_fx);
+        confidential_asset::set_chain_auditor_admin(&aptos_fx, signer::address_of(&ca_admin));
+
+        let (_, chain_ek) = generate_twisted_elgamal_keypair();
+        // aptos_fx (governance) is no longer the admin — must abort.
+        confidential_asset::set_chain_auditor(&aptos_fx, twisted_elgamal::pubkey_to_bytes(&chain_ek));
+
+        let _ = ca_admin;
+    }
+
+    #[test(
+        confidential_asset = @aptos_experimental,
+        aptos_fx = @aptos_framework,
+        ca_admin = @0xCA,
+        stranger = @0x1234
+    )]
+    #[expected_failure(abort_code = 0x50018, location = confidential_asset)]
+    /// Negative: an arbitrary third party who is neither governance nor the designated
+    /// admin cannot rotate the chain auditor.
+    fun fail_set_chain_auditor_by_stranger(
+        confidential_asset: signer, aptos_fx: signer, ca_admin: signer, stranger: signer)
+    {
+        set_up_chain_admin_test(&confidential_asset, &aptos_fx);
+        confidential_asset::set_chain_auditor_admin(&aptos_fx, signer::address_of(&ca_admin));
+
+        let (_, chain_ek) = generate_twisted_elgamal_keypair();
+        confidential_asset::set_chain_auditor(&stranger, twisted_elgamal::pubkey_to_bytes(&chain_ek));
+
+        let _ = ca_admin;
+    }
+
+    #[test(
+        confidential_asset = @aptos_experimental,
+        aptos_fx = @aptos_framework,
+        ca_admin1 = @0xCA1,
+        ca_admin2 = @0xCA2
+    )]
+    #[expected_failure(abort_code = 0x50018, location = confidential_asset)]
+    /// Rotation revokes the prior admin: after governance moves the role from ca_admin1
+    /// to ca_admin2, ca_admin1 loses authority.
+    fun fail_set_chain_auditor_by_revoked_admin(
+        confidential_asset: signer,
+        aptos_fx: signer,
+        ca_admin1: signer,
+        ca_admin2: signer)
+    {
+        set_up_chain_admin_test(&confidential_asset, &aptos_fx);
+        confidential_asset::set_chain_auditor_admin(&aptos_fx, signer::address_of(&ca_admin1));
+
+        // ca_admin1 sets a key successfully.
+        let (_, ek1) = generate_twisted_elgamal_keypair();
+        confidential_asset::set_chain_auditor(&ca_admin1, twisted_elgamal::pubkey_to_bytes(&ek1));
+
+        // Governance rotates the admin role away from ca_admin1.
+        confidential_asset::set_chain_auditor_admin(&aptos_fx, signer::address_of(&ca_admin2));
+
+        // The former admin tries to rotate again — must abort.
+        let (_, ek2) = generate_twisted_elgamal_keypair();
+        confidential_asset::set_chain_auditor(&ca_admin1, twisted_elgamal::pubkey_to_bytes(&ek2));
+
+        let _ = ca_admin2;
     }
 }

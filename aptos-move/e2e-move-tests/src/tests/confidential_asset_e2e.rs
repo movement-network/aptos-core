@@ -13,7 +13,7 @@
 // `0x1::event` from the same compile graph as `aptos-experimental` so `event::emitted_events` matches
 // `confidential_asset` (genesis `event` bytecode can lag). It also injects every `0x7` module from that
 // experimental build. Genesis already publishes
-// `FAController` for an older bytecode revision; we delete that resource and re-run
+// `GlobalConfig` for an older bytecode revision; we delete that resource and re-run
 // `init_module_for_testing` so on-disk layout matches the injected `confidential_asset` module.
 
 use crate::{tests::common::framework_dir_path, MoveHarness};
@@ -279,13 +279,13 @@ fn bypass_at(
         .unwrap_or_else(|e| panic!("bypass {module}::{fun}: {e:?}"))
 }
 
-/// Genesis `head` publishes `FAController` for bytecode that may differ from the injected module;
+/// Genesis `head` publishes `GlobalConfig` for bytecode that may differ from the injected module;
 /// remove it so `init_module` can republish with a matching layout.
-fn delete_genesis_fa_controller_if_present(h: &mut MoveHarness) {
+fn delete_genesis_global_config_if_present(h: &mut MoveHarness) {
     let tag = StructTag {
         address: APTOS_EXPERIMENTAL,
         module: Identifier::new("confidential_asset").unwrap(),
-        name: Identifier::new("FAController").unwrap(),
+        name: Identifier::new("GlobalConfig").unwrap(),
         type_args: vec![],
     };
     let key = StateKey::resource(&APTOS_EXPERIMENTAL, &tag).unwrap();
@@ -513,11 +513,33 @@ fn set_chain_auditor(h: &mut MoveHarness, auditor_pubkey_32: &[u8]) {
     );
 }
 
+/// Designates `admin_addr` as the chain-auditor admin (governance-only path). Required
+/// before `set_chain_auditor` will accept the corresponding signer; governance no longer
+/// holds chain-auditor authority directly.
+fn set_chain_auditor_admin(h: &mut MoveHarness, admin_addr: AccountAddress) {
+    let args = vec![
+        MoveValue::Signer(AccountAddress::ONE)
+            .simple_serialize()
+            .unwrap(),
+        bcs::to_bytes(&admin_addr).unwrap(),
+    ];
+    bypass_at(
+        h,
+        "confidential_asset",
+        "set_chain_auditor_admin",
+        vec![],
+        args,
+    );
+}
+
 /// Generates a fresh chain auditor keypair and installs it via `set_chain_auditor`.
 /// Used by `fresh_harness` so every confidential transfer in the test suite has a
 /// valid `auditor_eks[0]` available; tests that need to exercise rotation can call
-/// this again to install a successor.
+/// this again to install a successor. Designates `@0x1` as the chain-auditor admin so
+/// the bypass path can subsequently invoke `set_chain_auditor` with the framework
+/// signer; production deployments would point this at a dedicated admin account.
 fn install_default_chain_auditor(h: &mut MoveHarness) {
+    set_chain_auditor_admin(h, AccountAddress::ONE);
     let (_chain_dk, chain_ek) = generate_elgamal_keypair(h);
     let chain_pk = twisted_pubkey_bytes(h, &chain_ek);
     set_chain_auditor(h, &chain_pk);
@@ -888,12 +910,12 @@ fn profile_gas(
 fn fresh_harness() -> MoveHarness {
     let mut h = MoveHarness::new();
     enable_confidential_features(&mut h);
-    delete_genesis_fa_controller_if_present(&mut h);
+    delete_genesis_global_config_if_present(&mut h);
     inject_confidential_e2e_modules(&mut h);
     reinit_confidential_asset_module(&mut h);
     // Every confidential transfer requires a chain-level auditor; install a deterministic
     // throwaway one here so individual tests don't need to know about it. Tests that
-    // exercise the unset state should call `delete_genesis_fa_controller_if_present` +
+    // exercise the unset state should call `delete_genesis_global_config_if_present` +
     // `reinit_confidential_asset_module` themselves to get a clean slate.
     install_default_chain_auditor(&mut h);
     h
@@ -1109,7 +1131,7 @@ fn confidential_transfer_rejects_non_matching_asset_auditor_pubkey() {
 fn fresh_harness_no_chain_auditor() -> MoveHarness {
     let mut h = MoveHarness::new();
     enable_confidential_features(&mut h);
-    delete_genesis_fa_controller_if_present(&mut h);
+    delete_genesis_global_config_if_present(&mut h);
     inject_confidential_e2e_modules(&mut h);
     reinit_confidential_asset_module(&mut h);
     h

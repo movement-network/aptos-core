@@ -92,15 +92,17 @@ module aptos_experimental::confidential_asset {
     /// No confidential asset pool exists for the given asset type.
     const ENO_CONFIDENTIAL_ASSET_POOL: u64 = 20;
 
-    /// The chain-level auditor must be configured (via [`set_chain_auditor`]) before any
-    /// confidential transfer can be executed. Required as a baseline compliance guarantee
-    /// covering every confidential asset on the chain.
+    /// Chain auditor not configured; confidential transfers cannot proceed.
     const ECHAIN_AUDITOR_NOT_SET: u64 = 21;
 
-    /// The signer is not authorized to update the asset auditor for this token. The asset
-    /// auditor can only be updated by the root owner of the FA metadata object (see
-    /// [`set_asset_auditor`]).
+    /// Signer is not the FA metadata object's root owner.
     const ENOT_ASSET_ISSUER: u64 = 22;
+
+    /// Chain-auditor admin not assigned by governance.
+    const ECHAIN_AUDITOR_ADMIN_NOT_SET: u64 = 23;
+
+    /// Signer is not the configured chain-auditor admin.
+    const ENOT_CHAIN_AUDITOR_ADMIN: u64 = 24;
 
     //
     // Constants
@@ -157,10 +159,8 @@ module aptos_experimental::confidential_asset {
     }
 
     /// One entry in an auditor key history vector — used for both the chain-level auditor
-    /// (on [`FAController`]) and the per-asset auditor (on [`FAConfig`]). The history exists
-    /// for compliance reasons: U.S./EU regulations require us to be able to decrypt past
-    /// transfers for up to 7 years on demand, so when a key is rotated we record the prior
-    /// key alongside the epoch range during which it was active.
+    /// (on [`GlobalConfig`]) and the per-asset auditor (on [`FAConfig`]). Rotated keys are
+    /// retained so transfers stamped with a prior epoch can still be decrypted.
     struct AuditorEntry has store, drop, copy {
         ek: twisted_elgamal::CompressedPubkey,
         /// First epoch in which `ek` was the active auditor key. Monotonically increasing
@@ -171,8 +171,8 @@ module aptos_experimental::confidential_asset {
         deactivated_at_epoch: u64,
     }
 
-    /// Represents the controller for the primary FA stores and `FAConfig` objects.
-    struct FAController has key {
+    /// Global configuration for confidential assets: primary FA stores, `FAConfig` derivation, and chain-level auditor state.
+    struct GlobalConfig has key {
         /// Indicates whether the allow list is enabled. If `true`, only tokens from the allow list can be transferred.
         /// This flag is managed by the governance module.
         allow_list_enabled: bool,
@@ -180,26 +180,23 @@ module aptos_experimental::confidential_asset {
         /// Used to derive a signer that owns all the FAs' primary stores and `FAConfig` objects.
         extend_ref: ExtendRef,
 
-        /// The chain-level compliance auditor's encryption key. Set via [`set_chain_auditor`]
-        /// by governance. Every confidential transfer must include this key as the first
-        /// element (`auditor_eks[0]`) of its auditor list, ensuring no transfer on the chain
-        /// is fully unauditable. `None` only before the chain-level auditor has been
-        /// configured for the first time — `confidential_transfer` aborts with
-        /// [`ECHAIN_AUDITOR_NOT_SET`] in that state.
+        /// Chain-level auditor encryption key. Required at `auditor_eks[0]` on every
+        /// confidential transfer. `None` until set via [`set_chain_auditor`]; transfers
+        /// abort with [`ECHAIN_AUDITOR_NOT_SET`] in that state.
         chain_auditor_ek: Option<twisted_elgamal::CompressedPubkey>,
 
-        /// Monotonic counter, incremented on every successful [`set_chain_auditor`] call
-        /// (including clears, in which case the entry is appended to history with no
-        /// successor key). Stamped on each [`Transferred`] event so future audits can
-        /// determine which historical chain auditor key was in force at the time of
-        /// transfer and decrypt the transcript accordingly.
+        /// Account authorized to call [`set_chain_auditor`]. Set by governance via
+        /// [`set_chain_auditor_admin`]. `None` until governance assigns one, during which
+        /// window `set_chain_auditor` aborts with [`ECHAIN_AUDITOR_ADMIN_NOT_SET`].
+        chain_auditor_admin: Option<address>,
+
+        /// Bumped on every [`set_chain_auditor`] call (including clears). Stamped on each
+        /// [`Transferred`] event.
         chain_auditor_epoch: u64,
 
-        /// Append-only history of past chain auditor keys. Each entry's
-        /// `[activated_at_epoch, deactivated_at_epoch)` half-open interval describes the
-        /// range of `chain_auditor_epoch` values during which it was the active key.
-        /// Note: pre-launch this is unbounded; if rotations become frequent in production,
-        /// consider trimming or paginating.
+        /// Append-only history of chain auditor keys. Each entry's
+        /// `[activated_at_epoch, deactivated_at_epoch)` half-open interval is the range
+        /// of `chain_auditor_epoch` values during which it was active.
         chain_auditor_history: vector<AuditorEntry>,
     }
 
@@ -210,28 +207,16 @@ module aptos_experimental::confidential_asset {
         /// Can be toggled by the governance module. The withdrawals are always allowed.
         allowed: bool,
 
-        /// The asset-specific auditor's public key for the token. If unset, this field is
-        /// `None`. When set, every confidential transfer of this asset must include this
-        /// key at `auditor_eks[1]` (immediately after the chain-level auditor at
-        /// `auditor_eks[0]`).
-        ///
-        /// Asset auditors are appointed by the asset issuer on a case-by-case basis for
-        /// assets with specific regulatory obligations (e.g. a stablecoin with a banking
-        /// regulator, or a tokenized security). The "issuer" is the root owner of the FA
-        /// metadata object — for framework-managed FAs (root = `@0x1`) this is governance
-        /// via the `aptos_framework` signer; for issuer-deployed FAs it is the account
-        /// (or multisig) at the top of the metadata object's ownership chain. Asset
-        /// auditors are *additive* to the chain-level auditor, not a substitute.
+        /// Per-asset auditor encryption key. When set, required at `auditor_eks[1]` on
+        /// every transfer of this asset (additive to the chain auditor at `[0]`). Set via
+        /// [`set_asset_auditor`] by the FA metadata object's root owner.
         asset_auditor_ek: Option<twisted_elgamal::CompressedPubkey>,
 
-        /// Monotonic counter, incremented on every successful [`set_asset_auditor`] call.
-        /// Stamped on each [`Transferred`] event of this asset so future audits can map a
-        /// past transfer to the asset auditor key in force at that time. `0` while no
-        /// asset auditor has ever been set.
+        /// Bumped on every [`set_asset_auditor`] call. Stamped on each [`Transferred`]
+        /// event for this asset.
         asset_auditor_epoch: u64,
 
-        /// Append-only history of past asset auditor keys. See [`AuditorEntry`] for entry
-        /// semantics and [`FAController.chain_auditor_history`] for the sizing caveat.
+        /// Append-only history of asset auditor keys. See [`AuditorEntry`].
         asset_auditor_history: vector<AuditorEntry>,
     }
 
@@ -302,7 +287,7 @@ module aptos_experimental::confidential_asset {
         new_recip_pending_balance: confidential_balance::CompressedConfidentialBalance,
         /// Reserved memo payload for future or off-chain conventions; currently emitted as an empty `vector`.
         memo: vector<u8>,
-        /// Value of [`FAController.chain_auditor_epoch`] at the time of the transfer.
+        /// Value of [`GlobalConfig.chain_auditor_epoch`] at the time of the transfer.
         /// Required for compliance: lets future audits identify which historical
         /// chain-level auditor key was in force, so that the transcript can still be
         /// decrypted years after a key rotation.
@@ -359,9 +344,7 @@ module aptos_experimental::confidential_asset {
     }
 
     #[event]
-    /// Emitted when the asset-specific auditor is set, rotated, or cleared.
-    /// `new_epoch` is the post-change value of [`FAConfig.asset_auditor_epoch`] and matches
-    /// the value stamped on subsequent [`Transferred`] events for this asset.
+    /// Asset auditor set, rotated, or cleared.
     struct AssetAuditorChanged has drop, store {
         asset_type: address,
         new_asset_auditor_ek: Option<twisted_elgamal::CompressedPubkey>,
@@ -369,13 +352,16 @@ module aptos_experimental::confidential_asset {
     }
 
     #[event]
-    /// Emitted when the chain-level compliance auditor is set, rotated, or cleared by
-    /// governance. `new_epoch` is the post-change value of
-    /// [`FAController.chain_auditor_epoch`] and matches the value stamped on subsequent
-    /// [`Transferred`] events.
+    /// Chain auditor set, rotated, or cleared.
     struct ChainAuditorChanged has drop, store {
         new_chain_auditor_ek: Option<twisted_elgamal::CompressedPubkey>,
         new_epoch: u64,
+    }
+
+    #[event]
+    /// Chain-auditor admin assigned or rotated by governance.
+    struct ChainAuditorAdminChanged has drop, store {
+        new_admin: address,
     }
 
     //
@@ -390,14 +376,15 @@ module aptos_experimental::confidential_asset {
 
         let deployer_address = signer::address_of(deployer);
 
-        let fa_controller_ctor_ref = &object::create_object(deployer_address);
+        let global_config_ctor_ref = &object::create_object(deployer_address);
 
-        move_to(deployer, FAController {
+        move_to(deployer, GlobalConfig {
             allow_list_enabled: chain_id::get() == MAINNET_CHAIN_ID,
-            extend_ref: object::generate_extend_ref(fa_controller_ctor_ref),
+            extend_ref: object::generate_extend_ref(global_config_ctor_ref),
             chain_auditor_ek: std::option::none(),
             chain_auditor_epoch: 0,
             chain_auditor_history: vector[],
+            chain_auditor_admin: std::option::none(),
         });
     }
 
@@ -414,7 +401,7 @@ module aptos_experimental::confidential_asset {
         token: Object<Metadata>,
         ek: vector<u8>,
         registration_proof_commitment: vector<u8>,
-        registration_proof_response: vector<u8>) acquires FAController, FAConfig
+        registration_proof_response: vector<u8>) acquires GlobalConfig, FAConfig
     {
         let ek = twisted_elgamal::new_pubkey_from_bytes(ek).extract();
 
@@ -443,7 +430,7 @@ module aptos_experimental::confidential_asset {
         sender: &signer,
         token: Object<Metadata>,
         to: address,
-        amount: u64) acquires ConfidentialAssetStore, FAController, FAConfig
+        amount: u64) acquires ConfidentialAssetStore, GlobalConfig, FAConfig
     {
         deposit_to_internal(sender, token, to, amount)
     }
@@ -452,7 +439,7 @@ module aptos_experimental::confidential_asset {
     public entry fun deposit(
         sender: &signer,
         token: Object<Metadata>,
-        amount: u64) acquires ConfidentialAssetStore, FAController, FAConfig
+        amount: u64) acquires ConfidentialAssetStore, GlobalConfig, FAConfig
     {
         deposit_to_internal(sender, token, signer::address_of(sender), amount)
     }
@@ -461,7 +448,7 @@ module aptos_experimental::confidential_asset {
     public entry fun deposit_coins_to<CoinType>(
         sender: &signer,
         to: address,
-        amount: u64) acquires ConfidentialAssetStore, FAController, FAConfig
+        amount: u64) acquires ConfidentialAssetStore, GlobalConfig, FAConfig
     {
         let token = ensure_sufficient_fa<CoinType>(sender, amount).extract();
 
@@ -471,7 +458,7 @@ module aptos_experimental::confidential_asset {
     /// The same as `deposit`, but converts coins to missing FA first.
     public entry fun deposit_coins<CoinType>(
         sender: &signer,
-        amount: u64) acquires ConfidentialAssetStore, FAController, FAConfig
+        amount: u64) acquires ConfidentialAssetStore, GlobalConfig, FAConfig
     {
         let token = ensure_sufficient_fa<CoinType>(sender, amount).extract();
 
@@ -489,7 +476,7 @@ module aptos_experimental::confidential_asset {
         amount: u64,
         new_balance: vector<u8>,
         zkrp_new_balance: vector<u8>,
-        sigma_proof: vector<u8>) acquires ConfidentialAssetStore, FAController
+        sigma_proof: vector<u8>) acquires ConfidentialAssetStore, GlobalConfig
     {
         let new_balance = confidential_balance::new_actual_balance_from_bytes(new_balance).extract();
         let proof = confidential_proof::deserialize_withdrawal_proof(sigma_proof, zkrp_new_balance).extract();
@@ -504,7 +491,7 @@ module aptos_experimental::confidential_asset {
         amount: u64,
         new_balance: vector<u8>,
         zkrp_new_balance: vector<u8>,
-        sigma_proof: vector<u8>) acquires ConfidentialAssetStore, FAController
+        sigma_proof: vector<u8>) acquires ConfidentialAssetStore, GlobalConfig
     {
         withdraw_to(
             sender,
@@ -548,7 +535,7 @@ module aptos_experimental::confidential_asset {
         zkrp_new_balance: vector<u8>,
         zkrp_transfer_amount: vector<u8>,
         sigma_proof: vector<u8>,
-        sender_auditor_hint: vector<u8>) acquires ConfidentialAssetStore, FAConfig, FAController
+        sender_auditor_hint: vector<u8>) acquires ConfidentialAssetStore, FAConfig, GlobalConfig
     {
         let new_balance = confidential_balance::new_actual_balance_from_bytes(new_balance).extract();
         let sender_amount = confidential_balance::new_pending_balance_from_bytes(sender_amount).extract();
@@ -667,33 +654,33 @@ module aptos_experimental::confidential_asset {
     //
 
     /// Enables the allow list, restricting confidential transfers to tokens on the allow list.
-    public fun enable_allow_list(aptos_framework: &signer) acquires FAController {
+    public fun enable_allow_list(aptos_framework: &signer) acquires GlobalConfig {
         system_addresses::assert_aptos_framework(aptos_framework);
 
-        let fa_controller = borrow_global_mut<FAController>(@aptos_experimental);
+        let global_config = borrow_global_mut<GlobalConfig>(@aptos_experimental);
 
-        assert!(!fa_controller.allow_list_enabled, error::invalid_state(EALLOW_LIST_ENABLED));
+        assert!(!global_config.allow_list_enabled, error::invalid_state(EALLOW_LIST_ENABLED));
 
-        fa_controller.allow_list_enabled = true;
+        global_config.allow_list_enabled = true;
 
         event::emit(AllowListChanged { enabled: true });
     }
 
     /// Disables the allow list, allowing confidential transfers for all tokens.
-    public fun disable_allow_list(aptos_framework: &signer) acquires FAController {
+    public fun disable_allow_list(aptos_framework: &signer) acquires GlobalConfig {
         system_addresses::assert_aptos_framework(aptos_framework);
 
-        let fa_controller = borrow_global_mut<FAController>(@aptos_experimental);
+        let global_config = borrow_global_mut<GlobalConfig>(@aptos_experimental);
 
-        assert!(fa_controller.allow_list_enabled, error::invalid_state(EALLOW_LIST_DISABLED));
+        assert!(global_config.allow_list_enabled, error::invalid_state(EALLOW_LIST_DISABLED));
 
-        fa_controller.allow_list_enabled = false;
+        global_config.allow_list_enabled = false;
 
         event::emit(AllowListChanged { enabled: false });
     }
 
     /// Enables confidential transfers for the specified token.
-    public fun enable_token(aptos_framework: &signer, token: Object<Metadata>) acquires FAConfig, FAController {
+    public fun enable_token(aptos_framework: &signer, token: Object<Metadata>) acquires FAConfig, GlobalConfig {
         system_addresses::assert_aptos_framework(aptos_framework);
 
         let fa_config = borrow_global_mut<FAConfig>(ensure_fa_config_exists(token));
@@ -709,7 +696,7 @@ module aptos_experimental::confidential_asset {
     }
 
     /// Disables confidential transfers for the specified token.
-    public fun disable_token(aptos_framework: &signer, token: Object<Metadata>) acquires FAConfig, FAController {
+    public fun disable_token(aptos_framework: &signer, token: Object<Metadata>) acquires FAConfig, GlobalConfig {
         system_addresses::assert_aptos_framework(aptos_framework);
 
         let fa_config = borrow_global_mut<FAConfig>(ensure_fa_config_exists(token));
@@ -724,30 +711,16 @@ module aptos_experimental::confidential_asset {
         });
     }
 
-    /// Sets, rotates, or clears the asset-specific auditor's public key for `token`.
-    /// Pass an empty `new_auditor_ek` to clear.
+    /// Sets, rotates, or clears the asset-specific auditor key for `token`. Pass an empty
+    /// `new_auditor_ek` to clear. Bumps `asset_auditor_epoch` and appends to history.
     ///
-    /// Bumps `asset_auditor_epoch` on every successful call (including clears) and appends
-    /// the prior key to `asset_auditor_history` with `deactivated_at_epoch = new_epoch`,
-    /// so future audits can decrypt historical transfers under the key that was in force
-    /// at the time.
-    ///
-    /// **In-flight proof invalidation.** Auditor identity is bound into each transfer's
-    /// Fiat–Shamir transcript via the order of `auditor_eks`; rotating the asset auditor
-    /// therefore invalidates any user transactions that were already signed under the old
-    /// key but not yet executed. Senders must regenerate proofs against the new key.
-    ///
-    /// **Authorization.** Callable by the root owner of `token`'s metadata object — i.e.
-    /// the account at the top of the object ownership chain (walked via
-    /// [`object::root_owner`]). For framework-managed FAs whose root owner is `@0x1`,
-    /// this is governance acting through the `aptos_framework` signer. For
-    /// issuer-deployed FAs (including the common pattern where a contract object owns
-    /// the metadata and is in turn owned by a multisig), the multisig at the chain root
-    /// can call this directly. Aborts with [`ENOT_ASSET_ISSUER`] otherwise.
+    /// Callable by `object::root_owner(token)`; aborts with [`ENOT_ASSET_ISSUER`] otherwise.
+    /// Rotation invalidates pending transfer proofs (auditor key is bound into the
+    /// Fiat–Shamir transcript) — senders must regenerate against the new key.
     public entry fun set_asset_auditor(
         issuer: &signer,
         token: Object<Metadata>,
-        new_auditor_ek: vector<u8>) acquires FAConfig, FAController
+        new_auditor_ek: vector<u8>) acquires FAConfig, GlobalConfig
     {
         assert!(
             object::root_owner(token) == signer::address_of(issuer),
@@ -792,28 +765,42 @@ module aptos_experimental::confidential_asset {
         });
     }
 
-    /// Sets, rotates, or clears the chain-level compliance auditor's public key.
-    /// Pass an empty `new_chain_auditor_ek` to clear.
-    ///
-    /// The chain-level auditor is the baseline legal protection covering every confidential
-    /// asset on the chain: every confidential transfer must encrypt the transferred amount
-    /// under this key (placed at `auditor_eks[0]`). Per-asset auditors are *additive*, not
-    /// substitutes.
-    ///
-    /// Bumps `chain_auditor_epoch` and appends history; same in-flight invalidation
-    /// caveat as [`set_asset_auditor`] applies.
-    ///
-    /// Clearing the chain auditor (passing an empty key) bumps the epoch and disables all
-    /// confidential transfers chain-wide until a successor is set, since
-    /// [`validate_auditors`] aborts with [`ECHAIN_AUDITOR_NOT_SET`] when no chain auditor
-    /// is configured.
-    public fun set_chain_auditor(
+    /// Designates (or rotates) the account authorized to call [`set_chain_auditor`].
+    /// Governance-only. No clear form — rotate to a successor instead.
+    public entry fun set_chain_auditor_admin(
         aptos_framework: &signer,
-        new_chain_auditor_ek: vector<u8>) acquires FAController
+        new_admin: address) acquires GlobalConfig
     {
         system_addresses::assert_aptos_framework(aptos_framework);
 
-        let controller = borrow_global_mut<FAController>(@aptos_experimental);
+        let global_config = borrow_global_mut<GlobalConfig>(@aptos_experimental);
+        global_config.chain_auditor_admin = std::option::some(new_admin);
+
+        event::emit(ChainAuditorAdminChanged { new_admin });
+    }
+
+    /// Sets, rotates, or clears the chain-level auditor key. Pass an empty
+    /// `new_chain_auditor_ek` to clear (which disables all confidential transfers until a
+    /// successor is set). Bumps `chain_auditor_epoch` and appends to history.
+    ///
+    /// Callable only by [`GlobalConfig.chain_auditor_admin`]. Aborts with
+    /// [`ECHAIN_AUDITOR_ADMIN_NOT_SET`] before an admin is assigned, or
+    /// [`ENOT_CHAIN_AUDITOR_ADMIN`] for any other signer. Rotation invalidates pending
+    /// transfer proofs — see [`set_asset_auditor`].
+    public entry fun set_chain_auditor(
+        admin: &signer,
+        new_chain_auditor_ek: vector<u8>) acquires GlobalConfig
+    {
+        let global_config = borrow_global_mut<GlobalConfig>(@aptos_experimental);
+
+        assert!(
+            global_config.chain_auditor_admin.is_some(),
+            error::invalid_state(ECHAIN_AUDITOR_ADMIN_NOT_SET)
+        );
+        assert!(
+            *global_config.chain_auditor_admin.borrow() == signer::address_of(admin),
+            error::permission_denied(ENOT_CHAIN_AUDITOR_ADMIN)
+        );
 
         let new_ek_opt = if (new_chain_auditor_ek.length() == 0) {
             std::option::none()
@@ -823,29 +810,29 @@ module aptos_experimental::confidential_asset {
             parsed
         };
 
-        let new_epoch = controller.chain_auditor_epoch + 1;
-        let prior_ek = controller.chain_auditor_ek;
+        let new_epoch = global_config.chain_auditor_epoch + 1;
+        let prior_ek = global_config.chain_auditor_ek;
 
         if (prior_ek.is_some()) {
-            let history_len = controller.chain_auditor_history.length();
+            let history_len = global_config.chain_auditor_history.length();
             assert!(history_len > 0, error::internal(EINTERNAL_ERROR));
-            let prior_entry = controller.chain_auditor_history.borrow_mut(history_len - 1);
+            let prior_entry = global_config.chain_auditor_history.borrow_mut(history_len - 1);
             prior_entry.deactivated_at_epoch = new_epoch;
         };
 
         if (new_ek_opt.is_some()) {
-            controller.chain_auditor_history.push_back(AuditorEntry {
+            global_config.chain_auditor_history.push_back(AuditorEntry {
                 ek: *new_ek_opt.borrow(),
                 activated_at_epoch: new_epoch,
                 deactivated_at_epoch: 0,
             });
         };
 
-        controller.chain_auditor_ek = new_ek_opt;
-        controller.chain_auditor_epoch = new_epoch;
+        global_config.chain_auditor_ek = new_ek_opt;
+        global_config.chain_auditor_epoch = new_epoch;
 
         event::emit(ChainAuditorChanged {
-            new_chain_auditor_ek: controller.chain_auditor_ek,
+            new_chain_auditor_ek: global_config.chain_auditor_ek,
             new_epoch,
         });
     }
@@ -862,7 +849,7 @@ module aptos_experimental::confidential_asset {
 
     #[view]
     /// Checks if the token is allowed for confidential transfers.
-    public fun is_token_allowed(token: Object<Metadata>): bool acquires FAController, FAConfig {
+    public fun is_token_allowed(token: Object<Metadata>): bool acquires GlobalConfig, FAConfig {
         if (!is_allow_list_enabled()) {
             return true
         };
@@ -880,8 +867,8 @@ module aptos_experimental::confidential_asset {
     /// Checks if the allow list is enabled.
     /// If the allow list is enabled, only tokens from the allow list can be transferred.
     /// Otherwise, all tokens are allowed.
-    public fun is_allow_list_enabled(): bool acquires FAController {
-        borrow_global<FAController>(@aptos_experimental).allow_list_enabled
+    public fun is_allow_list_enabled(): bool acquires GlobalConfig {
+        borrow_global<GlobalConfig>(@aptos_experimental).allow_list_enabled
     }
 
     #[view]
@@ -938,10 +925,9 @@ module aptos_experimental::confidential_asset {
     }
 
     #[view]
-    /// Returns the asset-specific auditor's encryption key.
-    /// `None` if no asset auditor has been set for `token`.
+    /// Asset auditor encryption key for `token`, or `None` if unset.
     public fun get_asset_auditor(
-        token: Object<Metadata>): Option<twisted_elgamal::CompressedPubkey> acquires FAConfig, FAController
+        token: Object<Metadata>): Option<twisted_elgamal::CompressedPubkey> acquires FAConfig, GlobalConfig
     {
         let fa_config_address = get_fa_config_address(token);
 
@@ -953,9 +939,8 @@ module aptos_experimental::confidential_asset {
     }
 
     #[view]
-    /// Returns the asset-specific auditor's monotonic epoch. `0` if no asset auditor has
-    /// ever been set for `token`.
-    public fun get_asset_auditor_epoch(token: Object<Metadata>): u64 acquires FAConfig, FAController {
+    /// Asset auditor epoch for `token`. `0` if no asset auditor has been set.
+    public fun get_asset_auditor_epoch(token: Object<Metadata>): u64 acquires FAConfig, GlobalConfig {
         let fa_config_address = get_fa_config_address(token);
         if (!exists<FAConfig>(fa_config_address)) {
             return 0;
@@ -964,10 +949,9 @@ module aptos_experimental::confidential_asset {
     }
 
     #[view]
-    /// Returns the append-only history of asset auditor keys for `token`. Empty if no
-    /// asset auditor has ever been set.
+    /// Append-only history of asset auditor keys for `token`.
     public fun get_asset_auditor_history(
-        token: Object<Metadata>): vector<AuditorEntry> acquires FAConfig, FAController
+        token: Object<Metadata>): vector<AuditorEntry> acquires FAConfig, GlobalConfig
     {
         let fa_config_address = get_fa_config_address(token);
         if (!exists<FAConfig>(fa_config_address)) {
@@ -977,29 +961,32 @@ module aptos_experimental::confidential_asset {
     }
 
     #[view]
-    /// Returns the chain-level compliance auditor's encryption key. `None` only before
-    /// [`set_chain_auditor`] has been called for the first time, in which case
-    /// confidential transfers abort with [`ECHAIN_AUDITOR_NOT_SET`].
-    public fun get_chain_auditor(): Option<twisted_elgamal::CompressedPubkey> acquires FAController {
-        borrow_global<FAController>(@aptos_experimental).chain_auditor_ek
+    /// Chain auditor encryption key, or `None` if unset.
+    public fun get_chain_auditor(): Option<twisted_elgamal::CompressedPubkey> acquires GlobalConfig {
+        borrow_global<GlobalConfig>(@aptos_experimental).chain_auditor_ek
     }
 
     #[view]
-    /// Returns the chain-level auditor's monotonic epoch. `0` before any chain auditor
-    /// has been configured.
-    public fun get_chain_auditor_epoch(): u64 acquires FAController {
-        borrow_global<FAController>(@aptos_experimental).chain_auditor_epoch
+    /// Chain auditor epoch. `0` before any chain auditor has been configured.
+    public fun get_chain_auditor_epoch(): u64 acquires GlobalConfig {
+        borrow_global<GlobalConfig>(@aptos_experimental).chain_auditor_epoch
     }
 
     #[view]
-    /// Returns the append-only history of chain-level auditor keys.
-    public fun get_chain_auditor_history(): vector<AuditorEntry> acquires FAController {
-        borrow_global<FAController>(@aptos_experimental).chain_auditor_history
+    /// Append-only history of chain auditor keys.
+    public fun get_chain_auditor_history(): vector<AuditorEntry> acquires GlobalConfig {
+        borrow_global<GlobalConfig>(@aptos_experimental).chain_auditor_history
+    }
+
+    #[view]
+    /// Chain-auditor admin address, or `None` if governance hasn't assigned one yet.
+    public fun get_chain_auditor_admin(): Option<address> acquires GlobalConfig {
+        borrow_global<GlobalConfig>(@aptos_experimental).chain_auditor_admin
     }
 
     #[view]
     /// Returns the circulating supply of the confidential asset.
-    public fun confidential_asset_balance(token: Object<Metadata>): u64 acquires FAController {
+    public fun confidential_asset_balance(token: Object<Metadata>): u64 acquires GlobalConfig {
         fungible_asset::balance(get_pool_fa_store(token))
     }
 
@@ -1012,7 +999,7 @@ module aptos_experimental::confidential_asset {
     public fun register_internal(
         sender: &signer,
         token: Object<Metadata>,
-        ek: twisted_elgamal::CompressedPubkey) acquires FAController, FAConfig
+        ek: twisted_elgamal::CompressedPubkey) acquires GlobalConfig, FAConfig
     {
         assert!(is_safe_for_confidentiality(&token), error::invalid_argument(EUNSAFE_DISPATCHABLE_FA));
         assert!(is_token_allowed(token), error::invalid_argument(ETOKEN_DISABLED));
@@ -1044,7 +1031,7 @@ module aptos_experimental::confidential_asset {
         sender: &signer,
         token: Object<Metadata>,
         to: address,
-        amount: u64) acquires ConfidentialAssetStore, FAController, FAConfig
+        amount: u64) acquires ConfidentialAssetStore, GlobalConfig, FAConfig
     {
         assert!(is_safe_for_confidentiality(&token), error::invalid_argument(EUNSAFE_DISPATCHABLE_FA));
         assert!(is_token_allowed(token), error::invalid_argument(ETOKEN_DISABLED));
@@ -1097,7 +1084,7 @@ module aptos_experimental::confidential_asset {
         to: address,
         amount: u64,
         new_balance: confidential_balance::ConfidentialBalance,
-        proof: WithdrawalProof) acquires ConfidentialAssetStore, FAController
+        proof: WithdrawalProof) acquires ConfidentialAssetStore, GlobalConfig
     {
         assert!(is_safe_for_confidentiality(&token), error::invalid_argument(EUNSAFE_DISPATCHABLE_FA));
 
@@ -1154,7 +1141,7 @@ module aptos_experimental::confidential_asset {
         auditor_eks: vector<twisted_elgamal::CompressedPubkey>,
         auditor_amounts: vector<confidential_balance::ConfidentialBalance>,
         proof: TransferProof,
-        sender_auditor_hint: vector<u8>) acquires ConfidentialAssetStore, FAConfig, FAController
+        sender_auditor_hint: vector<u8>) acquires ConfidentialAssetStore, FAConfig, GlobalConfig
     {
         assert!(is_safe_for_confidentiality(&token), error::invalid_argument(EUNSAFE_DISPATCHABLE_FA));
         assert!(is_token_allowed(token), error::invalid_argument(ETOKEN_DISABLED));
@@ -1226,7 +1213,7 @@ module aptos_experimental::confidential_asset {
         let new_recip_pending_balance = confidential_balance::compress_balance(&recipient_pending_balance);
         recipient_ca_store.pending_balance = new_recip_pending_balance;
 
-        let chain_auditor_epoch = borrow_global<FAController>(@aptos_experimental).chain_auditor_epoch;
+        let chain_auditor_epoch = borrow_global<GlobalConfig>(@aptos_experimental).chain_auditor_epoch;
         let asset_auditor_epoch = get_asset_auditor_epoch(token);
 
         event::emit(Transferred {
@@ -1420,7 +1407,7 @@ module aptos_experimental::confidential_asset {
     /// Ensures that the `FAConfig` object exists for the specified token.
     /// If the object does not exist, creates it.
     /// Used only for internal purposes.
-    fun ensure_fa_config_exists(token: Object<Metadata>): address acquires FAController {
+    fun ensure_fa_config_exists(token: Object<Metadata>): address acquires GlobalConfig {
         let fa_config_address = get_fa_config_address(token);
 
         if (!exists<FAConfig>(fa_config_address)) {
@@ -1438,24 +1425,24 @@ module aptos_experimental::confidential_asset {
     }
 
     /// Returns an object for handling all the FA primary stores, and returns a signer for it.
-    fun get_fa_store_signer(): signer acquires FAController {
-        object::generate_signer_for_extending(&borrow_global<FAController>(@aptos_experimental).extend_ref)
+    fun get_fa_store_signer(): signer acquires GlobalConfig {
+        object::generate_signer_for_extending(&borrow_global<GlobalConfig>(@aptos_experimental).extend_ref)
     }
 
     /// Returns the address that handles all the FA primary stores.
-    fun get_fa_store_address(): address acquires FAController {
-        object::address_from_extend_ref(&borrow_global<FAController>(@aptos_experimental).extend_ref)
+    fun get_fa_store_address(): address acquires GlobalConfig {
+        object::address_from_extend_ref(&borrow_global<GlobalConfig>(@aptos_experimental).extend_ref)
     }
 
     /// Returns the pool's primary fungible store for the given token, aborting if it does not exist.
-    fun get_pool_fa_store(token: Object<Metadata>): Object<FungibleStore> acquires FAController {
+    fun get_pool_fa_store(token: Object<Metadata>): Object<FungibleStore> acquires GlobalConfig {
         let pool_addr = get_fa_store_address();
         assert!(primary_fungible_store::primary_store_exists(pool_addr, token), error::not_found(ENO_CONFIDENTIAL_ASSET_POOL));
         primary_fungible_store::primary_store(pool_addr, token)
     }
 
     /// Returns the pool's primary fungible store for the given token, creating it if necessary.
-    fun ensure_pool_fa_store(token: Object<Metadata>): Object<FungibleStore> acquires FAController {
+    fun ensure_pool_fa_store(token: Object<Metadata>): Object<FungibleStore> acquires GlobalConfig {
         primary_fungible_store::ensure_primary_store_exists(get_fa_store_address(), token)
     }
 
@@ -1472,8 +1459,8 @@ module aptos_experimental::confidential_asset {
     }
 
     /// Returns an object for handling the `FAConfig`, and returns a signer for it.
-    fun get_fa_config_signer(token: Object<Metadata>): signer acquires FAController {
-        let fa_ext = &borrow_global<FAController>(@aptos_experimental).extend_ref;
+    fun get_fa_config_signer(token: Object<Metadata>): signer acquires GlobalConfig {
+        let fa_ext = &borrow_global<GlobalConfig>(@aptos_experimental).extend_ref;
         let fa_ext_signer = object::generate_signer_for_extending(fa_ext);
 
         let fa_ctor = &object::create_named_object(&fa_ext_signer, construct_fa_seed(token));
@@ -1482,8 +1469,8 @@ module aptos_experimental::confidential_asset {
     }
 
     /// Returns the address that handles primary FA store and `FAConfig` objects for the specified token.
-    fun get_fa_config_address(token: Object<Metadata>): address acquires FAController {
-        let fa_ext = &borrow_global<FAController>(@aptos_experimental).extend_ref;
+    fun get_fa_config_address(token: Object<Metadata>): address acquires GlobalConfig {
+        let fa_ext = &borrow_global<GlobalConfig>(@aptos_experimental).extend_ref;
         let fa_ext_address = object::address_from_extend_ref(fa_ext);
 
         object::create_object_address(&fa_ext_address, construct_fa_seed(token))
@@ -1540,7 +1527,7 @@ module aptos_experimental::confidential_asset {
         transfer_amount: &confidential_balance::ConfidentialBalance,
         auditor_eks: &vector<twisted_elgamal::CompressedPubkey>,
         auditor_amounts: &vector<confidential_balance::ConfidentialBalance>,
-        proof: &TransferProof): bool acquires FAConfig, FAController
+        proof: &TransferProof): bool acquires FAConfig, GlobalConfig
     {
         if (
             !auditor_amounts.all(|auditor_amount| {
@@ -1557,7 +1544,7 @@ module aptos_experimental::confidential_asset {
             return false
         };
 
-        let chain_auditor_ek_opt = borrow_global<FAController>(@aptos_experimental).chain_auditor_ek;
+        let chain_auditor_ek_opt = borrow_global<GlobalConfig>(@aptos_experimental).chain_auditor_ek;
         assert!(chain_auditor_ek_opt.is_some(), error::invalid_state(ECHAIN_AUDITOR_NOT_SET));
 
         let asset_auditor_ek_opt = get_asset_auditor(token);
@@ -1670,7 +1657,7 @@ module aptos_experimental::confidential_asset {
     public fun register_for_testing(
         sender: &signer,
         token: Object<Metadata>,
-        ek: vector<u8>) acquires FAController, FAConfig
+        ek: vector<u8>) acquires GlobalConfig, FAConfig
     {
         let ek = twisted_elgamal::new_pubkey_from_bytes(ek).extract();
         register_internal(sender, token, ek);
@@ -1892,5 +1879,13 @@ module aptos_experimental::confidential_asset {
         assert!(evts.length() > 0, 195);
         let e = &evts[evts.length() - 1];
         assert!(e.new_epoch == expected_epoch, 196);
+    }
+
+    #[test_only]
+    public fun assert_last_chain_auditor_admin_changed_event(expected_admin: address) {
+        let evts = event::emitted_events<ChainAuditorAdminChanged>();
+        assert!(evts.length() > 0, 197);
+        let e = &evts[evts.length() - 1];
+        assert!(e.new_admin == expected_admin, 198);
     }
 }

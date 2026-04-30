@@ -125,25 +125,37 @@ pub struct RejectedTransactionSummary {
     pub reason: DiscardedVMStatus,
 }
 
-/// Validates that a single batch's num_txns and num_bytes are within receiver-side limits.
-pub fn verify_batch_info_limits(
-    batch: &BatchInfo,
-    max_batch_txns: u64,
-    max_batch_bytes: u64,
-) -> anyhow::Result<()> {
-    ensure!(
-        batch.num_txns() <= max_batch_txns,
-        "Batch txn count {} exceeds limit {}",
-        batch.num_txns(),
-        max_batch_txns,
-    );
-    ensure!(
-        batch.num_bytes() <= max_batch_bytes,
-        "Batch byte count {} exceeds limit {}",
-        batch.num_bytes(),
-        max_batch_bytes,
-    );
-    Ok(())
+/// Upper bounds on the number of transactions and bytes a single batch may declare.
+/// Checked on the receiver side to reject proposals or batches with inflated metadata.
+#[derive(Clone, Copy, Debug)]
+pub struct BatchSizeLimits {
+    pub max_txns: u64,
+    pub max_bytes: u64,
+}
+
+impl BatchSizeLimits {
+    pub fn new(max_txns: u64, max_bytes: u64) -> Self {
+        Self { max_txns, max_bytes }
+    }
+
+    /// Returns an error if `batch` exceeds either the transaction or byte cap.
+    pub fn check(&self, batch: &BatchInfo) -> anyhow::Result<()> {
+        ensure!(
+            batch.num_txns() <= self.max_txns,
+            "batch {} has {} txns, cap is {}",
+            batch.digest(),
+            batch.num_txns(),
+            self.max_txns,
+        );
+        ensure!(
+            batch.num_bytes() <= self.max_bytes,
+            "batch {} has {} bytes, cap is {}",
+            batch.digest(),
+            batch.num_bytes(),
+            self.max_bytes,
+        );
+        Ok(())
+    }
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]
@@ -554,11 +566,10 @@ impl Payload {
 
     pub fn verify_inline_batches<'a>(
         inline_batches: impl Iterator<Item = (&'a BatchInfo, &'a Vec<SignedTransaction>)>,
-        max_batch_txns: u64,
-        max_batch_bytes: u64,
+        size_limits: BatchSizeLimits,
     ) -> anyhow::Result<()> {
         for (batch, payload) in inline_batches {
-            verify_batch_info_limits(batch, max_batch_txns, max_batch_bytes)?;
+            size_limits.check(batch)?;
             // TODO: Can cloning be avoided here?
             let computed_digest = BatchPayload::new(batch.author(), payload.clone()).hash();
             ensure!(
@@ -575,12 +586,11 @@ impl Payload {
     pub fn verify_opt_batches(
         verifier: &ValidatorVerifier,
         opt_batches: &OptBatches,
-        max_batch_txns: u64,
-        max_batch_bytes: u64,
+        size_limits: BatchSizeLimits,
     ) -> anyhow::Result<()> {
         let authors = verifier.address_to_validator_index();
         for batch in &opt_batches.batch_summary {
-            verify_batch_info_limits(batch, max_batch_txns, max_batch_bytes)?;
+            size_limits.check(batch)?;
             ensure!(
                 authors.contains_key(&batch.author()),
                 "Invalid author {} for batch {}",
@@ -596,15 +606,14 @@ impl Payload {
         verifier: &ValidatorVerifier,
         proof_cache: &ProofCache,
         quorum_store_enabled: bool,
-        max_batch_txns: u64,
-        max_batch_bytes: u64,
+        size_limits: BatchSizeLimits,
     ) -> anyhow::Result<()> {
         match (quorum_store_enabled, self) {
             (false, Payload::DirectMempool(_)) => Ok(()),
             (true, Payload::InQuorumStore(proof_with_status)) => {
                 Self::verify_with_cache(&proof_with_status.proofs, verifier, proof_cache)?;
                 for proof in &proof_with_status.proofs {
-                    verify_batch_info_limits(proof.info(), max_batch_txns, max_batch_bytes)?;
+                    size_limits.check(proof.info())?;
                 }
                 Ok(())
             },
@@ -615,7 +624,7 @@ impl Payload {
                     proof_cache,
                 )?;
                 for proof in &proof_with_status.proof_with_data.proofs {
-                    verify_batch_info_limits(proof.info(), max_batch_txns, max_batch_bytes)?;
+                    size_limits.check(proof.info())?;
                 }
                 Ok(())
             },
@@ -623,12 +632,11 @@ impl Payload {
             | (true, Payload::QuorumStoreInlineHybridV2(inline_batches, proof_with_data, _)) => {
                 Self::verify_with_cache(&proof_with_data.proofs, verifier, proof_cache)?;
                 for proof in &proof_with_data.proofs {
-                    verify_batch_info_limits(proof.info(), max_batch_txns, max_batch_bytes)?;
+                    size_limits.check(proof.info())?;
                 }
                 Self::verify_inline_batches(
                     inline_batches.iter().map(|(info, txns)| (info, txns)),
-                    max_batch_txns,
-                    max_batch_bytes,
+                    size_limits,
                 )?;
                 Ok(())
             },
@@ -636,21 +644,19 @@ impl Payload {
                 let proof_with_data = opt_quorum_store.proof_with_data();
                 Self::verify_with_cache(&proof_with_data.batch_summary, verifier, proof_cache)?;
                 for proof in &proof_with_data.batch_summary {
-                    verify_batch_info_limits(proof.info(), max_batch_txns, max_batch_bytes)?;
+                    size_limits.check(proof.info())?;
                 }
                 Self::verify_inline_batches(
                     opt_quorum_store
                         .inline_batches()
                         .iter()
                         .map(|batch| (batch.info(), batch.transactions())),
-                    max_batch_txns,
-                    max_batch_bytes,
+                    size_limits,
                 )?;
                 Self::verify_opt_batches(
                     verifier,
                     opt_quorum_store.opt_batches(),
-                    max_batch_txns,
-                    max_batch_bytes,
+                    size_limits,
                 )?;
                 Ok(())
             },

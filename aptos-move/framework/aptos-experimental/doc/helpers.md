@@ -121,6 +121,3 @@ WARNING: This is not a proper ciphertext: the value <code>amount</code> can be e
 
 
 </details>
-
-
-[move-book]: https://aptos.dev/move/book/SUMMARY

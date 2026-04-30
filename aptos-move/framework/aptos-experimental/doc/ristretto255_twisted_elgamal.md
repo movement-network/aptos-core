@@ -20,6 +20,8 @@ and <code>r, r'</code> are random scalars.
 -  [Struct `CompressedCiphertext`](#0x7_ristretto255_twisted_elgamal_CompressedCiphertext)
 -  [Struct `CompressedPubkey`](#0x7_ristretto255_twisted_elgamal_CompressedPubkey)
 -  [Function `new_pubkey_from_bytes`](#0x7_ristretto255_twisted_elgamal_new_pubkey_from_bytes)
+-  [Function `is_identity_pubkey`](#0x7_ristretto255_twisted_elgamal_is_identity_pubkey)
+-  [Function `is_identity_compressed`](#0x7_ristretto255_twisted_elgamal_is_identity_compressed)
 -  [Function `pubkey_to_bytes`](#0x7_ristretto255_twisted_elgamal_pubkey_to_bytes)
 -  [Function `pubkey_to_point`](#0x7_ristretto255_twisted_elgamal_pubkey_to_point)
 -  [Function `pubkey_to_compressed_point`](#0x7_ristretto255_twisted_elgamal_pubkey_to_compressed_point)
@@ -149,7 +151,16 @@ A Twisted ElGamal public key, represented as a compressed Ristretto255 point.
 ## Function `new_pubkey_from_bytes`
 
 Creates a new public key from a serialized Ristretto255 point.
-Returns <code>Some(<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedPubkey">CompressedPubkey</a>)</code> if the deserialization is successful, otherwise <code>None</code>.
+Returns <code>Some(<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedPubkey">CompressedPubkey</a>)</code> if the deserialization is successful and the
+resulting point is non-identity, otherwise <code>None</code>.
+
+Identity-point public keys are rejected because they break both privacy and
+soundness: ciphertexts encrypted under <code>ek = identity</code> have the form
+<code>(v*G + r*H, r*identity) = (v*G + r*H, identity)</code>, so the randomness blinding
+is null and any observer can brute-force the encrypted value. Sigma protocols
+that bind the public key (registration, transfer, rotation) also become
+trivially forgeable: the prover does not need to know any secret key, since
+<code>e * identity = identity</code> for any challenge <code>e</code>.
 
 
 <pre><code><b>public</b> <b>fun</b> <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_new_pubkey_from_bytes">new_pubkey_from_bytes</a>(bytes: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_Option">option::Option</a>&lt;<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedPubkey">ristretto255_twisted_elgamal::CompressedPubkey</a>&gt;
@@ -164,13 +175,70 @@ Returns <code>Some(<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twi
 <pre><code><b>public</b> <b>fun</b> <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_new_pubkey_from_bytes">new_pubkey_from_bytes</a>(bytes: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): Option&lt;<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedPubkey">CompressedPubkey</a>&gt; {
     <b>let</b> point = <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_new_compressed_point_from_bytes">ristretto255::new_compressed_point_from_bytes</a>(bytes);
     <b>if</b> (point.is_some()) {
+        <b>let</b> compressed = point.extract();
+        <b>if</b> (<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_is_identity_compressed">is_identity_compressed</a>(&compressed)) {
+            <b>return</b> std::option::none()
+        };
         <b>let</b> pk = <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedPubkey">CompressedPubkey</a> {
-            point: point.extract()
+            point: compressed
         };
         std::option::some(pk)
     } <b>else</b> {
         std::option::none()
     }
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x7_ristretto255_twisted_elgamal_is_identity_pubkey"></a>
+
+## Function `is_identity_pubkey`
+
+Returns <code><b>true</b></code> if the given public key is the Ristretto255 identity point.
+Such keys are rejected by <code>new_pubkey_from_bytes</code>; this helper is exposed for
+callers that obtain a <code><a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedPubkey">CompressedPubkey</a></code> through other means and want to
+re-validate it before use.
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_is_identity_pubkey">is_identity_pubkey</a>(pubkey: &<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedPubkey">ristretto255_twisted_elgamal::CompressedPubkey</a>): bool
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_is_identity_pubkey">is_identity_pubkey</a>(pubkey: &<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedPubkey">CompressedPubkey</a>): bool {
+    <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_is_identity_compressed">is_identity_compressed</a>(&pubkey.point)
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x7_ristretto255_twisted_elgamal_is_identity_compressed"></a>
+
+## Function `is_identity_compressed`
+
+
+
+<pre><code><b>fun</b> <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_is_identity_compressed">is_identity_compressed</a>(point: &<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_CompressedRistretto">ristretto255::CompressedRistretto</a>): bool
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>fun</b> <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_is_identity_compressed">is_identity_compressed</a>(point: &CompressedRistretto): bool {
+    <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_compressed_point_to_bytes">ristretto255::compressed_point_to_bytes</a>(*point)
+        == <a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_compressed_point_to_bytes">ristretto255::compressed_point_to_bytes</a>(<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_point_identity_compressed">ristretto255::point_identity_compressed</a>())
 }
 </code></pre>
 
@@ -702,6 +770,3 @@ Returns the <code>RistrettoPoint</code> in the ciphertext that contains the encr
 
 
 </details>
-
-
-[move-book]: https://aptos.dev/move/book/SUMMARY

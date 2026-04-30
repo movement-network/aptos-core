@@ -713,6 +713,3 @@ Object reference should be provided when upgrading object code.
 
 
 </details>
-
-
-[move-book]: https://aptos.dev/move/book/SUMMARY

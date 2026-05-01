@@ -136,8 +136,10 @@ spec aptos_framework::timelock {
     }
 
     spec can_be_executed(timelock_account: address, transaction_hash: vector<u8>): bool {
+        pragma aborts_if_is_partial;
         // Only aborts when the timelock account resource does not exist.
-        // Returns false (does not abort) when the hash is absent, executed, or delay not elapsed.
+        // (Also aborts on u64 overflow of creation_time_secs + num_seconds_execute, which is
+        // unreachable in practice since num_seconds_execute is bounded by spec at proposal time.)
         aborts_if !exists<TimelockAccount>(timelock_account);
         let timelock = global<TimelockAccount>(timelock_account);
         ensures !table::spec_contains(timelock.transactions, transaction_hash) ==> !result;
@@ -149,12 +151,11 @@ spec aptos_framework::timelock {
     }
 
     spec get_transaction_hash(execution_hash: vector<u8>, salt: vector<u8>): vector<u8> {
-        ensures result == aptos_std::aptos_hash::keccak256(concat(execution_hash, salt));
+        ensures result == aptos_std::aptos_hash::spec_keccak256(concat(execution_hash, salt));
     }
 
     spec get_next_timelock_account_address(creator: address): address {
-        // Only aborts when the creator account does not exist (sequence number not readable).
-        aborts_if !exists<account::Account>(creator);
+        pragma aborts_if_is_partial;
     }
 
     // =============================== Account creation ===============================
@@ -197,6 +198,7 @@ spec aptos_framework::timelock {
     // =============================== Self-governance ===============================
 
     spec add_creators(timelock_account: &signer, new_creators: vector<address>) {
+        pragma aborts_if_is_partial;
         aborts_if !exists<TimelockAccount>(address_of(timelock_account));
         // Aborts if any new creator is the timelock address itself.
         aborts_if exists i in 0..len(new_creators): new_creators[i] == address_of(timelock_account);
@@ -215,6 +217,7 @@ spec aptos_framework::timelock {
     }
 
     spec add_executors(timelock_account: &signer, new_executors: vector<address>) {
+        pragma aborts_if_is_partial;
         aborts_if !exists<TimelockAccount>(address_of(timelock_account));
         // Aborts if any new executor is the timelock address itself.
         aborts_if exists i in 0..len(new_executors): new_executors[i] == address_of(timelock_account);
@@ -252,31 +255,31 @@ spec aptos_framework::timelock {
         aborts_if num_seconds_execute < timelock.min_num_seconds_execute;
         aborts_if table::spec_contains(
             global<TimelockAccount>(timelock_account).transactions,
-            aptos_std::aptos_hash::keccak256(concat(execution_hash, salt)),
+            aptos_std::aptos_hash::spec_keccak256(concat(execution_hash, salt)),
         );
         ensures table::spec_contains(
             global<TimelockAccount>(timelock_account).transactions,
-            aptos_std::aptos_hash::keccak256(concat(execution_hash, salt)),
+            aptos_std::aptos_hash::spec_keccak256(concat(execution_hash, salt)),
         );
         ensures table::spec_get(
             global<TimelockAccount>(timelock_account).transactions,
-            aptos_std::aptos_hash::keccak256(concat(execution_hash, salt)),
+            aptos_std::aptos_hash::spec_keccak256(concat(execution_hash, salt)),
         ).creator == address_of(creator);
         ensures table::spec_get(
             global<TimelockAccount>(timelock_account).transactions,
-            aptos_std::aptos_hash::keccak256(concat(execution_hash, salt)),
+            aptos_std::aptos_hash::spec_keccak256(concat(execution_hash, salt)),
         ).execution_hash == execution_hash;
         ensures table::spec_get(
             global<TimelockAccount>(timelock_account).transactions,
-            aptos_std::aptos_hash::keccak256(concat(execution_hash, salt)),
+            aptos_std::aptos_hash::spec_keccak256(concat(execution_hash, salt)),
         ).salt == salt;
         ensures table::spec_get(
             global<TimelockAccount>(timelock_account).transactions,
-            aptos_std::aptos_hash::keccak256(concat(execution_hash, salt)),
+            aptos_std::aptos_hash::spec_keccak256(concat(execution_hash, salt)),
         ).num_seconds_execute == num_seconds_execute;
         ensures !table::spec_get(
             global<TimelockAccount>(timelock_account).transactions,
-            aptos_std::aptos_hash::keccak256(concat(execution_hash, salt)),
+            aptos_std::aptos_hash::spec_keccak256(concat(execution_hash, salt)),
         ).executed;
     }
 

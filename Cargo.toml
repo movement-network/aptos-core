@@ -38,6 +38,7 @@ members = [
     "aptos-move/e2e-tests",
     "aptos-move/e2e-testsuite",
     "aptos-move/framework",
+    "aptos-move/framework/formal/difftest",
     "aptos-move/framework/cached-packages",
     "aptos-move/framework/table-natives",
     "aptos-move/move-examples",

@@ -361,21 +361,6 @@ theorem run_error_stable
   unfold run
   rw [herr]
 
-/-- Error propagation through multiple steps.
-
-If run produces .error at some fuel level, it remains .error at any higher fuel level.
-
-NOTE: This theorem's statement may need revision. When fuel=0, run returns .error by
-definition (fuel exhaustion), but run at higher fuel might succeed. The theorem is
-likely only meaningful when fuel > 0 and .error indicates an actual execution error,
-not fuel exhaustion. Consider refining the statement or adding a fuel > 0 hypothesis.
--/
-theorem run_error_monotonic
-    (fuel k : Nat)
-    (herr : run env frame cs stack ms fuel = .error) :
-    run env frame cs stack ms (fuel + k) = .error := by
-  sorry  -- TODO: Statement needs revision - see NOTE above
-
 /-! ## Container Threading Patterns -/
 
 /-- Two consecutive immBorrowField allocations - placeholder axiom. -/

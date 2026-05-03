@@ -83,6 +83,14 @@ def shift_left (bv : MvBitVector) (amount : UInt64) : MvBitVector :=
 
 -- ── Theorems ──────────────────────────────────────────────────────────────────
 
+private theorem MvBitVector.eq_of_length_and_bit_field {a b : MvBitVector}
+    (hl : a.length = b.length) (hb : a.bit_field = b.bit_field) : a = b := by
+  rcases a with ⟨la, aa, ia⟩
+  rcases b with ⟨lb, ab, ib⟩
+  simp at hl hb
+  subst hl hb
+  rfl
+
 @[simp] theorem new_ok_length {len : UInt64} (h0 : len ≠ 0) (hmax : len < MAX_SIZE)
     {bv : MvBitVector} (hnew : new len = .ok bv) : bv.length = len := by
   simp only [new, h0, ↓reduceIte] at hnew
@@ -132,10 +140,26 @@ theorem unset_ok_length {bv bv' : MvBitVector} {i : UInt64}
   · simp only [if_neg h]
 
 theorem shift_left_zero (bv : MvBitVector) : shift_left bv 0 = bv := by
-  sorry -- Complex proof requiring Array extensionality and UInt64 reasoning
-  -- Proof sketch works but elaboration is challenging:
-  -- Case 1 (bv.length = 0): Both sides have empty arrays
-  -- Case 2 (bv.length > 0): Array.ofFn with amount=0 recovers original
-  --   because i + 0 = i for all indices
+  rcases bv with ⟨len, arr, inv⟩
+  dsimp [shift_left]
+  by_cases h : (0 : UInt64) ≥ len
+  · have h0 : len.toNat = 0 := by
+      have hle := UInt64.le_iff_toNat_le.mp (ge_iff_le.mp h)
+      simpa [UInt64.toNat_zero] using hle
+    have hz : len = 0 := UInt64.toNat.inj (by simp [UInt64.toNat_zero, h0])
+    subst hz
+    have ha : arr = #[] := Array.eq_empty_of_size_eq_zero (by simp [inv])
+    subst ha
+    rfl
+  · simp only [if_neg h]
+    refine MvBitVector.eq_of_length_and_bit_field rfl ?_
+    apply Array.ext_getElem?
+    intro i
+    simp only [Array.getElem?_ofFn]
+    by_cases hi : i < len.toNat
+    · simp [hi, inv]
+    · have hi2 : len.toNat ≤ i := Nat.le_of_not_lt hi
+      have hi3 : arr.size ≤ i := by simp [inv] at hi2 ⊢; exact hi2
+      simp [hi, Array.getElem?_eq_none hi3]
 
 end MovementFormal.Std.BitVector

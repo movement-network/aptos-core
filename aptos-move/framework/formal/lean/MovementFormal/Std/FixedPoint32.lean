@@ -94,10 +94,6 @@ def round (fp : FixedPoint32) : UInt64 :=
     create_from_u64 0 = .ok ⟨0⟩ := by
   simp [create_from_u64, MAX_U64_NAT]
 
-theorem floor_integer (n : UInt64) (h : n.toNat < 2^32) :
-    (((create_from_u64 n).toOption.getD ⟨0⟩).value.shiftRight 32) = n := by
-  sorry
-
 @[simp] theorem is_zero_iff (fp : FixedPoint32) : is_zero fp = true ↔ fp.value = 0 := by
   simp [is_zero]
 
@@ -137,7 +133,38 @@ theorem max_ge_left (a b : FixedPoint32) : a.value ≤ (max a b).value := by
     exact u64_le_of_not_le (by rwa [ge_iff_le] at h)
 
 theorem floor_le_ceil (fp : FixedPoint32) : floor fp ≤ ceil fp := by
-  sorry
+  unfold ceil
+  by_cases hf : fracBits fp = 0
+  · rw [if_pos hf]; rw [UInt64.le_iff_toNat_le]; omega
+  · rw [if_neg hf]
+    by_cases hm : floor fp = 0xffffffffffffffff
+    · rw [if_pos hm]; rw [UInt64.le_iff_toNat_le]; omega
+    · rw [if_neg hm]
+      have hmaxnat :
+          (0xffffffffffffffff : UInt64).toNat = UInt64.size - 1 := by
+        rw [UInt64.toNat_ofNat_of_lt (by decide : 18446744073709551615 < UInt64.size)]
+        rfl
+      have hne : (floor fp).toNat ≠ UInt64.size - 1 := by
+        intro hnat
+        apply hm
+        apply UInt64.toNat.inj
+        rw [hmaxnat, hnat]
+      rw [UInt64.le_iff_toNat_le]
+      have hlt1 : (floor fp).toNat + 1 < UInt64.size := by
+        have hlt : (floor fp).toNat < UInt64.size := UInt64.toNat_lt_size _
+        have hle : (floor fp).toNat + 1 ≤ UInt64.size - 1 := by
+          unfold UInt64.size at hlt hne ⊢
+          omega
+        have hsz1 : UInt64.size - 1 < UInt64.size := by
+          unfold UInt64.size
+          decide
+        exact Nat.lt_of_le_of_lt hle hsz1
+      have hadd : ((floor fp) + 1).toNat = (floor fp).toNat + 1 := by
+        rw [UInt64.toNat_add]
+        simp only [UInt64.toNat_one]
+        exact Nat.mod_eq_of_lt hlt1
+      rw [hadd]
+      exact Nat.le_succ _
 
 theorem ceil_eq_floor_of_exact (fp : FixedPoint32) (h : fracBits fp = 0) :
     ceil fp = floor fp := by

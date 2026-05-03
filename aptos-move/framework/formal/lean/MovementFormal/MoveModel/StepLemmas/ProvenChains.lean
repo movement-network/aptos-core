@@ -54,11 +54,8 @@ theorem chain_two_allocs :
     let (cs1, fid1) := cs.alloc v1
     let (cs2, fid2) := cs1.alloc v2
     cs2.read fid1 = some v1 ∧ cs2.read fid2 = some v2 := by
-  intros cs v1 v2
-  -- This is already proven in ContainerEvolution as consecutive_allocs_both_readable
-  apply ContainerEvolution.consecutive_allocs_both_readable
-  · rfl
-  · rfl
+  intro cs v1 v2
+  exact ContainerEvolution.consecutive_allocs_both_readable cs v1 v2
 
 /-! ## Stack manipulation patterns -/
 

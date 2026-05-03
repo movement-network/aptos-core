@@ -106,7 +106,7 @@ theorem frame_invariant_preserved_moveLoc
     {env : ModuleEnv} {frame : Frame} {cs : List Frame} {stack : List MoveValue} {ms : MachineState}
     {code : Array MoveInstr} {localsSize pc : Nat}
     (hinv : FrameInvariant frame code localsSize pc)
-    {idx : Nat} {v : MoveValue} {frame' : Frame} {cs' : List Frame}
+    {idx : Nat} {_ : MoveValue} {frame' : Frame} {cs' : List Frame}
     {stack' : List MoveValue} {ms' : MachineState}
     (hstep : step env frame cs stack ms = .ok frame' cs' stack' ms')
     (hPcLt : pc < code.size)
@@ -165,7 +165,7 @@ theorem frame_invariant_preserved_copyLoc
     {env : ModuleEnv} {frame : Frame} {cs : List Frame} {stack : List MoveValue} {ms : MachineState}
     {code : Array MoveInstr} {localsSize pc : Nat}
     (hinv : FrameInvariant frame code localsSize pc)
-    {idx : Nat} {v : MoveValue} {frame' : Frame} {cs' : List Frame}
+    {idx : Nat} {_ : MoveValue} {frame' : Frame} {cs' : List Frame}
     {stack' : List MoveValue} {ms' : MachineState}
     (hstep : step env frame cs stack ms = .ok frame' cs' stack' ms')
     (hPcLt : pc < code.size)
@@ -311,16 +311,17 @@ theorem frame_invariant_preserved_call_nativeRef : True := trivial
     that when the frame invariant holds at the ret instruction, the entire execution
     completes with .returned. -/
 theorem frame_invariant_at_ret_completes
-    {env : ModuleEnv} {frame : Frame} {stack : List MoveValue} {ms : MachineState}
+    {env : ModuleEnv} {frame : Frame} {cs : List Frame} {stack : List MoveValue} {ms : MachineState}
     {code : Array MoveInstr} {localsSize pc : Nat}
     (hinv : FrameInvariant frame code localsSize pc)
     (hPcLt : pc < code.size)
     (hcode : code[pc]'hPcLt = .ret)
     (hNoCs : cs = []) :
-    step env frame [] stack ms = .returned stack ms := by
+    step env frame cs stack ms = .returned stack ms := by
+  rw [hNoCs]
   unfold step
   rw [hinv.code, hinv.pc]
-  simp [hPcLt, dif_pos, hcode, hNoCs]
+  simp [hPcLt, hcode]
 
 /-! ## Composition helpers
 

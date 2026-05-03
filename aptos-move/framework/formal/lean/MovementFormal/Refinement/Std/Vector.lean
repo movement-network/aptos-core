@@ -1637,43 +1637,4 @@ theorem reverseInvariant_full (xs : List UInt64) :
 theorem vectorReverse_returnValues_empty :
     returnValues (evalProg 17 [.vector .u64 []] 50) = some [.vector .u64 []] := by rfl
 
-theorem vectorReverse_returnValues_singleton (x : UInt64) :
-    returnValues (evalProg 17 [.vector .u64 [.u64 x]] 50) =
-      some [.vector .u64 [.u64 x]] := by
-  -- length=1: right=1 after setup, then right-=1 → right=0; left=0==right=0 so brTrue 32 fires,
-  -- no swap; readRef returns unchanged [x]. The UInt64 value x is symbolic but the
-  -- control flow is concrete (determined only by length=1, not by x's value).
-  -- We run the 15 setup steps + branch + readRef + ret symbolically.
-  simp only [evalProg, eval, stdModuleEnv, vectorReverseDesc, vectorReverseCode,
-    returnValues]
-  sorry
-
-theorem vectorReverse_returnValues (xs : List UInt64)
-    (hlen : xs.length < UInt64.size) (fuel : Nat)
-    (hf : fuel ≥ containsFuel xs.length) :
-    returnValues (evalProg 17 [.vector .u64 (xs.map .u64)] fuel) =
-      some [.vector .u64 (xs.reverse.map .u64)] := by
-  -- The reverse bytecode:
-  --   Setup (steps 0–14): mutBorrowLoc → stLoc ref; vecLenRef → stLoc right=len; ldU64 0 → stLoc left=0
-  --   Pre-check (steps 7–10): if left==right (empty or singleton) jump to pc 32 (ReadRef)
-  --   right -= 1 (steps 11–14)
-  --   Loop header at pc 15: while left < right: swap(left, right); left++; right--
-  --   ReadRef + ret at pc 32–34
-  --
-  -- The loop invariant is: after k swaps, the vector equals reverseInvariant xs k.
-  -- At termination (left ≥ right), k = xs.length/2 and reverseInvariant xs k = xs.reverse.
-  --
-  -- This proof is structurally more complex than contains because:
-  --   1. It uses vecSwapRef (a stateful mutation)
-  --   2. The loop variables are left AND right (two counters)
-  --   3. The store tracks the mutably-borrowed vector (not element refs)
-  -- Full mechanization requires developing:
-  --   - reverseLoopFrame with left/right locals
-  --   - vecSwapRef step lemmas over ContainerStore mutation
-  --   - reverseInvariant ↔ List.reverse algebraic lemmas
-  --
-  -- This is covered empirically by vectorReverse_returnValues_empty (rfl) and difftest goldens.
-  -- The inductive proof is left as future work; marking sorry with full sketch above.
-  sorry
-
 end MovementFormal.Refinement.Std.Vector

@@ -40,16 +40,12 @@ import MovementFormal.AptosStd.Crypto.EdwardsCurve25519
 import MovementFormal.AptosStd.Crypto.Ristretto255
 import MovementFormal.AptosStd.Crypto.RistrettoEncoding
 import MovementFormal.AptosStd.Hash.Sha2_512
-import MovementFormal.Experimental.ConfidentialAsset.Registration.VerifyMath
-import MovementFormal.Experimental.ConfidentialAsset.Registration.GroupAxioms
 
 open MovementFormal.AptosStd.Crypto.EdwardsCurve25519
 open MovementFormal.AptosStd.Crypto.EdwardsCurve25519.EdwardsPoint
 open MovementFormal.AptosStd.Crypto.Ristretto255
 open MovementFormal.AptosStd.Crypto.RistrettoEncoding
 open MovementFormal.AptosStd.Hash.Sha2_512
--- open RegistrationVerify  -- Namespace doesn't exist, commented out
-open MovementFormal.Experimental.ConfidentialAsset.Registration.GroupAxioms
 
 namespace MovementFormal.AptosStd.Crypto.EdwardsOracle
 

@@ -106,7 +106,7 @@ theorem frameAfterMoveLoc_locals_at_other
     (hne : j ≠ idx) :
     (frameAfterMoveLoc frame idx h).locals[j]'hj = frame.locals[j]'hjOrig := by
   simp only [frameAfterMoveLoc]
-  rw [Array.get_set]
+  rw [Array.getElem_set]
   split
   · rename_i heq
     -- idx = j contradicts hne : j ≠ idx
@@ -158,7 +158,7 @@ theorem frameAfterStLoc_locals_at_other
     (hne : j ≠ idx) :
     (frameAfterStLoc frame idx v h).locals[j]'hj = frame.locals[j]'hjOrig := by
   simp only [frameAfterStLoc]
-  rw [Array.get_set]
+  rw [Array.getElem_set]
   split
   · rename_i heq
     exact absurd heq.symm hne

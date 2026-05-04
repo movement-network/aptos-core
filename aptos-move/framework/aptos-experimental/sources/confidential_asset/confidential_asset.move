@@ -293,7 +293,11 @@ module aptos_experimental::confidential_asset {
         /// decrypted years after a key rotation.
         chain_auditor_epoch: u64,
         /// Value of [`FAConfig.asset_auditor_epoch`] for this asset at the time of the
-        /// transfer. `0` when this asset has no asset-level auditor configured.
+        /// transfer. `0` only when [`set_asset_auditor`] has never been called for this
+        /// asset; once called (including a clear with empty bytes) the epoch is bumped
+        /// and stamped here even if the current `asset_auditor_ek` is `None`. Consult
+        /// [`FAConfig.asset_auditor_history`] to recover the key (if any) active at this
+        /// epoch.
         asset_auditor_epoch: u64,
     }
 

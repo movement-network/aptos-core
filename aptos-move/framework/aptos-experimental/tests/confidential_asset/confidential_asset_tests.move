@@ -1303,10 +1303,10 @@ module aptos_experimental::confidential_asset_tests {
 
     #[test(confidential_asset = @aptos_experimental, aptos_fx = @aptos_framework,
         fa = @0xfa, alice = @0xa1, bob = @0xb0)]
-    /// Rotation history: each rotation bumps the epoch, appends to history, and stamps
-    /// the new epoch on subsequent transfers. Past entries close their
-    /// `deactivated_at_epoch` to the successor's `activated_at_epoch`.
-    fun success_chain_auditor_rotation_tracks_history(
+    /// Rotation: each rotation bumps the epoch and stamps the new epoch on subsequent
+    /// transfers. Off-chain auditors / gateways resolve epoch → key by indexing
+    /// `ChainAuditorChanged` / `AssetAuditorChanged` events.
+    fun success_auditor_rotation_bumps_epoch(
         confidential_asset: signer, aptos_fx: signer, fa: signer,
         alice: signer, bob: signer)
     {
@@ -1330,11 +1330,6 @@ module aptos_experimental::confidential_asset_tests {
         confidential_asset::set_chain_auditor(&aptos_fx, twisted_elgamal::pubkey_to_bytes(&ek3));
         assert!(confidential_asset::get_chain_auditor_epoch() == 3, 3);
 
-        // History has 3 entries; the first two are deactivated at the successor's epoch,
-        // and the active key has deactivated_at_epoch == 0.
-        let history = confidential_asset::get_chain_auditor_history();
-        assert!(history.length() == 3, 4);
-
         // Transfer stamps the *current* epoch (3) on the event.
         transfer(&alice, &alice_dk, token, bob_addr, 100, 200, vector[]);
         confidential_asset::assert_last_transferred_event_matches_state(
@@ -1349,9 +1344,7 @@ module aptos_experimental::confidential_asset_tests {
         assert!(confidential_asset::get_asset_auditor_epoch(token) == 2, 6);
         confidential_asset::set_asset_auditor(&fa, token, b"");
         assert!(confidential_asset::get_asset_auditor_epoch(token) == 3, 7);
-        // History contains both prior keys; after the clear there is no active asset auditor.
-        let asset_hist = confidential_asset::get_asset_auditor_history(token);
-        assert!(asset_hist.length() == 2, 8);
+        // After the clear there is no active asset auditor; the epoch keeps advancing.
         assert!(confidential_asset::get_asset_auditor(token).is_none(), 9);
     }
 

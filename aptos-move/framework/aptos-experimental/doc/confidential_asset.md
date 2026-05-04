@@ -8,7 +8,6 @@ It enables private transfers by obfuscating token amounts while keeping sender a
 
 
 -  [Resource `ConfidentialAssetStore`](#0x7_confidential_asset_ConfidentialAssetStore)
--  [Struct `AuditorEntry`](#0x7_confidential_asset_AuditorEntry)
 -  [Resource `GlobalConfig`](#0x7_confidential_asset_GlobalConfig)
 -  [Resource `FAConfig`](#0x7_confidential_asset_FAConfig)
 -  [Struct `Registered`](#0x7_confidential_asset_Registered)
@@ -59,10 +58,8 @@ It enables private transfers by obfuscating token amounts while keeping sender a
 -  [Function `is_frozen`](#0x7_confidential_asset_is_frozen)
 -  [Function `get_asset_auditor`](#0x7_confidential_asset_get_asset_auditor)
 -  [Function `get_asset_auditor_epoch`](#0x7_confidential_asset_get_asset_auditor_epoch)
--  [Function `get_asset_auditor_history`](#0x7_confidential_asset_get_asset_auditor_history)
 -  [Function `get_chain_auditor`](#0x7_confidential_asset_get_chain_auditor)
 -  [Function `get_chain_auditor_epoch`](#0x7_confidential_asset_get_chain_auditor_epoch)
--  [Function `get_chain_auditor_history`](#0x7_confidential_asset_get_chain_auditor_history)
 -  [Function `get_chain_auditor_admin`](#0x7_confidential_asset_get_chain_auditor_admin)
 -  [Function `confidential_asset_balance`](#0x7_confidential_asset_confidential_asset_balance)
 -  [Function `register_internal`](#0x7_confidential_asset_register_internal)
@@ -192,50 +189,6 @@ The <code><a href="confidential_asset.md#0x7_confidential_asset">confidential_as
 
 </details>
 
-<a id="0x7_confidential_asset_AuditorEntry"></a>
-
-## Struct `AuditorEntry`
-
-One entry in an auditor key history vector — used for both the chain-level auditor
-(on [<code><a href="confidential_asset.md#0x7_confidential_asset_GlobalConfig">GlobalConfig</a></code>]) and the per-asset auditor (on [<code><a href="confidential_asset.md#0x7_confidential_asset_FAConfig">FAConfig</a></code>]). Rotated keys are
-retained so transfers stamped with a prior epoch can still be decrypted.
-
-
-<pre><code><b>struct</b> <a href="confidential_asset.md#0x7_confidential_asset_AuditorEntry">AuditorEntry</a> <b>has</b> <b>copy</b>, drop, store
-</code></pre>
-
-
-
-<details>
-<summary>Fields</summary>
-
-
-<dl>
-<dt>
-<code>ek: <a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedPubkey">ristretto255_twisted_elgamal::CompressedPubkey</a></code>
-</dt>
-<dd>
-
-</dd>
-<dt>
-<code>activated_at_epoch: u64</code>
-</dt>
-<dd>
- First epoch in which <code>ek</code> was the active auditor key. Monotonically increasing
- per layer (chain or asset).
-</dd>
-<dt>
-<code>deactivated_at_epoch: u64</code>
-</dt>
-<dd>
- Epoch at which this entry was deactivated (i.e. the <code>activated_at_epoch</code> of its
- successor). <code>0</code> means the entry is still the active key.
-</dd>
-</dl>
-
-
-</details>
-
 <a id="0x7_confidential_asset_GlobalConfig"></a>
 
 ## Resource `GlobalConfig`
@@ -287,15 +240,8 @@ Global configuration for confidential assets: primary FA stores, <code><a href="
 </dt>
 <dd>
  Bumped on every [<code>set_chain_auditor</code>] call (including clears). Stamped on each
- [<code><a href="confidential_asset.md#0x7_confidential_asset_Transferred">Transferred</a></code>] event.
-</dd>
-<dt>
-<code>chain_auditor_history: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="confidential_asset.md#0x7_confidential_asset_AuditorEntry">confidential_asset::AuditorEntry</a>&gt;</code>
-</dt>
-<dd>
- Append-only history of chain auditor keys. Each entry's
- <code>[activated_at_epoch, deactivated_at_epoch)</code> half-open interval is the range
- of <code>chain_auditor_epoch</code> values during which it was active.
+ [<code><a href="confidential_asset.md#0x7_confidential_asset_Transferred">Transferred</a></code>] event so off-chain auditors / gateways can identify which
+ historical chain-auditor key was in force at that transfer.
 </dd>
 </dl>
 
@@ -339,14 +285,9 @@ Represents the configuration of a token.
 <code>asset_auditor_epoch: u64</code>
 </dt>
 <dd>
- Bumped on every [<code>set_asset_auditor</code>] call. Stamped on each [<code><a href="confidential_asset.md#0x7_confidential_asset_Transferred">Transferred</a></code>]
- event for this asset.
-</dd>
-<dt>
-<code>asset_auditor_history: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="confidential_asset.md#0x7_confidential_asset_AuditorEntry">confidential_asset::AuditorEntry</a>&gt;</code>
-</dt>
-<dd>
- Append-only history of asset auditor keys. See [<code><a href="confidential_asset.md#0x7_confidential_asset_AuditorEntry">AuditorEntry</a></code>].
+ Bumped on every [<code>set_asset_auditor</code>] call (including clears). Stamped on each
+ [<code><a href="confidential_asset.md#0x7_confidential_asset_Transferred">Transferred</a></code>] event for this asset so off-chain auditors / gateways can
+ identify which historical asset-auditor key was in force at that transfer.
 </dd>
 </dl>
 
@@ -595,7 +536,11 @@ from the verified proof. See the technical whitepaper (<code>whitepaper.md</code
 </dt>
 <dd>
  Value of [<code><a href="confidential_asset.md#0x7_confidential_asset_FAConfig">FAConfig</a>.asset_auditor_epoch</code>] for this asset at the time of the
- transfer. <code>0</code> when this asset has no asset-level auditor configured.
+ transfer. <code>0</code> only when [<code>set_asset_auditor</code>] has never been called for this
+ asset; once called (including a clear with empty bytes) the epoch is bumped
+ and stamped here even if the current <code>asset_auditor_ek</code> is <code>None</code>. Off-chain
+ auditors / gateways resolve <code>(asset_type, asset_auditor_epoch)</code> to the active
+ key by indexing [<code><a href="confidential_asset.md#0x7_confidential_asset_AssetAuditorChanged">AssetAuditorChanged</a></code>] events.
 </dd>
 </dl>
 
@@ -1247,7 +1192,6 @@ The maximum number of transactions can be aggregated on the pending balance befo
         extend_ref: <a href="../../aptos-framework/doc/object.md#0x1_object_generate_extend_ref">object::generate_extend_ref</a>(global_config_ctor_ref),
         chain_auditor_ek: std::option::none(),
         chain_auditor_epoch: 0,
-        chain_auditor_history: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>[],
         chain_auditor_admin: std::option::none(),
     });
 }
@@ -1977,7 +1921,7 @@ Disables confidential transfers for the specified token.
 ## Function `set_asset_auditor`
 
 Sets, rotates, or clears the asset-specific auditor key for <code>token</code>. Pass an empty
-<code>new_auditor_ek</code> to clear. Bumps <code>asset_auditor_epoch</code> and appends to history.
+<code>new_auditor_ek</code> to clear. Bumps <code>asset_auditor_epoch</code> and emits [<code><a href="confidential_asset.md#0x7_confidential_asset_AssetAuditorChanged">AssetAuditorChanged</a></code>].
 
 Callable by <code><a href="../../aptos-framework/doc/object.md#0x1_object_root_owner">object::root_owner</a>(token)</code>; aborts with [<code><a href="confidential_asset.md#0x7_confidential_asset_ENOT_ASSET_ISSUER">ENOT_ASSET_ISSUER</a></code>] otherwise.
 Rotation invalidates pending transfer proofs (auditor key is bound into the
@@ -2014,22 +1958,6 @@ Fiat–Shamir transcript) — senders must regenerate against the new key.
     };
 
     <b>let</b> new_epoch = fa_config.asset_auditor_epoch + 1;
-    <b>let</b> prior_ek = fa_config.asset_auditor_ek;
-
-    <b>if</b> (prior_ek.is_some()) {
-        <b>let</b> history_len = fa_config.asset_auditor_history.length();
-        <b>assert</b>!(history_len &gt; 0, <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_internal">error::internal</a>(<a href="confidential_asset.md#0x7_confidential_asset_EINTERNAL_ERROR">EINTERNAL_ERROR</a>));
-        <b>let</b> prior_entry = fa_config.asset_auditor_history.borrow_mut(history_len - 1);
-        prior_entry.deactivated_at_epoch = new_epoch;
-    };
-
-    <b>if</b> (new_ek_opt.is_some()) {
-        fa_config.asset_auditor_history.push_back(<a href="confidential_asset.md#0x7_confidential_asset_AuditorEntry">AuditorEntry</a> {
-            ek: *new_ek_opt.borrow(),
-            activated_at_epoch: new_epoch,
-            deactivated_at_epoch: 0,
-        });
-    };
 
     fa_config.asset_auditor_ek = new_ek_opt;
     fa_config.asset_auditor_epoch = new_epoch;
@@ -2086,7 +2014,7 @@ Governance-only. No clear form — rotate to a successor instead.
 
 Sets, rotates, or clears the chain-level auditor key. Pass an empty
 <code>new_chain_auditor_ek</code> to clear (which disables all confidential transfers until a
-successor is set). Bumps <code>chain_auditor_epoch</code> and appends to history.
+successor is set). Bumps <code>chain_auditor_epoch</code> and emits [<code><a href="confidential_asset.md#0x7_confidential_asset_ChainAuditorChanged">ChainAuditorChanged</a></code>].
 
 Callable only by [<code><a href="confidential_asset.md#0x7_confidential_asset_GlobalConfig">GlobalConfig</a>.chain_auditor_admin</code>]. Aborts with
 [<code><a href="confidential_asset.md#0x7_confidential_asset_ECHAIN_AUDITOR_ADMIN_NOT_SET">ECHAIN_AUDITOR_ADMIN_NOT_SET</a></code>] before an admin is assigned, or
@@ -2127,22 +2055,6 @@ transfer proofs — see [<code>set_asset_auditor</code>].
     };
 
     <b>let</b> new_epoch = global_config.chain_auditor_epoch + 1;
-    <b>let</b> prior_ek = global_config.chain_auditor_ek;
-
-    <b>if</b> (prior_ek.is_some()) {
-        <b>let</b> history_len = global_config.chain_auditor_history.length();
-        <b>assert</b>!(history_len &gt; 0, <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_internal">error::internal</a>(<a href="confidential_asset.md#0x7_confidential_asset_EINTERNAL_ERROR">EINTERNAL_ERROR</a>));
-        <b>let</b> prior_entry = global_config.chain_auditor_history.borrow_mut(history_len - 1);
-        prior_entry.deactivated_at_epoch = new_epoch;
-    };
-
-    <b>if</b> (new_ek_opt.is_some()) {
-        global_config.chain_auditor_history.push_back(<a href="confidential_asset.md#0x7_confidential_asset_AuditorEntry">AuditorEntry</a> {
-            ek: *new_ek_opt.borrow(),
-            activated_at_epoch: new_epoch,
-            deactivated_at_epoch: 0,
-        });
-    };
 
     global_config.chain_auditor_ek = new_ek_opt;
     global_config.chain_auditor_epoch = new_epoch;
@@ -2465,38 +2377,6 @@ Asset auditor epoch for <code>token</code>. <code>0</code> if no asset auditor h
 
 </details>
 
-<a id="0x7_confidential_asset_get_asset_auditor_history"></a>
-
-## Function `get_asset_auditor_history`
-
-Append-only history of asset auditor keys for <code>token</code>.
-
-
-<pre><code>#[view]
-<b>public</b> <b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_get_asset_auditor_history">get_asset_auditor_history</a>(token: <a href="../../aptos-framework/doc/object.md#0x1_object_Object">object::Object</a>&lt;<a href="../../aptos-framework/doc/fungible_asset.md#0x1_fungible_asset_Metadata">fungible_asset::Metadata</a>&gt;): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="confidential_asset.md#0x7_confidential_asset_AuditorEntry">confidential_asset::AuditorEntry</a>&gt;
-</code></pre>
-
-
-
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_get_asset_auditor_history">get_asset_auditor_history</a>(
-    token: Object&lt;Metadata&gt;): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="confidential_asset.md#0x7_confidential_asset_AuditorEntry">AuditorEntry</a>&gt; <b>acquires</b> <a href="confidential_asset.md#0x7_confidential_asset_FAConfig">FAConfig</a>, <a href="confidential_asset.md#0x7_confidential_asset_GlobalConfig">GlobalConfig</a>
-{
-    <b>let</b> fa_config_address = <a href="confidential_asset.md#0x7_confidential_asset_get_fa_config_address">get_fa_config_address</a>(token);
-    <b>if</b> (!<b>exists</b>&lt;<a href="confidential_asset.md#0x7_confidential_asset_FAConfig">FAConfig</a>&gt;(fa_config_address)) {
-        <b>return</b> <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>[];
-    };
-    <b>borrow_global</b>&lt;<a href="confidential_asset.md#0x7_confidential_asset_FAConfig">FAConfig</a>&gt;(fa_config_address).asset_auditor_history
-}
-</code></pre>
-
-
-
-</details>
-
 <a id="0x7_confidential_asset_get_chain_auditor"></a>
 
 ## Function `get_chain_auditor`
@@ -2542,32 +2422,6 @@ Chain auditor epoch. <code>0</code> before any chain auditor has been configured
 
 <pre><code><b>public</b> <b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_get_chain_auditor_epoch">get_chain_auditor_epoch</a>(): u64 <b>acquires</b> <a href="confidential_asset.md#0x7_confidential_asset_GlobalConfig">GlobalConfig</a> {
     <b>borrow_global</b>&lt;<a href="confidential_asset.md#0x7_confidential_asset_GlobalConfig">GlobalConfig</a>&gt;(@aptos_experimental).chain_auditor_epoch
-}
-</code></pre>
-
-
-
-</details>
-
-<a id="0x7_confidential_asset_get_chain_auditor_history"></a>
-
-## Function `get_chain_auditor_history`
-
-Append-only history of chain auditor keys.
-
-
-<pre><code>#[view]
-<b>public</b> <b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_get_chain_auditor_history">get_chain_auditor_history</a>(): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="confidential_asset.md#0x7_confidential_asset_AuditorEntry">confidential_asset::AuditorEntry</a>&gt;
-</code></pre>
-
-
-
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_get_chain_auditor_history">get_chain_auditor_history</a>(): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="confidential_asset.md#0x7_confidential_asset_AuditorEntry">AuditorEntry</a>&gt; <b>acquires</b> <a href="confidential_asset.md#0x7_confidential_asset_GlobalConfig">GlobalConfig</a> {
-    <b>borrow_global</b>&lt;<a href="confidential_asset.md#0x7_confidential_asset_GlobalConfig">GlobalConfig</a>&gt;(@aptos_experimental).chain_auditor_history
 }
 </code></pre>
 
@@ -3260,7 +3114,6 @@ Used only for internal purposes.
             allowed: <b>false</b>,
             asset_auditor_ek: std::option::none(),
             asset_auditor_epoch: 0,
-            asset_auditor_history: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>[],
         });
     };
 

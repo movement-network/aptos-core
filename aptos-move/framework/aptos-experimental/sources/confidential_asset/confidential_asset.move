@@ -158,19 +158,6 @@ module aptos_experimental::confidential_asset {
         ek: twisted_elgamal::CompressedPubkey,
     }
 
-    /// One entry in an auditor key history vector — used for both the chain-level auditor
-    /// (on [`GlobalConfig`]) and the per-asset auditor (on [`FAConfig`]). Rotated keys are
-    /// retained so transfers stamped with a prior epoch can still be decrypted.
-    struct AuditorEntry has store, drop, copy {
-        ek: twisted_elgamal::CompressedPubkey,
-        /// First epoch in which `ek` was the active auditor key. Monotonically increasing
-        /// per layer (chain or asset).
-        activated_at_epoch: u64,
-        /// Epoch at which this entry was deactivated (i.e. the `activated_at_epoch` of its
-        /// successor). `0` means the entry is still the active key.
-        deactivated_at_epoch: u64,
-    }
-
     /// Global configuration for confidential assets: primary FA stores, `FAConfig` derivation, and chain-level auditor state.
     struct GlobalConfig has key {
         /// Indicates whether the allow list is enabled. If `true`, only tokens from the allow list can be transferred.
@@ -191,13 +178,9 @@ module aptos_experimental::confidential_asset {
         chain_auditor_admin: Option<address>,
 
         /// Bumped on every [`set_chain_auditor`] call (including clears). Stamped on each
-        /// [`Transferred`] event.
+        /// [`Transferred`] event so off-chain auditors / gateways can identify which
+        /// historical chain-auditor key was in force at that transfer.
         chain_auditor_epoch: u64,
-
-        /// Append-only history of chain auditor keys. Each entry's
-        /// `[activated_at_epoch, deactivated_at_epoch)` half-open interval is the range
-        /// of `chain_auditor_epoch` values during which it was active.
-        chain_auditor_history: vector<AuditorEntry>,
     }
 
     /// Represents the configuration of a token.
@@ -212,12 +195,10 @@ module aptos_experimental::confidential_asset {
         /// [`set_asset_auditor`] by the FA metadata object's root owner.
         asset_auditor_ek: Option<twisted_elgamal::CompressedPubkey>,
 
-        /// Bumped on every [`set_asset_auditor`] call. Stamped on each [`Transferred`]
-        /// event for this asset.
+        /// Bumped on every [`set_asset_auditor`] call (including clears). Stamped on each
+        /// [`Transferred`] event for this asset so off-chain auditors / gateways can
+        /// identify which historical asset-auditor key was in force at that transfer.
         asset_auditor_epoch: u64,
-
-        /// Append-only history of asset auditor keys. See [`AuditorEntry`].
-        asset_auditor_history: vector<AuditorEntry>,
     }
 
     //
@@ -295,9 +276,9 @@ module aptos_experimental::confidential_asset {
         /// Value of [`FAConfig.asset_auditor_epoch`] for this asset at the time of the
         /// transfer. `0` only when [`set_asset_auditor`] has never been called for this
         /// asset; once called (including a clear with empty bytes) the epoch is bumped
-        /// and stamped here even if the current `asset_auditor_ek` is `None`. Consult
-        /// [`FAConfig.asset_auditor_history`] to recover the key (if any) active at this
-        /// epoch.
+        /// and stamped here even if the current `asset_auditor_ek` is `None`. Off-chain
+        /// auditors / gateways resolve `(asset_type, asset_auditor_epoch)` to the active
+        /// key by indexing [`AssetAuditorChanged`] events.
         asset_auditor_epoch: u64,
     }
 
@@ -387,7 +368,6 @@ module aptos_experimental::confidential_asset {
             extend_ref: object::generate_extend_ref(global_config_ctor_ref),
             chain_auditor_ek: std::option::none(),
             chain_auditor_epoch: 0,
-            chain_auditor_history: vector[],
             chain_auditor_admin: std::option::none(),
         });
     }
@@ -716,7 +696,7 @@ module aptos_experimental::confidential_asset {
     }
 
     /// Sets, rotates, or clears the asset-specific auditor key for `token`. Pass an empty
-    /// `new_auditor_ek` to clear. Bumps `asset_auditor_epoch` and appends to history.
+    /// `new_auditor_ek` to clear. Bumps `asset_auditor_epoch` and emits [`AssetAuditorChanged`].
     ///
     /// Callable by `object::root_owner(token)`; aborts with [`ENOT_ASSET_ISSUER`] otherwise.
     /// Rotation invalidates pending transfer proofs (auditor key is bound into the
@@ -742,22 +722,6 @@ module aptos_experimental::confidential_asset {
         };
 
         let new_epoch = fa_config.asset_auditor_epoch + 1;
-        let prior_ek = fa_config.asset_auditor_ek;
-
-        if (prior_ek.is_some()) {
-            let history_len = fa_config.asset_auditor_history.length();
-            assert!(history_len > 0, error::internal(EINTERNAL_ERROR));
-            let prior_entry = fa_config.asset_auditor_history.borrow_mut(history_len - 1);
-            prior_entry.deactivated_at_epoch = new_epoch;
-        };
-
-        if (new_ek_opt.is_some()) {
-            fa_config.asset_auditor_history.push_back(AuditorEntry {
-                ek: *new_ek_opt.borrow(),
-                activated_at_epoch: new_epoch,
-                deactivated_at_epoch: 0,
-            });
-        };
 
         fa_config.asset_auditor_ek = new_ek_opt;
         fa_config.asset_auditor_epoch = new_epoch;
@@ -785,7 +749,7 @@ module aptos_experimental::confidential_asset {
 
     /// Sets, rotates, or clears the chain-level auditor key. Pass an empty
     /// `new_chain_auditor_ek` to clear (which disables all confidential transfers until a
-    /// successor is set). Bumps `chain_auditor_epoch` and appends to history.
+    /// successor is set). Bumps `chain_auditor_epoch` and emits [`ChainAuditorChanged`].
     ///
     /// Callable only by [`GlobalConfig.chain_auditor_admin`]. Aborts with
     /// [`ECHAIN_AUDITOR_ADMIN_NOT_SET`] before an admin is assigned, or
@@ -815,22 +779,6 @@ module aptos_experimental::confidential_asset {
         };
 
         let new_epoch = global_config.chain_auditor_epoch + 1;
-        let prior_ek = global_config.chain_auditor_ek;
-
-        if (prior_ek.is_some()) {
-            let history_len = global_config.chain_auditor_history.length();
-            assert!(history_len > 0, error::internal(EINTERNAL_ERROR));
-            let prior_entry = global_config.chain_auditor_history.borrow_mut(history_len - 1);
-            prior_entry.deactivated_at_epoch = new_epoch;
-        };
-
-        if (new_ek_opt.is_some()) {
-            global_config.chain_auditor_history.push_back(AuditorEntry {
-                ek: *new_ek_opt.borrow(),
-                activated_at_epoch: new_epoch,
-                deactivated_at_epoch: 0,
-            });
-        };
 
         global_config.chain_auditor_ek = new_ek_opt;
         global_config.chain_auditor_epoch = new_epoch;
@@ -953,18 +901,6 @@ module aptos_experimental::confidential_asset {
     }
 
     #[view]
-    /// Append-only history of asset auditor keys for `token`.
-    public fun get_asset_auditor_history(
-        token: Object<Metadata>): vector<AuditorEntry> acquires FAConfig, GlobalConfig
-    {
-        let fa_config_address = get_fa_config_address(token);
-        if (!exists<FAConfig>(fa_config_address)) {
-            return vector[];
-        };
-        borrow_global<FAConfig>(fa_config_address).asset_auditor_history
-    }
-
-    #[view]
     /// Chain auditor encryption key, or `None` if unset.
     public fun get_chain_auditor(): Option<twisted_elgamal::CompressedPubkey> acquires GlobalConfig {
         borrow_global<GlobalConfig>(@aptos_experimental).chain_auditor_ek
@@ -974,12 +910,6 @@ module aptos_experimental::confidential_asset {
     /// Chain auditor epoch. `0` before any chain auditor has been configured.
     public fun get_chain_auditor_epoch(): u64 acquires GlobalConfig {
         borrow_global<GlobalConfig>(@aptos_experimental).chain_auditor_epoch
-    }
-
-    #[view]
-    /// Append-only history of chain auditor keys.
-    public fun get_chain_auditor_history(): vector<AuditorEntry> acquires GlobalConfig {
-        borrow_global<GlobalConfig>(@aptos_experimental).chain_auditor_history
     }
 
     #[view]
@@ -1421,7 +1351,6 @@ module aptos_experimental::confidential_asset {
                 allowed: false,
                 asset_auditor_ek: std::option::none(),
                 asset_auditor_epoch: 0,
-                asset_auditor_history: vector[],
             });
         };
 

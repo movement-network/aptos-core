@@ -569,8 +569,19 @@ module aptos_framework::timelock {
     /// when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
     fun validate_members(members: &vector<address>, timelock_address: address, duplicate_error: u64) {
         let distinct: vector<address> = vector[];
-        members.for_each_ref(|member| {
-            let member = *member;
+        let total = members.length();
+        let i = 0;
+        while ({
+            spec {
+                invariant i <= total;
+                invariant len(distinct) == i;
+                invariant forall k in 0..i: distinct[k] == members[k];
+                invariant forall k in 0..i: members[k] != timelock_address;
+                invariant forall k in 0..i: forall l in 0..k: members[k] != members[l];
+            };
+            i < total
+        }) {
+            let member = *members.borrow(i);
             assert!(
                 member != timelock_address,
                 error::invalid_argument(ESELF_CANNOT_BE_MEMBER),
@@ -578,7 +589,8 @@ module aptos_framework::timelock {
             let (found, _) = distinct.index_of(&member);
             assert!(!found, error::invalid_argument(duplicate_error));
             distinct.push_back(member);
-        });
+            i = i + 1;
+        };
     }
 
     inline fun assert_timelock_account_exists(timelock_account: address) {
@@ -645,9 +657,9 @@ module aptos_framework::timelock {
         destroy_burn_cap(burn);
     }
 
+    #[test_only]
     /// Get a signer for the timelock account using its stored SignerCapability.
     /// Used in tests to simulate the signer that `resolve` would return to a resolution script.
-    #[test_only]
     fun get_timelock_signer(timelock_account: address): signer acquires TimelockAccount {
         account::create_signer_with_capability(
             &borrow_global<TimelockAccount>(timelock_account).signer_cap

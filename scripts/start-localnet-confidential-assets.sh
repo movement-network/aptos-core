@@ -519,7 +519,8 @@ publish_experimental_from_profile() {
     --named-addresses "aptos_experimental=${named_addr}" \
     --max-gas "$MOVE_PUBLISH_MAX_GAS" \
     --skip-fetch-latest-git-deps \
-    --included-artifacts none
+    --included-artifacts none \
+    --override-size-check
 }
 
 wait_for_mint_key() {

@@ -480,6 +480,28 @@ fn run_normalize(
     h.run(txn)
 }
 
+fn run_normalize_and_rollover(
+    h: &mut MoveHarness,
+    account: &Account,
+    new_bal: &[u8],
+    zkrp: &[u8],
+    sigma: &[u8],
+) -> TransactionStatus {
+    let payload = TransactionPayload::EntryFunction(EntryFunction::new(
+        ca_module_id(),
+        Identifier::new("normalize_and_rollover_pending_balance").unwrap(),
+        vec![],
+        vec![
+            bcs::to_bytes(&MOVE_METADATA).unwrap(),
+            new_bal.to_vec(),
+            zkrp.to_vec(),
+            sigma.to_vec(),
+        ],
+    ));
+    let txn = h.create_transaction_payload(account, payload);
+    h.run(txn)
+}
+
 fn set_asset_auditor(h: &mut MoveHarness, auditor_pubkey_32: &[u8]) {
     let args = vec![
         MoveValue::Signer(AccountAddress::ONE)
@@ -1222,6 +1244,46 @@ fn confidential_transfer_rejects_after_chain_auditor_rotation() {
 
     let st = run_confidential_transfer(&mut h, &alice, bob_addr, &parts, vec![]);
     assert_kept_failure(&st, "post-rotation old-key proof must be rejected");
+}
+
+/// `normalize_and_rollover_pending_balance` does both steps in one tx. The proof is
+/// generated against the *current* (unnormalized) actual balance; success implies both
+/// `normalize_internal` and `rollover_pending_balance_internal` ran (their state asserts
+/// are mutually exclusive — `normalize` requires `!normalized`, `rollover` requires
+/// `normalized`, so a wrong composition would abort one of them).
+#[test]
+fn normalize_and_rollover_combined_entry_succeeds() {
+    let mut h = fresh_harness();
+    let chain = h.executor.get_chain_id().id();
+    let alice_addr = confidential_e2e_addr(0xEC, 1);
+    let bob_addr = confidential_e2e_addr(0xEC, 2);
+    let alice = h.new_account_with_balance_at(alice_addr, 50_000_000_000_000);
+    let bob = h.new_account_with_balance_at(bob_addr, 50_000_000_000_000);
+
+    let (alice_dk, alice_ek) = generate_elgamal_keypair(&mut h);
+    let (bob_dk, bob_ek) = generate_elgamal_keypair(&mut h);
+    for (acct, addr, dk, ek) in [(&alice, alice_addr, &alice_dk, &alice_ek), (&bob, bob_addr, &bob_dk, &bob_ek)] {
+        let pk = twisted_pubkey_bytes(&mut h, ek);
+        let (c, r) = prove_registration_parts(&mut h, chain, addr, dk, ek, MOVE_METADATA);
+        assert_kept_success(&run_register(&mut h, acct, &pk, &c, &r), "register");
+    }
+
+    // Stack two max-chunk deposits into the available balance to leave it unnormalized.
+    let max_chunk: u64 = (1u64 << 16) - 1;
+    assert_kept_success(&run_deposit(&mut h, &alice, max_chunk), "alice deposit 1");
+    assert_kept_success(&run_deposit_to(&mut h, &bob, alice_addr, max_chunk), "bob → alice deposit");
+    assert_kept_success(&run_rollover(&mut h, &alice), "rollover (now unnormalized)");
+
+    // A fresh deposit lands in pending; the combined entry must roll it in.
+    assert_kept_success(&run_deposit(&mut h, &alice, 50), "alice deposit 2");
+
+    // Proof normalizes against the *current* (unnormalized, pre-rollover) actual balance.
+    let cur: u128 = 2u128 * max_chunk as u128;
+    let (new_bal, zkrp, sigma) = pack_normalize(&mut h, chain, alice_addr, &alice_dk, cur);
+    assert_kept_success(
+        &run_normalize_and_rollover(&mut h, &alice, &new_bal, &zkrp, &sigma),
+        "normalize_and_rollover_pending_balance",
+    );
 }
 
 fn view_chain_auditor_pubkey(h: &mut MoveHarness) -> Vec<u8> {

@@ -39,6 +39,7 @@ It enables private transfers by obfuscating token amounts while keeping sender a
 -  [Function `freeze_token`](#0x7_confidential_asset_freeze_token)
 -  [Function `unfreeze_token`](#0x7_confidential_asset_unfreeze_token)
 -  [Function `rollover_pending_balance`](#0x7_confidential_asset_rollover_pending_balance)
+-  [Function `normalize_and_rollover_pending_balance`](#0x7_confidential_asset_normalize_and_rollover_pending_balance)
 -  [Function `rollover_pending_balance_and_freeze`](#0x7_confidential_asset_rollover_pending_balance_and_freeze)
 -  [Function `rotate_encryption_key_and_unfreeze`](#0x7_confidential_asset_rotate_encryption_key_and_unfreeze)
 -  [Function `enable_allow_list`](#0x7_confidential_asset_enable_allow_list)
@@ -1706,6 +1707,45 @@ This operation is necessary to use tokens from the pending balance for outgoing 
     sender: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>,
     token: Object&lt;Metadata&gt;) <b>acquires</b> <a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>
 {
+    <a href="confidential_asset.md#0x7_confidential_asset_rollover_pending_balance_internal">rollover_pending_balance_internal</a>(sender, token);
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x7_confidential_asset_normalize_and_rollover_pending_balance"></a>
+
+## Function `normalize_and_rollover_pending_balance`
+
+Normalizes the available balance and rolls the pending balance into it in a single
+transaction. Equivalent to calling <code>normalize</code> followed by <code>rollover_pending_balance</code>,
+but only requires one wallet approval.
+The sender provides their new normalized available-balance ciphertext, encrypted with
+fresh randomness, plus the matching range and sigma proofs (same arguments as <code>normalize</code>).
+
+
+<pre><code><b>public</b> entry <b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_normalize_and_rollover_pending_balance">normalize_and_rollover_pending_balance</a>(sender: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, token: <a href="../../aptos-framework/doc/object.md#0x1_object_Object">object::Object</a>&lt;<a href="../../aptos-framework/doc/fungible_asset.md#0x1_fungible_asset_Metadata">fungible_asset::Metadata</a>&gt;, new_balance: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, zkrp_new_balance: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, sigma_proof: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;)
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> entry <b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_normalize_and_rollover_pending_balance">normalize_and_rollover_pending_balance</a>(
+    sender: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>,
+    token: Object&lt;Metadata&gt;,
+    new_balance: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
+    zkrp_new_balance: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
+    sigma_proof: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;) <b>acquires</b> <a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>
+{
+    <b>let</b> new_balance = <a href="confidential_balance.md#0x7_confidential_balance_new_actual_balance_from_bytes">confidential_balance::new_actual_balance_from_bytes</a>(new_balance).extract();
+    <b>let</b> proof = <a href="confidential_proof.md#0x7_confidential_proof_deserialize_normalization_proof">confidential_proof::deserialize_normalization_proof</a>(sigma_proof, zkrp_new_balance).extract();
+
+    <a href="confidential_asset.md#0x7_confidential_asset_normalize_internal">normalize_internal</a>(sender, token, new_balance, proof);
     <a href="confidential_asset.md#0x7_confidential_asset_rollover_pending_balance_internal">rollover_pending_balance_internal</a>(sender, token);
 }
 </code></pre>

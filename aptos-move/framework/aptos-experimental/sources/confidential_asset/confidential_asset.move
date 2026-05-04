@@ -609,6 +609,25 @@ module aptos_experimental::confidential_asset {
         rollover_pending_balance_internal(sender, token);
     }
 
+    /// Normalizes the available balance and rolls the pending balance into it in a single
+    /// transaction. Equivalent to calling `normalize` followed by `rollover_pending_balance`,
+    /// but only requires one wallet approval.
+    /// The sender provides their new normalized available-balance ciphertext, encrypted with
+    /// fresh randomness, plus the matching range and sigma proofs (same arguments as `normalize`).
+    public entry fun normalize_and_rollover_pending_balance(
+        sender: &signer,
+        token: Object<Metadata>,
+        new_balance: vector<u8>,
+        zkrp_new_balance: vector<u8>,
+        sigma_proof: vector<u8>) acquires ConfidentialAssetStore
+    {
+        let new_balance = confidential_balance::new_actual_balance_from_bytes(new_balance).extract();
+        let proof = confidential_proof::deserialize_normalization_proof(sigma_proof, zkrp_new_balance).extract();
+
+        normalize_internal(sender, token, new_balance, proof);
+        rollover_pending_balance_internal(sender, token);
+    }
+
     /// Before calling `rotate_encryption_key`, we need to rollover the pending balance and freeze the token to prevent
     /// any new payments being come.
     public entry fun rollover_pending_balance_and_freeze(

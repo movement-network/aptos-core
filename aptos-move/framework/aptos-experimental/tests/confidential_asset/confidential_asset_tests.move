@@ -260,6 +260,39 @@ module aptos_experimental::confidential_asset_tests {
         );
     }
 
+    fun normalize_and_rollover(
+        sender: &signer,
+        sender_dk: &Scalar,
+        token: Object<Metadata>,
+        amount: u128)
+    {
+        let from = signer::address_of(sender);
+        let sender_ek = confidential_asset::encryption_key(from, token);
+        let current_balance = confidential_balance::decompress_balance(
+            &confidential_asset::actual_balance(from, token)
+        );
+
+        let (proof, new_balance) = confidential_proof::prove_normalization(
+            4u8, // test chain ID
+            from,
+            @aptos_experimental,
+            object::object_address(&token),
+            sender_dk,
+            &sender_ek,
+            amount,
+            &current_balance);
+
+        let (sigma_proof, zkrp_new_balance) = confidential_proof::serialize_normalization_proof(&proof);
+
+        confidential_asset::normalize_and_rollover_pending_balance(
+            sender,
+            token,
+            confidential_balance::balance_to_bytes(&new_balance),
+            zkrp_new_balance,
+            sigma_proof
+        );
+    }
+
     public fun set_up_for_confidential_asset_test(
         confidential_asset: &signer,
         aptos_fx: &signer,
@@ -757,6 +790,82 @@ module aptos_experimental::confidential_asset_tests {
         assert!(confidential_asset::is_normalized(alice_addr, token));
         assert!(
             confidential_asset::verify_actual_balance(alice_addr, token, &alice_dk, (2 * max_chunk_value as u128)), 1);
+    }
+
+    // `normalize_and_rollover_pending_balance` from an unnormalized state combines the two
+    // steps in one tx. After: pending is empty, balance becomes (old available + pending),
+    // and `normalized` is back to `false` (rollover resets it).
+    #[test(
+        confidential_asset = @aptos_experimental,
+        aptos_fx = @aptos_framework,
+        fa = @0xfa,
+        alice = @0xa1,
+        bob = @0xb0
+    )]
+    fun success_normalize_and_rollover_from_unnormalized(
+        confidential_asset: signer,
+        aptos_fx: signer,
+        fa: signer,
+        alice: signer,
+        bob: signer)
+    {
+        let max_chunk_value = 1 << 16 - 1;
+        let token = set_up_for_confidential_asset_test(
+            &confidential_asset, &aptos_fx, &fa, &alice, &bob,
+            max_chunk_value + 50, max_chunk_value);
+
+        let alice_addr = signer::address_of(&alice);
+        let (alice_dk, alice_ek) = generate_twisted_elgamal_keypair();
+        confidential_asset::register_for_testing(&alice, token, twisted_elgamal::pubkey_to_bytes(&alice_ek));
+
+        // Two deposits + a rollover stack max-chunk values into a single chunk, leaving the
+        // available balance unnormalized.
+        confidential_asset::deposit(&alice, token, max_chunk_value);
+        confidential_asset::deposit_to(&bob, token, alice_addr, max_chunk_value);
+        confidential_asset::rollover_pending_balance(&alice, token);
+        assert!(!confidential_asset::is_normalized(alice_addr, token), 1);
+
+        // A fresh deposit lands in pending; the combined entry must roll it in.
+        confidential_asset::deposit(&alice, token, 50);
+
+        let total: u128 = (2 * max_chunk_value as u128) + 50;
+        normalize_and_rollover(&alice, &alice_dk, token, (2 * max_chunk_value as u128));
+
+        // Available reflects normalized old + pending; not normalized
+        // (rollover always leaves the merged balance unnormalized — same as plain rollover).
+        assert!(!confidential_asset::is_normalized(alice_addr, token), 3);
+        assert!(
+            confidential_asset::verify_actual_balance(alice_addr, token, &alice_dk, total), 5);
+    }
+
+    // Calling `normalize_and_rollover_pending_balance` while already normalized aborts at
+    // the `normalize_internal` step (`EALREADY_NORMALIZED`, invalid_state = category 3).
+    #[test(
+        confidential_asset = @aptos_experimental,
+        aptos_fx = @aptos_framework,
+        fa = @0xfa,
+        alice = @0xa1,
+        bob = @0xb0
+    )]
+    #[expected_failure(abort_code = 0x03000B, location = aptos_experimental::confidential_asset)]
+    fun fail_normalize_and_rollover_when_already_normalized(
+        confidential_asset: signer,
+        aptos_fx: signer,
+        fa: signer,
+        alice: signer,
+        bob: signer)
+    {
+        let token = set_up_for_confidential_asset_test(
+            &confidential_asset, &aptos_fx, &fa, &alice, &bob, 500, 500);
+        let alice_addr = signer::address_of(&alice);
+        let (alice_dk, alice_ek) = generate_twisted_elgamal_keypair();
+        confidential_asset::register_for_testing(&alice, token, twisted_elgamal::pubkey_to_bytes(&alice_ek));
+
+        // A freshly registered store starts with `normalized == true` and an empty available
+        // balance, so the wrapper must abort at `normalize_internal`'s `EALREADY_NORMALIZED`.
+        assert!(confidential_asset::is_normalized(alice_addr, token), 1);
+
+        normalize_and_rollover(&alice, &alice_dk, token, 0);
     }
 
     #[test(

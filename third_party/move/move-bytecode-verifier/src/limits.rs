@@ -11,6 +11,14 @@ use move_binary_format::{
 use move_core_types::vm_status::StatusCode;
 use std::cmp;
 
+// Absolute safety ceilings that apply regardless of configuration.
+// These prevent resource exhaustion from oversized modules even if the
+// VerifierConfig limits are accidentally set to None.
+const HARD_MAX_FUNCTION_DEFINITIONS: usize = 10_000;
+const HARD_MAX_STRUCT_DEFINITIONS: usize = 2_000;
+const HARD_MAX_FIELDS_IN_STRUCT: usize = 255;
+const HARD_MAX_STRUCT_VARIANTS: usize = 255;
+
 pub struct LimitsVerifier<'a> {
     resolver: BinaryIndexedView<'a>,
 }
@@ -147,14 +155,6 @@ impl<'a> LimitsVerifier<'a> {
     }
 
     fn verify_definitions(&self, config: &VerifierConfig) -> PartialVMResult<()> {
-        // Absolute safety ceilings that apply regardless of configuration.
-        // These prevent resource exhaustion from oversized modules even if the
-        // VerifierConfig limits are accidentally set to None.
-        const HARD_MAX_FUNCTION_DEFINITIONS: usize = 10_000;
-        const HARD_MAX_STRUCT_DEFINITIONS: usize = 2_000;
-        const HARD_MAX_FIELDS_IN_STRUCT: usize = 255;
-        const HARD_MAX_STRUCT_VARIANTS: usize = 255;
-
         if let Some(defs) = self.resolver.function_defs() {
             let limit = config
                 .max_function_definitions

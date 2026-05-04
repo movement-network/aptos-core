@@ -72,10 +72,7 @@ pub fn aptos_prod_deserializer_config(features: &Features) -> DeserializerConfig
 }
 
 /// Returns [VerifierConfig] used by the Aptos blockchain in production.
-pub fn aptos_prod_verifier_config(
-    features: &Features,
-    timed_features: &TimedFeatures,
-) -> VerifierConfig {
+pub fn aptos_prod_verifier_config(features: &Features) -> VerifierConfig {
     let use_signature_checker_v2 = features.is_enabled(FeatureFlag::SIGNATURE_CHECKER_V2);
     let sig_checker_v2_fix_script_ty_param_count =
         features.is_enabled(FeatureFlag::SIGNATURE_CHECKER_V2_SCRIPT_FIX);
@@ -83,9 +80,6 @@ pub fn aptos_prod_verifier_config(
     let enable_resource_access_control =
         features.is_enabled(FeatureFlag::ENABLE_RESOURCE_ACCESS_CONTROL);
     let enable_function_values = features.is_enabled(FeatureFlag::ENABLE_FUNCTION_VALUES);
-
-    let strict_bounds =
-        timed_features.is_enabled(TimedFeatureFlag::StrictVerifierBounds);
 
     VerifierConfig {
         max_loop_depth: Some(5),
@@ -95,13 +89,13 @@ pub fn aptos_prod_verifier_config(
         max_value_stack_size: 1024,
         max_type_nodes: Some(256),
         max_push_size: Some(10000),
-        max_struct_definitions: if strict_bounds { Some(200) } else { None },
-        max_struct_variants: if strict_bounds { Some(64) } else { None },
-        max_fields_in_struct: if strict_bounds { Some(64) } else { None },
-        max_function_definitions: if strict_bounds { Some(1000) } else { None },
+        max_struct_definitions: Some(200),
+        max_struct_variants: Some(64),
+        max_fields_in_struct: Some(64),
+        max_function_definitions: Some(1000),
         max_back_edges_per_function: None,
         max_back_edges_per_module: None,
-        max_basic_blocks_in_script: if strict_bounds { Some(1024) } else { None },
+        max_basic_blocks_in_script: Some(1024),
         max_per_fun_meter_units: Some(1000 * 80000),
         max_per_mod_meter_units: Some(1000 * 80000),
         use_signature_checker_v2,
@@ -125,7 +119,7 @@ pub fn aptos_prod_vm_config(
     let paranoid_type_checks = get_paranoid_type_checks();
 
     let deserializer_config = aptos_prod_deserializer_config(features);
-    let verifier_config = aptos_prod_verifier_config(features, timed_features);
+    let verifier_config = aptos_prod_verifier_config(features);
 
     let layout_max_size = if gas_feature_version >= RELEASE_V1_30 {
         512

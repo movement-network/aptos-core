@@ -295,7 +295,7 @@ impl AptosVM {
     }
 
     #[inline(always)]
-    fn timed_features(&self) -> &TimedFeatures {
+    pub(crate) fn timed_features(&self) -> &TimedFeatures {
         self.move_vm.env.timed_features()
     }
 
@@ -1610,6 +1610,18 @@ impl AptosVM {
         let senders = transaction_data.senders();
         let proofs = transaction_data.authentication_proofs();
 
+        // Validate that the number of senders matches the number of authentication proofs
+        if senders.len() != proofs.len() {
+            return Err(VMStatus::error(
+                StatusCode::INVALID_NUMBER_OF_AUTHENTICATION_PROOFS,
+                Some(format!(
+                    "Mismatch between senders count ({}) and authentication proofs count ({})",
+                    senders.len(),
+                    proofs.len()
+                )),
+            ));
+        }
+
         // Add fee payer.
         let fee_payer_signer = if let Some(fee_payer) = transaction_data.fee_payer {
             Some(match &transaction_data.fee_payer_authentication_proof {
@@ -1915,7 +1927,7 @@ impl AptosVM {
         G: AptosGasMeter,
         F: FnOnce(u64, VMGasParameters, StorageGasParameters, bool, Gas, &'a C) -> G,
     {
-        let txn_metadata = TransactionMetadata::new(txn);
+        let txn_metadata = TransactionMetadata::new(txn, self.timed_features());
 
         let is_approved_gov_script = is_approved_gov_script(resolver, txn, &txn_metadata);
 
@@ -2803,7 +2815,7 @@ impl VMValidator for AptosVM {
                 return VMValidatorResult::error(StatusCode::INVALID_SIGNATURE);
             },
         };
-        let txn_data = TransactionMetadata::new(&txn);
+        let txn_data = TransactionMetadata::new(&txn, self.timed_features());
 
         let resolver = self.as_move_resolver(&state_view);
         let is_approved_gov_script = is_approved_gov_script(&resolver, &txn, &txn_data);

@@ -20,6 +20,15 @@ pub enum TimedFeatureFlag {
 
     // Fixes the bug of table natives not tracking the memory usage of the global values they create.
     FixMemoryUsageTracking,
+
+    /// Fixes the bug that table natives double count the memory usage of the global values.
+    FixTableNativesMemoryDoubleCounting,
+
+    /// Fixes the bug in deep type tag conversion.
+    FixCryptoAlgebraNativesTypeTagConversion,
+
+    /// Uses full transaction size when computing transaction metadata.
+    UseFullTransactionSizeForTransactionMetadata,
 }
 
 /// Representation of features that are gated by the block timestamps.
@@ -62,6 +71,9 @@ impl TimedFeatureOverride {
 
 const BEGINNING_OF_TIME: DateTime<Utc> = DateTime::UNIX_EPOCH;
 
+#[allow(dead_code)]
+const END_OF_TIME: DateTime<Utc> = DateTime::<Utc>::MAX_UTC;
+
 impl TimedFeatureFlag {
     /// Returns the activation time of the feature on the given chain.
     pub fn activation_time_on(&self, chain_id: &NamedChain) -> DateTime<Utc> {
@@ -69,6 +81,10 @@ impl TimedFeatureFlag {
         use TimedFeatureFlag::*;
 
         match (self, chain_id) {
+            (UseFullTransactionSizeForTransactionMetadata, MOVEMAINNET | MOVETESTNET) => Los_Angeles
+                .with_ymd_and_hms(2026, 5, 4, 9, 45, 0)
+                .unwrap()
+                .with_timezone(&Utc),
             (_, MOVEMAINNET | MOVETESTNET) => Los_Angeles
                 .with_ymd_and_hms(2025, 8, 11, 17, 0, 0)
                 .unwrap()
@@ -119,6 +135,23 @@ impl TimedFeatureFlag {
                 .with_ymd_and_hms(2025, 3, 11, 17, 0, 0)
                 .unwrap()
                 .with_timezone(&Utc),
+
+            (FixTableNativesMemoryDoubleCounting, TESTNET) => Los_Angeles
+                .with_ymd_and_hms(2025, 10, 16, 17, 0, 0)
+                .unwrap()
+                .with_timezone(&Utc),
+            (FixTableNativesMemoryDoubleCounting, MAINNET) => Los_Angeles
+                .with_ymd_and_hms(2025, 10, 21, 10, 0, 0)
+                .unwrap()
+                .with_timezone(&Utc),
+
+            // 1 hour after the beginning of time
+            (FixCryptoAlgebraNativesTypeTagConversion, _) => {
+                Utc.with_ymd_and_hms(1970, 1, 1, 1, 0, 0).unwrap()
+            },
+
+            // Irrelevant for us except for testing
+            (UseFullTransactionSizeForTransactionMetadata, _) => BEGINNING_OF_TIME,
 
             // For chains other than testnet and mainnet, a timed feature is considered enabled from
             // the very beginning, if left unspecified.

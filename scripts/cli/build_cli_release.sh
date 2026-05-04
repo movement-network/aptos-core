@@ -16,9 +16,10 @@
 
 set -e
 
-NAME='aptos-cli'
-CRATE_NAME='aptos'
-CARGO_PATH="crates/$CRATE_NAME/Cargo.toml"
+NAME='movement-cli'
+CRATE_NAME='movement'
+CRATE_DIR='aptos'
+CARGO_PATH="crates/$CRATE_DIR/Cargo.toml"
 PLATFORM_NAME="$1"
 EXPECTED_VERSION="$2"
 SKIP_CHECKS="$3"
@@ -43,7 +44,7 @@ if [[ "$SKIP_CHECKS" != "true" ]]; then
   fi
 
   # Check that the release doesn't already exist
-  if curl -s --stderr /dev/null --output /dev/null --head -f "https://github.com/aptos-labs/aptos-core/releases/download/aptos-cli-v$EXPECTED_VERSION/aptos-cli-$EXPECTED_VERSION-Ubuntu-22.04-x86_64.zip"; then
+  if curl -s --stderr /dev/null --output /dev/null --head -f "https://github.com/movementlabsxyz/aptos-core/releases/download/movement-cli-v$EXPECTED_VERSION/movement-cli-$EXPECTED_VERSION-Linux-x86_64.zip"; then
     echo "$EXPECTED_VERSION already released"
     exit 3
   fi

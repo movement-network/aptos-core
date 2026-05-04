@@ -1,14 +1,19 @@
 ---
 remote_endpoint: https://testnet.movementnetwork.xyz/
-# replace with below for actual release, compat test needs concrete URL above:
-# remote_endpoint: ~
-name: "v0.1"
+name: "disable-concurrent-fungible-balance"
 proposals:
-  - name: proposal_1_upgrade_framework
+  - name: disable_concurrent_fungible_balance
     metadata:
-      title: "Multi-step proposal to upgrade mainnet framework, version v0.1"
-      description: "This is for upgrading the framework to move2"
+      title: "Disable concurrent fungible balance"
+      description: "This is for disabling concurrent fungible balance"
+      source_code_url: "https://github.com/movementlabsxyz/aptos-core"
+      discussion_url: "https://github.com/movementlabsxyz/aptos-core"
     execution_mode: RootSigner
     update_sequence:
       - Framework:
           bytecode_version: 7
+          git_hash: ~
+      - FeatureFlag:
+          enabled: []
+          disabled:
+            - concurrent_fungible_balance

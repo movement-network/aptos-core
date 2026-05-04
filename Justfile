@@ -27,22 +27,22 @@ build binary="all" profile="dev":
 # Enter the development environment
 dev:
     @echo "Entering development environment..."
-    nix develop
+    nix --extra-experimental-features "nix-command flakes" develop
 
 # Run tests
 test:
     @echo "Running tests..."
-    nix develop -c cargo test
+    nix --extra-experimental-features "nix-command flakes" develop -c cargo test
 
 # Check code formatting
 fmt:
     @echo "Checking code formatting..."
-    nix develop -c cargo fmt -- --check
+    nix --extra-experimental-features "nix-command flakes" develop -c cargo fmt -- --check
 
 # Run clippy
 clippy:
     @echo "Running clippy..."
-    nix develop -c cargo clippy -- --deny warnings
+    nix --extra-experimental-features "nix-command flakes" develop -c cargo clippy -- --deny warnings
 
 # Clean build artifacts
 clean:
@@ -55,7 +55,7 @@ update:
     nix flake update
 
 # Build Docker image
-docker-build container="aptos-node" tag="latest" profile="release":
+container-build container="aptos-node" tag="latest" profile="release":
     #!/usr/bin/env bash
     # Check if Docker is installed
     if ! command -v docker &> /dev/null; then
@@ -77,10 +77,25 @@ docker-build container="aptos-node" tag="latest" profile="release":
     fi
 
     # Build the binary first
-    echo "Building {{container}} binary..."
-    just build aptos-node {{profile}}
-    just build aptos {{profile}}
-    just build l1-migration {{profile}}
+    echo "Building {{container}}..."
+    # Case for docker containers that need multiple binaries
+    case "{{container}}" in
+        "aptos-node")
+            just build aptos-node {{profile}}
+            just build aptos {{profile}}
+            just build l1-migration {{profile}}
+            ;;
+        "aptos-debugger")
+            just build aptos-debugger {{profile}}
+            ;;
+        "aptos-faucet-service")
+            just build aptos-faucet-service {{profile}}
+            ;;
+        *)
+            just build {{container}} {{profile}}
+            ;;
+    esac
+    
 
     # Set binary path based on profile
     if [ "{{profile}}" = "release" ]; then
@@ -99,6 +114,27 @@ docker-build container="aptos-node" tag="latest" profile="release":
     
     # Clean up the copied binary
     rm -f aptos-test
+
+# Push a container image to GHCR
+container-push container="aptos-node" tag="latest":
+    docker push ghcr.io/movementlabsxyz/{{container}}:{{tag}}
+
+# Build and push a container image
+container-release container="aptos-node" tag="latest" profile="release":
+    just container-build {{container}} {{tag}} {{profile}}
+    just container-push {{container}} {{tag}}
+
+# List available container targets
+list-containers:
+    @echo "Available container build targets:"
+    @echo "  aptos-node          - L1 blockchain node (aptos-node + movement + l1-migration)"
+    @echo "  aptos-debugger      - Database backup and restore tool"
+    @echo "  aptos-faucet-service - Token faucet for test networks"
+    @echo ""
+    @echo "Usage:"
+    @echo "  just container-build <container> [tag] [profile]"
+    @echo "  just container-push <container> [tag]"
+    @echo "  just container-release <container> [tag] [profile]  # build + push"
 
 # Build any binary by package name
 build-bin package:
@@ -131,3 +167,9 @@ help:
     @echo "  Use 'just build <binary-name>' for common binary builds"
     @echo "  Use 'just build' to build all packages"
     @echo "  Use 'just build-bin <package-name>' for custom package builds"
+    @echo ""
+    @echo "Container Build Options:"
+    @echo "  Use 'just list-containers' to see available container targets"
+    @echo "  Use 'just container-build <container>' to build a container image"
+    @echo "  Use 'just container-push <container>' to push to GHCR"
+    @echo "  Use 'just container-release <container>' to build + push"

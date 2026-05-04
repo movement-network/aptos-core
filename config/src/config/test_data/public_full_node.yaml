@@ -39,3 +39,5 @@ state_sync:
   state_sync_driver:
     bootstrapping_mode: DownloadLatestStates
     continuous_syncing_mode: ApplyTransactionOutputs
+    # We start sync from the waypoint ledger epoch
+    start_epoch: 2111769

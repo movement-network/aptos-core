@@ -626,6 +626,57 @@ echo "Enabling feature flag 87 (BULLETPROOFS_BATCH_NATIVES) ..."
 
 publish_experimental_from_profile
 
+# Bootstrap the chain-auditor: governance (mint.key) designates the publish-profile
+# account as `chain_auditor_admin`, then that admin sets a known TwistedElGamal
+# pubkey as the chain auditor. Without this, every `confidential_transfer` aborts
+# with ECHAIN_AUDITOR_NOT_SET because the GlobalConfig.chain_auditor_ek defaults
+# to None at publish.
+#
+# CHAIN_AUDITOR_EK is a fixed test-only key. Re-running the script bumps the
+# on-chain `chain_auditor_epoch` (harmless for tests; localnet state is wiped on
+# fresh starts). Private key for this pubkey (only needed if a test ever wants
+# to actually decrypt as the chain auditor):
+#   priv: 0xb17fdd9dd18e25a3c5f7b2004142b76c3998eab4f91372ea543830ece670b5cb
+CHAIN_AUDITOR_BOOTSTRAP_DIR="$SCRIPT_DIR/chain-auditor-bootstrap"
+CHAIN_AUDITOR_EK="${CHAIN_AUDITOR_EK:-0x5e7cbfdf6b100216d7541b0439704748225a90005cd4908a1ee3c90d1ab1ea00}"
+
+if [[ "${SKIP_EXPERIMENTAL_PUBLISH:-0}" != "1" ]]; then
+  if [[ ! -d "$CHAIN_AUDITOR_BOOTSTRAP_DIR" ]]; then
+    echo "error: missing $CHAIN_AUDITOR_BOOTSTRAP_DIR" >&2
+    exit 1
+  fi
+  admin_addr=$(profile_account_hex) || exit 1
+
+  # `move run-script` does not accept --named-addresses, so compile the bootstrap
+  # script package separately and feed the resulting bytecode in via
+  # --compiled-script-path.
+  echo "Compiling chain-auditor bootstrap script (aptos_experimental=$admin_addr) ..."
+  "$MOVEMENT" move compile-script \
+    --package-dir "$CHAIN_AUDITOR_BOOTSTRAP_DIR" \
+    --named-addresses "aptos_experimental=$admin_addr" \
+    --output-file "$CHAIN_AUDITOR_BOOTSTRAP_DIR/build/set_chain_auditor_admin.mv"
+
+  echo "Designating $admin_addr (profile \"$MOVEMENT_PROFILE\") as chain_auditor_admin ..."
+  "$MOVEMENT" move run-script \
+    --assume-yes \
+    --url "$NODE_URL" \
+    --private-key-file "$TEST_DIR/mint.key" \
+    --encoding bcs \
+    --sender-account "$CORE_RESOURCES_ADDRESS" \
+    --max-gas "$MOVE_RUN_SCRIPT_MAX_GAS" \
+    --compiled-script-path "$CHAIN_AUDITOR_BOOTSTRAP_DIR/build/set_chain_auditor_admin.mv" \
+    --args "address:$admin_addr"
+
+  echo "Setting chain auditor encryption key to $CHAIN_AUDITOR_EK ..."
+  "$MOVEMENT" move run \
+    --assume-yes \
+    --url "$NODE_URL" \
+    --profile "$MOVEMENT_PROFILE" \
+    --max-gas "$MOVE_RUN_SCRIPT_MAX_GAS" \
+    --function-id "${admin_addr}::confidential_asset::set_chain_auditor" \
+    --args "hex:$CHAIN_AUDITOR_EK"
+fi
+
 echo "Done — feature flag and (if enabled) publish finished."
 echo "REST: $NODE_URL/v1  (ready probe: $READY_URL — set WAIT_STRATEGY=node to wait only on REST)"
 

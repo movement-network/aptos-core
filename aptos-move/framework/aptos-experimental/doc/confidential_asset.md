@@ -1277,22 +1277,8 @@ in one transaction. Aborts with [<code><a href="confidential_asset.md#0x7_confid
     registration_proof_commitment: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
     registration_proof_response: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;) <b>acquires</b> <a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>, <a href="confidential_asset.md#0x7_confidential_asset_GlobalConfig">GlobalConfig</a>, <a href="confidential_asset.md#0x7_confidential_asset_FAConfig">FAConfig</a>
 {
-    <b>let</b> ek = twisted_elgamal::new_pubkey_from_bytes(ek).extract();
-
-    <b>let</b> cid = (<a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id_get">chain_id::get</a>() <b>as</b> u8);
-    <b>let</b> user = <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(sender);
-    <a href="confidential_proof.md#0x7_confidential_proof_verify_registration_proof">confidential_proof::verify_registration_proof</a>(
-        cid,
-        user,
-        @aptos_experimental,
-        &ek,
-        <a href="../../aptos-framework/doc/object.md#0x1_object_object_address">object::object_address</a>(&token),
-        registration_proof_commitment,
-        registration_proof_response
-    );
-
-    <a href="confidential_asset.md#0x7_confidential_asset_register_internal">register_internal</a>(sender, token, ek);
-    <a href="confidential_asset.md#0x7_confidential_asset_deposit_to_internal">deposit_to_internal</a>(sender, token, user, amount);
+    <a href="confidential_asset.md#0x7_confidential_asset_register">register</a>(sender, token, ek, registration_proof_commitment, registration_proof_response);
+    <a href="confidential_asset.md#0x7_confidential_asset_deposit_to_internal">deposit_to_internal</a>(sender, token, <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(sender), amount);
 }
 </code></pre>
 

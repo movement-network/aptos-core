@@ -415,22 +415,8 @@ module aptos_experimental::confidential_asset {
         registration_proof_commitment: vector<u8>,
         registration_proof_response: vector<u8>) acquires ConfidentialAssetStore, GlobalConfig, FAConfig
     {
-        let ek = twisted_elgamal::new_pubkey_from_bytes(ek).extract();
-
-        let cid = (chain_id::get() as u8);
-        let user = signer::address_of(sender);
-        confidential_proof::verify_registration_proof(
-            cid,
-            user,
-            @aptos_experimental,
-            &ek,
-            object::object_address(&token),
-            registration_proof_commitment,
-            registration_proof_response
-        );
-
-        register_internal(sender, token, ek);
-        deposit_to_internal(sender, token, user, amount);
+        register(sender, token, ek, registration_proof_commitment, registration_proof_response);
+        deposit_to_internal(sender, token, signer::address_of(sender), amount);
     }
 
     /// Brings tokens into the protocol, transferring the passed amount from the sender's primary FA store

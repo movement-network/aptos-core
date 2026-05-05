@@ -598,42 +598,6 @@ fn pack_transfer_simple(
     std::array::from_fn(|i| ret.return_values[i].0.clone())
 }
 
-/// Pre-registration variant of [`pack_transfer_simple`]: builds a transfer proof for a sender
-/// that does not yet have a confidential asset store. The sender's `ek` is supplied directly
-/// (raw 32-byte compressed pubkey) and the helper uses the canonical empty actual balance.
-fn pack_transfer_simple_pre_registration(
-    h: &mut MoveHarness,
-    chain_byte: u8,
-    sender: AccountAddress,
-    recipient: AccountAddress,
-    dk: &[u8],
-    sender_ek_bytes: &[u8],
-    amount: u64,
-    new_balance: u128,
-    sender_auditor_hint: Vec<u8>,
-) -> [Vec<u8>; 8] {
-    let args = vec![
-        bcs::to_bytes(&chain_byte).unwrap(),
-        bcs::to_bytes(&sender).unwrap(),
-        bcs::to_bytes(&recipient).unwrap(),
-        dk.to_vec(),
-        sender_ek_bytes.to_vec(),
-        bcs::to_bytes(&amount).unwrap(),
-        bcs::to_bytes(&new_balance).unwrap(),
-        bcs::to_bytes(&MOVE_METADATA).unwrap(),
-        bcs::to_bytes(&sender_auditor_hint).unwrap(),
-    ];
-    let ret = bypass_at(
-        h,
-        "confidential_gas_e2e_helpers",
-        "pack_confidential_transfer_proof_pre_registration",
-        vec![],
-        args,
-    );
-    assert_eq!(ret.return_values.len(), 8);
-    std::array::from_fn(|i| ret.return_values[i].0.clone())
-}
-
 fn pack_transfer_audited_verbatim(
     h: &mut MoveHarness,
     chain_byte: u8,

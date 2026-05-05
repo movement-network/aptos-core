@@ -26,7 +26,9 @@ It enables private transfers by obfuscating token amounts while keeping sender a
 -  [Constants](#@Constants_0)
 -  [Function `init_module`](#0x7_confidential_asset_init_module)
 -  [Function `register`](#0x7_confidential_asset_register)
--  [Function `register_and_deposit`](#0x7_confidential_asset_register_and_deposit)
+-  [Function `register_and_deposit_and_rollover_pending_balance`](#0x7_confidential_asset_register_and_deposit_and_rollover_pending_balance)
+-  [Function `deposit_and_rollover_pending_balance`](#0x7_confidential_asset_deposit_and_rollover_pending_balance)
+-  [Function `deposit_normalize_and_rollover_pending_balance`](#0x7_confidential_asset_deposit_normalize_and_rollover_pending_balance)
 -  [Function `deposit_to`](#0x7_confidential_asset_deposit_to)
 -  [Function `deposit`](#0x7_confidential_asset_deposit)
 -  [Function `deposit_coins_to`](#0x7_confidential_asset_deposit_coins_to)
@@ -1252,15 +1254,16 @@ Users are also responsible for generating a Twisted ElGamal key pair on their si
 
 </details>
 
-<a id="0x7_confidential_asset_register_and_deposit"></a>
+<a id="0x7_confidential_asset_register_and_deposit_and_rollover_pending_balance"></a>
 
-## Function `register_and_deposit`
+## Function `register_and_deposit_and_rollover_pending_balance`
 
-Atomically [<code>register</code>] the sender and [<code>deposit</code>] <code>amount</code> of <code>token</code> into their own pending balance
-in one transaction. Aborts with [<code><a href="confidential_asset.md#0x7_confidential_asset_ECA_STORE_ALREADY_PUBLISHED">ECA_STORE_ALREADY_PUBLISHED</a></code>] if the sender is already registered.
+Atomically [<code>register</code>], [<code>deposit</code>], and [<code>rollover_pending_balance</code>] for first-time users — public
+FA lands as spendable confidential (actual) balance in one tx. Aborts with
+[<code><a href="confidential_asset.md#0x7_confidential_asset_ECA_STORE_ALREADY_PUBLISHED">ECA_STORE_ALREADY_PUBLISHED</a></code>] if the sender is already registered.
 
 
-<pre><code><b>public</b> entry <b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_register_and_deposit">register_and_deposit</a>(sender: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, token: <a href="../../aptos-framework/doc/object.md#0x1_object_Object">object::Object</a>&lt;<a href="../../aptos-framework/doc/fungible_asset.md#0x1_fungible_asset_Metadata">fungible_asset::Metadata</a>&gt;, amount: u64, ek: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, registration_proof_commitment: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, registration_proof_response: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;)
+<pre><code><b>public</b> entry <b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_register_and_deposit_and_rollover_pending_balance">register_and_deposit_and_rollover_pending_balance</a>(sender: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, token: <a href="../../aptos-framework/doc/object.md#0x1_object_Object">object::Object</a>&lt;<a href="../../aptos-framework/doc/fungible_asset.md#0x1_fungible_asset_Metadata">fungible_asset::Metadata</a>&gt;, amount: u64, ek: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, registration_proof_commitment: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, registration_proof_response: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;)
 </code></pre>
 
 
@@ -1269,7 +1272,7 @@ in one transaction. Aborts with [<code><a href="confidential_asset.md#0x7_confid
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> entry <b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_register_and_deposit">register_and_deposit</a>(
+<pre><code><b>public</b> entry <b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_register_and_deposit_and_rollover_pending_balance">register_and_deposit_and_rollover_pending_balance</a>(
     sender: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>,
     token: Object&lt;Metadata&gt;,
     amount: u64,
@@ -1278,7 +1281,82 @@ in one transaction. Aborts with [<code><a href="confidential_asset.md#0x7_confid
     registration_proof_response: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;) <b>acquires</b> <a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>, <a href="confidential_asset.md#0x7_confidential_asset_GlobalConfig">GlobalConfig</a>, <a href="confidential_asset.md#0x7_confidential_asset_FAConfig">FAConfig</a>
 {
     <a href="confidential_asset.md#0x7_confidential_asset_register">register</a>(sender, token, ek, registration_proof_commitment, registration_proof_response);
-    <a href="confidential_asset.md#0x7_confidential_asset_deposit_to_internal">deposit_to_internal</a>(sender, token, <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(sender), amount);
+    <b>let</b> user = <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(sender);
+    <a href="confidential_asset.md#0x7_confidential_asset_deposit_to_internal">deposit_to_internal</a>(sender, token, user, amount);
+    <a href="confidential_asset.md#0x7_confidential_asset_rollover_pending_balance_internal">rollover_pending_balance_internal</a>(sender, token);
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x7_confidential_asset_deposit_and_rollover_pending_balance"></a>
+
+## Function `deposit_and_rollover_pending_balance`
+
+Atomically [<code>deposit</code>] and [<code>rollover_pending_balance</code>] when the sender's actual balance is already
+normalized — no proofs needed. Aborts with [<code><a href="confidential_asset.md#0x7_confidential_asset_ENORMALIZATION_REQUIRED">ENORMALIZATION_REQUIRED</a></code>] otherwise; use
+[<code>deposit_normalize_and_rollover_pending_balance</code>] in that case.
+
+
+<pre><code><b>public</b> entry <b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_deposit_and_rollover_pending_balance">deposit_and_rollover_pending_balance</a>(sender: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, token: <a href="../../aptos-framework/doc/object.md#0x1_object_Object">object::Object</a>&lt;<a href="../../aptos-framework/doc/fungible_asset.md#0x1_fungible_asset_Metadata">fungible_asset::Metadata</a>&gt;, amount: u64)
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> entry <b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_deposit_and_rollover_pending_balance">deposit_and_rollover_pending_balance</a>(
+    sender: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>,
+    token: Object&lt;Metadata&gt;,
+    amount: u64) <b>acquires</b> <a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>, <a href="confidential_asset.md#0x7_confidential_asset_GlobalConfig">GlobalConfig</a>, <a href="confidential_asset.md#0x7_confidential_asset_FAConfig">FAConfig</a>
+{
+    <b>let</b> user = <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(sender);
+    <a href="confidential_asset.md#0x7_confidential_asset_deposit_to_internal">deposit_to_internal</a>(sender, token, user, amount);
+    <a href="confidential_asset.md#0x7_confidential_asset_rollover_pending_balance_internal">rollover_pending_balance_internal</a>(sender, token);
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x7_confidential_asset_deposit_normalize_and_rollover_pending_balance"></a>
+
+## Function `deposit_normalize_and_rollover_pending_balance`
+
+Atomically [<code>deposit</code>], [<code>normalize</code>] the actual balance, and [<code>rollover_pending_balance</code>] when the
+sender's actual balance is NOT normalized. Same proof arguments as [<code>normalize</code>]. Aborts with
+[<code><a href="confidential_asset.md#0x7_confidential_asset_EALREADY_NORMALIZED">EALREADY_NORMALIZED</a></code>] if already normalized; use [<code>deposit_and_rollover_pending_balance</code>] then.
+
+
+<pre><code><b>public</b> entry <b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_deposit_normalize_and_rollover_pending_balance">deposit_normalize_and_rollover_pending_balance</a>(sender: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, token: <a href="../../aptos-framework/doc/object.md#0x1_object_Object">object::Object</a>&lt;<a href="../../aptos-framework/doc/fungible_asset.md#0x1_fungible_asset_Metadata">fungible_asset::Metadata</a>&gt;, amount: u64, new_balance: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, zkrp_new_balance: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, sigma_proof: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;)
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> entry <b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_deposit_normalize_and_rollover_pending_balance">deposit_normalize_and_rollover_pending_balance</a>(
+    sender: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>,
+    token: Object&lt;Metadata&gt;,
+    amount: u64,
+    new_balance: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
+    zkrp_new_balance: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
+    sigma_proof: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;) <b>acquires</b> <a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>, <a href="confidential_asset.md#0x7_confidential_asset_GlobalConfig">GlobalConfig</a>, <a href="confidential_asset.md#0x7_confidential_asset_FAConfig">FAConfig</a>
+{
+    <b>let</b> new_balance = <a href="confidential_balance.md#0x7_confidential_balance_new_actual_balance_from_bytes">confidential_balance::new_actual_balance_from_bytes</a>(new_balance).extract();
+    <b>let</b> proof = <a href="confidential_proof.md#0x7_confidential_proof_deserialize_normalization_proof">confidential_proof::deserialize_normalization_proof</a>(sigma_proof, zkrp_new_balance).extract();
+
+    <b>let</b> user = <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(sender);
+    <a href="confidential_asset.md#0x7_confidential_asset_deposit_to_internal">deposit_to_internal</a>(sender, token, user, amount);
+    <a href="confidential_asset.md#0x7_confidential_asset_normalize_internal">normalize_internal</a>(sender, token, new_balance, proof);
+    <a href="confidential_asset.md#0x7_confidential_asset_rollover_pending_balance_internal">rollover_pending_balance_internal</a>(sender, token);
 }
 </code></pre>
 

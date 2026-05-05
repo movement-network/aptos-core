@@ -455,10 +455,9 @@ module aptos_experimental::confidential_asset_tests {
         assert!(confidential_asset::verify_pending_balance(alice_addr, token, &alice_dk, 100), 1);
     }
 
-    // Combined `register + deposit` succeeds in one transaction: the confidential-asset store is
-    // published with Alice's new ek, public FA moves into Alice's own pending balance, and a
-    // follow-up plain `deposit` succeeds (proves the registration was genuinely persisted and
-    // not just consumed by proof verification).
+    // First-time combined entry point: register + deposit + rollover in one transaction. After
+    // success, the store is published, public FA moved into the protocol, and the deposited
+    // amount is in actual_balance (spendable) — not pending.
     #[test(
         confidential_asset = @aptos_experimental,
         aptos_fx = @aptos_framework,
@@ -466,7 +465,7 @@ module aptos_experimental::confidential_asset_tests {
         alice = @0xa1,
         bob = @0xb0
     )]
-    fun success_register_and_deposit(
+    fun success_register_and_deposit_and_rollover_pending_balance(
         confidential_asset: signer,
         aptos_fx: signer,
         fa: signer,
@@ -486,7 +485,7 @@ module aptos_experimental::confidential_asset_tests {
             object::object_address(&token),
         );
 
-        confidential_asset::register_and_deposit(
+        confidential_asset::register_and_deposit_and_rollover_pending_balance(
             &alice,
             token,
             100,
@@ -497,15 +496,13 @@ module aptos_experimental::confidential_asset_tests {
 
         assert!(confidential_asset::has_confidential_asset_store(alice_addr, token), 1);
         assert!(primary_fungible_store::balance(alice_addr, token) == 400, 2);
-        assert!(confidential_asset::verify_pending_balance(alice_addr, token, &alice_dk, 100), 3);
-
-        // Plain `deposit` must succeed afterward because the registration genuinely persisted.
-        confidential_asset::deposit(&alice, token, 50);
-        assert!(confidential_asset::verify_pending_balance(alice_addr, token, &alice_dk, 150), 4);
+        // Funds landed in actual (spendable), not pending. Pending is empty after rollover.
+        assert!(confidential_asset::verify_actual_balance(alice_addr, token, &alice_dk, 100), 3);
+        assert!(confidential_asset::verify_pending_balance(alice_addr, token, &alice_dk, 0), 4);
     }
 
-    // Submitting a malformed registration proof through the combined `register_and_deposit` path
-    // must abort before any state mutates: store is not created, fungible balance is not moved.
+    // Submitting a malformed registration proof through the combined entry must abort before any
+    // state mutates: store is not created, fungible balance is not moved, no rollover happens.
     #[test(
         confidential_asset = @aptos_experimental,
         aptos_fx = @aptos_framework,
@@ -514,7 +511,7 @@ module aptos_experimental::confidential_asset_tests {
         bob = @0xb0
     )]
     #[expected_failure(abort_code = 65537, location = aptos_experimental::confidential_proof)]
-    fun fail_register_and_deposit_with_bad_registration_proof(
+    fun fail_register_and_deposit_and_rollover_with_bad_registration_proof(
         confidential_asset: signer,
         aptos_fx: signer,
         fa: signer,
@@ -539,7 +536,7 @@ module aptos_experimental::confidential_asset_tests {
             object::object_address(&token),
         );
 
-        confidential_asset::register_and_deposit(
+        confidential_asset::register_and_deposit_and_rollover_pending_balance(
             &alice,
             token,
             100,
@@ -549,7 +546,7 @@ module aptos_experimental::confidential_asset_tests {
         );
     }
 
-    // `register_and_deposit` aborts when the sender is already registered for the token.
+    // The combined entry aborts when the sender is already registered for the token.
     #[test(
         confidential_asset = @aptos_experimental,
         aptos_fx = @aptos_framework,
@@ -558,7 +555,7 @@ module aptos_experimental::confidential_asset_tests {
         bob = @0xb0
     )]
     #[expected_failure(abort_code = 524290, location = aptos_experimental::confidential_asset)]
-    fun fail_register_and_deposit_when_already_registered(
+    fun fail_register_and_deposit_and_rollover_when_already_registered(
         confidential_asset: signer,
         aptos_fx: signer,
         fa: signer,
@@ -581,7 +578,7 @@ module aptos_experimental::confidential_asset_tests {
             object::object_address(&token),
         );
 
-        confidential_asset::register_and_deposit(
+        confidential_asset::register_and_deposit_and_rollover_pending_balance(
             &alice,
             token,
             10,
@@ -589,6 +586,147 @@ module aptos_experimental::confidential_asset_tests {
             commitment,
             response,
         );
+    }
+
+    // Subsequent combined entry (already registered, currently normalized): deposit + rollover.
+    // We arrange a normalized state by sending a confidential transfer first (which sets
+    // normalized=true on the sender's store).
+    #[test(
+        confidential_asset = @aptos_experimental,
+        aptos_fx = @aptos_framework,
+        fa = @0xfa,
+        alice = @0xa1,
+        bob = @0xb0
+    )]
+    fun success_deposit_and_rollover_pending_balance(
+        confidential_asset: signer,
+        aptos_fx: signer,
+        fa: signer,
+        alice: signer,
+        bob: signer)
+    {
+        let token = set_up_for_confidential_asset_test(&confidential_asset, &aptos_fx, &fa, &alice, &bob, 500, 500);
+
+        let alice_addr = signer::address_of(&alice);
+        let bob_addr = signer::address_of(&bob);
+        let (alice_dk, alice_ek) = generate_twisted_elgamal_keypair();
+        let (_bob_dk, bob_ek) = generate_twisted_elgamal_keypair();
+
+        confidential_asset::register_for_testing(&alice, token, twisted_elgamal::pubkey_to_bytes(&alice_ek));
+        confidential_asset::register_for_testing(&bob, token, twisted_elgamal::pubkey_to_bytes(&bob_ek));
+
+        // Bring Alice into a normalized=true state. After register_for_testing, deposit, then
+        // rollover, normalized=false. After a confidential_transfer the sender's store is set
+        // normalized=true, which is the precondition this entry point asserts.
+        confidential_asset::deposit(&alice, token, 100);
+        confidential_asset::rollover_pending_balance(&alice, token);
+        transfer(&alice, &alice_dk, token, bob_addr, 1, 99, vector[]);
+        // sanity-check our setup
+        assert!(confidential_asset::is_normalized(alice_addr, token), 99);
+
+        // Now exercise the combined entry: deposit + rollover, no normalize required.
+        confidential_asset::deposit_and_rollover_pending_balance(&alice, token, 50);
+
+        // 99 (post-transfer actual) + 50 (just deposited) = 149 in actual; pending empty.
+        assert!(confidential_asset::verify_actual_balance(alice_addr, token, &alice_dk, 149), 1);
+        assert!(confidential_asset::verify_pending_balance(alice_addr, token, &alice_dk, 0), 2);
+    }
+
+    // `deposit_and_rollover_pending_balance` aborts when the actual balance is not normalized.
+    // The state arrives after any prior `rollover_pending_balance` (which sets normalized=false),
+    // so this is the common post-make-private state and the wallet must route to
+    // `deposit_normalize_and_rollover_pending_balance` instead.
+    #[test(
+        confidential_asset = @aptos_experimental,
+        aptos_fx = @aptos_framework,
+        fa = @0xfa,
+        alice = @0xa1,
+        bob = @0xb0
+    )]
+    #[expected_failure(abort_code = 196618, location = aptos_experimental::confidential_asset)]
+    fun fail_deposit_and_rollover_when_not_normalized(
+        confidential_asset: signer,
+        aptos_fx: signer,
+        fa: signer,
+        alice: signer,
+        bob: signer)
+    {
+        let token = set_up_for_confidential_asset_test(&confidential_asset, &aptos_fx, &fa, &alice, &bob, 500, 500);
+
+        let alice_addr = signer::address_of(&alice);
+        let (_alice_dk, alice_ek) = generate_twisted_elgamal_keypair();
+        confidential_asset::register_for_testing(&alice, token, twisted_elgamal::pubkey_to_bytes(&alice_ek));
+
+        // After deposit + rollover, normalized=false. Subsequent combined call must abort.
+        confidential_asset::deposit(&alice, token, 100);
+        confidential_asset::rollover_pending_balance(&alice, token);
+        assert!(!confidential_asset::is_normalized(alice_addr, token), 99);
+
+        confidential_asset::deposit_and_rollover_pending_balance(&alice, token, 50);
+    }
+
+    // Subsequent combined entry with normalize: deposit + normalize + rollover. Used after a
+    // prior rollover (which left the store with normalized=false). After this call, normalized
+    // is back to false (rollover always sets it false), but the actual balance is the canonical
+    // sum so the next deposit-then-rollover call goes through the same path.
+    #[test(
+        confidential_asset = @aptos_experimental,
+        aptos_fx = @aptos_framework,
+        fa = @0xfa,
+        alice = @0xa1,
+        bob = @0xb0
+    )]
+    fun success_deposit_normalize_and_rollover_pending_balance(
+        confidential_asset: signer,
+        aptos_fx: signer,
+        fa: signer,
+        alice: signer,
+        bob: signer)
+    {
+        let token = set_up_for_confidential_asset_test(&confidential_asset, &aptos_fx, &fa, &alice, &bob, 500, 500);
+
+        let alice_addr = signer::address_of(&alice);
+        let (alice_dk, alice_ek) = generate_twisted_elgamal_keypair();
+        confidential_asset::register_for_testing(&alice, token, twisted_elgamal::pubkey_to_bytes(&alice_ek));
+
+        // Establish a normalized=false state (deposit then rollover).
+        confidential_asset::deposit(&alice, token, 100);
+        confidential_asset::rollover_pending_balance(&alice, token);
+        assert!(!confidential_asset::is_normalized(alice_addr, token), 99);
+
+        // Build the normalize proof off-chain against the *current* actual balance (100).
+        // `deposit_to_internal` only mutates pending, so the actual balance the proof is bound
+        // to matches the actual balance at on-chain `normalize_internal` time.
+        let cid = 4u8;
+        let sender_ek = confidential_asset::encryption_key(alice_addr, token);
+        let current_actual = confidential_balance::decompress_balance(
+            &confidential_asset::actual_balance(alice_addr, token)
+        );
+        let (proof, new_balance) = confidential_proof::prove_normalization(
+            cid,
+            alice_addr,
+            @aptos_experimental,
+            object::object_address(&token),
+            &alice_dk,
+            &sender_ek,
+            100,
+            &current_actual,
+        );
+        let new_balance_bytes = confidential_balance::balance_to_bytes(&new_balance);
+        let (sigma, zkrp) = confidential_proof::serialize_normalization_proof(&proof);
+
+        // deposit 30, then normalize, then rollover → actual = 100 + 30 = 130.
+        confidential_asset::deposit_normalize_and_rollover_pending_balance(
+            &alice,
+            token,
+            30,
+            new_balance_bytes,
+            zkrp,
+            sigma,
+        );
+
+        assert!(confidential_asset::verify_actual_balance(alice_addr, token, &alice_dk, 130), 1);
+        assert!(confidential_asset::verify_pending_balance(alice_addr, token, &alice_dk, 0), 2);
     }
 
     #[test(

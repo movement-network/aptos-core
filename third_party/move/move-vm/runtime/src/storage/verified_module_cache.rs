@@ -19,6 +19,12 @@ type Key = ([u8; 32], [u8; 32]);
 /// and V2 implementations.
 pub(crate) struct VerifiedModuleCache(Mutex<lru::LruCache<Key, ()>>);
 
+/// In test builds the cache is treated as empty: lookups always miss and inserts are no-ops.
+/// This keeps unit tests deterministic regardless of the process-global LRU's accumulated state.
+const fn cache_active() -> bool {
+    !cfg!(test) && !cfg!(feature = "testing")
+}
+
 impl VerifiedModuleCache {
     /// Maximum size of the cache. When modules are cached, they can skip re-verification.
     const VERIFIED_CACHE_SIZE: usize = 100_000;
@@ -29,22 +35,18 @@ impl VerifiedModuleCache {
     }
 
     /// Returns true if the (module hash, verifier config digest) pair is contained in the cache.
-    /// For tests, the cache is treated as empty at all times.
     pub(crate) fn contains(
         &self,
         module_hash: &[u8; 32],
         verifier_config_digest: &[u8; 32],
     ) -> bool {
-        !cfg!(test)
-            && !cfg!(feature = "testing")
-            && self.0.lock().contains(&(*module_hash, *verifier_config_digest))
+        cache_active() && self.0.lock().contains(&(*module_hash, *verifier_config_digest))
     }
 
     /// Inserts the (module hash, verifier config digest) pair into the cache, marking the
-    /// corresponding module as locally verified under that configuration. For tests, entries are
-    /// not added to the cache.
+    /// corresponding module as locally verified under that configuration.
     pub(crate) fn put(&self, module_hash: [u8; 32], verifier_config_digest: [u8; 32]) {
-        if !cfg!(test) && !cfg!(feature = "testing") {
+        if cache_active() {
             self.0
                 .lock()
                 .put((module_hash, verifier_config_digest), ());

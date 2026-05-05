@@ -26,6 +26,7 @@ It enables private transfers by obfuscating token amounts while keeping sender a
 -  [Constants](#@Constants_0)
 -  [Function `init_module`](#0x7_confidential_asset_init_module)
 -  [Function `register`](#0x7_confidential_asset_register)
+-  [Function `register_and_deposit`](#0x7_confidential_asset_register_and_deposit)
 -  [Function `deposit_to`](#0x7_confidential_asset_deposit_to)
 -  [Function `deposit`](#0x7_confidential_asset_deposit)
 -  [Function `deposit_coins_to`](#0x7_confidential_asset_deposit_coins_to)
@@ -33,6 +34,7 @@ It enables private transfers by obfuscating token amounts while keeping sender a
 -  [Function `withdraw_to`](#0x7_confidential_asset_withdraw_to)
 -  [Function `withdraw`](#0x7_confidential_asset_withdraw)
 -  [Function `confidential_transfer`](#0x7_confidential_asset_confidential_transfer)
+-  [Function `register_and_confidential_transfer`](#0x7_confidential_asset_register_and_confidential_transfer)
 -  [Function `max_sender_auditor_hint_bytes`](#0x7_confidential_asset_max_sender_auditor_hint_bytes)
 -  [Function `rotate_encryption_key`](#0x7_confidential_asset_rotate_encryption_key)
 -  [Function `normalize`](#0x7_confidential_asset_normalize)
@@ -1251,6 +1253,54 @@ Users are also responsible for generating a Twisted ElGamal key pair on their si
 
 </details>
 
+<a id="0x7_confidential_asset_register_and_deposit"></a>
+
+## Function `register_and_deposit`
+
+Atomically [<code>register</code>] the sender and [<code>deposit</code>] <code>amount</code> of <code>token</code> into their own pending balance
+in one transaction. Aborts with [<code><a href="confidential_asset.md#0x7_confidential_asset_ECA_STORE_ALREADY_PUBLISHED">ECA_STORE_ALREADY_PUBLISHED</a></code>] if the sender is already registered.
+
+
+<pre><code><b>public</b> entry <b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_register_and_deposit">register_and_deposit</a>(sender: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, token: <a href="../../aptos-framework/doc/object.md#0x1_object_Object">object::Object</a>&lt;<a href="../../aptos-framework/doc/fungible_asset.md#0x1_fungible_asset_Metadata">fungible_asset::Metadata</a>&gt;, amount: u64, ek: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, registration_proof_commitment: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, registration_proof_response: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;)
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> entry <b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_register_and_deposit">register_and_deposit</a>(
+    sender: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>,
+    token: Object&lt;Metadata&gt;,
+    amount: u64,
+    ek: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
+    registration_proof_commitment: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
+    registration_proof_response: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;) <b>acquires</b> <a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>, <a href="confidential_asset.md#0x7_confidential_asset_GlobalConfig">GlobalConfig</a>, <a href="confidential_asset.md#0x7_confidential_asset_FAConfig">FAConfig</a>
+{
+    <b>let</b> ek = twisted_elgamal::new_pubkey_from_bytes(ek).extract();
+
+    <b>let</b> cid = (<a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id_get">chain_id::get</a>() <b>as</b> u8);
+    <b>let</b> user = <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(sender);
+    <a href="confidential_proof.md#0x7_confidential_proof_verify_registration_proof">confidential_proof::verify_registration_proof</a>(
+        cid,
+        user,
+        @aptos_experimental,
+        &ek,
+        <a href="../../aptos-framework/doc/object.md#0x1_object_object_address">object::object_address</a>(&token),
+        registration_proof_commitment,
+        registration_proof_response
+    );
+
+    <a href="confidential_asset.md#0x7_confidential_asset_register_internal">register_internal</a>(sender, token, ek);
+    <a href="confidential_asset.md#0x7_confidential_asset_deposit_to_internal">deposit_to_internal</a>(sender, token, user, amount);
+}
+</code></pre>
+
+
+
+</details>
+
 <a id="0x7_confidential_asset_deposit_to"></a>
 
 ## Function `deposit_to`
@@ -1532,6 +1582,87 @@ transcript** (must match the hint used when generating the proof). Length must n
 
 </details>
 
+<a id="0x7_confidential_asset_register_and_confidential_transfer"></a>
+
+## Function `register_and_confidential_transfer`
+
+Atomically [<code>register</code>] the sender and submit a [<code>confidential_transfer</code>] in one transaction. The transfer's
+sigma proof must be built against the freshly-registered <code>ek</code> over the canonical empty actual balance.
+Aborts with [<code><a href="confidential_asset.md#0x7_confidential_asset_ECA_STORE_ALREADY_PUBLISHED">ECA_STORE_ALREADY_PUBLISHED</a></code>] if the sender is already registered.
+
+
+<pre><code><b>public</b> entry <b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_register_and_confidential_transfer">register_and_confidential_transfer</a>(sender: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, token: <a href="../../aptos-framework/doc/object.md#0x1_object_Object">object::Object</a>&lt;<a href="../../aptos-framework/doc/fungible_asset.md#0x1_fungible_asset_Metadata">fungible_asset::Metadata</a>&gt;, <b>to</b>: <b>address</b>, new_balance: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, sender_amount: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, recipient_amount: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, auditor_eks: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, auditor_amounts: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, zkrp_new_balance: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, zkrp_transfer_amount: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, sigma_proof: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, sender_auditor_hint: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, ek: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, registration_proof_commitment: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, registration_proof_response: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;)
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> entry <b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_register_and_confidential_transfer">register_and_confidential_transfer</a>(
+    sender: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>,
+    token: Object&lt;Metadata&gt;,
+    <b>to</b>: <b>address</b>,
+    new_balance: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
+    sender_amount: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
+    recipient_amount: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
+    auditor_eks: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
+    auditor_amounts: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
+    zkrp_new_balance: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
+    zkrp_transfer_amount: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
+    sigma_proof: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
+    sender_auditor_hint: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
+    ek: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
+    registration_proof_commitment: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
+    registration_proof_response: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;) <b>acquires</b> <a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>, <a href="confidential_asset.md#0x7_confidential_asset_FAConfig">FAConfig</a>, <a href="confidential_asset.md#0x7_confidential_asset_GlobalConfig">GlobalConfig</a>
+{
+    <b>let</b> ek_pub = twisted_elgamal::new_pubkey_from_bytes(ek).extract();
+
+    <b>let</b> cid = (<a href="../../aptos-framework/doc/chain_id.md#0x1_chain_id_get">chain_id::get</a>() <b>as</b> u8);
+    <b>let</b> user = <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(sender);
+    <a href="confidential_proof.md#0x7_confidential_proof_verify_registration_proof">confidential_proof::verify_registration_proof</a>(
+        cid,
+        user,
+        @aptos_experimental,
+        &ek_pub,
+        <a href="../../aptos-framework/doc/object.md#0x1_object_object_address">object::object_address</a>(&token),
+        registration_proof_commitment,
+        registration_proof_response
+    );
+
+    <a href="confidential_asset.md#0x7_confidential_asset_register_internal">register_internal</a>(sender, token, ek_pub);
+
+    <b>let</b> new_balance = <a href="confidential_balance.md#0x7_confidential_balance_new_actual_balance_from_bytes">confidential_balance::new_actual_balance_from_bytes</a>(new_balance).extract();
+    <b>let</b> sender_amount = <a href="confidential_balance.md#0x7_confidential_balance_new_pending_balance_from_bytes">confidential_balance::new_pending_balance_from_bytes</a>(sender_amount).extract();
+    <b>let</b> recipient_amount = <a href="confidential_balance.md#0x7_confidential_balance_new_pending_balance_from_bytes">confidential_balance::new_pending_balance_from_bytes</a>(recipient_amount).extract();
+    <b>let</b> auditor_eks = <a href="confidential_asset.md#0x7_confidential_asset_deserialize_auditor_eks">deserialize_auditor_eks</a>(auditor_eks).extract();
+    <b>let</b> auditor_amounts = <a href="confidential_asset.md#0x7_confidential_asset_deserialize_auditor_amounts">deserialize_auditor_amounts</a>(auditor_amounts).extract();
+    <b>let</b> proof = <a href="confidential_proof.md#0x7_confidential_proof_deserialize_transfer_proof">confidential_proof::deserialize_transfer_proof</a>(
+        sigma_proof,
+        zkrp_new_balance,
+        zkrp_transfer_amount
+    ).extract();
+
+    <a href="confidential_asset.md#0x7_confidential_asset_confidential_transfer_internal">confidential_transfer_internal</a>(
+        sender,
+        token,
+        <b>to</b>,
+        new_balance,
+        sender_amount,
+        recipient_amount,
+        auditor_eks,
+        auditor_amounts,
+        proof,
+        sender_auditor_hint
+    )
+}
+</code></pre>
+
+
+
+</details>
+
 <a id="0x7_confidential_asset_max_sender_auditor_hint_bytes"></a>
 
 ## Function `max_sender_auditor_hint_bytes`
@@ -1719,11 +1850,8 @@ This operation is necessary to use tokens from the pending balance for outgoing 
 
 ## Function `normalize_and_rollover_pending_balance`
 
-Normalizes the available balance and rolls the pending balance into it in a single
-transaction. Equivalent to calling <code>normalize</code> followed by <code>rollover_pending_balance</code>,
-but only requires one wallet approval.
-The sender provides their new normalized available-balance ciphertext, encrypted with
-fresh randomness, plus the matching range and sigma proofs (same arguments as <code>normalize</code>).
+Atomically [<code>normalize</code>] the actual balance and [<code>rollover_pending_balance</code>] in one transaction. Takes the
+same proof arguments as [<code>normalize</code>].
 
 
 <pre><code><b>public</b> entry <b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_normalize_and_rollover_pending_balance">normalize_and_rollover_pending_balance</a>(sender: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, token: <a href="../../aptos-framework/doc/object.md#0x1_object_Object">object::Object</a>&lt;<a href="../../aptos-framework/doc/fungible_asset.md#0x1_fungible_asset_Metadata">fungible_asset::Metadata</a>&gt;, new_balance: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, zkrp_new_balance: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, sigma_proof: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;)

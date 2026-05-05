@@ -598,6 +598,42 @@ fn pack_transfer_simple(
     std::array::from_fn(|i| ret.return_values[i].0.clone())
 }
 
+/// Pre-registration variant of [`pack_transfer_simple`]: builds a transfer proof for a sender
+/// that does not yet have a confidential asset store. The sender's `ek` is supplied directly
+/// (raw 32-byte compressed pubkey) and the helper uses the canonical empty actual balance.
+fn pack_transfer_simple_pre_registration(
+    h: &mut MoveHarness,
+    chain_byte: u8,
+    sender: AccountAddress,
+    recipient: AccountAddress,
+    dk: &[u8],
+    sender_ek_bytes: &[u8],
+    amount: u64,
+    new_balance: u128,
+    sender_auditor_hint: Vec<u8>,
+) -> [Vec<u8>; 8] {
+    let args = vec![
+        bcs::to_bytes(&chain_byte).unwrap(),
+        bcs::to_bytes(&sender).unwrap(),
+        bcs::to_bytes(&recipient).unwrap(),
+        dk.to_vec(),
+        sender_ek_bytes.to_vec(),
+        bcs::to_bytes(&amount).unwrap(),
+        bcs::to_bytes(&new_balance).unwrap(),
+        bcs::to_bytes(&MOVE_METADATA).unwrap(),
+        bcs::to_bytes(&sender_auditor_hint).unwrap(),
+    ];
+    let ret = bypass_at(
+        h,
+        "confidential_gas_e2e_helpers",
+        "pack_confidential_transfer_proof_pre_registration",
+        vec![],
+        args,
+    );
+    assert_eq!(ret.return_values.len(), 8);
+    std::array::from_fn(|i| ret.return_values[i].0.clone())
+}
+
 fn pack_transfer_audited_verbatim(
     h: &mut MoveHarness,
     chain_byte: u8,
@@ -1294,4 +1330,183 @@ fn view_chain_auditor_pubkey(h: &mut MoveHarness) -> Vec<u8> {
     assert!(!opt_struct.is_empty() && opt_struct[0] == 1, "chain auditor must be Some");
     let inner = opt_struct[1..].to_vec();
     twisted_pubkey_bytes(h, &inner)
+}
+
+// ---- Combined `register + X` entrypoints (single-tx-per-click flows) ----
+
+fn run_register_and_deposit(
+    h: &mut MoveHarness,
+    sender: &Account,
+    amount: u64,
+    ek_pubkey_32: &[u8],
+    comm: &[u8],
+    resp: &[u8],
+) -> TransactionStatus {
+    let payload = TransactionPayload::EntryFunction(EntryFunction::new(
+        ca_module_id(),
+        Identifier::new("register_and_deposit").unwrap(),
+        vec![],
+        vec![
+            bcs::to_bytes(&MOVE_METADATA).unwrap(),
+            bcs::to_bytes(&amount).unwrap(),
+            ek_pubkey_32.to_vec(),
+            comm.to_vec(),
+            resp.to_vec(),
+        ],
+    ));
+    let txn = h.create_transaction_payload(sender, payload);
+    h.run(txn)
+}
+
+fn run_register_and_confidential_transfer(
+    h: &mut MoveHarness,
+    sender: &Account,
+    recipient: AccountAddress,
+    parts: &[Vec<u8>; 8],
+    sender_auditor_hint: Vec<u8>,
+    ek_pubkey_32: &[u8],
+    comm: &[u8],
+    resp: &[u8],
+) -> TransactionStatus {
+    let payload = TransactionPayload::EntryFunction(EntryFunction::new(
+        ca_module_id(),
+        Identifier::new("register_and_confidential_transfer").unwrap(),
+        vec![],
+        vec![
+            bcs::to_bytes(&MOVE_METADATA).unwrap(),
+            bcs::to_bytes(&recipient).unwrap(),
+            parts[0].clone(),
+            parts[1].clone(),
+            parts[2].clone(),
+            parts[3].clone(),
+            parts[4].clone(),
+            parts[5].clone(),
+            parts[6].clone(),
+            parts[7].clone(),
+            bcs::to_bytes(&sender_auditor_hint).unwrap(),
+            ek_pubkey_32.to_vec(),
+            comm.to_vec(),
+            resp.to_vec(),
+        ],
+    ));
+    let txn = h.create_transaction_payload(sender, payload);
+    h.run(txn)
+}
+
+/// `register_and_deposit`: alice (unregistered) atomically registers and deposits into her own
+/// pending balance in a single tx. A subsequent plain `deposit` must succeed (proves the
+/// registration is genuinely persisted, not merely consumed by proof verification).
+#[test]
+fn register_and_deposit_succeeds() {
+    let mut h = fresh_harness();
+    let chain = h.executor.get_chain_id().id();
+    let alice_addr = confidential_e2e_addr(0xCD, 3);
+    let alice = h.new_account_with_balance_at(alice_addr, 50_000_000_000_000);
+
+    let (alice_dk, alice_ek) = generate_elgamal_keypair(&mut h);
+    let alice_pk = twisted_pubkey_bytes(&mut h, &alice_ek);
+    let (c, r) = prove_registration_parts(&mut h, chain, alice_addr, &alice_dk, &alice_ek, MOVE_METADATA);
+
+    assert_kept_success(
+        &run_register_and_deposit(&mut h, &alice, 100, &alice_pk, &c, &r),
+        "register_and_deposit",
+    );
+    // A subsequent plain deposit must succeed because alice's store is now registered.
+    assert_kept_success(&run_deposit(&mut h, &alice, 25), "post-deposit");
+}
+
+/// A registration proof bound to a *different* `ek` than the submitted one must abort the
+/// combined entrypoint before any state is mutated.
+#[test]
+fn register_and_deposit_rejects_bad_proof() {
+    let mut h = fresh_harness();
+    let chain = h.executor.get_chain_id().id();
+    let alice_addr = confidential_e2e_addr(0xCD, 4);
+    let alice = h.new_account_with_balance_at(alice_addr, 50_000_000_000_000);
+
+    let (alice_dk, alice_ek) = generate_elgamal_keypair(&mut h);
+    let (_other_dk, other_ek) = generate_elgamal_keypair(&mut h);
+    let other_pk = twisted_pubkey_bytes(&mut h, &other_ek);
+    // Proof generated for `alice_ek` but submitted alongside `other_pk`.
+    let (c, r) = prove_registration_parts(&mut h, chain, alice_addr, &alice_dk, &alice_ek, MOVE_METADATA);
+
+    assert_kept_failure(
+        &run_register_and_deposit(&mut h, &alice, 50, &other_pk, &c, &r),
+        "bad registration proof must reject combined call",
+    );
+}
+
+/// `register_and_confidential_transfer`: alice (unregistered) atomically registers + sends a
+/// confidential transfer to bob. The transfer carries the chain-auditor-only auditor list
+/// (slot 0) and a 0-amount transfer (alice has no actual balance pre-registration; the test is
+/// about exercising the combined entrypoint, not transferring real value).
+#[test]
+fn register_and_confidential_transfer_succeeds() {
+    let mut h = fresh_harness();
+    let chain = h.executor.get_chain_id().id();
+    let alice_addr = confidential_e2e_addr(0xCD, 6);
+    let bob_addr = confidential_e2e_addr(0xCD, 7);
+    let alice = h.new_account_with_balance_at(alice_addr, 60_000_000_000_000);
+    let bob = h.new_account_with_balance_at(bob_addr, 1_000_000_000);
+
+    // Bob registers normally so he has an `ek` for the recipient ciphertext.
+    let (bob_dk, bob_ek) = generate_elgamal_keypair(&mut h);
+    let bob_pk = twisted_pubkey_bytes(&mut h, &bob_ek);
+    let (bc, br) = prove_registration_parts(&mut h, chain, bob_addr, &bob_dk, &bob_ek, MOVE_METADATA);
+    assert_kept_success(&run_register(&mut h, &bob, &bob_pk, &bc, &br), "bob register");
+
+    let (alice_dk, alice_ek) = generate_elgamal_keypair(&mut h);
+    let alice_pk = twisted_pubkey_bytes(&mut h, &alice_ek);
+    let (rc, rr) = prove_registration_parts(&mut h, chain, alice_addr, &alice_dk, &alice_ek, MOVE_METADATA);
+
+    // Build a transfer proof with the chain auditor only at slot 0 (asset auditor unset by
+    // `fresh_harness`). Pre-registration alice has the canonical empty actual balance, so this
+    // proves a 0-amount transfer with new_balance == 0.
+    let parts = pack_transfer_simple_pre_registration(
+        &mut h,
+        chain,
+        alice_addr,
+        bob_addr,
+        &alice_dk,
+        &alice_pk,
+        0,
+        0,
+        vec![],
+    );
+
+    assert_kept_success(
+        &run_register_and_confidential_transfer(
+            &mut h, &alice, bob_addr, &parts, vec![], &alice_pk, &rc, &rr,
+        ),
+        "register_and_confidential_transfer",
+    );
+
+    // Alice's store is now registered: plain `deposit` must succeed.
+    assert_kept_success(&run_deposit(&mut h, &alice, 10), "post-deposit");
+}
+
+/// Calling `register_and_*` when the sender is already registered must fail; the combined
+/// entrypoints intentionally do not branch on `has_confidential_asset_store`. Callers that
+/// want a no-op-on-already-registered shape branch off-chain.
+#[test]
+fn register_and_deposit_aborts_when_already_registered() {
+    let mut h = fresh_harness();
+    let chain = h.executor.get_chain_id().id();
+    let alice_addr = confidential_e2e_addr(0xCD, 8);
+    let alice = h.new_account_with_balance_at(alice_addr, 50_000_000_000_000);
+
+    let (alice_dk, alice_ek) = generate_elgamal_keypair(&mut h);
+    let alice_pk = twisted_pubkey_bytes(&mut h, &alice_ek);
+    let (c, r) = prove_registration_parts(&mut h, chain, alice_addr, &alice_dk, &alice_ek, MOVE_METADATA);
+
+    assert_kept_success(
+        &run_register(&mut h, &alice, &alice_pk, &c, &r),
+        "alice plain register",
+    );
+
+    // Now combined call must abort because alice already has a confidential asset store.
+    assert_kept_failure(
+        &run_register_and_deposit(&mut h, &alice, 5, &alice_pk, &c, &r),
+        "register_and_deposit on already-registered must abort",
+    );
 }

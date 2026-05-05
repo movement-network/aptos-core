@@ -455,6 +455,239 @@ module aptos_experimental::confidential_asset_tests {
         assert!(confidential_asset::verify_pending_balance(alice_addr, token, &alice_dk, 100), 1);
     }
 
+    // Combined `register + deposit` succeeds in one transaction: the confidential-asset store is
+    // published with Alice's new ek, public FA moves into Alice's own pending balance, and a
+    // follow-up plain `deposit` succeeds (proves the registration was genuinely persisted and
+    // not just consumed by proof verification).
+    #[test(
+        confidential_asset = @aptos_experimental,
+        aptos_fx = @aptos_framework,
+        fa = @0xfa,
+        alice = @0xa1,
+        bob = @0xb0
+    )]
+    fun success_register_and_deposit(
+        confidential_asset: signer,
+        aptos_fx: signer,
+        fa: signer,
+        alice: signer,
+        bob: signer)
+    {
+        let token = set_up_for_confidential_asset_test(&confidential_asset, &aptos_fx, &fa, &alice, &bob, 500, 500);
+
+        let alice_addr = signer::address_of(&alice);
+        let (alice_dk, alice_ek) = generate_twisted_elgamal_keypair();
+        let (commitment, response) = confidential_proof::prove_registration(
+            4u8,
+            alice_addr,
+            @aptos_experimental,
+            &alice_dk,
+            &alice_ek,
+            object::object_address(&token),
+        );
+
+        confidential_asset::register_and_deposit(
+            &alice,
+            token,
+            100,
+            twisted_elgamal::pubkey_to_bytes(&alice_ek),
+            commitment,
+            response,
+        );
+
+        assert!(confidential_asset::has_confidential_asset_store(alice_addr, token), 1);
+        assert!(primary_fungible_store::balance(alice_addr, token) == 400, 2);
+        assert!(confidential_asset::verify_pending_balance(alice_addr, token, &alice_dk, 100), 3);
+
+        // Plain `deposit` must succeed afterward because the registration genuinely persisted.
+        confidential_asset::deposit(&alice, token, 50);
+        assert!(confidential_asset::verify_pending_balance(alice_addr, token, &alice_dk, 150), 4);
+    }
+
+    // Submitting a malformed registration proof through the combined `register_and_deposit` path
+    // must abort before any state mutates: store is not created, fungible balance is not moved.
+    #[test(
+        confidential_asset = @aptos_experimental,
+        aptos_fx = @aptos_framework,
+        fa = @0xfa,
+        alice = @0xa1,
+        bob = @0xb0
+    )]
+    #[expected_failure(abort_code = 65537, location = aptos_experimental::confidential_proof)]
+    fun fail_register_and_deposit_with_bad_registration_proof(
+        confidential_asset: signer,
+        aptos_fx: signer,
+        fa: signer,
+        alice: signer,
+        bob: signer)
+    {
+        let token = set_up_for_confidential_asset_test(&confidential_asset, &aptos_fx, &fa, &alice, &bob, 500, 500);
+
+        let alice_addr = signer::address_of(&alice);
+        let (alice_dk, alice_ek) = generate_twisted_elgamal_keypair();
+        let (_other_dk, other_ek) = generate_twisted_elgamal_keypair();
+
+        // Build a registration proof for `alice_ek` but submit it alongside a different `ek`.
+        // verify_registration_proof recomputes the challenge against the *submitted* ek and the
+        // proof fails Schnorr verification.
+        let (commitment, response) = confidential_proof::prove_registration(
+            4u8,
+            alice_addr,
+            @aptos_experimental,
+            &alice_dk,
+            &alice_ek,
+            object::object_address(&token),
+        );
+
+        confidential_asset::register_and_deposit(
+            &alice,
+            token,
+            100,
+            twisted_elgamal::pubkey_to_bytes(&other_ek),
+            commitment,
+            response,
+        );
+    }
+
+    // `register_and_deposit` aborts when the sender is already registered for the token.
+    #[test(
+        confidential_asset = @aptos_experimental,
+        aptos_fx = @aptos_framework,
+        fa = @0xfa,
+        alice = @0xa1,
+        bob = @0xb0
+    )]
+    #[expected_failure(abort_code = 524290, location = aptos_experimental::confidential_asset)]
+    fun fail_register_and_deposit_when_already_registered(
+        confidential_asset: signer,
+        aptos_fx: signer,
+        fa: signer,
+        alice: signer,
+        bob: signer)
+    {
+        let token = set_up_for_confidential_asset_test(&confidential_asset, &aptos_fx, &fa, &alice, &bob, 500, 500);
+
+        let alice_addr = signer::address_of(&alice);
+        let (alice_dk, alice_ek) = generate_twisted_elgamal_keypair();
+
+        confidential_asset::register_for_testing(&alice, token, twisted_elgamal::pubkey_to_bytes(&alice_ek));
+
+        let (commitment, response) = confidential_proof::prove_registration(
+            4u8,
+            alice_addr,
+            @aptos_experimental,
+            &alice_dk,
+            &alice_ek,
+            object::object_address(&token),
+        );
+
+        confidential_asset::register_and_deposit(
+            &alice,
+            token,
+            10,
+            twisted_elgamal::pubkey_to_bytes(&alice_ek),
+            commitment,
+            response,
+        );
+    }
+
+    // Combined `register + confidential_transfer` in one transaction. Alice has never used the
+    // protocol; she funds her actual balance off-chain via a public mint, registers, and sends a
+    // confidential transfer to Bob in a single tx. Wrap also exercises chain-auditor enforcement
+    // (slot 0 must equal `get_chain_auditor`).
+    #[test(
+        confidential_asset = @aptos_experimental,
+        aptos_fx = @aptos_framework,
+        fa = @0xfa,
+        alice = @0xa1,
+        bob = @0xb0
+    )]
+    fun success_register_and_confidential_transfer(
+        confidential_asset: signer,
+        aptos_fx: signer,
+        fa: signer,
+        alice: signer,
+        bob: signer)
+    {
+        let token = set_up_for_confidential_asset_test(&confidential_asset, &aptos_fx, &fa, &alice, &bob, 500, 500);
+
+        let alice_addr = signer::address_of(&alice);
+        let bob_addr = signer::address_of(&bob);
+
+        let (alice_dk, alice_ek) = generate_twisted_elgamal_keypair();
+        let (bob_dk, bob_ek) = generate_twisted_elgamal_keypair();
+
+        // Bob registers normally so he has an `ek` for the recipient ciphertext.
+        confidential_asset::register_for_testing(&bob, token, twisted_elgamal::pubkey_to_bytes(&bob_ek));
+
+        // Build the registration proof (Schnorr ZKPoK) for Alice.
+        let (commitment, response) = confidential_proof::prove_registration(
+            4u8,
+            alice_addr,
+            @aptos_experimental,
+            &alice_dk,
+            &alice_ek,
+            object::object_address(&token),
+        );
+
+        // Build the transfer proof. Pre-registration Alice's `actual_balance` is the canonical
+        // empty balance, so we prove a transfer of 0 (sending 0 confidential tokens; the test is
+        // about the combined entrypoint working, not about transferring real value pre-funding).
+        let chain_auditor_ek = confidential_asset::get_chain_auditor().extract();
+        let auditor_eks = vector[chain_auditor_ek];
+        let recipient_ek = confidential_asset::encryption_key(bob_addr, token);
+        let canonical_empty = confidential_balance::decompress_balance(
+            &confidential_balance::new_compressed_actual_balance_no_randomness()
+        );
+
+        let (
+            proof,
+            new_balance,
+            sender_amount,
+            recipient_amount,
+            auditor_amounts
+        ) = confidential_proof::prove_transfer(
+            4u8,
+            alice_addr,
+            @aptos_experimental,
+            object::object_address(&token),
+            &alice_dk,
+            &alice_ek,
+            &recipient_ek,
+            0,
+            0,
+            &canonical_empty,
+            &auditor_eks,
+            vector[],
+        );
+        let (sigma_proof, zkrp_new_balance, zkrp_transfer_amount) =
+            confidential_proof::serialize_transfer_proof(&proof);
+
+        confidential_asset::register_and_confidential_transfer(
+            &alice,
+            token,
+            bob_addr,
+            confidential_balance::balance_to_bytes(&new_balance),
+            confidential_balance::balance_to_bytes(&sender_amount),
+            confidential_balance::balance_to_bytes(&recipient_amount),
+            confidential_asset::serialize_auditor_eks(&auditor_eks),
+            confidential_asset::serialize_auditor_amounts(&auditor_amounts),
+            zkrp_new_balance,
+            zkrp_transfer_amount,
+            sigma_proof,
+            vector[],
+            twisted_elgamal::pubkey_to_bytes(&alice_ek),
+            commitment,
+            response,
+        );
+
+        assert!(confidential_asset::has_confidential_asset_store(alice_addr, token), 1);
+        // Alice's actual balance ciphertext encodes 0 (we transferred 0).
+        assert!(confidential_asset::verify_actual_balance(alice_addr, token, &alice_dk, 0), 2);
+        // Bob's pending balance got the 0-amount ciphertext appended; decryption confirms 0.
+        assert!(confidential_asset::verify_pending_balance(bob_addr, token, &bob_dk, 0), 3);
+    }
+
     #[test(
         confidential_asset = @aptos_experimental,
         aptos_fx = @aptos_framework,

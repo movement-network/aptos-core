@@ -69,6 +69,9 @@ pub struct RuntimeEnvironment {
     /// different verifier configurations (e.g. straddling an epoch boundary where the config
     /// changed) would treat each other's cached entries as their own — a module accepted under
     /// a more permissive config could be skipped under a stricter one.
+    /// 
+    /// Invariant: must stay in line with `vm_config.verifier_config`. Any mutation of `vm_config.verifier_config` must
+    /// recompute this digest.
     verifier_config_digest: [u8; 32],
 }
 

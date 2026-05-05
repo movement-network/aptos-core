@@ -889,3 +889,58 @@ impl fmt::Display for PayloadFilter {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::proof_of_store::{BatchId, BatchInfo};
+    use aptos_crypto::HashValue;
+    use aptos_types::PeerId;
+
+    fn make_batch(num_txns: u64, num_bytes: u64) -> BatchInfo {
+        BatchInfo::new(
+            PeerId::random(),
+            BatchId::new_for_test(1),
+            0,
+            100,
+            HashValue::random(),
+            num_txns,
+            num_bytes,
+            0,
+        )
+    }
+
+    #[test]
+    fn batch_size_limits_accepts_within_bounds() {
+        let limits = BatchSizeLimits::new(100, 1000);
+        assert!(limits.check(&make_batch(100, 1000)).is_ok());
+        assert!(limits.check(&make_batch(1, 1)).is_ok());
+        assert!(limits.check(&make_batch(0, 0)).is_ok());
+    }
+
+    #[test]
+    fn batch_size_limits_rejects_excess_txns() {
+        let limits = BatchSizeLimits::new(100, 1000);
+        let err = limits
+            .check(&make_batch(101, 500))
+            .expect_err("should reject batch exceeding txn cap");
+        assert!(err.to_string().contains("txns"), "{err}");
+    }
+
+    #[test]
+    fn batch_size_limits_rejects_excess_bytes() {
+        let limits = BatchSizeLimits::new(100, 1000);
+        let err = limits
+            .check(&make_batch(50, 1001))
+            .expect_err("should reject batch exceeding byte cap");
+        assert!(err.to_string().contains("bytes"), "{err}");
+    }
+
+    #[test]
+    fn batch_size_limits_rejects_overflow_values() {
+        let limits = BatchSizeLimits::new(100, 1000);
+        // Attacker claims u64::MAX txns / bytes — must be rejected.
+        assert!(limits.check(&make_batch(u64::MAX, 500)).is_err());
+        assert!(limits.check(&make_batch(50, u64::MAX)).is_err());
+    }
+}

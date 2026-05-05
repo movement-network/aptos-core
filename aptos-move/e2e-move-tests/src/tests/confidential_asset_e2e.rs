@@ -1358,41 +1358,6 @@ fn run_register_and_deposit(
     h.run(txn)
 }
 
-fn run_register_and_confidential_transfer(
-    h: &mut MoveHarness,
-    sender: &Account,
-    recipient: AccountAddress,
-    parts: &[Vec<u8>; 8],
-    sender_auditor_hint: Vec<u8>,
-    ek_pubkey_32: &[u8],
-    comm: &[u8],
-    resp: &[u8],
-) -> TransactionStatus {
-    let payload = TransactionPayload::EntryFunction(EntryFunction::new(
-        ca_module_id(),
-        Identifier::new("register_and_confidential_transfer").unwrap(),
-        vec![],
-        vec![
-            bcs::to_bytes(&MOVE_METADATA).unwrap(),
-            bcs::to_bytes(&recipient).unwrap(),
-            parts[0].clone(),
-            parts[1].clone(),
-            parts[2].clone(),
-            parts[3].clone(),
-            parts[4].clone(),
-            parts[5].clone(),
-            parts[6].clone(),
-            parts[7].clone(),
-            bcs::to_bytes(&sender_auditor_hint).unwrap(),
-            ek_pubkey_32.to_vec(),
-            comm.to_vec(),
-            resp.to_vec(),
-        ],
-    ));
-    let txn = h.create_transaction_payload(sender, payload);
-    h.run(txn)
-}
-
 /// `register_and_deposit`: alice (unregistered) atomically registers and deposits into her own
 /// pending balance in a single tx. A subsequent plain `deposit` must succeed (proves the
 /// registration is genuinely persisted, not merely consumed by proof verification).
@@ -1434,55 +1399,6 @@ fn register_and_deposit_rejects_bad_proof() {
         &run_register_and_deposit(&mut h, &alice, 50, &other_pk, &c, &r),
         "bad registration proof must reject combined call",
     );
-}
-
-/// `register_and_confidential_transfer`: alice (unregistered) atomically registers + sends a
-/// confidential transfer to bob. The transfer carries the chain-auditor-only auditor list
-/// (slot 0) and a 0-amount transfer (alice has no actual balance pre-registration; the test is
-/// about exercising the combined entrypoint, not transferring real value).
-#[test]
-fn register_and_confidential_transfer_succeeds() {
-    let mut h = fresh_harness();
-    let chain = h.executor.get_chain_id().id();
-    let alice_addr = confidential_e2e_addr(0xCD, 6);
-    let bob_addr = confidential_e2e_addr(0xCD, 7);
-    let alice = h.new_account_with_balance_at(alice_addr, 60_000_000_000_000);
-    let bob = h.new_account_with_balance_at(bob_addr, 1_000_000_000);
-
-    // Bob registers normally so he has an `ek` for the recipient ciphertext.
-    let (bob_dk, bob_ek) = generate_elgamal_keypair(&mut h);
-    let bob_pk = twisted_pubkey_bytes(&mut h, &bob_ek);
-    let (bc, br) = prove_registration_parts(&mut h, chain, bob_addr, &bob_dk, &bob_ek, MOVE_METADATA);
-    assert_kept_success(&run_register(&mut h, &bob, &bob_pk, &bc, &br), "bob register");
-
-    let (alice_dk, alice_ek) = generate_elgamal_keypair(&mut h);
-    let alice_pk = twisted_pubkey_bytes(&mut h, &alice_ek);
-    let (rc, rr) = prove_registration_parts(&mut h, chain, alice_addr, &alice_dk, &alice_ek, MOVE_METADATA);
-
-    // Build a transfer proof with the chain auditor only at slot 0 (asset auditor unset by
-    // `fresh_harness`). Pre-registration alice has the canonical empty actual balance, so this
-    // proves a 0-amount transfer with new_balance == 0.
-    let parts = pack_transfer_simple_pre_registration(
-        &mut h,
-        chain,
-        alice_addr,
-        bob_addr,
-        &alice_dk,
-        &alice_pk,
-        0,
-        0,
-        vec![],
-    );
-
-    assert_kept_success(
-        &run_register_and_confidential_transfer(
-            &mut h, &alice, bob_addr, &parts, vec![], &alice_pk, &rc, &rr,
-        ),
-        "register_and_confidential_transfer",
-    );
-
-    // Alice's store is now registered: plain `deposit` must succeed.
-    assert_kept_success(&run_deposit(&mut h, &alice, 10), "post-deposit");
 }
 
 /// Calling `register_and_*` when the sender is already registered must fail; the combined

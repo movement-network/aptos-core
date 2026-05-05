@@ -574,67 +574,6 @@ module aptos_experimental::confidential_asset {
         )
     }
 
-    /// Atomically [`register`] the sender and submit a [`confidential_transfer`] in one transaction. The transfer's
-    /// sigma proof must be built against the freshly-registered `ek` over the canonical empty actual balance.
-    /// Aborts with [`ECA_STORE_ALREADY_PUBLISHED`] if the sender is already registered.
-    public entry fun register_and_confidential_transfer(
-        sender: &signer,
-        token: Object<Metadata>,
-        to: address,
-        new_balance: vector<u8>,
-        sender_amount: vector<u8>,
-        recipient_amount: vector<u8>,
-        auditor_eks: vector<u8>,
-        auditor_amounts: vector<u8>,
-        zkrp_new_balance: vector<u8>,
-        zkrp_transfer_amount: vector<u8>,
-        sigma_proof: vector<u8>,
-        sender_auditor_hint: vector<u8>,
-        ek: vector<u8>,
-        registration_proof_commitment: vector<u8>,
-        registration_proof_response: vector<u8>) acquires ConfidentialAssetStore, FAConfig, GlobalConfig
-    {
-        let ek_pub = twisted_elgamal::new_pubkey_from_bytes(ek).extract();
-
-        let cid = (chain_id::get() as u8);
-        let user = signer::address_of(sender);
-        confidential_proof::verify_registration_proof(
-            cid,
-            user,
-            @aptos_experimental,
-            &ek_pub,
-            object::object_address(&token),
-            registration_proof_commitment,
-            registration_proof_response
-        );
-
-        register_internal(sender, token, ek_pub);
-
-        let new_balance = confidential_balance::new_actual_balance_from_bytes(new_balance).extract();
-        let sender_amount = confidential_balance::new_pending_balance_from_bytes(sender_amount).extract();
-        let recipient_amount = confidential_balance::new_pending_balance_from_bytes(recipient_amount).extract();
-        let auditor_eks = deserialize_auditor_eks(auditor_eks).extract();
-        let auditor_amounts = deserialize_auditor_amounts(auditor_amounts).extract();
-        let proof = confidential_proof::deserialize_transfer_proof(
-            sigma_proof,
-            zkrp_new_balance,
-            zkrp_transfer_amount
-        ).extract();
-
-        confidential_transfer_internal(
-            sender,
-            token,
-            to,
-            new_balance,
-            sender_amount,
-            recipient_amount,
-            auditor_eks,
-            auditor_amounts,
-            proof,
-            sender_auditor_hint
-        )
-    }
-
     #[view]
     /// Returns the maximum allowed `sender_auditor_hint` length for [`confidential_transfer`].
     public fun max_sender_auditor_hint_bytes(): u64 {

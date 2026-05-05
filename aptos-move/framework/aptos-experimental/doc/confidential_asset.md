@@ -1280,10 +1280,11 @@ FA lands as spendable confidential (actual) balance in one tx. Aborts with
     registration_proof_commitment: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
     registration_proof_response: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;) <b>acquires</b> <a href="confidential_asset.md#0x7_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>, <a href="confidential_asset.md#0x7_confidential_asset_GlobalConfig">GlobalConfig</a>, <a href="confidential_asset.md#0x7_confidential_asset_FAConfig">FAConfig</a>
 {
+    // The fresh store created by `register` is `normalized = <b>true</b>` <b>with</b> empty actual_balance,
+    // so `deposit_and_rollover_pending_balance`'s normalized-state assertion passes — no need
+    // for a separate normalize step here.
     <a href="confidential_asset.md#0x7_confidential_asset_register">register</a>(sender, token, ek, registration_proof_commitment, registration_proof_response);
-    <b>let</b> user = <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(sender);
-    <a href="confidential_asset.md#0x7_confidential_asset_deposit_to_internal">deposit_to_internal</a>(sender, token, user, amount);
-    <a href="confidential_asset.md#0x7_confidential_asset_rollover_pending_balance_internal">rollover_pending_balance_internal</a>(sender, token);
+    <a href="confidential_asset.md#0x7_confidential_asset_deposit_and_rollover_pending_balance">deposit_and_rollover_pending_balance</a>(sender, token, amount);
 }
 </code></pre>
 

@@ -416,10 +416,11 @@ module aptos_experimental::confidential_asset {
         registration_proof_commitment: vector<u8>,
         registration_proof_response: vector<u8>) acquires ConfidentialAssetStore, GlobalConfig, FAConfig
     {
+        // The fresh store created by `register` is `normalized = true` with empty actual_balance,
+        // so `deposit_and_rollover_pending_balance`'s normalized-state assertion passes — no need
+        // for a separate normalize step here.
         register(sender, token, ek, registration_proof_commitment, registration_proof_response);
-        let user = signer::address_of(sender);
-        deposit_to_internal(sender, token, user, amount);
-        rollover_pending_balance_internal(sender, token);
+        deposit_and_rollover_pending_balance(sender, token, amount);
     }
 
     /// Atomically [`deposit`] and [`rollover_pending_balance`] when the sender's actual balance is already

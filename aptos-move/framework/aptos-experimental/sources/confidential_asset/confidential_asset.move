@@ -424,7 +424,7 @@ module aptos_experimental::confidential_asset {
 
     /// Atomically [`deposit`] and [`rollover_pending_balance`] when the sender's actual balance is already
     /// normalized — no proofs needed. Aborts with [`ENORMALIZATION_REQUIRED`] otherwise; use
-    /// [`deposit_normalize_and_rollover_pending_balance`] in that case.
+    /// [`deposit_and_normalize_and_rollover_pending_balance`] in that case.
     public entry fun deposit_and_rollover_pending_balance(
         sender: &signer,
         token: Object<Metadata>,
@@ -438,7 +438,7 @@ module aptos_experimental::confidential_asset {
     /// Atomically [`deposit`], [`normalize`] the actual balance, and [`rollover_pending_balance`] when the
     /// sender's actual balance is NOT normalized. Same proof arguments as [`normalize`]. Aborts with
     /// [`EALREADY_NORMALIZED`] if already normalized; use [`deposit_and_rollover_pending_balance`] then.
-    public entry fun deposit_normalize_and_rollover_pending_balance(
+    public entry fun deposit_and_normalize_and_rollover_pending_balance(
         sender: &signer,
         token: Object<Metadata>,
         amount: u64,

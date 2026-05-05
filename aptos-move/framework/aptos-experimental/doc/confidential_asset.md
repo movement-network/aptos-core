@@ -28,7 +28,7 @@ It enables private transfers by obfuscating token amounts while keeping sender a
 -  [Function `register`](#0x7_confidential_asset_register)
 -  [Function `register_and_deposit_and_rollover_pending_balance`](#0x7_confidential_asset_register_and_deposit_and_rollover_pending_balance)
 -  [Function `deposit_and_rollover_pending_balance`](#0x7_confidential_asset_deposit_and_rollover_pending_balance)
--  [Function `deposit_normalize_and_rollover_pending_balance`](#0x7_confidential_asset_deposit_normalize_and_rollover_pending_balance)
+-  [Function `deposit_and_normalize_and_rollover_pending_balance`](#0x7_confidential_asset_deposit_and_normalize_and_rollover_pending_balance)
 -  [Function `deposit_to`](#0x7_confidential_asset_deposit_to)
 -  [Function `deposit`](#0x7_confidential_asset_deposit)
 -  [Function `deposit_coins_to`](#0x7_confidential_asset_deposit_coins_to)
@@ -1297,7 +1297,7 @@ FA lands as spendable confidential (actual) balance in one tx. Aborts with
 
 Atomically [<code>deposit</code>] and [<code>rollover_pending_balance</code>] when the sender's actual balance is already
 normalized — no proofs needed. Aborts with [<code><a href="confidential_asset.md#0x7_confidential_asset_ENORMALIZATION_REQUIRED">ENORMALIZATION_REQUIRED</a></code>] otherwise; use
-[<code>deposit_normalize_and_rollover_pending_balance</code>] in that case.
+[<code>deposit_and_normalize_and_rollover_pending_balance</code>] in that case.
 
 
 <pre><code><b>public</b> entry <b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_deposit_and_rollover_pending_balance">deposit_and_rollover_pending_balance</a>(sender: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, token: <a href="../../aptos-framework/doc/object.md#0x1_object_Object">object::Object</a>&lt;<a href="../../aptos-framework/doc/fungible_asset.md#0x1_fungible_asset_Metadata">fungible_asset::Metadata</a>&gt;, amount: u64)
@@ -1324,16 +1324,16 @@ normalized — no proofs needed. Aborts with [<code><a href="confidential_asset.
 
 </details>
 
-<a id="0x7_confidential_asset_deposit_normalize_and_rollover_pending_balance"></a>
+<a id="0x7_confidential_asset_deposit_and_normalize_and_rollover_pending_balance"></a>
 
-## Function `deposit_normalize_and_rollover_pending_balance`
+## Function `deposit_and_normalize_and_rollover_pending_balance`
 
 Atomically [<code>deposit</code>], [<code>normalize</code>] the actual balance, and [<code>rollover_pending_balance</code>] when the
 sender's actual balance is NOT normalized. Same proof arguments as [<code>normalize</code>]. Aborts with
 [<code><a href="confidential_asset.md#0x7_confidential_asset_EALREADY_NORMALIZED">EALREADY_NORMALIZED</a></code>] if already normalized; use [<code>deposit_and_rollover_pending_balance</code>] then.
 
 
-<pre><code><b>public</b> entry <b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_deposit_normalize_and_rollover_pending_balance">deposit_normalize_and_rollover_pending_balance</a>(sender: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, token: <a href="../../aptos-framework/doc/object.md#0x1_object_Object">object::Object</a>&lt;<a href="../../aptos-framework/doc/fungible_asset.md#0x1_fungible_asset_Metadata">fungible_asset::Metadata</a>&gt;, amount: u64, new_balance: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, zkrp_new_balance: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, sigma_proof: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;)
+<pre><code><b>public</b> entry <b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_deposit_and_normalize_and_rollover_pending_balance">deposit_and_normalize_and_rollover_pending_balance</a>(sender: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, token: <a href="../../aptos-framework/doc/object.md#0x1_object_Object">object::Object</a>&lt;<a href="../../aptos-framework/doc/fungible_asset.md#0x1_fungible_asset_Metadata">fungible_asset::Metadata</a>&gt;, amount: u64, new_balance: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, zkrp_new_balance: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, sigma_proof: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;)
 </code></pre>
 
 
@@ -1342,7 +1342,7 @@ sender's actual balance is NOT normalized. Same proof arguments as [<code>normal
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> entry <b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_deposit_normalize_and_rollover_pending_balance">deposit_normalize_and_rollover_pending_balance</a>(
+<pre><code><b>public</b> entry <b>fun</b> <a href="confidential_asset.md#0x7_confidential_asset_deposit_and_normalize_and_rollover_pending_balance">deposit_and_normalize_and_rollover_pending_balance</a>(
     sender: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>,
     token: Object&lt;Metadata&gt;,
     amount: u64,

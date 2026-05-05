@@ -1304,7 +1304,7 @@ fn view_chain_auditor_pubkey(h: &mut MoveHarness) -> Vec<u8> {
 //
 //   - unregistered                                  → register_and_deposit_and_rollover_pending_balance
 //   - registered, normalized=true                   → deposit_and_rollover_pending_balance
-//   - registered, normalized=false (post-rollover)  → deposit_normalize_and_rollover_pending_balance
+//   - registered, normalized=false (post-rollover)  → deposit_and_normalize_and_rollover_pending_balance
 
 fn run_register_and_deposit_and_rollover(
     h: &mut MoveHarness,
@@ -1351,7 +1351,7 @@ fn run_deposit_normalize_and_rollover(
 ) -> TransactionStatus {
     let payload = TransactionPayload::EntryFunction(EntryFunction::new(
         ca_module_id(),
-        Identifier::new("deposit_normalize_and_rollover_pending_balance").unwrap(),
+        Identifier::new("deposit_and_normalize_and_rollover_pending_balance").unwrap(),
         vec![],
         vec![
             bcs::to_bytes(&MOVE_METADATA).unwrap(),
@@ -1466,7 +1466,7 @@ fn deposit_and_rollover_succeeds_when_normalized() {
 
 /// Subsequent combined entry on a NOT-normalized state must abort with ENORMALIZATION_REQUIRED
 /// (3 << 16 | 10 = 196618). The wallet detects this state via `is_normalized` view and routes
-/// to `deposit_normalize_and_rollover_pending_balance` instead.
+/// to `deposit_and_normalize_and_rollover_pending_balance` instead.
 #[test]
 fn deposit_and_rollover_aborts_when_not_normalized() {
     let mut h = fresh_harness();

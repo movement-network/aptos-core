@@ -635,7 +635,7 @@ module aptos_experimental::confidential_asset_tests {
     // `deposit_and_rollover_pending_balance` aborts when the actual balance is not normalized.
     // The state arrives after any prior `rollover_pending_balance` (which sets normalized=false),
     // so this is the common post-make-private state and the wallet must route to
-    // `deposit_normalize_and_rollover_pending_balance` instead.
+    // `deposit_and_normalize_and_rollover_pending_balance` instead.
     #[test(
         confidential_asset = @aptos_experimental,
         aptos_fx = @aptos_framework,
@@ -676,7 +676,7 @@ module aptos_experimental::confidential_asset_tests {
         alice = @0xa1,
         bob = @0xb0
     )]
-    fun success_deposit_normalize_and_rollover_pending_balance(
+    fun success_deposit_and_normalize_and_rollover_pending_balance(
         confidential_asset: signer,
         aptos_fx: signer,
         fa: signer,
@@ -716,7 +716,7 @@ module aptos_experimental::confidential_asset_tests {
         let (sigma, zkrp) = confidential_proof::serialize_normalization_proof(&proof);
 
         // deposit 30, then normalize, then rollover → actual = 100 + 30 = 130.
-        confidential_asset::deposit_normalize_and_rollover_pending_balance(
+        confidential_asset::deposit_and_normalize_and_rollover_pending_balance(
             &alice,
             token,
             30,

@@ -405,6 +405,57 @@ module aptos_experimental::confidential_asset {
         register_internal(sender, token, ek);
     }
 
+    /// Atomically [`register`], [`deposit`], and [`rollover_pending_balance`] for first-time users — public
+    /// FA lands as spendable confidential (actual) balance in one tx. Aborts with
+    /// [`ECA_STORE_ALREADY_PUBLISHED`] if the sender is already registered.
+    public entry fun register_and_deposit_and_rollover_pending_balance(
+        sender: &signer,
+        token: Object<Metadata>,
+        amount: u64,
+        ek: vector<u8>,
+        registration_proof_commitment: vector<u8>,
+        registration_proof_response: vector<u8>) acquires ConfidentialAssetStore, GlobalConfig, FAConfig
+    {
+        // The fresh store created by `register` is `normalized = true` with empty actual_balance,
+        // so `deposit_and_rollover_pending_balance`'s normalized-state assertion passes — no need
+        // for a separate normalize step here.
+        register(sender, token, ek, registration_proof_commitment, registration_proof_response);
+        deposit_and_rollover_pending_balance(sender, token, amount);
+    }
+
+    /// Atomically [`deposit`] and [`rollover_pending_balance`] when the sender's actual balance is already
+    /// normalized — no proofs needed. Aborts with [`ENORMALIZATION_REQUIRED`] otherwise; use
+    /// [`deposit_and_normalize_and_rollover_pending_balance`] in that case.
+    public entry fun deposit_and_rollover_pending_balance(
+        sender: &signer,
+        token: Object<Metadata>,
+        amount: u64) acquires ConfidentialAssetStore, GlobalConfig, FAConfig
+    {
+        let user = signer::address_of(sender);
+        deposit_to_internal(sender, token, user, amount);
+        rollover_pending_balance_internal(sender, token);
+    }
+
+    /// Atomically [`deposit`], [`normalize`] the actual balance, and [`rollover_pending_balance`] when the
+    /// sender's actual balance is NOT normalized. Same proof arguments as [`normalize`]. Aborts with
+    /// [`EALREADY_NORMALIZED`] if already normalized; use [`deposit_and_rollover_pending_balance`] then.
+    public entry fun deposit_and_normalize_and_rollover_pending_balance(
+        sender: &signer,
+        token: Object<Metadata>,
+        amount: u64,
+        new_balance: vector<u8>,
+        zkrp_new_balance: vector<u8>,
+        sigma_proof: vector<u8>) acquires ConfidentialAssetStore, GlobalConfig, FAConfig
+    {
+        let new_balance = confidential_balance::new_actual_balance_from_bytes(new_balance).extract();
+        let proof = confidential_proof::deserialize_normalization_proof(sigma_proof, zkrp_new_balance).extract();
+
+        let user = signer::address_of(sender);
+        deposit_to_internal(sender, token, user, amount);
+        normalize_internal(sender, token, new_balance, proof);
+        rollover_pending_balance_internal(sender, token);
+    }
+
     /// Brings tokens into the protocol, transferring the passed amount from the sender's primary FA store
     /// to the pending balance of the recipient.
     /// The initial confidential balance is publicly visible, as entering the protocol requires a normal transfer.
@@ -606,6 +657,22 @@ module aptos_experimental::confidential_asset {
         sender: &signer,
         token: Object<Metadata>) acquires ConfidentialAssetStore
     {
+        rollover_pending_balance_internal(sender, token);
+    }
+
+    /// Atomically [`normalize`] the actual balance and [`rollover_pending_balance`] in one transaction. Takes the
+    /// same proof arguments as [`normalize`].
+    public entry fun normalize_and_rollover_pending_balance(
+        sender: &signer,
+        token: Object<Metadata>,
+        new_balance: vector<u8>,
+        zkrp_new_balance: vector<u8>,
+        sigma_proof: vector<u8>) acquires ConfidentialAssetStore
+    {
+        let new_balance = confidential_balance::new_actual_balance_from_bytes(new_balance).extract();
+        let proof = confidential_proof::deserialize_normalization_proof(sigma_proof, zkrp_new_balance).extract();
+
+        normalize_internal(sender, token, new_balance, proof);
         rollover_pending_balance_internal(sender, token);
     }
 

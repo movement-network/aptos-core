@@ -1,0 +1,12 @@
+[package]
+name = "ChainAuditorBootstrap"
+version = "1.0.0"
+
+[addresses]
+# Resolved at compile-time via --named-addresses to the publish-profile account
+# that AptosExperimental was published from. This script only references
+# aptos_experimental::confidential_asset symbols; it does not deploy here.
+aptos_experimental = "_"
+
+[dependencies]
+AptosExperimental = { local = "../../aptos-move/framework/aptos-experimental" }

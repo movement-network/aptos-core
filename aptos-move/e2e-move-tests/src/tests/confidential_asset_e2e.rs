@@ -480,6 +480,28 @@ fn run_normalize(
     h.run(txn)
 }
 
+fn run_normalize_and_rollover(
+    h: &mut MoveHarness,
+    account: &Account,
+    new_bal: &[u8],
+    zkrp: &[u8],
+    sigma: &[u8],
+) -> TransactionStatus {
+    let payload = TransactionPayload::EntryFunction(EntryFunction::new(
+        ca_module_id(),
+        Identifier::new("normalize_and_rollover_pending_balance").unwrap(),
+        vec![],
+        vec![
+            bcs::to_bytes(&MOVE_METADATA).unwrap(),
+            new_bal.to_vec(),
+            zkrp.to_vec(),
+            sigma.to_vec(),
+        ],
+    ));
+    let txn = h.create_transaction_payload(account, payload);
+    h.run(txn)
+}
+
 fn set_asset_auditor(h: &mut MoveHarness, auditor_pubkey_32: &[u8]) {
     let args = vec![
         MoveValue::Signer(AccountAddress::ONE)
@@ -1224,6 +1246,46 @@ fn confidential_transfer_rejects_after_chain_auditor_rotation() {
     assert_kept_failure(&st, "post-rotation old-key proof must be rejected");
 }
 
+/// `normalize_and_rollover_pending_balance` does both steps in one tx. The proof is
+/// generated against the *current* (unnormalized) actual balance; success implies both
+/// `normalize_internal` and `rollover_pending_balance_internal` ran (their state asserts
+/// are mutually exclusive — `normalize` requires `!normalized`, `rollover` requires
+/// `normalized`, so a wrong composition would abort one of them).
+#[test]
+fn normalize_and_rollover_combined_entry_succeeds() {
+    let mut h = fresh_harness();
+    let chain = h.executor.get_chain_id().id();
+    let alice_addr = confidential_e2e_addr(0xEC, 1);
+    let bob_addr = confidential_e2e_addr(0xEC, 2);
+    let alice = h.new_account_with_balance_at(alice_addr, 50_000_000_000_000);
+    let bob = h.new_account_with_balance_at(bob_addr, 50_000_000_000_000);
+
+    let (alice_dk, alice_ek) = generate_elgamal_keypair(&mut h);
+    let (bob_dk, bob_ek) = generate_elgamal_keypair(&mut h);
+    for (acct, addr, dk, ek) in [(&alice, alice_addr, &alice_dk, &alice_ek), (&bob, bob_addr, &bob_dk, &bob_ek)] {
+        let pk = twisted_pubkey_bytes(&mut h, ek);
+        let (c, r) = prove_registration_parts(&mut h, chain, addr, dk, ek, MOVE_METADATA);
+        assert_kept_success(&run_register(&mut h, acct, &pk, &c, &r), "register");
+    }
+
+    // Stack two max-chunk deposits into the available balance to leave it unnormalized.
+    let max_chunk: u64 = (1u64 << 16) - 1;
+    assert_kept_success(&run_deposit(&mut h, &alice, max_chunk), "alice deposit 1");
+    assert_kept_success(&run_deposit_to(&mut h, &bob, alice_addr, max_chunk), "bob → alice deposit");
+    assert_kept_success(&run_rollover(&mut h, &alice), "rollover (now unnormalized)");
+
+    // A fresh deposit lands in pending; the combined entry must roll it in.
+    assert_kept_success(&run_deposit(&mut h, &alice, 50), "alice deposit 2");
+
+    // Proof normalizes against the *current* (unnormalized, pre-rollover) actual balance.
+    let cur: u128 = 2u128 * max_chunk as u128;
+    let (new_bal, zkrp, sigma) = pack_normalize(&mut h, chain, alice_addr, &alice_dk, cur);
+    assert_kept_success(
+        &run_normalize_and_rollover(&mut h, &alice, &new_bal, &zkrp, &sigma),
+        "normalize_and_rollover_pending_balance",
+    );
+}
+
 fn view_chain_auditor_pubkey(h: &mut MoveHarness) -> Vec<u8> {
     let ret = bypass_at(h, "confidential_asset", "get_chain_auditor", vec![], vec![]);
     assert_eq!(ret.return_values.len(), 1);
@@ -1232,4 +1294,229 @@ fn view_chain_auditor_pubkey(h: &mut MoveHarness) -> Vec<u8> {
     assert!(!opt_struct.is_empty() && opt_struct[0] == 1, "chain auditor must be Some");
     let inner = opt_struct[1..].to_vec();
     twisted_pubkey_bytes(h, &inner)
+}
+
+// ---- Combined "lands spendable" entrypoints (single-tx make-private flows) ----
+//
+// These three Move entrypoints collapse a deposit into a spendable confidential balance in one
+// transaction. All three end with `rollover_pending_balance_internal`, which writes the new
+// actual balance and zeros pending. The wallet picks based on on-chain state:
+//
+//   - unregistered                                  → register_and_deposit_and_rollover_pending_balance
+//   - registered, normalized=true                   → deposit_and_rollover_pending_balance
+//   - registered, normalized=false (post-rollover)  → deposit_and_normalize_and_rollover_pending_balance
+
+fn run_register_and_deposit_and_rollover(
+    h: &mut MoveHarness,
+    sender: &Account,
+    amount: u64,
+    ek_pubkey_32: &[u8],
+    comm: &[u8],
+    resp: &[u8],
+) -> TransactionStatus {
+    let payload = TransactionPayload::EntryFunction(EntryFunction::new(
+        ca_module_id(),
+        Identifier::new("register_and_deposit_and_rollover_pending_balance").unwrap(),
+        vec![],
+        vec![
+            bcs::to_bytes(&MOVE_METADATA).unwrap(),
+            bcs::to_bytes(&amount).unwrap(),
+            ek_pubkey_32.to_vec(),
+            comm.to_vec(),
+            resp.to_vec(),
+        ],
+    ));
+    let txn = h.create_transaction_payload(sender, payload);
+    h.run(txn)
+}
+
+fn run_deposit_and_rollover(h: &mut MoveHarness, sender: &Account, amount: u64) -> TransactionStatus {
+    let payload = TransactionPayload::EntryFunction(EntryFunction::new(
+        ca_module_id(),
+        Identifier::new("deposit_and_rollover_pending_balance").unwrap(),
+        vec![],
+        vec![bcs::to_bytes(&MOVE_METADATA).unwrap(), bcs::to_bytes(&amount).unwrap()],
+    ));
+    let txn = h.create_transaction_payload(sender, payload);
+    h.run(txn)
+}
+
+fn run_deposit_normalize_and_rollover(
+    h: &mut MoveHarness,
+    sender: &Account,
+    amount: u64,
+    new_balance: &[u8],
+    zkrp: &[u8],
+    sigma: &[u8],
+) -> TransactionStatus {
+    let payload = TransactionPayload::EntryFunction(EntryFunction::new(
+        ca_module_id(),
+        Identifier::new("deposit_and_normalize_and_rollover_pending_balance").unwrap(),
+        vec![],
+        vec![
+            bcs::to_bytes(&MOVE_METADATA).unwrap(),
+            bcs::to_bytes(&amount).unwrap(),
+            new_balance.to_vec(),
+            zkrp.to_vec(),
+            sigma.to_vec(),
+        ],
+    ));
+    let txn = h.create_transaction_payload(sender, payload);
+    h.run(txn)
+}
+
+/// First-time atomic register + deposit + rollover. Verifies (a) the entry succeeds, (b) the
+/// store is genuinely registered (a follow-up plain deposit works), and (c) the funds landed in
+/// actual (spendable), since the test exercises the same path the wallet's "Make private" UX
+/// uses for unregistered users.
+#[test]
+fn register_and_deposit_and_rollover_succeeds() {
+    let mut h = fresh_harness();
+    let chain = h.executor.get_chain_id().id();
+    let alice_addr = confidential_e2e_addr(0xCD, 3);
+    let alice = h.new_account_with_balance_at(alice_addr, 50_000_000_000_000);
+
+    let (alice_dk, alice_ek) = generate_elgamal_keypair(&mut h);
+    let alice_pk = twisted_pubkey_bytes(&mut h, &alice_ek);
+    let (c, r) = prove_registration_parts(&mut h, chain, alice_addr, &alice_dk, &alice_ek, MOVE_METADATA);
+
+    assert_kept_success(
+        &run_register_and_deposit_and_rollover(&mut h, &alice, 100, &alice_pk, &c, &r),
+        "register_and_deposit_and_rollover",
+    );
+    // Registration genuinely persisted: subsequent plain deposit (which requires an existing
+    // store) must succeed.
+    assert_kept_success(&run_deposit(&mut h, &alice, 25), "post-deposit");
+}
+
+/// Bad registration proof must reject before any state mutates.
+#[test]
+fn register_and_deposit_and_rollover_rejects_bad_proof() {
+    let mut h = fresh_harness();
+    let chain = h.executor.get_chain_id().id();
+    let alice_addr = confidential_e2e_addr(0xCD, 4);
+    let alice = h.new_account_with_balance_at(alice_addr, 50_000_000_000_000);
+
+    let (alice_dk, alice_ek) = generate_elgamal_keypair(&mut h);
+    let (_other_dk, other_ek) = generate_elgamal_keypair(&mut h);
+    let other_pk = twisted_pubkey_bytes(&mut h, &other_ek);
+    let (c, r) = prove_registration_parts(&mut h, chain, alice_addr, &alice_dk, &alice_ek, MOVE_METADATA);
+
+    assert_kept_failure(
+        &run_register_and_deposit_and_rollover(&mut h, &alice, 50, &other_pk, &c, &r),
+        "bad registration proof must reject combined call",
+    );
+}
+
+/// Combined entry aborts when the sender is already registered.
+#[test]
+fn register_and_deposit_and_rollover_aborts_when_already_registered() {
+    let mut h = fresh_harness();
+    let chain = h.executor.get_chain_id().id();
+    let alice_addr = confidential_e2e_addr(0xCD, 8);
+    let alice = h.new_account_with_balance_at(alice_addr, 50_000_000_000_000);
+
+    let (alice_dk, alice_ek) = generate_elgamal_keypair(&mut h);
+    let alice_pk = twisted_pubkey_bytes(&mut h, &alice_ek);
+    let (c, r) = prove_registration_parts(&mut h, chain, alice_addr, &alice_dk, &alice_ek, MOVE_METADATA);
+
+    assert_kept_success(
+        &run_register(&mut h, &alice, &alice_pk, &c, &r),
+        "alice plain register",
+    );
+    assert_kept_failure(
+        &run_register_and_deposit_and_rollover(&mut h, &alice, 5, &alice_pk, &c, &r),
+        "register_and_deposit_and_rollover on already-registered must abort",
+    );
+}
+
+/// Subsequent combined entry on a normalized state: deposit + rollover, no normalize required.
+/// Pre-state (normalized=true) is established by registering, depositing, rolling over, then
+/// withdrawing — the withdraw path sets normalized=true.
+#[test]
+fn deposit_and_rollover_succeeds_when_normalized() {
+    let mut h = fresh_harness();
+    let chain = h.executor.get_chain_id().id();
+    let alice_addr = confidential_e2e_addr(0xCD, 10);
+    let alice = h.new_account_with_balance_at(alice_addr, 50_000_000_000_000);
+
+    let (alice_dk, alice_ek) = generate_elgamal_keypair(&mut h);
+    let alice_pk = twisted_pubkey_bytes(&mut h, &alice_ek);
+    let (c, r) = prove_registration_parts(&mut h, chain, alice_addr, &alice_dk, &alice_ek, MOVE_METADATA);
+
+    // First-time path leaves normalized=false (rollover side effect).
+    assert_kept_success(
+        &run_register_and_deposit_and_rollover(&mut h, &alice, 100, &alice_pk, &c, &r),
+        "register_and_deposit_and_rollover",
+    );
+
+    // Withdraw any amount: normalized is set true on the sender's store.
+    let (new_bal, zkrp, sigma) = pack_withdraw(&mut h, chain, alice_addr, &alice_dk, &alice_ek, 1, 99);
+    assert_kept_success(
+        &run_withdraw(&mut h, &alice, 1, &new_bal, &zkrp, &sigma),
+        "withdraw to set normalized=true",
+    );
+
+    // Now the deposit_and_rollover path must succeed.
+    assert_kept_success(
+        &run_deposit_and_rollover(&mut h, &alice, 50),
+        "deposit_and_rollover when normalized",
+    );
+}
+
+/// Subsequent combined entry on a NOT-normalized state must abort with ENORMALIZATION_REQUIRED
+/// (3 << 16 | 10 = 196618). The wallet detects this state via `is_normalized` view and routes
+/// to `deposit_and_normalize_and_rollover_pending_balance` instead.
+#[test]
+fn deposit_and_rollover_aborts_when_not_normalized() {
+    let mut h = fresh_harness();
+    let chain = h.executor.get_chain_id().id();
+    let alice_addr = confidential_e2e_addr(0xCD, 11);
+    let alice = h.new_account_with_balance_at(alice_addr, 50_000_000_000_000);
+
+    let (alice_dk, alice_ek) = generate_elgamal_keypair(&mut h);
+    let alice_pk = twisted_pubkey_bytes(&mut h, &alice_ek);
+    let (c, r) = prove_registration_parts(&mut h, chain, alice_addr, &alice_dk, &alice_ek, MOVE_METADATA);
+
+    // After register_and_deposit_and_rollover, normalized=false.
+    assert_kept_success(
+        &run_register_and_deposit_and_rollover(&mut h, &alice, 100, &alice_pk, &c, &r),
+        "register_and_deposit_and_rollover",
+    );
+
+    // No withdraw / transfer / normalize in between → normalized still false.
+    assert_kept_failure(
+        &run_deposit_and_rollover(&mut h, &alice, 50),
+        "deposit_and_rollover when not normalized must abort",
+    );
+}
+
+/// Subsequent combined entry on a NOT-normalized state, with normalize proof. Lands funds
+/// spendable in one tx.
+#[test]
+fn deposit_normalize_and_rollover_succeeds_when_not_normalized() {
+    let mut h = fresh_harness();
+    let chain = h.executor.get_chain_id().id();
+    let alice_addr = confidential_e2e_addr(0xCD, 12);
+    let alice = h.new_account_with_balance_at(alice_addr, 50_000_000_000_000);
+
+    let (alice_dk, alice_ek) = generate_elgamal_keypair(&mut h);
+    let alice_pk = twisted_pubkey_bytes(&mut h, &alice_ek);
+    let (c, r) = prove_registration_parts(&mut h, chain, alice_addr, &alice_dk, &alice_ek, MOVE_METADATA);
+
+    // First-time → normalized=false, actual=100.
+    assert_kept_success(
+        &run_register_and_deposit_and_rollover(&mut h, &alice, 100, &alice_pk, &c, &r),
+        "register_and_deposit_and_rollover",
+    );
+
+    // Build the normalize proof against the *current* (pre-second-deposit) actual balance =
+    // 100. `deposit_to_internal` only mutates pending, so the actual the proof binds to matches
+    // the on-chain actual at normalize_internal time.
+    let (new_bal, zkrp, sigma) = pack_normalize(&mut h, chain, alice_addr, &alice_dk, 100u128);
+
+    assert_kept_success(
+        &run_deposit_normalize_and_rollover(&mut h, &alice, 50, &new_bal, &zkrp, &sigma),
+        "deposit_normalize_and_rollover when not normalized",
+    );
 }

@@ -15,7 +15,7 @@ use crate::{
     },
     DbReader,
 };
-use anyhow::Result;
+use anyhow::{bail, Result};
 use aptos_experimental_layered_map::{LayeredMap, MapLayer};
 use aptos_metrics_core::TimerHelper;
 use aptos_types::{
@@ -109,20 +109,24 @@ impl State {
         persisted: &State,
         updates: &BatchedStateUpdateRefs,
         state_cache: &ShardedStateCache,
-    ) -> Self {
+    ) -> Result<Self> {
         let _timer = TIMER.timer_with(&["state__update"]);
 
         // 1. The update batch must begin at self.next_version().
         assert_eq!(self.next_version(), updates.first_version);
         // 2. The cache must be at a version equal or newer than `persisted`, otherwise
         //    updates between the cached version and the persisted version are potentially
-        //    missed during the usage calculation.
-        assert!(
-            persisted.next_version() <= state_cache.next_version(),
-            "persisted: {}, cache: {}",
-            persisted.next_version(),
-            state_cache.next_version(),
-        );
+        //    missed during the usage calculation. Under speculative execution of fork
+        //    siblings, the persisted watermark can advance past the in-flight base — surface
+        //    this as a recoverable error so the local consensus module can drop the losing
+        //    branch, rather than aborting the process.
+        if persisted.next_version() > state_cache.next_version() {
+            bail!(
+                "persisted version ({}) is ahead of cache version ({}), likely due to a fork",
+                persisted.next_version(),
+                state_cache.next_version(),
+            );
+        }
         // 3. `self` must be at a version equal or newer than the cache, because we assume
         //    it is overlaid on top of the cache.
         assert!(self.next_version() >= state_cache.next_version());
@@ -150,7 +154,7 @@ impl State {
         let shards = Arc::new(shards.try_into().expect("Known to be 16 shards."));
         let usage = self.update_usage(usage_delta_per_shard);
 
-        State::new_with_updates(updates.last_version(), shards, usage)
+        Ok(State::new_with_updates(updates.last_version(), shards, usage))
     }
 
     fn update_usage(&self, usage_delta_per_shard: Vec<(i64, i64)>) -> StateStorageUsage {
@@ -237,11 +241,11 @@ impl LedgerState {
         persisted_snapshot: &State,
         updates: &StateUpdateRefs,
         reads: &ShardedStateCache,
-    ) -> LedgerState {
+    ) -> Result<LedgerState> {
         let _timer = TIMER.timer_with(&["ledger_state__update"]);
 
         let last_checkpoint = if let Some(updates) = &updates.for_last_checkpoint {
-            self.latest().update(persisted_snapshot, updates, reads)
+            self.latest().update(persisted_snapshot, updates, reads)?
         } else {
             self.last_checkpoint.clone()
         };
@@ -252,12 +256,12 @@ impl LedgerState {
             &last_checkpoint
         };
         let latest = if let Some(updates) = &updates.for_latest {
-            base_of_latest.update(persisted_snapshot, updates, reads)
+            base_of_latest.update(persisted_snapshot, updates, reads)?
         } else {
             base_of_latest.clone()
         };
 
-        LedgerState::new(latest, last_checkpoint)
+        Ok(LedgerState::new(latest, last_checkpoint))
     }
 
     /// Old values of the updated keys are read from the DbReader at the version of the
@@ -282,7 +286,7 @@ impl LedgerState {
             persisted_snapshot,
             updates,
             state_view.memorized_reads(),
-        );
+        )?;
         let state_reads = state_view.into_memorized_reads();
         Ok((updated, state_reads))
     }

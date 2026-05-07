@@ -9,7 +9,7 @@ use crate::{
     },
     DbReader,
 };
-use anyhow::Result;
+use anyhow::{bail, Result};
 use aptos_crypto::{hash::CORRUPTION_SENTINEL, HashValue};
 use aptos_metrics_core::TimerHelper;
 use aptos_scratchpad::{ProofRead, SparseMerkleTree};
@@ -75,8 +75,17 @@ impl StateSummary {
 
         assert_ne!(self.global_state_summary.root_hash(), *CORRUPTION_SENTINEL);
 
-        // Persisted must be before or at my version.
-        assert!(persisted.next_version() <= self.next_version());
+        // Persisted must be before or at my version. Under speculative execution of fork
+        // siblings, the persisted watermark can advance past the in-flight base — surface this
+        // as a recoverable error so the local consensus module can drop the losing branch,
+        // rather than aborting the process.
+        if persisted.next_version() > self.next_version() {
+            bail!(
+                "persisted version ({}) is ahead of current version ({}), likely due to a fork",
+                persisted.next_version(),
+                self.next_version(),
+            );
+        }
         // Updates must start at exactly my version.
         assert_eq!(updates.first_version(), self.next_version());
 

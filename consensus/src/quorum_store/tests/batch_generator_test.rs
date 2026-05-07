@@ -785,3 +785,115 @@ async fn test_remote_batches_in_progress() {
         .unwrap()
         .unwrap();
 }
+
+// Ensures the batch-generator pull cycle terminates and produces no
+// batches when every queued transaction's serialized size exceeds
+// `sender_max_batch_bytes`. The pull is bounded by a wall-clock timeout
+// so any future regression that fails to make progress under this
+// configuration fails the test deterministically instead of hanging.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_oversized_txn_does_not_hang_batch_generator() {
+    let (quorum_store_to_mempool_tx, mut quorum_store_to_mempool_rx) = channel(1_024);
+    let (batch_coordinator_cmd_tx, mut batch_coordinator_cmd_rx) = TokioChannel(100);
+
+    // Set the per-sender batch byte cap strictly below the size of a single
+    // generated transaction so every queued transaction is, by itself, too
+    // large to fit into any batch.
+    let txn_bytes_len = create_vec_signed_transactions(1)[0].txn_bytes_len();
+    let config = QuorumStoreConfig {
+        sender_max_batch_bytes: txn_bytes_len - 1,
+        ..Default::default()
+    };
+
+    let author = AccountAddress::random();
+    let mut batch_generator = BatchGenerator::new(
+        0,
+        author,
+        config,
+        Arc::new(MockQuorumStoreDB::new()),
+        Arc::new(MockBatchWriter::new()),
+        quorum_store_to_mempool_tx,
+        1000,
+    );
+
+    // Mempool-side fixture: respond to the pull with a small set of
+    // transactions and then verify the resulting batch-coordinator command.
+    let join_handle = tokio::spawn(async move {
+        let signed_txns = create_vec_signed_transactions(3);
+        // The mempool helper applies its own cumulative-size cap before
+        // returning transactions to the batch generator. Pass a generous cap
+        // (well above the total payload) so the helper does not filter any
+        // transaction out — the per-sender batch byte cap inside the batch
+        // generator is what this test exercises.
+        queue_mempool_batch_response(
+            signed_txns,
+            txn_bytes_len * 10,
+            &mut quorum_store_to_mempool_rx,
+        )
+        .await;
+
+        // The pull must produce zero batches: every transaction's size
+        // exceeds the per-sender batch byte cap, so none can be packed.
+        let quorum_store_command = batch_coordinator_cmd_rx.recv().await.unwrap();
+        if let BatchCoordinatorCommand::NewBatches(_, result) = quorum_store_command {
+            assert_eq!(
+                result.len(),
+                0,
+                "transactions exceeding sender_max_batch_bytes must not be batched"
+            );
+        } else {
+            panic!("Unexpected variant")
+        }
+    });
+
+    // Run the pull on a detached OS thread with its own runtime.
+    // `bucket_into_batches` is fully synchronous, so a non-yielding pull
+    // would block teardown of the test runtime if it lived on a tokio
+    // worker. The OS thread is independent of the test runtime; a
+    // regression that fails to make progress is reaped by the OS on test
+    // process exit instead of hanging libtest's harness.
+    let (done_tx, done_rx) = std::sync::mpsc::sync_channel(1);
+    std::thread::spawn(move || {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let result = rt.block_on(batch_generator.handle_scheduled_pull(300));
+        let _ = done_tx.send(result);
+    });
+
+    // A 5s budget is far above the expected runtime of a single pull cycle
+    // over a handful of transactions; tripping it indicates the pull failed
+    // to make progress.
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    let result = loop {
+        match done_rx.try_recv() {
+            Ok(v) => break v,
+            Err(std::sync::mpsc::TryRecvError::Empty) => {
+                if std::time::Instant::now() >= deadline {
+                    panic!(
+                        "handle_scheduled_pull must terminate when every queued txn exceeds the per-sender batch byte cap"
+                    );
+                }
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            },
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                panic!("pull thread terminated without delivering a result");
+            },
+        }
+    };
+
+    // Forward the (empty) result to the mempool-side fixture so it can run
+    // its assertion on the batch-coordinator command.
+    batch_coordinator_cmd_tx
+        .send(BatchCoordinatorCommand::NewBatches(author, result))
+        .await
+        .unwrap();
+
+    // Give the mempool-side fixture a generous deadline to drain its
+    // assertion before tearing down the test runtime.
+    timeout(Duration::from_millis(10_000), join_handle)
+        .await
+        .unwrap()
+        .unwrap();
+}

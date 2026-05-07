@@ -237,6 +237,7 @@ impl BatchGenerator {
             } else {
                 // The leading transaction alone exceeds `sender_max_batch_bytes`;
                 // drop it so the loop makes progress.
+                counters::BATCH_GENERATOR_DROPPED_OVERSIZED_TXNS.inc();
                 txns.remove(0);
                 txns_remaining -= 1;
             }

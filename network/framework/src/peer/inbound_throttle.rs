@@ -1,4 +1,4 @@
-// Copyright (c) Aptos Foundation
+// Copyright (c) Movement Foundation
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
@@ -126,25 +126,16 @@ impl PeerInboundThrottle {
 /// Stream fragments do not count as a new message (only headers do) but their
 /// bytes are still accounted for.
 fn compute_message_cost(message: &Result<MultiplexMessage, ReadError>) -> (u64, u64) {
-    let msg_cost: u64 = match message {
-        Ok(MultiplexMessage::Message(_)) => 1,
-        Ok(MultiplexMessage::Stream(StreamMessage::Header(_))) => 1,
-        Ok(MultiplexMessage::Stream(StreamMessage::Fragment(_))) => 0,
-        Err(_) => 0,
-    };
-
-    let byte_cost: u64 = match message {
-        Ok(MultiplexMessage::Message(msg)) => msg.data_len() as u64,
+    match message {
+        Ok(MultiplexMessage::Message(msg)) => (1, msg.data_len() as u64),
         Ok(MultiplexMessage::Stream(StreamMessage::Header(h))) => {
-            h.message.data_len() as u64
+            (1, h.message.data_len() as u64)
         },
         Ok(MultiplexMessage::Stream(StreamMessage::Fragment(f))) => {
-            f.raw_data.len() as u64
+            (0, f.raw_data.len() as u64)
         },
-        Err(_) => 0,
-    };
-
-    (msg_cost, byte_cost)
+        Err(_) => (0, 0),
+    }
 }
 
 /// Spin on the bucket until `cost` tokens are available, sleeping in between.

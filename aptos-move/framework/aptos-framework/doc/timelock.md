@@ -663,7 +663,10 @@ The caller is not an executor (or a creator when the executor list is empty).
 
 <a id="0x1_timelock_ENUMBER_SECONDS_TOO_SMALL"></a>
 
-The specified number of seconds for execution is too small (must be > 360).
+The specified number of seconds is below the required minimum: the account's
+<code>min_num_seconds_execute</code> must be greater than <code><a href="timelock.md#0x1_timelock_MIN_NUM_SECONDS_EXECUTE_FLOOR">MIN_NUM_SECONDS_EXECUTE_FLOOR</a></code> (360),
+and a transaction's <code>num_seconds_execute</code> must be at least the account's
+<code>min_num_seconds_execute</code>.
 
 
 <pre><code><b>const</b> <a href="timelock.md#0x1_timelock_ENUMBER_SECONDS_TOO_SMALL">ENUMBER_SECONDS_TOO_SMALL</a>: u64 = 14;
@@ -947,11 +950,13 @@ and has passed the timelock period.
 
 ## Function `get_next_timelock_account_address`
 
-Return the predicted address for the next timelock account created by the given creator.
+Return the predicted address for the next timelock account deployed by the given account.
+The deployer authorizes resource-account creation but does not become a creator or executor;
+membership is determined entirely by the <code>creators</code> and <code>executors</code> arguments to <code>create</code>.
 
 
 <pre><code>#[view]
-<b>public</b> <b>fun</b> <a href="timelock.md#0x1_timelock_get_next_timelock_account_address">get_next_timelock_account_address</a>(creator: <b>address</b>): <b>address</b>
+<b>public</b> <b>fun</b> <a href="timelock.md#0x1_timelock_get_next_timelock_account_address">get_next_timelock_account_address</a>(deployer: <b>address</b>): <b>address</b>
 </code></pre>
 
 
@@ -960,9 +965,9 @@ Return the predicted address for the next timelock account created by the given 
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="timelock.md#0x1_timelock_get_next_timelock_account_address">get_next_timelock_account_address</a>(creator: <b>address</b>): <b>address</b> {
-    <b>let</b> owner_nonce = <a href="account.md#0x1_account_get_sequence_number">account::get_sequence_number</a>(creator);
-    create_resource_address(&creator, <a href="timelock.md#0x1_timelock_create_timelock_account_seed">create_timelock_account_seed</a>(to_bytes(&owner_nonce)))
+<pre><code><b>public</b> <b>fun</b> <a href="timelock.md#0x1_timelock_get_next_timelock_account_address">get_next_timelock_account_address</a>(deployer: <b>address</b>): <b>address</b> {
+    <b>let</b> owner_nonce = <a href="account.md#0x1_account_get_sequence_number">account::get_sequence_number</a>(deployer);
+    create_resource_address(&deployer, <a href="timelock.md#0x1_timelock_create_timelock_account_seed">create_timelock_account_seed</a>(to_bytes(&owner_nonce)))
 }
 </code></pre>
 
@@ -1003,16 +1008,23 @@ Clients use this to compute the hash before proposing a transaction.
 
 ## Function `create`
 
-Create a new timelock account with the calling signer as the initial creator.
+Create a new timelock account.
 
-@param additional_creators Additional creator addresses. The calling signer is always
-included. No duplicates allowed.
+The <code>deployer</code> signer authorizes resource-account creation (and pays storage gas) but
+gains no ongoing authority over the timelock — they are not added to creators or
+executors. This lets a deployer (e.g. a multisig) instantiate a timelock that is owned
+by an entirely different set of addresses without first having to transfer ownership.
+
+@param deployer Signer used to derive the resource-account address. Must not appear in
+<code>creators</code> or <code>executors</code> unless that role is intended.
+@param creators Addresses authorized to propose transactions. Must contain at least one
+address and have no duplicates. The timelock account address itself is not allowed.
 @param executors Addresses authorized to execute transactions after the timelock period.
 If empty, creators can also execute.
 @param num_seconds_execute Minimum delay in seconds before a proposed transaction can be executed.
 
 
-<pre><code><b>public</b> entry <b>fun</b> <a href="timelock.md#0x1_timelock_create">create</a>(creator: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, additional_creators: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;, executors: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;, num_seconds_execute: u64)
+<pre><code><b>public</b> entry <b>fun</b> <a href="timelock.md#0x1_timelock_create">create</a>(deployer: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, creators: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;, executors: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;, num_seconds_execute: u64)
 </code></pre>
 
 
@@ -1022,16 +1034,15 @@ If empty, creators can also execute.
 
 
 <pre><code><b>public</b> entry <b>fun</b> <a href="timelock.md#0x1_timelock_create">create</a>(
-    creator: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>,
-    additional_creators: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;,
+    deployer: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>,
+    creators: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;,
     executors: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;,
     num_seconds_execute: u64,
 ) {
-    <b>let</b> (timelock_signer, timelock_signer_cap) = <a href="timelock.md#0x1_timelock_create_timelock_account">create_timelock_account</a>(creator);
-    additional_creators.push_back(address_of(creator));
+    <b>let</b> (timelock_signer, timelock_signer_cap) = <a href="timelock.md#0x1_timelock_create_timelock_account">create_timelock_account</a>(deployer);
     <a href="timelock.md#0x1_timelock_create_timelock_account_internal">create_timelock_account_internal</a>(
         &timelock_signer,
-        additional_creators,
+        creators,
         executors,
         num_seconds_execute,
         timelock_signer_cap,
@@ -1355,7 +1366,7 @@ proposals of the same script. The table key is <code>keccak256(execution_hash ||
 ## Function `cancel_transaction`
 
 Cancel a pending transaction. The transaction's executed field is set to true.
-Any creator or executor (or creator when executors is empty) can cancel at any time.
+Any creator or executor can cancel at any time.
 <code>transaction_hash</code> must be exactly 32 bytes.
 
 
@@ -1485,7 +1496,7 @@ reverts atomically, leaving the proposal in its previous state.
 
 
 
-<pre><code><b>fun</b> <a href="timelock.md#0x1_timelock_create_timelock_account">create_timelock_account</a>(creator: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>): (<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, <a href="account.md#0x1_account_SignerCapability">account::SignerCapability</a>)
+<pre><code><b>fun</b> <a href="timelock.md#0x1_timelock_create_timelock_account">create_timelock_account</a>(deployer: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>): (<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, <a href="account.md#0x1_account_SignerCapability">account::SignerCapability</a>)
 </code></pre>
 
 
@@ -1494,10 +1505,10 @@ reverts atomically, leaving the proposal in its previous state.
 <summary>Implementation</summary>
 
 
-<pre><code><b>fun</b> <a href="timelock.md#0x1_timelock_create_timelock_account">create_timelock_account</a>(creator: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>): (<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, SignerCapability) {
-    <b>let</b> creator_nonce = <a href="account.md#0x1_account_get_sequence_number">account::get_sequence_number</a>(address_of(creator));
+<pre><code><b>fun</b> <a href="timelock.md#0x1_timelock_create_timelock_account">create_timelock_account</a>(deployer: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>): (<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, SignerCapability) {
+    <b>let</b> deployer_nonce = <a href="account.md#0x1_account_get_sequence_number">account::get_sequence_number</a>(address_of(deployer));
     <b>let</b> (timelock_signer, timelock_signer_cap) =
-        <a href="account.md#0x1_account_create_resource_account">account::create_resource_account</a>(creator, <a href="timelock.md#0x1_timelock_create_timelock_account_seed">create_timelock_account_seed</a>(to_bytes(&creator_nonce)));
+        <a href="account.md#0x1_account_create_resource_account">account::create_resource_account</a>(deployer, <a href="timelock.md#0x1_timelock_create_timelock_account_seed">create_timelock_account_seed</a>(to_bytes(&deployer_nonce)));
     // Register for APT so the <a href="timelock.md#0x1_timelock">timelock</a> <a href="account.md#0x1_account">account</a> can pay gas and receive transfers.
     <b>if</b> (!<a href="coin.md#0x1_coin_is_account_registered">coin::is_account_registered</a>&lt;AptosCoin&gt;(address_of(&timelock_signer))) {
         <a href="coin.md#0x1_coin_register">coin::register</a>&lt;AptosCoin&gt;(&timelock_signer);
@@ -1780,9 +1791,9 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 
 <tr>
 <td>9</td>
-<td>Creating a timelock account properly initializes all resources and publishes the TimelockAccount resource under the resource account address derived from the creator's address and sequence number.</td>
+<td>Creating a timelock account properly initializes all resources and publishes the TimelockAccount resource under the resource account address derived from the deployer's address and sequence number. The deployer authorizes resource-account creation but does not gain creator or executor status; membership is determined entirely by the <code>creators</code> and <code>executors</code> arguments passed to <code>create</code>.</td>
 <td>Medium</td>
-<td>The create function derives the resource account address, creates the account via account::create_resource_account, adds the creator to the creators list, and calls create_timelock_account_internal which publishes the TimelockAccount resource with all fields initialized.</td>
+<td>The create function derives the resource account address, creates the account via account::create_resource_account, and calls create_timelock_account_internal which publishes the TimelockAccount resource with all fields initialized from the supplied creators and executors lists.</td>
 <td>Audited that TimelockAccount is initialized and published (create, create_timelock_account_internal).</td>
 </tr>
 
@@ -1954,7 +1965,7 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 
 
 <pre><code>#[view]
-<b>public</b> <b>fun</b> <a href="timelock.md#0x1_timelock_get_next_timelock_account_address">get_next_timelock_account_address</a>(creator: <b>address</b>): <b>address</b>
+<b>public</b> <b>fun</b> <a href="timelock.md#0x1_timelock_get_next_timelock_account_address">get_next_timelock_account_address</a>(deployer: <b>address</b>): <b>address</b>
 </code></pre>
 
 
@@ -1987,7 +1998,7 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 ### Function `create`
 
 
-<pre><code><b>public</b> entry <b>fun</b> <a href="timelock.md#0x1_timelock_create">create</a>(creator: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, additional_creators: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;, executors: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;, num_seconds_execute: u64)
+<pre><code><b>public</b> entry <b>fun</b> <a href="timelock.md#0x1_timelock_create">create</a>(deployer: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, creators: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;, executors: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;, num_seconds_execute: u64)
 </code></pre>
 
 
@@ -1995,7 +2006,7 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 
 <pre><code><b>pragma</b> verify = <b>false</b>;
 <b>aborts_if</b> num_seconds_execute &lt;= 360;
-<b>aborts_if</b> !<b>exists</b>&lt;<a href="account.md#0x1_account_Account">account::Account</a>&gt;(address_of(creator));
+<b>aborts_if</b> !<b>exists</b>&lt;<a href="account.md#0x1_account_Account">account::Account</a>&gt;(address_of(deployer));
 </code></pre>
 
 
@@ -2231,14 +2242,14 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 ### Function `create_timelock_account`
 
 
-<pre><code><b>fun</b> <a href="timelock.md#0x1_timelock_create_timelock_account">create_timelock_account</a>(creator: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>): (<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, <a href="account.md#0x1_account_SignerCapability">account::SignerCapability</a>)
+<pre><code><b>fun</b> <a href="timelock.md#0x1_timelock_create_timelock_account">create_timelock_account</a>(deployer: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>): (<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, <a href="account.md#0x1_account_SignerCapability">account::SignerCapability</a>)
 </code></pre>
 
 
 
 
 <pre><code><b>pragma</b> verify = <b>false</b>;
-<b>aborts_if</b> !<b>exists</b>&lt;<a href="account.md#0x1_account_Account">account::Account</a>&gt;(address_of(creator));
+<b>aborts_if</b> !<b>exists</b>&lt;<a href="account.md#0x1_account_Account">account::Account</a>&gt;(address_of(deployer));
 </code></pre>
 
 

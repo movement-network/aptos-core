@@ -1267,22 +1267,29 @@ pub enum EntryFunctionCall {
     },
 
     /// Cancel a pending transaction. The transaction's executed field is set to true.
-    /// Any creator or executor (or creator when executors is empty) can cancel at any time.
+    /// Any creator or executor can cancel at any time.
     /// `transaction_hash` must be exactly 32 bytes.
     TimelockCancelTransaction {
         timelock_account: AccountAddress,
         transaction_hash: Vec<u8>,
     },
 
-    /// Create a new timelock account with the calling signer as the initial creator.
+    /// Create a new timelock account.
     ///
-    /// @param additional_creators Additional creator addresses. The calling signer is always
-    ///        included. No duplicates allowed.
+    /// The `deployer` signer authorizes resource-account creation (and pays storage gas) but
+    /// gains no ongoing authority over the timelock — they are not added to creators or
+    /// executors. This lets a deployer (e.g. a multisig) instantiate a timelock that is owned
+    /// by an entirely different set of addresses without first having to transfer ownership.
+    ///
+    /// @param deployer Signer used to derive the resource-account address. Must not appear in
+    ///        `creators` or `executors` unless that role is intended.
+    /// @param creators Addresses authorized to propose transactions. Must contain at least one
+    ///        address and have no duplicates. The timelock account address itself is not allowed.
     /// @param executors Addresses authorized to execute transactions after the timelock period.
     ///        If empty, creators can also execute.
     /// @param num_seconds_execute Minimum delay in seconds before a proposed transaction can be executed.
     TimelockCreate {
-        additional_creators: Vec<AccountAddress>,
+        creators: Vec<AccountAddress>,
         executors: Vec<AccountAddress>,
         num_seconds_execute: u64,
     },
@@ -2155,10 +2162,10 @@ impl EntryFunctionCall {
                 transaction_hash,
             } => timelock_cancel_transaction(timelock_account, transaction_hash),
             TimelockCreate {
-                additional_creators,
+                creators,
                 executors,
                 num_seconds_execute,
-            } => timelock_create(additional_creators, executors, num_seconds_execute),
+            } => timelock_create(creators, executors, num_seconds_execute),
             TimelockCreateTransaction {
                 timelock_account,
                 execution_hash,
@@ -5708,7 +5715,7 @@ pub fn timelock_add_executors(new_executors: Vec<AccountAddress>) -> Transaction
 }
 
 /// Cancel a pending transaction. The transaction's executed field is set to true.
-/// Any creator or executor (or creator when executors is empty) can cancel at any time.
+/// Any creator or executor can cancel at any time.
 /// `transaction_hash` must be exactly 32 bytes.
 pub fn timelock_cancel_transaction(
     timelock_account: AccountAddress,
@@ -5731,15 +5738,22 @@ pub fn timelock_cancel_transaction(
     ))
 }
 
-/// Create a new timelock account with the calling signer as the initial creator.
+/// Create a new timelock account.
 ///
-/// @param additional_creators Additional creator addresses. The calling signer is always
-///        included. No duplicates allowed.
+/// The `deployer` signer authorizes resource-account creation (and pays storage gas) but
+/// gains no ongoing authority over the timelock — they are not added to creators or
+/// executors. This lets a deployer (e.g. a multisig) instantiate a timelock that is owned
+/// by an entirely different set of addresses without first having to transfer ownership.
+///
+/// @param deployer Signer used to derive the resource-account address. Must not appear in
+///        `creators` or `executors` unless that role is intended.
+/// @param creators Addresses authorized to propose transactions. Must contain at least one
+///        address and have no duplicates. The timelock account address itself is not allowed.
 /// @param executors Addresses authorized to execute transactions after the timelock period.
 ///        If empty, creators can also execute.
 /// @param num_seconds_execute Minimum delay in seconds before a proposed transaction can be executed.
 pub fn timelock_create(
-    additional_creators: Vec<AccountAddress>,
+    creators: Vec<AccountAddress>,
     executors: Vec<AccountAddress>,
     num_seconds_execute: u64,
 ) -> TransactionPayload {
@@ -5754,7 +5768,7 @@ pub fn timelock_create(
         ident_str!("create").to_owned(),
         vec![],
         vec![
-            bcs::to_bytes(&additional_creators).unwrap(),
+            bcs::to_bytes(&creators).unwrap(),
             bcs::to_bytes(&executors).unwrap(),
             bcs::to_bytes(&num_seconds_execute).unwrap(),
         ],
@@ -8215,7 +8229,7 @@ mod decoder {
     pub fn timelock_create(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
         if let TransactionPayload::EntryFunction(script) = payload {
             Some(EntryFunctionCall::TimelockCreate {
-                additional_creators: bcs::from_bytes(script.args().get(0)?).ok()?,
+                creators: bcs::from_bytes(script.args().get(0)?).ok()?,
                 executors: bcs::from_bytes(script.args().get(1)?).ok()?,
                 num_seconds_execute: bcs::from_bytes(script.args().get(2)?).ok()?,
             })

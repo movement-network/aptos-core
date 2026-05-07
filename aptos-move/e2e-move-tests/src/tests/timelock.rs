@@ -102,19 +102,24 @@ fn multisig_account_address(creator: AccountAddress, seq: u64) -> AccountAddress
 
 const DELAY: u64 = 3700;
 
+/// Convenience wrapper that calls `0x1::timelock::create` with the deployer included as a
+/// creator. The on-chain `create` no longer auto-adds the deployer; tests that want the
+/// deployer to also be a creator (which is most of them) rely on this helper to splice it in.
 fn create_timelock(
     h: &mut MoveHarness,
-    creator: &Account,
+    deployer: &Account,
     additional_creators: Vec<AccountAddress>,
     executors: Vec<AccountAddress>,
     delay: u64,
 ) -> TransactionStatus {
+    let mut creators = vec![*deployer.address()];
+    creators.extend(additional_creators);
     h.run_entry_function(
-        creator,
+        deployer,
         str::parse("0x1::timelock::create").unwrap(),
         vec![],
         vec![
-            bcs::to_bytes(&additional_creators).unwrap(),
+            bcs::to_bytes(&creators).unwrap(),
             bcs::to_bytes(&executors).unwrap(),
             bcs::to_bytes(&delay).unwrap(),
         ],

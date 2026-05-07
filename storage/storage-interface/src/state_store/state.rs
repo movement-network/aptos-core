@@ -327,8 +327,9 @@ mod tests {
         let cached_state = ShardedStateCache::new_empty(Some(base_version));
 
         // `State::update` must surface this fork-induced version mismatch as a recoverable
-        // error and return normally — that return is the test's assertion, no explicit check
-        // is needed.
-        let _ = base_state.update(&persisted_state, &state_updates, &cached_state);
+        // error so the local consensus module can discard the losing branch.
+        base_state
+            .update(&persisted_state, &state_updates, &cached_state)
+            .expect_err("fork-induced version mismatch must surface as Err");
     }
 }

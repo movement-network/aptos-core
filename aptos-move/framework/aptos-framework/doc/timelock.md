@@ -1557,8 +1557,19 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 
 <pre><code><b>fun</b> <a href="timelock.md#0x1_timelock_validate_members">validate_members</a>(members: &<a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;, timelock_address: <b>address</b>, duplicate_error: u64) {
     <b>let</b> distinct: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt; = <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>[];
-    members.for_each_ref(|member| {
-        <b>let</b> member = *member;
+    <b>let</b> total = members.length();
+    <b>let</b> i = 0;
+    <b>while</b> ({
+        <b>spec</b> {
+            <b>invariant</b> i &lt;= total;
+            <b>invariant</b> len(distinct) == i;
+            <b>invariant</b> <b>forall</b> k in 0..i: distinct[k] == members[k];
+            <b>invariant</b> <b>forall</b> k in 0..i: members[k] != timelock_address;
+            <b>invariant</b> <b>forall</b> k in 0..i: <b>forall</b> l in 0..k: members[k] != members[l];
+        };
+        i &lt; total
+    }) {
+        <b>let</b> member = *members.borrow(i);
         <b>assert</b>!(
             member != timelock_address,
             <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="timelock.md#0x1_timelock_ESELF_CANNOT_BE_MEMBER">ESELF_CANNOT_BE_MEMBER</a>),
@@ -1566,7 +1577,8 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
         <b>let</b> (found, _) = distinct.index_of(&member);
         <b>assert</b>!(!found, <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(duplicate_error));
         distinct.push_back(member);
-    });
+        i = i + 1;
+    };
 }
 </code></pre>
 
@@ -1923,7 +1935,8 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 
 
 
-<pre><code><b>aborts_if</b> !<b>exists</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(timelock_account);
+<pre><code><b>pragma</b> aborts_if_is_partial;
+<b>aborts_if</b> !<b>exists</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(timelock_account);
 <b>let</b> <a href="timelock.md#0x1_timelock">timelock</a> = <b>global</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(timelock_account);
 <b>ensures</b> !<a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_contains">table::spec_contains</a>(<a href="timelock.md#0x1_timelock">timelock</a>.transactions, transaction_hash) ==&gt; !result;
 <b>ensures</b> <a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_contains">table::spec_contains</a>(<a href="timelock.md#0x1_timelock">timelock</a>.transactions, transaction_hash) ==&gt; result ==
@@ -1947,7 +1960,7 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 
 
 
-<pre><code><b>aborts_if</b> !<b>exists</b>&lt;<a href="account.md#0x1_account_Account">account::Account</a>&gt;(creator);
+<pre><code><b>pragma</b> aborts_if_is_partial;
 </code></pre>
 
 
@@ -1964,7 +1977,7 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 
 
 
-<pre><code><b>ensures</b> result == aptos_std::aptos_hash::keccak256(concat(execution_hash, salt));
+<pre><code><b>ensures</b> result == aptos_std::aptos_hash::spec_keccak256(concat(execution_hash, salt));
 </code></pre>
 
 
@@ -2024,7 +2037,8 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 
 
 
-<pre><code><b>aborts_if</b> !<b>exists</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(address_of(timelock_account));
+<pre><code><b>pragma</b> aborts_if_is_partial;
+<b>aborts_if</b> !<b>exists</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(address_of(timelock_account));
 <b>aborts_if</b> <b>exists</b> i in 0..len(new_creators): new_creators[i] == address_of(timelock_account);
 <b>aborts_if</b> <b>exists</b> i in 0..len(new_creators): <b>exists</b> j in 0..i: new_creators[i] == new_creators[j];
 <b>ensures</b> <b>exists</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(address_of(timelock_account));
@@ -2061,7 +2075,8 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 
 
 
-<pre><code><b>aborts_if</b> !<b>exists</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(address_of(timelock_account));
+<pre><code><b>pragma</b> aborts_if_is_partial;
+<b>aborts_if</b> !<b>exists</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(address_of(timelock_account));
 <b>aborts_if</b> <b>exists</b> i in 0..len(new_executors): new_executors[i] == address_of(timelock_account);
 <b>aborts_if</b> <b>exists</b> i in 0..len(new_executors): <b>exists</b> j in 0..i: new_executors[i] == new_executors[j];
 <b>ensures</b> <b>exists</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(address_of(timelock_account));
@@ -2124,31 +2139,31 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 <b>aborts_if</b> num_seconds_execute &lt; <a href="timelock.md#0x1_timelock">timelock</a>.min_num_seconds_execute;
 <b>aborts_if</b> <a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_contains">table::spec_contains</a>(
     <b>global</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(timelock_account).transactions,
-    aptos_std::aptos_hash::keccak256(concat(execution_hash, salt)),
+    aptos_std::aptos_hash::spec_keccak256(concat(execution_hash, salt)),
 );
 <b>ensures</b> <a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_contains">table::spec_contains</a>(
     <b>global</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(timelock_account).transactions,
-    aptos_std::aptos_hash::keccak256(concat(execution_hash, salt)),
+    aptos_std::aptos_hash::spec_keccak256(concat(execution_hash, salt)),
 );
 <b>ensures</b> <a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_get">table::spec_get</a>(
     <b>global</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(timelock_account).transactions,
-    aptos_std::aptos_hash::keccak256(concat(execution_hash, salt)),
+    aptos_std::aptos_hash::spec_keccak256(concat(execution_hash, salt)),
 ).creator == address_of(creator);
 <b>ensures</b> <a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_get">table::spec_get</a>(
     <b>global</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(timelock_account).transactions,
-    aptos_std::aptos_hash::keccak256(concat(execution_hash, salt)),
+    aptos_std::aptos_hash::spec_keccak256(concat(execution_hash, salt)),
 ).execution_hash == execution_hash;
 <b>ensures</b> <a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_get">table::spec_get</a>(
     <b>global</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(timelock_account).transactions,
-    aptos_std::aptos_hash::keccak256(concat(execution_hash, salt)),
+    aptos_std::aptos_hash::spec_keccak256(concat(execution_hash, salt)),
 ).salt == salt;
 <b>ensures</b> <a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_get">table::spec_get</a>(
     <b>global</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(timelock_account).transactions,
-    aptos_std::aptos_hash::keccak256(concat(execution_hash, salt)),
+    aptos_std::aptos_hash::spec_keccak256(concat(execution_hash, salt)),
 ).num_seconds_execute == num_seconds_execute;
 <b>ensures</b> !<a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_get">table::spec_get</a>(
     <b>global</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(timelock_account).transactions,
-    aptos_std::aptos_hash::keccak256(concat(execution_hash, salt)),
+    aptos_std::aptos_hash::spec_keccak256(concat(execution_hash, salt)),
 ).executed;
 </code></pre>
 

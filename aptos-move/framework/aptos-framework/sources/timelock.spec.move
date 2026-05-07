@@ -71,11 +71,13 @@ spec aptos_framework::timelock {
     ///
     /// No.: 9
     /// Requirement: Creating a timelock account properly initializes all resources and publishes the TimelockAccount
-    /// resource under the resource account address derived from the creator's address and sequence number.
+    /// resource under the resource account address derived from the deployer's address and sequence number. The
+    /// deployer authorizes resource-account creation but does not gain creator or executor status; membership is
+    /// determined entirely by the `creators` and `executors` arguments passed to `create`.
     /// Criticality: Medium
     /// Implementation: The create function derives the resource account address, creates the account via
-    /// account::create_resource_account, adds the creator to the creators list, and calls
-    /// create_timelock_account_internal which publishes the TimelockAccount resource with all fields initialized.
+    /// account::create_resource_account, and calls create_timelock_account_internal which publishes the TimelockAccount
+    /// resource with all fields initialized from the supplied creators and executors lists.
     /// Enforcement: Audited that TimelockAccount is initialized and published (create, create_timelock_account_internal).
     ///
     /// No.: 10
@@ -154,15 +156,15 @@ spec aptos_framework::timelock {
         ensures result == aptos_std::aptos_hash::spec_keccak256(concat(execution_hash, salt));
     }
 
-    spec get_next_timelock_account_address(creator: address): address {
+    spec get_next_timelock_account_address(deployer: address): address {
         pragma aborts_if_is_partial;
     }
 
     // =============================== Account creation ===============================
 
     spec create(
-        creator: &signer,
-        additional_creators: vector<address>,
+        deployer: &signer,
+        creators: vector<address>,
         executors: vector<address>,
         num_seconds_execute: u64,
     ) {
@@ -171,7 +173,7 @@ spec aptos_framework::timelock {
         // cannot fully reason about.
         pragma verify = false;
         aborts_if num_seconds_execute <= 360;
-        aborts_if !exists<account::Account>(address_of(creator));
+        aborts_if !exists<account::Account>(address_of(deployer));
     }
 
     spec create_timelock_account_internal(
@@ -325,10 +327,10 @@ spec aptos_framework::timelock {
 
     // =============================== Private helpers ===============================
 
-    spec create_timelock_account(creator: &signer): (signer, SignerCapability) {
+    spec create_timelock_account(deployer: &signer): (signer, SignerCapability) {
         // Full verification disabled; create_resource_account involves complex cross-module effects.
         pragma verify = false;
-        aborts_if !exists<account::Account>(address_of(creator));
+        aborts_if !exists<account::Account>(address_of(deployer));
     }
 
     spec create_timelock_account_seed(seed: vector<u8>): vector<u8> {

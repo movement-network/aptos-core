@@ -607,6 +607,7 @@ pub enum StatusCode {
     RESERVED_VALIDATION_ERROR_14 = 49,
     RESERVED_VALIDATION_ERROR_15 = 50,
 
+
     // When a code module/script is published it is verified. These are the
     // possible errors that can arise from the verification process.
     // Verification Errors: 1000-1999

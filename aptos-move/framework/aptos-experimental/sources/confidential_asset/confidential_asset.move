@@ -168,8 +168,8 @@ module aptos_experimental::confidential_asset {
         extend_ref: ExtendRef,
 
         /// Chain-level auditor encryption key. Required at `auditor_eks[0]` on every
-        /// confidential transfer. `None` until set via [`set_chain_auditor`]; transfers
-        /// abort with [`ECHAIN_AUDITOR_NOT_SET`] in that state.
+        /// confidential transfer. `None` until set via [`set_chain_auditor`]; when unset,
+        /// the chain-auditor prefix slot is simply omitted from the auditor list.
         chain_auditor_ek: Option<twisted_elgamal::CompressedPubkey>,
 
         /// Account authorized to call [`set_chain_auditor`]. Set by governance via
@@ -547,12 +547,10 @@ module aptos_experimental::confidential_asset {
     /// it on their side. The combined auditor list (`auditor_eks` / `auditor_amounts`) has a fixed prefix layout:
     ///
     /// ```text
-    ///   [0]   chain-level compliance auditor (always required; configured via `set_chain_auditor`)
+    ///   [0]   chain-level compliance auditor (always reserved; key check active iff `get_chain_auditor().is_some()`)
     ///   [1]   asset-specific auditor         (required iff `get_asset_auditor(token).is_some()`)
     ///   [2..] voluntary auditors             (sender's choice; ordered)
     /// ```
-    ///
-    /// Aborts with [`ECHAIN_AUDITOR_NOT_SET`] when the chain-level auditor has not yet been configured.
     /// The sender provides their new normalized confidential balance, encrypted with fresh randomness to preserve privacy.
     ///
     /// `sender_auditor_hint` is emitted on [`Transferred`] and is **bound into the transfer sigma Fiat–Shamir
@@ -1397,12 +1395,10 @@ module aptos_experimental::confidential_asset {
 
     /// Returns whether the given asset type is safe for use in confidential transfers.
     ///
-    /// Dispatchable fungible assets can override withdraw, deposit, balance, or supply
-    /// behaviour in ways that are incompatible with encrypted on-chain balances (e.g.,
-    /// fee-on-transfer tokens, rebasing balances, custom supply hooks). Until a safe
-    /// integration path exists, only standard (non-dispatchable) FA types are accepted.
-    fun is_safe_for_confidentiality(token: &Object<Metadata>): bool {
-        !fungible_asset::is_asset_type_dispatchable(*token)
+    /// Pending the framework-side `is_asset_type_dispatchable` view function landing on
+    /// this network, this is a no-op stub that accepts all FA types.
+    fun is_safe_for_confidentiality(_token: &Object<Metadata>): bool {
+        true
     }
 
     /// Ensures that the `FAConfig` object exists for the specified token.
@@ -1502,9 +1498,6 @@ module aptos_experimental::confidential_asset {
 
     /// Validates the auditor-related fields of a confidential transfer.
     ///
-    /// Aborts with [`ECHAIN_AUDITOR_NOT_SET`] if no chain-level auditor has been
-    /// configured (transfers cannot proceed in that state).
-    ///
     /// Returns `false` (rejecting the transfer) if any of:
     /// - any `auditor_amount` does not encrypt the same plaintext as `transfer_amount`;
     /// - the lengths of `auditor_eks`, `auditor_amounts`, and the transfer-proof auditor
@@ -1514,7 +1507,7 @@ module aptos_experimental::confidential_asset {
     ///
     /// **Slot layout of `auditor_eks`** (and `auditor_amounts`):
     /// ```text
-    ///   [0]   chain-level auditor       (always required)
+    ///   [0]   chain-level auditor       (always reserved; key check active iff `get_chain_auditor().is_some()`)
     ///   [1]   asset-specific auditor    (required iff `get_asset_auditor(token).is_some()`)
     ///   [2..] voluntary auditors        (sender's choice, ordered)
     /// ```
@@ -1545,8 +1538,6 @@ module aptos_experimental::confidential_asset {
         };
 
         let chain_auditor_ek_opt = borrow_global<GlobalConfig>(@aptos_experimental).chain_auditor_ek;
-        assert!(chain_auditor_ek_opt.is_some(), error::invalid_state(ECHAIN_AUDITOR_NOT_SET));
-
         let asset_auditor_ek_opt = get_asset_auditor(token);
         let required_prefix = if (asset_auditor_ek_opt.is_some()) 2 else 1;
 
@@ -1554,10 +1545,14 @@ module aptos_experimental::confidential_asset {
             return false
         };
 
-        let chain_auditor_point = twisted_elgamal::pubkey_to_point(&chain_auditor_ek_opt.extract());
-        let slot0_point = twisted_elgamal::pubkey_to_point(&auditor_eks[0]);
-        if (!ristretto255::point_equals(&chain_auditor_point, &slot0_point)) {
-            return false
+        // Chain-auditor slot 0 is always reserved (wire format is stable), but the
+        // key-equality check is skipped while no chain auditor is configured.
+        if (chain_auditor_ek_opt.is_some()) {
+            let chain_auditor_point = twisted_elgamal::pubkey_to_point(&chain_auditor_ek_opt.extract());
+            let slot0_point = twisted_elgamal::pubkey_to_point(&auditor_eks[0]);
+            if (!ristretto255::point_equals(&chain_auditor_point, &slot0_point)) {
+                return false
+            };
         };
 
         if (asset_auditor_ek_opt.is_some()) {

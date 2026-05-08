@@ -326,6 +326,7 @@ module aptos_framework::timelock {
         new_creators: vector<address>,
     ) acquires TimelockAccount {
         let timelock_address = address_of(timelock_account);
+        // TODO: seems like this allows any timelock to add creators to any timelock
         assert_timelock_account_exists(timelock_address);
         let creators_added = copy new_creators;
         validate_members(&new_creators, timelock_address, EDUPLICATE_CREATOR);
@@ -474,6 +475,9 @@ module aptos_framework::timelock {
         timelock_account: address,
         transaction_hash: vector<u8>,
     ) acquires TimelockAccount {
+        // TODO: it looks impossible to handle a situation a condition where a party has been compromised
+        // and malicious actor is on a stand out against signers rejecting each other's transactions
+        // they must rely on exhaustion
         assert_timelock_account_exists(timelock_account);
         assert!(transaction_hash.length() == SCRIPT_HASH_LENGTH, error::invalid_argument(EINVALID_BYTES_LENGTH));
         let actor_addr = address_of(actor);
@@ -539,7 +543,7 @@ module aptos_framework::timelock {
                 transaction_context::get_script_hash() == transaction.execution_hash,
                 error::invalid_argument(EEXECUTION_HASH_NOT_MATCHING),
             );
-
+            // TODO: check necessity. why set to current_execution_hash here only? why not use it directly
             current_execution_hash = transaction.execution_hash;
             transaction.executed = true;
         };
@@ -561,6 +565,7 @@ module aptos_framework::timelock {
         let deployer_nonce = account::get_sequence_number(address_of(deployer));
         let (timelock_signer, timelock_signer_cap) =
             account::create_resource_account(deployer, create_timelock_account_seed(to_bytes(&deployer_nonce)));
+        // TODO: maybe unecessary with migration
         // Register for APT so the timelock account can pay gas and receive transfers.
         if (!coin::is_account_registered<AptosCoin>(address_of(&timelock_signer))) {
             coin::register<AptosCoin>(&timelock_signer);

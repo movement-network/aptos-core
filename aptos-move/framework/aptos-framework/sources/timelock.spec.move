@@ -201,42 +201,73 @@ spec aptos_framework::timelock {
 
     spec add_creators(timelock_account: &signer, new_creators: vector<address>) {
         pragma aborts_if_is_partial;
-        aborts_if !exists<TimelockAccount>(address_of(timelock_account));
+        let addr = address_of(timelock_account);
+        aborts_if !exists<TimelockAccount>(addr);
         // Aborts if any new creator is the timelock address itself.
-        aborts_if exists i in 0..len(new_creators): new_creators[i] == address_of(timelock_account);
+        aborts_if exists i in 0..len(new_creators): new_creators[i] == addr;
         // Aborts if new_creators list has internal duplicates.
         aborts_if exists i in 0..len(new_creators): exists j in 0..i: new_creators[i] == new_creators[j];
-        ensures exists<TimelockAccount>(address_of(timelock_account));
+        ensures exists<TimelockAccount>(addr);
+        // Post-state: creators list is the prior list with new_creators appended; no other field changes.
+        ensures global<TimelockAccount>(addr).creators
+            == concat(old(global<TimelockAccount>(addr).creators), new_creators);
+        ensures global<TimelockAccount>(addr).executors
+            == old(global<TimelockAccount>(addr).executors);
+        ensures global<TimelockAccount>(addr).min_num_seconds_execute
+            == old(global<TimelockAccount>(addr).min_num_seconds_execute);
     }
 
     spec remove_creators(timelock_account: &signer, creators_to_remove: vector<address>) {
         pragma aborts_if_is_partial;
-        aborts_if !exists<TimelockAccount>(address_of(timelock_account));
+        let addr = address_of(timelock_account);
+        aborts_if !exists<TimelockAccount>(addr);
         // Aborts if removing these creators would leave zero creators.
         // (Full enumeration of the post-removal set is complex; partial spec retained here.)
+        ensures exists<TimelockAccount>(addr);
         // Must retain at least one creator.
-        ensures len(global<TimelockAccount>(address_of(timelock_account)).creators) >= 1;
+        ensures len(global<TimelockAccount>(addr).creators) >= 1;
+        // Note: "executors and min_num_seconds_execute unchanged" is a true property of this entry,
+        // but expressing it here trips the prover's loop havoc over `for_each_ref` on a mutably
+        // borrowed struct. Tracked in timelock.fv.md.
     }
 
     spec add_executors(timelock_account: &signer, new_executors: vector<address>) {
         pragma aborts_if_is_partial;
-        aborts_if !exists<TimelockAccount>(address_of(timelock_account));
+        let addr = address_of(timelock_account);
+        aborts_if !exists<TimelockAccount>(addr);
         // Aborts if any new executor is the timelock address itself.
-        aborts_if exists i in 0..len(new_executors): new_executors[i] == address_of(timelock_account);
+        aborts_if exists i in 0..len(new_executors): new_executors[i] == addr;
         // Aborts if new_executors list has internal duplicates.
         aborts_if exists i in 0..len(new_executors): exists j in 0..i: new_executors[i] == new_executors[j];
-        ensures exists<TimelockAccount>(address_of(timelock_account));
+        ensures exists<TimelockAccount>(addr);
+        // Post-state: executors list is the prior list with new_executors appended; no other field changes.
+        ensures global<TimelockAccount>(addr).executors
+            == concat(old(global<TimelockAccount>(addr).executors), new_executors);
+        ensures global<TimelockAccount>(addr).creators
+            == old(global<TimelockAccount>(addr).creators);
+        ensures global<TimelockAccount>(addr).min_num_seconds_execute
+            == old(global<TimelockAccount>(addr).min_num_seconds_execute);
     }
 
     spec remove_executors(timelock_account: &signer, executors_to_remove: vector<address>) {
-        aborts_if !exists<TimelockAccount>(address_of(timelock_account));
-        ensures exists<TimelockAccount>(address_of(timelock_account));
+        let addr = address_of(timelock_account);
+        aborts_if !exists<TimelockAccount>(addr);
+        ensures exists<TimelockAccount>(addr);
+        // Note: "creators and min_num_seconds_execute unchanged" is a true property of this entry,
+        // but expressing it here trips the prover's loop havoc over `for_each_ref` on a mutably
+        // borrowed struct. Tracked in timelock.fv.md.
     }
 
     spec update_min_num_seconds_execute(timelock_account: &signer, new_min_num_seconds_execute: u64) {
-        aborts_if !exists<TimelockAccount>(address_of(timelock_account));
+        let addr = address_of(timelock_account);
+        aborts_if !exists<TimelockAccount>(addr);
         aborts_if new_min_num_seconds_execute <= 360;
-        ensures global<TimelockAccount>(address_of(timelock_account)).min_num_seconds_execute == new_min_num_seconds_execute;
+        ensures global<TimelockAccount>(addr).min_num_seconds_execute == new_min_num_seconds_execute;
+        // Membership lists are unchanged.
+        ensures global<TimelockAccount>(addr).creators
+            == old(global<TimelockAccount>(addr).creators);
+        ensures global<TimelockAccount>(addr).executors
+            == old(global<TimelockAccount>(addr).executors);
     }
 
     // =============================== Transaction flow ===============================

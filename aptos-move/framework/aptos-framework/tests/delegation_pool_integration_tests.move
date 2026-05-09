@@ -487,12 +487,20 @@ module aptos_framework::delegation_pool_integration_tests {
         assert!(stake::get_remaining_lockup_secs(validator_address) == LOCKUP_CYCLE_SECONDS, 3);
     }
 
-    #[test(aptos_framework = @aptos_framework, validator = @0x123)]
+    #[test(aptos_framework = @aptos_framework, validator = @0x123, validator_2 = @0x234)]
     public entry fun test_active_validator_can_withdraw_all_stake_and_rewards_at_once(
         aptos_framework: &signer,
         validator: &signer,
+        validator_2: &signer,
     ) {
         initialize_for_test(aptos_framework);
+
+        // A second validator ensures the election is never empty, so the liveness fallback never
+        // fires and the primary validator is kicked normally when its stake reaches zero.
+        // validator_2 joins first (index 1); validator joins second (index 0) and triggers end_epoch.
+        let (_sk_2, pk_2, pop_2) = generate_identity();
+        initialize_test_validator(&pk_2, &pop_2, validator_2, 100 * ONE_APT, true, false);
+
         let (_sk, pk, pop) = generate_identity();
         initialize_test_validator(&pk, &pop, validator, 100 * ONE_APT, true, true);
         let validator_address = dp::get_owned_pool_address(signer::address_of(validator));
@@ -501,6 +509,7 @@ module aptos_framework::delegation_pool_integration_tests {
         // One more epoch passes to generate rewards.
         end_epoch();
         assert!(stake::get_validator_state(validator_address) == VALIDATOR_STATUS_ACTIVE, 1);
+        // validator is at index 0 (last to join pending_active gets index 0).
         stake::assert_validator_state(validator_address, 101 * ONE_APT, 0, 0, 0, 0);
 
         // Unlock all coins while still having a lockup.
@@ -519,8 +528,9 @@ module aptos_framework::delegation_pool_integration_tests {
         // Enough time has passed so the current lockup cycle should have ended. Funds are now fully unlocked.
         timestamp::fast_forward_seconds(LOCKUP_CYCLE_SECONDS);
         end_epoch();
+        // validator_2 still qualifies so the election is non-empty — validator is kicked normally.
+        // validator_index stays at 0 (last value while active; not updated after kick).
         stake::assert_validator_state(validator_address, 0, 10303010000, 0, 0, 0);
-        // Validator has been kicked out of the validator set as their stake is 0 now.
         assert!(stake::get_validator_state(validator_address) == VALIDATOR_STATUS_INACTIVE, 4);
     }
 
@@ -601,12 +611,20 @@ module aptos_framework::delegation_pool_integration_tests {
         stake::assert_validator_state(validator_address, 100 * ONE_APT, 0, 0, 0, 0);
     }
 
-    #[test(aptos_framework = @aptos_framework, validator = @0x123)]
+    #[test(aptos_framework = @aptos_framework, validator = @0x123, validator_2 = @0x234)]
     public entry fun test_active_validator_having_insufficient_remaining_stake_after_withdrawal_gets_kicked(
         aptos_framework: &signer,
         validator: &signer,
+        validator_2: &signer,
     ) {
         initialize_for_test(aptos_framework);
+
+        // A second validator ensures the election is never empty, so the primary validator is
+        // kicked normally when its remaining stake drops below minimum — no liveness fallback.
+        // validator_2 joins first (index 0); validator joins second (index 1) and triggers end_epoch.
+        let (_sk_2, pk_2, pop_2) = generate_identity();
+        initialize_test_validator(&pk_2, &pop_2, validator_2, 100 * ONE_APT, true, false);
+
         let (_sk, pk, pop) = generate_identity();
         initialize_test_validator(&pk, &pop, validator, 100 * ONE_APT, true, true);
 
@@ -614,17 +632,19 @@ module aptos_framework::delegation_pool_integration_tests {
         let validator_address = dp::get_owned_pool_address(signer::address_of(validator));
         assert!(stake::get_remaining_lockup_secs(validator_address) == LOCKUP_CYCLE_SECONDS, 1);
         dp::unlock(validator, validator_address, 50 * ONE_APT);
+        // validator is at index 0 (last to join pending_active gets index 0).
         stake::assert_validator_state(validator_address, 50 * ONE_APT, 0, 0, 50 * ONE_APT, 0);
 
         // Enough time has passed so the current lockup cycle should have ended.
-        // 50 coins should have unlocked while the remaining 51 (50 + rewards) is not enough so the validator is kicked
-        // from the validator set.
+        // 50 APT is unlocked and the remaining 50 APT is below minimum_stake.
         assert!(stake::get_validator_state(validator_address) == VALIDATOR_STATUS_ACTIVE, 2);
         timestamp::fast_forward_seconds(LOCKUP_CYCLE_SECONDS);
         end_epoch();
+        // validator_2 still qualifies so the election is non-empty — validator is kicked normally.
         assert!(stake::get_validator_state(validator_address) == VALIDATOR_STATUS_INACTIVE, 2);
+        // validator_index stays at 0 (last value while active; not updated after kick).
         stake::assert_validator_state(validator_address, 5050000000, 5050000000, 0, 0, 0);
-        // Lockup is no longer renewed since the validator is no longer a part of the validator set.
+        // Lockup is not renewed for a kicked validator (only active-set validators get renewal).
         assert!(stake::get_remaining_lockup_secs(validator_address) == 0, 3);
     }
 

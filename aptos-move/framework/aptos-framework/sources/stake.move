@@ -344,6 +344,16 @@ module aptos_framework::stake {
         pool_address: address,
     }
 
+    // Emitted when the epoch-boundary election produces an empty validator set.
+    // The protocol retains the previous active set (with refreshed voting power)
+    // to preserve liveness. Signals a governance/economic failure requiring operator attention.
+    #[event]
+    struct EmptyElectionFallback has drop, store {
+        minimum_stake: u64,
+        emergency_validator_count: u64,
+        total_emergency_voting_power: u128,
+    }
+
     #[deprecated]
     /// DEPRECATED
     struct ValidatorFees has key {
@@ -1308,8 +1318,35 @@ module aptos_framework::stake {
             i = i + 1;
         };
 
-        validator_set.active_validators = next_epoch_validators;
-        validator_set.total_voting_power = total_voting_power;
+        if (vector::is_empty(&next_epoch_validators)) {
+            // Every staker dropped below minimum_stake — transitioning to an
+            // empty set would halt the chain. Carry the previous active set
+            // forward with voting power recomputed from current stake balances
+            // (post-reward, post-fee) so consensus can continue.
+            let retained = vector::empty<ValidatorInfo>();
+            let retained_power = 0u128;
+            vector::for_each_ref(&validator_set.active_validators, |vi| {
+                let vi: &ValidatorInfo = vi;
+                let info = generate_validator_info(
+                    vi.addr,
+                    borrow_global<StakePool>(vi.addr),
+                    *borrow_global<ValidatorConfig>(vi.addr),
+                );
+                retained_power = retained_power + (info.voting_power as u128);
+                vector::push_back(&mut retained, info);
+            });
+            validator_set.active_validators = retained;
+            validator_set.total_voting_power = retained_power;
+            event::emit(EmptyElectionFallback {
+                minimum_stake,
+                emergency_validator_count: vector::length(&validator_set.active_validators),
+                total_emergency_voting_power: validator_set.total_voting_power,
+            });
+        } else {
+            // Normal case, some validator participate to the next epoch.
+            validator_set.active_validators = next_epoch_validators;
+            validator_set.total_voting_power = total_voting_power;
+        };
         validator_set.total_joining_power = 0;
 
         // Update validator indices, reset performance scores, and renew lockups.
@@ -1373,8 +1410,54 @@ module aptos_framework::stake {
         validator_consensus_infos_from_validator_set(validator_set)
     }
 
+    // Estimate the next-epoch voting power and config for a single validator address.
+    // When compute_rewards=true, rewards are estimated from perf_index in validator_perf;
+    // when false (pending_active validators that haven't participated in consensus) reward is 0.
+    // Power = active + pending_active + reward + (pending_inactive if lockup not yet expired).
+    fun estimate_validator_power(
+        addr: address,
+        perf_index: u64,
+        compute_rewards: bool,
+        validator_perf: &ValidatorPerformance,
+        rewards_rate: u64,
+        rewards_rate_denominator: u64,
+    ): (u64, ValidatorConfig) acquires StakePool, ValidatorConfig {
+        let stake_pool = borrow_global<StakePool>(addr);
+        let cur_active = coin::value(&stake_pool.active);
+        let cur_pending_active = coin::value(&stake_pool.pending_active);
+        let cur_pending_inactive = coin::value(&stake_pool.pending_inactive);
+        let lockup_expired = get_reconfig_start_time_secs() >= stake_pool.locked_until_secs;
+        let cur_reward = if (compute_rewards && cur_active > 0) {
+            spec {
+                assert perf_index < len(validator_perf.validators);
+            };
+            let cur_perf = vector::borrow(&validator_perf.validators, perf_index);
+            spec {
+                assume cur_perf.successful_proposals + cur_perf.failed_proposals <= MAX_U64;
+            };
+            calculate_rewards_amount(
+                cur_active,
+                cur_perf.successful_proposals,
+                cur_perf.successful_proposals + cur_perf.failed_proposals,
+                rewards_rate,
+                rewards_rate_denominator,
+            )
+        } else {
+            0
+        };
+        spec {
+            assume cur_active + cur_pending_active + cur_reward <= MAX_U64;
+            assume cur_active + cur_pending_active + cur_pending_inactive + cur_reward <= MAX_U64;
+        };
+        let power = cur_active
+            + cur_pending_active
+            + if (lockup_expired) { 0 } else { cur_pending_inactive }
+            + cur_reward;
+        let config = *borrow_global<ValidatorConfig>(addr);
+        (power, config)
+    }
+
     public fun next_validator_consensus_infos(): vector<ValidatorConsensusInfo> acquires ValidatorSet, ValidatorPerformance, StakePool, ValidatorConfig {
-        // Init.
         let cur_validator_set = borrow_global<ValidatorSet>(@aptos_framework);
         let staking_config = staking_config::get();
         let validator_perf = borrow_global<ValidatorPerformance>(@aptos_framework);
@@ -1410,54 +1493,67 @@ module aptos_framework::stake {
             } else {
                 vector::borrow(&cur_validator_set.pending_active, candidate_idx - num_cur_actives)
             };
-            let stake_pool = borrow_global<StakePool>(candidate.addr);
-            let cur_active = coin::value(&stake_pool.active);
-            let cur_pending_active = coin::value(&stake_pool.pending_active);
-            let cur_pending_inactive = coin::value(&stake_pool.pending_inactive);
-
-            let cur_reward = if (candidate_in_current_validator_set && cur_active > 0) {
-                spec {
-                    assert candidate.config.validator_index < len(validator_perf.validators);
-                };
-                let cur_perf = vector::borrow(&validator_perf.validators, candidate.config.validator_index);
-                spec {
-                    assume cur_perf.successful_proposals + cur_perf.failed_proposals <= MAX_U64;
-                };
-                calculate_rewards_amount(cur_active, cur_perf.successful_proposals, cur_perf.successful_proposals + cur_perf.failed_proposals, rewards_rate, rewards_rate_denominator)
-            } else {
-                0
-            };
-
-            let lockup_expired = get_reconfig_start_time_secs() >= stake_pool.locked_until_secs;
-            spec {
-                assume cur_active + cur_pending_active + cur_reward <= MAX_U64;
-                assume cur_active + cur_pending_inactive + cur_pending_active + cur_reward <= MAX_U64;
-            };
-            let new_voting_power =
-                cur_active
-                + if (lockup_expired) { 0 } else { cur_pending_inactive }
-                + cur_pending_active
-                + cur_reward;
-
+            let (new_voting_power, config) = estimate_validator_power(
+                candidate.addr,
+                candidate.config.validator_index,
+                candidate_in_current_validator_set,
+                validator_perf,
+                rewards_rate,
+                rewards_rate_denominator,
+            );
             if (new_voting_power >= minimum_stake) {
-                let config = *borrow_global<ValidatorConfig>(candidate.addr);
                 config.validator_index = num_new_actives;
-                let new_validator_info = ValidatorInfo {
-                    addr: candidate.addr,
-                    voting_power: new_voting_power,
-                    config,
-                };
-
-                // Update ValidatorSet.
                 spec {
                     assume new_total_power + new_voting_power <= MAX_U128;
                 };
-                new_total_power = new_total_power + (new_voting_power as u128);
-                vector::push_back(&mut new_active_validators, new_validator_info);
+                new_total_power += (new_voting_power as u128);
+                vector::push_back(&mut new_active_validators, ValidatorInfo {
+                    addr: candidate.addr,
+                    voting_power: new_voting_power,
+                    config,
+                });
                 num_new_actives = num_new_actives + 1;
-
             };
             candidate_idx = candidate_idx + 1;
+        };
+
+        // Reproduce the liveness fallback on_new_epoch(): if the simulated election yields no
+        // qualifying validators (and there was actually a non-empty candidate pool — i.e., all
+        // candidates failed the stake threshold rather than no candidates existing at all),
+        // predict that the current active set will be retained so that the consensus layer
+        // receives a consistent view of the next epoch.
+        // Merges pending_active into active_validators before its election loop,
+        // so its fallback implicitly covers both pools.
+        if (vector::is_empty(&new_active_validators)
+                && (num_cur_actives > 0 || num_cur_pending_actives > 0)) {
+            let fallback_idx = 0;
+            while (fallback_idx < num_candidates) {
+                let is_active = fallback_idx < num_cur_actives;
+                let validator = if (is_active) {
+                    vector::borrow(&cur_validator_set.active_validators, fallback_idx)
+                } else {
+                    vector::borrow(&cur_validator_set.pending_active, fallback_idx - num_cur_actives)
+                };
+                let (fallback_power, config) = estimate_validator_power(
+                    validator.addr,
+                    validator.config.validator_index,
+                    is_active,
+                    validator_perf,
+                    rewards_rate,
+                    rewards_rate_denominator,
+                );
+                config.validator_index = fallback_idx;
+                spec {
+                    assume new_total_power + fallback_power <= MAX_U128;
+                };
+                new_total_power = new_total_power + (fallback_power as u128);
+                vector::push_back(&mut new_active_validators, ValidatorInfo {
+                    addr: validator.addr,
+                    voting_power: fallback_power,
+                    config,
+                });
+                fallback_idx = fallback_idx + 1;
+            };
         };
 
         let new_validator_set = ValidatorSet {
@@ -2465,8 +2561,9 @@ module aptos_framework::stake {
         timestamp::fast_forward_seconds(LOCKUP_CYCLE_SECONDS);
         end_epoch();
         assert_validator_state(validator_address, 0, 103, 0, 0, 0);
-        // Validator has been kicked out of the validator set as their stake is 0 now.
-        assert!(get_validator_state(validator_address) == VALIDATOR_STATUS_INACTIVE, 4);
+        // Validator is the only active validator so removing them would produce an empty set and halt the chain.
+        // The liveness fallback retains them in the active set even though their stake is 0.
+        assert!(get_validator_state(validator_address) == VALIDATOR_STATUS_ACTIVE, 4);
     }
 
     #[test(aptos_framework = @aptos_framework, validator = @0x123)]
@@ -2560,15 +2657,17 @@ module aptos_framework::stake {
         assert_validator_state(validator_address, 50, 0, 0, 50, 0);
 
         // Enough time has passed so the current lockup cycle should have ended.
-        // 50 coins should have unlocked while the remaining 51 (50 + rewards) is not enough so the validator is kicked
-        // from the validator set.
+        // 50 coins unlock while the remaining 50 is below minimum_stake.
+        // Because this is the only active validator, the election would produce an empty set and halt
+        // the chain. The liveness fallback retains the validator with refreshed voting power instead.
         assert!(get_validator_state(validator_address) == VALIDATOR_STATUS_ACTIVE, 2);
         timestamp::fast_forward_seconds(LOCKUP_CYCLE_SECONDS);
         end_epoch();
-        assert!(get_validator_state(validator_address) == VALIDATOR_STATUS_INACTIVE, 2);
+        // Validator remains ACTIVE — liveness fallback triggered (empty election would halt chain).
+        assert!(get_validator_state(validator_address) == VALIDATOR_STATUS_ACTIVE, 2);
         assert_validator_state(validator_address, 50, 50, 0, 0, 0);
-        // Lockup is no longer renewed since the validator is no longer a part of the validator set.
-        assert!(get_remaining_lockup_secs(validator_address) == 0, 3);
+        // Lockup is renewed because the validator is still in the active set via fallback.
+        assert!(get_remaining_lockup_secs(validator_address) == LOCKUP_CYCLE_SECONDS, 3);
     }
 
     #[test(aptos_framework = @aptos_framework, validator = @0x123, validator_2 = @0x234)]
@@ -3409,6 +3508,232 @@ module aptos_framework::stake {
         let stake_after_full = coin::value(&borrow_global<StakePool>(validator_address).active);
         // Should be ~1015 (1005 + 1% = 1005 + 10.05 = 1015)
         assert!(stake_after_full >= 1015, 8); // Got full rewards
+    }
+
+    // next_validator_consensus_infos() must predict the same fallback that on_new_epoch() applies:
+    // when all validators drop below minimum_stake, the current active set is retained rather than
+    // returning an empty list. Without this, the consensus layer would receive an incorrect preview
+    // of the next epoch while on_new_epoch() would still retain validators via the fallback.
+    //
+    // next_validator_consensus_infos() must be called within an active reconfig context
+    // (between on_reconfig_start and on_reconfig_finish) because it internally calls
+    // get_reconfig_start_time_secs() to determine whether lockups have expired.
+    #[test(aptos_framework = @aptos_framework, validator = @0x123)]
+    public entry fun test_next_validator_consensus_infos_reflects_liveness_fallback(
+        aptos_framework: &signer,
+        validator: &signer,
+    ) acquires AllowedValidators, AptosCoinCapabilities, OwnerCapability, StakePool, ValidatorConfig, ValidatorPerformance, ValidatorSet {
+        initialize_for_test(aptos_framework);
+        let (_sk, pk, pop) = generate_identity();
+        // Validator joins with 100 stake (minimum). end_epoch distributes 1 coin reward → active = 101.
+        initialize_test_validator(&pk, &pop, validator, 100, true, true);
+        let validator_address = signer::address_of(validator);
+
+        // Unlock 100 coins leaving 1 active + 100 pending_inactive.
+        unlock(validator, 100);
+
+        // Advance time past the lockup. With lockup_expired=true in the simulation,
+        // pending_inactive is excluded from voting_power → voting_power = 1 < minimum_stake=100.
+        set_validator_perf_at_least_one_block();
+        timestamp::fast_forward_seconds(LOCKUP_CYCLE_SECONDS);
+
+        // Start the reconfig — required context for next_validator_consensus_infos().
+        reconfiguration_state::on_reconfig_start();
+
+        // The election simulation produces no qualifying validators (voting_power=1 < 100).
+        // Without the fallback fix this returns an empty vector; with it the retained active
+        // set is returned so the consensus layer sees a consistent next-epoch view.
+        let next_infos = next_validator_consensus_infos();
+        assert!(vector::length(&next_infos) > 0, 1);
+        let info = vector::borrow(&next_infos, 0);
+        assert!(validator_consensus_info::get_addr(info) == validator_address, 2);
+
+        // Complete the epoch to leave state clean.
+        on_new_epoch();
+        reconfiguration_state::on_reconfig_finish();
+    }
+
+
+    // next_validator_consensus_infos() fallback must include pending_active validators, because
+    // on_new_epoch() merges pending_active into active_validators before its election loop, so
+    // its fallback implicitly retains them. Here minimum_stake is raised to 200 after both
+    // validators join (at 100), causing all candidates to fail the election. The fallback must
+    // return both: validator_1 (current active) and validator_2 (pending_active, not yet promoted).
+    #[test(aptos_framework = @aptos_framework, validator_1 = @0x123, validator_2 = @0x234)]
+    public entry fun test_next_validator_consensus_infos_fallback_includes_pending_active(
+        aptos_framework: &signer,
+        validator_1: &signer,
+        validator_2: &signer,
+    ) acquires AllowedValidators, AptosCoinCapabilities, OwnerCapability, StakePool, ValidatorConfig, ValidatorPerformance, ValidatorSet {
+        initialize_for_test(aptos_framework);
+
+        // validator_1 joins, end_epoch promotes it to active (stake ≈ 101 after one reward).
+        let (_sk_1, pk_1, pop_1) = generate_identity();
+        initialize_test_validator(&pk_1, &pop_1, validator_1, 100, true, true);
+        let validator_1_address = signer::address_of(validator_1);
+
+        // validator_2 joins but no end_epoch — stays in ValidatorSet.pending_active.
+        let (_sk_2, pk_2, pop_2) = generate_identity();
+        initialize_test_validator(&pk_2, &pop_2, validator_2, 100, true, false);
+        let validator_2_address = signer::address_of(validator_2);
+
+        // Raise minimum_stake above what either validator currently holds.
+        // validator_1 active ≈ 101; validator_2 pending_active = 100 — both below the new floor.
+        staking_config::update_required_stake(aptos_framework, 200, 10000);
+
+        // Drain validator_1's active stake so voting_power = 0 in the simulation.
+        let (active_1, _, _, _) = get_stake(validator_1_address);
+        unlock(validator_1, active_1);
+
+        // Advance past lockup so pending_inactive is excluded from voting_power.
+        set_validator_perf_at_least_one_block();
+        timestamp::fast_forward_seconds(LOCKUP_CYCLE_SECONDS);
+
+        // Start the reconfig context required by next_validator_consensus_infos().
+        reconfiguration_state::on_reconfig_start();
+
+        // Election: validator_1 voting_power=0 <200, validator_2 voting_power=100 <200 → empty.
+        // Fallback fires: pass-1 retains validator_1 (active), pass-2 retains validator_2
+        // (pending_active), mirroring what on_new_epoch() would produce.
+        let next_infos = next_validator_consensus_infos();
+        assert!(vector::length(&next_infos) == 2, 1);
+        let info_0 = vector::borrow(&next_infos, 0);
+        assert!(validator_consensus_info::get_addr(info_0) == validator_1_address, 2);
+        let info_1 = vector::borrow(&next_infos, 1);
+        assert!(validator_consensus_info::get_addr(info_1) == validator_2_address, 3);
+
+        // Complete the epoch to leave state clean.
+        on_new_epoch();
+        reconfiguration_state::on_reconfig_finish();
+    }
+
+    // When the epoch-boundary election produces an empty validator set, the protocol must retain the
+    // previous active set to preserve liveness. This test verifies that a single validator whose stake
+    // drops below minimum_stake remains ACTIVE rather than halting the chain.
+    #[test(aptos_framework = @aptos_framework, validator = @0x123)]
+    public entry fun test_liveness_fallback_retains_validator_when_election_is_empty(
+        aptos_framework: &signer,
+        validator: &signer,
+    ) acquires AllowedValidators, AptosCoinCapabilities, OwnerCapability, StakePool, ValidatorConfig, ValidatorPerformance, ValidatorSet {
+        initialize_for_test(aptos_framework);
+        let (_sk, pk, pop) = generate_identity();
+        // Join with exactly minimum_stake.
+        initialize_test_validator(&pk, &pop, validator, 100, true, true);
+        let validator_address = signer::address_of(validator);
+
+        // Collect one epoch of rewards so active stake is slightly above 100.
+        end_epoch();
+        assert!(get_validator_state(validator_address) == VALIDATOR_STATUS_ACTIVE, 1);
+
+        // Unlock all active coins — voting_power will be 0 once the lockup expires.
+        let (active_before, _, _, _) = get_stake(validator_address);
+        unlock(validator, active_before);
+
+        // Let the lockup expire; pending_inactive moves to inactive during update_stake_pool.
+        timestamp::fast_forward_seconds(LOCKUP_CYCLE_SECONDS);
+        end_epoch();
+
+        // The election produces an empty set (0 active stake < minimum_stake=100).
+        // Liveness fallback must retain the previous active set instead of writing an empty one.
+        assert!(get_validator_state(validator_address) == VALIDATOR_STATUS_ACTIVE, 2);
+
+        // Stake pool reflects the settled state: all coins are now inactive.
+        let (active, _, pending_active, pending_inactive) = get_stake(validator_address);
+        assert!(active == 0, 3);
+        assert!(pending_active == 0, 4);
+        assert!(pending_inactive == 0, 5);
+
+        // Lockup is renewed because the validator went through the normal post-election path.
+        assert!(get_remaining_lockup_secs(validator_address) == LOCKUP_CYCLE_SECONDS, 6);
+
+        // Exactly one liveness-fallback event must have been emitted with correct fields.
+        // voting_power=0 because all stake is now inactive (unlocked past lockup).
+        let fallback_events = event::emitted_events<EmptyElectionFallback>();
+        assert!(vector::length(&fallback_events) == 1, 7);
+        let e = vector::borrow(&fallback_events, 0);
+        assert!(e.minimum_stake == 100, 8);
+        assert!(e.emergency_validator_count == 1, 9);
+        assert!(e.total_emergency_voting_power == 0, 10);
+    }
+
+    // When only SOME validators drop below minimum_stake, the election still produces a non-empty set
+    // and the normal kick path applies — no fallback. This test verifies the normal path is unaffected.
+    #[test(aptos_framework = @aptos_framework, validator_1 = @0x123, validator_2 = @0x234)]
+    public entry fun test_validator_kicked_normally_when_another_qualifies(
+        aptos_framework: &signer,
+        validator_1: &signer,
+        validator_2: &signer,
+    ) acquires AllowedValidators, AptosCoinCapabilities, OwnerCapability, StakePool, ValidatorConfig, ValidatorPerformance, ValidatorSet {
+        initialize_for_test(aptos_framework);
+        let (_sk_1, pk_1, pop_1) = generate_identity();
+        let (_sk_2, pk_2, pop_2) = generate_identity();
+        // validator_1 starts at minimum; validator_2 has more headroom.
+        initialize_test_validator(&pk_1, &pop_1, validator_1, 100, true, false);
+        initialize_test_validator(&pk_2, &pop_2, validator_2, 200, true, true);
+
+        let validator_1_address = signer::address_of(validator_1);
+        let validator_2_address = signer::address_of(validator_2);
+
+        // validator_1 unlocks 50 coins, leaving 50 active — below minimum_stake.
+        unlock(validator_1, 50);
+
+        // Let lockup expire so pending_inactive moves to inactive and voting_power is recomputed.
+        timestamp::fast_forward_seconds(LOCKUP_CYCLE_SECONDS);
+        end_epoch();
+
+        // Election is non-empty (validator_2 qualifies) so the normal kick path fires.
+        // validator_1 is removed from the active set because its voting_power < minimum_stake.
+        assert!(get_validator_state(validator_1_address) == VALIDATOR_STATUS_INACTIVE, 1);
+        // validator_2 stays active — its stake is well above minimum.
+        assert!(get_validator_state(validator_2_address) == VALIDATOR_STATUS_ACTIVE, 2);
+
+        // No liveness-fallback event must be emitted on the normal (non-empty election) path.
+        assert!(vector::is_empty(&event::emitted_events<EmptyElectionFallback>()), 3);
+    }
+
+    // When ALL validators in a multi-validator set drop below minimum_stake, the election is empty
+    // and the liveness fallback must retain the entire previous active set.
+    #[test(aptos_framework = @aptos_framework, validator_1 = @0x123, validator_2 = @0x234)]
+    public entry fun test_liveness_fallback_retains_all_validators_when_all_drop_below_min(
+        aptos_framework: &signer,
+        validator_1: &signer,
+        validator_2: &signer,
+    ) acquires AllowedValidators, AptosCoinCapabilities, OwnerCapability, StakePool, ValidatorConfig, ValidatorPerformance, ValidatorSet {
+        initialize_for_test(aptos_framework);
+        let (_sk_1, pk_1, pop_1) = generate_identity();
+        let (_sk_2, pk_2, pop_2) = generate_identity();
+        initialize_test_validator(&pk_1, &pop_1, validator_1, 100, true, false);
+        initialize_test_validator(&pk_2, &pop_2, validator_2, 100, true, true);
+
+        let validator_1_address = signer::address_of(validator_1);
+        let validator_2_address = signer::address_of(validator_2);
+
+        // Both validators unlock enough to drop below minimum_stake.
+        unlock(validator_1, 60);
+        unlock(validator_2, 60);
+
+        // Let lockup expire so both drop to 40 active stake each.
+        timestamp::fast_forward_seconds(LOCKUP_CYCLE_SECONDS);
+        end_epoch();
+
+        // Both validators are below minimum_stake; election is empty.
+        // Liveness fallback retains the entire previous active set.
+        assert!(get_validator_state(validator_1_address) == VALIDATOR_STATUS_ACTIVE, 1);
+        assert!(get_validator_state(validator_2_address) == VALIDATOR_STATUS_ACTIVE, 2);
+
+        // Both lockups are renewed since both remain in the active set.
+        assert!(get_remaining_lockup_secs(validator_1_address) == LOCKUP_CYCLE_SECONDS, 3);
+        assert!(get_remaining_lockup_secs(validator_2_address) == LOCKUP_CYCLE_SECONDS, 4);
+
+        // Exactly one liveness-fallback event with both validators retained.
+        // Each had 40 active stake (100 - 60 = 40; reward = 40*1%=0 in integer), and pending_inactive
+        // moved to inactive when the lockup expired, so total_emergency_voting_power = 40 + 40 = 80.
+        let fallback_events = event::emitted_events<EmptyElectionFallback>();
+        assert!(vector::length(&fallback_events) == 1, 5);
+        let e = vector::borrow(&fallback_events, 0);
+        assert!(e.minimum_stake == 100, 6);
+        assert!(e.emergency_validator_count == 2, 7);
+        assert!(e.total_emergency_voting_power == 80, 8);
     }
 
     // Test that the old minting path still works when treasury feature is disabled

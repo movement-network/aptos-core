@@ -1017,11 +1017,12 @@ module aptos_framework::staking_contract {
         std::features::change_feature_flags_for_testing(aptos_framework, vector[], vector[features::get_periodical_reward_rate_decrease_feature()]);
     }
 
-    #[test(aptos_framework = @0x1, staker = @0x123, operator = @0x234)]
+    #[test(aptos_framework = @0x1, staker = @0x123, operator = @0x234, validator_2 = @0x345)]
     public entry fun test_end_to_end(
         aptos_framework: &signer,
         staker: &signer,
-        operator: &signer
+        operator: &signer,
+        validator_2: &signer,
     ) acquires Store, BeneficiaryForOperator {
         setup_staking_contract(aptos_framework, staker, operator, INITIAL_BALANCE, 10);
         let staker_address = signer::address_of(staker);
@@ -1034,7 +1035,12 @@ module aptos_framework::staking_contract {
         stake::assert_stake_pool(pool_address, INITIAL_BALANCE, 0, 0, 0);
         assert!(last_recorded_principal(staker_address, operator_address) == INITIAL_BALANCE, 0);
 
-        // Operator joins the validator set.
+        // A second validator ensures the election is never empty, so the primary pool is kicked
+        // normally when its stake is fully withdrawn rather than being retained by the liveness fallback.
+        let (_sk_2, pk_2, pop_2) = stake::generate_identity();
+        stake::initialize_test_validator(&pk_2, &pop_2, validator_2, INITIAL_BALANCE, true, false);
+
+        // Operator joins the validator set (triggers epoch end — both validators become active).
         let (_sk, pk, pop) = stake::generate_identity();
         stake::join_validator_set_for_test(&pk, &pop, operator, pool_address, true);
         assert!(stake::get_validator_state(pool_address) == VALIDATOR_STATUS_ACTIVE, 1);
@@ -1103,7 +1109,9 @@ module aptos_framework::staking_contract {
         assert_distribution(staker_address, operator_address, staker_address, withdrawn_amount);
         assert!(last_recorded_principal(staker_address, operator_address) == 0, 0);
 
-        // End epoch. The stake pool should get kicked out of the validator set as it has 0 remaining active stake.
+        // End epoch. The stake pool has 0 remaining active stake. validator_2 keeps the election
+        // non-empty so the pool is kicked normally (INACTIVE) rather than retained by the fallback.
+        // Rewards are still distributed during this epoch because the pool was active at epoch start.
         stake::fast_forward_to_unlock(pool_address);
         // Operator should still earn 10% commission on the rewards on top of the staker's withdrawn_amount.
         let commission_on_withdrawn_amount = (with_rewards(withdrawn_amount) - withdrawn_amount) / 10;

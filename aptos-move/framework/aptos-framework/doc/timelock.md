@@ -2054,10 +2054,17 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 
 
 <pre><code><b>pragma</b> aborts_if_is_partial;
-<b>aborts_if</b> !<b>exists</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(address_of(timelock_account));
-<b>aborts_if</b> <b>exists</b> i in 0..len(new_creators): new_creators[i] == address_of(timelock_account);
+<b>let</b> addr = address_of(timelock_account);
+<b>aborts_if</b> !<b>exists</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(addr);
+<b>aborts_if</b> <b>exists</b> i in 0..len(new_creators): new_creators[i] == addr;
 <b>aborts_if</b> <b>exists</b> i in 0..len(new_creators): <b>exists</b> j in 0..i: new_creators[i] == new_creators[j];
-<b>ensures</b> <b>exists</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(address_of(timelock_account));
+<b>ensures</b> <b>exists</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(addr);
+<b>ensures</b> <b>global</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(addr).creators
+    == concat(<b>old</b>(<b>global</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(addr).creators), new_creators);
+<b>ensures</b> <b>global</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(addr).executors
+    == <b>old</b>(<b>global</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(addr).executors);
+<b>ensures</b> <b>global</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(addr).min_num_seconds_execute
+    == <b>old</b>(<b>global</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(addr).min_num_seconds_execute);
 </code></pre>
 
 
@@ -2074,8 +2081,10 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 
 
 <pre><code><b>pragma</b> aborts_if_is_partial;
-<b>aborts_if</b> !<b>exists</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(address_of(timelock_account));
-<b>ensures</b> len(<b>global</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(address_of(timelock_account)).creators) &gt;= 1;
+<b>let</b> addr = address_of(timelock_account);
+<b>aborts_if</b> !<b>exists</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(addr);
+<b>ensures</b> <b>exists</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(addr);
+<b>ensures</b> len(<b>global</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(addr).creators) &gt;= 1;
 </code></pre>
 
 
@@ -2092,10 +2101,17 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 
 
 <pre><code><b>pragma</b> aborts_if_is_partial;
-<b>aborts_if</b> !<b>exists</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(address_of(timelock_account));
-<b>aborts_if</b> <b>exists</b> i in 0..len(new_executors): new_executors[i] == address_of(timelock_account);
+<b>let</b> addr = address_of(timelock_account);
+<b>aborts_if</b> !<b>exists</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(addr);
+<b>aborts_if</b> <b>exists</b> i in 0..len(new_executors): new_executors[i] == addr;
 <b>aborts_if</b> <b>exists</b> i in 0..len(new_executors): <b>exists</b> j in 0..i: new_executors[i] == new_executors[j];
-<b>ensures</b> <b>exists</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(address_of(timelock_account));
+<b>ensures</b> <b>exists</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(addr);
+<b>ensures</b> <b>global</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(addr).executors
+    == concat(<b>old</b>(<b>global</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(addr).executors), new_executors);
+<b>ensures</b> <b>global</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(addr).creators
+    == <b>old</b>(<b>global</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(addr).creators);
+<b>ensures</b> <b>global</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(addr).min_num_seconds_execute
+    == <b>old</b>(<b>global</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(addr).min_num_seconds_execute);
 </code></pre>
 
 
@@ -2111,8 +2127,9 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 
 
 
-<pre><code><b>aborts_if</b> !<b>exists</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(address_of(timelock_account));
-<b>ensures</b> <b>exists</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(address_of(timelock_account));
+<pre><code><b>let</b> addr = address_of(timelock_account);
+<b>aborts_if</b> !<b>exists</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(addr);
+<b>ensures</b> <b>exists</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(addr);
 </code></pre>
 
 
@@ -2128,9 +2145,14 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 
 
 
-<pre><code><b>aborts_if</b> !<b>exists</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(address_of(timelock_account));
+<pre><code><b>let</b> addr = address_of(timelock_account);
+<b>aborts_if</b> !<b>exists</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(addr);
 <b>aborts_if</b> new_min_num_seconds_execute &lt;= 360;
-<b>ensures</b> <b>global</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(address_of(timelock_account)).min_num_seconds_execute == new_min_num_seconds_execute;
+<b>ensures</b> <b>global</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(addr).min_num_seconds_execute == new_min_num_seconds_execute;
+<b>ensures</b> <b>global</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(addr).creators
+    == <b>old</b>(<b>global</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(addr).creators);
+<b>ensures</b> <b>global</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(addr).executors
+    == <b>old</b>(<b>global</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(addr).executors);
 </code></pre>
 
 
@@ -2290,6 +2312,3 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 <b>aborts_if</b> <b>exists</b> i in 0..len(members):
     <b>exists</b> j in 0..i: members[i] == members[j];
 </code></pre>
-
-
-[move-book]: https://aptos.dev/move/book/SUMMARY

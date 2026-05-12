@@ -6,7 +6,7 @@
 use crate::{
     core_mempool::{CoreMempool, TimelineId},
     network::{MempoolNetworkInterface, MempoolSyncMsg},
-    shared_mempool::use_case_history::UseCaseHistory,
+    shared_mempool::{peer_rate_limiter::PeerRateLimiter, use_case_history::UseCaseHistory},
 };
 use anyhow::Result;
 use aptos_config::{
@@ -56,6 +56,7 @@ pub(crate) struct SharedMempool<NetworkClient, TransactionValidator> {
     pub subscribers: Vec<UnboundedSender<SharedMempoolNotification>>,
     pub broadcast_within_validator_network: Arc<RwLock<bool>>,
     pub use_case_history: Arc<Mutex<UseCaseHistory>>,
+    pub peer_rate_limiter: Option<PeerRateLimiter>,
 }
 
 impl<
@@ -78,6 +79,10 @@ impl<
             config.usecase_stats_num_blocks_to_track,
             config.usecase_stats_num_top_to_track,
         );
+        let peer_rate_limiter = config.peer_inbound_rate_limit_tps.map(|tps| {
+            let burst = config.peer_inbound_rate_limit_burst.unwrap_or(tps);
+            PeerRateLimiter::new(tps, burst)
+        });
         SharedMempool {
             mempool,
             config,
@@ -87,6 +92,7 @@ impl<
             subscribers,
             broadcast_within_validator_network: Arc::new(RwLock::new(true)),
             use_case_history: Arc::new(Mutex::new(use_case_history)),
+            peer_rate_limiter,
         }
     }
 

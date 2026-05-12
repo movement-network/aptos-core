@@ -296,7 +296,7 @@ async fn process_received_txns<NetworkClient, TransactionValidator>(
     smp: &mut SharedMempool<NetworkClient, TransactionValidator>,
     network_id: NetworkId,
     message_id: MempoolMessageId,
-    transactions: Vec<(
+    mut transactions: Vec<(
         SignedTransaction,
         Option<u64>,
         Option<BroadcastPeerPriority>,
@@ -306,10 +306,51 @@ async fn process_received_txns<NetworkClient, TransactionValidator>(
     NetworkClient: NetworkClientInterface<MempoolSyncMsg> + 'static,
     TransactionValidator: TransactionValidation + 'static,
 {
+    let peer = PeerNetworkId::new(network_id, peer_id);
+
+    // Per-peer rate limiting: if configured, check the token bucket for this
+    // peer and truncate the batch to the allowed count.  Dropped transactions
+    // are never validated — we immediately signal backpressure so the sender
+    // can throttle itself.
+    if let Some(ref mut limiter) = smp.peer_rate_limiter {
+        let requested = transactions.len();
+        let allowed = limiter.try_acquire(&peer, requested);
+        if allowed < requested {
+            let dropped = requested - allowed;
+            warn!(
+                LogSchema::new(LogEntry::CoordinatorRuntime)
+                    .peer(&peer),
+                "Per-peer rate limit exceeded: dropping {} of {} txns",
+                dropped,
+                requested,
+            );
+            counters::shared_mempool_event_inc("peer_rate_limited");
+            transactions.truncate(allowed);
+
+            // If the entire batch was dropped, send an immediate backpressure
+            // ACK and return — there is nothing left to process.
+            if transactions.is_empty() {
+                let ack = MempoolSyncMsg::BroadcastTransactionsResponse {
+                    message_id,
+                    retry: true,
+                    backoff: true,
+                };
+                if let Err(e) = smp.network_interface.send_message_to_peer(peer, ack) {
+                    counters::network_send_fail_inc(counters::ACK_TXNS);
+                    warn!(
+                        LogSchema::event_log(LogEntry::BroadcastACK, LogEvent::NetworkSendFail)
+                            .peer(&peer)
+                            .error(&e.into())
+                    );
+                }
+                return;
+            }
+        }
+    }
+
     smp.network_interface
         .num_mempool_txns_received_since_peers_updated += transactions.len() as u64;
     let smp_clone = smp.clone();
-    let peer = PeerNetworkId::new(network_id, peer_id);
     let ineligible_for_broadcast = (smp.network_interface.is_validator()
         && !smp.broadcast_within_validator_network())
         || smp.network_interface.is_upstream_peer(&peer, None);
@@ -438,6 +479,10 @@ async fn handle_update_peers<NetworkClient, TransactionValidator>(
         }
         for peer in &disabled {
             debug!(LogSchema::new(LogEntry::LostPeer).peer(peer));
+            // Remove stale rate-limiter state for disconnected peers.
+            if let Some(ref mut limiter) = smp.peer_rate_limiter {
+                limiter.remove_peer(peer);
+            }
         }
     }
 }

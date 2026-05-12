@@ -102,6 +102,15 @@ pub struct MempoolConfig {
     pub enable_max_load_balancing_at_any_load: bool,
     /// Maximum number of orderless transactions allowed in the Mempool per user
     pub orderless_txn_capacity_per_user: usize,
+    /// Per-peer inbound rate limit in transactions per second (token-bucket refill rate).
+    /// When set, each peer gets an independent token bucket. Transactions exceeding the
+    /// budget are dropped before validation and the peer receives a backpressure signal.
+    /// When `None` (default), no per-peer rate limiting is applied.
+    pub peer_inbound_rate_limit_tps: Option<u64>,
+    /// Burst size (token-bucket capacity) for per-peer inbound rate limiting.
+    /// Only used when `peer_inbound_rate_limit_tps` is set.  Defaults to the
+    /// value of `peer_inbound_rate_limit_tps` (i.e. one second of burst).
+    pub peer_inbound_rate_limit_burst: Option<u64>,
 }
 
 impl Default for MempoolConfig {
@@ -167,6 +176,8 @@ impl Default for MempoolConfig {
             ],
             enable_max_load_balancing_at_any_load: false,
             orderless_txn_capacity_per_user: 1000,
+            peer_inbound_rate_limit_tps: None,
+            peer_inbound_rate_limit_burst: None,
         }
     }
 }

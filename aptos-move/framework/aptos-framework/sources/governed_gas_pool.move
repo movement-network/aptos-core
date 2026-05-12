@@ -2,6 +2,8 @@ module aptos_framework::governed_gas_pool {
 
     friend aptos_framework::transaction_validation;
 
+    
+
     use std::vector;
     use aptos_framework::account::{Self, SignerCapability, create_signer_with_capability};
     use aptos_framework::system_addresses::{Self};

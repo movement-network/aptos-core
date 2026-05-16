@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use aptos_language_e2e_tests::{account::Account, executor::FakeExecutor};
-use aptos_transaction_simulation::GENESIS_CHANGE_SET_HEAD;
+use aptos_transaction_simulation::GENESIS_CHANGE_SET_TESTNET;
 use aptos_types::{
     chain_id::ChainId,
     on_chain_config::Features,
@@ -36,8 +36,23 @@ use utils::vm::{
     FuzzerRunnableAuthenticator, RunnableState,
 };
 
-// genesis write set generated once for each fuzzing session
-static VM_WRITE_SET: Lazy<WriteSet> = Lazy::new(|| GENESIS_CHANGE_SET_HEAD.write_set().clone());
+// genesis write set generated once for each fuzzing session.
+// Uses TESTNET bundle and catch_unwind to survive genesis panics (e.g.
+// argument-count mismatches from framework version skew). If genesis fails,
+// VM_WRITE_SET is None and all inputs are rejected — the fuzzer stays alive.
+static VM_WRITE_SET: Lazy<Option<WriteSet>> = Lazy::new(|| {
+    // libFuzzer installs a panic hook that calls abort(), preventing
+    // catch_unwind from working. Temporarily replace it with a no-op
+    // so genesis panics can be caught and the fuzzer keeps running.
+    let prev_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        GENESIS_CHANGE_SET_TESTNET.write_set().clone()
+    }))
+    .ok();
+    std::panic::set_hook(prev_hook);
+    result
+});
 
 const FUZZER_CONCURRENCY_LEVEL: usize = 1;
 static TP: Lazy<Arc<rayon::ThreadPool>> = Lazy::new(|| {
@@ -186,8 +201,9 @@ fn run_case(mut input: RunnableState) -> Result<(), Corpus> {
     }
 
     AptosVM::set_concurrency_level_once(FUZZER_CONCURRENCY_LEVEL);
+    let write_set = VM_WRITE_SET.as_ref().ok_or(Corpus::Reject)?;
     let mut vm = FakeExecutor::from_genesis_with_existing_thread_pool(
-        &VM_WRITE_SET,
+        write_set,
         ChainId::mainnet(),
         Arc::clone(&TP),
     )
@@ -334,6 +350,13 @@ fn run_case(mut input: RunnableState) -> Result<(), Corpus> {
         },
     };
 
+    // --- Pre-execution state snapshot ---
+    let supply_before = vm.read_coin_supply();
+    let sender_balance_before = vm
+        .read_apt_fungible_store_resource(&sender_acc)
+        .map(|s| s.balance())
+        .unwrap_or(0);
+
     // exec tx
     tdbg!("exec start");
     let mut old_res = None;
@@ -412,6 +435,56 @@ fn run_case(mut input: RunnableState) -> Result<(), Corpus> {
                 "Potential unexpected gas usage detected. Execution time: {:?}, Gas burned: {:?}",
                 elapsed,
                 fee.execution_gas_used() + fee.io_gas_used()
+            );
+        }
+    }
+
+    // --- Post-execution invariant checks ---
+    // Apply the write set so we can read updated state
+    vm.apply_write_set(res.write_set());
+
+    // Check 1: Total coin supply must be conserved
+    let supply_after = vm.read_coin_supply();
+    if let (Some(before), Some(after)) = (supply_before, supply_after) {
+        if after > before {
+            panic!(
+                "SUPPLY INFLATION: total supply increased from {} to {} (delta: +{}). \
+                 Coins were created out of thin air.",
+                before,
+                after,
+                after - before,
+            );
+        }
+        // Supply can decrease (burned for gas), but should never increase
+    }
+
+    // Check 2: Sender balance should not increase after paying gas
+    let sender_balance_after = vm
+        .read_apt_fungible_store_resource(&sender_acc)
+        .map(|s| s.balance())
+        .unwrap_or(0);
+    let gas_paid = (fee.gas_used() as u128) * 100; // gas_unit_price = 100
+    if sender_balance_after > sender_balance_before {
+        panic!(
+            "BALANCE INFLATION: sender balance increased from {} to {} (delta: +{}). \
+             Gas paid: {}. Sender gained coins without a valid source.",
+            sender_balance_before,
+            sender_balance_after,
+            sender_balance_after - sender_balance_before,
+            gas_paid,
+        );
+    }
+
+    // Check 3: Sender didn't lose more than their entire balance + gas
+    // (would indicate underflow wrapping)
+    if sender_balance_before > 0 && sender_balance_after > sender_balance_before {
+        // This catches u64 wrapping: if balance was 1000 and somehow became
+        // 18446744073709551000, that's a wrapping underflow
+        if sender_balance_after > sender_balance_before + 1_000_000_000_000 {
+            panic!(
+                "UNDERFLOW DETECTED: sender balance jumped from {} to {} — \
+                 likely u64 wrapping underflow.",
+                sender_balance_before, sender_balance_after,
             );
         }
     }

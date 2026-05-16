@@ -101,3 +101,9 @@ name = "type_tag_to_string"
 path = "fuzz_targets/move/type_tag_to_string.rs"
 test = false
 doc = false
+
+[[bin]]
+name = "crash_replay"
+path = "fuzz_targets/move/crash_replay.rs"
+test = false
+doc = false

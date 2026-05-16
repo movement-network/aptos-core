@@ -925,3 +925,6 @@ futures-sink = { git = "https://github.com/aptos-labs/futures-rs", branch = "bac
 futures-io = { git = "https://github.com/aptos-labs/futures-rs", branch = "backport" }
 futures-task = { git = "https://github.com/aptos-labs/futures-rs", branch = "backport" }
 futures-macro = { git = "https://github.com/aptos-labs/futures-rs", branch = "backport" }
+# Patch slug to remove cdylib crate-type — cdylib breaks cargo-fuzz builds because
+# sanitizer coverage symbols are undefined when linking a standalone shared library.
+slug = { path = "testsuite/fuzzer/fuzz/patches/slug" }

@@ -399,7 +399,7 @@ fn main() {
                 },
                 Err(_) => {
                     crashed += 1;
-                    println!("CRASHED (panic/segfault)");
+                    println!("CRASH DETECTED, possible bug");
                 },
             }
         }
@@ -407,7 +407,7 @@ fn main() {
         println!("\n=== Summary ===");
         println!("Total:            {}", total);
         println!("Passed verifier:  {}", passed_verifier);
-        println!("Crashed (confirmed): {}", crashed);
+        println!("Crashed (possible bugs): {}", crashed);
         println!("Rejected by verifier: {}", rejected);
         println!("Deserialization failed: {}", deser_failed);
     } else {
@@ -419,7 +419,7 @@ fn main() {
             })) {
                 Ok(Ok(result)) => println!("  Final: {}", result),
                 Ok(Err(e)) => println!("  Error: {}", e),
-                Err(_) => println!("  CRASHED — bug confirmed"),
+                Err(_) => println!("  CRASH DETECTED, possible bug"),
             }
             println!();
         }

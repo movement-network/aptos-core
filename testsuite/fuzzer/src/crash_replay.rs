@@ -489,14 +489,14 @@ fn main() {
                 Ok(Ok(result)) => { passed += 1; println!("{}", result); },
                 Ok(Err(e)) if e.contains("REJECTED") => { rejected += 1; println!("REJECTED"); },
                 Ok(Err(e)) => { other_err += 1; println!("ERR: {}", e); },
-                Err(_) => { crashed += 1; println!("CRASHED"); },
+                Err(_) => { crashed += 1; println!("CRASH DETECTED, possible bug"); },
             }
         }
 
         println!("\n=== Results ===");
         println!("Total:       {}", total);
         println!("Executed:    {}", passed);
-        println!("CRASHED:     {} <-- confirmed bugs", crashed);
+        println!("CRASHED:     {} <-- possible bugs", crashed);
         println!("Rejected:    {}", rejected);
         println!("Other error: {}", other_err);
     } else {
@@ -505,7 +505,7 @@ fn main() {
             match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| replay_crash(path))) {
                 Ok(Ok(result)) => println!("  Result: {}", result),
                 Ok(Err(e)) => println!("  Error: {}", e),
-                Err(_) => println!("  CRASHED — bug confirmed"),
+                Err(_) => println!("  CRASH DETECTED, possible bug"),
             }
             println!();
         }

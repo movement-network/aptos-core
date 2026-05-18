@@ -36,19 +36,8 @@ use utils::vm::{
     FuzzerRunnableAuthenticator, RunnableState,
 };
 
-// genesis write set generated once for each fuzzing session.
-// Suppress the panic hook so genesis panics don't abort the fuzzer process.
-// The genesis panic is a known bug (vm-genesis/src/lib.rs:405).
-static VM_WRITE_SET: Lazy<Option<WriteSet>> = Lazy::new(|| {
-    let prev = std::panic::take_hook();
-    std::panic::set_hook(Box::new(|_| {}));
-    let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        GENESIS_CHANGE_SET_HEAD.write_set().clone()
-    }))
-    .ok();
-    std::panic::set_hook(prev);
-    r
-});
+// genesis write set generated once for each fuzzing session
+static VM_WRITE_SET: Lazy<WriteSet> = Lazy::new(|| GENESIS_CHANGE_SET_HEAD.write_set().clone());
 
 const FUZZER_CONCURRENCY_LEVEL: usize = 1;
 static TP: Lazy<Arc<rayon::ThreadPool>> = Lazy::new(|| {
@@ -197,9 +186,8 @@ fn run_case(mut input: RunnableState) -> Result<(), Corpus> {
     }
 
     AptosVM::set_concurrency_level_once(FUZZER_CONCURRENCY_LEVEL);
-    let write_set = VM_WRITE_SET.as_ref().ok_or(Corpus::Reject)?;
     let mut vm = FakeExecutor::from_genesis_with_existing_thread_pool(
-        write_set,
+        &VM_WRITE_SET,
         ChainId::mainnet(),
         Arc::clone(&TP),
     )

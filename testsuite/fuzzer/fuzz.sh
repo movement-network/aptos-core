@@ -582,7 +582,7 @@ function run() {
     features=$(get_features_for_target $fuzz_target)
     sanitizer=${FUZZ_SANITIZER:-address}
     if [[ "$OSTYPE" == "darwin"* ]]; then
-        cargo_fuzz run $features --sanitizer $sanitizer -O $fuzz_target $testcase -- -fork=4 #-ignore_crashes=1
+        cargo_fuzz run $features --sanitizer $sanitizer -O $fuzz_target $testcase -- -fork=4 -ignore_crashes=1
     else
         cargo_fuzz run $features --sanitizer $sanitizer -O $fuzz_target $testcase -- -rss_limit_mb=4096 -fork=10 #-ignore_crashes=1
     fi

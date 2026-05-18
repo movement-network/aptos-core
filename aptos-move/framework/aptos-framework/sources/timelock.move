@@ -520,7 +520,7 @@ module aptos_framework::timelock {
     ): signer acquires TimelockAccount {
         assert_timelock_account_exists(timelock_account);
         assert_is_executor(executor, timelock_account);
-        assert!(transaction_hash.length() == SCRIPT_HASH_LENGTH, error::invalid_argument(EINVALID_BYTES_LENGTH));
+        assert!(transaction_hash.length() == TRANSACTION_HASH_LENGTH, error::invalid_argument(EINVALID_BYTES_LENGTH));
 
         let executor_addr = address_of(executor);
         {

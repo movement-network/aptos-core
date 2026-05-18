@@ -558,7 +558,7 @@ module aptos_framework::timelock {
         let deployer_nonce = account::get_sequence_number(address_of(deployer));
         let (timelock_signer, timelock_signer_cap) =
             account::create_resource_account(deployer, create_timelock_account_seed(to_bytes(&deployer_nonce)));
-        // Register for APT so the timelock account can pay gas and receive transfers.
+        // Register for MOVE so the timelock account can pay gas and receive transfers.
         if (!coin::is_account_registered<AptosCoin>(address_of(&timelock_signer))) {
             coin::register<AptosCoin>(&timelock_signer);
         };

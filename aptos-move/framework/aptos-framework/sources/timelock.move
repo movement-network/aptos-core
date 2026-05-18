@@ -8,8 +8,8 @@
 /// - A configurable minimum delay (`min_num_seconds_execute`) that must elapse after a
 ///   transaction is proposed before it can be executed
 ///
-/// Execution model (mirrors `aptos_governance` resolution): a creator proposes the keccak256
-/// hash of a future resolution script. After the delay, an authorized executor submits a
+/// Execution model (mirrors `aptos_governance` resolution): a creator proposes the SHA3-256
+/// hash of a future resolution script's bytecode. After the delay, an authorized executor submits a
 /// `Script` transaction whose script hash equals the proposed `execution_hash`. The script
 /// calls `resolve`, which verifies the running script's hash via
 /// `transaction_context::get_script_hash()` and returns the timelock account's signer. The
@@ -44,6 +44,7 @@ module aptos_framework::timelock {
     const DOMAIN_SEPARATOR: vector<u8> = b"aptos_framework::timelock";
 
     const SCRIPT_HASH_LENGTH: u64 = 32;
+    const TRANSACTION_HASH_LENGTH: u64 = 32;
     const SALT_LENGTH: u64 = 32;
     const MIN_NUM_SECONDS_EXECUTE: u64 = 360;
     const MAX_NUM_SECONDS_EXECUTE: u64 = 604800;
@@ -430,8 +431,8 @@ module aptos_framework::timelock {
 
     /// Propose a new transaction to be executed after the timelock period.
     ///
-    /// `execution_hash` is the keccak256 hash of the resolution script that will perform the
-    /// transaction's effects when submitted. `salt` (32 bytes) disambiguates duplicate
+    /// `execution_hash` is the SHA3-256 hash of the resolution script's bytecode that will
+    /// perform the transaction's effects when submitted. `salt` (32 bytes) disambiguates duplicate
     /// proposals of the same script. The table key is `keccak256(execution_hash || salt)`.
     /// `num_seconds_execute` must be >= `min_num_seconds_execute`.
     public entry fun create_transaction(
@@ -492,7 +493,7 @@ module aptos_framework::timelock {
     ) acquires TimelockAccount {
         assert_timelock_account_exists(timelock_account);
         assert!(
-            transaction_hash.length() == SCRIPT_HASH_LENGTH,
+            transaction_hash.length() == TRANSACTION_HASH_LENGTH,
             error::invalid_argument(EINVALID_BYTES_LENGTH)
         );
         let actor_addr = address_of(actor);
@@ -540,7 +541,7 @@ module aptos_framework::timelock {
         assert_timelock_account_exists(timelock_account);
         assert_is_executor(executor, timelock_account);
         assert!(
-            transaction_hash.length() == SCRIPT_HASH_LENGTH,
+            transaction_hash.length() == TRANSACTION_HASH_LENGTH,
             error::invalid_argument(EINVALID_BYTES_LENGTH)
         );
 
@@ -588,7 +589,7 @@ module aptos_framework::timelock {
             account::create_resource_account(
                 deployer, create_timelock_account_seed(to_bytes(&deployer_nonce))
             );
-        // Register for APT so the timelock account can pay gas and receive transfers.
+        // Register for MOVE so the timelock account can pay gas and receive transfers.
         if (!coin::is_account_registered<AptosCoin>(address_of(&timelock_signer))) {
             coin::register<AptosCoin>(&timelock_signer);
         };

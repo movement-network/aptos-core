@@ -1491,7 +1491,11 @@ module aptos_framework::stake {
             let candidate = if (candidate_idx < num_cur_actives) {
                 vector::borrow(&cur_validator_set.active_validators, candidate_idx)
             } else {
-                vector::borrow(&cur_validator_set.pending_active, candidate_idx - num_cur_actives)
+                // on_new_epoch() merges pending_active via append(), which uses pop_back() and
+                // therefore reverses the segment. Mirror that reversal so validator_index
+                // assignments match what on_new_epoch() will actually install.
+                let pending_idx = num_cur_pending_actives - 1 - (candidate_idx - num_cur_actives);
+                vector::borrow(&cur_validator_set.pending_active, pending_idx)
             };
             let (new_voting_power, config) = estimate_validator_power(
                 candidate.addr,
@@ -1532,7 +1536,8 @@ module aptos_framework::stake {
                 let validator = if (is_active) {
                     vector::borrow(&cur_validator_set.active_validators, fallback_idx)
                 } else {
-                    vector::borrow(&cur_validator_set.pending_active, fallback_idx - num_cur_actives)
+                    let pending_idx = num_cur_pending_actives - 1 - (fallback_idx - num_cur_actives);
+                    vector::borrow(&cur_validator_set.pending_active, pending_idx)
                 };
                 let (fallback_power, config) = estimate_validator_power(
                     validator.addr,
@@ -3605,6 +3610,62 @@ module aptos_framework::stake {
         // Complete the epoch to leave state clean.
         on_new_epoch();
         reconfiguration_state::on_reconfig_finish();
+    }
+
+    // next_validator_consensus_infos() must traverse pending_active in reverse order to match
+    // on_new_epoch()'s append(), which uses pop_back() and therefore reverses that segment before
+    // the election runs.  With pending_active = [validator_2, validator_3] (insertion order),
+    // append() produces merged active_validators = [validator_1, validator_3, validator_2].
+    // The preview must predict that same order and validator_index assignment.  Without the
+    // reversal, the preview returns [validator_1, validator_2, validator_3] — mismatching what
+    // on_new_epoch() installs whenever pending_active is non-empty.
+    #[test(aptos_framework = @aptos_framework, validator_1 = @0x123, validator_2 = @0x234, validator_3 = @0x345)]
+    public entry fun test_next_validator_consensus_infos_pending_active_order_matches_on_new_epoch(
+        aptos_framework: &signer,
+        validator_1: &signer,
+        validator_2: &signer,
+        validator_3: &signer,
+    ) acquires AllowedValidators, AptosCoinCapabilities, OwnerCapability, StakePool, ValidatorConfig, ValidatorPerformance, ValidatorSet {
+        initialize_for_test(aptos_framework);
+
+        // validator_1 joins and is promoted to active via end_epoch.
+        let (_sk_1, pk_1, pop_1) = generate_identity();
+        initialize_test_validator(&pk_1, &pop_1, validator_1, 100, true, true);
+        let validator_1_address = signer::address_of(validator_1);
+
+        // validator_2 and validator_3 join pending_active in that order — no end_epoch.
+        // pending_active = [validator_2, validator_3].
+        let (_sk_2, pk_2, pop_2) = generate_identity();
+        initialize_test_validator(&pk_2, &pop_2, validator_2, 100, true, false);
+        let validator_2_address = signer::address_of(validator_2);
+
+        let (_sk_3, pk_3, pop_3) = generate_identity();
+        initialize_test_validator(&pk_3, &pop_3, validator_3, 100, true, false);
+        let validator_3_address = signer::address_of(validator_3);
+
+        // on_new_epoch() merges via append() which uses pop_back(), reversing pending_active:
+        //   merged = [validator_1, validator_3, validator_2]
+        // Election assigns: validator_1→idx=0, validator_3→idx=1, validator_2→idx=2.
+        // The preview must predict exactly that order.
+        set_validator_perf_at_least_one_block();
+        timestamp::fast_forward_seconds(EPOCH_DURATION);
+        reconfiguration_state::on_reconfig_start();
+
+        let next_infos = next_validator_consensus_infos();
+        assert!(vector::length(&next_infos) == 3, 1);
+        assert!(validator_consensus_info::get_addr(vector::borrow(&next_infos, 0)) == validator_1_address, 2);
+        assert!(validator_consensus_info::get_addr(vector::borrow(&next_infos, 1)) == validator_3_address, 3);
+        assert!(validator_consensus_info::get_addr(vector::borrow(&next_infos, 2)) == validator_2_address, 4);
+
+        // Run the real epoch transition and verify the installed order matches the preview.
+        on_new_epoch();
+        reconfiguration_state::on_reconfig_finish();
+
+        let installed = borrow_global<ValidatorSet>(@aptos_framework);
+        assert!(vector::length(&installed.active_validators) == 3, 5);
+        assert!(vector::borrow(&installed.active_validators, 0).addr == validator_1_address, 6);
+        assert!(vector::borrow(&installed.active_validators, 1).addr == validator_3_address, 7);
+        assert!(vector::borrow(&installed.active_validators, 2).addr == validator_2_address, 8);
     }
 
     // When the epoch-boundary election produces an empty validator set, the protocol must retain the

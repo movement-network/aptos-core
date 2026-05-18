@@ -14,7 +14,24 @@ use legacy_move_compiler::{
     unit_test::TestPlan,
 };
 use move_command_line_common::files::verify_and_create_named_address_mapping;
-use move_compiler_v2::plan_builder as plan_builder_v2;
+use legacy_move_compiler::unit_test::TestCase;
+use move_compiler_v2::{
+    fuzz::{DefaultFuzzSource, FuzzConfig, FuzzPlanMetadata, FuzzValueSource},
+    fuzz_corpus, plan_builder as plan_builder_v2,
+};
+use std::sync::Arc;
+
+/// Sidecar attached to [`TestPlan::runner_metadata`] when a fuzz source is
+/// active. The runner downcasts to this type to drive shrinking on failing
+/// fuzz cases and corpus persistence. Holding both the metadata and the
+/// source means the runner doesn't need to know how to build either.
+pub struct FuzzRunnerCtx {
+    pub metadata: FuzzPlanMetadata,
+    pub source: Arc<dyn FuzzValueSource>,
+    /// When set, the runner appends failing fuzz arguments to
+    /// `<corpus_dir>/failures/...` and replays prior entries on next run.
+    pub corpus_dir: Option<std::path::PathBuf>,
+}
 use move_core_types::{effects::ChangeSet, language_storage::ModuleId};
 use move_model::metadata::{CompilerVersion, LanguageVersion};
 use move_package::compilation::compiled_package::build_and_report_v2_driver;
@@ -102,6 +119,27 @@ pub struct UnitTestingConfig {
     /// Verbose mode
     #[clap(short = 'v', long = "verbose")]
     pub verbose: bool,
+
+    /// Number of values to sample per implicit-fuzz `#[test]` parameter.
+    #[clap(long = "fuzz-runs", default_value_t = 16)]
+    pub fuzz_runs: usize,
+
+    /// Deterministic seed for the fuzz value source. Defaults to 0; change to
+    /// search the space differently across CI runs.
+    #[clap(long = "fuzz-seed", default_value_t = 0)]
+    pub fuzz_seed: u64,
+
+    /// Percentage weight (0..=100) of dictionary draws against random+edge
+    /// draws when fuzzing primitive parameters. Mirrors Foundry's
+    /// `dictionary_weight`.
+    #[clap(long = "fuzz-dictionary-weight", default_value_t = 40)]
+    pub fuzz_dictionary_weight: u8,
+
+    /// Directory used as the fuzz corpus. When set, regression cases from
+    /// `<dir>/failures/` are replayed alongside fresh fuzz draws, and any
+    /// fuzz-generated test that fails is appended to it. Disabled by default.
+    #[clap(long = "fuzz-corpus-dir")]
+    pub fuzz_corpus_dir: Option<std::path::PathBuf>,
 }
 
 fn format_module_id(module_id: &ModuleId) -> String {
@@ -127,6 +165,10 @@ impl Default for UnitTestingConfig {
             verbose: false,
             list: false,
             named_address_values: vec![],
+            fuzz_runs: 16,
+            fuzz_seed: 0,
+            fuzz_dictionary_weight: 40,
+            fuzz_corpus_dir: None,
         }
     }
 }
@@ -148,7 +190,7 @@ impl UnitTestingConfig {
     ) -> Option<TestPlan> {
         let addresses =
             verify_and_create_named_address_mapping(self.named_address_values.clone()).ok()?;
-        let (test_plan, files, units) = {
+        let (build_opt, files, units, fuzz_source) = {
             let options = move_compiler_v2::Options {
                 compile_test_code: true,
                 testing: true,
@@ -163,10 +205,72 @@ impl UnitTestingConfig {
                 ..Default::default()
             };
             let (files, units, env) = build_and_report_v2_driver(options).unwrap();
-            let test_plan = plan_builder_v2::construct_test_plan(&env, None);
-            (test_plan, files, units)
+            let fuzz_config = FuzzConfig {
+                runs: self.fuzz_runs,
+                seed: self.fuzz_seed,
+                dictionary_weight: self.fuzz_dictionary_weight,
+                ..FuzzConfig::default()
+            };
+            let fuzz_source: Arc<dyn FuzzValueSource> =
+                Arc::new(DefaultFuzzSource::new(&env, fuzz_config));
+            let build_opt = plan_builder_v2::construct_test_plan_with_fuzz_source(
+                &env,
+                None,
+                fuzz_source.as_ref(),
+            );
+            (build_opt, files, units, fuzz_source)
         };
-        test_plan.map(|tests| TestPlan::new(tests, files, units, vec![]))
+        build_opt.map(|build| {
+            let mut plans = build.plans;
+            // Topic 2: replay regression corpus by appending saved failing
+            // argument vectors as extra TestCases. The runner re-runs them
+            // before the fresh fuzz draws.
+            if let Some(corpus_dir) = self.fuzz_corpus_dir.as_ref() {
+                for module_plan in plans.iter_mut() {
+                    let module_id = module_plan.module_id.clone();
+                    // Snapshot the existing case names so we don't replay against
+                    // already-replayed regressions.
+                    let test_names: Vec<String> =
+                        module_plan.tests.keys().cloned().collect();
+                    for original_name in test_names {
+                        let function_stem = original_name
+                            .split_once('[')
+                            .map(|(stem, _)| stem.to_string())
+                            .unwrap_or(original_name.clone());
+                        let regressions = fuzz_corpus::load_failures(
+                            corpus_dir,
+                            &module_id,
+                            &function_stem,
+                        )
+                        .unwrap_or_default();
+                        for (i, args) in regressions.into_iter().enumerate() {
+                            // Inherit expected_failure shape from the original
+                            // case so abort-code expectations replay too.
+                            let template = module_plan.tests.get(&original_name).cloned();
+                            let expected_failure = template
+                                .as_ref()
+                                .and_then(|c| c.expected_failure.clone());
+                            let replay_name = format!("{}#regression[{}]", function_stem, i);
+                            module_plan.tests.insert(
+                                replay_name.clone(),
+                                TestCase {
+                                    test_name: replay_name,
+                                    arguments: args,
+                                    expected_failure,
+                                },
+                            );
+                        }
+                    }
+                }
+            }
+            let mut plan = TestPlan::new(plans, files, units, vec![]);
+            plan.runner_metadata = Some(Arc::new(FuzzRunnerCtx {
+                metadata: build.fuzz_metadata,
+                source: fuzz_source,
+                corpus_dir: self.fuzz_corpus_dir.clone(),
+            }));
+            plan
+        })
     }
 
     /// Build a test plan from a unit test config

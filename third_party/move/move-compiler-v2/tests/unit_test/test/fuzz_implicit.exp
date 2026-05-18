@@ -1,25 +1,16 @@
 
 Diagnostics:
-error: unable to generate test
+note: fuzz: expanded `bare_with_signer` to 16 cases
   ┌─ tests/unit_test/test/fuzz_implicit.move:6:16
   │
-5 │     #[test]
-  │       ---- no fuzz value source is registered; install a `FuzzValueSource` to enable implicit-fuzz #[test] expansion
 6 │     public fun bare_with_signer(_a: signer) { }
-  │                ^^^^^^^^^^^^^^^^ -- Corresponding to this parameter
+  │                ^^^^^^^^^^^^^^^^
 
-error: unable to generate test
+note: fuzz: expanded `bare_with_two` to 16 cases
   ┌─ tests/unit_test/test/fuzz_implicit.move:9:16
   │
-8 │     #[test]
-  │       ---- no fuzz value source is registered; install a `FuzzValueSource` to enable implicit-fuzz #[test] expansion
 9 │     public fun bare_with_two(_a: signer, _b: address) { }
-  │                ^^^^^^^^^^^^^ -- Corresponding to this parameter
+  │                ^^^^^^^^^^^^^
 
-error: unable to generate test
-  ┌─ tests/unit_test/test/fuzz_implicit.move:9:16
-  │
-8 │     #[test]
-  │       ---- no fuzz value source is registered; install a `FuzzValueSource` to enable implicit-fuzz #[test] expansion
-9 │     public fun bare_with_two(_a: signer, _b: address) { }
-  │                ^^^^^^^^^^^^^             -- Corresponding to this parameter
+
+============ bytecode verification succeeded ========

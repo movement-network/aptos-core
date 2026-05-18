@@ -12,7 +12,9 @@
 //! success.
 
 use crate::{
-    fuzz::{Domain, FuzzValueSource, NoFuzzSource, ParamSpec, RangeSpec},
+    fuzz::{
+        ArgOrigin, Domain, FuzzPlanMetadata, FuzzValueSource, NoFuzzSource, ParamSpec, RangeSpec,
+    },
     options::Options,
 };
 use codespan_reporting::diagnostic::Severity;
@@ -44,6 +46,15 @@ const MAX_FUZZ_CASES: usize = 1024;
 // Test Plan Building
 //***************************************************************************
 
+/// Output of plan-building: the test plans plus a sidecar map of fuzz
+/// metadata keyed by `(ModuleId, expanded_test_name)`. The metadata is what
+/// lets the runner shrink failing fuzz cases and mutate corpus entries.
+#[derive(Debug, Clone)]
+pub struct TestPlanBuild {
+    pub plans: Vec<ModuleTestPlan>,
+    pub fuzz_metadata: FuzzPlanMetadata,
+}
+
 // Constructs a test plan for each module in `env.target`. This also validates the structure of the
 // attributes as the test plan is constructed.
 pub fn construct_test_plan(
@@ -51,37 +62,44 @@ pub fn construct_test_plan(
     package_filter: Option<Symbol>,
 ) -> Option<Vec<ModuleTestPlan>> {
     construct_test_plan_with_fuzz_source(env, package_filter, &NoFuzzSource)
+        .map(|build| build.plans)
 }
 
 /// Like [`construct_test_plan`], but the caller can supply a [`FuzzValueSource`] to materialize
-/// values for implicit-fuzz or `in`/`!=` constrained parameters.
+/// values for implicit-fuzz or `in`/`!=` constrained parameters. Returns a [`TestPlanBuild`]
+/// carrying both the per-module test plans and the [`FuzzPlanMetadata`] sidecar.
 pub fn construct_test_plan_with_fuzz_source(
     env: &GlobalEnv,
     package_filter: Option<Symbol>,
     fuzz_source: &dyn FuzzValueSource,
-) -> Option<Vec<ModuleTestPlan>> {
+) -> Option<TestPlanBuild> {
     let options = env.get_extension::<Options>().expect("options");
     if !options.compile_test_code {
         return None;
     }
 
-    Some(
-        env.get_modules()
-            .filter_map(|module| {
-                if module.is_primary_target() {
-                    construct_module_test_plan(env, package_filter, fuzz_source, module)
-                } else {
-                    None
-                }
-            })
-            .collect(),
-    )
+    let mut metadata = FuzzPlanMetadata::default();
+    let plans: Vec<ModuleTestPlan> = env
+        .get_modules()
+        .filter_map(|module| {
+            if module.is_primary_target() {
+                construct_module_test_plan(env, package_filter, fuzz_source, &mut metadata, module)
+            } else {
+                None
+            }
+        })
+        .collect();
+    Some(TestPlanBuild {
+        plans,
+        fuzz_metadata: metadata,
+    })
 }
 
 fn construct_module_test_plan(
     env: &GlobalEnv,
     _package_filter: Option<Symbol>,
     fuzz_source: &dyn FuzzValueSource,
+    metadata: &mut FuzzPlanMetadata,
     module: ModuleEnv,
 ) -> Option<ModuleTestPlan> {
     // TODO (#12885): what is a package?  Do we need this code?
@@ -90,11 +108,29 @@ fn construct_module_test_plan(
     // }
 
     let current_module = module.get_name();
-    let tests: BTreeMap<_, _> = module
+    let module_id_for_meta = module.get_identifier().map(|name| {
+        let addr_bytes = match current_module.addr() {
+            Address::Numerical(num_addr) => Some(*num_addr),
+            Address::Symbolic(sym) => env.resolve_address_alias(*sym),
+        };
+        (addr_bytes, name)
+    });
+
+    let expanded: Vec<ExpandedCase> = module
         .get_functions()
-        .flat_map(|func| build_test_info(env, current_module, fuzz_source, func).into_iter())
-        .map(|test_case| (test_case.test_name.clone(), test_case))
+        .flat_map(|func| build_test_info(env, current_module, fuzz_source, func))
         .collect();
+    let mut tests: BTreeMap<String, TestCase> = BTreeMap::new();
+    for ex in expanded {
+        if let Some((Some(addr), name)) = module_id_for_meta.as_ref() {
+            metadata.insert(
+                ModuleId::new(*addr, name.clone()),
+                ex.case.test_name.clone(),
+                ex.origins,
+            );
+        }
+        tests.insert(ex.case.test_name.clone(), ex.case);
+    }
 
     let module_id = module.get_identifier();
     if tests.is_empty() {
@@ -123,12 +159,19 @@ fn construct_module_test_plan(
     }
 }
 
+/// One expanded `#[test]` case: a `TestCase` ready for the runner plus the
+/// per-argument origin that lets the runner shrink/mutate when appropriate.
+pub struct ExpandedCase {
+    pub case: TestCase,
+    pub origins: Vec<ArgOrigin>,
+}
+
 fn build_test_info(
     env: &GlobalEnv,
     current_module: &ModuleName,
     fuzz_source: &dyn FuzzValueSource,
     function: FunctionEnv,
-) -> Vec<TestCase> {
+) -> Vec<ExpandedCase> {
     let fn_name_str = function.get_name_str();
     let fn_id_loc = function.get_id_loc();
 
@@ -183,13 +226,25 @@ fn build_test_info(
 
     let parameters: Vec<_> = function.get_parameters_ref().iter().cloned().collect();
 
-    // For each parameter, materialize one dimension of MoveValues.
+    // We separate deterministic dimensions (Concrete/Matrix) from fuzz dimensions so that
+    // explicit matrices Cartesian-multiply but independent fuzz draws *zip* together: with
+    // `#[test(a, b)]` the user expects N runs total, each binding `a[i]` and `b[i]`, not
+    // N² combinations. Matches Foundry's `[fuzz] runs = N` semantics.
     let mut had_error = false;
     let mut had_fuzz = false;
-    let mut dimensions: Vec<(Symbol, Vec<MoveValue>)> = Vec::with_capacity(parameters.len());
+    enum Dim {
+        Det(Vec<MoveValue>),
+        Fuzz {
+            values: Vec<MoveValue>,
+            param_name: String,
+            ty: Type,
+            domain: Domain,
+            exclude: Domain,
+        },
+    }
+    let mut dims: Vec<(Symbol, Dim)> = Vec::with_capacity(parameters.len());
     for param in &parameters {
         let Parameter(var, ty, var_loc) = param;
-        // Synthesize an implicit-fuzz spec when no spec was given for this param.
         let owned_default;
         let spec_ref = match specs.get(var) {
             Some(s) => s,
@@ -201,6 +256,8 @@ fn build_test_info(
                 &owned_default
             },
         };
+        let is_fuzz = matches!(spec_ref, ParamSpec::Fuzz { .. });
+        let param_name = env.symbol_pool().string(*var);
         match materialize_param_values(
             env,
             fuzz_source,
@@ -208,13 +265,26 @@ fn build_test_info(
             &test_attribute_loc,
             var_loc,
             ty,
+            param_name.as_str(),
             spec_ref,
         ) {
             Some(values) => {
-                if matches!(spec_ref, ParamSpec::Fuzz { .. }) {
+                if is_fuzz {
                     had_fuzz = true;
+                    let (domain, exclude) = match spec_ref {
+                        ParamSpec::Fuzz { domain, exclude } => (domain.clone(), exclude.clone()),
+                        _ => unreachable!(),
+                    };
+                    dims.push((*var, Dim::Fuzz {
+                        values,
+                        param_name: param_name.to_string(),
+                        ty: ty.clone(),
+                        domain,
+                        exclude,
+                    }));
+                } else {
+                    dims.push((*var, Dim::Det(values)));
                 }
-                dimensions.push((*var, values));
             },
             None => had_error = true,
         }
@@ -229,18 +299,30 @@ fn build_test_info(
         Some(abort_attribute) => parse_failure_attribute(env, current_module, abort_attribute),
     };
 
-    // Cartesian product across all parameter dimensions.
-    let total: usize = dimensions
+    // Cartesian over deterministic dimensions; zip across fuzz dimensions.
+    let det_product: usize = dims
         .iter()
-        .map(|(_, vs)| vs.len())
+        .filter_map(|(_, d)| if let Dim::Det(vs) = d { Some(vs.len()) } else { None })
         .product::<usize>()
         .max(1);
+    let fuzz_runs: usize = dims
+        .iter()
+        .filter_map(|(_, d)| {
+            if let Dim::Fuzz { values, .. } = d {
+                Some(values.len())
+            } else {
+                None
+            }
+        })
+        .min()
+        .unwrap_or(1);
+    let total = det_product.saturating_mul(fuzz_runs);
     if total > MAX_FUZZ_CASES {
         env.error(
             &fn_id_loc,
             &format!(
                 "#[test] expansion would produce {} cases (cap: {}). Narrow the matrix, fuzz \
-                 domain, or `--fuzz-iterations`.",
+                 domain, or `--fuzz-runs`.",
                 total, MAX_FUZZ_CASES
             ),
         );
@@ -260,55 +342,94 @@ fn build_test_info(
         );
     }
 
-    if dimensions.is_empty() {
+    if dims.is_empty() {
         // Zero-arg function: a single case with no arguments and the bare function name.
-        return vec![TestCase {
-            test_name: fn_name_str.to_string(),
-            arguments: Vec::new(),
-            expected_failure,
+        return vec![ExpandedCase {
+            case: TestCase {
+                test_name: fn_name_str.to_string(),
+                arguments: Vec::new(),
+                expected_failure,
+            },
+            origins: Vec::new(),
         }];
     }
 
-    // If every dimension has exactly one value, emit a single TestCase with the bare function
-    // name (preserves existing test-name behavior for non-expanded #[test] functions).
-    let is_single = dimensions.iter().all(|(_, vs)| vs.len() == 1);
+    let is_single = total == 1;
+
+    // Iterate: for each Cartesian point of the deterministic dims, run `fuzz_runs` zipped
+    // draws over the fuzz dims. When `had_fuzz` is false this collapses to plain Cartesian.
+    let det_lens: Vec<usize> = dims
+        .iter()
+        .map(|(_, d)| match d {
+            Dim::Det(vs) => vs.len(),
+            Dim::Fuzz { .. } => 1, // placeholder; we drive fuzz with `fuzz_iter`
+        })
+        .collect();
 
     let mut cases = Vec::with_capacity(total);
-    let mut indices = vec![0usize; dimensions.len()];
+    let mut det_indices = vec![0usize; dims.len()];
     loop {
-        let mut arguments = Vec::with_capacity(dimensions.len());
-        let mut suffix_parts = Vec::with_capacity(dimensions.len());
-        for (i, (var, vs)) in dimensions.iter().enumerate() {
-            let v = &vs[indices[i]];
-            arguments.push(v.clone());
-            suffix_parts.push(format!(
-                "{}={}",
-                var.display(env.symbol_pool()),
-                format_move_value(v)
-            ));
+        for fuzz_iter in 0..fuzz_runs {
+            let mut arguments = Vec::with_capacity(dims.len());
+            let mut suffix_parts = Vec::with_capacity(dims.len());
+            let mut origins = Vec::with_capacity(dims.len());
+            for (i, (var, d)) in dims.iter().enumerate() {
+                let v = match d {
+                    Dim::Det(vs) => &vs[det_indices[i]],
+                    Dim::Fuzz { values, .. } => &values[fuzz_iter % values.len()],
+                };
+                arguments.push(v.clone());
+                suffix_parts.push(format!(
+                    "{}={}",
+                    var.display(env.symbol_pool()),
+                    format_move_value(v)
+                ));
+                origins.push(match d {
+                    Dim::Det(_) => ArgOrigin::Fixed,
+                    Dim::Fuzz {
+                        param_name,
+                        ty,
+                        domain,
+                        exclude,
+                        ..
+                    } => ArgOrigin::Fuzz {
+                        param_name: param_name.clone(),
+                        ty: ty.clone(),
+                        domain: domain.clone(),
+                        exclude: exclude.clone(),
+                    },
+                });
+            }
+            let test_name = if is_single {
+                fn_name_str.to_string()
+            } else {
+                format!("{}[{}]", fn_name_str, suffix_parts.join(","))
+            };
+            cases.push(ExpandedCase {
+                case: TestCase {
+                    test_name,
+                    arguments,
+                    expected_failure: expected_failure.clone(),
+                },
+                origins,
+            });
         }
-        let test_name = if is_single {
-            fn_name_str.to_string()
-        } else {
-            format!("{}[{}]", fn_name_str, suffix_parts.join(","))
-        };
-        cases.push(TestCase {
-            test_name,
-            arguments,
-            expected_failure: expected_failure.clone(),
-        });
-        // Advance odometer.
-        let mut idx = dimensions.len();
+        // Advance odometer across deterministic dims only — fuzz dims are zipped
+        // by `fuzz_iter` above.
+        let mut idx = dims.len();
         loop {
             if idx == 0 {
                 return cases;
             }
             idx -= 1;
-            indices[idx] += 1;
-            if indices[idx] < dimensions[idx].1.len() {
+            if matches!(dims[idx].1, Dim::Fuzz { .. }) {
+                continue;
+            }
+            det_indices[idx] += 1;
+            if det_indices[idx] < det_lens[idx] {
                 break;
             }
-            indices[idx] = 0;
+            det_indices[idx] = 0;
         }
     }
 }
@@ -338,6 +459,7 @@ fn materialize_param_values(
     test_attribute_loc: &Loc,
     var_loc: &Loc,
     ty: &Type,
+    param_name: &str,
     spec: &ParamSpec,
 ) -> Option<Vec<MoveValue>> {
     match spec {
@@ -359,7 +481,14 @@ fn materialize_param_values(
             Some(out)
         },
         ParamSpec::Fuzz { domain, exclude } => {
-            match fuzz_source.sample(ty, domain, exclude, DEFAULT_FUZZ_ITERATIONS, DEFAULT_FUZZ_SEED)
+            match fuzz_source.sample(
+                ty,
+                param_name,
+                domain,
+                exclude,
+                DEFAULT_FUZZ_ITERATIONS,
+                DEFAULT_FUZZ_SEED,
+            )
             {
                 Ok(vs) if vs.is_empty() => {
                     env.error_with_labels(fn_id_loc, "unable to generate test", vec![
@@ -508,16 +637,19 @@ fn merge_test_param_entry(
         },
         Attribute::Constrained(id, sym, op, val) => {
             let entry_loc = env.get_node_loc(*id);
-            // Build/extend a Fuzz spec for this parameter.
+            // Build/extend a Fuzz spec for this parameter. If `_a = ...` was already
+            // seen, restore the existing spec after reporting the mix error so the
+            // function's other parameters can still be analyzed coherently.
             let existing = specs.remove(sym);
             let (mut domain, mut exclude) = match existing {
                 None => (Domain::default(), Domain::default()),
                 Some(ParamSpec::Fuzz { domain, exclude }) => (domain, exclude),
-                Some(_) => {
+                Some(other) => {
                     env.error(
                         &entry_loc,
                         "Cannot mix `=` with `!=` / `in` for the same parameter",
                     );
+                    specs.insert(*sym, other);
                     return false;
                 },
             };

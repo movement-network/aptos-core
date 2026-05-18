@@ -33,6 +33,10 @@ pub struct TestPlan {
     // `NamedCompiledModule` for compiled modules with source,
     // `CompiledModule` for modules with bytecode only
     pub module_info: BTreeMap<ModuleId, NamedOrBytecodeModule>,
+    /// Opaque metadata that downstream runners may consult — e.g. the
+    /// `move-unit-test` runner stores `FuzzPlanMetadata` + fuzz source here
+    /// to enable shrinking/mutation. Legacy code does not introspect it.
+    pub runner_metadata: Option<std::sync::Arc<dyn std::any::Any + Send + Sync>>,
 }
 
 #[derive(Debug, Clone)]
@@ -125,6 +129,7 @@ impl TestPlan {
             files,
             module_tests,
             module_info,
+            runner_metadata: None,
         }
     }
 }

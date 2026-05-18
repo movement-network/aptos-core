@@ -9,11 +9,13 @@ use crate::{
         UnitTestFactory,
     },
 };
+use crate::FuzzRunnerCtx;
 use anyhow::Result;
 use colored::*;
 use legacy_move_compiler::unit_test::{
     ExpectedFailure, ModuleTestPlan, NamedOrBytecodeModule, TestCase, TestPlan,
 };
+use move_compiler_v2::fuzz::ArgOrigin;
 use move_binary_format::{
     errors::{Location, VMResult},
     file_format::CompiledModule,
@@ -47,6 +49,9 @@ pub struct SharedTestingConfig {
     #[allow(dead_code)] // used by some features
     source_files: Vec<String>,
     record_writeset: bool,
+    /// Set when a fuzz source was attached to the [`TestPlan`]. The runner
+    /// uses this to shrink failing fuzz cases into a minimal counterexample.
+    fuzz_ctx: Option<std::sync::Arc<FuzzRunnerCtx>>,
 }
 
 pub struct TestRunner {
@@ -139,6 +144,11 @@ impl TestRunner {
             starting_storage_state.apply(genesis_state)?;
         }
 
+        let fuzz_ctx = tests
+            .runner_metadata
+            .as_ref()
+            .and_then(|m| m.clone().downcast::<FuzzRunnerCtx>().ok());
+
         Ok(Self {
             testing_config: SharedTestingConfig {
                 save_storage_state_on_failure,
@@ -146,6 +156,7 @@ impl TestRunner {
                 starting_storage_state,
                 source_files,
                 record_writeset,
+                fuzz_ctx,
             },
             num_threads,
             tests,
@@ -234,9 +245,141 @@ impl<W: Write> TestOutput<'_, '_, W> {
         )
         .unwrap();
     }
+
+    /// Free-form note printed underneath the last status line. Used by the
+    /// shrink path to surface the minimal counterexample.
+    fn note(&self, message: &str) {
+        writeln!(self.writer.lock().unwrap(), "         {}", message).unwrap()
+    }
+}
+
+/// Human-readable argument vector used in shrink output.
+fn format_arguments(args: &[move_core_types::value::MoveValue]) -> String {
+    use move_core_types::value::MoveValue;
+    let parts: Vec<String> = args
+        .iter()
+        .map(|v| match v {
+            MoveValue::Address(a) | MoveValue::Signer(a) => {
+                format!("@{}", a.short_str_lossless())
+            },
+            MoveValue::U8(x) => x.to_string(),
+            MoveValue::U16(x) => x.to_string(),
+            MoveValue::U32(x) => x.to_string(),
+            MoveValue::U64(x) => x.to_string(),
+            MoveValue::U128(x) => x.to_string(),
+            MoveValue::U256(x) => x.to_string(),
+            MoveValue::Bool(b) => b.to_string(),
+            other => format!("{:?}", other),
+        })
+        .collect();
+    format!("[{}]", parts.join(", "))
 }
 
 impl SharedTestingConfig {
+    /// Topic 2: write the failing argument vector to the regression corpus
+    /// when a corpus directory is configured. Prefers the shrunk-minimal
+    /// vector when available — that's the cleanest reproducer to persist.
+    fn persist_to_corpus(
+        &self,
+        test_plan: &ModuleTestPlan,
+        function_name: &str,
+        test_info: &TestCase,
+        shrunk: Option<&[move_core_types::value::MoveValue]>,
+    ) {
+        let Some(ctx) = self.fuzz_ctx.as_ref() else { return };
+        let Some(dir) = ctx.corpus_dir.as_ref() else { return };
+        // Only persist if this case was fuzz-origin. Regressions don't need
+        // saving again — they're already on disk.
+        let origins = ctx.metadata.get(&test_plan.module_id, function_name);
+        if origins.is_none() || origins.unwrap().iter().all(|o| matches!(o, ArgOrigin::Fixed)) {
+            return;
+        }
+        // The function stem is the test name without the expansion suffix.
+        let stem = function_name
+            .split_once('[')
+            .map(|(s, _)| s.to_string())
+            .unwrap_or_else(|| function_name.to_string());
+        let args = shrunk.unwrap_or(test_info.arguments.as_slice());
+        // Best-effort: ignore filesystem errors so a stuck corpus path doesn't
+        // mask the underlying test failure.
+        let _ = move_compiler_v2::fuzz_corpus::append_failure(
+            dir,
+            &test_plan.module_id,
+            &stem,
+            args,
+        );
+    }
+
+    /// If the failing case was a fuzz-generated case, walk the shrinker until
+    /// no further shrink reproduces the failure. Returns the minimal failing
+    /// argument vector, or `None` when shrinking is not applicable (no fuzz
+    /// context, no fuzz arguments, or already minimal).
+    ///
+    /// Bound: 100 total shrink steps per case. Each step tries one shrink per
+    /// fuzzed argument and accepts the first one that still fails.
+    fn shrink_if_fuzz<F: UnitTestFactory>(
+        &self,
+        test_plan: &ModuleTestPlan,
+        function_name: &str,
+        test_info: &TestCase,
+        factory: &Mutex<F>,
+    ) -> Option<Vec<move_core_types::value::MoveValue>> {
+        let ctx = self.fuzz_ctx.as_ref()?;
+        let origins = ctx.metadata.get(&test_plan.module_id, function_name)?;
+        if origins.iter().all(|o| matches!(o, ArgOrigin::Fixed)) {
+            return None;
+        }
+        let mut current = test_info.arguments.clone();
+        let mut improved_at_least_once = false;
+        for _ in 0..100 {
+            let mut improved = false;
+            for (i, origin) in origins.iter().enumerate() {
+                let (param_name, ty, domain, exclude) = match origin {
+                    ArgOrigin::Fuzz {
+                        param_name,
+                        ty,
+                        domain,
+                        exclude,
+                    } => (param_name, ty, domain, exclude),
+                    ArgOrigin::Fixed => continue,
+                };
+                let candidate_value = ctx.source.shrink(
+                    ty,
+                    param_name,
+                    &current[i],
+                    domain,
+                    exclude,
+                );
+                let Some(smaller) = candidate_value else {
+                    continue;
+                };
+                let mut candidate = current.clone();
+                candidate[i] = smaller;
+                let probe = TestCase {
+                    test_name: test_info.test_name.clone(),
+                    arguments: candidate.clone(),
+                    expected_failure: test_info.expected_failure.clone(),
+                };
+                let (_, _, exec_result, _) =
+                    self.execute_via_move_vm(test_plan, function_name, &probe, factory);
+                if exec_result.is_err() {
+                    current = candidate;
+                    improved = true;
+                    improved_at_least_once = true;
+                    break;
+                }
+            }
+            if !improved {
+                break;
+            }
+        }
+        if improved_at_least_once {
+            Some(current)
+        } else {
+            None
+        }
+    }
+
     #[allow(clippy::field_reassign_with_default)]
     fn execute_via_move_vm<F: UnitTestFactory>(
         &self,
@@ -427,6 +570,29 @@ impl SharedTestingConfig {
                         },
                         None => {
                             output.fail(function_name);
+                            // Topic 3: if this test failure originated from a fuzz-sampled
+                            // case, attempt to shrink it to a minimal counterexample and
+                            // print the result alongside the failure.
+                            let shrunk = self.shrink_if_fuzz(
+                                test_plan,
+                                function_name,
+                                test_info,
+                                factory,
+                            );
+                            if let Some(args) = shrunk.as_ref() {
+                                output.note(&format!(
+                                    "└─ minimal counterexample: {}",
+                                    format_arguments(args)
+                                ));
+                            }
+                            // Topic 2: persist failing fuzz arguments to the
+                            // regression corpus so the next run replays them.
+                            self.persist_to_corpus(
+                                test_plan,
+                                function_name,
+                                test_info,
+                                shrunk.as_deref(),
+                            );
                             stats.test_failure(
                                 TestFailure::new(
                                     FailureReason::unexpected_error(actual_err),

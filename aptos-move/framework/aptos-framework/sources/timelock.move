@@ -423,8 +423,8 @@ module aptos_framework::timelock {
 
     /// Propose a new transaction to be executed after the timelock period.
     ///
-    /// `execution_hash` is the keccak256 hash of the resolution script that will perform the
-    /// transaction's effects when submitted. `salt` (32 bytes) disambiguates duplicate
+    /// `execution_hash` is the SHA3-256 hash of the resolution script's bytecode that will
+    /// perform the transaction's effects when submitted. `salt` (32 bytes) disambiguates duplicate
     /// proposals of the same script. The table key is `keccak256(execution_hash || salt)`.
     /// `num_seconds_execute` must be >= `min_num_seconds_execute`.
     public entry fun create_transaction(

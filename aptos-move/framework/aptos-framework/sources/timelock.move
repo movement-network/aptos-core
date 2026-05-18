@@ -476,7 +476,7 @@ module aptos_framework::timelock {
         transaction_hash: vector<u8>,
     ) acquires TimelockAccount {
         assert_timelock_account_exists(timelock_account);
-        assert!(transaction_hash.length() == SCRIPT_HASH_LENGTH, error::invalid_argument(EINVALID_BYTES_LENGTH));
+        assert!(transaction_hash.length() == TRANSACTION_HASH_LENGTH, error::invalid_argument(EINVALID_BYTES_LENGTH));
         let actor_addr = address_of(actor);
 
         // Evaluate authorization before acquiring the mutable borrow.

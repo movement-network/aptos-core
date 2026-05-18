@@ -44,6 +44,7 @@ module aptos_framework::timelock {
     const DOMAIN_SEPARATOR: vector<u8> = b"aptos_framework::timelock";
 
     const SCRIPT_HASH_LENGTH: u64 = 32;
+    const TRANSACTION_HASH_LENGTH: u64 = 32;
     const SALT_LENGTH: u64 = 32;
     const MIN_NUM_SECONDS_EXECUTE_FLOOR: u64 = 360;
 

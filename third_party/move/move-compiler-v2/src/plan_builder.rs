@@ -466,6 +466,22 @@ fn materialize_param_values(
         ParamSpec::Concrete(v) => coerce_to_param_type(env, fn_id_loc, test_attribute_loc, var_loc, ty, v.clone())
             .map(|v| vec![v]),
         ParamSpec::Matrix(vs) => {
+            if vs.is_empty() {
+                // `_a = []` would produce zero test cases for this dim, which
+                // collapses Cartesian expansion to zero total cases and trips
+                // the dimension-indexing loop in `build_test_info`.
+                env.error_with_labels(fn_id_loc, "unable to generate test", vec![
+                    (
+                        test_attribute_loc.clone(),
+                        "Empty matrix `[]` produces no test cases".to_string(),
+                    ),
+                    (
+                        var_loc.clone(),
+                        "Corresponding to this parameter".to_string(),
+                    ),
+                ]);
+                return None;
+            }
             let mut out = Vec::with_capacity(vs.len());
             for v in vs {
                 let coerced = coerce_to_param_type(

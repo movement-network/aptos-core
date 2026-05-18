@@ -8,8 +8,8 @@
 /// - A configurable minimum delay (`min_num_seconds_execute`) that must elapse after a
 ///   transaction is proposed before it can be executed
 ///
-/// Execution model (mirrors `aptos_governance` resolution): a creator proposes the keccak256
-/// hash of a future resolution script. After the delay, an authorized executor submits a
+/// Execution model (mirrors `aptos_governance` resolution): a creator proposes the SHA3-256
+/// hash of a future resolution script's bytecode. After the delay, an authorized executor submits a
 /// `Script` transaction whose script hash equals the proposed `execution_hash`. The script
 /// calls `resolve`, which verifies the running script's hash via
 /// `transaction_context::get_script_hash()` and returns the timelock account's signer. The

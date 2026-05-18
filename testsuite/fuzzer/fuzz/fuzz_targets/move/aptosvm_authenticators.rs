@@ -49,7 +49,16 @@ use utils::{
 };
 
 // genesis write set generated once for each fuzzing session
-static VM: Lazy<WriteSet> = Lazy::new(|| GENESIS_CHANGE_SET_HEAD.write_set().clone());
+static VM: Lazy<Option<WriteSet>> = Lazy::new(|| {
+    let prev = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        GENESIS_CHANGE_SET_HEAD.write_set().clone()
+    }))
+    .ok();
+    std::panic::set_hook(prev);
+    r
+});
 
 const FUZZER_CONCURRENCY_LEVEL: usize = 1;
 static TP: Lazy<Arc<rayon::ThreadPool>> = Lazy::new(|| {
@@ -66,7 +75,7 @@ fn run_case(input: TransactionState) -> Result<(), Corpus> {
 
     AptosVM::set_concurrency_level_once(FUZZER_CONCURRENCY_LEVEL);
     let mut vm = FakeExecutor::from_genesis_with_existing_thread_pool(
-        &VM,
+        VM.as_ref().ok_or(Corpus::Reject)?,
         ChainId::mainnet(),
         Arc::clone(&TP),
     )

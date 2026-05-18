@@ -4086,12 +4086,13 @@ impl<'d> serde::de::DeserializeSeed<'d> for DeserializationSeed<'_, &MoveTypeLay
                         // If no custom deserializer, it is not known how the
                         // delayed value should be deserialized. Just like with
                         // serialization, we return an error.
+                        // NOTE: Do not format `kind` or `layout` here — they may
+                        // contain corrupted data that causes an OOB read in Debug/Display.
                         Err(D::Error::custom(
                             PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR)
-                                .with_message(format!(
-                                    "no custom deserializer for native value ({:?}) with layout {}",
-                                    kind, layout
-                                )),
+                                .with_message(
+                                    "no custom deserializer for native value".to_string()
+                                ),
                         ))
                     },
                 }

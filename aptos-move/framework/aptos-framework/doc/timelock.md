@@ -606,7 +606,7 @@ A transaction with this execution hash and salt already exists.
 Current transaction script hash does not match the proposed execution hash.
 
 
-<pre><code><b>const</b> <a href="timelock.md#0x1_timelock_EEXECUTION_HASH_NOT_MATCHING">EEXECUTION_HASH_NOT_MATCHING</a>: u64 = 16;
+<pre><code><b>const</b> <a href="timelock.md#0x1_timelock_EEXECUTION_HASH_NOT_MATCHING">EEXECUTION_HASH_NOT_MATCHING</a>: u64 = 17;
 </code></pre>
 
 
@@ -616,7 +616,7 @@ Current transaction script hash does not match the proposed execution hash.
 The provided hash or salt must be exactly 32 bytes.
 
 
-<pre><code><b>const</b> <a href="timelock.md#0x1_timelock_EINVALID_BYTES_LENGTH">EINVALID_BYTES_LENGTH</a>: u64 = 15;
+<pre><code><b>const</b> <a href="timelock.md#0x1_timelock_EINVALID_BYTES_LENGTH">EINVALID_BYTES_LENGTH</a>: u64 = 16;
 </code></pre>
 
 
@@ -661,10 +661,20 @@ The caller is not an executor (or a creator when the executor list is empty).
 
 
 
+<a id="0x1_timelock_ENUMBER_SECONDS_TOO_LARGE"></a>
+
+The account's <code>min_num_seconds_execute</code> must not exceed <code><a href="timelock.md#0x1_timelock_MAX_NUM_SECONDS_EXECUTE">MAX_NUM_SECONDS_EXECUTE</a></code> (604800).
+
+
+<pre><code><b>const</b> <a href="timelock.md#0x1_timelock_ENUMBER_SECONDS_TOO_LARGE">ENUMBER_SECONDS_TOO_LARGE</a>: u64 = 15;
+</code></pre>
+
+
+
 <a id="0x1_timelock_ENUMBER_SECONDS_TOO_SMALL"></a>
 
 The specified number of seconds is below the required minimum: the account's
-<code>min_num_seconds_execute</code> must be greater than <code><a href="timelock.md#0x1_timelock_MIN_NUM_SECONDS_EXECUTE_FLOOR">MIN_NUM_SECONDS_EXECUTE_FLOOR</a></code> (360),
+<code>min_num_seconds_execute</code> must be greater than <code><a href="timelock.md#0x1_timelock_MIN_NUM_SECONDS_EXECUTE">MIN_NUM_SECONDS_EXECUTE</a></code> (360),
 and a transaction's <code>num_seconds_execute</code> must be at least the account's
 <code>min_num_seconds_execute</code>.
 
@@ -714,11 +724,20 @@ Removing these creators would leave the timelock account with zero creators.
 
 
 
-<a id="0x1_timelock_MIN_NUM_SECONDS_EXECUTE_FLOOR"></a>
+<a id="0x1_timelock_MAX_NUM_SECONDS_EXECUTE"></a>
 
 
 
-<pre><code><b>const</b> <a href="timelock.md#0x1_timelock_MIN_NUM_SECONDS_EXECUTE_FLOOR">MIN_NUM_SECONDS_EXECUTE_FLOOR</a>: u64 = 360;
+<pre><code><b>const</b> <a href="timelock.md#0x1_timelock_MAX_NUM_SECONDS_EXECUTE">MAX_NUM_SECONDS_EXECUTE</a>: u64 = 604800;
+</code></pre>
+
+
+
+<a id="0x1_timelock_MIN_NUM_SECONDS_EXECUTE"></a>
+
+
+
+<pre><code><b>const</b> <a href="timelock.md#0x1_timelock_MIN_NUM_SECONDS_EXECUTE">MIN_NUM_SECONDS_EXECUTE</a>: u64 = 360;
 </code></pre>
 
 
@@ -1695,8 +1714,12 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 
 <pre><code>inline <b>fun</b> <a href="timelock.md#0x1_timelock_assert_delay">assert_delay</a>(num_seconds_execute: u64) {
     <b>assert</b>!(
-        num_seconds_execute &gt; <a href="timelock.md#0x1_timelock_MIN_NUM_SECONDS_EXECUTE_FLOOR">MIN_NUM_SECONDS_EXECUTE_FLOOR</a>,
+        num_seconds_execute &gt; <a href="timelock.md#0x1_timelock_MIN_NUM_SECONDS_EXECUTE">MIN_NUM_SECONDS_EXECUTE</a>,
         <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="timelock.md#0x1_timelock_ENUMBER_SECONDS_TOO_SMALL">ENUMBER_SECONDS_TOO_SMALL</a>),
+    );
+    <b>assert</b>!(
+        num_seconds_execute &lt;= <a href="timelock.md#0x1_timelock_MAX_NUM_SECONDS_EXECUTE">MAX_NUM_SECONDS_EXECUTE</a>,
+        <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="timelock.md#0x1_timelock_ENUMBER_SECONDS_TOO_LARGE">ENUMBER_SECONDS_TOO_LARGE</a>),
     );
 }
 </code></pre>

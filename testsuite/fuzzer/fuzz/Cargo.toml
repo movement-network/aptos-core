@@ -103,6 +103,12 @@ test = false
 doc = false
 
 [[bin]]
+name = "deser_then_verify"
+path = "fuzz_targets/move/deser_then_verify.rs"
+test = false
+doc = false
+
+[[bin]]
 name = "crash_replay"
 path = "fuzz_targets/move/crash_replay.rs"
 test = false

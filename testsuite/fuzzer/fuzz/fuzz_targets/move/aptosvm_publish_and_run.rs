@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use aptos_language_e2e_tests::{account::Account, executor::FakeExecutor};
-use aptos_transaction_simulation::GENESIS_CHANGE_SET_TESTNET;
+use aptos_transaction_simulation::GENESIS_CHANGE_SET_HEAD;
 use aptos_types::{
     chain_id::ChainId,
     on_chain_config::Features,
@@ -36,23 +36,8 @@ use utils::vm::{
     FuzzerRunnableAuthenticator, RunnableState,
 };
 
-// genesis write set generated once for each fuzzing session.
-// Uses TESTNET bundle and catch_unwind to survive genesis panics (e.g.
-// argument-count mismatches from framework version skew). If genesis fails,
-// VM_WRITE_SET is None and all inputs are rejected — the fuzzer stays alive.
-static VM_WRITE_SET: Lazy<Option<WriteSet>> = Lazy::new(|| {
-    // libFuzzer installs a panic hook that calls abort(), preventing
-    // catch_unwind from working. Temporarily replace it with a no-op
-    // so genesis panics can be caught and the fuzzer keeps running.
-    let prev_hook = std::panic::take_hook();
-    std::panic::set_hook(Box::new(|_| {}));
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        GENESIS_CHANGE_SET_TESTNET.write_set().clone()
-    }))
-    .ok();
-    std::panic::set_hook(prev_hook);
-    result
-});
+// genesis write set generated once for each fuzzing session
+static VM_WRITE_SET: Lazy<WriteSet> = Lazy::new(|| GENESIS_CHANGE_SET_HEAD.write_set().clone());
 
 const FUZZER_CONCURRENCY_LEVEL: usize = 1;
 static TP: Lazy<Arc<rayon::ThreadPool>> = Lazy::new(|| {
@@ -201,9 +186,8 @@ fn run_case(mut input: RunnableState) -> Result<(), Corpus> {
     }
 
     AptosVM::set_concurrency_level_once(FUZZER_CONCURRENCY_LEVEL);
-    let write_set = VM_WRITE_SET.as_ref().ok_or(Corpus::Reject)?;
     let mut vm = FakeExecutor::from_genesis_with_existing_thread_pool(
-        write_set,
+        &VM_WRITE_SET,
         ChainId::mainnet(),
         Arc::clone(&TP),
     )

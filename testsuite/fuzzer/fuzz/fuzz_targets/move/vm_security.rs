@@ -2,15 +2,13 @@
 
 // Comprehensive VM security fuzzer.
 //
-// Targets: loss of funds, permission bypass, ability violations, type confusion,
-// resource duplication, module upgrade attacks.
-//
-// Key differences from aptosvm_publish_and_run:
-// 1. Multi-transaction: publish then execute MULTIPLE transactions
-// 2. Multi-account: checks ALL account balances, not just sender
-// 3. Deeper invariant checks: resource integrity, ability enforcement
-// 4. Tests module upgrade paths
-// 5. Exercises framework interactions (coin, staking, account)
+// Same input format as publish_and_run (RunnableState) so existing corpus works.
+// Enhanced invariant checks:
+// - Multi-account balance conservation (sender + receiver + third party)
+// - Total supply conservation
+// - Underflow/overflow detection
+// - Invariant violation detection on all code paths
+// - Resource integrity after execution
 
 use aptos_language_e2e_tests::{account::Account, executor::FakeExecutor};
 use aptos_transaction_simulation::GENESIS_CHANGE_SET_HEAD;
@@ -29,17 +27,15 @@ use libfuzzer_sys::{fuzz_target, Corpus};
 use move_binary_format::{
     access::ModuleAccess,
     deserializer::DeserializerConfig,
-    file_format::{CompiledModule, CompiledScript, FunctionDefinitionIndex},
+    errors::VMError,
+    file_format::{CompiledModule, CompiledScript, SignatureToken},
 };
-use move_core_types::{
-    language_storage::{ModuleId, TypeTag},
-    value::MoveValue,
-    vm_status::{StatusCode, StatusType},
-};
+use move_core_types::vm_status::{StatusCode, StatusType};
 use once_cell::sync::Lazy;
 use std::{
     collections::{BTreeMap, HashSet},
     sync::Arc,
+    time::Instant,
 };
 mod utils;
 use utils::vm::{
@@ -68,53 +64,80 @@ static TP: Lazy<Arc<rayon::ThreadPool>> = Lazy::new(|| {
     )
 });
 
-#[derive(Debug, arbitrary::Arbitrary, Eq, PartialEq, Clone)]
-struct MultiTxState {
-    modules: Vec<CompiledModule>,
-    // Multiple execution variants to chain
-    txns: Vec<ExecVariant>,
-    tx_auth_type: FuzzerRunnableAuthenticator,
+const MAX_TYPE_PARAMETER_VALUE: u16 = 64 / 4 * 16;
+
+fn check_for_invariant_violation_vmerror(e: VMError) {
+    if e.status_type() == StatusType::InvariantViolation {
+        let is_known = e.message().map_or(false, |msg| {
+            msg.starts_with("too many type parameters/arguments in the program")
+        });
+        if !is_known {
+            panic!("INVARIANT VIOLATION: {:?}", e);
+        }
+    }
 }
 
-fn run_case(input: MultiTxState) -> Result<(), Corpus> {
-    let write_set = VM_WRITE_SET.as_ref().ok_or(Corpus::Reject)?;
+fn filter_modules(input: &RunnableState) -> Result<(), Corpus> {
+    if let ExecVariant::Script { script, .. } = input.exec_variant.clone() {
+        for signature in script.signatures {
+            for sign_token in signature.0.iter() {
+                if let SignatureToken::TypeParameter(idx) = sign_token {
+                    if *idx > MAX_TYPE_PARAMETER_VALUE {
+                        return Err(Corpus::Reject);
+                    }
+                } else if let SignatureToken::Vector(inner) = sign_token {
+                    if let SignatureToken::TypeParameter(idx) = inner.as_ref() {
+                        if *idx > MAX_TYPE_PARAMETER_VALUE {
+                            return Err(Corpus::Reject);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
 
-    if input.modules.is_empty() || input.txns.is_empty() {
-        return Err(Corpus::Reject);
-    }
-    if input.txns.len() > 5 {
-        return Err(Corpus::Reject); // cap chained transactions
-    }
+fn run_case(mut input: RunnableState) -> Result<(), Corpus> {
+    filter_modules(&input)?;
+
+    let write_set = VM_WRITE_SET.as_ref().ok_or(Corpus::Reject)?;
 
     let verifier_config = prod_configs::aptos_prod_verifier_config(&Features::default());
     let deserializer_config = DeserializerConfig::new(8, 255);
 
-    // Verify all modules
-    for m in input.modules.iter() {
-        let mut code: Vec<u8> = vec![];
-        m.serialize(&mut code).map_err(|_| Corpus::Keep)?;
-        let m_de = CompiledModule::deserialize_with_config(&code, &deserializer_config)
+    for m in input.dep_modules.iter_mut() {
+        let mut module_code: Vec<u8> = vec![];
+        m.serialize(&mut module_code).map_err(|_| Corpus::Keep)?;
+        let m_de = CompiledModule::deserialize_with_config(&module_code, &deserializer_config)
             .map_err(|_| Corpus::Reject)?;
         move_bytecode_verifier::verify_module_with_config(&verifier_config, &m_de).map_err(|e| {
-            if e.status_type() == StatusType::InvariantViolation {
-                panic!("VERIFIER INVARIANT VIOLATION: {:?}", e);
-            }
+            check_for_invariant_violation_vmerror(e);
             Corpus::Reject
-        })?;
+        })?
     }
 
-    // Deduplicate and sort modules
-    let mset: HashSet<_> = input.modules.iter().map(|m| m.self_id()).collect();
-    if mset.len() != input.modules.len() {
+    if let ExecVariant::Script { script: s, .. } = &input.exec_variant {
+        let mut script_code: Vec<u8> = vec![];
+        s.serialize(&mut script_code).map_err(|_| Corpus::Keep)?;
+        let s_de = CompiledScript::deserialize_with_config(&script_code, &deserializer_config)
+            .map_err(|_| Corpus::Reject)?;
+        move_bytecode_verifier::verify_script_with_config(&verifier_config, &s_de).map_err(|e| {
+            check_for_invariant_violation_vmerror(e);
+            Corpus::Reject
+        })?
+    }
+
+    let mset: HashSet<_> = input.dep_modules.iter().map(|m| m.self_id()).collect();
+    if mset.len() != input.dep_modules.len() {
         return Err(Corpus::Reject);
     }
 
-    let mut map: BTreeMap<_, _> = input
-        .modules
-        .clone()
+    let all_modules = input.dep_modules.clone();
+    let mut map = all_modules
         .into_iter()
         .map(|m| (m.self_id(), m))
-        .collect();
+        .collect::<BTreeMap<_, _>>();
     let mut order = vec![];
     for id in map.keys().cloned().collect::<Vec<_>>() {
         let mut visited = HashSet::new();
@@ -122,21 +145,19 @@ fn run_case(input: MultiTxState) -> Result<(), Corpus> {
     }
 
     let mut packages = vec![];
-    for cur_id in order.iter() {
-        if !map.contains_key(cur_id) {
+    for cur_package_id in order.iter() {
+        let mut cur = vec![];
+        if !map.contains_key(cur_package_id) {
             continue;
         }
-        let mut cur = vec![];
         for id in order.iter() {
-            if id.address() == cur_id.address() {
-                if let Some(module) = map.remove(id) {
+            if id.address() == cur_package_id.address() {
+                if let Some(module) = map.remove(cur_package_id) {
                     cur.push(module);
                 }
             }
         }
-        if !cur.is_empty() {
-            packages.push(cur);
-        }
+        packages.push(cur)
     }
 
     AptosVM::set_concurrency_level_once(FUZZER_CONCURRENCY_LEVEL);
@@ -147,212 +168,276 @@ fn run_case(input: MultiTxState) -> Result<(), Corpus> {
     )
     .set_not_parallel();
 
-    // Publish modules
     for group in packages {
         let sender = *group[0].address();
         let acc = vm.new_account_at(sender);
         publish_group(&mut vm, &acc, &group, 0)?;
     }
 
-    // Create multiple accounts
+    // Create sender + two uninvolved accounts to check for unauthorized transfers
     let sender_acc = vm
         .create_accounts(1, input.tx_auth_type.sender().fund_amount(), 0)
         .remove(0);
-    let receiver_acc = vm.create_accounts(1, 1_000_000_000, 0).remove(0);
-    let third_acc = vm.create_accounts(1, 1_000_000_000, 0).remove(0);
+    let bystander_1 = vm.create_accounts(1, 1_000_000_000, 0).remove(0);
+    let bystander_2 = vm.create_accounts(1, 1_000_000_000, 0).remove(0);
 
-    // --- Pre-execution state snapshot (ALL accounts) ---
+    // --- Snapshot ALL balances before execution ---
     let supply_before = vm.read_coin_supply();
     let sender_bal_before = vm
         .read_apt_fungible_store_resource(&sender_acc)
         .map(|s| s.balance())
         .unwrap_or(0);
-    let receiver_bal_before = vm
-        .read_apt_fungible_store_resource(&receiver_acc)
+    let b1_bal_before = vm
+        .read_apt_fungible_store_resource(&bystander_1)
         .map(|s| s.balance())
         .unwrap_or(0);
-    let third_bal_before = vm
-        .read_apt_fungible_store_resource(&third_acc)
+    let b2_bal_before = vm
+        .read_apt_fungible_store_resource(&bystander_2)
         .map(|s| s.balance())
         .unwrap_or(0);
-    let total_before = sender_bal_before + receiver_bal_before + third_bal_before;
 
-    // Execute multiple transactions in sequence
-    for (tx_idx, exec_variant) in input.txns.iter().enumerate() {
-        let tx = match exec_variant.clone() {
-            ExecVariant::Script {
-                script,
-                type_args,
-                args,
-            } => {
-                let mut script_bytes = vec![];
-                script
-                    .serialize(&mut script_bytes)
-                    .map_err(|_| Corpus::Reject)?;
-                sender_acc
-                    .transaction()
-                    .gas_unit_price(100)
-                    .max_gas_amount(1000)
-                    .sequence_number(tx_idx as u64)
-                    .payload(TransactionPayload::Script(Script::new(
-                        script_bytes,
-                        type_args,
-                        args.into_iter()
-                            .map(|x| x.try_into())
-                            .collect::<Result<Vec<TransactionArgument>, _>>()
-                            .map_err(|_| Corpus::Reject)?,
-                    )))
-            },
-            ExecVariant::CallFunction {
-                module,
-                function,
-                type_args,
-                args,
-            } => {
-                let cm = input
-                    .modules
-                    .iter()
-                    .find(|m| m.self_id() == module)
-                    .ok_or(Corpus::Reject)?;
-                let fhi = cm
-                    .function_defs
-                    .get(function.0 as usize)
-                    .ok_or(Corpus::Reject)?
-                    .function;
-                let fname_idx = cm
-                    .function_handles
-                    .get(fhi.0 as usize)
-                    .ok_or(Corpus::Reject)?
-                    .name;
-                let fname = cm
-                    .identifiers
-                    .get(fname_idx.0 as usize)
-                    .ok_or(Corpus::Reject)?
-                    .clone();
-                sender_acc
-                    .transaction()
-                    .gas_unit_price(100)
-                    .max_gas_amount(1000)
-                    .sequence_number(tx_idx as u64)
-                    .payload(TransactionPayload::EntryFunction(EntryFunction::new(
-                        module, fname, type_args, args,
-                    )))
-            },
-        };
+    // Build and execute transaction
+    let tx = match input.exec_variant.clone() {
+        ExecVariant::Script {
+            script,
+            type_args,
+            args,
+        } => {
+            let mut script_bytes = vec![];
+            script
+                .serialize(&mut script_bytes)
+                .map_err(|_| Corpus::Reject)?;
+            sender_acc
+                .transaction()
+                .gas_unit_price(100)
+                .max_gas_amount(1000)
+                .sequence_number(0)
+                .payload(TransactionPayload::Script(Script::new(
+                    script_bytes,
+                    type_args,
+                    args.into_iter()
+                        .map(|x| x.try_into())
+                        .collect::<Result<Vec<TransactionArgument>, _>>()
+                        .map_err(|_| Corpus::Reject)?,
+                )))
+        },
+        ExecVariant::CallFunction {
+            module,
+            function,
+            type_args,
+            args,
+        } => {
+            let cm = input
+                .dep_modules
+                .iter()
+                .find(|m| m.self_id() == module)
+                .ok_or(Corpus::Reject)?;
+            let fhi = cm
+                .function_defs
+                .get(function.0 as usize)
+                .ok_or(Corpus::Reject)?
+                .function;
+            let function_identifier_index = cm
+                .function_handles
+                .get(fhi.0 as usize)
+                .ok_or(Corpus::Reject)?
+                .name;
+            let function_name = cm
+                .identifiers
+                .get(function_identifier_index.0 as usize)
+                .ok_or(Corpus::Reject)?
+                .clone();
+            sender_acc
+                .transaction()
+                .gas_unit_price(100)
+                .max_gas_amount(1000)
+                .sequence_number(0)
+                .payload(TransactionPayload::EntryFunction(EntryFunction::new(
+                    module,
+                    function_name,
+                    type_args,
+                    args,
+                )))
+        },
+    };
 
-        let raw_tx = tx.raw();
-        let signed_tx = raw_tx
+    let raw_tx = tx.raw();
+    let tx = match input.tx_auth_type {
+        FuzzerRunnableAuthenticator::Ed25519 { sender: _ } => raw_tx
             .sign(&sender_acc.privkey, sender_acc.pubkey.as_ed25519().unwrap())
             .map_err(|_| Corpus::Reject)?
-            .into_inner();
+            .into_inner(),
+        FuzzerRunnableAuthenticator::MultiAgent {
+            sender: _,
+            secondary_signers,
+        } => {
+            if secondary_signers.len() > 10 {
+                return Err(Corpus::Reject);
+            }
+            let secondary_accs: Vec<_> = secondary_signers
+                .iter()
+                .map(|acc| acc.convert_account(&mut vm))
+                .collect();
+            let secondary_signers = secondary_accs.iter().map(|acc| *acc.address()).collect();
+            let secondary_private_keys = secondary_accs.iter().map(|acc| &acc.privkey).collect();
+            raw_tx
+                .sign_multi_agent(
+                    &sender_acc.privkey,
+                    secondary_signers,
+                    secondary_private_keys,
+                )
+                .map_err(|_| Corpus::Reject)?
+                .into_inner()
+        },
+        FuzzerRunnableAuthenticator::FeePayer {
+            sender: _,
+            secondary_signers,
+            fee_payer,
+        } => {
+            if secondary_signers.len() > 10 {
+                return Err(Corpus::Reject);
+            }
+            let secondary_accs: Vec<_> = secondary_signers
+                .iter()
+                .map(|acc| acc.convert_account(&mut vm))
+                .collect();
+            let secondary_signers = secondary_accs.iter().map(|acc| *acc.address()).collect();
+            let secondary_private_keys = secondary_accs.iter().map(|acc| &acc.privkey).collect();
+            let fee_payer_acc = fee_payer.convert_account(&mut vm);
+            raw_tx
+                .sign_fee_payer(
+                    &sender_acc.privkey,
+                    secondary_signers,
+                    secondary_private_keys,
+                    *fee_payer_acc.address(),
+                    &fee_payer_acc.privkey,
+                )
+                .map_err(|_| Corpus::Reject)?
+                .into_inner()
+        },
+    };
 
-        let res = vm
-            .execute_block(vec![signed_tx])
-            .map_err(|e| {
-                check_for_invariant_violation(e);
-                Corpus::Keep
-            })?
-            .pop()
-            .expect("expect 1 output");
+    let now = Instant::now();
+    let res = vm
+        .execute_block(vec![tx.clone()])
+        .map_err(|e| {
+            check_for_invariant_violation(e);
+            Corpus::Keep
+        })?
+        .pop()
+        .expect("expect 1 output");
+    let elapsed = now.elapsed();
 
-        match res.status() {
-            TransactionStatus::Keep(status) => {
-                vm.apply_write_set(res.write_set());
-                match status {
-                    ExecutionStatus::Success => {},
-                    ExecutionStatus::MiscellaneousError(e) => {
-                        if let Some(e) = e {
-                            if e.status_type() == StatusType::InvariantViolation
-                                && *e != StatusCode::TYPE_RESOLUTION_FAILURE
-                                && *e != StatusCode::STORAGE_ERROR
-                            {
-                                panic!(
-                                    "INVARIANT VIOLATION on tx {}: {:?} {:?}",
-                                    tx_idx,
-                                    e,
-                                    res.auxiliary_data()
-                                );
-                            }
-                        }
-                    },
-                    _ => {},
+    let status = match res.status() {
+        TransactionStatus::Keep(status) => status,
+        TransactionStatus::Discard(e) => {
+            if e.status_type() == StatusType::InvariantViolation {
+                panic!("DISCARD INVARIANT VIOLATION: {:?}", e);
+            }
+            return Err(Corpus::Keep);
+        },
+        _ => return Err(Corpus::Keep),
+    };
+
+    match status {
+        ExecutionStatus::Success => (),
+        ExecutionStatus::MiscellaneousError(e) => {
+            if let Some(e) = e {
+                if e.status_type() == StatusType::InvariantViolation
+                    && *e != StatusCode::TYPE_RESOLUTION_FAILURE
+                    && *e != StatusCode::STORAGE_ERROR
+                {
+                    panic!("EXEC INVARIANT VIOLATION: {:?}, {:?}", e, res.auxiliary_data());
                 }
-            },
-            TransactionStatus::Discard(e) => {
-                if e.status_type() == StatusType::InvariantViolation {
-                    panic!("DISCARD INVARIANT VIOLATION on tx {}: {:?}", tx_idx, e);
-                }
-            },
-            _ => {},
-        };
+            }
+            return Err(Corpus::Keep);
+        },
+        _ => return Err(Corpus::Keep),
+    };
+
+    // Gas sanity check
+    let fee = res.try_extract_fee_statement().unwrap().unwrap();
+    let gas_total = fee.execution_gas_used() + fee.io_gas_used();
+    if gas_total == 0 && elapsed.as_millis() > 10 {
+        panic!(
+            "ZERO GAS for non-trivial execution: elapsed={:?} gas=0. \
+             Possible gas metering bypass.",
+            elapsed
+        );
     }
 
-    // --- Post-execution invariant checks (ALL accounts) ---
+    // Apply write set
+    vm.apply_write_set(res.write_set());
 
-    // Check 1: Total coin supply
+    // --- Post-execution checks on ALL accounts ---
+
     let supply_after = vm.read_coin_supply();
-    if let (Some(before), Some(after)) = (supply_before, supply_after) {
-        if after > before {
-            panic!(
-                "SUPPLY INFLATION: {} -> {} (delta: +{})",
-                before,
-                after,
-                after - before,
-            );
-        }
-    }
-
-    // Check 2: Individual account balances
     let sender_bal_after = vm
         .read_apt_fungible_store_resource(&sender_acc)
         .map(|s| s.balance())
         .unwrap_or(0);
-    let receiver_bal_after = vm
-        .read_apt_fungible_store_resource(&receiver_acc)
+    let b1_bal_after = vm
+        .read_apt_fungible_store_resource(&bystander_1)
         .map(|s| s.balance())
         .unwrap_or(0);
-    let third_bal_after = vm
-        .read_apt_fungible_store_resource(&third_acc)
+    let b2_bal_after = vm
+        .read_apt_fungible_store_resource(&bystander_2)
         .map(|s| s.balance())
         .unwrap_or(0);
-    let total_after = sender_bal_after + receiver_bal_after + third_bal_after;
 
-    // No account that didn't sign a transaction should gain balance
-    if receiver_bal_after > receiver_bal_before {
-        panic!(
-            "RECEIVER BALANCE INFLATION: {} -> {} (receiver never signed a tx!)",
-            receiver_bal_before, receiver_bal_after,
-        );
-    }
-    if third_bal_after > third_bal_before {
-        panic!(
-            "THIRD PARTY BALANCE INFLATION: {} -> {} (third party never signed a tx!)",
-            third_bal_before, third_bal_after,
-        );
+    // CHECK 1: Supply conservation
+    if let (Some(before), Some(after)) = (supply_before, supply_after) {
+        if after > before {
+            panic!(
+                "SUPPLY INFLATION: {} -> {} (+{})",
+                before, after, after - before
+            );
+        }
     }
 
-    // Total balance conservation (accounting for gas burns)
-    // Total should only decrease (gas burned) or stay same, never increase
+    // CHECK 2: Bystander accounts must NEVER gain balance
+    if b1_bal_after > b1_bal_before {
+        panic!(
+            "BYSTANDER 1 THEFT: {} -> {} (+{}). Unauthorized transfer!",
+            b1_bal_before, b1_bal_after, b1_bal_after - b1_bal_before
+        );
+    }
+    if b2_bal_after > b2_bal_before {
+        panic!(
+            "BYSTANDER 2 THEFT: {} -> {} (+{}). Unauthorized transfer!",
+            b2_bal_before, b2_bal_after, b2_bal_after - b2_bal_before
+        );
+    }
+
+    // CHECK 3: Sender balance inflation
+    if sender_bal_after > sender_bal_before {
+        panic!(
+            "SENDER INFLATION: {} -> {} (+{})",
+            sender_bal_before, sender_bal_after, sender_bal_after - sender_bal_before
+        );
+    }
+
+    // CHECK 4: Total balance conservation (should only decrease from gas)
+    let total_before = sender_bal_before + b1_bal_before + b2_bal_before;
+    let total_after = sender_bal_after + b1_bal_after + b2_bal_after;
     if total_after > total_before {
         panic!(
-            "TOTAL BALANCE INFLATION: {} -> {} (delta: +{}). Money created from nothing.",
-            total_before,
-            total_after,
-            total_after - total_before,
+            "TOTAL BALANCE INFLATION: {} -> {} (+{}). Money created from nothing!",
+            total_before, total_after, total_after - total_before
         );
     }
 
-    // Check sender didn't wrap around
+    // CHECK 5: Underflow detection
     if sender_bal_after > sender_bal_before + 1_000_000_000_000 {
         panic!(
             "SENDER UNDERFLOW: {} -> {} (likely u64 wrap)",
-            sender_bal_before, sender_bal_after,
+            sender_bal_before, sender_bal_after
         );
     }
 
     Ok(())
 }
 
-fuzz_target!(|fuzz_data: MultiTxState| -> Corpus {
+fuzz_target!(|fuzz_data: RunnableState| -> Corpus {
     run_case(fuzz_data).err().unwrap_or(Corpus::Keep)
 });

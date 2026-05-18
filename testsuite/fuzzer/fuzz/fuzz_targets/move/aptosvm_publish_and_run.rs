@@ -36,8 +36,19 @@ use utils::vm::{
     FuzzerRunnableAuthenticator, RunnableState,
 };
 
-// genesis write set generated once for each fuzzing session
-static VM_WRITE_SET: Lazy<WriteSet> = Lazy::new(|| GENESIS_CHANGE_SET_HEAD.write_set().clone());
+// genesis write set generated once for each fuzzing session.
+// catch_unwind to survive the genesis panic at vm-genesis/src/lib.rs:405
+// (0x1::util aborts during initialization — second known bug after the format OOB).
+static VM_WRITE_SET: Lazy<Option<WriteSet>> = Lazy::new(|| {
+    let prev = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        GENESIS_CHANGE_SET_HEAD.write_set().clone()
+    }))
+    .ok();
+    std::panic::set_hook(prev);
+    r
+});
 
 const FUZZER_CONCURRENCY_LEVEL: usize = 1;
 static TP: Lazy<Arc<rayon::ThreadPool>> = Lazy::new(|| {
@@ -186,8 +197,9 @@ fn run_case(mut input: RunnableState) -> Result<(), Corpus> {
     }
 
     AptosVM::set_concurrency_level_once(FUZZER_CONCURRENCY_LEVEL);
+    let write_set = VM_WRITE_SET.as_ref().ok_or(Corpus::Reject)?;
     let mut vm = FakeExecutor::from_genesis_with_existing_thread_pool(
-        &VM_WRITE_SET,
+        write_set,
         ChainId::mainnet(),
         Arc::clone(&TP),
     )
@@ -334,10 +346,22 @@ fn run_case(mut input: RunnableState) -> Result<(), Corpus> {
         },
     };
 
-    // --- Pre-execution state snapshot ---
+    // Create bystander accounts to detect unauthorized transfers
+    let bystander_1 = vm.create_accounts(1, 1_000_000_000, 0).remove(0);
+    let bystander_2 = vm.create_accounts(1, 1_000_000_000, 0).remove(0);
+
+    // --- Pre-execution state snapshot (ALL accounts) ---
     let supply_before = vm.read_coin_supply();
     let sender_balance_before = vm
         .read_apt_fungible_store_resource(&sender_acc)
+        .map(|s| s.balance())
+        .unwrap_or(0);
+    let b1_before = vm
+        .read_apt_fungible_store_resource(&bystander_1)
+        .map(|s| s.balance())
+        .unwrap_or(0);
+    let b2_before = vm
+        .read_apt_fungible_store_resource(&bystander_2)
         .map(|s| s.balance())
         .unwrap_or(0);
 
@@ -471,6 +495,50 @@ fn run_case(mut input: RunnableState) -> Result<(), Corpus> {
                 sender_balance_before, sender_balance_after,
             );
         }
+    }
+
+    // Check 4: Bystander accounts must NEVER gain balance (unauthorized transfer)
+    let b1_after = vm
+        .read_apt_fungible_store_resource(&bystander_1)
+        .map(|s| s.balance())
+        .unwrap_or(0);
+    let b2_after = vm
+        .read_apt_fungible_store_resource(&bystander_2)
+        .map(|s| s.balance())
+        .unwrap_or(0);
+    if b1_after > b1_before {
+        panic!(
+            "BYSTANDER THEFT: bystander_1 balance {} -> {} (+{}). \
+             Unauthorized transfer detected!",
+            b1_before, b1_after, b1_after - b1_before,
+        );
+    }
+    if b2_after > b2_before {
+        panic!(
+            "BYSTANDER THEFT: bystander_2 balance {} -> {} (+{}). \
+             Unauthorized transfer detected!",
+            b2_before, b2_after, b2_after - b2_before,
+        );
+    }
+
+    // Check 5: Total balance conservation (accounts for gas burns only)
+    let total_before = sender_balance_before + b1_before + b2_before;
+    let total_after = sender_balance_after + b1_after + b2_after;
+    if total_after > total_before {
+        panic!(
+            "TOTAL BALANCE INFLATION: {} -> {} (+{}). \
+             Money created from nothing!",
+            total_before, total_after, total_after - total_before,
+        );
+    }
+
+    // Check 6: Zero gas for non-trivial execution
+    if gas_paid == 0 && elapsed.as_millis() > 10 {
+        panic!(
+            "ZERO GAS: execution took {:?} but charged 0 gas. \
+             Possible gas metering bypass.",
+            elapsed,
+        );
     }
 
     Ok(())

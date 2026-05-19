@@ -164,16 +164,6 @@ jobs:
           cp    .claude-reviewer/agents/audit-pr.md "$HOME/.claude/agents/"
           chmod +x "$HOME/.claude/agents/audit-pr/scripts/"*.sh
 
-      - name: Load prompt
-        id: load
-        run: |
-          set -euo pipefail
-          {
-            echo 'prompt<<PROMPT_EOF'
-            cat .claude-reviewer/prompts/audit-pr.md
-            echo 'PROMPT_EOF'
-          } >> "$GITHUB_OUTPUT"
-
       - name: Detect audit mode
         id: mode
         env:
@@ -201,6 +191,30 @@ jobs:
 
           echo "Detected AUDIT_MODE=$MODE (event=$EVENT_NAME, prior_summaries=$PRIOR)"
           echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+
+      - name: Load prompt
+        # Mode-specific prompts live at .claude-reviewer/prompts/audit-pr-{fresh,follow-up}.md.
+        # The two modes are kept in SEPARATE files (not a single conditional prompt) because
+        # LLMs do not reliably gate on `if AUDIT_MODE=fresh ...` conditionals in natural-
+        # language prompts: a single file with both modes caused Claude to do a full re-audit
+        # on follow-up triggers in practice (rubujubi/aptos-core PR #22, v9 smoke test).
+        # See claude-pr-reviewer/prompts/ for the two files and the consumer contract.
+        id: load
+        env:
+          MODE: ${{ steps.mode.outputs.mode }}
+        run: |
+          set -euo pipefail
+          PROMPT_FILE=".claude-reviewer/prompts/audit-pr-${MODE}.md"
+          if [[ ! -f "$PROMPT_FILE" ]]; then
+            echo "ERROR: prompt file not found: $PROMPT_FILE" >&2
+            ls -la .claude-reviewer/prompts/ >&2 || true
+            exit 1
+          fi
+          {
+            echo 'prompt<<PROMPT_EOF'
+            cat "$PROMPT_FILE"
+            echo 'PROMPT_EOF'
+          } >> "$GITHUB_OUTPUT"
 
       - name: Run Claude audit
         uses: anthropics/claude-code-action@v1

@@ -208,6 +208,16 @@ Storage state for managing the no-code Token.
 ## Constants
 
 
+<a id="0x4_aptos_token_ENOT_CREATOR"></a>
+
+The provided signer is not the creator
+
+
+<pre><code><b>const</b> <a href="aptos_token.md#0x4_aptos_token_ENOT_CREATOR">ENOT_CREATOR</a>: u64 = 3;
+</code></pre>
+
+
+
 <a id="0x4_aptos_token_ECOLLECTION_DOES_NOT_EXIST"></a>
 
 The collection does not exist
@@ -224,16 +234,6 @@ The field being changed is not mutable
 
 
 <pre><code><b>const</b> <a href="aptos_token.md#0x4_aptos_token_EFIELD_NOT_MUTABLE">EFIELD_NOT_MUTABLE</a>: u64 = 4;
-</code></pre>
-
-
-
-<a id="0x4_aptos_token_ENOT_CREATOR"></a>
-
-The provided signer is not the creator
-
-
-<pre><code><b>const</b> <a href="aptos_token.md#0x4_aptos_token_ENOT_CREATOR">ENOT_CREATOR</a>: u64 = 3;
 </code></pre>
 
 

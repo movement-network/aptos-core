@@ -943,4 +943,16 @@ mod tests {
         assert!(limits.check(&make_batch(u64::MAX, 500)).is_err());
         assert!(limits.check(&make_batch(50, u64::MAX)).is_err());
     }
+
+    #[test]
+    fn verify_inline_batches_rejects_oversized_batch() {
+        let limits = BatchSizeLimits::new(100, 1000);
+        let oversized = make_batch(101, 500);
+        let txns = vec![];
+        let batches = vec![(&oversized, &txns)];
+
+        let err = Payload::verify_inline_batches(batches.into_iter(), limits)
+            .expect_err("should reject oversized inline batch during verification");
+        assert!(err.to_string().contains("txns"), "{err}");
+    }
 }

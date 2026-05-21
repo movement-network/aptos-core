@@ -700,6 +700,13 @@ module aptos_framework::fungible_asset {
         exists<DispatchFunctionStore>(metadata_addr)
     }
 
+    #[view]
+    /// Return whether a fungible asset type has any dispatch or derived-supply hooks registered.
+    public fun is_asset_type_dispatchable(metadata: Object<Metadata>): bool {
+        let metadata_addr = object::object_address(&metadata);
+        exists<DispatchFunctionStore>(metadata_addr) || exists<DeriveSupply>(metadata_addr)
+    }
+
     public fun deposit_dispatch_function<T: key>(store: Object<T>): Option<FunctionInfo> acquires FungibleStore, DispatchFunctionStore {
         let fa_store = borrow_store_resource(&store);
         let metadata_addr = object::object_address(&fa_store.metadata);
@@ -1362,8 +1369,13 @@ module aptos_framework::fungible_asset {
     ) acquires FungibleStore {
         assert!(object::owns(store, signer::address_of(owner)), error::permission_denied(ENOT_STORE_OWNER));
         assert!(!is_frozen(store), error::invalid_argument(ESTORE_IS_FROZEN));
+        let fungible_store_address = object::object_address(&store);
+        // be graceful if ConcurrentFungibleBalance already exists, but flag is off
+        if (exists<ConcurrentFungibleBalance>(fungible_store_address)) {
+            return
+        };
         assert!(allow_upgrade_to_concurrent_fungible_balance(), error::invalid_argument(ECONCURRENT_BALANCE_NOT_ENABLED));
-        ensure_store_upgraded_to_concurrent_internal(object::object_address(&store));
+        ensure_store_upgraded_to_concurrent_internal(fungible_store_address);
     }
 
     /// Ensure a known `FungibleStore` has `ConcurrentFungibleBalance`.
@@ -1530,6 +1542,22 @@ module aptos_framework::fungible_asset {
         create_store(&creator_ref, metadata);
         let delete_ref = object::generate_delete_ref(&creator_ref);
         remove_store(&delete_ref);
+    }
+
+    #[test(creator = @0xcafe)]
+    fun test_is_asset_type_dispatchable_false_for_plain_fa(creator: &signer) {
+        let (_, _, _, _, metadata) = create_fungible_asset(creator);
+        assert!(!is_asset_type_dispatchable(metadata), 1);
+    }
+
+    #[test(creator = @0xcafe)]
+    fun test_is_asset_type_dispatchable_true_with_derived_supply(creator: &signer) {
+        let (creator_ref, token_object) = create_test_token(creator);
+        init_test_metadata(&creator_ref);
+        let metadata = object::convert<TestToken, Metadata>(token_object);
+        assert!(!is_asset_type_dispatchable(metadata), 1);
+        register_derive_supply_dispatch_function(&creator_ref, option::none());
+        assert!(is_asset_type_dispatchable(metadata), 2);
     }
 
     #[test(creator = @0xcafe, aaron = @0xface)]

@@ -546,12 +546,21 @@ impl AptosVM {
             ..
         } = status
         {
+            let use_exact_match = self
+                .features()
+                .is_enabled(FeatureFlag::EXTRACT_ABORT_INFO_EXACT_MATCH);
             let info = module_storage
                 .fetch_module_metadata(module_id.address(), module_id.name())
                 .ok()
                 .flatten()
                 .and_then(|metadata| get_metadata(&metadata))
-                .and_then(|m| m.extract_abort_info(code));
+                .and_then(|m| {
+                    if use_exact_match {
+                        m.extract_abort_info(code)
+                    } else {
+                        m.extract_abort_info_legacy(code)
+                    }
+                });
             ExecutionStatus::MoveAbort {
                 location: AbortLocation::Module(module_id),
                 code,
@@ -1609,6 +1618,18 @@ impl AptosVM {
         // Account Abstraction dispatchable authentication.
         let senders = transaction_data.senders();
         let proofs = transaction_data.authentication_proofs();
+
+        // Validate that the number of senders matches the number of authentication proofs
+        if senders.len() != proofs.len() {
+            return Err(VMStatus::error(
+                StatusCode::INVALID_NUMBER_OF_AUTHENTICATION_PROOFS,
+                Some(format!(
+                    "Mismatch between senders count ({}) and authentication proofs count ({})",
+                    senders.len(),
+                    proofs.len()
+                )),
+            ));
+        }
 
         // Add fee payer.
         let fee_payer_signer = if let Some(fee_payer) = transaction_data.fee_payer {

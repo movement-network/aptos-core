@@ -89,6 +89,9 @@ impl EpochEndingRestoreController {
         let mut previous_li: Option<&LedgerInfoWithSignatures> = None;
         let mut ledger_infos = Vec::new();
 
+        // Find the maximum trusted waypoint version to skip verification before it
+        let max_trusted_waypoint_version = self.trusted_waypoints.keys().max().copied();
+
         let mut past_target = false;
         for chunk in &manifest.chunks {
             if past_target {
@@ -134,6 +137,12 @@ impl EpochEndingRestoreController {
                         wp_li,
                         wp_trusted,
                     );
+                } else if max_trusted_waypoint_version
+                    .map_or(false, |max_wp| li.ledger_info().version() <= max_wp)
+                {
+                    // Skip verification - this LI is at or before the maximum trusted waypoint.
+                    // We trust the chain up to and including max_wp, so no need to verify these epochs.
+                    // Verification will resume starting at the epoch AFTER the waypoint.
                 } else if let Some(pre_li) = previous_li {
                     pre_li
                         .ledger_info()
@@ -276,6 +285,7 @@ pub struct EpochHistory {
 impl EpochHistory {
     pub fn verify_ledger_info(&self, li_with_sigs: &LedgerInfoWithSignatures) -> Result<()> {
         let epoch = li_with_sigs.ledger_info().epoch();
+        let version = li_with_sigs.ledger_info().version();
         ensure!(!self.epoch_endings.is_empty(), "Empty epoch history.",);
         if epoch > self.epoch_endings.len() as u64 {
             // TODO(aldenhu): fix this from upper level
@@ -294,7 +304,7 @@ impl EpochHistory {
             );
         } else if let Some(wp_trusted) = self
             .trusted_waypoints
-            .get(&li_with_sigs.ledger_info().version())
+            .get(&version)
         {
             let wp_li = Waypoint::new_any(li_with_sigs.ledger_info());
             ensure!(
@@ -303,6 +313,15 @@ impl EpochHistory {
                 wp_li,
                 wp_trusted,
             );
+        } else if self
+            .trusted_waypoints
+            .keys()
+            .max()
+            .is_some_and(|max_wp| version <= *max_wp)
+        {
+            // For historical restore, anything up to the highest trusted waypoint is treated as
+            // trusted data. This keeps transaction/state restore aligned with epoch-ending
+            // preheat, which already bypasses signature verification for this range.
         } else {
             self.epoch_endings[epoch as usize - 1]
                 .next_epoch_state()

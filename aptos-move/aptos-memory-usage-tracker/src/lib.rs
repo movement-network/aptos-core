@@ -369,27 +369,6 @@ where
     }
 
     #[inline]
-    fn charge_pack_closure(
-        &mut self,
-        is_generic: bool,
-        args: impl ExactSizeIterator<Item = impl ValueView> + Clone,
-    ) -> PartialVMResult<()> {
-        self.use_heap_memory(
-            args.clone()
-                .try_fold(AbstractValueSize::zero(), |acc, val| {
-                    let stack_size = self
-                        .vm_gas_params()
-                        .misc
-                        .abs_val
-                        .abstract_stack_size(val, self.feature_version())?;
-                    Ok::<_, PartialVMError>(acc + stack_size)
-                })?,
-        )?;
-
-        self.base.charge_pack_closure(is_generic, args)
-    }
-
-    #[inline]
     fn charge_read_ref(&mut self, val: impl ValueView) -> PartialVMResult<()> {
         let heap_size = self
             .vm_gas_params()

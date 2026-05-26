@@ -251,7 +251,8 @@ impl ValueVisitor for AbstractValueSizeVisitor<'_> {
     #[inline]
     fn visit_closure(&mut self, depth: u64, _len: usize) -> PartialVMResult<bool> {
         self.check_depth(depth)?;
-        self.size += self.params.closure;
+        // TODO(#15664): introduce a dedicated gas parameter?
+        self.size += self.params.struct_;
         Ok(true)
     }
 
@@ -465,7 +466,8 @@ impl AbstractValueSizeGasParameters {
             #[inline]
             fn visit_closure(&mut self, depth: u64, _len: usize) -> PartialVMResult<bool> {
                 self.check_depth(depth)?;
-                self.res = Some(self.params.closure);
+                // TODO(#15664): introduce a dedicated gas parameter?
+                self.res = Some(self.params.struct_);
                 Ok(false)
             }
 
@@ -655,7 +657,8 @@ impl AbstractValueSizeGasParameters {
             #[inline]
             fn visit_closure(&mut self, depth: u64, _len: usize) -> PartialVMResult<bool> {
                 self.check_depth(depth)?;
-                self.res = Some(self.params.closure);
+                // TODO(#15664): introduce a dedicated gas parameter?
+                self.res = Some(self.params.struct_);
                 Ok(false)
             }
 

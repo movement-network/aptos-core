@@ -1,6 +1,6 @@
 /// This module implements the Confidential Asset (CA) Standard, a privacy-focused protocol for managing fungible assets (FA).
 /// It enables private transfers by obfuscating token amounts while keeping sender and recipient addresses visible.
-module aptos_experimental::confidential_asset {
+module aptos_framework::confidential_asset {
     use std::bcs;
     use std::error;
     use std::option::Option;
@@ -18,11 +18,11 @@ module aptos_experimental::confidential_asset {
     use aptos_framework::primary_fungible_store;
     use aptos_framework::system_addresses;
 
-    use aptos_experimental::confidential_balance;
-    use aptos_experimental::confidential_proof::{
+    use aptos_framework::confidential_balance;
+    use aptos_framework::confidential_proof::{
         Self, NormalizationProof, RotationProof, TransferProof, WithdrawalProof
     };
-    use aptos_experimental::ristretto255_twisted_elgamal as twisted_elgamal;
+    use aptos_framework::ristretto255_twisted_elgamal as twisted_elgamal;
 
     #[test_only]
     use aptos_std::ristretto255::Scalar;
@@ -395,7 +395,7 @@ module aptos_experimental::confidential_asset {
         confidential_proof::verify_registration_proof(
             cid,
             user,
-            @aptos_experimental,
+            @aptos_framework,
             &ek,
             object::object_address(&token),
             registration_proof_commitment,
@@ -708,7 +708,7 @@ module aptos_experimental::confidential_asset {
     public fun enable_allow_list(aptos_framework: &signer) acquires GlobalConfig {
         system_addresses::assert_aptos_framework(aptos_framework);
 
-        let global_config = borrow_global_mut<GlobalConfig>(@aptos_experimental);
+        let global_config = borrow_global_mut<GlobalConfig>(@aptos_framework);
 
         assert!(!global_config.allow_list_enabled, error::invalid_state(EALLOW_LIST_ENABLED));
 
@@ -721,7 +721,7 @@ module aptos_experimental::confidential_asset {
     public fun disable_allow_list(aptos_framework: &signer) acquires GlobalConfig {
         system_addresses::assert_aptos_framework(aptos_framework);
 
-        let global_config = borrow_global_mut<GlobalConfig>(@aptos_experimental);
+        let global_config = borrow_global_mut<GlobalConfig>(@aptos_framework);
 
         assert!(global_config.allow_list_enabled, error::invalid_state(EALLOW_LIST_DISABLED));
 
@@ -808,7 +808,7 @@ module aptos_experimental::confidential_asset {
     {
         system_addresses::assert_aptos_framework(aptos_framework);
 
-        let global_config = borrow_global_mut<GlobalConfig>(@aptos_experimental);
+        let global_config = borrow_global_mut<GlobalConfig>(@aptos_framework);
         global_config.chain_auditor_admin = std::option::some(new_admin);
 
         event::emit(ChainAuditorAdminChanged { new_admin });
@@ -826,7 +826,7 @@ module aptos_experimental::confidential_asset {
         admin: &signer,
         new_chain_auditor_ek: vector<u8>) acquires GlobalConfig
     {
-        let global_config = borrow_global_mut<GlobalConfig>(@aptos_experimental);
+        let global_config = borrow_global_mut<GlobalConfig>(@aptos_framework);
 
         assert!(
             global_config.chain_auditor_admin.is_some(),
@@ -887,7 +887,7 @@ module aptos_experimental::confidential_asset {
     /// If the allow list is enabled, only tokens from the allow list can be transferred.
     /// Otherwise, all tokens are allowed.
     public fun is_allow_list_enabled(): bool acquires GlobalConfig {
-        borrow_global<GlobalConfig>(@aptos_experimental).allow_list_enabled
+        borrow_global<GlobalConfig>(@aptos_framework).allow_list_enabled
     }
 
     #[view]
@@ -970,19 +970,19 @@ module aptos_experimental::confidential_asset {
     #[view]
     /// Chain auditor encryption key, or `None` if unset.
     public fun get_chain_auditor(): Option<twisted_elgamal::CompressedPubkey> acquires GlobalConfig {
-        borrow_global<GlobalConfig>(@aptos_experimental).chain_auditor_ek
+        borrow_global<GlobalConfig>(@aptos_framework).chain_auditor_ek
     }
 
     #[view]
     /// Chain auditor epoch. `0` before any chain auditor has been configured.
     public fun get_chain_auditor_epoch(): u64 acquires GlobalConfig {
-        borrow_global<GlobalConfig>(@aptos_experimental).chain_auditor_epoch
+        borrow_global<GlobalConfig>(@aptos_framework).chain_auditor_epoch
     }
 
     #[view]
     /// Chain-auditor admin address, or `None` if governance hasn't assigned one yet.
     public fun get_chain_auditor_admin(): Option<address> acquires GlobalConfig {
-        borrow_global<GlobalConfig>(@aptos_experimental).chain_auditor_admin
+        borrow_global<GlobalConfig>(@aptos_framework).chain_auditor_admin
     }
 
     #[view]
@@ -1100,7 +1100,7 @@ module aptos_experimental::confidential_asset {
         confidential_proof::verify_withdrawal_proof(
             cid,
             from,
-            @aptos_experimental,
+            @aptos_framework,
             object::object_address(&token),
             &sender_ek,
             amount,
@@ -1175,7 +1175,7 @@ module aptos_experimental::confidential_asset {
         confidential_proof::verify_transfer_proof(
             cid,
             from,
-            @aptos_experimental,
+            @aptos_framework,
             object::object_address(&token),
             &sender_ek,
             &recipient_ek,
@@ -1214,7 +1214,7 @@ module aptos_experimental::confidential_asset {
         let new_recip_pending_balance = confidential_balance::compress_balance(&recipient_pending_balance);
         recipient_ca_store.pending_balance = new_recip_pending_balance;
 
-        let chain_auditor_epoch = borrow_global<GlobalConfig>(@aptos_experimental).chain_auditor_epoch;
+        let chain_auditor_epoch = borrow_global<GlobalConfig>(@aptos_framework).chain_auditor_epoch;
         let asset_auditor_epoch = get_asset_auditor_epoch(token);
 
         event::emit(Transferred {
@@ -1257,7 +1257,7 @@ module aptos_experimental::confidential_asset {
         confidential_proof::verify_rotation_proof(
             cid,
             user,
-            @aptos_experimental,
+            @aptos_framework,
             object::object_address(&token),
             &current_ek,
             &new_ek,
@@ -1299,7 +1299,7 @@ module aptos_experimental::confidential_asset {
         confidential_proof::verify_normalization_proof(
             cid,
             user,
-            @aptos_experimental,
+            @aptos_framework,
             object::object_address(&token),
             &sender_ek,
             &current_balance,
@@ -1426,12 +1426,12 @@ module aptos_experimental::confidential_asset {
 
     /// Returns an object for handling all the FA primary stores, and returns a signer for it.
     fun get_fa_store_signer(): signer acquires GlobalConfig {
-        object::generate_signer_for_extending(&borrow_global<GlobalConfig>(@aptos_experimental).extend_ref)
+        object::generate_signer_for_extending(&borrow_global<GlobalConfig>(@aptos_framework).extend_ref)
     }
 
     /// Returns the address that handles all the FA primary stores.
     fun get_fa_store_address(): address acquires GlobalConfig {
-        object::address_from_extend_ref(&borrow_global<GlobalConfig>(@aptos_experimental).extend_ref)
+        object::address_from_extend_ref(&borrow_global<GlobalConfig>(@aptos_framework).extend_ref)
     }
 
     /// Returns the pool's primary fungible store for the given token, aborting if it does not exist.
@@ -1460,7 +1460,7 @@ module aptos_experimental::confidential_asset {
 
     /// Returns an object for handling the `FAConfig`, and returns a signer for it.
     fun get_fa_config_signer(token: Object<Metadata>): signer acquires GlobalConfig {
-        let fa_ext = &borrow_global<GlobalConfig>(@aptos_experimental).extend_ref;
+        let fa_ext = &borrow_global<GlobalConfig>(@aptos_framework).extend_ref;
         let fa_ext_signer = object::generate_signer_for_extending(fa_ext);
 
         let fa_ctor = &object::create_named_object(&fa_ext_signer, construct_fa_seed(token));
@@ -1470,7 +1470,7 @@ module aptos_experimental::confidential_asset {
 
     /// Returns the address that handles primary FA store and `FAConfig` objects for the specified token.
     fun get_fa_config_address(token: Object<Metadata>): address acquires GlobalConfig {
-        let fa_ext = &borrow_global<GlobalConfig>(@aptos_experimental).extend_ref;
+        let fa_ext = &borrow_global<GlobalConfig>(@aptos_framework).extend_ref;
         let fa_ext_address = object::address_from_extend_ref(fa_ext);
 
         object::create_object_address(&fa_ext_address, construct_fa_seed(token))
@@ -1482,7 +1482,7 @@ module aptos_experimental::confidential_asset {
         bcs::to_bytes(
             &string_utils::format2(
                 &b"confidential_asset::{}::token::{}::user",
-                @aptos_experimental,
+                @aptos_framework,
                 object::object_address(&token)
             )
         )
@@ -1494,7 +1494,7 @@ module aptos_experimental::confidential_asset {
         bcs::to_bytes(
             &string_utils::format2(
                 &b"confidential_asset::{}::token::{}::fa",
-                @aptos_experimental,
+                @aptos_framework,
                 object::object_address(&token)
             )
         )
@@ -1544,7 +1544,7 @@ module aptos_experimental::confidential_asset {
             return false
         };
 
-        let chain_auditor_ek_opt = borrow_global<GlobalConfig>(@aptos_experimental).chain_auditor_ek;
+        let chain_auditor_ek_opt = borrow_global<GlobalConfig>(@aptos_framework).chain_auditor_ek;
         assert!(chain_auditor_ek_opt.is_some(), error::invalid_state(ECHAIN_AUDITOR_NOT_SET));
 
         let asset_auditor_ek_opt = get_asset_auditor(token);

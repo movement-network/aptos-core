@@ -812,3 +812,6 @@ Computes a Fiat-Shamir challenge <code>rho = H(G, H, Y, Y', C, D, c, c_1, c_2, \
 
 
 </details>
+
+
+[move-book]: https://aptos.dev/move/book/SUMMARY

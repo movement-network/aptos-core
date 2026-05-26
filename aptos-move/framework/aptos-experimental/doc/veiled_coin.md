@@ -1505,3 +1505,6 @@ Mints a veiled coin from a normal coin, shelving the normal coin into the resour
 
 
 </details>
+
+
+[move-book]: https://aptos.dev/move/book/SUMMARY

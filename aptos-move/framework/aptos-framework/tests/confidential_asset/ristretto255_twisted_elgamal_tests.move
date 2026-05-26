@@ -1,6 +1,6 @@
 #[test_only]
-module aptos_experimental::ristretto255_twisted_elgamal_tests {
-    use aptos_experimental::ristretto255_twisted_elgamal::{
+module aptos_framework::ristretto255_twisted_elgamal_tests {
+    use aptos_framework::ristretto255_twisted_elgamal::{
         Self as twisted_elgamal,
         generate_twisted_elgamal_keypair,
     };

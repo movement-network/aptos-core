@@ -3,7 +3,7 @@
 // subsequent `confidential_asset::set_chain_auditor` entry call signed by the
 // admin itself.
 script {
-    use aptos_experimental::confidential_asset;
+    use aptos_framework::confidential_asset;
     use aptos_framework::aptos_governance;
 
     fun main(core_resources: &signer, new_admin: address) {

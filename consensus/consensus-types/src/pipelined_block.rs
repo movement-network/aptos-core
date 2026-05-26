@@ -340,9 +340,10 @@ impl PipelinedBlock {
     }
 
     // GUARD: keep this function a pure write to `self.randomness`.
-    // `ShareAggregator` runs synchronously here, with no `await` on any
-    // pipeline-derived future. That is what makes a known upstream deadlock
-    // structurally impossible.
+    // `ShareAggregator` runs synchronously in `consensus/src/rand/rand_gen/rand_store.rs`
+    // and its result reaches `set_randomness` through a channel, with no
+    // `await` on any pipeline-derived future on either side. That is what
+    // makes a known upstream deadlock structurally impossible.
     //
     // Background:
     //   https://github.com/aptos-labs/aptos-core/pull/18699  (upstream optimization that introduced the cycle)

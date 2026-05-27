@@ -1281,13 +1281,19 @@ pub enum EntryFunctionCall {
     /// executors. This lets a deployer (e.g. a multisig) instantiate a timelock that is owned
     /// by an entirely different set of addresses without first having to transfer ownership.
     ///
-    /// @param deployer Signer used to derive the resource-account address. Must not appear in
-    ///        `creators` or `executors` unless that role is intended.
-    /// @param creators Addresses authorized to propose transactions. Must contain at least one
-    ///        address and have no duplicates. The timelock account address itself is not allowed.
-    /// @param executors Addresses authorized to execute transactions after the timelock period.
-    ///        If empty, creators can also execute.
-    /// @param num_seconds_execute Minimum delay in seconds before a proposed transaction can be executed.
+    /// # Arguments
+    /// * `deployer` - Signer used to derive the resource-account address. Must not appear in
+    ///   `creators` or `executors` unless that role is intended.
+    /// * `creators` - Addresses authorized to propose transactions. Must contain at least one
+    ///   address and have no duplicates. The timelock account address itself is not allowed.
+    /// * `executors` - Addresses authorized to execute transactions after the timelock period.
+    ///   If empty, creators can also execute.
+    /// * `num_seconds_execute` - Minimum delay in seconds before a proposed transaction can be executed.
+    ///
+    /// # Aborts
+    /// * If `creators` is empty
+    /// * If `creators` or `executors` contains duplicate addresses or the timelock account address
+    /// * If `num_seconds_execute` is outside the allowed delay bounds
     TimelockCreate {
         creators: Vec<AccountAddress>,
         executors: Vec<AccountAddress>,
@@ -5745,13 +5751,19 @@ pub fn timelock_cancel_transaction(
 /// executors. This lets a deployer (e.g. a multisig) instantiate a timelock that is owned
 /// by an entirely different set of addresses without first having to transfer ownership.
 ///
-/// @param deployer Signer used to derive the resource-account address. Must not appear in
-///        `creators` or `executors` unless that role is intended.
-/// @param creators Addresses authorized to propose transactions. Must contain at least one
-///        address and have no duplicates. The timelock account address itself is not allowed.
-/// @param executors Addresses authorized to execute transactions after the timelock period.
-///        If empty, creators can also execute.
-/// @param num_seconds_execute Minimum delay in seconds before a proposed transaction can be executed.
+/// # Arguments
+/// * `deployer` - Signer used to derive the resource-account address. Must not appear in
+///   `creators` or `executors` unless that role is intended.
+/// * `creators` - Addresses authorized to propose transactions. Must contain at least one
+///   address and have no duplicates. The timelock account address itself is not allowed.
+/// * `executors` - Addresses authorized to execute transactions after the timelock period.
+///   If empty, creators can also execute.
+/// * `num_seconds_execute` - Minimum delay in seconds before a proposed transaction can be executed.
+///
+/// # Aborts
+/// * If `creators` is empty
+/// * If `creators` or `executors` contains duplicate addresses or the timelock account address
+/// * If `num_seconds_execute` is outside the allowed delay bounds
 pub fn timelock_create(
     creators: Vec<AccountAddress>,
     executors: Vec<AccountAddress>,

@@ -264,13 +264,13 @@ fn assert_failed(status: &TransactionStatus) {
 //   ENOT_EXECUTOR = 5                → error::permission_denied     → 0x50005
 //   EACCOUNT_NOT_TIMELOCK = 3        → error::invalid_state         → 0x30003
 //   ETRANSACTION_NOT_FOUND = 7       → error::not_found             → 0x60007
-//   EEXECUTION_HASH_NOT_MATCHING= 16 → error::invalid_argument      → 0x10010
+//   EEXECUTION_HASH_NOT_MATCHING= 17 → error::invalid_argument      → 0x10011
 const ABORT_TIMELOCK_NOT_EXPIRED: u64 = 0x30008;
 const ABORT_ALREADY_EXECUTED: u64 = 0x30009;
 const ABORT_NOT_EXECUTOR: u64 = 0x50005;
 const ABORT_ACCOUNT_NOT_TIMELOCK: u64 = 0x30003;
 const ABORT_TRANSACTION_NOT_FOUND: u64 = 0x60007;
-const ABORT_EXECUTION_HASH_MISMATCH: u64 = 0x10010;
+const ABORT_EXECUTION_HASH_MISMATCH: u64 = 0x10011;
 
 /// The Lazy `SCRIPTS` initializer compiles seven Move script packages on first invocation,
 /// which recurses deeply enough to overflow Rust's default 2 MB test thread stack. Each

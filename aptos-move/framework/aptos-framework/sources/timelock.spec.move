@@ -105,33 +105,33 @@ spec aptos_framework::timelock {
 
     spec creators(timelock_account: address): vector<address> {
         aborts_if !exists<TimelockAccount>(timelock_account);
-        ensures result == global<TimelockAccount>(timelock_account).creators;
+        ensures result == TimelockAccount[timelock_account].creators;
     }
 
     spec executors(timelock_account: address): vector<address> {
         aborts_if !exists<TimelockAccount>(timelock_account);
-        ensures result == global<TimelockAccount>(timelock_account).executors;
+        ensures result == TimelockAccount[timelock_account].executors;
     }
 
     spec min_num_seconds_execute(timelock_account: address): u64 {
         aborts_if !exists<TimelockAccount>(timelock_account);
-        ensures result == global<TimelockAccount>(timelock_account).min_num_seconds_execute;
+        ensures result == TimelockAccount[timelock_account].min_num_seconds_execute;
     }
 
     spec is_creator(addr: address, timelock_account: address): bool {
         aborts_if !exists<TimelockAccount>(timelock_account);
-        ensures result == contains(global<TimelockAccount>(timelock_account).creators, addr);
+        ensures result == contains(TimelockAccount[timelock_account].creators, addr);
     }
 
     spec is_executor(addr: address, timelock_account: address): bool {
         aborts_if !exists<TimelockAccount>(timelock_account);
-        let timelock = global<TimelockAccount>(timelock_account);
+        let timelock = TimelockAccount[timelock_account];
         ensures len(timelock.executors) == 0 ==> result == contains(timelock.creators, addr);
         ensures len(timelock.executors) > 0 ==> result == contains(timelock.executors, addr);
     }
 
     spec get_transaction(timelock_account: address, transaction_hash: vector<u8>): TimelockTransaction {
-        let timelock = global<TimelockAccount>(timelock_account);
+        let timelock = TimelockAccount[timelock_account];
         aborts_if !exists<TimelockAccount>(timelock_account);
         aborts_if !table::spec_contains(timelock.transactions, transaction_hash);
         ensures result == table::spec_get(timelock.transactions, transaction_hash);
@@ -143,7 +143,7 @@ spec aptos_framework::timelock {
         // (Also aborts on u64 overflow of creation_time_secs + num_seconds_execute, which is
         // unreachable in practice since num_seconds_execute is bounded by spec at proposal time.)
         aborts_if !exists<TimelockAccount>(timelock_account);
-        let timelock = global<TimelockAccount>(timelock_account);
+        let timelock = TimelockAccount[timelock_account];
         ensures !table::spec_contains(timelock.transactions, transaction_hash) ==> !result;
         ensures table::spec_contains(timelock.transactions, transaction_hash) ==> result ==
             (!table::spec_get(timelock.transactions, transaction_hash).executed
@@ -185,6 +185,7 @@ spec aptos_framework::timelock {
     ) {
         aborts_if len(creators) < 1;
         aborts_if min_num_seconds_execute <= 360;
+        aborts_if min_num_seconds_execute > 604800;
         aborts_if exists<TimelockAccount>(address_of(timelock_account));
         // Aborts if creators or executors contain duplicates or include the timelock address.
         aborts_if exists i in 0..len(creators): creators[i] == address_of(timelock_account);
@@ -192,9 +193,9 @@ spec aptos_framework::timelock {
         aborts_if exists i in 0..len(executors): executors[i] == address_of(timelock_account);
         aborts_if exists i in 0..len(executors): exists j in 0..i: executors[i] == executors[j];
         ensures exists<TimelockAccount>(address_of(timelock_account));
-        ensures global<TimelockAccount>(address_of(timelock_account)).min_num_seconds_execute == min_num_seconds_execute;
-        ensures global<TimelockAccount>(address_of(timelock_account)).creators == creators;
-        ensures global<TimelockAccount>(address_of(timelock_account)).executors == executors;
+        ensures TimelockAccount[address_of(timelock_account)].min_num_seconds_execute == min_num_seconds_execute;
+        ensures TimelockAccount[address_of(timelock_account)].creators == creators;
+        ensures TimelockAccount[address_of(timelock_account)].executors == executors;
     }
 
     // =============================== Self-governance ===============================
@@ -209,12 +210,12 @@ spec aptos_framework::timelock {
         aborts_if exists i in 0..len(new_creators): exists j in 0..i: new_creators[i] == new_creators[j];
         ensures exists<TimelockAccount>(addr);
         // Post-state: creators list is the prior list with new_creators appended; no other field changes.
-        ensures global<TimelockAccount>(addr).creators
-            == concat(old(global<TimelockAccount>(addr).creators), new_creators);
-        ensures global<TimelockAccount>(addr).executors
-            == old(global<TimelockAccount>(addr).executors);
-        ensures global<TimelockAccount>(addr).min_num_seconds_execute
-            == old(global<TimelockAccount>(addr).min_num_seconds_execute);
+        ensures TimelockAccount[addr].creators
+            == concat(old(TimelockAccount[addr].creators), new_creators);
+        ensures TimelockAccount[addr].executors
+            == old(TimelockAccount[addr].executors);
+        ensures TimelockAccount[addr].min_num_seconds_execute
+            == old(TimelockAccount[addr].min_num_seconds_execute);
     }
 
     spec remove_creators(timelock_account: &signer, creators_to_remove: vector<address>) {
@@ -225,7 +226,7 @@ spec aptos_framework::timelock {
         // (Full enumeration of the post-removal set is complex; partial spec retained here.)
         ensures exists<TimelockAccount>(addr);
         // Must retain at least one creator.
-        ensures len(global<TimelockAccount>(addr).creators) >= 1;
+        ensures len(TimelockAccount[addr].creators) >= 1;
         // Note: "executors and min_num_seconds_execute unchanged" is a true property of this entry,
         // but expressing it here trips the prover's loop havoc over `for_each_ref` on a mutably
         // borrowed struct. Tracked in timelock.fv.md.
@@ -241,12 +242,15 @@ spec aptos_framework::timelock {
         aborts_if exists i in 0..len(new_executors): exists j in 0..i: new_executors[i] == new_executors[j];
         ensures exists<TimelockAccount>(addr);
         // Post-state: executors list is the prior list with new_executors appended; no other field changes.
-        ensures global<TimelockAccount>(addr).executors
-            == concat(old(global<TimelockAccount>(addr).executors), new_executors);
-        ensures global<TimelockAccount>(addr).creators
-            == old(global<TimelockAccount>(addr).creators);
-        ensures global<TimelockAccount>(addr).min_num_seconds_execute
-            == old(global<TimelockAccount>(addr).min_num_seconds_execute);
+        ensures TimelockAccount[addr].executors
+            == concat(old(TimelockAccount[addr].executors), new_executors);
+        ensures TimelockAccount[addr].creators
+            == old(TimelockAccount[addr].creators);
+        ensures TimelockAccount[addr].min_num_seconds_execute
+            == old(TimelockAccount[addr].min_num_seconds_execute);
+        // Ensure the timelock account has no duplicate executors.
+        ensures forall i in 0..len(TimelockAccount[addr].executors):
+            forall j in i+1..len(TimelockAccount[addr].executors): TimelockAccount[addr].executors[i] != TimelockAccount[addr].executors[j];
     }
 
     spec remove_executors(timelock_account: &signer, executors_to_remove: vector<address>) {
@@ -262,12 +266,13 @@ spec aptos_framework::timelock {
         let addr = address_of(timelock_account);
         aborts_if !exists<TimelockAccount>(addr);
         aborts_if new_min_num_seconds_execute <= 360;
-        ensures global<TimelockAccount>(addr).min_num_seconds_execute == new_min_num_seconds_execute;
+        aborts_if new_min_num_seconds_execute > 604800;
+        ensures TimelockAccount[addr].min_num_seconds_execute == new_min_num_seconds_execute;
         // Membership lists are unchanged.
-        ensures global<TimelockAccount>(addr).creators
-            == old(global<TimelockAccount>(addr).creators);
-        ensures global<TimelockAccount>(addr).executors
-            == old(global<TimelockAccount>(addr).executors);
+        ensures TimelockAccount[addr].creators
+            == old(TimelockAccount[addr].creators);
+        ensures TimelockAccount[addr].executors
+            == old(TimelockAccount[addr].executors);
     }
 
     // =============================== Transaction flow ===============================
@@ -280,51 +285,51 @@ spec aptos_framework::timelock {
         salt: vector<u8>,
     ) {
         pragma aborts_if_is_partial;
-        let timelock = global<TimelockAccount>(timelock_account);
+        let timelock = TimelockAccount[timelock_account];
         aborts_if !exists<TimelockAccount>(timelock_account);
         aborts_if !contains(timelock.creators, address_of(creator));
         aborts_if len(execution_hash) != 32;
         aborts_if len(salt) != 32;
         aborts_if num_seconds_execute < timelock.min_num_seconds_execute;
         aborts_if table::spec_contains(
-            global<TimelockAccount>(timelock_account).transactions,
+            TimelockAccount[timelock_account].transactions,
             aptos_std::aptos_hash::spec_keccak256(concat(execution_hash, salt)),
         );
         ensures table::spec_contains(
-            global<TimelockAccount>(timelock_account).transactions,
+            TimelockAccount[timelock_account].transactions,
             aptos_std::aptos_hash::spec_keccak256(concat(execution_hash, salt)),
         );
         ensures table::spec_get(
-            global<TimelockAccount>(timelock_account).transactions,
+            TimelockAccount[timelock_account].transactions,
             aptos_std::aptos_hash::spec_keccak256(concat(execution_hash, salt)),
         ).creator == address_of(creator);
         ensures table::spec_get(
-            global<TimelockAccount>(timelock_account).transactions,
+            TimelockAccount[timelock_account].transactions,
             aptos_std::aptos_hash::spec_keccak256(concat(execution_hash, salt)),
         ).execution_hash == execution_hash;
         ensures table::spec_get(
-            global<TimelockAccount>(timelock_account).transactions,
+            TimelockAccount[timelock_account].transactions,
             aptos_std::aptos_hash::spec_keccak256(concat(execution_hash, salt)),
         ).salt == salt;
         ensures table::spec_get(
-            global<TimelockAccount>(timelock_account).transactions,
+            TimelockAccount[timelock_account].transactions,
             aptos_std::aptos_hash::spec_keccak256(concat(execution_hash, salt)),
         ).num_seconds_execute == num_seconds_execute;
         ensures !table::spec_get(
-            global<TimelockAccount>(timelock_account).transactions,
+            TimelockAccount[timelock_account].transactions,
             aptos_std::aptos_hash::spec_keccak256(concat(execution_hash, salt)),
         ).executed;
     }
 
     spec cancel_transaction(actor: &signer, timelock_account: address, transaction_hash: vector<u8>) {
-        let timelock = global<TimelockAccount>(timelock_account);
+        let timelock = TimelockAccount[timelock_account];
         aborts_if !exists<TimelockAccount>(timelock_account);
         aborts_if len(transaction_hash) != 32;
         aborts_if !contains(timelock.creators, address_of(actor))
             && (len(timelock.executors) == 0 || !contains(timelock.executors, address_of(actor)));
         aborts_if !table::spec_contains(timelock.transactions, transaction_hash);
         aborts_if table::spec_get(timelock.transactions, transaction_hash).executed;
-        ensures table::spec_get(global<TimelockAccount>(timelock_account).transactions, transaction_hash).executed;
+        ensures table::spec_get(TimelockAccount[timelock_account].transactions, transaction_hash).executed;
     }
 
     spec resolve(
@@ -335,7 +340,7 @@ spec aptos_framework::timelock {
         // Full verification is disabled because resolve calls the native
         // transaction_context::get_script_hash, which the prover cannot constrain.
         pragma verify = false;
-        let timelock = global<TimelockAccount>(timelock_account);
+        let timelock = TimelockAccount[timelock_account];
         aborts_if !exists<TimelockAccount>(timelock_account);
         aborts_if len(transaction_hash) != 32;
         aborts_if {
@@ -352,8 +357,8 @@ spec aptos_framework::timelock {
         aborts_if aptos_framework::timestamp::now_seconds() < table::spec_get(timelock.transactions, transaction_hash).creation_time_secs
             + table::spec_get(timelock.transactions, transaction_hash).num_seconds_execute;
         // On success, the entry is marked executed and remains in the table.
-        ensures table::spec_get(global<TimelockAccount>(timelock_account).transactions, transaction_hash).executed;
-        ensures table::spec_contains(global<TimelockAccount>(timelock_account).transactions, transaction_hash);
+        ensures table::spec_get(TimelockAccount[timelock_account].transactions, transaction_hash).executed;
+        ensures table::spec_contains(TimelockAccount[timelock_account].transactions, transaction_hash);
     }
 
     // =============================== Private helpers ===============================

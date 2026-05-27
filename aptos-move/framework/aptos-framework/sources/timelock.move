@@ -127,25 +127,25 @@ module aptos_framework::timelock {
     #[event]
     struct AddCreators has drop, store {
         timelock_account: address,
-        creators_added: vector<address>
+        new_creators: vector<address>
     }
 
     #[event]
     struct RemoveCreators has drop, store {
         timelock_account: address,
-        creators_removed: vector<address>
+        removed_creators: vector<address>
     }
 
     #[event]
     struct AddExecutors has drop, store {
         timelock_account: address,
-        executors_added: vector<address>
+        new_executors: vector<address>
     }
 
     #[event]
     struct RemoveExecutors has drop, store {
         timelock_account: address,
-        executors_removed: vector<address>
+        removed_executors: vector<address>
     }
 
     #[event]
@@ -183,32 +183,32 @@ module aptos_framework::timelock {
     #[view]
     /// Return the list of creators for the given timelock account.
     public fun creators(timelock_account: address): vector<address> acquires TimelockAccount {
-        borrow_global<TimelockAccount>(timelock_account).creators
+        TimelockAccount[timelock_account].creators
     }
 
     #[view]
     /// Return the list of executors. An empty list means creators can also execute.
     public fun executors(timelock_account: address): vector<address> acquires TimelockAccount {
-        borrow_global<TimelockAccount>(timelock_account).executors
+        TimelockAccount[timelock_account].executors
     }
 
     #[view]
     /// Return the minimum timelock delay in seconds.
     public fun min_num_seconds_execute(timelock_account: address): u64 acquires TimelockAccount {
-        borrow_global<TimelockAccount>(timelock_account).min_num_seconds_execute
+        TimelockAccount[timelock_account].min_num_seconds_execute
     }
 
     #[view]
     /// Return true if the given address is a creator of the timelock account.
     public fun is_creator(addr: address, timelock_account: address): bool acquires TimelockAccount {
-        borrow_global<TimelockAccount>(timelock_account).creators.contains(&addr)
+        TimelockAccount[timelock_account].creators.contains(&addr)
     }
 
     #[view]
     /// Return true if the given address is authorized to execute transactions.
     /// If the executor list is empty, creators are also authorized to execute.
     public fun is_executor(addr: address, timelock_account: address): bool acquires TimelockAccount {
-        let timelock = borrow_global<TimelockAccount>(timelock_account);
+        let timelock = &TimelockAccount[timelock_account];
         if (timelock.executors.is_empty()) {
             timelock.creators.contains(&addr)
         } else {
@@ -221,7 +221,7 @@ module aptos_framework::timelock {
     public fun get_transaction(
         timelock_account: address, transaction_hash: vector<u8>
     ): TimelockTransaction acquires TimelockAccount {
-        let timelock = borrow_global<TimelockAccount>(timelock_account);
+        let timelock = &TimelockAccount[timelock_account];
         assert!(
             timelock.transactions.contains(transaction_hash),
             error::not_found(ETRANSACTION_NOT_FOUND)
@@ -235,7 +235,7 @@ module aptos_framework::timelock {
     public fun can_be_executed(
         timelock_account: address, transaction_hash: vector<u8>
     ): bool acquires TimelockAccount {
-        let timelock = borrow_global<TimelockAccount>(timelock_account);
+        let timelock = &TimelockAccount[timelock_account];
         if (!timelock.transactions.contains(transaction_hash)) {
             return false
         };
@@ -260,9 +260,8 @@ module aptos_framework::timelock {
     public fun get_transaction_hash(
         execution_hash: vector<u8>, salt: vector<u8>
     ): vector<u8> {
-        let bytes = copy execution_hash;
-        bytes.append(copy salt);
-        keccak256(bytes)
+        execution_hash.append(salt);
+        keccak256(execution_hash)
     }
 
     // =============================== Account creation ===============================
@@ -274,13 +273,19 @@ module aptos_framework::timelock {
     /// executors. This lets a deployer (e.g. a multisig) instantiate a timelock that is owned
     /// by an entirely different set of addresses without first having to transfer ownership.
     ///
-    /// @param deployer Signer used to derive the resource-account address. Must not appear in
-    ///        `creators` or `executors` unless that role is intended.
-    /// @param creators Addresses authorized to propose transactions. Must contain at least one
-    ///        address and have no duplicates. The timelock account address itself is not allowed.
-    /// @param executors Addresses authorized to execute transactions after the timelock period.
-    ///        If empty, creators can also execute.
-    /// @param num_seconds_execute Minimum delay in seconds before a proposed transaction can be executed.
+    /// # Arguments
+    /// * `deployer` - Signer used to derive the resource-account address. Must not appear in
+    ///   `creators` or `executors` unless that role is intended.
+    /// * `creators` - Addresses authorized to propose transactions. Must contain at least one
+    ///   address and have no duplicates. The timelock account address itself is not allowed.
+    /// * `executors` - Addresses authorized to execute transactions after the timelock period.
+    ///   If empty, creators can also execute.
+    /// * `num_seconds_execute` - Minimum delay in seconds before a proposed transaction can be executed.
+    ///
+    /// # Aborts
+    /// * If `creators` is empty
+    /// * If `creators` or `executors` contains duplicate addresses or the timelock account address
+    /// * If `num_seconds_execute` is outside the allowed delay bounds
     public entry fun create(
         deployer: &signer,
         creators: vector<address>,
@@ -304,11 +309,11 @@ module aptos_framework::timelock {
         min_num_seconds_execute: u64,
         signer_cap: SignerCapability
     ) {
+        assert_delay(min_num_seconds_execute);
         let timelock_address = address_of(timelock_account);
         assert!(creators.length() >= 1, error::invalid_argument(ENOT_ENOUGH_CREATORS));
         validate_members(&creators, timelock_address, EDUPLICATE_CREATOR);
         validate_members(&executors, timelock_address, EDUPLICATE_EXECUTOR);
-        assert_delay(min_num_seconds_execute);
 
         move_to(
             timelock_account,
@@ -335,13 +340,12 @@ module aptos_framework::timelock {
     ) acquires TimelockAccount {
         let timelock_address = address_of(timelock_account);
         assert_timelock_account_exists(timelock_address);
-        let creators_added = copy new_creators;
         validate_members(&new_creators, timelock_address, EDUPLICATE_CREATOR);
-        let timelock = borrow_global_mut<TimelockAccount>(timelock_address);
+        let timelock = &mut TimelockAccount[timelock_address];
         timelock.creators.append(new_creators);
         // Re-validate the combined list to catch cross-list duplicates.
         validate_members(&timelock.creators, timelock_address, EDUPLICATE_CREATOR);
-        emit(AddCreators { timelock_account: timelock_address, creators_added });
+        emit(AddCreators { timelock_account: timelock_address, new_creators });
     }
 
     /// Remove creators from the timelock account. At least one creator must remain.
@@ -351,20 +355,20 @@ module aptos_framework::timelock {
     ) acquires TimelockAccount {
         let timelock_address = address_of(timelock_account);
         assert_timelock_account_exists(timelock_address);
-        let timelock = borrow_global_mut<TimelockAccount>(timelock_address);
-        let creators_removed = vector[];
+        let timelock = &mut TimelockAccount[timelock_address];
+        let removed_creators = vector[];
         creators_to_remove.for_each_ref(|to_remove| {
             let (found, index) = timelock.creators.index_of(to_remove);
             if (found) {
-                creators_removed.push_back(timelock.creators.swap_remove(index));
+                removed_creators.push_back(timelock.creators.swap_remove(index));
             }
         });
         assert!(
             timelock.creators.length() >= 1,
             error::invalid_state(EWOULD_REMOVE_ALL_CREATORS)
         );
-        if (!creators_removed.is_empty()) {
-            emit(RemoveCreators { timelock_account: timelock_address, creators_removed });
+        if (!removed_creators.is_empty()) {
+            emit(RemoveCreators { timelock_account: timelock_address, removed_creators });
         };
     }
 
@@ -375,12 +379,11 @@ module aptos_framework::timelock {
     ) acquires TimelockAccount {
         let timelock_address = address_of(timelock_account);
         assert_timelock_account_exists(timelock_address);
-        let executors_added = copy new_executors;
         validate_members(&new_executors, timelock_address, EDUPLICATE_EXECUTOR);
-        let timelock = borrow_global_mut<TimelockAccount>(timelock_address);
+        let timelock = &mut TimelockAccount[timelock_address];
         timelock.executors.append(new_executors);
         validate_members(&timelock.executors, timelock_address, EDUPLICATE_EXECUTOR);
-        emit(AddExecutors { timelock_account: timelock_address, executors_added });
+        emit(AddExecutors { timelock_account: timelock_address, new_executors });
     }
 
     /// Remove executors from the timelock account.
@@ -391,17 +394,17 @@ module aptos_framework::timelock {
     ) acquires TimelockAccount {
         let timelock_address = address_of(timelock_account);
         assert_timelock_account_exists(timelock_address);
-        let timelock = borrow_global_mut<TimelockAccount>(timelock_address);
-        let executors_removed = vector[];
+        let timelock = &mut TimelockAccount[timelock_address];
+        let removed_executors = vector[];
         executors_to_remove.for_each_ref(|to_remove| {
             let (found, index) = timelock.executors.index_of(to_remove);
             if (found) {
-                executors_removed.push_back(timelock.executors.swap_remove(index));
+                removed_executors.push_back(timelock.executors.swap_remove(index));
             }
         });
-        if (!executors_removed.is_empty()) {
+        if (!removed_executors.is_empty()) {
             emit(
-                RemoveExecutors { timelock_account: timelock_address, executors_removed }
+                RemoveExecutors { timelock_account: timelock_address, removed_executors }
             );
         };
     }
@@ -415,7 +418,7 @@ module aptos_framework::timelock {
         let timelock_address = address_of(timelock_account);
         assert_timelock_account_exists(timelock_address);
         assert_delay(new_min_num_seconds_execute);
-        let timelock = borrow_global_mut<TimelockAccount>(timelock_address);
+        let timelock = &mut TimelockAccount[timelock_address];
         let old_min_num_seconds_execute = timelock.min_num_seconds_execute;
         timelock.min_num_seconds_execute = new_min_num_seconds_execute;
         emit(
@@ -453,9 +456,9 @@ module aptos_framework::timelock {
             error::invalid_argument(EINVALID_BYTES_LENGTH)
         );
 
-        let transaction_hash = get_transaction_hash(copy execution_hash, copy salt);
+        let transaction_hash = get_transaction_hash(execution_hash, salt);
         let creator_addr = address_of(creator);
-        let timelock = borrow_global_mut<TimelockAccount>(timelock_account);
+        let timelock = &mut TimelockAccount[timelock_account];
         assert!(
             num_seconds_execute >= timelock.min_num_seconds_execute,
             error::invalid_argument(ENUMBER_SECONDS_TOO_SMALL)
@@ -473,7 +476,7 @@ module aptos_framework::timelock {
             salt,
             executed: false
         };
-        timelock.transactions.add(copy transaction_hash, copy transaction);
+        timelock.transactions.add(transaction_hash, transaction);
 
         emit(
             CreateTransaction {
@@ -506,7 +509,7 @@ module aptos_framework::timelock {
             error::permission_denied(ENOT_CREATOR_OR_EXECUTOR)
         );
 
-        let timelock = borrow_global_mut<TimelockAccount>(timelock_account);
+        let timelock = &mut TimelockAccount[timelock_account];
         assert!(
             timelock.transactions.contains(transaction_hash),
             error::not_found(ETRANSACTION_NOT_FOUND)
@@ -546,38 +549,37 @@ module aptos_framework::timelock {
         );
 
         let executor_addr = address_of(executor);
-        {
-            let timelock = borrow_global_mut<TimelockAccount>(timelock_account);
-            assert!(
-                timelock.transactions.contains(transaction_hash),
-                error::not_found(ETRANSACTION_NOT_FOUND)
-            );
-            let transaction = timelock.transactions.borrow_mut(transaction_hash);
-            assert!(
-                !transaction.executed,
-                error::invalid_state(ETRANSACTION_ALREADY_EXECUTED)
-            );
-            assert!(
-                now_seconds()
-                    >= transaction.creation_time_secs + transaction.num_seconds_execute,
-                error::invalid_state(ETIMELOCK_NOT_EXPIRED)
-            );
-            assert!(
-                transaction_context::get_script_hash() == transaction.execution_hash,
-                error::invalid_argument(EEXECUTION_HASH_NOT_MATCHING)
-            );
-            transaction.executed = true;
-            emit(
-                ResolveTransaction {
-                    timelock_account,
-                    executor: executor_addr,
-                    transaction_hash,
-                    execution_hash: transaction.execution_hash
-                }
-            );
-        };
 
-        let timelock = borrow_global<TimelockAccount>(timelock_account);
+        let timelock = &mut TimelockAccount[timelock_account];
+        assert!(
+            timelock.transactions.contains(transaction_hash),
+            error::not_found(ETRANSACTION_NOT_FOUND)
+        );
+        let transaction = timelock.transactions.borrow_mut(transaction_hash);
+        assert!(
+            !transaction.executed,
+            error::invalid_state(ETRANSACTION_ALREADY_EXECUTED)
+        );
+        assert!(
+            now_seconds()
+                >= transaction.creation_time_secs + transaction.num_seconds_execute,
+            error::invalid_state(ETIMELOCK_NOT_EXPIRED)
+        );
+        assert!(
+            transaction_context::get_script_hash() == transaction.execution_hash,
+            error::invalid_argument(EEXECUTION_HASH_NOT_MATCHING)
+        );
+        transaction.executed = true;
+        emit(
+            ResolveTransaction {
+                timelock_account,
+                executor: executor_addr,
+                transaction_hash,
+                execution_hash: transaction.execution_hash
+            }
+        );
+
+        let timelock = &TimelockAccount[timelock_account];
         account::create_signer_with_capability(&timelock.signer_cap)
     }
 
@@ -645,9 +647,7 @@ module aptos_framework::timelock {
         creator: &signer, timelock_account: address
     ) {
         assert!(
-            borrow_global<TimelockAccount>(timelock_account).creators.contains(
-                &address_of(creator)
-            ),
+            TimelockAccount[timelock_account].creators.contains(&address_of(creator)),
             error::permission_denied(ENOT_CREATOR)
         );
     }
@@ -655,7 +655,7 @@ module aptos_framework::timelock {
     inline fun assert_is_executor(
         executor: &signer, timelock_account: address
     ) {
-        let timelock = borrow_global<TimelockAccount>(timelock_account);
+        let timelock = &TimelockAccount[timelock_account];
         let executor_addr = address_of(executor);
         let authorized =
             if (timelock.executors.is_empty()) {
@@ -714,7 +714,7 @@ module aptos_framework::timelock {
     /// Used in tests to simulate the signer that `resolve` would return to a resolution script.
     fun get_timelock_signer(timelock_account: address): signer acquires TimelockAccount {
         account::create_signer_with_capability(
-            &borrow_global<TimelockAccount>(timelock_account).signer_cap
+            &TimelockAccount[timelock_account].signer_cap
         )
     }
 

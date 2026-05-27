@@ -5,16 +5,20 @@
 // `aptos-move/e2e-move-tests/README.md`) and re-run.
 //
 // VM-level confidential-asset checks for this fork. Scenarios are written against the behavior
-// documented in `aptos_experimental::confidential_asset` (e.g. `validate_auditors`, entry
+// documented in `aptos_framework::confidential_asset` (e.g. `validate_auditors`, entry
 // signatures)—not transcribed from other repositories' test code.
 //
 // The harness hot-swaps all `0x1` modules from a test-mode compile of `aptos-stdlib` (MoveStdlib +
-// AptosStdlib, so `ristretto255::random_scalar` and friends resolve consistently), then overlays
-// `0x1::event` from the same compile graph as `aptos-experimental` so `event::emitted_events` matches
-// `confidential_asset` (genesis `event` bytecode can lag). It also injects every `0x7` module from that
-// experimental build. Genesis already publishes
-// `GlobalConfig` for an older bytecode revision; we delete that resource and re-run
-// `init_module_for_testing` so on-disk layout matches the injected `confidential_asset` module.
+// AptosStdlib, so `ristretto255::random_scalar` and friends resolve consistently), then overlays the
+// confidential-asset module family (`confidential_asset`, `confidential_balance`,
+// `confidential_proof`, `ristretto255_twisted_elgamal`, `confidential_gas_e2e_helpers`) plus
+// `event` from a test-mode compile of `aptos-framework`, so the bytecode of those modules matches
+// what `confidential_asset` was compiled against and `event::emitted_events` resolves. We deliberately
+// do NOT replace other 0x1 framework modules — doing so swaps account/fungible-store/transaction-
+// validation layouts out from under state that genesis already published, breaking gas-fee
+// prologue reads. Genesis already publishes `GlobalConfig` for an older bytecode revision; we
+// delete that resource and re-run `init_module_for_testing` so on-disk layout matches the
+// injected `confidential_asset` module.
 
 use crate::{tests::common::framework_dir_path, MoveHarness};
 use aptos_language_e2e_tests::account::Account;
@@ -40,11 +44,7 @@ use move_vm_runtime::move_vm::SerializedReturnValues;
 use once_cell::sync::OnceCell;
 use std::collections::BTreeMap;
 
-const APTOS_EXPERIMENTAL: AccountAddress = AccountAddress::new({
-    let mut b = [0u8; AccountAddress::LENGTH];
-    b[31] = 0x07;
-    b
-});
+const APTOS_FRAMEWORK: AccountAddress = AccountAddress::ONE;
 /// Published fungible metadata object for gas/APT in test genesis.
 const MOVE_METADATA: AccountAddress = AccountAddress::new({
     let mut b = [0u8; AccountAddress::LENGTH];
@@ -63,8 +63,8 @@ fn move_test_build_config() -> BuildConfig {
     build_config.dev_mode = false;
     build_config.skip_fetch_latest_git_deps = true;
     build_config.additional_named_addresses.insert(
-        "aptos_experimental".to_string(),
-        APTOS_EXPERIMENTAL,
+        "aptos_framework".to_string(),
+        APTOS_FRAMEWORK,
     );
     build_config.compiler_config.bytecode_version = Some(VERSION_MAX);
     build_config.compiler_config.language_version = Some(LanguageVersion::latest());
@@ -75,7 +75,7 @@ fn move_test_build_config() -> BuildConfig {
 
 fn ca_module_id() -> ModuleId {
     ModuleId::new(
-        APTOS_EXPERIMENTAL,
+        APTOS_FRAMEWORK,
         Identifier::new("confidential_asset").unwrap(),
     )
 }
@@ -123,8 +123,20 @@ fn compile_stdlib_inject_modules() -> Vec<(ModuleId, Vec<u8>)> {
     out
 }
 
-fn compile_experimental_with_tests() -> (Vec<(ModuleId, Vec<u8>)>, (ModuleId, Vec<u8>)) {
-    let pkg = framework_dir_path("aptos-experimental");
+/// Confidential-asset module family (the modules that moved from `aptos-experimental` 0x7 into
+/// `aptos-framework` 0x1). Only these — plus `event` — get overlaid from the framework test build;
+/// replacing other framework modules would invalidate state genesis already published.
+const CONFIDENTIAL_FRAMEWORK_MODULES: &[&str] = &[
+    "confidential_asset",
+    "confidential_balance",
+    "confidential_gas_e2e_helpers",
+    "confidential_proof",
+    "event",
+    "ristretto255_twisted_elgamal",
+];
+
+fn compile_framework_inject_modules() -> Vec<(ModuleId, Vec<u8>)> {
+    let pkg = framework_dir_path("aptos-framework");
     let build_config = move_test_build_config();
 
     let mut stderr = Vec::<u8>::new();
@@ -133,7 +145,7 @@ fn compile_experimental_with_tests() -> (Vec<(ModuleId, Vec<u8>)>, (ModuleId, Ve
         .resolution_graph_for_package(&pkg, &mut stderr)
         .unwrap_or_else(|e| {
             panic!(
-                "resolve aptos-experimental: {:?}\n{}",
+                "resolve aptos-framework: {:?}\n{}",
                 e,
                 String::from_utf8_lossy(&stderr)
             )
@@ -142,42 +154,42 @@ fn compile_experimental_with_tests() -> (Vec<(ModuleId, Vec<u8>)>, (ModuleId, Ve
         .compile_package_no_exit(resolved_graph, vec![], &mut stderr)
         .unwrap_or_else(|e| {
             panic!(
-                "compile aptos-experimental: {:?}\n{}",
+                "compile aptos-framework: {:?}\n{}",
                 e,
                 String::from_utf8_lossy(&stderr)
             )
         });
 
     let mut out = Vec::new();
-    let mut event_bytes: Option<(ModuleId, Vec<u8>)> = None;
     for unit in compiled.all_modules() {
         if let CompiledUnit::Module(NamedCompiledModule { module, .. }) = &unit.unit {
             let id = module.self_id();
-            if id.address() == &APTOS_EXPERIMENTAL {
+            if id.address() == &APTOS_FRAMEWORK
+                && CONFIDENTIAL_FRAMEWORK_MODULES.contains(&id.name().as_str())
+            {
                 let bytes = unit.unit.serialize(Some(module.version));
                 out.push((id, bytes));
-            } else if id.address() == &AccountAddress::ONE && id.name().as_str() == "event" {
-                let bytes = unit.unit.serialize(Some(module.version));
-                event_bytes = Some((id, bytes));
             }
         }
     }
     out.sort_by(|a, b| a.0.name().as_str().cmp(b.0.name().as_str()));
-    assert!(
-        !out.is_empty(),
-        "expected at least one aptos_experimental module from test build"
-    );
-    let event = event_bytes.expect("aptos-experimental compile graph must include 0x1::event");
-    (out, event)
+    for required in CONFIDENTIAL_FRAMEWORK_MODULES {
+        assert!(
+            out.iter().any(|(id, _)| id.name().as_str() == *required),
+            "aptos-framework compile graph missing 0x1::{required}"
+        );
+    }
+    out
 }
 
 fn compile_confidential_e2e_inject_modules() -> Vec<(ModuleId, Vec<u8>)> {
-    let (experimental_0x7, event_overlay) = compile_experimental_with_tests();
-    let mut by_id: BTreeMap<ModuleId, Vec<u8>> = compile_stdlib_inject_modules().into_iter().collect();
-    by_id.insert(event_overlay.0, event_overlay.1);
+    let mut by_id: BTreeMap<ModuleId, Vec<u8>> =
+        compile_stdlib_inject_modules().into_iter().collect();
+    for (id, bytes) in compile_framework_inject_modules() {
+        by_id.insert(id, bytes);
+    }
     let mut v: Vec<(ModuleId, Vec<u8>)> = by_id.into_iter().collect();
     v.sort_by(|a, b| a.0.name().as_str().cmp(b.0.name().as_str()));
-    v.extend(experimental_0x7);
     v
 }
 
@@ -215,13 +227,13 @@ fn assert_kept_success(status: &TransactionStatus, ctx: &str) {
 }
 
 fn assert_kept_failure(status: &TransactionStatus, ctx: &str) {
-    assert!(
-        !matches!(
-            status,
-            TransactionStatus::Keep(ExecutionStatus::Success)
-        ),
-        "{ctx}: expected failure, got success"
-    );
+    match status {
+        TransactionStatus::Keep(ExecutionStatus::Success) => {
+            panic!("{ctx}: expected kept failure, got success")
+        }
+        TransactionStatus::Keep(_) => {}
+        other => panic!("{ctx}: expected kept failure, got {other:?}"),
+    }
 }
 
 /// Deterministic addresses for matrix cases (avoid reusing state across scenarios).
@@ -230,28 +242,6 @@ fn confidential_e2e_addr(tag: u8, idx: u8) -> AccountAddress {
     b[30] = tag;
     b[31] = idx;
     AccountAddress::new(b)
-}
-
-/// Args for **`confidential_asset::enable_token`** via **`try_exec_function_bypass_at`** (framework signer + metadata).
-pub(super) fn confidential_asset_enable_token_bypass_args() -> Vec<Vec<u8>> {
-    vec![
-        MoveValue::Signer(AccountAddress::ONE)
-            .simple_serialize()
-            .expect("signer arg"),
-        bcs::to_bytes(&MOVE_METADATA).expect("metadata arg"),
-    ]
-}
-
-/// Args for **`enable_allow_list`** / **`disable_allow_list`** (framework signer only).
-pub(super) fn confidential_asset_allow_list_governance_bypass_args() -> Vec<Vec<u8>> {
-    vec![MoveValue::Signer(AccountAddress::ONE)
-        .simple_serialize()
-        .expect("signer arg")]
-}
-
-/// Args for **`disable_token`** / **`enable_token`** (framework signer + metadata object).
-pub(super) fn confidential_asset_token_toggle_bypass_args() -> Vec<Vec<u8>> {
-    confidential_asset_enable_token_bypass_args()
 }
 
 fn bcs_auditor_pubkeys_from_ek_structs(h: &mut MoveHarness, ek_structs: &[Vec<u8>]) -> Vec<Vec<u8>> {
@@ -270,7 +260,7 @@ fn bypass_at(
 ) -> SerializedReturnValues {
     h.executor
         .try_exec_function_bypass_at(
-            APTOS_EXPERIMENTAL,
+            APTOS_FRAMEWORK,
             module,
             fun,
             ty_args,
@@ -283,12 +273,12 @@ fn bypass_at(
 /// remove it so `init_module` can republish with a matching layout.
 fn delete_genesis_global_config_if_present(h: &mut MoveHarness) {
     let tag = StructTag {
-        address: APTOS_EXPERIMENTAL,
+        address: APTOS_FRAMEWORK,
         module: Identifier::new("confidential_asset").unwrap(),
         name: Identifier::new("GlobalConfig").unwrap(),
         type_args: vec![],
     };
-    let key = StateKey::resource(&APTOS_EXPERIMENTAL, &tag).unwrap();
+    let key = StateKey::resource(&APTOS_FRAMEWORK, &tag).unwrap();
     if h.executor.read_state_value(&key).is_none() {
         return;
     }
@@ -299,7 +289,7 @@ fn delete_genesis_global_config_if_present(h: &mut MoveHarness) {
 }
 
 fn reinit_confidential_asset_module(h: &mut MoveHarness) {
-    let signer_arg = MoveValue::Signer(APTOS_EXPERIMENTAL)
+    let signer_arg = MoveValue::Signer(APTOS_FRAMEWORK)
         .simple_serialize()
         .expect("signer arg");
     let _ = bypass_at(
@@ -344,7 +334,7 @@ fn prove_registration_parts(
     let args = vec![
         bcs::to_bytes(&chain_byte).unwrap(),
         bcs::to_bytes(&user).unwrap(),
-        bcs::to_bytes(&APTOS_EXPERIMENTAL).unwrap(),
+        bcs::to_bytes(&APTOS_FRAMEWORK).unwrap(),
         dk.to_vec(),
         ek.to_vec(),
         bcs::to_bytes(&token).unwrap(),
@@ -420,61 +410,6 @@ fn run_rollover(h: &mut MoveHarness, account: &Account) -> TransactionStatus {
         Identifier::new("rollover_pending_balance").unwrap(),
         vec![],
         vec![bcs::to_bytes(&MOVE_METADATA).unwrap()],
-    ));
-    let txn = h.create_transaction_payload(account, payload);
-    h.run(txn)
-}
-
-fn run_rollover_and_freeze(h: &mut MoveHarness, account: &Account) -> TransactionStatus {
-    let payload = TransactionPayload::EntryFunction(EntryFunction::new(
-        ca_module_id(),
-        Identifier::new("rollover_pending_balance_and_freeze").unwrap(),
-        vec![],
-        vec![bcs::to_bytes(&MOVE_METADATA).unwrap()],
-    ));
-    let txn = h.create_transaction_payload(account, payload);
-    h.run(txn)
-}
-
-fn run_freeze_token(h: &mut MoveHarness, account: &Account) -> TransactionStatus {
-    let payload = TransactionPayload::EntryFunction(EntryFunction::new(
-        ca_module_id(),
-        Identifier::new("freeze_token").unwrap(),
-        vec![],
-        vec![bcs::to_bytes(&MOVE_METADATA).unwrap()],
-    ));
-    let txn = h.create_transaction_payload(account, payload);
-    h.run(txn)
-}
-
-fn run_unfreeze_token(h: &mut MoveHarness, account: &Account) -> TransactionStatus {
-    let payload = TransactionPayload::EntryFunction(EntryFunction::new(
-        ca_module_id(),
-        Identifier::new("unfreeze_token").unwrap(),
-        vec![],
-        vec![bcs::to_bytes(&MOVE_METADATA).unwrap()],
-    ));
-    let txn = h.create_transaction_payload(account, payload);
-    h.run(txn)
-}
-
-fn run_normalize(
-    h: &mut MoveHarness,
-    account: &Account,
-    new_bal: &[u8],
-    zkrp: &[u8],
-    sigma: &[u8],
-) -> TransactionStatus {
-    let payload = TransactionPayload::EntryFunction(EntryFunction::new(
-        ca_module_id(),
-        Identifier::new("normalize").unwrap(),
-        vec![],
-        vec![
-            bcs::to_bytes(&MOVE_METADATA).unwrap(),
-            new_bal.to_vec(),
-            zkrp.to_vec(),
-            sigma.to_vec(),
-        ],
     ));
     let txn = h.create_transaction_payload(account, payload);
     h.run(txn)
@@ -734,32 +669,6 @@ fn pack_withdraw(
     )
 }
 
-fn run_withdraw_to(
-    h: &mut MoveHarness,
-    sender: &Account,
-    to: AccountAddress,
-    amount: u64,
-    new_bal: &[u8],
-    zkrp: &[u8],
-    sigma: &[u8],
-) -> TransactionStatus {
-    let payload = TransactionPayload::EntryFunction(EntryFunction::new(
-        ca_module_id(),
-        Identifier::new("withdraw_to").unwrap(),
-        vec![],
-        vec![
-            bcs::to_bytes(&MOVE_METADATA).unwrap(),
-            bcs::to_bytes(&to).unwrap(),
-            bcs::to_bytes(&amount).unwrap(),
-            new_bal.to_vec(),
-            zkrp.to_vec(),
-            sigma.to_vec(),
-        ],
-    ));
-    let txn = h.create_transaction_payload(sender, payload);
-    h.run(txn)
-}
-
 fn run_withdraw(
     h: &mut MoveHarness,
     sender: &Account,
@@ -811,122 +720,6 @@ fn pack_normalize(
         ret.return_values[1].0.clone(),
         ret.return_values[2].0.clone(),
     )
-}
-
-fn pack_rotate(
-    h: &mut MoveHarness,
-    chain_byte: u8,
-    sender: AccountAddress,
-    cur_dk: &[u8],
-    new_dk: &[u8],
-    new_ek: &[u8],
-    balance: u128,
-) -> (Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>) {
-    let args = vec![
-        bcs::to_bytes(&chain_byte).unwrap(),
-        bcs::to_bytes(&sender).unwrap(),
-        cur_dk.to_vec(),
-        new_dk.to_vec(),
-        new_ek.to_vec(),
-        bcs::to_bytes(&balance).unwrap(),
-        bcs::to_bytes(&MOVE_METADATA).unwrap(),
-    ];
-    let ret = bypass_at(
-        h,
-        "confidential_gas_e2e_helpers",
-        "pack_rotate_encryption_key_proof",
-        vec![],
-        args,
-    );
-    assert_eq!(ret.return_values.len(), 4);
-    (
-        ret.return_values[0].0.clone(),
-        ret.return_values[1].0.clone(),
-        ret.return_values[2].0.clone(),
-        ret.return_values[3].0.clone(),
-    )
-}
-
-fn run_rotate(
-    h: &mut MoveHarness,
-    sender: &Account,
-    new_ek: &[u8],
-    new_bal: &[u8],
-    zkrp: &[u8],
-    sigma: &[u8],
-) -> TransactionStatus {
-    let payload = TransactionPayload::EntryFunction(EntryFunction::new(
-        ca_module_id(),
-        Identifier::new("rotate_encryption_key").unwrap(),
-        vec![],
-        vec![
-            bcs::to_bytes(&MOVE_METADATA).unwrap(),
-            new_ek.to_vec(),
-            new_bal.to_vec(),
-            zkrp.to_vec(),
-            sigma.to_vec(),
-        ],
-    ));
-    let txn = h.create_transaction_payload(sender, payload);
-    h.run(txn)
-}
-
-fn run_rotate_and_unfreeze(
-    h: &mut MoveHarness,
-    sender: &Account,
-    new_ek: &[u8],
-    new_bal: &[u8],
-    zkrp: &[u8],
-    sigma: &[u8],
-) -> TransactionStatus {
-    let payload = TransactionPayload::EntryFunction(EntryFunction::new(
-        ca_module_id(),
-        Identifier::new("rotate_encryption_key_and_unfreeze").unwrap(),
-        vec![],
-        vec![
-            bcs::to_bytes(&MOVE_METADATA).unwrap(),
-            new_ek.to_vec(),
-            new_bal.to_vec(),
-            zkrp.to_vec(),
-            sigma.to_vec(),
-        ],
-    ));
-    let txn = h.create_transaction_payload(sender, payload);
-    h.run(txn)
-}
-
-fn baseline_fa_transfer_gas(h: &mut MoveHarness, from: &Account, to: AccountAddress, amount: u64) -> u64 {
-    let payload = TransactionPayload::EntryFunction(EntryFunction::new(
-        ModuleId::new(AccountAddress::ONE, Identifier::new("primary_fungible_store").unwrap()),
-        Identifier::new("transfer").unwrap(),
-        vec![TypeTag::Struct(Box::new(StructTag {
-            address: AccountAddress::ONE,
-            module: Identifier::new("fungible_asset").unwrap(),
-            name: Identifier::new("Metadata").unwrap(),
-            type_args: vec![],
-        }))],
-        vec![
-            bcs::to_bytes(&MOVE_METADATA).unwrap(),
-            bcs::to_bytes(&to).unwrap(),
-            bcs::to_bytes(&amount).unwrap(),
-        ],
-    ));
-    h.evaluate_gas(from, payload)
-}
-
-fn profile_gas(
-    h: &mut MoveHarness,
-    account: &Account,
-    payload: TransactionPayload,
-    label: &str,
-) -> u64 {
-    let (gas_log, gas_used, fee) = h.evaluate_gas_with_profiler(account, payload);
-    assert!(
-        gas_used > 0,
-        "{label}: expected positive gas (got {gas_used})"
-    );
-    let _ = (gas_log, fee);
-    gas_used
 }
 
 fn fresh_harness() -> MoveHarness {

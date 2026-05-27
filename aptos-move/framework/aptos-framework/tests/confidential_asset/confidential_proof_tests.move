@@ -1,14 +1,14 @@
 #[test_only]
-module aptos_experimental::confidential_proof_tests {
-    use aptos_experimental::confidential_balance;
-    use aptos_experimental::confidential_proof;
-    use aptos_experimental::ristretto255_twisted_elgamal::{Self as twisted_elgamal, generate_twisted_elgamal_keypair};
+module aptos_framework::confidential_proof_tests {
+    use aptos_framework::confidential_balance;
+    use aptos_framework::confidential_proof;
+    use aptos_framework::ristretto255_twisted_elgamal::{Self as twisted_elgamal, generate_twisted_elgamal_keypair};
 
     // Test constants for domain separation
     const TEST_CHAIN_ID: u8 = 4;
     const TEST_SENDER: address = @0xa1;
     /// Published package account for `confidential_asset` / `confidential_proof` (matches `[addresses]` in experimental `Move.toml`).
-    const TEST_CONTRACT_ADDRESS: address = @aptos_experimental;
+    const TEST_CONTRACT_ADDRESS: address = @aptos_framework;
     // `TEST_TOKEN_ADDRESS` is declared further down in the registration-tests block (`@0xbeef`); reused here for
     // every transfer/withdraw/rotation/normalization callsite so all FS transcripts are domain-separated by the same
     // token address.

@@ -1,6 +1,6 @@
 /// The `confidential_proof` module provides the infrastructure for verifying zero-knowledge proofs used in the Confidential Asset protocol.
 /// These proofs ensure correctness for operations such as `confidential_transfer`, `withdraw`, `rotate_encryption_key`, and `normalize`.
-module aptos_experimental::confidential_proof {
+module aptos_framework::confidential_proof {
     use std::bcs;
     use std::error;
     use std::option;
@@ -9,10 +9,10 @@ module aptos_experimental::confidential_proof {
     use aptos_std::ristretto255::{Self, CompressedRistretto, Scalar};
     use aptos_std::ristretto255_bulletproofs::{Self as bulletproofs, RangeProof};
 
-    use aptos_experimental::confidential_balance;
-    use aptos_experimental::ristretto255_twisted_elgamal as twisted_elgamal;
+    use aptos_framework::confidential_balance;
+    use aptos_framework::ristretto255_twisted_elgamal as twisted_elgamal;
 
-    friend aptos_experimental::confidential_asset;
+    friend aptos_framework::confidential_asset;
 
     //
     // Errors

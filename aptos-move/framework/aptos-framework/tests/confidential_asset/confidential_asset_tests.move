@@ -1,5 +1,5 @@
 #[test_only]
-module aptos_experimental::confidential_asset_tests {
+module aptos_framework::confidential_asset_tests {
     use std::features;
     use std::option;
     use std::signer;
@@ -13,10 +13,10 @@ module aptos_experimental::confidential_asset_tests {
     use aptos_framework::object::{Self, Object};
     use aptos_framework::primary_fungible_store;
 
-    use aptos_experimental::confidential_asset;
-    use aptos_experimental::confidential_balance;
-    use aptos_experimental::confidential_proof;
-    use aptos_experimental::ristretto255_twisted_elgamal::{Self as twisted_elgamal, generate_twisted_elgamal_keypair};
+    use aptos_framework::confidential_asset;
+    use aptos_framework::confidential_balance;
+    use aptos_framework::confidential_proof;
+    use aptos_framework::ristretto255_twisted_elgamal::{Self as twisted_elgamal, generate_twisted_elgamal_keypair};
 
     struct MockCoin {}
 
@@ -38,7 +38,7 @@ module aptos_experimental::confidential_asset_tests {
         let (proof, new_balance) = confidential_proof::prove_withdrawal(
             cid,
             from,
-            @aptos_experimental,
+            @aptos_framework,
             object::object_address(&token),
             sender_dk,
             &sender_ek,
@@ -87,7 +87,7 @@ module aptos_experimental::confidential_asset_tests {
         ) = confidential_proof::prove_transfer(
             4u8, // test chain ID
             from,
-            @aptos_experimental,
+            @aptos_framework,
             object::object_address(&token),
             sender_dk,
             &sender_ek,
@@ -154,7 +154,7 @@ module aptos_experimental::confidential_asset_tests {
         ) = confidential_proof::prove_transfer(
             4u8, // test chain ID
             from,
-            @aptos_experimental,
+            @aptos_framework,
             object::object_address(&token),
             sender_dk,
             &sender_ek,
@@ -205,7 +205,7 @@ module aptos_experimental::confidential_asset_tests {
         let (proof, new_balance) = confidential_proof::prove_rotation(
             4u8, // test chain ID
             from,
-            @aptos_experimental,
+            @aptos_framework,
             object::object_address(&token),
             sender_dk,
             new_dk,
@@ -242,7 +242,7 @@ module aptos_experimental::confidential_asset_tests {
         let (proof, new_balance) = confidential_proof::prove_normalization(
             4u8, // test chain ID
             from,
-            @aptos_experimental,
+            @aptos_framework,
             object::object_address(&token),
             sender_dk,
             &sender_ek,
@@ -275,7 +275,7 @@ module aptos_experimental::confidential_asset_tests {
         let (proof, new_balance) = confidential_proof::prove_normalization(
             4u8, // test chain ID
             from,
-            @aptos_experimental,
+            @aptos_framework,
             object::object_address(&token),
             sender_dk,
             &sender_ek,
@@ -347,7 +347,7 @@ module aptos_experimental::confidential_asset_tests {
     }
 
     #[test(
-        confidential_asset = @aptos_experimental,
+        confidential_asset = @aptos_framework,
         aptos_fx = @aptos_framework,
         fa = @0xfa,
         alice = @0xa1,
@@ -380,7 +380,7 @@ module aptos_experimental::confidential_asset_tests {
     }
 
     #[test(
-        confidential_asset = @aptos_experimental,
+        confidential_asset = @aptos_framework,
         aptos_fx = @aptos_framework,
         fa = @0xfa,
         alice = @0xa1,
@@ -417,7 +417,7 @@ module aptos_experimental::confidential_asset_tests {
     }
 
     #[test(
-        confidential_asset = @aptos_experimental,
+        confidential_asset = @aptos_framework,
         aptos_fx = @aptos_framework,
         fa = @0xfa,
         alice = @0xa1,
@@ -459,7 +459,7 @@ module aptos_experimental::confidential_asset_tests {
     // success, the store is published, public FA moved into the protocol, and the deposited
     // amount is in actual_balance (spendable) — not pending.
     #[test(
-        confidential_asset = @aptos_experimental,
+        confidential_asset = @aptos_framework,
         aptos_fx = @aptos_framework,
         fa = @0xfa,
         alice = @0xa1,
@@ -479,7 +479,7 @@ module aptos_experimental::confidential_asset_tests {
         let (commitment, response) = confidential_proof::prove_registration(
             4u8,
             alice_addr,
-            @aptos_experimental,
+            @aptos_framework,
             &alice_dk,
             &alice_ek,
             object::object_address(&token),
@@ -504,13 +504,13 @@ module aptos_experimental::confidential_asset_tests {
     // Submitting a malformed registration proof through the combined entry must abort before any
     // state mutates: store is not created, fungible balance is not moved, no rollover happens.
     #[test(
-        confidential_asset = @aptos_experimental,
+        confidential_asset = @aptos_framework,
         aptos_fx = @aptos_framework,
         fa = @0xfa,
         alice = @0xa1,
         bob = @0xb0
     )]
-    #[expected_failure(abort_code = 65537, location = aptos_experimental::confidential_proof)]
+    #[expected_failure(abort_code = 65537, location = aptos_framework::confidential_proof)]
     fun fail_register_and_deposit_and_rollover_with_bad_registration_proof(
         confidential_asset: signer,
         aptos_fx: signer,
@@ -530,7 +530,7 @@ module aptos_experimental::confidential_asset_tests {
         let (commitment, response) = confidential_proof::prove_registration(
             4u8,
             alice_addr,
-            @aptos_experimental,
+            @aptos_framework,
             &alice_dk,
             &alice_ek,
             object::object_address(&token),
@@ -548,13 +548,13 @@ module aptos_experimental::confidential_asset_tests {
 
     // The combined entry aborts when the sender is already registered for the token.
     #[test(
-        confidential_asset = @aptos_experimental,
+        confidential_asset = @aptos_framework,
         aptos_fx = @aptos_framework,
         fa = @0xfa,
         alice = @0xa1,
         bob = @0xb0
     )]
-    #[expected_failure(abort_code = 524290, location = aptos_experimental::confidential_asset)]
+    #[expected_failure(abort_code = 524290, location = aptos_framework::confidential_asset)]
     fun fail_register_and_deposit_and_rollover_when_already_registered(
         confidential_asset: signer,
         aptos_fx: signer,
@@ -572,7 +572,7 @@ module aptos_experimental::confidential_asset_tests {
         let (commitment, response) = confidential_proof::prove_registration(
             4u8,
             alice_addr,
-            @aptos_experimental,
+            @aptos_framework,
             &alice_dk,
             &alice_ek,
             object::object_address(&token),
@@ -592,7 +592,7 @@ module aptos_experimental::confidential_asset_tests {
     // We arrange a normalized state by sending a confidential transfer first (which sets
     // normalized=true on the sender's store).
     #[test(
-        confidential_asset = @aptos_experimental,
+        confidential_asset = @aptos_framework,
         aptos_fx = @aptos_framework,
         fa = @0xfa,
         alice = @0xa1,
@@ -637,13 +637,13 @@ module aptos_experimental::confidential_asset_tests {
     // so this is the common post-make-private state and the wallet must route to
     // `deposit_and_normalize_and_rollover_pending_balance` instead.
     #[test(
-        confidential_asset = @aptos_experimental,
+        confidential_asset = @aptos_framework,
         aptos_fx = @aptos_framework,
         fa = @0xfa,
         alice = @0xa1,
         bob = @0xb0
     )]
-    #[expected_failure(abort_code = 196618, location = aptos_experimental::confidential_asset)]
+    #[expected_failure(abort_code = 196618, location = aptos_framework::confidential_asset)]
     fun fail_deposit_and_rollover_when_not_normalized(
         confidential_asset: signer,
         aptos_fx: signer,
@@ -670,7 +670,7 @@ module aptos_experimental::confidential_asset_tests {
     // is back to false (rollover always sets it false), but the actual balance is the canonical
     // sum so the next deposit-then-rollover call goes through the same path.
     #[test(
-        confidential_asset = @aptos_experimental,
+        confidential_asset = @aptos_framework,
         aptos_fx = @aptos_framework,
         fa = @0xfa,
         alice = @0xa1,
@@ -705,7 +705,7 @@ module aptos_experimental::confidential_asset_tests {
         let (proof, new_balance) = confidential_proof::prove_normalization(
             cid,
             alice_addr,
-            @aptos_experimental,
+            @aptos_framework,
             object::object_address(&token),
             &alice_dk,
             &sender_ek,
@@ -730,7 +730,7 @@ module aptos_experimental::confidential_asset_tests {
     }
 
     #[test(
-        confidential_asset = @aptos_experimental,
+        confidential_asset = @aptos_framework,
         aptos_fx = @aptos_framework,
         fa = @0xfa,
         alice = @0xa1,
@@ -773,7 +773,7 @@ module aptos_experimental::confidential_asset_tests {
     }
 
     #[test(
-        confidential_asset = @aptos_experimental,
+        confidential_asset = @aptos_framework,
         aptos_fx = @aptos_framework,
         fa = @0xfa,
         alice = @0xa1,
@@ -826,7 +826,7 @@ module aptos_experimental::confidential_asset_tests {
     }
 
     #[test(
-        confidential_asset = @aptos_experimental,
+        confidential_asset = @aptos_framework,
         aptos_fx = @aptos_framework,
         fa = @0xfa,
         alice = @0xa1,
@@ -890,7 +890,7 @@ module aptos_experimental::confidential_asset_tests {
     }
 
     #[test(
-        confidential_asset = @aptos_experimental,
+        confidential_asset = @aptos_framework,
         aptos_fx = @aptos_framework,
         fa = @0xfa,
         alice = @0xa1,
@@ -951,7 +951,7 @@ module aptos_experimental::confidential_asset_tests {
     }
 
     #[test(
-        confidential_asset = @aptos_experimental,
+        confidential_asset = @aptos_framework,
         aptos_fx = @aptos_framework,
         fa = @0xfa,
         alice = @0xa1,
@@ -982,7 +982,7 @@ module aptos_experimental::confidential_asset_tests {
     }
 
     #[test(
-        confidential_asset = @aptos_experimental,
+        confidential_asset = @aptos_framework,
         aptos_fx = @aptos_framework,
         fa = @0xfa,
         alice = @0xa1,
@@ -1018,7 +1018,7 @@ module aptos_experimental::confidential_asset_tests {
     }
 
     #[test(
-        confidential_asset = @aptos_experimental,
+        confidential_asset = @aptos_framework,
         aptos_fx = @aptos_framework,
         fa = @0xfa,
         alice = @0xa1,
@@ -1070,7 +1070,7 @@ module aptos_experimental::confidential_asset_tests {
     // steps in one tx. After: pending is empty, balance becomes (old available + pending),
     // and `normalized` is back to `false` (rollover resets it).
     #[test(
-        confidential_asset = @aptos_experimental,
+        confidential_asset = @aptos_framework,
         aptos_fx = @aptos_framework,
         fa = @0xfa,
         alice = @0xa1,
@@ -1115,13 +1115,13 @@ module aptos_experimental::confidential_asset_tests {
     // Calling `normalize_and_rollover_pending_balance` while already normalized aborts at
     // the `normalize_internal` step (`EALREADY_NORMALIZED`, invalid_state = category 3).
     #[test(
-        confidential_asset = @aptos_experimental,
+        confidential_asset = @aptos_framework,
         aptos_fx = @aptos_framework,
         fa = @0xfa,
         alice = @0xa1,
         bob = @0xb0
     )]
-    #[expected_failure(abort_code = 0x03000B, location = aptos_experimental::confidential_asset)]
+    #[expected_failure(abort_code = 0x03000B, location = aptos_framework::confidential_asset)]
     fun fail_normalize_and_rollover_when_already_normalized(
         confidential_asset: signer,
         aptos_fx: signer,
@@ -1143,7 +1143,7 @@ module aptos_experimental::confidential_asset_tests {
     }
 
     #[test(
-        confidential_asset = @aptos_experimental,
+        confidential_asset = @aptos_framework,
         aptos_fx = @aptos_framework,
         fa = @0xfa,
         alice = @0xa1,
@@ -1208,7 +1208,7 @@ module aptos_experimental::confidential_asset_tests {
     }
 
     #[test(
-        confidential_asset = @aptos_experimental,
+        confidential_asset = @aptos_framework,
         aptos_fx = @aptos_framework,
         fa = @0xfa,
         alice = @0xa1,
@@ -1261,7 +1261,7 @@ module aptos_experimental::confidential_asset_tests {
     }
 
     #[test(
-        confidential_asset = @aptos_experimental,
+        confidential_asset = @aptos_framework,
         aptos_fx = @aptos_framework,
         fa = @0xfa,
         alice = @0xa1
@@ -1283,7 +1283,7 @@ module aptos_experimental::confidential_asset_tests {
     }
 
     #[test(
-        confidential_asset = @aptos_experimental,
+        confidential_asset = @aptos_framework,
         aptos_fx = @aptos_framework,
         fa = @0xfa,
         alice = @0xa1
@@ -1305,7 +1305,7 @@ module aptos_experimental::confidential_asset_tests {
     }
 
     #[test(
-        confidential_asset = @aptos_experimental,
+        confidential_asset = @aptos_framework,
         aptos_fx = @aptos_framework,
         alice = @0xa1
     )]
@@ -1343,7 +1343,7 @@ module aptos_experimental::confidential_asset_tests {
     }
 
     #[test(
-        confidential_asset = @aptos_experimental,
+        confidential_asset = @aptos_framework,
         aptos_fx = @aptos_framework,
         alice = @0xa1,
     )]
@@ -1431,7 +1431,7 @@ module aptos_experimental::confidential_asset_tests {
     }
 
     #[test(
-        confidential_asset = @aptos_experimental,
+        confidential_asset = @aptos_framework,
         aptos_fx = @aptos_framework,
         fa = @0xfa,
         alice = @0xa1
@@ -1452,7 +1452,7 @@ module aptos_experimental::confidential_asset_tests {
     }
 
     #[test(
-        confidential_asset = @aptos_experimental,
+        confidential_asset = @aptos_framework,
         aptos_fx = @aptos_framework,
         fa = @0xfa,
         alice = @0xa1
@@ -1527,7 +1527,7 @@ module aptos_experimental::confidential_asset_tests {
             &confidential_asset::actual_balance(from, token));
         let (proof, new_balance, sender_amount, recipient_amount, auditor_amounts) =
             confidential_proof::prove_transfer(
-                4u8, from, @aptos_experimental, object::object_address(&token),
+                4u8, from, @aptos_framework, object::object_address(&token),
                 sender_dk, &sender_ek, &recipient_ek, amount, new_amount,
                 &current_balance, auditor_eks, sender_auditor_hint);
         let (sigma_proof, zkrp_new_balance, zkrp_transfer_amount) =
@@ -1542,7 +1542,7 @@ module aptos_experimental::confidential_asset_tests {
             zkrp_new_balance, zkrp_transfer_amount, sigma_proof, sender_auditor_hint);
     }
 
-    #[test(confidential_asset = @aptos_experimental, aptos_fx = @aptos_framework,
+    #[test(confidential_asset = @aptos_framework, aptos_fx = @aptos_framework,
         fa = @0xfa, alice = @0xa1, bob = @0xb0)]
     #[expected_failure(abort_code = 0x030015, location = confidential_asset)]
     /// Confidential transfers cannot run before the chain-level auditor has been
@@ -1565,7 +1565,7 @@ module aptos_experimental::confidential_asset_tests {
         audit_transfer_raw(&alice, &alice_dk, token, bob_addr, 100, 100, &vector[], vector[]);
     }
 
-    #[test(confidential_asset = @aptos_experimental, aptos_fx = @aptos_framework,
+    #[test(confidential_asset = @aptos_framework, aptos_fx = @aptos_framework,
         fa = @0xfa, alice = @0xa1, bob = @0xb0)]
     #[expected_failure(abort_code = 0x010006, location = confidential_asset)]
     /// Slot 0 of `auditor_eks` must equal the active chain auditor key — a sender cannot
@@ -1592,7 +1592,7 @@ module aptos_experimental::confidential_asset_tests {
             &vector[wrong_ek], vector[]);
     }
 
-    #[test(confidential_asset = @aptos_experimental, aptos_fx = @aptos_framework,
+    #[test(confidential_asset = @aptos_framework, aptos_fx = @aptos_framework,
         fa = @0xfa, alice = @0xa1, bob = @0xb0)]
     #[expected_failure(abort_code = 0x010006, location = confidential_asset)]
     /// When an asset auditor is set, `auditor_eks` must include both the chain auditor
@@ -1620,7 +1620,7 @@ module aptos_experimental::confidential_asset_tests {
         audit_transfer(&alice, &alice_dk, token, bob_addr, 100, 100, &vector[], vector[]);
     }
 
-    #[test(confidential_asset = @aptos_experimental, aptos_fx = @aptos_framework,
+    #[test(confidential_asset = @aptos_framework, aptos_fx = @aptos_framework,
         fa = @0xfa, alice = @0xa1, bob = @0xb0)]
     /// Voluntary auditors at slot 2+ are accepted when no asset auditor is configured —
     /// the prefix is just `[chain]`, anything after is the sender's choice.
@@ -1651,7 +1651,7 @@ module aptos_experimental::confidential_asset_tests {
         assert!(confidential_balance::verify_pending_balance(&auditor_amounts[2], &vol2_dk, 100), 3);
     }
 
-    #[test(confidential_asset = @aptos_experimental, aptos_fx = @aptos_framework,
+    #[test(confidential_asset = @aptos_framework, aptos_fx = @aptos_framework,
         fa = @0xfa, alice = @0xa1, bob = @0xb0)]
     #[expected_failure(abort_code = 0x010006, location = confidential_asset)]
     /// A proof generated under the previous chain auditor key becomes unsubmittable after
@@ -1684,7 +1684,7 @@ module aptos_experimental::confidential_asset_tests {
             &vector[old_chain_ek], vector[]);
     }
 
-    #[test(confidential_asset = @aptos_experimental, aptos_fx = @aptos_framework,
+    #[test(confidential_asset = @aptos_framework, aptos_fx = @aptos_framework,
         fa = @0xfa, alice = @0xa1, bob = @0xb0)]
     /// Rotation: each rotation bumps the epoch and stamps the new epoch on subsequent
     /// transfers. Off-chain auditors / gateways resolve epoch → key by indexing
@@ -1770,7 +1770,7 @@ module aptos_experimental::confidential_asset_tests {
     }
 
     #[test(
-        confidential_asset = @aptos_experimental,
+        confidential_asset = @aptos_framework,
         aptos_fx = @aptos_framework,
         fa = @0xfa,
         alice = @0xa1
@@ -1799,7 +1799,7 @@ module aptos_experimental::confidential_asset_tests {
     }
 
     #[test(
-        confidential_asset = @aptos_experimental,
+        confidential_asset = @aptos_framework,
         aptos_fx = @aptos_framework,
         fa = @0xfa,
         alice = @0xa1
@@ -1820,7 +1820,7 @@ module aptos_experimental::confidential_asset_tests {
     }
 
     #[test(
-        confidential_asset = @aptos_experimental,
+        confidential_asset = @aptos_framework,
         aptos_fx = @aptos_framework,
         fa = @0xfa,
         alice = @0xa1
@@ -1844,7 +1844,7 @@ module aptos_experimental::confidential_asset_tests {
     }
 
     #[test(
-        confidential_asset = @aptos_experimental,
+        confidential_asset = @aptos_framework,
         aptos_fx = @aptos_framework,
         alice = @0xa1
     )]
@@ -1869,7 +1869,7 @@ module aptos_experimental::confidential_asset_tests {
     }
 
     #[test(
-        confidential_asset = @aptos_experimental,
+        confidential_asset = @aptos_framework,
         aptos_fx = @aptos_framework,
         multisig = @0x9001,
         alice = @0xa1
@@ -1903,7 +1903,7 @@ module aptos_experimental::confidential_asset_tests {
     }
 
     #[test(
-        confidential_asset = @aptos_experimental,
+        confidential_asset = @aptos_framework,
         aptos_fx = @aptos_framework,
         multisig = @0x9001,
         alice = @0xa1
@@ -1958,7 +1958,7 @@ module aptos_experimental::confidential_asset_tests {
     }
 
     #[test(
-        confidential_asset = @aptos_experimental,
+        confidential_asset = @aptos_framework,
         aptos_fx = @aptos_framework,
         ca_admin = @0xCA
     )]
@@ -1987,7 +1987,7 @@ module aptos_experimental::confidential_asset_tests {
     }
 
     #[test(
-        confidential_asset = @aptos_experimental,
+        confidential_asset = @aptos_framework,
         aptos_fx = @aptos_framework,
         ca_admin = @0xCA
     )]
@@ -2010,7 +2010,7 @@ module aptos_experimental::confidential_asset_tests {
     }
 
     #[test(
-        confidential_asset = @aptos_experimental,
+        confidential_asset = @aptos_framework,
         aptos_fx = @aptos_framework,
         not_gov = @0x9999
     )]
@@ -2026,7 +2026,7 @@ module aptos_experimental::confidential_asset_tests {
     }
 
     #[test(
-        confidential_asset = @aptos_experimental,
+        confidential_asset = @aptos_framework,
         aptos_fx = @aptos_framework
     )]
     #[expected_failure(abort_code = 0x30017, location = confidential_asset)]
@@ -2043,7 +2043,7 @@ module aptos_experimental::confidential_asset_tests {
     }
 
     #[test(
-        confidential_asset = @aptos_experimental,
+        confidential_asset = @aptos_framework,
         aptos_fx = @aptos_framework,
         ca_admin = @0xCA
     )]
@@ -2065,7 +2065,7 @@ module aptos_experimental::confidential_asset_tests {
     }
 
     #[test(
-        confidential_asset = @aptos_experimental,
+        confidential_asset = @aptos_framework,
         aptos_fx = @aptos_framework,
         ca_admin = @0xCA,
         stranger = @0x1234
@@ -2086,7 +2086,7 @@ module aptos_experimental::confidential_asset_tests {
     }
 
     #[test(
-        confidential_asset = @aptos_experimental,
+        confidential_asset = @aptos_framework,
         aptos_fx = @aptos_framework,
         ca_admin1 = @0xCA1,
         ca_admin2 = @0xCA2

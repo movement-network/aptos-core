@@ -41,3 +41,6 @@ and so actual costs of entry functions can be more precisely measured.
 
 
 </details>
+
+
+[move-book]: https://aptos.dev/move/book/SUMMARY

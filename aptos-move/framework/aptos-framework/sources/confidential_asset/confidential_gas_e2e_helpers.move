@@ -4,16 +4,16 @@
 //! emission (ciphertexts, `ek_volun_auds`, hint, balances) is asserted in Move unit tests (`confidential_asset_tests`),
 //! not in these helpers.
 #[test_only]
-module aptos_experimental::confidential_gas_e2e_helpers {
+module aptos_framework::confidential_gas_e2e_helpers {
     use std::vector;
     use aptos_std::ristretto255::Scalar;
     use aptos_framework::fungible_asset::Metadata;
     use aptos_framework::object::{Self, Object};
 
-    use aptos_experimental::confidential_asset;
-    use aptos_experimental::confidential_balance;
-    use aptos_experimental::confidential_proof;
-    use aptos_experimental::ristretto255_twisted_elgamal::{Self as twisted_elgamal, CompressedPubkey};
+    use aptos_framework::confidential_asset;
+    use aptos_framework::confidential_balance;
+    use aptos_framework::confidential_proof;
+    use aptos_framework::ristretto255_twisted_elgamal::{Self as twisted_elgamal, CompressedPubkey};
 
     /// `(new_balance_bytes, zkrp_new_balance, sigma_proof)` for `withdraw_to`.
     public fun pack_withdraw_to_proof(
@@ -30,7 +30,7 @@ module aptos_experimental::confidential_gas_e2e_helpers {
         let (proof, new_balance) = confidential_proof::prove_withdrawal(
             chain_id,
             sender,
-            @aptos_experimental,
+            @aptos_framework,
             object::object_address(&token),
             dk,
             ek,
@@ -214,7 +214,7 @@ module aptos_experimental::confidential_gas_e2e_helpers {
         ) = confidential_proof::prove_transfer(
             chain_id,
             sender,
-            @aptos_experimental,
+            @aptos_framework,
             object::object_address(&token),
             sender_dk,
             &sender_ek,
@@ -255,7 +255,7 @@ module aptos_experimental::confidential_gas_e2e_helpers {
         let (proof, new_balance) = confidential_proof::prove_rotation(
             chain_id,
             sender,
-            @aptos_experimental,
+            @aptos_framework,
             object::object_address(&token),
             sender_dk,
             new_dk,
@@ -289,7 +289,7 @@ module aptos_experimental::confidential_gas_e2e_helpers {
         let (proof, new_balance) = confidential_proof::prove_normalization(
             chain_id,
             sender,
-            @aptos_experimental,
+            @aptos_framework,
             object::object_address(&token),
             dk,
             &ek,

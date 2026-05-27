@@ -136,8 +136,16 @@ pub async fn read_header<T: AsyncRead + std::marker::Unpin>(
 mod test {
     use super::*;
     use aptos_memsocket::MemorySocket;
-    use futures::{executor::block_on, future::join, io::AsyncWriteExt};
-    use std::net::ToSocketAddrs;
+    use futures::{
+        executor::block_on,
+        future::join,
+        io::{AsyncWriteExt, Cursor},
+    };
+    use std::{
+        net::ToSocketAddrs,
+        pin::Pin,
+        task::{Context, Poll},
+    };
 
     const TEST_DATA: &[u8; 4] = &[0xDE, 0xAD, 0xBE, 0xEF];
     const IPV4_ADDR_1: &[u8; 4] = &[0x00, 0x00, 0x00, 0x01];
@@ -290,6 +298,82 @@ mod test {
         };
 
         block_on(check_data);
+    }
+
+    struct GuardedReadStream {
+        inner: Cursor<Vec<u8>>,
+        max_allowed_read_len: usize,
+        max_observed_read_len: usize,
+    }
+
+    impl GuardedReadStream {
+        fn new(data: Vec<u8>, max_allowed_read_len: usize) -> Self {
+            Self {
+                inner: Cursor::new(data),
+                max_allowed_read_len,
+                max_observed_read_len: 0,
+            }
+        }
+
+        fn max_observed_read_len(&self) -> usize {
+            self.max_observed_read_len
+        }
+    }
+
+    impl AsyncRead for GuardedReadStream {
+        fn poll_read(
+            mut self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            buf: &mut [u8],
+        ) -> Poll<io::Result<usize>> {
+            self.max_observed_read_len = self.max_observed_read_len.max(buf.len());
+
+            if buf.len() > self.max_allowed_read_len {
+                return Poll::Ready(Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "oversized read request from untrusted length field: {}",
+                        buf.len()
+                    ),
+                )));
+            }
+
+            Pin::new(&mut self.inner).poll_read(cx, buf)
+        }
+    }
+
+    #[test]
+    fn test_large_untrusted_length_uses_bounded_read_chunks() {
+        let original_addr = NetworkAddress::mock();
+
+        // Build a valid PROXY v2 header: LOCAL_PROTOCOL with address_size = u16::MAX.
+        // No address bytes follow — the stream ends after the 16-byte fixed header.
+        let mut input = Vec::new();
+        input.extend_from_slice(&PPV2_SIGNATURE);
+        input.push(PPV2_PROXY);
+        input.push(LOCAL_PROTOCOL);
+        input.extend_from_slice(&u16::MAX.to_be_bytes());
+
+        let max_allowed_read_len = 1024;
+        let mut stream = GuardedReadStream::new(input, max_allowed_read_len);
+
+        // The stream is truncated, so parsing must fail with UnexpectedEof.
+        // If the parser allocates a 65535-byte buffer and tries to read it at once,
+        // the guard fires with InvalidData instead — causing this assertion to fail.
+        let err = block_on(read_header(&original_addr, &mut stream))
+            .expect_err("truncated payload should fail");
+        assert_eq!(
+            err.kind(),
+            io::ErrorKind::UnexpectedEof,
+            "expected UnexpectedEof but got {:?} — parser may be making oversized read requests",
+            err
+        );
+        assert!(
+            stream.max_observed_read_len() <= max_allowed_read_len,
+            "parser requested a read of {} bytes, exceeding the {} byte bound",
+            stream.max_observed_read_len(),
+            max_allowed_read_len,
+        );
     }
 
     #[test]

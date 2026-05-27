@@ -36,19 +36,29 @@ impl VerifiedModuleCache {
         Self(Mutex::new(lru::LruCache::new(Self::VERIFIED_CACHE_SIZE)))
     }
 
-    /// Returns true if the module hash is contained in the cache. For tests, the cache is treated
-    /// as empty at all times.
-    pub(crate) fn contains(&self, module_hash: &[u8; 32]) -> bool {
+    /// Returns true if the (module hash, verifier config digest) pair is contained in the cache.
+    /// For tests, the cache is treated as empty at all times.
+    pub(crate) fn contains(
+        &self,
+        module_hash: &[u8; 32],
+        verifier_config_digest: &[u8; 32],
+    ) -> bool {
         // Note: need to use get to update LRU queue.
-        verifier_cache_enabled() && self.0.lock().get(module_hash).is_some()
+        verifier_cache_enabled()
+            && self
+                .0
+                .lock()
+                .get(&(*module_hash, *verifier_config_digest))
+                .is_some()
     }
 
-    /// Inserts the hash into the cache, marking the corresponding as locally verified. For tests,
-    /// entries are not added to the cache.
-    pub(crate) fn put(&self, module_hash: [u8; 32]) {
+    /// Inserts the (module hash, verifier config digest) pair into the cache, marking the
+    /// corresponding module as locally verified under that configuration. For tests, entries are
+    /// not added to the cache.
+    pub(crate) fn put(&self, module_hash: [u8; 32], verifier_config_digest: [u8; 32]) {
         if verifier_cache_enabled() {
             let mut cache = self.0.lock();
-            cache.put(module_hash, ());
+            cache.put((module_hash, verifier_config_digest), ());
         }
     }
 
@@ -75,7 +85,7 @@ fn verifier_cache_enabled() -> bool {
             false
         } else {
             // Cache is enabled in non-test environments only.
-            true
+            cache_active()
         }
     }
 }

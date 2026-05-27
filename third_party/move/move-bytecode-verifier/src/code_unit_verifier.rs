@@ -28,6 +28,9 @@ use move_binary_format::{
 use move_core_types::vm_status::StatusCode;
 use std::collections::HashMap;
 
+const HARD_MAX_BASIC_BLOCKS: usize = 8_192;
+const HARD_MAX_BASIC_BLOCKS_IN_SCRIPT: usize = 8_192;
+
 pub struct CodeUnitVerifier<'a> {
     resolver: BinaryIndexedView<'a>,
     function_view: FunctionView<'a>,
@@ -92,10 +95,11 @@ impl<'a> CodeUnitVerifier<'a> {
         let resolver = BinaryIndexedView::Script(script);
         let name_def_map = HashMap::new();
 
-        if let Some(limit) = verifier_config.max_basic_blocks_in_script {
-            if function_view.cfg().blocks().len() > limit {
-                return Err(PartialVMError::new(StatusCode::TOO_MANY_BASIC_BLOCKS));
-            }
+        let limit = verifier_config
+            .max_basic_blocks_in_script
+            .unwrap_or(HARD_MAX_BASIC_BLOCKS_IN_SCRIPT);
+        if function_view.cfg().blocks().len() > limit {
+            return Err(PartialVMError::new(StatusCode::TOO_MANY_BASIC_BLOCKS));
         }
 
         if let Some(limit) = verifier_config.max_back_edges_per_function {
@@ -144,12 +148,13 @@ impl<'a> CodeUnitVerifier<'a> {
             meter,
         )?;
 
-        if let Some(limit) = verifier_config.max_basic_blocks {
-            if function_view.cfg().blocks().len() > limit {
-                return Err(
-                    PartialVMError::new(StatusCode::TOO_MANY_BASIC_BLOCKS).at_code_offset(index, 0)
-                );
-            }
+        let limit = verifier_config
+            .max_basic_blocks
+            .unwrap_or(HARD_MAX_BASIC_BLOCKS);
+        if function_view.cfg().blocks().len() > limit {
+            return Err(
+                PartialVMError::new(StatusCode::TOO_MANY_BASIC_BLOCKS).at_code_offset(index, 0)
+            );
         }
 
         let num_back_edges = function_view.cfg().num_back_edges();

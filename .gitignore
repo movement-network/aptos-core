@@ -11,6 +11,9 @@
 # GDB related
 **/.gdb_history
 
+# multiagent
+.multiagent
+
 # macOS Specific ignores
 # General
 .DS_Store

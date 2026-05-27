@@ -2066,7 +2066,7 @@ dependencies = [
  "aptos-indexer-grpc-server-framework",
  "aptos-indexer-grpc-utils",
  "aptos-metrics-core",
- "aptos-moving-average 0.1.0 (git+https://github.com/aptos-labs/aptos-indexer-processors.git?rev=62beedc881d1b76632318ceb186ee9065236468e)",
+ "aptos-moving-average 0.1.0 (git+https://github.com/movementlabsxyz/aptos-indexer-processors.git?rev=62beedc881d1b76632318ceb186ee9065236468e)",
  "aptos-protos 1.3.1",
  "async-trait",
  "clap 4.5.21",
@@ -2093,7 +2093,7 @@ dependencies = [
  "aptos-indexer-grpc-server-framework",
  "aptos-indexer-grpc-utils",
  "aptos-metrics-core",
- "aptos-moving-average 0.1.0 (git+https://github.com/aptos-labs/aptos-indexer-processors.git?rev=62beedc881d1b76632318ceb186ee9065236468e)",
+ "aptos-moving-average 0.1.0 (git+https://github.com/movementlabsxyz/aptos-indexer-processors.git?rev=62beedc881d1b76632318ceb186ee9065236468e)",
  "aptos-protos 1.3.1",
  "aptos-transaction-filter 0.1.0",
  "async-trait",
@@ -2171,7 +2171,7 @@ dependencies = [
  "aptos-indexer-grpc-server-framework",
  "aptos-indexer-grpc-utils",
  "aptos-metrics-core",
- "aptos-moving-average 0.1.0 (git+https://github.com/aptos-labs/aptos-indexer-processors.git?rev=62beedc881d1b76632318ceb186ee9065236468e)",
+ "aptos-moving-average 0.1.0 (git+https://github.com/movementlabsxyz/aptos-indexer-processors.git?rev=62beedc881d1b76632318ceb186ee9065236468e)",
  "async-trait",
  "clap 4.5.21",
  "futures",
@@ -2225,7 +2225,7 @@ dependencies = [
  "aptos-mempool",
  "aptos-mempool-notifications",
  "aptos-metrics-core",
- "aptos-moving-average 0.1.0 (git+https://github.com/aptos-labs/aptos-indexer-processors.git?rev=62beedc881d1b76632318ceb186ee9065236468e)",
+ "aptos-moving-average 0.1.0 (git+https://github.com/movementlabsxyz/aptos-indexer-processors.git?rev=62beedc881d1b76632318ceb186ee9065236468e)",
  "aptos-proptest-helpers",
  "aptos-protos 1.3.1",
  "aptos-runtimes",
@@ -2413,13 +2413,13 @@ dependencies = [
 [[package]]
 name = "aptos-indexer-processor-sdk"
 version = "0.1.0"
-source = "git+https://github.com/aptos-labs/aptos-indexer-processor-sdk.git?rev=c63f6ee891e42cc50f92480c21d4afa86012b157#c63f6ee891e42cc50f92480c21d4afa86012b157"
+source = "git+https://github.com/movementlabsxyz/aptos-indexer-processor-sdk.git?rev=c63f6ee891e42cc50f92480c21d4afa86012b157#c63f6ee891e42cc50f92480c21d4afa86012b157"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
  "aptos-indexer-transaction-stream",
- "aptos-protos 1.3.1 (git+https://github.com/aptos-labs/aptos-core.git?rev=2dd9c73b27fdcbe78c7391fd43c9a5d00b93e686)",
- "aptos-system-utils 0.1.0 (git+https://github.com/aptos-labs/aptos-core.git?rev=2dd9c73b27fdcbe78c7391fd43c9a5d00b93e686)",
+ "aptos-protos 1.3.1 (git+https://github.com/movementlabsxyz/aptos-core.git?rev=2dd9c73b27fdcbe78c7391fd43c9a5d00b93e686)",
+ "aptos-system-utils 0.1.0 (git+https://github.com/movementlabsxyz/aptos-core.git?rev=2dd9c73b27fdcbe78c7391fd43c9a5d00b93e686)",
  "async-trait",
  "autometrics",
  "axum 0.7.5",
@@ -2498,12 +2498,12 @@ dependencies = [
 [[package]]
 name = "aptos-indexer-transaction-stream"
 version = "0.1.0"
-source = "git+https://github.com/aptos-labs/aptos-indexer-processor-sdk.git?rev=c63f6ee891e42cc50f92480c21d4afa86012b157#c63f6ee891e42cc50f92480c21d4afa86012b157"
+source = "git+https://github.com/movementlabsxyz/aptos-indexer-processor-sdk.git?rev=c63f6ee891e42cc50f92480c21d4afa86012b157#c63f6ee891e42cc50f92480c21d4afa86012b157"
 dependencies = [
  "anyhow",
- "aptos-moving-average 0.1.0 (git+https://github.com/aptos-labs/aptos-indexer-processor-sdk.git?rev=c63f6ee891e42cc50f92480c21d4afa86012b157)",
- "aptos-protos 1.3.1 (git+https://github.com/aptos-labs/aptos-core.git?rev=2dd9c73b27fdcbe78c7391fd43c9a5d00b93e686)",
- "aptos-transaction-filter 0.1.0 (git+https://github.com/aptos-labs/aptos-core.git?rev=2dd9c73b27fdcbe78c7391fd43c9a5d00b93e686)",
+ "aptos-moving-average 0.1.0 (git+https://github.com/movementlabsxyz/aptos-indexer-processor-sdk.git?rev=c63f6ee891e42cc50f92480c21d4afa86012b157)",
+ "aptos-protos 1.3.1 (git+https://github.com/movementlabsxyz/aptos-core.git?rev=2dd9c73b27fdcbe78c7391fd43c9a5d00b93e686)",
+ "aptos-transaction-filter 0.1.0 (git+https://github.com/movementlabsxyz/aptos-core.git?rev=2dd9c73b27fdcbe78c7391fd43c9a5d00b93e686)",
  "chrono",
  "futures-util",
  "once_cell",
@@ -3008,7 +3008,7 @@ dependencies = [
 [[package]]
 name = "aptos-moving-average"
 version = "0.1.0"
-source = "git+https://github.com/aptos-labs/aptos-indexer-processors.git?rev=62beedc881d1b76632318ceb186ee9065236468e#62beedc881d1b76632318ceb186ee9065236468e"
+source = "git+https://github.com/movementlabsxyz/aptos-indexer-processors.git?rev=62beedc881d1b76632318ceb186ee9065236468e#62beedc881d1b76632318ceb186ee9065236468e"
 dependencies = [
  "chrono",
 ]
@@ -3016,7 +3016,7 @@ dependencies = [
 [[package]]
 name = "aptos-moving-average"
 version = "0.1.0"
-source = "git+https://github.com/aptos-labs/aptos-indexer-processor-sdk.git?rev=c63f6ee891e42cc50f92480c21d4afa86012b157#c63f6ee891e42cc50f92480c21d4afa86012b157"
+source = "git+https://github.com/movementlabsxyz/aptos-indexer-processor-sdk.git?rev=c63f6ee891e42cc50f92480c21d4afa86012b157#c63f6ee891e42cc50f92480c21d4afa86012b157"
 dependencies = [
  "chrono",
 ]
@@ -3502,7 +3502,7 @@ dependencies = [
 [[package]]
 name = "aptos-profiler"
 version = "0.1.0"
-source = "git+https://github.com/aptos-labs/aptos-core.git?rev=2dd9c73b27fdcbe78c7391fd43c9a5d00b93e686#2dd9c73b27fdcbe78c7391fd43c9a5d00b93e686"
+source = "git+https://github.com/movementlabsxyz/aptos-core.git?rev=2dd9c73b27fdcbe78c7391fd43c9a5d00b93e686#2dd9c73b27fdcbe78c7391fd43c9a5d00b93e686"
 dependencies = [
  "anyhow",
  "backtrace",
@@ -3534,7 +3534,7 @@ dependencies = [
 [[package]]
 name = "aptos-protos"
 version = "1.3.1"
-source = "git+https://github.com/aptos-labs/aptos-core.git?rev=2dd9c73b27fdcbe78c7391fd43c9a5d00b93e686#2dd9c73b27fdcbe78c7391fd43c9a5d00b93e686"
+source = "git+https://github.com/movementlabsxyz/aptos-core.git?rev=2dd9c73b27fdcbe78c7391fd43c9a5d00b93e686#2dd9c73b27fdcbe78c7391fd43c9a5d00b93e686"
 dependencies = [
  "pbjson",
  "prost 0.13.4",
@@ -4136,10 +4136,10 @@ dependencies = [
 [[package]]
 name = "aptos-system-utils"
 version = "0.1.0"
-source = "git+https://github.com/aptos-labs/aptos-core.git?rev=2dd9c73b27fdcbe78c7391fd43c9a5d00b93e686#2dd9c73b27fdcbe78c7391fd43c9a5d00b93e686"
+source = "git+https://github.com/movementlabsxyz/aptos-core.git?rev=2dd9c73b27fdcbe78c7391fd43c9a5d00b93e686#2dd9c73b27fdcbe78c7391fd43c9a5d00b93e686"
 dependencies = [
  "anyhow",
- "aptos-profiler 0.1.0 (git+https://github.com/aptos-labs/aptos-core.git?rev=2dd9c73b27fdcbe78c7391fd43c9a5d00b93e686)",
+ "aptos-profiler 0.1.0 (git+https://github.com/movementlabsxyz/aptos-core.git?rev=2dd9c73b27fdcbe78c7391fd43c9a5d00b93e686)",
  "async-mutex",
  "http 0.2.11",
  "hyper 0.14.28",
@@ -4395,10 +4395,10 @@ dependencies = [
 [[package]]
 name = "aptos-transaction-filter"
 version = "0.1.0"
-source = "git+https://github.com/aptos-labs/aptos-core.git?rev=2dd9c73b27fdcbe78c7391fd43c9a5d00b93e686#2dd9c73b27fdcbe78c7391fd43c9a5d00b93e686"
+source = "git+https://github.com/movementlabsxyz/aptos-core.git?rev=2dd9c73b27fdcbe78c7391fd43c9a5d00b93e686#2dd9c73b27fdcbe78c7391fd43c9a5d00b93e686"
 dependencies = [
  "anyhow",
- "aptos-protos 1.3.1 (git+https://github.com/aptos-labs/aptos-core.git?rev=2dd9c73b27fdcbe78c7391fd43c9a5d00b93e686)",
+ "aptos-protos 1.3.1 (git+https://github.com/movementlabsxyz/aptos-core.git?rev=2dd9c73b27fdcbe78c7391fd43c9a5d00b93e686)",
  "derivative",
  "derive_builder",
  "memchr",
@@ -5716,7 +5716,7 @@ dependencies = [
 [[package]]
 name = "bcs"
 version = "0.1.4"
-source = "git+https://github.com/aptos-labs/bcs.git?rev=d31fab9d81748e2594be5cd5cdf845786a30562d#d31fab9d81748e2594be5cd5cdf845786a30562d"
+source = "git+https://github.com/movementlabsxyz/bcs.git?rev=d31fab9d81748e2594be5cd5cdf845786a30562d#d31fab9d81748e2594be5cd5cdf845786a30562d"
 dependencies = [
  "serde",
  "thiserror 1.0.69",
@@ -8755,7 +8755,7 @@ checksum = "8fcfdc7a0362c9f4444381a9e697c79d435fe65b52a37466fc2c1184cee9edc6"
 [[package]]
 name = "firebase-token"
 version = "0.3.0"
-source = "git+https://github.com/aptos-labs/firebase-token?rev=34ea512d3d1fad6c11df3e7d82ff72beccc05836#34ea512d3d1fad6c11df3e7d82ff72beccc05836"
+source = "git+https://github.com/movementlabsxyz/firebase-token?rev=34ea512d3d1fad6c11df3e7d82ff72beccc05836#34ea512d3d1fad6c11df3e7d82ff72beccc05836"
 dependencies = [
  "jsonwebtoken 8.3.0",
  "reqwest 0.11.23",
@@ -8973,7 +8973,7 @@ checksum = "e6d5a32815ae3f33302d95fdcb2ce17862f8c65363dcfd29360480ba1001fc9c"
 [[package]]
 name = "futures"
 version = "0.3.30"
-source = "git+https://github.com/aptos-labs/futures-rs?branch=backport#1845d7d36bc4bccbc0b57be68fbc05abd0b8bc68"
+source = "git+https://github.com/movementlabsxyz/futures-rs?branch=backport#1845d7d36bc4bccbc0b57be68fbc05abd0b8bc68"
 dependencies = [
  "futures-channel",
  "futures-core",
@@ -8987,7 +8987,7 @@ dependencies = [
 [[package]]
 name = "futures-channel"
 version = "0.3.30"
-source = "git+https://github.com/aptos-labs/futures-rs?branch=backport#1845d7d36bc4bccbc0b57be68fbc05abd0b8bc68"
+source = "git+https://github.com/movementlabsxyz/futures-rs?branch=backport#1845d7d36bc4bccbc0b57be68fbc05abd0b8bc68"
 dependencies = [
  "futures-core",
  "futures-sink",
@@ -8996,12 +8996,12 @@ dependencies = [
 [[package]]
 name = "futures-core"
 version = "0.3.30"
-source = "git+https://github.com/aptos-labs/futures-rs?branch=backport#1845d7d36bc4bccbc0b57be68fbc05abd0b8bc68"
+source = "git+https://github.com/movementlabsxyz/futures-rs?branch=backport#1845d7d36bc4bccbc0b57be68fbc05abd0b8bc68"
 
 [[package]]
 name = "futures-executor"
 version = "0.3.30"
-source = "git+https://github.com/aptos-labs/futures-rs?branch=backport#1845d7d36bc4bccbc0b57be68fbc05abd0b8bc68"
+source = "git+https://github.com/movementlabsxyz/futures-rs?branch=backport#1845d7d36bc4bccbc0b57be68fbc05abd0b8bc68"
 dependencies = [
  "futures-core",
  "futures-task",
@@ -9011,7 +9011,7 @@ dependencies = [
 [[package]]
 name = "futures-io"
 version = "0.3.30"
-source = "git+https://github.com/aptos-labs/futures-rs?branch=backport#1845d7d36bc4bccbc0b57be68fbc05abd0b8bc68"
+source = "git+https://github.com/movementlabsxyz/futures-rs?branch=backport#1845d7d36bc4bccbc0b57be68fbc05abd0b8bc68"
 
 [[package]]
 name = "futures-lite"
@@ -9054,7 +9054,7 @@ dependencies = [
 [[package]]
 name = "futures-macro"
 version = "0.3.30"
-source = "git+https://github.com/aptos-labs/futures-rs?branch=backport#1845d7d36bc4bccbc0b57be68fbc05abd0b8bc68"
+source = "git+https://github.com/movementlabsxyz/futures-rs?branch=backport#1845d7d36bc4bccbc0b57be68fbc05abd0b8bc68"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -9064,12 +9064,12 @@ dependencies = [
 [[package]]
 name = "futures-sink"
 version = "0.3.30"
-source = "git+https://github.com/aptos-labs/futures-rs?branch=backport#1845d7d36bc4bccbc0b57be68fbc05abd0b8bc68"
+source = "git+https://github.com/movementlabsxyz/futures-rs?branch=backport#1845d7d36bc4bccbc0b57be68fbc05abd0b8bc68"
 
 [[package]]
 name = "futures-task"
 version = "0.3.30"
-source = "git+https://github.com/aptos-labs/futures-rs?branch=backport#1845d7d36bc4bccbc0b57be68fbc05abd0b8bc68"
+source = "git+https://github.com/movementlabsxyz/futures-rs?branch=backport#1845d7d36bc4bccbc0b57be68fbc05abd0b8bc68"
 
 [[package]]
 name = "futures-timer"
@@ -9084,7 +9084,7 @@ dependencies = [
 [[package]]
 name = "futures-util"
 version = "0.3.30"
-source = "git+https://github.com/aptos-labs/futures-rs?branch=backport#1845d7d36bc4bccbc0b57be68fbc05abd0b8bc68"
+source = "git+https://github.com/movementlabsxyz/futures-rs?branch=backport#1845d7d36bc4bccbc0b57be68fbc05abd0b8bc68"
 dependencies = [
  "futures-channel",
  "futures-core",
@@ -10499,7 +10499,7 @@ dependencies = [
 [[package]]
 name = "instrumented-channel"
 version = "0.1.0"
-source = "git+https://github.com/aptos-labs/aptos-indexer-processor-sdk.git?rev=c63f6ee891e42cc50f92480c21d4afa86012b157#c63f6ee891e42cc50f92480c21d4afa86012b157"
+source = "git+https://github.com/movementlabsxyz/aptos-indexer-processor-sdk.git?rev=c63f6ee891e42cc50f92480c21d4afa86012b157#c63f6ee891e42cc50f92480c21d4afa86012b157"
 dependencies = [
  "delegate",
  "derive_builder",
@@ -11510,7 +11510,7 @@ dependencies = [
 [[package]]
 name = "merlin"
 version = "3.0.0"
-source = "git+https://github.com/aptos-labs/merlin#3454ccc85e37355c729ba40e6dac6e867ddf59f5"
+source = "git+https://github.com/movementlabsxyz/merlin#3454ccc85e37355c729ba40e6dac6e867ddf59f5"
 dependencies = [
  "byteorder",
  "keccak",
@@ -14335,7 +14335,7 @@ checksum = "7170ef9988bc169ba16dd36a7fa041e5c4cbeb6a35b76d4c03daded371eae7c0"
 [[package]]
 name = "poseidon-ark"
 version = "0.0.1"
-source = "git+https://github.com/arnaucube/poseidon-ark.git?rev=6d2487aa1308d9d3860a2b724c485d73095c1c68#6d2487aa1308d9d3860a2b724c485d73095c1c68"
+source = "git+https://github.com/movementlabsxyz/poseidon-ark.git?rev=6d2487aa1308d9d3860a2b724c485d73095c1c68#6d2487aa1308d9d3860a2b724c485d73095c1c68"
 dependencies = [
  "ark-bn254",
  "ark-ff",
@@ -14645,7 +14645,7 @@ dependencies = [
 [[package]]
 name = "processor"
 version = "0.1.0"
-source = "git+https://github.com/aptos-labs/aptos-indexer-processors-v2.git?rev=8628f1534efa28ada547bbcd34afec1af55697d4#8628f1534efa28ada547bbcd34afec1af55697d4"
+source = "git+https://github.com/movementlabsxyz/aptos-indexer-processors-v2.git?rev=8628f1534efa28ada547bbcd34afec1af55697d4#8628f1534efa28ada547bbcd34afec1af55697d4"
 dependencies = [
  "ahash 0.8.11",
  "allocative",
@@ -16117,7 +16117,7 @@ dependencies = [
 [[package]]
 name = "sample"
 version = "0.1.0"
-source = "git+https://github.com/aptos-labs/aptos-indexer-processor-sdk.git?rev=c63f6ee891e42cc50f92480c21d4afa86012b157#c63f6ee891e42cc50f92480c21d4afa86012b157"
+source = "git+https://github.com/movementlabsxyz/aptos-indexer-processor-sdk.git?rev=c63f6ee891e42cc50f92480c21d4afa86012b157#c63f6ee891e42cc50f92480c21d4afa86012b157"
 dependencies = [
  "tracing",
 ]
@@ -16294,7 +16294,7 @@ dependencies = [
 [[package]]
 name = "self_update"
 version = "0.39.0"
-source = "git+https://github.com/banool/self_update.git?rev=8306158ad0fd5b9d4766a3c6bf967e7ef0ea5c4b#8306158ad0fd5b9d4766a3c6bf967e7ef0ea5c4b"
+source = "git+https://github.com/movementlabsxyz/self_update.git?rev=8306158ad0fd5b9d4766a3c6bf967e7ef0ea5c4b#8306158ad0fd5b9d4766a3c6bf967e7ef0ea5c4b"
 dependencies = [
  "hyper 0.14.28",
  "indicatif 0.17.7",
@@ -16359,7 +16359,7 @@ dependencies = [
 [[package]]
 name = "serde-generate"
 version = "0.20.6"
-source = "git+https://github.com/aptos-labs/serde-reflection?rev=73b6bbf748334b71ff6d7d09d06a29e3062ca075#73b6bbf748334b71ff6d7d09d06a29e3062ca075"
+source = "git+https://github.com/movementlabsxyz/serde-reflection?rev=73b6bbf748334b71ff6d7d09d06a29e3062ca075#73b6bbf748334b71ff6d7d09d06a29e3062ca075"
 dependencies = [
  "bcs 0.1.6",
  "bincode",
@@ -16387,7 +16387,7 @@ dependencies = [
 [[package]]
 name = "serde-reflection"
 version = "0.3.5"
-source = "git+https://github.com/aptos-labs/serde-reflection?rev=73b6bbf748334b71ff6d7d09d06a29e3062ca075#73b6bbf748334b71ff6d7d09d06a29e3062ca075"
+source = "git+https://github.com/movementlabsxyz/serde-reflection?rev=73b6bbf748334b71ff6d7d09d06a29e3062ca075#73b6bbf748334b71ff6d7d09d06a29e3062ca075"
 dependencies = [
  "once_cell",
  "serde",
@@ -19548,7 +19548,7 @@ dependencies = [
 [[package]]
 name = "x25519-dalek"
 version = "1.2.0"
-source = "git+https://github.com/aptos-labs/x25519-dalek?rev=b9cdbaf36bf2a83438d9f660e5a708c82ed60d8e#b9cdbaf36bf2a83438d9f660e5a708c82ed60d8e"
+source = "git+https://github.com/movementlabsxyz/x25519-dalek?rev=b9cdbaf36bf2a83438d9f660e5a708c82ed60d8e#b9cdbaf36bf2a83438d9f660e5a708c82ed60d8e"
 dependencies = [
  "curve25519-dalek 3.2.0",
  "rand_core 0.5.1",

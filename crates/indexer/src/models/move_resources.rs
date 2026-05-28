@@ -1,7 +1,11 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 #![allow(clippy::extra_unused_lifetimes)]
-use crate::{models::transactions::Transaction, schema::move_resources, util::standardize_address};
+use crate::{
+    models::transactions::Transaction,
+    schema::move_resources,
+    util::{remove_null_bytes, standardize_address},
+};
 use anyhow::{Context, Result};
 use aptos_api_types::{DeleteResource, MoveStructTag as APIMoveStructTag, WriteResource};
 use field_count::FieldCount;
@@ -49,7 +53,7 @@ impl MoveResource {
             address: standardize_address(&write_resource.address.to_string()),
             module: parsed_data.module.clone(),
             generic_type_params: parsed_data.generic_type_params,
-            data: Some(serde_json::to_value(&write_resource.data.data).unwrap()),
+            data: Some(serde_json::to_value(remove_null_bytes(&write_resource.data.data)).unwrap()),
             is_deleted: false,
             state_key_hash: standardize_address(write_resource.state_key_hash.as_str()),
         }

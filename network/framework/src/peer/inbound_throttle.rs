@@ -11,7 +11,7 @@ use crate::{
 };
 use aptos_logger::debug;
 use aptos_time_service::{TimeService, TimeServiceTrait};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 const MSG_RATE_LABEL: &str = "msg_rate";
 const BYTE_RATE_LABEL: &str = "byte_rate";
@@ -22,22 +22,21 @@ struct LeakyBucket {
     available: f64,
     max_capacity: u64,
     per_second: u64,
-    last_update: Instant,
+    last_update: std::time::Instant,
 }
 
 impl LeakyBucket {
-    fn new(max_capacity: u64, per_second: u64) -> Self {
+    fn new(max_capacity: u64, per_second: u64, now: std::time::Instant) -> Self {
         Self {
             available: max_capacity as f64,
             max_capacity,
             per_second,
-            last_update: Instant::now(),
+            last_update: now,
         }
     }
 
-    /// Replenish tokens based on wall-clock time since last call.
-    fn replenish(&mut self) {
-        let now = Instant::now();
+    /// Replenish tokens based on elapsed time since last call.
+    fn replenish(&mut self, now: std::time::Instant) {
         let delta = now.duration_since(self.last_update);
         let added = delta.as_secs_f64() * self.per_second as f64;
         self.available = (self.available + added).min(self.max_capacity as f64);
@@ -49,12 +48,12 @@ impl LeakyBucket {
     /// - `Ok(())` — cost was deducted successfully.
     /// - `Err(Some(d))` — not enough capacity right now; caller should wait `d`.
     /// - `Err(None)` — cost exceeds the bucket's max capacity and can never be satisfied.
-    fn try_spend(&mut self, cost: u64) -> Result<(), Option<Duration>> {
+    fn try_spend(&mut self, cost: u64, now: std::time::Instant) -> Result<(), Option<Duration>> {
         if cost > self.max_capacity {
             return Err(None);
         }
 
-        self.replenish();
+        self.replenish(now);
 
         if self.available >= cost as f64 {
             self.available -= cost as f64;
@@ -88,8 +87,9 @@ impl PeerInboundThrottle {
             return None;
         }
 
-        let msg_bucket = msg_per_sec.map(|r| LeakyBucket::new(r, r));
-        let byte_bucket = bytes_per_sec.map(|r| LeakyBucket::new(r, r));
+        let now = time_service.now();
+        let msg_bucket = msg_per_sec.map(|r| LeakyBucket::new(r, r, now));
+        let byte_bucket = bytes_per_sec.map(|r| LeakyBucket::new(r, r, now));
 
         Some(Self {
             byte_bucket,
@@ -108,12 +108,14 @@ impl PeerInboundThrottle {
 
         if let Some(bucket) = &mut self.msg_bucket {
             if msg_cost > 0 {
-                acquire_or_wait(bucket, msg_cost, &self.time_service, MSG_RATE_LABEL).await?;
+                acquire_or_wait(bucket, msg_cost, &self.time_service, MSG_RATE_LABEL)
+                    .await?;
             }
         }
         if let Some(bucket) = &mut self.byte_bucket {
             if byte_cost > 0 {
-                acquire_or_wait(bucket, byte_cost, &self.time_service, BYTE_RATE_LABEL).await?;
+                acquire_or_wait(bucket, byte_cost, &self.time_service, BYTE_RATE_LABEL)
+                    .await?;
             }
         }
 
@@ -146,7 +148,7 @@ async fn acquire_or_wait(
     label: &'static str,
 ) -> Result<(), PeerManagerError> {
     loop {
-        match bucket.try_spend(cost) {
+        match bucket.try_spend(cost, time_service.now()) {
             Ok(()) => return Ok(()),
             Err(Some(delay)) => {
                 debug!(

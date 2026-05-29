@@ -1774,7 +1774,9 @@ impl TransactionOutput {
         const ERR_MSG: &str = "TransactionOutput does not match TransactionInfo";
 
         let expected_txn_status: TransactionStatus = txn_info.status().clone().into();
-        if let TransactionStatus::Keep(ExecutionStatus::MiscellaneousError(_)) = &expected_txn_status {
+        if let TransactionStatus::Keep(ExecutionStatus::MiscellaneousError(_)) =
+            &expected_txn_status
+        {
             return Ok(()); // skip all the debug info mismatch for now
         }
         ensure!(

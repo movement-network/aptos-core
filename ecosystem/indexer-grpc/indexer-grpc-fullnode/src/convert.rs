@@ -32,10 +32,6 @@ use hex;
 use move_core_types::ability::Ability;
 use std::time::Duration;
 
-fn sanitize_json_for_postgres(json: String) -> String {
-    json.replace('\u{0000}', "").replace("\\u0000", "")
-}
-
 pub fn convert_move_module_id(move_module_id: &MoveModuleId) -> transaction::MoveModuleId {
     transaction::MoveModuleId {
         address: move_module_id.address.to_string(),
@@ -416,14 +412,12 @@ pub fn convert_write_set_change(change: &WriteSetChange) -> transaction::WriteSe
                     state_key_hash: convert_hex_string_to_bytes(&write_resource.state_key_hash),
                     r#type: Some(convert_move_struct_tag(&write_resource.data.typ)),
                     type_str: write_resource.data.typ.to_string(),
-                    data: sanitize_json_for_postgres(
-                        serde_json::to_string(&write_resource.data.data).unwrap_or_else(|_| {
-                            panic!(
-                                "Could not convert move_resource data to json '{:?}'",
-                                write_resource.data
-                            )
-                        }),
-                    ),
+                    data: serde_json::to_string(&write_resource.data.data).unwrap_or_else(|_| {
+                        panic!(
+                            "Could not convert move_resource data to json '{:?}'",
+                            write_resource.data
+                        )
+                    }),
                 },
             )),
         },
@@ -1004,15 +998,4 @@ fn convert_validator_transaction(
         },
         events: convert_events(api_validator_txn.events()),
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::sanitize_json_for_postgres;
-
-    #[test]
-    fn sanitize_json_for_postgres_strips_null_bytes() {
-        let input = String::from("{\"message\":\"a\\u0000b\u{0000}c\"}");
-        assert_eq!(sanitize_json_for_postgres(input), "{\"message\":\"abc\"}");
-    }
 }

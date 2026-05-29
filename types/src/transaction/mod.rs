@@ -1774,10 +1774,14 @@ impl TransactionOutput {
         const ERR_MSG: &str = "TransactionOutput does not match TransactionInfo";
 
         let expected_txn_status: TransactionStatus = txn_info.status().clone().into();
-        if let TransactionStatus::Keep(stat) = &expected_txn_status {
-            if matches!(stat, ExecutionStatus::MiscellaneousError(_)) {
-                return Ok(()); // skip all the debug info mismatch for now
-            }
+        match &expected_txn_status {
+            TransactionStatus::Keep(stat) => {
+                match stat {
+                    ExecutionStatus::MiscellaneousError(_) => return Ok(()), // skip all the debug info mismatch for now
+                    _ => (),
+                }
+            },
+            _ => (),
         }
         ensure!(
             self.status() == &expected_txn_status,

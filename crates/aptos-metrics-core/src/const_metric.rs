@@ -37,7 +37,6 @@ impl ConstMetric {
 
         let mut metric = Metric::default();
         metric.set_counter(counter);
-        #[allow(clippy::useless_conversion)]
         metric.set_label(labels.into());
 
         Ok(ConstMetric {
@@ -64,7 +63,6 @@ impl ConstMetric {
 
         let mut metric = Metric::default();
         metric.set_gauge(guage);
-        #[allow(clippy::useless_conversion)]
         metric.set_label(labels.into());
 
         Ok(ConstMetric {
@@ -86,7 +84,6 @@ impl Collector for ConstMetric {
         met.set_name(self.desc.fq_name.clone());
         met.set_help(self.desc.help.clone());
         met.set_field_type(self.metric_type);
-        #[allow(clippy::useless_conversion)]
         met.set_metric(vec![self.metric.clone()].into());
 
         vec![met]

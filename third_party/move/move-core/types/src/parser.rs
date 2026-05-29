@@ -40,7 +40,7 @@ enum Token {
     Lt,
     Gt,
     Comma,
-    Eof,
+    EOF,
 }
 
 impl Token {
@@ -367,22 +367,22 @@ where
         .into_iter()
         .filter(|tok| !tok.is_whitespace())
         .collect();
-    tokens.push(Token::Eof);
+    tokens.push(Token::EOF);
     let mut parser = Parser::new(tokens);
     let res = f(&mut parser)?;
-    parser.consume(Token::Eof)?;
+    parser.consume(Token::EOF)?;
     Ok(res)
 }
 
 pub fn parse_string_list(s: &str) -> Result<Vec<String>> {
     parse(s, |parser| {
-        parser.parse_comma_list(|parser| parser.parse_string(), Token::Eof, true)
+        parser.parse_comma_list(|parser| parser.parse_string(), Token::EOF, true)
     })
 }
 
 pub fn parse_type_tags(s: &str) -> Result<Vec<TypeTag>> {
     parse(s, |parser| {
-        parser.parse_comma_list(|parser| parser.parse_type_tag(0), Token::Eof, true)
+        parser.parse_comma_list(|parser| parser.parse_type_tag(0), Token::EOF, true)
     })
 }
 
@@ -398,7 +398,7 @@ pub fn parse_transaction_arguments(s: &str) -> Result<Vec<TransactionArgument>> 
     parse(s, |parser| {
         parser.parse_comma_list(
             |parser| parser.parse_transaction_argument(),
-            Token::Eof,
+            Token::EOF,
             true,
         )
     })

@@ -4,7 +4,7 @@ version = "0.0.0"
 
 [dependencies]
 AptosFramework = { local = "../../framework/aptos-framework" }
-AptosToken = { git = "https://github.com/aptos-labs/aptos-framework.git", subdir = "aptos-token", rev = "mainnet" }
+AptosToken = { local = "../../framework/aptos-token" }
 
 [addresses]
 aptos_framework = "0x1"

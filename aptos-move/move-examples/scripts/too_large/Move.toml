@@ -4,4 +4,4 @@ version = "0.0.0"
 
 [dependencies]
 AptosFramework = { local = "../../../framework/aptos-framework" }
-MoveStdlib = { git = "https://github.com/aptos-labs/aptos-framework.git", subdir = "move-stdlib", rev = "mainnet" }
+MoveStdlib = { local = "../../../framework/move-stdlib" }

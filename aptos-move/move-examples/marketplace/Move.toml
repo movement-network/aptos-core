@@ -7,5 +7,5 @@ marketplace = "_"
 
 [dependencies]
 AptosFramework = { local = "../../framework/aptos-framework" }
-AptosToken = { git = "https://github.com/aptos-labs/aptos-framework.git", subdir = "aptos-token", rev = "mainnet" }
+AptosToken = { local = "../../framework/aptos-token" }
 AptosTokenObjects = { local = "../../framework/aptos-token-objects" }

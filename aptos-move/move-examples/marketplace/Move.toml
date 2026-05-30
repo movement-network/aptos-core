@@ -6,6 +6,6 @@ version = "0.0.0"
 marketplace = "_"
 
 [dependencies]
-AptosFramework = { git = "https://github.com/aptos-labs/aptos-framework.git", subdir = "aptos-framework", rev = "mainnet" }
+AptosFramework = { local = "../../framework/aptos-framework" }
 AptosToken = { git = "https://github.com/aptos-labs/aptos-framework.git", subdir = "aptos-token", rev = "mainnet" }
-AptosTokenObjects = { git = "https://github.com/aptos-labs/aptos-framework.git", subdir = "aptos-token-objects", rev = "mainnet" }
+AptosTokenObjects = { local = "../../framework/aptos-token-objects" }

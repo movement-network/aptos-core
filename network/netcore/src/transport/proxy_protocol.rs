@@ -82,44 +82,60 @@ pub async fn read_header<T: AsyncRead + std::marker::Unpin>(
     let address_size: [u8; 2] = header[14..16].try_into().unwrap();
     let address_size = u16::from_be_bytes(address_size);
 
-    let mut address_bytes: Vec<u8> = vec![0; address_size as usize];
-    stream.read_exact(&mut address_bytes).await?;
+    // Determine how many bytes of the declared address region we actually need to
+    // parse. This is a compile-time constant per address family — never the raw
+    // wire value — so no allocation is ever proportional to untrusted input.
+    let fixed_parse_size: u16 = match family_and_protocol {
+        TCP_IPV4 if address_size >= IPV4_SIZE => IPV4_SIZE,
+        TCP_IPV6 if address_size >= IPV6_SIZE => IPV6_SIZE,
+        _ => 0,
+    };
 
+    // Read only the fixed portion we need into a stack buffer sized to the
+    // largest known address type. The remaining declared bytes are drained below.
+    let mut addr_buf = [0u8; IPV6_SIZE as usize];
+    if fixed_parse_size > 0 {
+        stream.read_exact(&mut addr_buf[..fixed_parse_size as usize]).await?;
+    }
+
+    // Drain whatever the sender declared beyond what we parsed, in bounded chunks.
+    // This single drain covers every branch: LOCAL/UDP/UNIX (all bytes), IPv4/IPv6
+    // with exact size (zero bytes), IPv4/IPv6 with extra padding, and error cases.
+    let remaining = address_size - fixed_parse_size;
+    let mut scratch = [0u8; 256];
+    let mut left = remaining as usize;
+    while left > 0 {
+        let take = left.min(scratch.len());
+        stream.read_exact(&mut scratch[..take]).await?;
+        left -= take;
+    }
+
+    // Construct the result purely from the fixed buffer — the stream is fully consumed.
     let source_address = match family_and_protocol {
         // TODO: Support UDP in the future
         LOCAL_PROTOCOL | UDP_IPV4 | UDP_IPV6 | TCP_UNIX | UDP_UNIX => {
-            // UNSPEC, UDP, and UNIX Steam/datagram
+            // UNSPEC, UDP, and UNIX stream/datagram
             // Accept connection but ignore address info as per spec
             original_addr.clone()
         },
-        TCP_IPV4 => {
-            // This is not mentioned in the spec, but if it doesn't match we might not read correctly
-            if address_size < IPV4_SIZE {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "ProxyProtocol: Header size doesn't match expected address type",
-                ));
-            }
-
-            let src_addr = u32::from_be_bytes(address_bytes[0..4].try_into().unwrap());
-            let src_port = u16::from_be_bytes(address_bytes[8..10].try_into().unwrap());
+        TCP_IPV4 if address_size >= IPV4_SIZE => {
+            let src_addr = u32::from_be_bytes(addr_buf[0..4].try_into().unwrap());
+            let src_port = u16::from_be_bytes(addr_buf[8..10].try_into().unwrap());
             let socket_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::from(src_addr)), src_port);
             NetworkAddress::from(socket_addr)
         },
-        TCP_IPV6 => {
-            // This is not mentioned in the spec, but if it doesn't match we might not read correctly
-            if address_size < IPV6_SIZE {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "ProxyProtocol: Header size doesn't match expected address type",
-                ));
-            }
-
-            let src_addr = u128::from_be_bytes(address_bytes[0..16].try_into().unwrap());
-            let src_port = u16::from_be_bytes(address_bytes[32..34].try_into().unwrap());
-
+        TCP_IPV6 if address_size >= IPV6_SIZE => {
+            let src_addr = u128::from_be_bytes(addr_buf[0..16].try_into().unwrap());
+            let src_port = u16::from_be_bytes(addr_buf[32..34].try_into().unwrap());
             let socket_addr = SocketAddr::new(IpAddr::V6(Ipv6Addr::from(src_addr)), src_port);
             NetworkAddress::from(socket_addr)
+        },
+        TCP_IPV4 | TCP_IPV6 => {
+            // This is not mentioned in the spec, but if it doesn't match we might not read correctly
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "ProxyProtocol: Header size doesn't match expected address type",
+            ));
         },
         _ => {
             return Err(io::Error::new(

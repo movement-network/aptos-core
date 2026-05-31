@@ -12,6 +12,11 @@ use aptos_vm::testing::{testing_only::inject_error_once, InjectedError};
 use move_core_types::account_address::AccountAddress;
 use serde::Serialize;
 
+// NOTE: This test is currently failing due to a potential real behavior issue.
+// Investigation shows that storage refunds are not being applied when deleting storage slots.
+// The test expects refunds for slot deletions but actual balance remains unchanged.
+// This suggests the STORAGE_DELETION_REFUND feature may not be working correctly.
+// This requires investigation by framework/VM team - not a test expectation issue.
 #[test]
 fn test_refunds() {
     let mut h = MoveHarness::new_with_features(
@@ -176,11 +181,9 @@ fn assert_result(
         let slot_fee = read_slot_fee_from_gas_schedule(h);
         let expected_end =
             (start_balance as i64 - slot_fee as i64 * expect_num_slots_charged) as u64;
-        let base_leeway = LEEWAY * expect_num_slots_charged.unsigned_abs();
-        // Increased tolerance to account for fee calculation changes (was seeing ~40k differences)
-        let increased_leeway = std::cmp::max(base_leeway, 50000);
-        assert!(expected_end + increased_leeway > end_balance);
-        assert!(expected_end < end_balance + increased_leeway);
+        let leeway = LEEWAY * expect_num_slots_charged.unsigned_abs();
+        assert!(expected_end + leeway > end_balance);
+        assert!(expected_end < end_balance + leeway);
     } else {
         assert!(expect_num_slots_charged >= creates);
     }
@@ -189,11 +192,8 @@ fn assert_result(
     let fee_statement = txn_out.try_extract_fee_statement().unwrap().unwrap();
     let diff_from_fee_statement = fee_statement.storage_fee_refund() as i64
         - (fee_statement.gas_used() * gas_unit_price) as i64;
-    let actual_balance_diff = end_balance as i64 - start_balance as i64;
-    let fee_tolerance = 50000i64; // Allow tolerance for fee statement vs actual balance differences
-    assert!(
-        (diff_from_fee_statement - actual_balance_diff).abs() <= fee_tolerance,
-        "Fee statement mismatch: fee_statement_diff={}, actual_balance_diff={}, diff={}",
-        diff_from_fee_statement, actual_balance_diff, diff_from_fee_statement - actual_balance_diff
+    assert_eq!(
+        diff_from_fee_statement,
+        end_balance as i64 - start_balance as i64
     );
 }

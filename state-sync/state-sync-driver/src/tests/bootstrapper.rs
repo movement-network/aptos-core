@@ -904,7 +904,7 @@ async fn test_fetch_epoch_ending_ledger_infos_timeout() {
 }
 
 #[tokio::test]
-#[should_panic(expected = "Failed to verify the waypoint: Waypoint value mismatch")]
+#[should_panic(expected = "Waypoint verification failed: Waypoint value mismatch")]
 async fn test_fetch_epoch_ending_ledger_infos_waypoint_mismatch() {
     // Create a driver configuration
     let mut driver_configuration = create_full_node_driver_configuration();

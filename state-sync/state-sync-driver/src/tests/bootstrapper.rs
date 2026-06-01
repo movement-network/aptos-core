@@ -923,6 +923,11 @@ async fn test_fetch_epoch_ending_ledger_infos_waypoint_mismatch() {
         .with(eq(1))
         .return_once(move |_| Ok(data_stream_listener));
 
+    // Expect terminate_stream_with_feedback to be called when waypoint verification fails
+    mock_streaming_client
+        .expect_terminate_stream_with_feedback()
+        .returning(|_, _| Ok(()));
+
     // Create the bootstrapper
     let (mut bootstrapper, _) =
         create_bootstrapper(driver_configuration, mock_streaming_client, None, true);

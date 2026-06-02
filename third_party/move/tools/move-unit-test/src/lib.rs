@@ -14,7 +14,7 @@ use legacy_move_compiler::{
     unit_test::TestPlan,
 };
 use move_command_line_common::files::verify_and_create_named_address_mapping;
-use legacy_move_compiler::unit_test::TestCase;
+use legacy_move_compiler::unit_test::{ExpectedFailure, TestCase};
 use move_compiler_v2::{
     fuzz::{DefaultFuzzSource, FuzzConfig, FuzzPlanMetadata, FuzzValueSource},
     fuzz_corpus, plan_builder as plan_builder_v2,
@@ -187,6 +187,10 @@ impl UnitTestingConfig {
         &self,
         source_files: Vec<String>,
         deps: Vec<String>,
+        // Whether to replay the regression corpus into this plan. The deps-only
+        // pass in `build_test_plan` discards everything but files/module_info,
+        // so replaying there is wasted disk I/O — callers pass `false` for it.
+        replay_corpus: bool,
     ) -> Option<TestPlan> {
         let addresses =
             verify_and_create_named_address_mapping(self.named_address_values.clone()).ok()?;
@@ -225,38 +229,36 @@ impl UnitTestingConfig {
             // Topic 2: replay regression corpus by appending saved failing
             // argument vectors as extra TestCases. The runner re-runs them
             // before the fresh fuzz draws.
-            if let Some(corpus_dir) = self.fuzz_corpus_dir.as_ref() {
+            if let Some(corpus_dir) = self.fuzz_corpus_dir.as_ref().filter(|_| replay_corpus) {
                 for module_plan in plans.iter_mut() {
                     let module_id = module_plan.module_id.clone();
-                    // Snapshot the existing case names so we don't replay against
-                    // already-replayed regressions.
-                    let test_names: Vec<String> =
-                        module_plan.tests.keys().cloned().collect();
-                    for original_name in test_names {
-                        let function_stem = original_name
-                            .split_once('[')
-                            .map(|(stem, _)| stem.to_string())
-                            .unwrap_or(original_name.clone());
-                        let regressions = fuzz_corpus::load_failures(
-                            corpus_dir,
-                            &module_id,
-                            &function_stem,
-                        )
-                        .unwrap_or_default();
+                    // Collect one representative `expected_failure` per real
+                    // function symbol. Deduping by `function_name` (the real
+                    // Move symbol, not the decorated display name) means each
+                    // function's corpus file is read exactly once, regardless
+                    // of how many expanded cases share it.
+                    let mut stems: BTreeMap<String, Option<ExpectedFailure>> = BTreeMap::new();
+                    for case in module_plan.tests.values() {
+                        stems
+                            .entry(case.function_name.clone())
+                            .or_insert_with(|| case.expected_failure.clone());
+                    }
+                    for (stem, expected_failure) in stems {
+                        let regressions =
+                            fuzz_corpus::load_failures(corpus_dir, &module_id, &stem)
+                                .unwrap_or_default();
                         for (i, args) in regressions.into_iter().enumerate() {
-                            // Inherit expected_failure shape from the original
-                            // case so abort-code expectations replay too.
-                            let template = module_plan.tests.get(&original_name).cloned();
-                            let expected_failure = template
-                                .as_ref()
-                                .and_then(|c| c.expected_failure.clone());
-                            let replay_name = format!("{}#regression[{}]", function_stem, i);
+                            let replay_name = format!("{}#regression[{}]", stem, i);
                             module_plan.tests.insert(
                                 replay_name.clone(),
                                 TestCase {
                                     test_name: replay_name,
+                                    // Real symbol so the runner can load the
+                                    // function; the `#regression[..]` name is
+                                    // display-only.
+                                    function_name: stem.clone(),
                                     arguments: args,
-                                    expected_failure,
+                                    expected_failure: expected_failure.clone(),
                                 },
                             );
                         }
@@ -279,9 +281,9 @@ impl UnitTestingConfig {
 
         let TestPlan {
             files, module_info, ..
-        } = self.compile_to_test_plan(deps.clone(), vec![])?;
+        } = self.compile_to_test_plan(deps.clone(), vec![], false)?;
 
-        let mut test_plan = self.compile_to_test_plan(self.source_files.clone(), deps)?;
+        let mut test_plan = self.compile_to_test_plan(self.source_files.clone(), deps, true)?;
         test_plan.module_info.extend(module_info);
         test_plan.files.extend(files);
         Some(test_plan)

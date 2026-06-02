@@ -137,6 +137,11 @@ pub trait FuzzValueSource: Send + Sync {
     /// from `domain` (unrestricted when empty) and avoiding any value in
     /// `exclude`. `seed` is provided for reproducibility.
     ///
+    /// Passing `n == 0` requests the source's own configured run count (for
+    /// [`DefaultFuzzSource`] that is [`FuzzConfig::runs`]). Callers that are
+    /// generic over the source — like the plan builder — pass `0` so the
+    /// `--fuzz-runs` setting is honored instead of a hardcoded count.
+    ///
     /// `param_name` enables Foundry-style fixtures — sources can route
     /// per-parameter using user-declared `FIXTURE_<name>` constants. The
     /// caller passes the parameter's display string so the trait doesn't
@@ -212,8 +217,15 @@ impl FuzzValueSource for NoFuzzSource {
 // Configuration
 // ---------------------------------------------------------------------------
 
-/// Tunables for [`DefaultFuzzSource`]. Defaults mirror Foundry's `[fuzz]`
-/// section so users coming from EVM tooling find familiar knobs.
+/// Tunables for [`DefaultFuzzSource`]. The knob *names* mirror Foundry's
+/// `[fuzz]` section so users coming from EVM tooling find familiar dials, but
+/// the defaults are not identical: `runs` defaults to 16 rather than Foundry's
+/// 256. The lower default is intentional — each case is a full in-process
+/// MoveVM execution, and the plan builder Cartesian-multiplies fuzz `runs`
+/// against any explicit `#[test]` matrices under a `MAX_FUZZ_CASES` (1024) cap,
+/// so a 256 default would blow that ceiling as soon as a test has a couple of
+/// matrix dimensions. Raise `runs` (or `--fuzz-runs`) for deeper search.
+/// `dictionary_weight` does match Foundry's default of 40.
 #[derive(Clone, Debug)]
 pub struct FuzzConfig {
     /// Number of samples drawn per implicit-fuzz parameter.
@@ -491,12 +503,6 @@ impl Rng {
         z ^ (z >> 31)
     }
 
-    fn next_u128(&mut self) -> u128 {
-        let hi = self.next_u64() as u128;
-        let lo = self.next_u64() as u128;
-        (hi << 64) | lo
-    }
-
     fn pick<'a, T>(&mut self, xs: &'a [T]) -> Option<&'a T> {
         if xs.is_empty() {
             None
@@ -663,8 +669,21 @@ fn sample_addresses(
         }
     }
 
+    // Finite literal domain with no ranges: random/edge draws almost never
+    // land in the listed set, so draw straight from it (with repeats) to fill
+    // `n` rather than returning fewer values and capping the run count.
+    let literal_only = !dom_addrs.is_empty() && dom_ranges.is_empty();
+
     while out.len() < n && tries < cap {
         tries += 1;
+        if literal_only {
+            match rng.pick(&dom_addrs).copied() {
+                Some(a) if !is_excluded(&a) => out.push(wrap(a)),
+                Some(_) => {},
+                None => break,
+            }
+            continue;
+        }
         let pick = rng.next_u64() % 100;
         let candidate = if pick < u64::from(EDGE_WEIGHT) {
             // Edge: well-known anchors.
@@ -781,15 +800,28 @@ fn sample_uints(
 
     let mut tries = 0usize;
     let cap = n.saturating_mul(max_retry_multiplier).max(1);
+    // When the domain is a finite set of literals (no ranges), random/edge/dict
+    // draws almost never land in the set, so we'd return far fewer than `n`
+    // values — which then caps the whole function's run count via the zip in
+    // the plan builder. Draw straight from the literal set instead.
+    let literal_only = domain_active && dom_ranges.is_empty();
 
     while out.len() < n && tries < cap {
         tries += 1;
         let pick = rng.next_u64() % 100;
-        let candidate = if pick < edge_cutoff {
+        let candidate = if literal_only {
+            // Cycle through the listed values (with repeats) to fill `n`.
+            match rng.pick(&dom_lits) {
+                Some(v) => v.clone(),
+                None => break,
+            }
+        } else if pick < edge_cutoff {
             // Edge sample. If a domain range is active, draw an edge value
-            // bracketed against the active range.
+            // bracketed against the active range — honoring the half-open
+            // upper bound so we never emit the excluded `hi`.
             if let Some((lo, hi, inc)) = rng.pick(&dom_ranges).cloned() {
-                let endpoints = [lo.clone(), hi.clone(), &lo + 1, if inc { hi } else { &hi - 1 }];
+                let hi_edge = if inc { hi } else { &hi - 1 };
+                let endpoints = [lo.clone(), &lo + 1, &hi_edge - 1, hi_edge];
                 rng.pick(&endpoints).cloned().unwrap_or_else(BigInt::default)
             } else {
                 rng.pick(&edges).cloned().unwrap_or_else(BigInt::default)
@@ -801,7 +833,10 @@ fn sample_uints(
             let (lo, hi, inc) = rng.pick(&dom_ranges).cloned().unwrap();
             sample_bigint_in_range(rng, &lo, &hi, inc)
         } else {
-            BigInt::from(rng.next_u128() % modulus.clone().to_u128().unwrap_or(u128::MAX).max(1))
+            // Full-width random draw. Going through `u128` here would cap u128
+            // at 2^128-1 (unreachable max) and clamp u256 to its low 128 bits,
+            // so draw enough limbs to cover the whole type instead.
+            random_bigint_below(rng, &modulus)
         };
         // Coerce candidate into the type's representable range.
         let candidate = ((&candidate % &modulus) + &modulus) % &modulus;
@@ -942,6 +977,25 @@ fn limbs_to_u32(u64s: &[u64]) -> Vec<u32> {
         out.push((*n >> 32) as u32);
     }
     out
+}
+
+/// Draw a (uniform-ish) random `BigInt` in `[0, modulus)` for any Move uint
+/// width. Generates one extra limb beyond the modulus width before reducing,
+/// so the high end of wide types (u128 max, the upper 128 bits of u256) is
+/// reachable; a small modulo bias is acceptable for fuzzing.
+fn random_bigint_below(rng: &mut Rng, modulus: &BigInt) -> BigInt {
+    if modulus <= &BigInt::from(1) {
+        return BigInt::from(0);
+    }
+    // Bits in `modulus`; one extra 64-bit limb makes the reduction bias
+    // negligible across the whole range.
+    let limbs = ((modulus.bits() / 64) + 1).max(1) as usize;
+    let mut words = Vec::with_capacity(limbs);
+    for _ in 0..limbs {
+        words.push(rng.next_u64());
+    }
+    let raw = BigInt::from_slice(Sign::Plus, &limbs_to_u32(&words));
+    raw % modulus
 }
 
 // ---------------------------------------------------------------------------

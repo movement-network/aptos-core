@@ -24,7 +24,8 @@ use legacy_move_compiler::{
 };
 use move_command_line_common::{address::NumericalAddress, parser::NumberFormat};
 use move_core_types::{
-    identifier::Identifier, language_storage::ModuleId, value::MoveValue, vm_status::StatusCode,
+    identifier::Identifier, language_storage::ModuleId, u256, value::MoveValue,
+    vm_status::StatusCode,
 };
 use move_model::{
     ast::{Address, Attribute, AttributeValue, ConstraintOp, ModuleName, Value},
@@ -32,13 +33,14 @@ use move_model::{
     symbol::Symbol,
     ty::{PrimitiveType, Type},
 };
-use num::{BigInt, ToPrimitive};
+use num::{bigint::Sign, BigInt, ToPrimitive};
 use std::collections::BTreeMap;
 
-/// Default number of values to draw per fuzzed parameter.
-const DEFAULT_FUZZ_ITERATIONS: usize = 16;
-/// Default deterministic seed if the caller does not override.
-const DEFAULT_FUZZ_SEED: u64 = 0;
+/// Sentinel run count handed to `FuzzValueSource::sample`: `0` means "use the
+/// source's own configured `runs`" (e.g. `FuzzConfig::runs`, driven by
+/// `--fuzz-runs`). The planner is generic over the source and has no config of
+/// its own, so it defers the count to the source rather than hardcoding it.
+const FUZZ_RUNS_FROM_SOURCE: usize = 0;
 /// Cap on Cartesian-product expansion to guard against accidental explosion.
 const MAX_FUZZ_CASES: usize = 1024;
 
@@ -243,7 +245,7 @@ fn build_test_info(
         },
     }
     let mut dims: Vec<(Symbol, Dim)> = Vec::with_capacity(parameters.len());
-    for param in &parameters {
+    for (param_index, param) in parameters.iter().enumerate() {
         let Parameter(var, ty, var_loc) = param;
         let owned_default;
         let spec_ref = match specs.get(var) {
@@ -266,6 +268,11 @@ fn build_test_info(
             var_loc,
             ty,
             param_name.as_str(),
+            // Per-parameter salt: derived from the parameter position so two
+            // fuzz parameters of the same type draw distinct value streams
+            // rather than identical ones. The source mixes this with its own
+            // base seed (`--fuzz-seed`).
+            param_index as u64,
             spec_ref,
         ) {
             Some(values) => {
@@ -347,6 +354,7 @@ fn build_test_info(
         return vec![ExpandedCase {
             case: TestCase {
                 test_name: fn_name_str.to_string(),
+                function_name: fn_name_str.to_string(),
                 arguments: Vec::new(),
                 expected_failure,
             },
@@ -400,14 +408,25 @@ fn build_test_info(
                     },
                 });
             }
+            // The display name embeds the case ordinal so it is unique even when
+            // two expansions draw the same argument values (e.g. a `bool` fuzz
+            // param, or a narrow domain). Without the ordinal these collide in
+            // the per-module `BTreeMap<TestName, _>` and cases are silently
+            // dropped. The ordinal is the case's position in `cases`.
             let test_name = if is_single {
                 fn_name_str.to_string()
             } else {
-                format!("{}[{}]", fn_name_str, suffix_parts.join(","))
+                format!(
+                    "{}#{}[{}]",
+                    fn_name_str,
+                    cases.len(),
+                    suffix_parts.join(",")
+                )
             };
             cases.push(ExpandedCase {
                 case: TestCase {
                     test_name,
+                    function_name: fn_name_str.to_string(),
                     arguments,
                     expected_failure: expected_failure.clone(),
                 },
@@ -460,6 +479,7 @@ fn materialize_param_values(
     var_loc: &Loc,
     ty: &Type,
     param_name: &str,
+    seed: u64,
     spec: &ParamSpec,
 ) -> Option<Vec<MoveValue>> {
     match spec {
@@ -502,8 +522,9 @@ fn materialize_param_values(
                 param_name,
                 domain,
                 exclude,
-                DEFAULT_FUZZ_ITERATIONS,
-                DEFAULT_FUZZ_SEED,
+                // `0` => let the source use its configured `runs` (`--fuzz-runs`).
+                FUZZ_RUNS_FROM_SOURCE,
+                seed,
             )
             {
                 Ok(vs) if vs.is_empty() => {
@@ -555,19 +576,114 @@ fn coerce_to_param_type(
             Some(MoveValue::Signer(*addr))
         },
         (MoveValue::Address(_), Type::Primitive(PrimitiveType::Address)) => Some(value),
+        (MoveValue::Bool(_), Type::Primitive(PrimitiveType::Bool)) => Some(value),
+        // Integer carrier -> the parameter's actual width, with a range check.
+        (_, Type::Primitive(prim)) if is_uint_prim(prim) => match move_value_as_bigint(&value) {
+            Some(n) => {
+                coerce_numeric_to_width(env, fn_id_loc, test_attribute_loc, var_loc, prim, &n)
+            },
+            None => {
+                coerce_type_error(env, fn_id_loc, test_attribute_loc, var_loc);
+                None
+            },
+        },
         _ => {
-            let err_msg = "Unexpected argument type: expect an address or a signer";
-            let invalid_test = "unable to generate test";
-            env.error_with_labels(fn_id_loc, invalid_test, vec![
-                (test_attribute_loc.clone(), err_msg.to_string()),
-                (
-                    var_loc.clone(),
-                    "Corresponding to this parameter".to_string(),
-                ),
-            ]);
+            coerce_type_error(env, fn_id_loc, test_attribute_loc, var_loc);
             None
         },
     }
+}
+
+fn is_uint_prim(p: &PrimitiveType) -> bool {
+    matches!(
+        p,
+        PrimitiveType::U8
+            | PrimitiveType::U16
+            | PrimitiveType::U32
+            | PrimitiveType::U64
+            | PrimitiveType::U128
+            | PrimitiveType::U256
+    )
+}
+
+/// Extract a `BigInt` from any integer `MoveValue`. Used to reinterpret a
+/// `u256` literal carrier into the parameter's declared width.
+fn move_value_as_bigint(v: &MoveValue) -> Option<BigInt> {
+    match v {
+        MoveValue::U8(x) => Some(BigInt::from(*x)),
+        MoveValue::U16(x) => Some(BigInt::from(*x)),
+        MoveValue::U32(x) => Some(BigInt::from(*x)),
+        MoveValue::U64(x) => Some(BigInt::from(*x)),
+        MoveValue::U128(x) => Some(BigInt::from(*x)),
+        MoveValue::U256(x) => {
+            let mut be = x.to_le_bytes();
+            be.reverse();
+            Some(BigInt::from_bytes_be(Sign::Plus, &be))
+        },
+        _ => None,
+    }
+}
+
+/// Convert `n` to a `MoveValue` of the given uint width, reporting a range
+/// error (and returning `None`) when it does not fit.
+fn coerce_numeric_to_width(
+    env: &GlobalEnv,
+    fn_id_loc: &Loc,
+    test_attribute_loc: &Loc,
+    var_loc: &Loc,
+    prim: &PrimitiveType,
+    n: &BigInt,
+) -> Option<MoveValue> {
+    let max: BigInt = match prim {
+        PrimitiveType::U8 => BigInt::from(u8::MAX),
+        PrimitiveType::U16 => BigInt::from(u16::MAX),
+        PrimitiveType::U32 => BigInt::from(u32::MAX),
+        PrimitiveType::U64 => BigInt::from(u64::MAX),
+        PrimitiveType::U128 => BigInt::from(u128::MAX),
+        PrimitiveType::U256 => (BigInt::from(1) << 256) - BigInt::from(1),
+        _ => return None,
+    };
+    if n.sign() == Sign::Minus || n > &max {
+        env.error_with_labels(fn_id_loc, "unable to generate test", vec![
+            (
+                test_attribute_loc.clone(),
+                format!("value {} is out of range for `{:?}`", n, prim),
+            ),
+            (
+                var_loc.clone(),
+                "Corresponding to this parameter".to_string(),
+            ),
+        ]);
+        return None;
+    }
+    Some(match prim {
+        PrimitiveType::U8 => MoveValue::U8(n.to_u64().unwrap() as u8),
+        PrimitiveType::U16 => MoveValue::U16(n.to_u64().unwrap() as u16),
+        PrimitiveType::U32 => MoveValue::U32(n.to_u64().unwrap() as u32),
+        PrimitiveType::U64 => MoveValue::U64(n.to_u64().unwrap()),
+        PrimitiveType::U128 => MoveValue::U128(n.to_u128().unwrap()),
+        PrimitiveType::U256 => {
+            let (_sign, be) = n.to_bytes_be();
+            let mut buf = [0u8; 32];
+            buf[32 - be.len()..].copy_from_slice(&be);
+            buf.reverse();
+            MoveValue::U256(u256::U256::from_le_bytes(&buf))
+        },
+        _ => return None,
+    })
+}
+
+fn coerce_type_error(env: &GlobalEnv, fn_id_loc: &Loc, test_attribute_loc: &Loc, var_loc: &Loc) {
+    env.error_with_labels(fn_id_loc, "unable to generate test", vec![
+        (
+            test_attribute_loc.clone(),
+            "Unexpected argument type: expected an address, signer, bool, or integer".to_string(),
+        ),
+        (
+            var_loc.clone(),
+            "Corresponding to this parameter".to_string(),
+        ),
+    ]);
 }
 
 //***************************************************************************
@@ -1214,15 +1330,37 @@ fn convert_attribute_value_to_move_value(
     env: &GlobalEnv,
     value: &AttributeValue,
 ) -> Option<MoveValue> {
-    // Only addresses are allowed
+    // Addresses, bools, and integer literals are accepted. Integers are carried
+    // as a `u256` placeholder here because the parameter's actual width is not
+    // known until `coerce_to_param_type` runs; coercion narrows (with a range
+    // check) to the real type.
     match value {
         AttributeValue::Value(_id, Value::Address(addr)) => match addr {
             Address::Numerical(num) => Some(*num),
             Address::Symbolic(sym) => env.resolve_address_alias(*sym),
         }
         .map(MoveValue::Address),
+        AttributeValue::Value(_id, Value::Bool(b)) => Some(MoveValue::Bool(*b)),
+        AttributeValue::Value(_id, Value::Number(n)) => bigint_to_u256_carrier(n),
         _ => None,
     }
+}
+
+/// Carry a non-negative integer literal as a `u256` `MoveValue`. Returns `None`
+/// for negative or larger-than-`u256` values (which cannot appear for a Move
+/// integer literal, but are rejected defensively).
+fn bigint_to_u256_carrier(n: &BigInt) -> Option<MoveValue> {
+    if n.sign() == Sign::Minus {
+        return None;
+    }
+    let (_sign, be) = n.to_bytes_be();
+    if be.len() > 32 {
+        return None;
+    }
+    let mut buf = [0u8; 32];
+    buf[32 - be.len()..].copy_from_slice(&be);
+    buf.reverse(); // to little-endian for U256::from_le_bytes
+    Some(MoveValue::U256(u256::U256::from_le_bytes(&buf)))
 }
 
 fn check_location<T>(env: &GlobalEnv, loc: Loc, attr: &str, location: Option<T>) -> Option<T> {

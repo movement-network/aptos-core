@@ -294,18 +294,17 @@ impl SharedTestingConfig {
         if origins.is_none() || origins.unwrap().iter().all(|o| matches!(o, ArgOrigin::Fixed)) {
             return;
         }
-        // The function stem is the test name without the expansion suffix.
-        let stem = function_name
-            .split_once('[')
-            .map(|(s, _)| s.to_string())
-            .unwrap_or_else(|| function_name.to_string());
+        // Key the corpus file by the real function symbol so it round-trips
+        // with the replay loader (which also keys by `function_name`). Parsing
+        // the decorated display name would break now that it carries a `#idx`.
+        let stem = test_info.function_name.as_str();
         let args = shrunk.unwrap_or(test_info.arguments.as_slice());
         // Best-effort: ignore filesystem errors so a stuck corpus path doesn't
         // mask the underlying test failure.
         let _ = move_compiler_v2::fuzz_corpus::append_failure(
             dir,
             &test_plan.module_id,
-            &stem,
+            stem,
             args,
         );
     }
@@ -357,6 +356,7 @@ impl SharedTestingConfig {
                 candidate[i] = smaller;
                 let probe = TestCase {
                     test_name: test_info.test_name.clone(),
+                    function_name: test_info.function_name.clone(),
                     arguments: candidate.clone(),
                     expected_failure: test_info.expected_failure.clone(),
                 };
@@ -407,7 +407,11 @@ impl SharedTestingConfig {
         let result = module_storage
             .load_function(
                 &test_plan.module_id,
-                IdentStr::new(function_name).unwrap(),
+                // Load by the real Move function symbol, NOT the (possibly
+                // decorated/unique) display name in `function_name` — the
+                // latter can contain `#`/`[`/`]`/`=` from fuzz/matrix expansion
+                // and is not a valid identifier.
+                IdentStr::new(&test_info.function_name).unwrap(),
                 // No type args for now.
                 &[],
             )

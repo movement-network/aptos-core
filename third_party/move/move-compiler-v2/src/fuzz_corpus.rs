@@ -194,7 +194,9 @@ pub fn append_failure(
     let key = to_wire(args).and_then(|w| bcs::to_bytes(&w).map_err(Into::into));
     let key = match key {
         Ok(k) => k,
-        Err(_) => return Ok(()), // unsupported variant; silently skip
+        // Propagate rather than silently dropping: a failure we can't persist
+        // must not look like a successfully-saved regression.
+        Err(e) => return Err(e.context("corpus: cannot serialize failing arguments")),
     };
     if seen.insert(key) {
         existing.push(args.to_vec());
@@ -225,7 +227,7 @@ pub fn append_seed(
     let key = to_wire(args).and_then(|w| bcs::to_bytes(&w).map_err(Into::into));
     let key = match key {
         Ok(k) => k,
-        Err(_) => return Ok(()),
+        Err(e) => return Err(e.context("corpus: cannot serialize seed arguments")),
     };
     if seen.insert(key) {
         existing.push(args.to_vec());

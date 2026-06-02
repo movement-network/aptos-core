@@ -47,7 +47,14 @@ pub struct ModuleTestPlan {
 
 #[derive(Debug, Clone)]
 pub struct TestCase {
+    /// Display/identity name of this case. For fuzz/matrix expansion this is
+    /// decorated and made unique (e.g. `foo#3[a=42]`), so it is NOT a valid
+    /// Move identifier and must not be used to look up the function.
     pub test_name: TestName,
+    /// The real Move function symbol to invoke (e.g. `foo`). Always a valid
+    /// identifier. Runners must use this — not `test_name` — when loading the
+    /// function from the VM.
+    pub function_name: TestName,
     pub arguments: Vec<MoveValue>,
     pub expected_failure: Option<ExpectedFailure>,
 }

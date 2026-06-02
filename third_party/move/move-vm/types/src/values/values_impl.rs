@@ -119,6 +119,18 @@ pub enum Value {
     ClosureValue(Closure),
 }
 
+#[derive(Debug)]
+pub(crate) struct Values(Rc<RefCell<Vec<Value>>>);
+
+impl std::ops::Deref for Values {
+    type Target = Rc<RefCell<Vec<Value>>>;
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 /// A container is a collection of values. It is used to represent data structures like a
 /// Move vector or struct.
 ///
@@ -130,9 +142,9 @@ pub enum Value {
 /// making it possible to be shared by references.
 #[derive(Debug)]
 pub(crate) enum Container {
-    Locals(Rc<RefCell<Vec<Value>>>),
-    Vec(Rc<RefCell<Vec<Value>>>),
-    Struct(Rc<RefCell<Vec<Value>>>),
+    Locals(Values),
+    Vec(Values),
+    Struct(Values),
     VecU8(Rc<RefCell<Vec<u8>>>),
     VecU64(Rc<RefCell<Vec<u64>>>),
     VecU128(Rc<RefCell<Vec<u128>>>),
@@ -405,10 +417,10 @@ impl Container {
     }
 
     fn master_signer(x: AccountAddress) -> Self {
-        Container::Struct(Rc::new(RefCell::new(vec![
+        Container::Struct(Values(Rc::new(RefCell::new(vec![
             Value::U16(MASTER_SIGNER_VARIANT),
             Value::Address(Box::new(x)),
-        ])))
+        ]))))
     }
 }
 
@@ -608,8 +620,8 @@ impl Container {
         }
 
         Ok(match self {
-            Self::Vec(r) => Self::Vec(copy_rc_ref_vec_val(r, depth, max_depth)?),
-            Self::Struct(r) => Self::Struct(copy_rc_ref_vec_val(r, depth, max_depth)?),
+            Self::Vec(r) => Self::Vec(Values(copy_rc_ref_vec_val(r, depth, max_depth)?)),
+            Self::Struct(r) => Self::Struct(Values(copy_rc_ref_vec_val(r, depth, max_depth)?)),
 
             Self::VecU8(r) => Self::VecU8(Rc::new(RefCell::new(r.borrow().clone()))),
             Self::VecU16(r) => Self::VecU16(Rc::new(RefCell::new(r.borrow().clone()))),
@@ -638,8 +650,8 @@ impl Container {
     // Note(inline): expensive to inline, +10s compile time
     fn copy_by_ref(&self) -> Self {
         match self {
-            Self::Vec(r) => Self::Vec(Rc::clone(r)),
-            Self::Struct(r) => Self::Struct(Rc::clone(r)),
+            Self::Vec(r) => Self::Vec(Values(Rc::clone(&r.0))),
+            Self::Struct(r) => Self::Struct(Values(Rc::clone(&r.0))),
 
             Self::VecU8(r) => Self::VecU8(Rc::clone(r)),
             Self::VecU16(r) => Self::VecU16(Rc::clone(r)),
@@ -656,7 +668,7 @@ impl Container {
             Self::VecBool(r) => Self::VecBool(Rc::clone(r)),
             Self::VecAddress(r) => Self::VecAddress(Rc::clone(r)),
 
-            Self::Locals(r) => Self::Locals(Rc::clone(r)),
+            Self::Locals(r) => Self::Locals(Values(Rc::clone(&r.0))),
         }
     }
 }
@@ -1504,9 +1516,27 @@ impl ContainerRef {
                     }};
                 }
 
+                macro_rules! assign_values {
+                    ($r1:expr, $tc:ident) => {{
+                        let r = match c {
+                            Container::$tc(v) => v.0,
+                            _ => {
+                                return Err(PartialVMError::new(
+                                    StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR,
+                                )
+                                .with_message(
+                                    "failed to write_ref: container type mismatch".to_string(),
+                                )
+                                .with_sub_status(move_core_types::vm_status::sub_status::unknown_invariant_violation::EPARANOID_FAILURE))
+                            },
+                        };
+                        *$r1.borrow_mut() = take_unique_ownership(r)?;
+                    }};
+                }
+
                 match self.container() {
-                    Container::Struct(r) => assign!(r, Struct),
-                    Container::Vec(r) => assign!(r, Vec),
+                    Container::Struct(r) => assign_values!(r, Struct),
+                    Container::Vec(r) => assign_values!(r, Vec),
                     Container::VecU8(r) => assign!(r, VecU8),
                     Container::VecU16(r) => assign!(r, VecU16),
                     Container::VecU32(r) => assign!(r, VecU32),
@@ -2135,7 +2165,7 @@ impl Locals {
             | Value::ClosureValue(_)
             | Value::DelayedFieldID { .. } => Ok(Value::IndexedRef(IndexedRef {
                 idx,
-                container_ref: ContainerRef::Local(Container::Locals(Rc::clone(&self.0))),
+                container_ref: ContainerRef::Local(Container::Locals(Values(Rc::clone(&self.0)))),
             })),
 
             Value::ContainerRef(_) | Value::Invalid | Value::IndexedRef(_) => Err(
@@ -2379,7 +2409,7 @@ impl Value {
 
     #[cfg_attr(feature = "force-inline", inline(always))]
     pub fn struct_(s: Struct) -> Self {
-        Value::Container(Container::Struct(Rc::new(RefCell::new(s.fields))))
+        Value::Container(Container::Struct(Values(Rc::new(RefCell::new(s.fields)))))
     }
 
     #[cfg_attr(feature = "force-inline", inline(always))]
@@ -2494,9 +2524,9 @@ impl Value {
                 Ok(v)
             })
             .collect::<PartialVMResult<Vec<_>>>()?;
-        Ok(Self::Container(Container::Vec(Rc::new(RefCell::new(
+        Ok(Self::Container(Container::Vec(Values(Rc::new(RefCell::new(
             values,
-        )))))
+        ))))))
     }
 
     pub fn closure(
@@ -2635,7 +2665,7 @@ impl VMValueCast<Struct> for Value {
     fn cast(self) -> PartialVMResult<Struct> {
         match self {
             Value::Container(Container::Struct(r)) => Ok(Struct {
-                fields: take_unique_ownership(r)?,
+                fields: take_unique_ownership(r.0)?,
             }),
             v => Err(PartialVMError::new(StatusCode::INTERNAL_TYPE_ERROR)
                 .with_message(format!("cannot cast {:?} to struct", v,))),
@@ -2677,7 +2707,7 @@ impl VMValueCast<Vec<Value>> for Value {
     fn cast(self) -> PartialVMResult<Vec<Value>> {
         match self {
             Value::Container(Container::Vec(c)) => {
-                Ok(take_unique_ownership(c)?.into_iter().collect())
+                Ok(take_unique_ownership(c.0)?.into_iter().collect())
             },
             Value::Address(_)
             | Value::Bool(_)
@@ -3919,7 +3949,7 @@ impl Vector {
             | Type::Struct { .. }
             | Type::StructInstantiation { .. }
             | Type::Function { .. } => {
-                Value::Container(Container::Vec(Rc::new(RefCell::new(elements))))
+                Value::Container(Container::Vec(Values(Rc::new(RefCell::new(elements)))))
             },
 
             Type::Reference(_) | Type::MutableReference(_) | Type::TyParam(_) => {
@@ -3991,7 +4021,7 @@ impl Vector {
                 .into_iter()
                 .map(Value::address)
                 .collect(),
-            Container::Vec(r) => take_unique_ownership(r)?.into_iter().collect(),
+            Container::Vec(r) => take_unique_ownership(r.0)?.into_iter().collect(),
             Container::Locals(_) | Container::Struct(_) => {
                 return Err(PartialVMError::new_invariant_violation(
                     "Unexpected non-vector container",
@@ -4178,13 +4208,13 @@ impl GlobalValueImpl {
             Self::Fresh { value } => {
                 let fields = Self::expect_struct_fields(value);
                 Ok(Value::ContainerRef(ContainerRef::Local(Container::Struct(
-                    Rc::clone(fields),
+                    Values(Rc::clone(fields)),
                 ))))
             },
             Self::Cached { value, status } => {
                 let fields = Self::expect_struct_fields(value);
                 Ok(Value::ContainerRef(ContainerRef::Global {
-                    container: Container::Struct(Rc::clone(fields)),
+                    container: Container::Struct(Values(Rc::clone(fields))),
                     status: Rc::clone(status),
                 }))
             },
@@ -5024,7 +5054,7 @@ impl<'d> serde::de::DeserializeSeed<'d> for DeserializationSeed<'_, &MoveTypeLay
                         layout,
                     };
                     let vector = deserializer.deserialize_seq(VectorElementVisitor(seed))?;
-                    Value::Container(Container::Vec(Rc::new(RefCell::new(vector))))
+                    Value::Container(Container::Vec(Values(Rc::new(RefCell::new(vector)))))
                 },
             }),
 
@@ -5767,7 +5797,9 @@ pub mod prop {
                     })
                     .boxed(),
                 layout => vec(value_strategy_with_layout(layout), 0..10)
-                    .prop_map(|vals| Value::Container(Container::Vec(Rc::new(RefCell::new(vals)))))
+                    .prop_map(|vals| {
+                        Value::Container(Container::Vec(Values(Rc::new(RefCell::new(vals)))))
+                    })
                     .boxed(),
             },
             L::Struct(_struct_layout @ MoveStructLayout::RuntimeVariants(variants)) => {

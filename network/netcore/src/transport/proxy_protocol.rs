@@ -95,19 +95,21 @@ pub async fn read_header<T: AsyncRead + std::marker::Unpin>(
     // largest known address type. The remaining declared bytes are drained below.
     let mut addr_buf = [0u8; IPV6_SIZE as usize];
     if fixed_parse_size > 0 {
-        stream.read_exact(&mut addr_buf[..fixed_parse_size as usize]).await?;
+        stream
+            .read_exact(&mut addr_buf[..fixed_parse_size as usize])
+            .await?;
     }
 
     // Drain whatever the sender declared beyond what we parsed, in bounded chunks.
     // This single drain covers every branch: LOCAL/UDP/UNIX (all bytes), IPv4/IPv6
     // with exact size (zero bytes), IPv4/IPv6 with extra padding, and error cases.
-    let remaining = address_size - fixed_parse_size;
+    let remaining = address_size.saturating_sub(fixed_parse_size);
     let mut scratch = [0u8; 256];
     let mut left = remaining as usize;
     while left > 0 {
         let take = left.min(scratch.len());
         stream.read_exact(&mut scratch[..take]).await?;
-        left -= take;
+        left = left.saturating_sub(take);
     }
 
     // Construct the result purely from the fixed buffer — the stream is fully consumed.
@@ -177,6 +179,48 @@ mod test {
     const PORT_80: &[u8; 2] = &[0x00, 80];
     const IPV4_ADDR_SIZE: &[u8; 2] = &[0x00, IPV4_SIZE as u8];
     const IPV6_ADDR_SIZE: &[u8; 2] = &[0x00, IPV6_SIZE as u8];
+
+    struct GuardedReadStream {
+        inner: Cursor<Vec<u8>>,
+        max_allowed_read_len: usize,
+        max_observed_read_len: usize,
+    }
+
+    impl GuardedReadStream {
+        fn new(data: Vec<u8>, max_allowed_read_len: usize) -> Self {
+            Self {
+                inner: Cursor::new(data),
+                max_allowed_read_len,
+                max_observed_read_len: 0,
+            }
+        }
+
+        fn max_observed_read_len(&self) -> usize {
+            self.max_observed_read_len
+        }
+    }
+
+    impl AsyncRead for GuardedReadStream {
+        fn poll_read(
+            mut self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            buf: &mut [u8],
+        ) -> Poll<io::Result<usize>> {
+            self.max_observed_read_len = self.max_observed_read_len.max(buf.len());
+
+            if buf.len() > self.max_allowed_read_len {
+                return Poll::Ready(Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "oversized read request from untrusted length field: {}",
+                        buf.len()
+                    ),
+                )));
+            }
+
+            Pin::new(&mut self.inner).poll_read(cx, buf)
+        }
+    }
 
     async fn send_v4(sender: &mut MemorySocket) -> io::Result<()> {
         sender.write_all(&PPV2_SIGNATURE).await?; // V2 signature
@@ -270,10 +314,13 @@ mod test {
 
     #[test]
     fn test_local_proxy_protocol() {
-        let address_bytes: [&[u8; 1]; 5] =
-            [&[LOCAL_PROTOCOL], &[UDP_IPV4], &[UDP_IPV6], &[TCP_UNIX], &[
-                UDP_UNIX,
-            ]];
+        let address_bytes: [&[u8; 1]; 5] = [
+            &[LOCAL_PROTOCOL],
+            &[UDP_IPV4],
+            &[UDP_IPV6],
+            &[TCP_UNIX],
+            &[UDP_UNIX],
+        ];
 
         address_bytes
             .iter()
@@ -314,48 +361,6 @@ mod test {
         };
 
         block_on(check_data);
-    }
-
-    struct GuardedReadStream {
-        inner: Cursor<Vec<u8>>,
-        max_allowed_read_len: usize,
-        max_observed_read_len: usize,
-    }
-
-    impl GuardedReadStream {
-        fn new(data: Vec<u8>, max_allowed_read_len: usize) -> Self {
-            Self {
-                inner: Cursor::new(data),
-                max_allowed_read_len,
-                max_observed_read_len: 0,
-            }
-        }
-
-        fn max_observed_read_len(&self) -> usize {
-            self.max_observed_read_len
-        }
-    }
-
-    impl AsyncRead for GuardedReadStream {
-        fn poll_read(
-            mut self: Pin<&mut Self>,
-            cx: &mut Context<'_>,
-            buf: &mut [u8],
-        ) -> Poll<io::Result<usize>> {
-            self.max_observed_read_len = self.max_observed_read_len.max(buf.len());
-
-            if buf.len() > self.max_allowed_read_len {
-                return Poll::Ready(Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!(
-                        "oversized read request from untrusted length field: {}",
-                        buf.len()
-                    ),
-                )));
-            }
-
-            Pin::new(&mut self.inner).poll_read(cx, buf)
-        }
     }
 
     #[test]

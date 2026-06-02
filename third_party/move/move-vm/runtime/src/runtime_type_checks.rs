@@ -706,10 +706,10 @@ impl RuntimeTypeCheck for FullRuntimeTypeCheck {
             },
             Bytecode::VecPack(si, num) => {
                 let (ty, _) = ty_cache.get_signature_index_type(*si, frame)?;
-                let num: usize = (*num).try_into().map_err(|_| {
+                let num: u16 = (*num).try_into().map_err(|_| {
                     PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR)
                 })?;
-                let elem_tys = operand_stack.popn_tys(num)?;
+                let elem_tys = operand_stack.popn_tys(num.into())?;
                 for elem_ty in elem_tys.iter() {
                     // For vector element types, use assignability
                     elem_ty.paranoid_check_assignable(ty)?;

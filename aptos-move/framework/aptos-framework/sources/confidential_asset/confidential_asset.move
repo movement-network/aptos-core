@@ -114,8 +114,8 @@ module aptos_framework::confidential_asset {
     /// The maximum number of transactions can be aggregated on the pending balance before rollover is required.
     const MAX_TRANSFERS_BEFORE_ROLLOVER: u64 = 65534;
 
-    /// The mainnet chain ID. If the chain ID is 1, the allow list is enabled.
-    const MAINNET_CHAIN_ID: u8 = 1;
+    /// The Movement mainnet chain ID. If the chain ID is 126, the allow list is enabled.
+    const MAINNET_CHAIN_ID: u8 = 126;
 
     //
     // Structs
@@ -950,7 +950,7 @@ module aptos_framework::confidential_asset {
     {
         let fa_config_address = get_fa_config_address(token);
 
-        if (!is_allow_list_enabled() && !exists<FAConfig>(fa_config_address)) {
+        if (!exists<FAConfig>(fa_config_address)) {
             return std::option::none();
         };
 

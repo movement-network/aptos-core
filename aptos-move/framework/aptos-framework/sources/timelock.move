@@ -46,7 +46,7 @@ module aptos_framework::timelock {
     const SCRIPT_HASH_LENGTH: u64 = 32;
     const TRANSACTION_HASH_LENGTH: u64 = 32;
     const SALT_LENGTH: u64 = 32;
-    const MIN_NUM_SECONDS_EXECUTE: u64 = 360;
+    const MIN_NUM_SECONDS_EXECUTE: u64 = 3600;
     const MAX_NUM_SECONDS_EXECUTE: u64 = 604800;
 
     /// Creator list cannot contain duplicate addresses.
@@ -76,7 +76,7 @@ module aptos_framework::timelock {
     /// The caller is neither a creator nor an executor.
     const ENOT_CREATOR_OR_EXECUTOR: u64 = 13;
     /// The specified number of seconds is below the required minimum: the account's
-    /// `min_num_seconds_execute` must be greater than `MIN_NUM_SECONDS_EXECUTE` (360),
+    /// `min_num_seconds_execute` must be at least `MIN_NUM_SECONDS_EXECUTE` (3600),
     /// and a transaction's `num_seconds_execute` must be at least the account's
     /// `min_num_seconds_execute`.
     const ENUMBER_SECONDS_TOO_SMALL: u64 = 14;
@@ -106,8 +106,10 @@ module aptos_framework::timelock {
 
     /// A transaction proposed for timelock execution.
     ///
-    /// `execution_hash` is the keccak256 hash of the authorized resolution script. At resolve
-    /// time it is checked against the running script's hash via `transaction_context::get_script_hash()`.
+    /// `execution_hash` is the SHA3-256 hash of the authorized resolution script's bytecode — the
+    /// same value `transaction_context::get_script_hash()` returns for that script. At resolve time
+    /// it is compared (raw, not re-hashed) against the running script's hash. Note this is distinct
+    /// from the table key, which is `keccak256(execution_hash || salt)`.
     struct TimelockTransaction has copy, drop, store {
         execution_hash: vector<u8>,
         // The creator who proposed this transaction.
@@ -340,10 +342,11 @@ module aptos_framework::timelock {
     ) acquires TimelockAccount {
         let timelock_address = address_of(timelock_account);
         assert_timelock_account_exists(timelock_address);
+        // Validate `new_creators` on its own first. This is redundant at runtime.
         validate_members(&new_creators, timelock_address, EDUPLICATE_CREATOR);
         let timelock = &mut TimelockAccount[timelock_address];
         timelock.creators.append(new_creators);
-        // Re-validate the combined list to catch cross-list duplicates.
+        // Re-validate the combined list to also catch cross-list duplicates against existing creators.
         validate_members(&timelock.creators, timelock_address, EDUPLICATE_CREATOR);
         emit(AddCreators { timelock_account: timelock_address, new_creators });
     }
@@ -379,9 +382,11 @@ module aptos_framework::timelock {
     ) acquires TimelockAccount {
         let timelock_address = address_of(timelock_account);
         assert_timelock_account_exists(timelock_address);
+        // Pre-append validation kept for the prover's `aborts_if` (see `add_creators`); do not remove.
         validate_members(&new_executors, timelock_address, EDUPLICATE_EXECUTOR);
         let timelock = &mut TimelockAccount[timelock_address];
         timelock.executors.append(new_executors);
+        // Re-validate the combined list to also catch cross-list duplicates against existing executors.
         validate_members(&timelock.executors, timelock_address, EDUPLICATE_EXECUTOR);
         emit(AddExecutors { timelock_account: timelock_address, new_executors });
     }
@@ -668,7 +673,7 @@ module aptos_framework::timelock {
 
     inline fun assert_delay(num_seconds_execute: u64) {
         assert!(
-            num_seconds_execute > MIN_NUM_SECONDS_EXECUTE,
+            num_seconds_execute >= MIN_NUM_SECONDS_EXECUTE,
             error::invalid_argument(ENUMBER_SECONDS_TOO_SMALL)
         );
         assert!(

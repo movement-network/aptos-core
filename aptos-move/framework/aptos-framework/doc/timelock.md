@@ -174,8 +174,10 @@ Stored at the resource account address created during timelock account creation.
 
 A transaction proposed for timelock execution.
 
-<code>execution_hash</code> is the keccak256 hash of the authorized resolution script. At resolve
-time it is checked against the running script's hash via <code><a href="transaction_context.md#0x1_transaction_context_get_script_hash">transaction_context::get_script_hash</a>()</code>.
+<code>execution_hash</code> is the SHA3-256 hash of the authorized resolution script's bytecode — the
+same value <code><a href="transaction_context.md#0x1_transaction_context_get_script_hash">transaction_context::get_script_hash</a>()</code> returns for that script. At resolve time
+it is compared (raw, not re-hashed) against the running script's hash. Note this is distinct
+from the table key, which is <code>keccak256(execution_hash || salt)</code>.
 
 
 <pre><code><b>struct</b> <a href="timelock.md#0x1_timelock_TimelockTransaction">TimelockTransaction</a> <b>has</b> <b>copy</b>, drop, store
@@ -676,7 +678,7 @@ The account's <code>min_num_seconds_execute</code> must not exceed <code><a href
 <a id="0x1_timelock_ENUMBER_SECONDS_TOO_SMALL"></a>
 
 The specified number of seconds is below the required minimum: the account's
-<code>min_num_seconds_execute</code> must be greater than <code><a href="timelock.md#0x1_timelock_MIN_NUM_SECONDS_EXECUTE">MIN_NUM_SECONDS_EXECUTE</a></code> (360),
+<code>min_num_seconds_execute</code> must be at least <code><a href="timelock.md#0x1_timelock_MIN_NUM_SECONDS_EXECUTE">MIN_NUM_SECONDS_EXECUTE</a></code> (3600),
 and a transaction's <code>num_seconds_execute</code> must be at least the account's
 <code>min_num_seconds_execute</code>.
 
@@ -739,7 +741,7 @@ Removing these creators would leave the timelock account with zero creators.
 
 
 
-<pre><code><b>const</b> <a href="timelock.md#0x1_timelock_MIN_NUM_SECONDS_EXECUTE">MIN_NUM_SECONDS_EXECUTE</a>: u64 = 360;
+<pre><code><b>const</b> <a href="timelock.md#0x1_timelock_MIN_NUM_SECONDS_EXECUTE">MIN_NUM_SECONDS_EXECUTE</a>: u64 = 3600;
 </code></pre>
 
 
@@ -1166,10 +1168,11 @@ Can only be invoked by the timelock account itself via the proposal flow.
 ) <b>acquires</b> <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a> {
     <b>let</b> timelock_address = address_of(timelock_account);
     <a href="timelock.md#0x1_timelock_assert_timelock_account_exists">assert_timelock_account_exists</a>(timelock_address);
+    // Validate `new_creators` on its own first. This is redundant at runtime.
     <a href="timelock.md#0x1_timelock_validate_members">validate_members</a>(&new_creators, timelock_address, <a href="timelock.md#0x1_timelock_EDUPLICATE_CREATOR">EDUPLICATE_CREATOR</a>);
     <b>let</b> <a href="timelock.md#0x1_timelock">timelock</a> = &<b>mut</b> <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[timelock_address];
     <a href="timelock.md#0x1_timelock">timelock</a>.creators.append(new_creators);
-    // Re-validate the combined list <b>to</b> catch cross-list duplicates.
+    // Re-validate the combined list <b>to</b> also catch cross-list duplicates against existing creators.
     <a href="timelock.md#0x1_timelock_validate_members">validate_members</a>(&<a href="timelock.md#0x1_timelock">timelock</a>.creators, timelock_address, <a href="timelock.md#0x1_timelock_EDUPLICATE_CREATOR">EDUPLICATE_CREATOR</a>);
     emit(<a href="timelock.md#0x1_timelock_AddCreators">AddCreators</a> { timelock_account: timelock_address, new_creators });
 }
@@ -1245,9 +1248,11 @@ Can only be invoked by the timelock account itself via the proposal flow.
 ) <b>acquires</b> <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a> {
     <b>let</b> timelock_address = address_of(timelock_account);
     <a href="timelock.md#0x1_timelock_assert_timelock_account_exists">assert_timelock_account_exists</a>(timelock_address);
+    // Pre-append validation kept for the prover's `<b>aborts_if</b>` (see `add_creators`); do not remove.
     <a href="timelock.md#0x1_timelock_validate_members">validate_members</a>(&new_executors, timelock_address, <a href="timelock.md#0x1_timelock_EDUPLICATE_EXECUTOR">EDUPLICATE_EXECUTOR</a>);
     <b>let</b> <a href="timelock.md#0x1_timelock">timelock</a> = &<b>mut</b> <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[timelock_address];
     <a href="timelock.md#0x1_timelock">timelock</a>.executors.append(new_executors);
+    // Re-validate the combined list <b>to</b> also catch cross-list duplicates against existing executors.
     <a href="timelock.md#0x1_timelock_validate_members">validate_members</a>(&<a href="timelock.md#0x1_timelock">timelock</a>.executors, timelock_address, <a href="timelock.md#0x1_timelock_EDUPLICATE_EXECUTOR">EDUPLICATE_EXECUTOR</a>);
     emit(<a href="timelock.md#0x1_timelock_AddExecutors">AddExecutors</a> { timelock_account: timelock_address, new_executors });
 }
@@ -1770,7 +1775,7 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 
 <pre><code>inline <b>fun</b> <a href="timelock.md#0x1_timelock_assert_delay">assert_delay</a>(num_seconds_execute: u64) {
     <b>assert</b>!(
-        num_seconds_execute &gt; <a href="timelock.md#0x1_timelock_MIN_NUM_SECONDS_EXECUTE">MIN_NUM_SECONDS_EXECUTE</a>,
+        num_seconds_execute &gt;= <a href="timelock.md#0x1_timelock_MIN_NUM_SECONDS_EXECUTE">MIN_NUM_SECONDS_EXECUTE</a>,
         <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="timelock.md#0x1_timelock_ENUMBER_SECONDS_TOO_SMALL">ENUMBER_SECONDS_TOO_SMALL</a>)
     );
     <b>assert</b>!(
@@ -2080,7 +2085,8 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 
 
 <pre><code><b>pragma</b> verify = <b>false</b>;
-<b>aborts_if</b> num_seconds_execute &lt;= 360;
+<b>aborts_if</b> num_seconds_execute &lt; <a href="timelock.md#0x1_timelock_MIN_NUM_SECONDS_EXECUTE">MIN_NUM_SECONDS_EXECUTE</a>;
+<b>aborts_if</b> num_seconds_execute &gt; <a href="timelock.md#0x1_timelock_MAX_NUM_SECONDS_EXECUTE">MAX_NUM_SECONDS_EXECUTE</a>;
 <b>aborts_if</b> !<b>exists</b>&lt;<a href="account.md#0x1_account_Account">account::Account</a>&gt;(address_of(deployer));
 </code></pre>
 
@@ -2098,8 +2104,8 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 
 
 <pre><code><b>aborts_if</b> len(creators) &lt; 1;
-<b>aborts_if</b> <a href="timelock.md#0x1_timelock_min_num_seconds_execute">min_num_seconds_execute</a> &lt;= 360;
-<b>aborts_if</b> min_num_seconds_execute &gt; 604800;
+<b>aborts_if</b> <a href="timelock.md#0x1_timelock_min_num_seconds_execute">min_num_seconds_execute</a> &lt; <a href="timelock.md#0x1_timelock_MIN_NUM_SECONDS_EXECUTE">MIN_NUM_SECONDS_EXECUTE</a>;
+<b>aborts_if</b> min_num_seconds_execute &gt; <a href="timelock.md#0x1_timelock_MAX_NUM_SECONDS_EXECUTE">MAX_NUM_SECONDS_EXECUTE</a>;
 <b>aborts_if</b> <b>exists</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(address_of(timelock_account));
 <b>aborts_if</b> <b>exists</b> i in 0..len(creators): creators[i] == address_of(timelock_account);
 <b>aborts_if</b> <b>exists</b> i in 0..len(creators): <b>exists</b> j in 0..i: creators[i] == creators[j];
@@ -2220,8 +2226,8 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 
 <pre><code><b>let</b> addr = address_of(timelock_account);
 <b>aborts_if</b> !<b>exists</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(addr);
-<b>aborts_if</b> new_min_num_seconds_execute &lt;= 360;
-<b>aborts_if</b> new_min_num_seconds_execute &gt; 604800;
+<b>aborts_if</b> new_min_num_seconds_execute &lt; <a href="timelock.md#0x1_timelock_MIN_NUM_SECONDS_EXECUTE">MIN_NUM_SECONDS_EXECUTE</a>;
+<b>aborts_if</b> new_min_num_seconds_execute &gt; <a href="timelock.md#0x1_timelock_MAX_NUM_SECONDS_EXECUTE">MAX_NUM_SECONDS_EXECUTE</a>;
 <b>ensures</b> <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[addr].min_num_seconds_execute == new_min_num_seconds_execute;
 <b>ensures</b> <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[addr].creators
     == <b>old</b>(<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[addr].creators);

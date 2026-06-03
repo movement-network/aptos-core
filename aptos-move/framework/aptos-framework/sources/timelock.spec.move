@@ -139,9 +139,9 @@ spec aptos_framework::timelock {
 
     spec can_be_executed(timelock_account: address, transaction_hash: vector<u8>): bool {
         pragma aborts_if_is_partial;
-        // Only aborts when the timelock account resource does not exist.
-        // (Also aborts on u64 overflow of creation_time_secs + num_seconds_execute, which is
-        // unreachable in practice since num_seconds_execute is bounded by spec at proposal time.)
+        // Aborts if the resource is absent. May also overflow on `creation_time_secs +
+        // num_seconds_execute` for a pathologically large (proposer-chosen) delay; that case is
+        // left unspecified by `aborts_if_is_partial`.
         aborts_if !exists<TimelockAccount>(timelock_account);
         let timelock = TimelockAccount[timelock_account];
         ensures !table::spec_contains(timelock.transactions, transaction_hash) ==> !result;
@@ -172,7 +172,10 @@ spec aptos_framework::timelock {
         // cross-module side-effects (coin registration, nonce derivation) that the prover
         // cannot fully reason about.
         pragma verify = false;
-        aborts_if num_seconds_execute <= 360;
+        // Mirror assert_delay's bounds (referencing the module constants so the spec can't
+        // drift from the code).
+        aborts_if num_seconds_execute < MIN_NUM_SECONDS_EXECUTE;
+        aborts_if num_seconds_execute > MAX_NUM_SECONDS_EXECUTE;
         aborts_if !exists<account::Account>(address_of(deployer));
     }
 
@@ -184,8 +187,9 @@ spec aptos_framework::timelock {
         signer_cap: SignerCapability,
     ) {
         aborts_if len(creators) < 1;
-        aborts_if min_num_seconds_execute <= 360;
-        aborts_if min_num_seconds_execute > 604800;
+        // Mirror assert_delay's bounds via the module constants.
+        aborts_if min_num_seconds_execute < MIN_NUM_SECONDS_EXECUTE;
+        aborts_if min_num_seconds_execute > MAX_NUM_SECONDS_EXECUTE;
         aborts_if exists<TimelockAccount>(address_of(timelock_account));
         // Aborts if creators or executors contain duplicates or include the timelock address.
         aborts_if exists i in 0..len(creators): creators[i] == address_of(timelock_account);
@@ -229,7 +233,7 @@ spec aptos_framework::timelock {
         ensures len(TimelockAccount[addr].creators) >= 1;
         // Note: "executors and min_num_seconds_execute unchanged" is a true property of this entry,
         // but expressing it here trips the prover's loop havoc over `for_each_ref` on a mutably
-        // borrowed struct. Tracked in timelock.fv.md.
+        // borrowed struct.
     }
 
     spec add_executors(timelock_account: &signer, new_executors: vector<address>) {
@@ -259,14 +263,15 @@ spec aptos_framework::timelock {
         ensures exists<TimelockAccount>(addr);
         // Note: "creators and min_num_seconds_execute unchanged" is a true property of this entry,
         // but expressing it here trips the prover's loop havoc over `for_each_ref` on a mutably
-        // borrowed struct. Tracked in timelock.fv.md.
+        // borrowed struct.
     }
 
     spec update_min_num_seconds_execute(timelock_account: &signer, new_min_num_seconds_execute: u64) {
         let addr = address_of(timelock_account);
         aborts_if !exists<TimelockAccount>(addr);
-        aborts_if new_min_num_seconds_execute <= 360;
-        aborts_if new_min_num_seconds_execute > 604800;
+        // Mirror assert_delay's bounds via the module constants.
+        aborts_if new_min_num_seconds_execute < MIN_NUM_SECONDS_EXECUTE;
+        aborts_if new_min_num_seconds_execute > MAX_NUM_SECONDS_EXECUTE;
         ensures TimelockAccount[addr].min_num_seconds_execute == new_min_num_seconds_execute;
         // Membership lists are unchanged.
         ensures TimelockAccount[addr].creators

@@ -101,6 +101,8 @@ fn multisig_account_address(creator: AccountAddress, seq: u64) -> AccountAddress
 // ──────────────────────────────────────────────────────────────
 
 const DELAY: u64 = 3700;
+/// Must match `timelock::MIN_NUM_SECONDS_EXECUTE`. Used by the delay-boundary test.
+const MIN_DELAY_SECS: u64 = 3600;
 
 /// Convenience wrapper that calls `0x1::timelock::create` with the deployer included as a
 /// creator. The on-chain `create` no longer auto-adds the deployer; tests that want the
@@ -250,13 +252,6 @@ fn assert_aborts_with(status: &TransactionStatus, expected_code: u64) {
     }
 }
 
-fn assert_failed(status: &TransactionStatus) {
-    assert!(
-        !matches!(status, TransactionStatus::Keep(ExecutionStatus::Success)),
-        "expected failure, got: {:?}",
-        status
-    );
-}
 
 // Abort codes (from timelock.move):
 //   ETIMELOCK_NOT_EXPIRED = 8        → error::invalid_state         → 0x30008
@@ -265,12 +260,24 @@ fn assert_failed(status: &TransactionStatus) {
 //   EACCOUNT_NOT_TIMELOCK = 3        → error::invalid_state         → 0x30003
 //   ETRANSACTION_NOT_FOUND = 7       → error::not_found             → 0x60007
 //   EEXECUTION_HASH_NOT_MATCHING= 17 → error::invalid_argument      → 0x10011
+//   EWOULD_REMOVE_ALL_CREATORS = 12  → error::invalid_state         → 0x3000C
+//   ENOT_CREATOR_OR_EXECUTOR = 13    → error::permission_denied     → 0x5000D
+//   ENUMBER_SECONDS_TOO_SMALL = 14   → error::invalid_argument      → 0x1000E
+//   EINVALID_BYTES_LENGTH = 16       → error::invalid_argument      → 0x10010
 const ABORT_TIMELOCK_NOT_EXPIRED: u64 = 0x30008;
 const ABORT_ALREADY_EXECUTED: u64 = 0x30009;
 const ABORT_NOT_EXECUTOR: u64 = 0x50005;
 const ABORT_ACCOUNT_NOT_TIMELOCK: u64 = 0x30003;
 const ABORT_TRANSACTION_NOT_FOUND: u64 = 0x60007;
 const ABORT_EXECUTION_HASH_MISMATCH: u64 = 0x10011;
+const ABORT_WOULD_REMOVE_ALL_CREATORS: u64 = 0x3000C;
+const ABORT_NOT_CREATOR_OR_EXECUTOR: u64 = 0x5000D;
+const ABORT_NUMBER_SECONDS_TOO_SMALL: u64 = 0x1000E;
+const ABORT_INVALID_BYTES_LENGTH: u64 = 0x10010;
+// ENOT_CREATOR = 4               → error::permission_denied     → 0x50004
+// EDUPLICATE_TRANSACTION = 11    → error::already_exists        → 0x8000B
+const ABORT_NOT_CREATOR: u64 = 0x50004;
+const ABORT_DUPLICATE_TRANSACTION: u64 = 0x8000B;
 
 /// The Lazy `SCRIPTS` initializer compiles seven Move script packages on first invocation,
 /// which recurses deeply enough to overflow Rust's default 2 MB test thread stack. Each
@@ -802,7 +809,7 @@ fn test_duplicate_transaction_rejected() {
 
     // Same execution_hash + salt → must fail (EDUPLICATE_TRANSACTION).
     let status = propose(&mut h, &creator, timelock_addr, &exec_hash, DELAY, &salt);
-    assert_failed(&status);
+    assert_aborts_with(&status, ABORT_DUPLICATE_TRANSACTION);
 
     // Different salt → must succeed.
     let salt2 = salt32(b"dup_2");
@@ -826,7 +833,7 @@ fn test_non_creator_cannot_propose() {
     let salt = salt32(b"non_creator");
     let tx_hash = transaction_hash_of(&exec_hash, &salt);
     let status = propose(&mut h, &outsider, timelock_addr, &exec_hash, DELAY, &salt);
-    assert_failed(&status);
+    assert_aborts_with(&status, ABORT_NOT_CREATOR);
 
     // Nothing was stored, so the table key is absent.
     assert!(!can_be_executed(&mut h, timelock_addr, &tx_hash));
@@ -839,12 +846,15 @@ fn test_create_timelock_below_min_delay_fails() {
     let mut h = MoveHarness::new();
     let creator = h.new_account_at(AccountAddress::from_hex_literal("0xA700").unwrap());
 
-    // delay = 360 → must fail (must be > 360).
-    assert_failed(&create_timelock(&mut h, &creator, vec![], vec![], 360));
+    // One below the minimum → must fail (must be >= MIN_NUM_SECONDS_EXECUTE).
+    assert_aborts_with(
+        &create_timelock(&mut h, &creator, vec![], vec![], MIN_DELAY_SECS - 1),
+        ABORT_NUMBER_SECONDS_TOO_SMALL,
+    );
 
-    // delay = 361 → must succeed.
+    // Exactly the minimum → must succeed.
     let creator2 = h.new_account_at(AccountAddress::from_hex_literal("0xA702").unwrap());
-    assert_success!(create_timelock(&mut h, &creator2, vec![], vec![], 361));
+    assert_success!(create_timelock(&mut h, &creator2, vec![], vec![], MIN_DELAY_SECS));
     });
 }
 
@@ -868,7 +878,7 @@ fn test_propose_below_min_delay_fails() {
         DELAY - 1,
         &salt32(b"below_min"),
     );
-    assert_failed(&status);
+    assert_aborts_with(&status, ABORT_NUMBER_SECONDS_TOO_SMALL);
 
     // Exactly min_num_seconds_execute → succeeds.
     assert_success!(propose(
@@ -903,17 +913,17 @@ fn test_create_transaction_invalid_lengths_fail() {
         DELAY,
         b"short",
     );
-    assert_failed(&status);
+    assert_aborts_with(&status, ABORT_INVALID_BYTES_LENGTH);
 
     // Salt too long.
     let long_salt = vec![0u8; 33];
     let status = propose(&mut h, &creator, timelock_addr, &exec_hash, DELAY, &long_salt);
-    assert_failed(&status);
+    assert_aborts_with(&status, ABORT_INVALID_BYTES_LENGTH);
 
     // execution_hash wrong length.
     let bad_hash = vec![0u8; 31];
     let status = propose(&mut h, &creator, timelock_addr, &bad_hash, DELAY, &valid_salt);
-    assert_failed(&status);
+    assert_aborts_with(&status, ABORT_INVALID_BYTES_LENGTH);
 
     // All correct → succeeds.
     assert_success!(propose(
@@ -1064,6 +1074,189 @@ fn test_timelock_proposes_multisig_transaction() {
     // Alice (also a multisig owner) executes the multisig transaction. With 1-of-N approval and
     // the proposer (timelock) auto-approving, the proposal is at quorum.
     assert_success!(h.run_multisig(&alice, multisig_addr, Some(multisig_payload)));
+    });
+}
+
+// ──── Delay / authorization / cancel edge cases ────
+
+#[test]
+fn test_resolve_uses_per_transaction_delay_not_min() {
+    run_in_big_stack(|| {
+    // The resolve gate must use the transaction's own `num_seconds_execute`, not the account's
+    // `min_num_seconds_execute`. Propose with a delay LARGER than the account min and verify the
+    // proposal is not executable until the larger per-transaction delay elapses.
+    let mut h = MoveHarness::new();
+    let creator = h.new_account_at(AccountAddress::from_hex_literal("0xD100").unwrap());
+    let timelock_addr = timelock_account_address(*creator.address(), 10);
+    assert_success!(create_timelock(&mut h, &creator, vec![], vec![], DELAY));
+
+    let tx_delay = DELAY * 2; // >= account min, so accepted by create_transaction.
+    let code = script("noop");
+    let exec_hash = execution_hash_of(&code);
+    let salt = salt32(b"longer_delay_salt");
+    let tx_hash = transaction_hash_of(&exec_hash, &salt);
+    assert_success!(propose(&mut h, &creator, timelock_addr, &exec_hash, tx_delay, &salt));
+
+    // Past the account min (DELAY) but before the per-transaction delay (2*DELAY): not executable.
+    fast_forward_block(&mut h, DELAY + 1);
+    assert!(!can_be_executed(&mut h, timelock_addr, &tx_hash));
+    let status =
+        run_resolution_script(&mut h, &creator, code.clone(), vec![], timelock_addr, &tx_hash);
+    assert_aborts_with(&status, ABORT_TIMELOCK_NOT_EXPIRED);
+
+    // Past the per-transaction delay: now executable.
+    fast_forward_block(&mut h, DELAY + 1);
+    assert!(can_be_executed(&mut h, timelock_addr, &tx_hash));
+    assert_success!(run_resolution_script(
+        &mut h, &creator, code, vec![], timelock_addr, &tx_hash
+    ));
+    });
+}
+
+#[test]
+fn test_creator_cannot_resolve_when_executors_set() {
+    run_in_big_stack(|| {
+    // With a non-empty executor set, a creator may propose but must NOT be able to resolve.
+    let mut h = MoveHarness::new();
+    let creator = h.new_account_at(AccountAddress::from_hex_literal("0xD200").unwrap());
+    let executor = h.new_account_at(AccountAddress::from_hex_literal("0xD201").unwrap());
+    let timelock_addr = timelock_account_address(*creator.address(), 10);
+    assert_success!(create_timelock(
+        &mut h,
+        &creator,
+        vec![],
+        vec![*executor.address()],
+        DELAY
+    ));
+
+    let code = script("noop");
+    let exec_hash = execution_hash_of(&code);
+    let salt = salt32(b"creator_no_resolve");
+    let tx_hash = transaction_hash_of(&exec_hash, &salt);
+    assert_success!(propose(&mut h, &creator, timelock_addr, &exec_hash, DELAY, &salt));
+    fast_forward_block(&mut h, DELAY + 1);
+
+    // Creator is a valid proposer but not in the executor set → denied.
+    let status =
+        run_resolution_script(&mut h, &creator, code.clone(), vec![], timelock_addr, &tx_hash);
+    assert_aborts_with(&status, ABORT_NOT_EXECUTOR);
+
+    // The designated executor can resolve the same (still-pending) proposal.
+    assert_success!(run_resolution_script(
+        &mut h, &executor, code, vec![], timelock_addr, &tx_hash
+    ));
+    });
+}
+
+#[test]
+fn test_resolve_remove_last_creator_aborts() {
+    run_in_big_stack(|| {
+    // Removing the sole remaining creator through the real resolve→remove_creators path must
+    // abort (EWOULD_REMOVE_ALL_CREATORS); the whole script reverts atomically.
+    let mut h = MoveHarness::new();
+    let creator = h.new_account_at(AccountAddress::from_hex_literal("0xD300").unwrap());
+    let timelock_addr = timelock_account_address(*creator.address(), 10);
+    assert_success!(create_timelock(&mut h, &creator, vec![], vec![], DELAY));
+
+    let code = script("remove_creator");
+    let exec_hash = execution_hash_of(&code);
+    let salt = salt32(b"remove_last_creator");
+    let tx_hash = transaction_hash_of(&exec_hash, &salt);
+    assert_success!(propose(&mut h, &creator, timelock_addr, &exec_hash, DELAY, &salt));
+    fast_forward_block(&mut h, DELAY + 1);
+
+    let extra = vec![TransactionArgument::Address(*creator.address())];
+    let status = run_resolution_script(&mut h, &creator, code, extra, timelock_addr, &tx_hash);
+    assert_aborts_with(&status, ABORT_WOULD_REMOVE_ALL_CREATORS);
+
+    // Atomic revert: the creator is still present and the proposal is still pending.
+    assert!(is_creator_view(&mut h, *creator.address(), timelock_addr));
+    assert!(can_be_executed(&mut h, timelock_addr, &tx_hash));
+    });
+}
+
+#[test]
+fn test_cancel_edge_cases() {
+    run_in_big_stack(|| {
+    // Covers cancel_transaction's three guard paths: bad hash length, not-found, and an
+    // unauthorized actor.
+    let mut h = MoveHarness::new();
+    let creator = h.new_account_at(AccountAddress::from_hex_literal("0xD400").unwrap());
+    let intruder = h.new_account_at(AccountAddress::from_hex_literal("0xD4FF").unwrap());
+    let timelock_addr = timelock_account_address(*creator.address(), 10);
+    assert_success!(create_timelock(&mut h, &creator, vec![], vec![], DELAY));
+
+    let code = script("noop");
+    let exec_hash = execution_hash_of(&code);
+    let salt = salt32(b"cancel_edge");
+    let tx_hash = transaction_hash_of(&exec_hash, &salt);
+    assert_success!(propose(&mut h, &creator, timelock_addr, &exec_hash, DELAY, &salt));
+
+    // (1) Wrong length: a 31-byte hash is rejected before the existence/auth checks.
+    let short_hash = vec![0u8; 31];
+    assert_aborts_with(
+        &cancel(&mut h, &creator, timelock_addr, &short_hash),
+        ABORT_INVALID_BYTES_LENGTH,
+    );
+
+    // (2) Well-formed 32-byte hash that was never proposed → not found (actor is authorized).
+    let ghost_hash = transaction_hash_of(&exec_hash, &salt32(b"never_proposed"));
+    assert_aborts_with(
+        &cancel(&mut h, &creator, timelock_addr, &ghost_hash),
+        ABORT_TRANSACTION_NOT_FOUND,
+    );
+
+    // (3) An actor who is neither creator nor executor cannot cancel an existing proposal.
+    assert_aborts_with(
+        &cancel(&mut h, &intruder, timelock_addr, &tx_hash),
+        ABORT_NOT_CREATOR_OR_EXECUTOR,
+    );
+
+    // The proposal survived all three rejected attempts.
+    fast_forward_block(&mut h, DELAY + 1);
+    assert!(can_be_executed(&mut h, timelock_addr, &tx_hash));
+    });
+}
+
+#[test]
+fn test_same_execution_hash_different_salt_independent() {
+    run_in_big_stack(|| {
+    // Two proposals of the SAME script, disambiguated only by salt, are independent: each is
+    // resolved by its own `transaction_hash` (= keccak256(execution_hash || salt)), and resolving
+    // one does not consume the other. This pins the salt-binding behavior of the resolve path.
+    let mut h = MoveHarness::new();
+    let creator = h.new_account_at(AccountAddress::from_hex_literal("0xD500").unwrap());
+    let timelock_addr = timelock_account_address(*creator.address(), 10);
+    assert_success!(create_timelock(&mut h, &creator, vec![], vec![], DELAY));
+
+    let code = script("noop");
+    let exec_hash = execution_hash_of(&code);
+    let salt_a = salt32(b"salt_a");
+    let salt_b = salt32(b"salt_b");
+    let tx_hash_a = transaction_hash_of(&exec_hash, &salt_a);
+    let tx_hash_b = transaction_hash_of(&exec_hash, &salt_b);
+    assert_success!(propose(&mut h, &creator, timelock_addr, &exec_hash, DELAY, &salt_a));
+    assert_success!(propose(&mut h, &creator, timelock_addr, &exec_hash, DELAY, &salt_b));
+
+    fast_forward_block(&mut h, DELAY + 1);
+
+    // Resolve A by its own hash.
+    assert_success!(run_resolution_script(
+        &mut h, &creator, code.clone(), vec![], timelock_addr, &tx_hash_a
+    ));
+
+    // A is consumed; B is untouched and still executable.
+    assert!(!can_be_executed(&mut h, timelock_addr, &tx_hash_a));
+    assert!(can_be_executed(&mut h, timelock_addr, &tx_hash_b));
+
+    // Re-resolving A fails; B still resolves with its own hash.
+    assert_aborts_with(
+        &run_resolution_script(&mut h, &creator, code.clone(), vec![], timelock_addr, &tx_hash_a),
+        ABORT_ALREADY_EXECUTED,
+    );
+    assert_success!(run_resolution_script(
+        &mut h, &creator, code, vec![], timelock_addr, &tx_hash_b
+    ));
     });
 }
 

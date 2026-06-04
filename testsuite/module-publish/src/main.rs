@@ -26,11 +26,6 @@ fn additional_packages() -> Vec<(&'static str, &'static str, bool)> {
             "src/packages/framework_usecases",
             false,
         ),
-        (
-            "experimental_usecases",
-            "src/packages/experimental_usecases",
-            true,
-        ),
         ("complex", "src/packages/complex", false),
         (
             "ambassador_token",

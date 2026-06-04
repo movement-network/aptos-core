@@ -95,7 +95,6 @@ LOCALNET_PID_FILE="${REPO_ROOT}/.movement/localnet.pid"
 NODE_URL="${NODE_URL:-http://127.0.0.1:8080}"
 READY_URL="${READY_URL:-http://127.0.0.1:8070}"
 FRAMEWORK_DIR="$REPO_ROOT/aptos-move/framework/aptos-framework"
-FEATURE_SCRIPT="$SCRIPT_DIR/enable-confidential-assets-feature-87.move"
 SKIP_START="${SKIP_START:-0}"
 BACKGROUND="${BACKGROUND:-1}"
 NODE_WAIT_TIMEOUT_SECS="${NODE_WAIT_TIMEOUT_SECS:-120}"
@@ -123,11 +122,6 @@ STARTED_LOCALNET_BG=0
 
 if ! command -v "$MOVEMENT" >/dev/null 2>&1; then
   echo "error: '$MOVEMENT' not found. Set MOVEMENT or add it to PATH." >&2
-  exit 1
-fi
-
-if [[ ! -f "$FEATURE_SCRIPT" ]]; then
-  echo "error: missing $FEATURE_SCRIPT" >&2
   exit 1
 fi
 
@@ -614,6 +608,28 @@ ensure_movement_cli_config_for_publish
 fund_mint_related_accounts
 
 echo "Enabling feature flag 87 (BULLETPROOFS_BATCH_NATIVES) ..."
+# Generated inline (the governance proposal repo holds the canonical copy of this script).
+FEATURE_SCRIPT_DIR="$(mktemp -d)"
+FEATURE_SCRIPT="$FEATURE_SCRIPT_DIR/enable-confidential-assets-feature-87.move"
+cat > "$FEATURE_SCRIPT" <<'EOF'
+// Enables on-chain feature flag 87 (BULLETPROOFS_BATCH_NATIVES) and reconfigures.
+// Sender must be the core resources account (localnet: key in <test-dir>/mint.key).
+script {
+    use aptos_framework::aptos_governance;
+    use std::features;
+
+    fun main(core_resources: &signer) {
+        let core_signer = aptos_governance::get_signer_testnet_only(core_resources, @0x1);
+        let framework_signer = &core_signer;
+
+        let enabled_blob: vector<u64> = vector[87];
+        let disabled_blob: vector<u64> = vector[];
+
+        features::change_feature_flags_for_next_epoch(framework_signer, enabled_blob, disabled_blob);
+        aptos_governance::reconfigure(framework_signer);
+    }
+}
+EOF
 "$MOVEMENT" move run-script \
   --assume-yes \
   --url "$NODE_URL" \
@@ -623,6 +639,7 @@ echo "Enabling feature flag 87 (BULLETPROOFS_BATCH_NATIVES) ..."
   --max-gas "$MOVE_RUN_SCRIPT_MAX_GAS" \
   --framework-local-dir "$FRAMEWORK_DIR" \
   --script-path "$FEATURE_SCRIPT"
+rm -rf "$FEATURE_SCRIPT_DIR"
 
 publish_experimental_from_profile
 

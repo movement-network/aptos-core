@@ -31,7 +31,7 @@ module aptos_framework::confidential_proof {
     const FIAT_SHAMIR_NORMALIZATION_SIGMA_DST: vector<u8> = b"MovementConfidentialAsset/Normalization";
     const FIAT_SHAMIR_REGISTRATION_SIGMA_DST: vector<u8> = b"MovementConfidentialAsset/Registration";
 
-    const BULLETPROOFS_DST: vector<u8> = b"AptosConfidentialAsset/BulletproofRangeProof";
+    const BULLETPROOFS_DST: vector<u8> = b"MovementConfidentialAsset/BulletproofRangeProof";
     const BULLETPROOFS_NUM_BITS: u64 = 16;
 
     //

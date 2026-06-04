@@ -171,16 +171,19 @@ pub fn load_seeds(
     read_corpus_file(&path)
 }
 
-/// Append `args` to the failures file for `(module, test)`, de-duping against
-/// the existing entries. Idempotent.
-pub fn append_failure(
+/// Append `args` to the `subdir` corpus file for `(module, test)`, de-duping
+/// against the existing entries. Idempotent. `what` names the entry kind for
+/// error context.
+fn append_entry(
     corpus_dir: &Path,
+    subdir: &str,
     module_id: &ModuleId,
     test_name: &str,
     args: &[MoveValue],
+    what: &str,
 ) -> Result<()> {
     let path = corpus_dir
-        .join(FAILURES_SUBDIR)
+        .join(subdir)
         .join(corpus_filename(module_id, test_name));
     let mut existing = if path.exists() {
         read_corpus_file(&path)?
@@ -194,15 +197,26 @@ pub fn append_failure(
     let key = to_wire(args).and_then(|w| bcs::to_bytes(&w).map_err(Into::into));
     let key = match key {
         Ok(k) => k,
-        // Propagate rather than silently dropping: a failure we can't persist
-        // must not look like a successfully-saved regression.
-        Err(e) => return Err(e.context("corpus: cannot serialize failing arguments")),
+        // Propagate rather than silently dropping: an entry we can't persist
+        // must not look like a successfully-saved one.
+        Err(e) => return Err(e.context(format!("corpus: cannot serialize {} arguments", what))),
     };
     if seen.insert(key) {
         existing.push(args.to_vec());
         write_corpus_file(&path, &existing)?;
     }
     Ok(())
+}
+
+/// Append `args` to the failures file for `(module, test)`, de-duping against
+/// the existing entries. Idempotent.
+pub fn append_failure(
+    corpus_dir: &Path,
+    module_id: &ModuleId,
+    test_name: &str,
+    args: &[MoveValue],
+) -> Result<()> {
+    append_entry(corpus_dir, FAILURES_SUBDIR, module_id, test_name, args, "failing")
 }
 
 /// Append `args` to the seeds file for `(module, test)`.
@@ -212,28 +226,7 @@ pub fn append_seed(
     test_name: &str,
     args: &[MoveValue],
 ) -> Result<()> {
-    let path = corpus_dir
-        .join(SEEDS_SUBDIR)
-        .join(corpus_filename(module_id, test_name));
-    let mut existing = if path.exists() {
-        read_corpus_file(&path)?
-    } else {
-        Vec::new()
-    };
-    let mut seen: BTreeSet<Vec<u8>> = existing
-        .iter()
-        .filter_map(|e| to_wire(e).ok().and_then(|w| bcs::to_bytes(&w).ok()))
-        .collect();
-    let key = to_wire(args).and_then(|w| bcs::to_bytes(&w).map_err(Into::into));
-    let key = match key {
-        Ok(k) => k,
-        Err(e) => return Err(e.context("corpus: cannot serialize seed arguments")),
-    };
-    if seen.insert(key) {
-        existing.push(args.to_vec());
-        write_corpus_file(&path, &existing)?;
-    }
-    Ok(())
+    append_entry(corpus_dir, SEEDS_SUBDIR, module_id, test_name, args, "seed")
 }
 
 /// Standard path resolution. Pass through to expose the layout.

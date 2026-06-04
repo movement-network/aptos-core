@@ -251,6 +251,16 @@ fn build_test_info(
         let spec_ref = match specs.get(var) {
             Some(s) => s,
             None => {
+                // A parameter with no explicit `#[test(...)]` assignment is
+                // treated as an *implicit fuzz* input over an unrestricted
+                // domain. This intentionally replaces the legacy compiler's
+                // hard "Missing test parameter assignment" error: a bare
+                // `#[test] fun f(a: u64)` now expands into fuzz cases when a
+                // `FuzzValueSource` is registered (the move-unit-test runner
+                // installs `DefaultFuzzSource`), and reports a clear "no fuzz
+                // value source" diagnostic when one is not. This is a
+                // deliberate behavior change — see the runner-facing docs in
+                // `tests/unit_test/test/fuzz_implicit.move`.
                 owned_default = ParamSpec::Fuzz {
                     domain: Domain::default(),
                     exclude: Domain::default(),
@@ -454,8 +464,9 @@ fn build_test_info(
 }
 
 /// Compact human-readable rendering for a `MoveValue`, used in expanded
-/// test-case suffixes like `foo[a=@0x1,b=42]`.
-fn format_move_value(v: &MoveValue) -> String {
+/// test-case suffixes like `foo[a=@0x1,b=42]`. Also reused by the unit-test
+/// runner to render shrink counterexamples, so the two stay in lock-step.
+pub fn format_move_value(v: &MoveValue) -> String {
     match v {
         MoveValue::Address(a) | MoveValue::Signer(a) => format!("@{}", a.short_str_lossless()),
         MoveValue::U8(x) => x.to_string(),

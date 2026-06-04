@@ -17,7 +17,7 @@ use legacy_move_compiler::unit_test::{
 };
 use move_compiler_v2::fuzz::ArgOrigin;
 use move_binary_format::{
-    errors::{Location, VMResult},
+    errors::{Location, VMError, VMResult},
     file_format::CompiledModule,
 };
 use move_bytecode_utils::Modules;
@@ -253,24 +253,25 @@ impl<W: Write> TestOutput<'_, '_, W> {
     }
 }
 
-/// Human-readable argument vector used in shrink output.
+/// Project a `VMError` onto the `MoveError` identity used to compare failures
+/// (status, sub-status, location, message). `MoveError`'s `PartialEq` ignores
+/// the message, so two failures are "the same bug" when those first three match.
+fn move_error_of(e: &VMError) -> MoveError {
+    MoveError(
+        e.major_status(),
+        e.sub_status(),
+        e.location().clone(),
+        e.message().cloned(),
+    )
+}
+
+/// Human-readable argument vector used in shrink output. Renders each value
+/// through the compiler's `format_move_value` so the shrink counterexample and
+/// the expanded-case name (built in the plan builder) format identically.
 fn format_arguments(args: &[move_core_types::value::MoveValue]) -> String {
-    use move_core_types::value::MoveValue;
     let parts: Vec<String> = args
         .iter()
-        .map(|v| match v {
-            MoveValue::Address(a) | MoveValue::Signer(a) => {
-                format!("@{}", a.short_str_lossless())
-            },
-            MoveValue::U8(x) => x.to_string(),
-            MoveValue::U16(x) => x.to_string(),
-            MoveValue::U32(x) => x.to_string(),
-            MoveValue::U64(x) => x.to_string(),
-            MoveValue::U128(x) => x.to_string(),
-            MoveValue::U256(x) => x.to_string(),
-            MoveValue::Bool(b) => b.to_string(),
-            other => format!("{:?}", other),
-        })
+        .map(move_compiler_v2::plan_builder::format_move_value)
         .collect();
     format!("[{}]", parts.join(", "))
 }
@@ -314,14 +315,21 @@ impl SharedTestingConfig {
     /// argument vector, or `None` when shrinking is not applicable (no fuzz
     /// context, no fuzz arguments, or already minimal).
     ///
+    /// `original` is the failure being minimized. A shrink candidate is only
+    /// accepted when it reproduces the *same* failure (same status code, sub
+    /// status, and abort location) — accepting *any* error would let the
+    /// shrinker wander onto an unrelated abort (or out-of-gas) and report a
+    /// "minimal counterexample" that doesn't actually trigger the original bug.
+    ///
     /// Bound: 100 total shrink steps per case. Each step tries one shrink per
-    /// fuzzed argument and accepts the first one that still fails.
+    /// fuzzed argument and accepts the first one that still reproduces.
     fn shrink_if_fuzz<F: UnitTestFactory>(
         &self,
         test_plan: &ModuleTestPlan,
         function_name: &str,
         test_info: &TestCase,
         factory: &Mutex<F>,
+        original: &MoveError,
     ) -> Option<Vec<move_core_types::value::MoveValue>> {
         let ctx = self.fuzz_ctx.as_ref()?;
         let origins = ctx.metadata.get(&test_plan.module_id, function_name)?;
@@ -362,7 +370,9 @@ impl SharedTestingConfig {
                 };
                 let (_, _, exec_result, _) =
                     self.execute_via_move_vm(test_plan, function_name, &probe, factory);
-                if exec_result.is_err() {
+                // Accept only if the candidate reproduces the *same* failure
+                // (status, sub-status, location — see `move_error_of`).
+                if matches!(&exec_result, Err(e) if &move_error_of(e) == original) {
                     current = candidate;
                     improved = true;
                     improved_at_least_once = true;
@@ -377,6 +387,31 @@ impl SharedTestingConfig {
             Some(current)
         } else {
             None
+        }
+    }
+
+    /// Shrink a fuzz failure (if applicable), persist the resulting minimal
+    /// (or, if shrinking did nothing, original) failing arguments to the
+    /// regression corpus, and emit the minimal counterexample as a note. A
+    /// no-op for non-fuzz cases — every step gates on fuzz metadata internally —
+    /// so it is safe to call from any failure branch.
+    fn shrink_persist_and_note<F: UnitTestFactory, W: Write>(
+        &self,
+        test_plan: &ModuleTestPlan,
+        function_name: &str,
+        test_info: &TestCase,
+        factory: &Mutex<F>,
+        original: &MoveError,
+        output: &TestOutput<W>,
+    ) {
+        let shrunk =
+            self.shrink_if_fuzz(test_plan, function_name, test_info, factory, original);
+        self.persist_to_corpus(test_plan, function_name, test_info, shrunk.as_deref());
+        if let Some(args) = shrunk.as_ref() {
+            output.note(&format!(
+                "└─ minimal counterexample: {}",
+                format_arguments(args)
+            ));
         }
     }
 
@@ -505,12 +540,7 @@ impl SharedTestingConfig {
 
             match exec_result {
                 Err(err) => {
-                    let actual_err = MoveError(
-                        err.major_status(),
-                        err.sub_status(),
-                        err.location().clone(),
-                        err.message().cloned(),
-                    );
+                    let actual_err = move_error_of(&err);
                     assert!(err.major_status() != StatusCode::EXECUTED);
                     match test_info.expected_failure.as_ref() {
                         Some(ExpectedFailure::Expected) => {
@@ -562,6 +592,16 @@ impl SharedTestingConfig {
                         None if err.major_status() == StatusCode::OUT_OF_GAS => {
                             // Ran out of ticks, report a test timeout and log a test failure
                             output.timeout(function_name);
+                            // A gas blow-up is a real, replayable fuzz finding, so
+                            // persist the failing input so the regression doesn't
+                            // silently vanish next run. We deliberately do NOT
+                            // shrink it: shrinking searches for a *smaller* input
+                            // that still hits OUT_OF_GAS, but smaller inputs almost
+                            // always consume less gas, so each probe is a full
+                            // gas-bounded re-execution that nearly always fails to
+                            // reproduce — up to ~100×args wasted executions for no
+                            // benefit. No-op for non-fuzz cases.
+                            self.persist_to_corpus(test_plan, function_name, test_info, None);
                             stats.test_failure(
                                 TestFailure::new(
                                     FailureReason::timeout(),
@@ -574,28 +614,18 @@ impl SharedTestingConfig {
                         },
                         None => {
                             output.fail(function_name);
-                            // Topic 3: if this test failure originated from a fuzz-sampled
-                            // case, attempt to shrink it to a minimal counterexample and
-                            // print the result alongside the failure.
-                            let shrunk = self.shrink_if_fuzz(
+                            // Topic 3 + 2: if this failure originated from a
+                            // fuzz-sampled case, shrink it to a minimal
+                            // counterexample (reproducing the *same* error) and
+                            // persist the failing arguments so the next run
+                            // replays them.
+                            self.shrink_persist_and_note(
                                 test_plan,
                                 function_name,
                                 test_info,
                                 factory,
-                            );
-                            if let Some(args) = shrunk.as_ref() {
-                                output.note(&format!(
-                                    "└─ minimal counterexample: {}",
-                                    format_arguments(args)
-                                ));
-                            }
-                            // Topic 2: persist failing fuzz arguments to the
-                            // regression corpus so the next run replays them.
-                            self.persist_to_corpus(
-                                test_plan,
-                                function_name,
-                                test_info,
-                                shrunk.as_deref(),
+                                &actual_err,
+                                output,
                             );
                             stats.test_failure(
                                 TestFailure::new(

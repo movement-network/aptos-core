@@ -47,6 +47,14 @@ use test_reporter::UnitTestFactory;
 /// The default value bounding the amount of gas consumed in a test.
 const DEFAULT_EXECUTION_BOUND: u64 = 1_000_000;
 
+/// Upper bound on regression cases replayed from the corpus per function.
+/// Compile-time fuzz expansion is capped by `MAX_FUZZ_CASES` in the plan
+/// builder, but regression cases are appended to the plan *after* planning, so
+/// without a ceiling here a corpus that has grown across many CI runs would run
+/// an unbounded number of in-process VM executions. When the corpus exceeds
+/// this, the most recent entries are replayed and the overflow is reported.
+const MAX_REGRESSION_REPLAYS_PER_FN: usize = 256;
+
 #[derive(Debug, Parser, Clone)]
 #[clap(author, version, about)]
 pub struct UnitTestingConfig {
@@ -247,7 +255,31 @@ impl UnitTestingConfig {
                         let regressions =
                             fuzz_corpus::load_failures(corpus_dir, &module_id, &stem)
                                 .unwrap_or_default();
-                        for (i, args) in regressions.into_iter().enumerate() {
+                        // Bound replays per function. Corpus entries are
+                        // appended in discovery order, so the newest failures
+                        // are at the tail — keep those and skip the oldest
+                        // overflow, reporting what was dropped rather than
+                        // silently truncating.
+                        let skip = regressions
+                            .len()
+                            .saturating_sub(MAX_REGRESSION_REPLAYS_PER_FN);
+                        if skip > 0 {
+                            // Plan assembly runs before any `TestOutput`/diagnostic
+                            // sink exists (the compiler `GlobalEnv` is already
+                            // dropped, and the corpus is unknown to the compiler),
+                            // so stderr is the only channel available here. Keep it
+                            // a single, clearly-prefixed line.
+                            eprintln!(
+                                "warning: fuzz: `{}` has {} saved regression failures; replaying \
+                                 the most recent {} and skipping {} (trim the corpus or raise the \
+                                 replay cap)",
+                                stem,
+                                regressions.len(),
+                                MAX_REGRESSION_REPLAYS_PER_FN,
+                                skip,
+                            );
+                        }
+                        for (i, args) in regressions.into_iter().enumerate().skip(skip) {
                             let replay_name = format!("{}#regression[{}]", stem, i);
                             module_plan.tests.insert(
                                 replay_name.clone(),

@@ -118,11 +118,12 @@ impl FuzzPlanMetadata {
     }
 
     pub fn get(&self, module_id: &ModuleId, test_name: &str) -> Option<&Vec<ArgOrigin>> {
-        // ModuleId isn't Hash for BTreeMap lookup with (&_, &str); rebuild key.
+        // `entries` is keyed by the same `(ModuleId, String)` tuple used at
+        // insert time, and both components are `Ord`, so a direct keyed lookup
+        // is correct and O(log n) — no need to linear-scan. (A `&str` borrow of
+        // the tuple key isn't possible, so we rebuild an owned key.)
         self.entries
-            .iter()
-            .find(|((m, n), _)| m == module_id && n == test_name)
-            .map(|(_, v)| v)
+            .get(&(module_id.clone(), test_name.to_string()))
     }
 }
 
@@ -574,6 +575,16 @@ fn sample_bools(
     exclude: &Domain,
     fixtures: Option<&FixturePool>,
 ) -> Result<Vec<MoveValue>, String> {
+    // A range constraint (`b in lo..hi`) is meaningless for `bool` and would
+    // otherwise be silently dropped, leaving the domain unrestricted. Reject it
+    // with a clear diagnostic rather than ignoring the user's intent.
+    if !domain.ranges.is_empty() || !exclude.ranges.is_empty() {
+        return Err(
+            "fuzz: range constraints (`lo..hi`) are not supported on `bool` parameters; \
+             use literals (e.g. `b in [true]` or `b != false`)"
+                .to_string(),
+        );
+    }
     let dom_bools: Vec<bool> = domain.literals.iter().filter_map(extract_bool).collect();
     let exc_bools: Vec<bool> = exclude.literals.iter().filter_map(extract_bool).collect();
     let mut pool: Vec<bool> = if dom_bools.is_empty() {
@@ -606,6 +617,10 @@ fn sample_addresses(
     dict: &FuzzDictionary,
     fixtures: Option<&FixturePool>,
 ) -> Result<Vec<MoveValue>, String> {
+    // Reject range bounds that don't fit the 32-byte address space at
+    // plan-build time, so `bigint_to_address`'s truncation is never the thing
+    // that silently narrows a user's constraint.
+    validate_address_domain(domain, exclude)?;
     let dom_addrs: Vec<AccountAddress> = domain
         .literals
         .iter()
@@ -674,6 +689,14 @@ fn sample_addresses(
     // `n` rather than returning fewer values and capping the run count.
     let literal_only = !dom_addrs.is_empty() && dom_ranges.is_empty();
 
+    let random_address = |rng: &mut Rng| {
+        let mut bytes = [0u8; AccountAddress::LENGTH];
+        for chunk in bytes.chunks_exact_mut(8) {
+            chunk.copy_from_slice(&rng.next_u64().to_le_bytes());
+        }
+        AccountAddress::new(bytes)
+    };
+
     while out.len() < n && tries < cap {
         tries += 1;
         if literal_only {
@@ -685,7 +708,21 @@ fn sample_addresses(
             continue;
         }
         let pick = rng.next_u64() % 100;
-        let candidate = if pick < u64::from(EDGE_WEIGHT) {
+        let is_edge = pick < u64::from(EDGE_WEIGHT);
+        let candidate = if !dom_ranges.is_empty() {
+            // A domain range is active. A full-width random address essentially
+            // never lands in a bounded interval, so sample *within* a randomly
+            // chosen range (mirroring `sample_uints`) instead of rejecting draws
+            // until the retry budget is exhausted. Spend the edge budget on
+            // range-bracketed boundary values for coverage, honoring the
+            // half-open upper bound so the excluded `hi` is never emitted.
+            let (lo, hi, inc) = rng.pick(&dom_ranges).unwrap();
+            if is_edge {
+                bigint_to_address(range_edge_endpoint(rng, lo, hi, *inc))
+            } else {
+                bigint_to_address(sample_bigint_in_range(rng, lo, hi, *inc))
+            }
+        } else if is_edge {
             // Edge: well-known anchors.
             let edges = [
                 AccountAddress::ZERO,
@@ -693,27 +730,10 @@ fn sample_addresses(
                 AccountAddress::from_hex_literal("0x2").unwrap_or(AccountAddress::ONE),
             ];
             *rng.pick(&edges).unwrap()
-        } else if !dict.addresses.is_empty() && pick < 100 {
-            // Dictionary, when available, otherwise random (handled below).
+        } else if !dict.addresses.is_empty() {
             *rng.pick(&dict.addresses).unwrap()
         } else {
-            let mut bytes = [0u8; AccountAddress::LENGTH];
-            for chunk in bytes.chunks_exact_mut(8) {
-                chunk.copy_from_slice(&rng.next_u64().to_le_bytes());
-            }
-            AccountAddress::new(bytes)
-        };
-        let candidate = if dict.addresses.is_empty() && pick >= u64::from(EDGE_WEIGHT) && pick < 100
-        {
-            // We fell into the "dictionary" branch but the dictionary is empty —
-            // synthesize a random address instead.
-            let mut bytes = [0u8; AccountAddress::LENGTH];
-            for chunk in bytes.chunks_exact_mut(8) {
-                chunk.copy_from_slice(&rng.next_u64().to_le_bytes());
-            }
-            AccountAddress::new(bytes)
-        } else {
-            candidate
+            random_address(rng)
         };
         if !in_domain(&candidate) || is_excluded(&candidate) {
             continue;
@@ -741,13 +761,19 @@ fn sample_uints(
     dictionary_weight: u8,
     max_retry_multiplier: usize,
 ) -> Result<Vec<MoveValue>, String> {
+    // Reject constraint values that don't fit the type up front — the same
+    // policy `coerce_numeric_to_width` applies to concrete `#[test]` values — so
+    // `a != 300` on a `u8` is a clear error rather than a silently-wrapped
+    // `a != 44`. Once validated, every literal is in `[0, max]`, so membership
+    // checks line up with the reduced random candidates below.
+    validate_uint_domain(width, domain, exclude)?;
+    let edges = uint_edges(width);
+    let modulus = uint_modulus(width);
     let dom_lits: Vec<BigInt> = domain.literals.iter().filter_map(extract_bigint).collect();
     let exc_lits: Vec<BigInt> = exclude.literals.iter().filter_map(extract_bigint).collect();
     let dom_ranges = parse_int_ranges(&domain.ranges);
     let exc_ranges = parse_int_ranges(&exclude.ranges);
     let domain_active = !dom_lits.is_empty() || !dom_ranges.is_empty();
-    let edges = uint_edges(width);
-    let modulus = uint_modulus(width);
 
     let is_excluded = |v: &BigInt| -> bool {
         exc_lits.contains(v)
@@ -792,11 +818,11 @@ fn sample_uints(
         }
     }
 
+    // Pick weights partition [0,100): [0,edge_cutoff)=edge, [edge_cutoff,
+    // dict_cutoff)=dictionary, [dict_cutoff,100)=random (the fall-through).
     let dictionary_weight = dictionary_weight.min(100);
-    let random_weight = 100u64.saturating_sub(u64::from(dictionary_weight) + u64::from(EDGE_WEIGHT));
     let edge_cutoff = u64::from(EDGE_WEIGHT);
     let dict_cutoff = edge_cutoff + u64::from(dictionary_weight);
-    let _ = random_weight; // documentation; the random branch is the fall-through
 
     let mut tries = 0usize;
     let cap = n.saturating_mul(max_retry_multiplier).max(1);
@@ -817,12 +843,9 @@ fn sample_uints(
             }
         } else if pick < edge_cutoff {
             // Edge sample. If a domain range is active, draw an edge value
-            // bracketed against the active range — honoring the half-open
-            // upper bound so we never emit the excluded `hi`.
+            // bracketed against the active range; otherwise use the type edges.
             if let Some((lo, hi, inc)) = rng.pick(&dom_ranges).cloned() {
-                let hi_edge = if inc { hi } else { &hi - 1 };
-                let endpoints = [lo.clone(), &lo + 1, &hi_edge - 1, hi_edge];
-                rng.pick(&endpoints).cloned().unwrap_or_else(BigInt::default)
+                range_edge_endpoint(rng, &lo, &hi, inc)
             } else {
                 rng.pick(&edges).cloned().unwrap_or_else(BigInt::default)
             }
@@ -839,7 +862,7 @@ fn sample_uints(
             random_bigint_below(rng, &modulus)
         };
         // Coerce candidate into the type's representable range.
-        let candidate = ((&candidate % &modulus) + &modulus) % &modulus;
+        let candidate = reduce_into_range(candidate, &modulus);
         if !in_domain(&candidate) || is_excluded(&candidate) {
             continue;
         }
@@ -918,9 +941,103 @@ fn address_in_range(addr: &AccountAddress, lo: &BigInt, hi: &BigInt, inclusive_h
     in_int_range(&v, lo, hi, inclusive_hi)
 }
 
+/// Reject `#[test]` fuzz constraints whose literal/range values don't fit the
+/// integer width, mirroring the policy `coerce_numeric_to_width` enforces for
+/// concrete values. Returning `Err` here surfaces as a labeled plan-build
+/// diagnostic (see `materialize_param_values`), so an out-of-range constraint
+/// is a clear compile error instead of a silently-wrapped value.
+fn validate_uint_domain(width: UintWidth, domain: &Domain, exclude: &Domain) -> Result<(), String> {
+    let modulus = uint_modulus(width);
+    let max = &modulus - 1;
+    for v in domain
+        .literals
+        .iter()
+        .chain(exclude.literals.iter())
+        .filter_map(extract_bigint)
+    {
+        if v > max {
+            return Err(format!(
+                "fuzz: value {} is out of range for this integer parameter (max {})",
+                v, max
+            ));
+        }
+    }
+    for r in domain.ranges.iter().chain(exclude.ranges.iter()) {
+        if let Some(lo) = extract_bigint(&r.lo) {
+            if lo > max {
+                return Err(format!(
+                    "fuzz: range bound {} is out of range for this integer parameter (max {})",
+                    lo, max
+                ));
+            }
+        }
+        if let Some(hi) = extract_bigint(&r.hi) {
+            // An exclusive upper bound may equal the modulus (it denotes "up to
+            // max, inclusive"); an inclusive one must be <= max.
+            let hi_limit = if r.inclusive_hi { &max } else { &modulus };
+            if &hi > hi_limit {
+                return Err(format!(
+                    "fuzz: range bound {} is out of range for this integer parameter (max {})",
+                    hi, max
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Reject address-range bounds that don't fit the 32-byte address space, so the
+/// generator (`bigint_to_address`) and the membership filter (`address_in_range`)
+/// can never disagree about an out-of-space bound.
+fn validate_address_domain(domain: &Domain, exclude: &Domain) -> Result<(), String> {
+    let max = (BigInt::from(1) << 256) - 1;
+    for r in domain.ranges.iter().chain(exclude.ranges.iter()) {
+        for bound in [&r.lo, &r.hi] {
+            if let Some(v) = extract_bigint(bound) {
+                if v.sign() == Sign::Minus || v > max {
+                    return Err(format!(
+                        "fuzz: address range bound {} does not fit the 32-byte address space",
+                        v
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Interpret a `BigInt` as a 256-bit big-endian address. Negative inputs are
+/// clamped to `0x0` (the bottom of the address space) — they can arise from
+/// range-edge arithmetic on degenerate ranges and have no address meaning.
+/// Values wider than 32 bytes are truncated to their low 32 bytes, matching
+/// `address_in_range`'s big-endian interpretation. Address range bounds are
+/// validated against the 32-byte space at plan-build time (see
+/// `validate_address_domain`), so the truncation path is defensive only.
+fn bigint_to_address(n: BigInt) -> AccountAddress {
+    if n.sign() == Sign::Minus {
+        return AccountAddress::ZERO;
+    }
+    let (_sign, be) = n.to_bytes_be();
+    let mut buf = [0u8; AccountAddress::LENGTH];
+    if be.len() >= AccountAddress::LENGTH {
+        buf.copy_from_slice(&be[be.len() - AccountAddress::LENGTH..]);
+    } else {
+        buf[AccountAddress::LENGTH - be.len()..].copy_from_slice(&be);
+    }
+    AccountAddress::new(buf)
+}
+
 // ---------------------------------------------------------------------------
 // Numeric helpers
 // ---------------------------------------------------------------------------
+
+/// Reduce `n` into the half-open range `[0, modulus)`, handling negative
+/// inputs. Used to coerce both sampled candidates and user-supplied literals
+/// into a uint type's representable range so membership checks and emitted
+/// values stay consistent.
+fn reduce_into_range(n: BigInt, modulus: &BigInt) -> BigInt {
+    ((n % modulus) + modulus) % modulus
+}
 
 fn uint_modulus(width: UintWidth) -> BigInt {
     match width {
@@ -968,6 +1085,26 @@ fn sample_bigint_in_range(rng: &mut Rng, lo: &BigInt, hi: &BigInt, inclusive_hi:
     }
     let raw = BigInt::from_slice(Sign::Plus, &limbs_to_u32(&limbs));
     lo + raw % span
+}
+
+/// Pick a boundary value for a range, honoring the half-open upper bound (so
+/// the excluded `hi` is never returned). Every endpoint is clamped to `[lo,
+/// hi_edge]`, so a degenerate range like `0..1` (whose naive `hi_edge - 1`
+/// would be `-1`) yields only in-range values instead of negatives or
+/// out-of-bounds picks. Shared by `sample_uints` and `sample_addresses`.
+fn range_edge_endpoint(rng: &mut Rng, lo: &BigInt, hi: &BigInt, inclusive_hi: bool) -> BigInt {
+    let one = BigInt::from(1);
+    let hi_edge = if inclusive_hi { hi.clone() } else { hi - &one };
+    if hi_edge <= *lo {
+        return lo.clone();
+    }
+    let endpoints = [
+        lo.clone(),
+        (lo + &one).min(hi_edge.clone()),
+        (&hi_edge - &one).max(lo.clone()),
+        hi_edge,
+    ];
+    rng.pick(&endpoints).cloned().unwrap_or_else(|| lo.clone())
 }
 
 fn limbs_to_u32(u64s: &[u64]) -> Vec<u32> {
@@ -1184,7 +1321,7 @@ fn mutate_value(
                     rng.pick(&lits).cloned().unwrap_or(cur.clone())
                 },
             };
-            let cand = ((&cand % &m) + &m) % &m;
+            let cand = reduce_into_range(cand, &m);
             if cand == cur {
                 return None;
             }
@@ -1290,7 +1427,7 @@ fn mutate_value(
 
 fn bigint_to_move_value(n: BigInt, width: UintWidth) -> Option<MoveValue> {
     let m = uint_modulus(width);
-    let n = ((&n % &m) + &m) % &m;
+    let n = reduce_into_range(n, &m);
     match width {
         UintWidth::U8 => n.to_u64().map(|x| MoveValue::U8(x as u8)),
         UintWidth::U16 => n.to_u64().map(|x| MoveValue::U16(x as u16)),

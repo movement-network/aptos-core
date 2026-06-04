@@ -37,7 +37,7 @@ use std::{
     cell::RefCell,
     cmp::Ordering,
     fmt::{self, Debug, Display, Formatter},
-    iter, mem,
+    iter, mem::{self, ManuallyDrop},
     rc::Rc,
 };
 use triomphe::Arc as TriompheArc;
@@ -122,12 +122,45 @@ pub enum Value {
 #[derive(Debug)]
 pub(crate) struct Values(Rc<RefCell<Vec<Value>>>);
 
+impl Values {
+    #[allow(unsafe_code)]
+    fn unwrap(self) -> Rc<RefCell<Vec<Value>>> {
+        let this = ManuallyDrop::new(self);
+        unsafe { std::ptr::read(&this.0) }
+    }
+}
+
 impl std::ops::Deref for Values {
     type Target = Rc<RefCell<Vec<Value>>>;
 
     #[inline]
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl Drop for Values {
+    fn drop(&mut self) {
+        fn visit(vs: &mut Values) -> Vec<Value> {
+            if let Some(ref_cell) = Rc::get_mut(&mut vs.0) {
+                std::mem::take(ref_cell.get_mut())
+            } else {
+                vec![]
+            }
+        }
+
+        let mut to_visit = visit(self);
+        while let Some(v) = to_visit.pop() {
+            let Value::Container(c) = v else {
+                continue;
+            };
+            match c {
+                Container::Locals(mut vs) | Container::Vec(mut vs) | Container::Struct(mut vs) => {
+                    to_visit.append(&mut visit(&mut vs));
+                },
+                _ => {}
+            }
+        }
     }
 }
 
@@ -1519,7 +1552,7 @@ impl ContainerRef {
                 macro_rules! assign_values {
                     ($r1:expr, $tc:ident) => {{
                         let r = match c {
-                            Container::$tc(v) => v.0,
+                            Container::$tc(v) => v.unwrap(),
                             _ => {
                                 return Err(PartialVMError::new(
                                     StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR,
@@ -2665,7 +2698,7 @@ impl VMValueCast<Struct> for Value {
     fn cast(self) -> PartialVMResult<Struct> {
         match self {
             Value::Container(Container::Struct(r)) => Ok(Struct {
-                fields: take_unique_ownership(r.0)?,
+                fields: take_unique_ownership(r.unwrap())?,
             }),
             v => Err(PartialVMError::new(StatusCode::INTERNAL_TYPE_ERROR)
                 .with_message(format!("cannot cast {:?} to struct", v,))),
@@ -2707,7 +2740,7 @@ impl VMValueCast<Vec<Value>> for Value {
     fn cast(self) -> PartialVMResult<Vec<Value>> {
         match self {
             Value::Container(Container::Vec(c)) => {
-                Ok(take_unique_ownership(c.0)?.into_iter().collect())
+                Ok(take_unique_ownership(c.unwrap())?.into_iter().collect())
             },
             Value::Address(_)
             | Value::Bool(_)
@@ -4021,7 +4054,7 @@ impl Vector {
                 .into_iter()
                 .map(Value::address)
                 .collect(),
-            Container::Vec(r) => take_unique_ownership(r.0)?.into_iter().collect(),
+            Container::Vec(r) => take_unique_ownership(r.unwrap())?.into_iter().collect(),
             Container::Locals(_) | Container::Struct(_) => {
                 return Err(PartialVMError::new_invariant_violation(
                     "Unexpected non-vector container",

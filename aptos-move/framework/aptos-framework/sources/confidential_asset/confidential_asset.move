@@ -104,6 +104,9 @@ module aptos_framework::confidential_asset {
     /// Signer is not the configured chain-auditor admin.
     const ENOT_CHAIN_AUDITOR_ADMIN: u64 = 24;
 
+    /// Deposit or withdrawal amount must be greater than zero.
+    const EZERO_AMOUNT: u64 = 25;
+
     //
     // Constants
     //
@@ -1037,6 +1040,9 @@ module aptos_framework::confidential_asset {
         assert!(is_safe_for_confidentiality(&token), error::invalid_argument(EUNSAFE_DISPATCHABLE_FA));
         assert!(is_token_allowed(token), error::invalid_argument(ETOKEN_DISABLED));
         assert!(!is_frozen(to, token), error::invalid_state(EALREADY_FROZEN));
+        // A zero deposit moves no funds but still consumes one of the recipient's
+        // `MAX_TRANSFERS_BEFORE_ROLLOVER` pending slots, letting anyone force rollovers on them.
+        assert!(amount > 0, error::invalid_argument(EZERO_AMOUNT));
 
         let from = signer::address_of(sender);
 
@@ -1088,6 +1094,9 @@ module aptos_framework::confidential_asset {
         proof: WithdrawalProof) acquires ConfidentialAssetStore, GlobalConfig
     {
         assert!(is_safe_for_confidentiality(&token), error::invalid_argument(EUNSAFE_DISPATCHABLE_FA));
+        // A zero withdrawal would re-randomize the actual balance and mark it normalized,
+        // acting as a `normalize` that skips the `EALREADY_NORMALIZED` guard.
+        assert!(amount > 0, error::invalid_argument(EZERO_AMOUNT));
 
         let from = signer::address_of(sender);
 

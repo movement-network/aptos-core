@@ -423,6 +423,65 @@ module aptos_framework::confidential_asset_tests {
         alice = @0xa1,
         bob = @0xb0
     )]
+    #[expected_failure(abort_code = 0x010019, location = confidential_asset)]
+    fun fail_deposit_zero_amount(
+        confidential_asset: signer,
+        aptos_fx: signer,
+        fa: signer,
+        alice: signer,
+        bob: signer)
+    {
+        let token = set_up_for_confidential_asset_test(&confidential_asset, &aptos_fx, &fa, &alice, &bob, 500, 500);
+
+        let bob_addr = signer::address_of(&bob);
+
+        let (_alice_dk, alice_ek) = generate_twisted_elgamal_keypair();
+        let (_bob_dk, bob_ek) = generate_twisted_elgamal_keypair();
+
+        confidential_asset::register_for_testing(&alice, token, twisted_elgamal::pubkey_to_bytes(&alice_ek));
+        confidential_asset::register_for_testing(&bob, token, twisted_elgamal::pubkey_to_bytes(&bob_ek));
+
+        // Zero deposits move no funds but would consume the recipient's pending slots.
+        confidential_asset::deposit_to(&alice, token, bob_addr, 0);
+    }
+
+    #[test(
+        confidential_asset = @aptos_framework,
+        aptos_fx = @aptos_framework,
+        fa = @0xfa,
+        alice = @0xa1,
+        bob = @0xb0
+    )]
+    #[expected_failure(abort_code = 0x010019, location = confidential_asset)]
+    fun fail_withdraw_zero_amount(
+        confidential_asset: signer,
+        aptos_fx: signer,
+        fa: signer,
+        alice: signer,
+        bob: signer)
+    {
+        let token = set_up_for_confidential_asset_test(&confidential_asset, &aptos_fx, &fa, &alice, &bob, 500, 500);
+
+        let alice_addr = signer::address_of(&alice);
+
+        let (alice_dk, alice_ek) = generate_twisted_elgamal_keypair();
+
+        confidential_asset::register_for_testing(&alice, token, twisted_elgamal::pubkey_to_bytes(&alice_ek));
+
+        confidential_asset::deposit(&alice, token, 200);
+        confidential_asset::rollover_pending_balance(&alice, token);
+
+        // A zero withdrawal would act as a normalize that skips the EALREADY_NORMALIZED guard.
+        withdraw(&alice, &alice_dk, token, alice_addr, 0, 200);
+    }
+
+    #[test(
+        confidential_asset = @aptos_framework,
+        aptos_fx = @aptos_framework,
+        fa = @0xfa,
+        alice = @0xa1,
+        bob = @0xb0
+    )]
     fun success_transfer_test(
         confidential_asset: signer,
         aptos_fx: signer,

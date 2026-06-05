@@ -318,13 +318,6 @@ impl LedgerInfoWithV0 {
         &self,
         validator: &ValidatorVerifier,
     ) -> ::std::result::Result<(), VerifyError> {
-        // Check if this LedgerInfo is before the waypoint version
-        if let Some(waypoint_version) = get_waypoint_version() {
-            if self.ledger_info().version() <= waypoint_version {
-                return Ok(());
-            }
-        }
-
         validator.verify_multi_signatures(self.ledger_info(), &self.signatures)
     }
 

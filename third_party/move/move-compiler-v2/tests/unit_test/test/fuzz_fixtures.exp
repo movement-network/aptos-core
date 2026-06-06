@@ -1,6 +1,6 @@
 
 Diagnostics:
-note: fuzz: expanded `fuzz_with_fixtures` to 16 cases
+note: fuzz: expanded `fuzz_with_fixtures` to 64 cases
    ┌─ tests/unit_test/test/fuzz_fixtures.move:11:16
    │
 11 │     public fun fuzz_with_fixtures(_amount: u64, _recipient: address, _salt: u32) { }

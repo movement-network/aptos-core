@@ -1,42 +1,42 @@
 
 Diagnostics:
-note: fuzz: expanded `ne_single` to 16 cases
+note: fuzz: expanded `ne_single` to 64 cases
   ┌─ tests/unit_test/test/fuzz_constraints.move:6:16
   │
 6 │     public fun ne_single(_a: signer) { }
   │                ^^^^^^^^^
 
-note: fuzz: expanded `ne_list` to 16 cases
+note: fuzz: expanded `ne_list` to 64 cases
   ┌─ tests/unit_test/test/fuzz_constraints.move:9:16
   │
 9 │     public fun ne_list(_a: signer) { }
   │                ^^^^^^^
 
-note: fuzz: expanded `in_list` to 16 cases
+note: fuzz: expanded `in_list` to 64 cases
    ┌─ tests/unit_test/test/fuzz_constraints.move:12:16
    │
 12 │     public fun in_list(_a: signer) { }
    │                ^^^^^^^
 
-note: fuzz: expanded `in_inclusive_range` to 16 cases
+note: fuzz: expanded `in_inclusive_range` to 64 cases
    ┌─ tests/unit_test/test/fuzz_constraints.move:15:16
    │
 15 │     public fun in_inclusive_range(_a: signer) { }
    │                ^^^^^^^^^^^^^^^^^^
 
-note: fuzz: expanded `in_half_open_range` to 16 cases
+note: fuzz: expanded `in_half_open_range` to 64 cases
    ┌─ tests/unit_test/test/fuzz_constraints.move:18:16
    │
 18 │     public fun in_half_open_range(_a: signer) { }
    │                ^^^^^^^^^^^^^^^^^^
 
-note: fuzz: expanded `in_union` to 16 cases
+note: fuzz: expanded `in_union` to 64 cases
    ┌─ tests/unit_test/test/fuzz_constraints.move:21:16
    │
 21 │     public fun in_union(_a: signer) { }
    │                ^^^^^^^^
 
-note: fuzz: expanded `in_with_excludes` to 16 cases
+note: fuzz: expanded `in_with_excludes` to 64 cases
    ┌─ tests/unit_test/test/fuzz_constraints.move:26:16
    │
 26 │     public fun in_with_excludes(_a: signer) { }

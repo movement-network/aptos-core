@@ -44,7 +44,7 @@ fn run(config: &UnitTestingConfig) -> (String, bool, usize) {
     (String::from_utf8(buffer).unwrap(), ok, total_cases)
 }
 
-const DEFAULT_FUZZ_RUNS: usize = 16;
+use move_compiler_v2::fuzz::DEFAULT_FUZZ_RUNS;
 
 /// Implicit-fuzz parameters expand into `DEFAULT_FUZZ_RUNS` *uniquely named*
 /// cases that all execute without panicking. Before the fix, the decorated
@@ -98,4 +98,28 @@ module 0x42::fuzz_mod {
     assert_eq!(total, 3, "matrix should produce 3 cases; output:\n{}", output);
     assert!(ok, "matrix cases should pass; output:\n{}", output);
     assert_eq!(output.matches("[ PASS").count(), 3, "output:\n{}", output);
+}
+
+/// Multiple explicit matrices expand *pairwise* (2-way covering), not as a full
+/// Cartesian product. Three `[_,_,_]` matrices would be 3×3×3 = 27 cases under
+/// the old Cartesian expansion; pairwise covers every pair of values across any
+/// two parameters in 10 cases. This guards the default-pairwise behavior.
+#[test]
+fn multi_matrix_expands_pairwise_not_cartesian() {
+    let (_dir, config) = config_for(
+        r#"
+module 0x42::fuzz_mod {
+    #[test(_a = [1, 2, 3], _b = [1, 2, 3], _c = [1, 2, 3])]
+    fun matrix3(_a: u64, _b: u64, _c: u64) { }
+}
+"#,
+    );
+    let (output, ok, total) = run(&config);
+    assert_eq!(
+        total, 10,
+        "3x3x3 matrices should expand pairwise to 10 cases (27 under full Cartesian); output:\n{}",
+        output
+    );
+    assert!(ok, "pairwise matrix cases should pass; output:\n{}", output);
+    assert_eq!(output.matches("[ PASS").count(), 10, "output:\n{}", output);
 }

@@ -218,15 +218,29 @@ impl FuzzValueSource for NoFuzzSource {
 // Configuration
 // ---------------------------------------------------------------------------
 
+/// Default number of samples drawn per implicit-fuzz `#[test]` parameter.
+///
+/// This is the *single source of truth* for the default run count: the
+/// [`FuzzConfig::default`] field, the `--fuzz-runs` CLI flag, and the
+/// `UnitTestingConfig` default all reference it, so there is exactly one place
+/// to change.
+///
+/// Set below Foundry's 256 on purpose. Each case is a full in-process MoveVM
+/// execution, so the default governs inner-loop `move test` latency; and the
+/// plan builder multiplies `runs` against the pairwise expansion of any
+/// explicit `#[test]` matrices under the [`MAX_FUZZ_CASES`] cap, so a large
+/// default eats the matrix headroom. 64 keeps the inner loop fast while leaving
+/// room for matrix+fuzz combinations; raise `--fuzz-runs` (e.g. 256+ in a
+/// nightly CI profile) for deeper search.
+///
+/// [`MAX_FUZZ_CASES`]: crate::plan_builder
+pub const DEFAULT_FUZZ_RUNS: usize = 64;
+
 /// Tunables for [`DefaultFuzzSource`]. The knob *names* mirror Foundry's
 /// `[fuzz]` section so users coming from EVM tooling find familiar dials, but
-/// the defaults are not identical: `runs` defaults to 16 rather than Foundry's
-/// 256. The lower default is intentional — each case is a full in-process
-/// MoveVM execution, and the plan builder Cartesian-multiplies fuzz `runs`
-/// against any explicit `#[test]` matrices under a `MAX_FUZZ_CASES` (1024) cap,
-/// so a 256 default would blow that ceiling as soon as a test has a couple of
-/// matrix dimensions. Raise `runs` (or `--fuzz-runs`) for deeper search.
-/// `dictionary_weight` does match Foundry's default of 40.
+/// the defaults are not identical: `runs` defaults to [`DEFAULT_FUZZ_RUNS`]
+/// rather than Foundry's 256 (see that constant for why). `dictionary_weight`
+/// does match Foundry's default of 40.
 #[derive(Clone, Debug)]
 pub struct FuzzConfig {
     /// Number of samples drawn per implicit-fuzz parameter.
@@ -246,7 +260,7 @@ pub struct FuzzConfig {
 impl Default for FuzzConfig {
     fn default() -> Self {
         Self {
-            runs: 16,
+            runs: DEFAULT_FUZZ_RUNS,
             seed: 0,
             dictionary_weight: 40,
             max_retry_multiplier: 64,

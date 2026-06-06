@@ -34,15 +34,20 @@ use move_model::{
     ty::{PrimitiveType, Type},
 };
 use num::{bigint::Sign, BigInt, ToPrimitive};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Sentinel run count handed to `FuzzValueSource::sample`: `0` means "use the
 /// source's own configured `runs`" (e.g. `FuzzConfig::runs`, driven by
 /// `--fuzz-runs`). The planner is generic over the source and has no config of
 /// its own, so it defers the count to the source rather than hardcoding it.
 const FUZZ_RUNS_FROM_SOURCE: usize = 0;
-/// Cap on Cartesian-product expansion to guard against accidental explosion.
-const MAX_FUZZ_CASES: usize = 1024;
+/// Cap on test-case expansion to guard against accidental explosion. Applies to
+/// the *product* of the pairwise matrix expansion and the fuzz run count, so it
+/// must stay comfortably above [`fuzz::DEFAULT_FUZZ_RUNS`] to leave room for
+/// matrix+fuzz combinations (2048 / 64 = 32 matrix rows of headroom).
+///
+/// [`fuzz::DEFAULT_FUZZ_RUNS`]: crate::fuzz::DEFAULT_FUZZ_RUNS
+const MAX_FUZZ_CASES: usize = 2048;
 
 //***************************************************************************
 // Test Plan Building
@@ -316,12 +321,36 @@ fn build_test_info(
         Some(abort_attribute) => parse_failure_attribute(env, current_module, abort_attribute),
     };
 
-    // Cartesian over deterministic dimensions; zip across fuzz dimensions.
-    let det_product: usize = dims
+    // Pairwise (2-way) covering over deterministic dimensions; zip across fuzz
+    // dimensions. Explicit matrices used to Cartesian-multiply (`∏ lenᵢ`), which
+    // bloats combinatorially: three `[1,2,3]` matrices alone were 27 cases. Most
+    // interaction bugs are 2-way, so we instead generate a pairwise covering
+    // array — every pair of values across any two matrix params still appears,
+    // but the case count collapses to roughly the product of the two largest
+    // dimensions. Pairwise == Cartesian for 0/1/2 matrix params, so this only
+    // shrinks expansions with three or more. Independent fuzz draws still *zip*:
+    // `#[test(a, b)]` is N runs binding `a[i]`/`b[i]`, not N² (Foundry's
+    // `[fuzz] runs = N` semantics).
+    let det_positions: Vec<usize> = dims
         .iter()
-        .filter_map(|(_, d)| if let Dim::Det(vs) = d { Some(vs.len()) } else { None })
-        .product::<usize>()
-        .max(1);
+        .enumerate()
+        .filter_map(|(i, (_, d))| matches!(d, Dim::Det(_)).then_some(i))
+        .collect();
+    let det_lens: Vec<usize> = det_positions
+        .iter()
+        .map(|&i| match &dims[i].1 {
+            Dim::Det(vs) => vs.len(),
+            Dim::Fuzz { .. } => unreachable!(),
+        })
+        .collect();
+    // Each row selects a value-index for every deterministic dim (in
+    // `det_positions` order); `det_order_of_pos[i]` maps a `dims` position back
+    // to its column in a row, or `None` for fuzz dims.
+    let det_rows = pairwise_index_rows(&det_lens);
+    let mut det_order_of_pos: Vec<Option<usize>> = vec![None; dims.len()];
+    for (col, &pos) in det_positions.iter().enumerate() {
+        det_order_of_pos[pos] = Some(col);
+    }
     let fuzz_runs: usize = dims
         .iter()
         .filter_map(|(_, d)| {
@@ -333,7 +362,7 @@ fn build_test_info(
         })
         .min()
         .unwrap_or(1);
-    let total = det_product.saturating_mul(fuzz_runs);
+    let total = det_rows.len().saturating_mul(fuzz_runs);
     if total > MAX_FUZZ_CASES {
         env.error(
             &fn_id_loc,
@@ -374,26 +403,22 @@ fn build_test_info(
 
     let is_single = total == 1;
 
-    // Iterate: for each Cartesian point of the deterministic dims, run `fuzz_runs` zipped
-    // draws over the fuzz dims. When `had_fuzz` is false this collapses to plain Cartesian.
-    let det_lens: Vec<usize> = dims
-        .iter()
-        .map(|(_, d)| match d {
-            Dim::Det(vs) => vs.len(),
-            Dim::Fuzz { .. } => 1, // placeholder; we drive fuzz with `fuzz_iter`
-        })
-        .collect();
-
+    // For each pairwise row over the deterministic dims, run `fuzz_runs` zipped
+    // draws over the fuzz dims. With no fuzz dims this is just the pairwise rows;
+    // with no deterministic dims `det_rows` is a single empty row, so it reduces
+    // to the zipped fuzz draws.
     let mut cases = Vec::with_capacity(total);
-    let mut det_indices = vec![0usize; dims.len()];
-    loop {
+    for det_row in &det_rows {
         for fuzz_iter in 0..fuzz_runs {
             let mut arguments = Vec::with_capacity(dims.len());
             let mut suffix_parts = Vec::with_capacity(dims.len());
             let mut origins = Vec::with_capacity(dims.len());
             for (i, (var, d)) in dims.iter().enumerate() {
                 let v = match d {
-                    Dim::Det(vs) => &vs[det_indices[i]],
+                    Dim::Det(vs) => {
+                        let col = det_order_of_pos[i].expect("deterministic dim has a column");
+                        &vs[det_row[col]]
+                    },
                     Dim::Fuzz { values, .. } => &values[fuzz_iter % values.len()],
                 };
                 arguments.push(v.clone());
@@ -443,24 +468,131 @@ fn build_test_info(
                 origins,
             });
         }
-        // Advance odometer across deterministic dims only — fuzz dims are zipped
-        // by `fuzz_iter` above.
-        let mut idx = dims.len();
-        loop {
-            if idx == 0 {
-                return cases;
-            }
-            idx -= 1;
-            if matches!(dims[idx].1, Dim::Fuzz { .. }) {
-                continue;
-            }
-            det_indices[idx] += 1;
-            if det_indices[idx] < det_lens[idx] {
-                break;
-            }
-            det_indices[idx] = 0;
+    }
+    cases
+}
+
+/// Build a 2-way (pairwise) covering array over deterministic matrix
+/// dimensions, returning one row of value-indices per generated test case.
+///
+/// Each entry of `lens` is the number of values a dimension can take; the
+/// returned rows are index-tuples (`row[k]` selects a value for dimension `k`)
+/// such that for *every* pair of dimensions, *every* combination of their
+/// values appears in at least one row. This is the default expansion for
+/// explicit `#[test]` matrices: most interaction bugs are 2-way, so pairwise
+/// preserves that coverage while turning a full Cartesian product (`∏ lenᵢ`)
+/// into roughly the product of the two largest dimensions.
+///
+/// Degenerate inputs collapse to the exhaustive answer: zero dims yield one
+/// empty row, one dim yields one row per value, and two dims yield the full
+/// Cartesian product (pairwise *is* Cartesian when there are only two
+/// parameters). Implemented with IPOG (In-Parameter-Order, General), which is
+/// fully deterministic — no RNG — so expansions are reproducible run to run.
+fn pairwise_index_rows(lens: &[usize]) -> Vec<Vec<usize>> {
+    // Sentinel for an unassigned ("don't care") slot during construction.
+    const FREE: usize = usize::MAX;
+
+    if lens.is_empty() {
+        return vec![Vec::new()];
+    }
+    if lens.iter().any(|&l| l == 0) {
+        // A zero-length dimension produces no cases at all; callers reject this
+        // earlier (`Empty matrix []`), but stay defensive rather than index
+        // out of bounds below.
+        return Vec::new();
+    }
+    if lens.len() == 1 {
+        return (0..lens[0]).map(|v| vec![v]).collect();
+    }
+
+    // Seed with the full Cartesian product of the first two dimensions — the
+    // exact pairwise solution for two parameters.
+    let mut rows: Vec<Vec<usize>> = Vec::new();
+    for a in 0..lens[0] {
+        for b in 0..lens[1] {
+            let mut row = vec![FREE; lens.len()];
+            row[0] = a;
+            row[1] = b;
+            rows.push(row);
         }
     }
+
+    // Extend one parameter at a time (IPOG horizontal then vertical growth).
+    for p in 2..lens.len() {
+        // Pairs still needing coverage between an earlier param `j < p` and `p`,
+        // encoded as `(j, value_of_j, value_of_p)`. A BTreeSet keeps iteration
+        // order deterministic.
+        let mut uncovered: BTreeSet<(usize, usize, usize)> = BTreeSet::new();
+        for j in 0..p {
+            for vj in 0..lens[j] {
+                for vp in 0..lens[p] {
+                    uncovered.insert((j, vj, vp));
+                }
+            }
+        }
+
+        // Horizontal growth: give each existing row the value for `p` that
+        // covers the most still-uncovered pairs.
+        for row in rows.iter_mut() {
+            if uncovered.is_empty() {
+                break;
+            }
+            let mut best_val = 0;
+            let mut best_gain = -1i64;
+            for vp in 0..lens[p] {
+                let gain = (0..p)
+                    .filter(|&j| row[j] != FREE && uncovered.contains(&(j, row[j], vp)))
+                    .count() as i64;
+                if gain > best_gain {
+                    best_gain = gain;
+                    best_val = vp;
+                }
+            }
+            row[p] = best_val;
+            for (j, &vj) in row.iter().enumerate().take(p) {
+                if vj != FREE {
+                    uncovered.remove(&(j, vj, best_val));
+                }
+            }
+        }
+
+        // Vertical growth: cover the remaining pairs with new rows, merging into
+        // a row added during this pass whenever both slots are free or already
+        // agree.
+        let mut added: Vec<Vec<usize>> = Vec::new();
+        while let Some(&(j, vj, vp)) = uncovered.iter().next() {
+            uncovered.remove(&(j, vj, vp));
+            let mut merged = false;
+            for row in added.iter_mut() {
+                let j_ok = row[j] == FREE || row[j] == vj;
+                let p_ok = row[p] == FREE || row[p] == vp;
+                if j_ok && p_ok {
+                    row[j] = vj;
+                    row[p] = vp;
+                    merged = true;
+                    break;
+                }
+            }
+            if !merged {
+                let mut row = vec![FREE; lens.len()];
+                row[j] = vj;
+                row[p] = vp;
+                added.push(row);
+            }
+        }
+        rows.extend(added);
+    }
+
+    // Fill any remaining don't-care slots with a valid value (index 0); every
+    // required pair is already covered, so this only ever adds coverage.
+    for row in rows.iter_mut() {
+        for slot in row.iter_mut() {
+            if *slot == FREE {
+                *slot = 0;
+            }
+        }
+    }
+    rows
 }
 
 /// Compact human-readable rendering for a `MoveValue`, used in expanded
@@ -1384,4 +1516,82 @@ fn check_location<T>(env: &GlobalEnv, loc: Loc, attr: &str, location: Option<T>)
         env.error(&loc, &msg)
     }
     location
+}
+
+#[cfg(test)]
+mod tests {
+    use super::pairwise_index_rows;
+    use std::collections::BTreeSet;
+
+    /// Every row must be a valid index-tuple for the given dimension sizes.
+    fn assert_in_bounds(lens: &[usize], rows: &[Vec<usize>]) {
+        for row in rows {
+            assert_eq!(row.len(), lens.len());
+            for (k, &v) in row.iter().enumerate() {
+                assert!(v < lens[k], "value {} out of bounds for dim {} (len {})", v, k, lens[k]);
+            }
+        }
+    }
+
+    /// The covering property: for every pair of dimensions, every combination
+    /// of their values appears in at least one row.
+    fn assert_pairwise_covered(lens: &[usize], rows: &[Vec<usize>]) {
+        for i in 0..lens.len() {
+            for j in (i + 1)..lens.len() {
+                let seen: BTreeSet<(usize, usize)> =
+                    rows.iter().map(|r| (r[i], r[j])).collect();
+                assert_eq!(
+                    seen.len(),
+                    lens[i] * lens[j],
+                    "dims ({i},{j}) with lens ({},{}) not fully covered: {} of {}",
+                    lens[i],
+                    lens[j],
+                    seen.len(),
+                    lens[i] * lens[j]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn degenerate_dimensions() {
+        assert_eq!(pairwise_index_rows(&[]), vec![Vec::<usize>::new()]);
+        assert_eq!(pairwise_index_rows(&[3]), vec![vec![0], vec![1], vec![2]]);
+        // A zero-length dimension yields no rows at all.
+        assert!(pairwise_index_rows(&[2, 0, 3]).is_empty());
+    }
+
+    #[test]
+    fn two_dims_are_full_cartesian() {
+        let lens = [2usize, 3];
+        let rows = pairwise_index_rows(&lens);
+        assert_eq!(rows.len(), 6);
+        assert_in_bounds(&lens, &rows);
+        assert_pairwise_covered(&lens, &rows);
+    }
+
+    #[test]
+    fn three_plus_dims_cover_all_pairs_and_shrink() {
+        // 3^3 = 27 full Cartesian; pairwise must cover every pair yet stay well
+        // under the product (the pairwise lower bound here is 3*3 = 9).
+        let lens = [3usize, 3, 3];
+        let rows = pairwise_index_rows(&lens);
+        assert_in_bounds(&lens, &rows);
+        assert_pairwise_covered(&lens, &rows);
+        assert!(rows.len() < 27, "expected shrink below full Cartesian, got {}", rows.len());
+        assert!(rows.len() >= 9, "cannot cover all pairs with fewer than 9 rows");
+
+        // Mixed sizes and more dimensions still satisfy the covering property.
+        for lens in [
+            vec![2usize, 3, 4],
+            vec![4usize, 3, 2, 5],
+            vec![2usize, 2, 2, 2, 2],
+        ] {
+            let rows = pairwise_index_rows(&lens);
+            assert_in_bounds(&lens, &rows);
+            assert_pairwise_covered(&lens, &rows);
+            let full: usize = lens.iter().product();
+            assert!(rows.len() <= full);
+        }
+    }
 }

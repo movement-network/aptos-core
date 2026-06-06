@@ -16,7 +16,7 @@ use legacy_move_compiler::{
 use move_command_line_common::files::verify_and_create_named_address_mapping;
 use legacy_move_compiler::unit_test::{ExpectedFailure, TestCase};
 use move_compiler_v2::{
-    fuzz::{DefaultFuzzSource, FuzzConfig, FuzzPlanMetadata, FuzzValueSource},
+    fuzz::{DefaultFuzzSource, FuzzConfig, FuzzPlanMetadata, FuzzValueSource, DEFAULT_FUZZ_RUNS},
     fuzz_corpus, plan_builder as plan_builder_v2,
 };
 use std::sync::Arc;
@@ -129,7 +129,7 @@ pub struct UnitTestingConfig {
     pub verbose: bool,
 
     /// Number of values to sample per implicit-fuzz `#[test]` parameter.
-    #[clap(long = "fuzz-runs", default_value_t = 16)]
+    #[clap(long = "fuzz-runs", default_value_t = DEFAULT_FUZZ_RUNS)]
     pub fuzz_runs: usize,
 
     /// Deterministic seed for the fuzz value source. Defaults to 0; change to
@@ -173,7 +173,7 @@ impl Default for UnitTestingConfig {
             verbose: false,
             list: false,
             named_address_values: vec![],
-            fuzz_runs: 16,
+            fuzz_runs: DEFAULT_FUZZ_RUNS,
             fuzz_seed: 0,
             fuzz_dictionary_weight: 40,
             fuzz_corpus_dir: None,

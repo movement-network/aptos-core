@@ -16,7 +16,10 @@ use legacy_move_compiler::{
 use move_command_line_common::files::verify_and_create_named_address_mapping;
 use legacy_move_compiler::unit_test::{ExpectedFailure, TestCase};
 use move_compiler_v2::{
-    fuzz::{DefaultFuzzSource, FuzzConfig, FuzzPlanMetadata, FuzzValueSource, DEFAULT_FUZZ_RUNS},
+    fuzz::{
+        DefaultFuzzSource, FuzzConfig, FuzzPlanMetadata, FuzzValueSource,
+        DEFAULT_FUZZ_DICTIONARY_WEIGHT, DEFAULT_FUZZ_RUNS, DEFAULT_FUZZ_SEED,
+    },
     fuzz_corpus, plan_builder as plan_builder_v2,
 };
 use std::sync::Arc;
@@ -47,6 +50,11 @@ use test_reporter::UnitTestFactory;
 /// The default value bounding the amount of gas consumed in a test.
 const DEFAULT_EXECUTION_BOUND: u64 = 1_000_000;
 
+/// Default number of threads used to run tests. Single source of truth shared
+/// by the `--threads` CLI default and `UnitTestingConfig::default`, which must
+/// agree (the latter is what every programmatic embedder gets).
+const DEFAULT_NUM_THREADS: usize = 8;
+
 /// Upper bound on regression cases replayed from the corpus per function.
 /// Compile-time fuzz expansion is capped by `MAX_FUZZ_CASES` in the plan
 /// builder, but regression cases are appended to the plan *after* planning, so
@@ -69,7 +77,7 @@ pub struct UnitTestingConfig {
     /// Number of threads to use for running tests.
     #[clap(
         name = "num_threads",
-        default_value_t = 8,
+        default_value_t = DEFAULT_NUM_THREADS,
         short = 't',
         long = "threads"
     )]
@@ -134,13 +142,13 @@ pub struct UnitTestingConfig {
 
     /// Deterministic seed for the fuzz value source. Defaults to 0; change to
     /// search the space differently across CI runs.
-    #[clap(long = "fuzz-seed", default_value_t = 0)]
+    #[clap(long = "fuzz-seed", default_value_t = DEFAULT_FUZZ_SEED)]
     pub fuzz_seed: u64,
 
     /// Percentage weight (0..=100) of dictionary draws against random+edge
     /// draws when fuzzing primitive parameters. Mirrors Foundry's
     /// `dictionary_weight`.
-    #[clap(long = "fuzz-dictionary-weight", default_value_t = 40)]
+    #[clap(long = "fuzz-dictionary-weight", default_value_t = DEFAULT_FUZZ_DICTIONARY_WEIGHT)]
     pub fuzz_dictionary_weight: u8,
 
     /// Directory used as the fuzz corpus. When set, regression cases from
@@ -162,7 +170,7 @@ impl Default for UnitTestingConfig {
     fn default() -> Self {
         Self {
             filter: None,
-            num_threads: 8,
+            num_threads: DEFAULT_NUM_THREADS,
             report_statistics: false,
             report_storage_on_error: false,
             report_stacktrace_on_abort: false,
@@ -174,8 +182,8 @@ impl Default for UnitTestingConfig {
             list: false,
             named_address_values: vec![],
             fuzz_runs: DEFAULT_FUZZ_RUNS,
-            fuzz_seed: 0,
-            fuzz_dictionary_weight: 40,
+            fuzz_seed: DEFAULT_FUZZ_SEED,
+            fuzz_dictionary_weight: DEFAULT_FUZZ_DICTIONARY_WEIGHT,
             fuzz_corpus_dir: None,
         }
     }

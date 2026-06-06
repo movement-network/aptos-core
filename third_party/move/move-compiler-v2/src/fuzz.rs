@@ -236,11 +236,28 @@ impl FuzzValueSource for NoFuzzSource {
 /// [`MAX_FUZZ_CASES`]: crate::plan_builder
 pub const DEFAULT_FUZZ_RUNS: usize = 64;
 
+/// Default base RNG seed for the fuzz value source.
+///
+/// Single source of truth shared by [`FuzzConfig::default`] and the
+/// `--fuzz-seed` CLI flag. Deterministic by default (0) so runs reproduce;
+/// override to search the space differently across CI runs.
+pub const DEFAULT_FUZZ_SEED: u64 = 0;
+
+/// Default relative weight (0..=100) of dictionary draws against the
+/// random+edge strategies. Matches Foundry's `dictionary_weight` of 40.
+///
+/// Single source of truth shared by [`FuzzConfig::default`] and the
+/// `--fuzz-dictionary-weight` CLI flag. Participates in the
+/// `random + edge + dictionary == 100` weighting (with [`EDGE_WEIGHT`]), so the
+/// CLI and library defaults must not drift apart.
+pub const DEFAULT_FUZZ_DICTIONARY_WEIGHT: u8 = 40;
+
 /// Tunables for [`DefaultFuzzSource`]. The knob *names* mirror Foundry's
 /// `[fuzz]` section so users coming from EVM tooling find familiar dials, but
 /// the defaults are not identical: `runs` defaults to [`DEFAULT_FUZZ_RUNS`]
-/// rather than Foundry's 256 (see that constant for why). `dictionary_weight`
-/// does match Foundry's default of 40.
+/// rather than Foundry's 256 (see that constant for why).
+/// `dictionary_weight` does match Foundry's default of
+/// [`DEFAULT_FUZZ_DICTIONARY_WEIGHT`].
 #[derive(Clone, Debug)]
 pub struct FuzzConfig {
     /// Number of samples drawn per implicit-fuzz parameter.
@@ -261,8 +278,8 @@ impl Default for FuzzConfig {
     fn default() -> Self {
         Self {
             runs: DEFAULT_FUZZ_RUNS,
-            seed: 0,
-            dictionary_weight: 40,
+            seed: DEFAULT_FUZZ_SEED,
+            dictionary_weight: DEFAULT_FUZZ_DICTIONARY_WEIGHT,
             max_retry_multiplier: 64,
         }
     }

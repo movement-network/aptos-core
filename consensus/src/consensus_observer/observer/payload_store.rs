@@ -981,6 +981,79 @@ mod test {
     }
 
     #[test]
+    fn test_verify_payloads_against_ordered_block_forged_block_info() {
+        // Create a new block payload store
+        let consensus_observer_config = ConsensusObserverConfig::default();
+        let mut block_payload_store = BlockPayloadStore::new(consensus_observer_config);
+
+        // Add some verified blocks for the current epoch
+        let current_epoch = 0;
+        let num_verified_blocks = 10;
+        let verified_blocks = create_and_add_blocks_to_store(
+            &mut block_payload_store,
+            num_verified_blocks,
+            current_epoch,
+            true,
+        );
+
+        // Create an ordered block using the verified blocks
+        let ordered_block = OrderedBlock::new(
+            verified_blocks.clone(),
+            create_empty_ledger_info(current_epoch),
+        );
+
+        // Verify the ordered block and ensure it passes before any tampering
+        block_payload_store
+            .verify_payloads_against_ordered_block(&ordered_block)
+            .unwrap();
+
+        // Tamper with the first stored payload: keep the correct block id but forge the
+        // timestamp far into the future (the metadata is publisher-supplied and unsigned).
+        // Crucially, preserve the entry's existing valid transaction payload so the forged
+        // metadata is the only defect.
+        let tampered_block = &verified_blocks[0];
+        let original_block_info = tampered_block.block_info();
+        // Push the timestamp ~30 years into the future (the field is in microseconds): a
+        // far-future value that would force quorum store batch expiration, without
+        // resorting to a saturating sentinel.
+        let forged_timestamp_usecs = original_block_info.timestamp_usecs() + 1_000_000_000_000_000;
+        let forged_block_info = BlockInfo::new(
+            original_block_info.epoch(),
+            original_block_info.round(),
+            original_block_info.id(),
+            original_block_info.executed_state_id(),
+            original_block_info.version(),
+            forged_timestamp_usecs,
+            original_block_info.next_epoch_state().cloned(),
+        );
+        {
+            let block_payloads = block_payload_store.get_block_payloads();
+            let mut block_payloads = block_payloads.lock();
+            let block_payload_status = block_payloads
+                .get_mut(&(tampered_block.epoch(), tampered_block.round()))
+                .unwrap();
+            let existing_transaction_payload = match block_payload_status {
+                BlockPayloadStatus::AvailableAndVerified(block_payload) => {
+                    block_payload.transaction_payload().clone()
+                },
+                BlockPayloadStatus::AvailableAndUnverified(block_payload) => {
+                    block_payload.transaction_payload().clone()
+                },
+            };
+            *block_payload_status = BlockPayloadStatus::AvailableAndVerified(BlockPayload::new(
+                forged_block_info,
+                existing_transaction_payload,
+            ));
+        }
+
+        // Verify the ordered block and ensure it now fails (the forged block info mismatches)
+        let error = block_payload_store
+            .verify_payloads_against_ordered_block(&ordered_block)
+            .unwrap_err();
+        assert_matches!(error, Error::InvalidMessageError(_));
+    }
+
+    #[test]
     fn test_verify_payload_signatures_failure() {
         // Create a new consensus observer config
         let max_num_pending_blocks = 100;

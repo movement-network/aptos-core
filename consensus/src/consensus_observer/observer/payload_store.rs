@@ -171,6 +171,22 @@ impl BlockPayloadStore {
                     // Get the block transaction payload
                     let transaction_payload = match entry.get() {
                         BlockPayloadStatus::AvailableAndVerified(block_payload) => {
+                            // The stored block info is supplied by the (untrusted) publisher
+                            // and is not covered by payload signature verification. Ensure its
+                            // pre-execution fields match the ordered block's block info before
+                            // trusting the payload, otherwise forged metadata (e.g. a far-future
+                            // timestamp) could be accepted.
+                            if !block_payload
+                                .block()
+                                .match_ordered_only(&ordered_block.block_info())
+                            {
+                                return Err(Error::InvalidMessageError(format!(
+                                    "Payload verification failed! Block info for the stored payload does not match the ordered block for epoch: {:?} and round: {:?}",
+                                    ordered_block.epoch(),
+                                    ordered_block.round()
+                                )));
+                            }
+
                             block_payload.transaction_payload()
                         },
                         BlockPayloadStatus::AvailableAndUnverified(_) => {

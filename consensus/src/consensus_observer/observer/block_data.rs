@@ -191,15 +191,8 @@ impl ObserverBlockData {
 
     /// Handles commited blocks up to the given ledger info
     fn handle_committed_blocks(&mut self, ledger_info: LedgerInfoWithSignatures) {
-        // Remove the committed blocks from the payload and ordered block stores
-        self.block_payload_store.remove_blocks_for_epoch_round(
-            ledger_info.commit_info().epoch(),
-            ledger_info.commit_info().round(),
-        );
-        self.ordered_block_store
-            .remove_blocks_for_commit(&ledger_info);
-
-        // Verify the ledger info is for the same epoch
+        // Only process commit callbacks for the current epoch. A callback for a
+        // different epoch is ignored without touching the caches or the root.
         let root_commit_info = self.root.commit_info();
         if ledger_info.commit_info().epoch() != root_commit_info.epoch() {
             warn!(
@@ -211,6 +204,14 @@ impl ObserverBlockData {
             );
             return;
         }
+
+        // Remove the committed blocks from the payload and ordered block stores
+        self.block_payload_store.remove_blocks_for_epoch_round(
+            ledger_info.commit_info().epoch(),
+            ledger_info.commit_info().round(),
+        );
+        self.ordered_block_store
+            .remove_blocks_for_commit(&ledger_info);
 
         // Update the root ledger info. Note: we only want to do this if
         // the new ledger info round is greater than the current root

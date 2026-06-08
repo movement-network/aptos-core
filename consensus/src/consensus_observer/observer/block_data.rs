@@ -663,6 +663,58 @@ mod test {
     }
 
     #[test]
+    fn test_handle_committed_blocks_wrong_epoch_preserves_caches() {
+        // Create a root ledger info
+        let epoch = 10;
+        let round = 5;
+        let root = create_ledger_info(epoch, round);
+
+        // Create the observer block data
+        let mut observer_block_data =
+            ObserverBlockData::new_with_root(ConsensusObserverConfig::default(), root.clone());
+
+        // Seed pending ordered blocks and their payloads at the root epoch
+        let num_ordered_blocks = 3;
+        let ordered_blocks = create_and_add_ordered_blocks(
+            &mut observer_block_data,
+            num_ordered_blocks,
+            epoch,
+            round,
+        );
+        for ordered_block in &ordered_blocks {
+            create_and_add_payloads_for_ordered_block(&mut observer_block_data, ordered_block);
+        }
+
+        // Verify both caches hold all seeded entries
+        assert_eq!(
+            observer_block_data.get_all_ordered_blocks().len(),
+            num_ordered_blocks
+        );
+        assert_eq!(
+            observer_block_data.get_block_payloads().lock().len(),
+            num_ordered_blocks
+        );
+
+        // Deliver a commit notification for a different epoch than the root (epoch + 1).
+        // The root is at `epoch`, so this notification does not belong here and must be
+        // ignored: it should not evict anything from the caches, and it should not move
+        // the root. The higher round (round + 7) ensures we'd notice if the root wrongly
+        // advanced.
+        observer_block_data.handle_committed_blocks(create_ledger_info(epoch + 1, round + 7));
+
+        // Verify nothing was evicted and the root is unchanged
+        assert_eq!(
+            observer_block_data.get_all_ordered_blocks().len(),
+            num_ordered_blocks
+        );
+        assert_eq!(
+            observer_block_data.get_block_payloads().lock().len(),
+            num_ordered_blocks
+        );
+        assert_eq!(observer_block_data.root(), root);
+    }
+
+    #[test]
     fn test_remove_ready_pending_block() {
         // Create a root ledger info
         let epoch = 100;

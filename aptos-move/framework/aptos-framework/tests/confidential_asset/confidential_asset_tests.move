@@ -507,11 +507,37 @@ module aptos_framework::confidential_asset_tests {
 
         assert!(confidential_asset::verify_actual_balance(alice_addr, token, &alice_dk, 100), 1);
         assert!(confidential_asset::verify_pending_balance(bob_addr, token, &bob_dk, 100), 1);
+    }
 
-        transfer(&alice, &alice_dk, token, alice_addr, 100, 0, vector[]);
+    // Self-transfers are disabled: a confidential transfer whose recipient is the sender must abort
+    // with `ESELF_TRANSFER` (0x01001A) before mutating any balance.
+    #[test(
+        confidential_asset = @aptos_framework,
+        aptos_fx = @aptos_framework,
+        fa = @0xfa,
+        alice = @0xa1,
+        bob = @0xb0
+    )]
+    #[expected_failure(abort_code = 0x01001A, location = confidential_asset)]
+    fun fail_self_transfer(
+        confidential_asset: signer,
+        aptos_fx: signer,
+        fa: signer,
+        alice: signer,
+        bob: signer)
+    {
+        let token = set_up_for_confidential_asset_test(&confidential_asset, &aptos_fx, &fa, &alice, &bob, 500, 500);
 
-        assert!(confidential_asset::verify_actual_balance(alice_addr, token, &alice_dk, 0), 1);
-        assert!(confidential_asset::verify_pending_balance(alice_addr, token, &alice_dk, 100), 1);
+        let alice_addr = signer::address_of(&alice);
+
+        let (alice_dk, alice_ek) = generate_twisted_elgamal_keypair();
+
+        confidential_asset::register_for_testing(&alice, token, twisted_elgamal::pubkey_to_bytes(&alice_ek));
+
+        confidential_asset::deposit(&alice, token, 200);
+        confidential_asset::rollover_pending_balance(&alice, token);
+
+        transfer(&alice, &alice_dk, token, alice_addr, 100, 100, vector[]);
     }
 
     // First-time combined entry point: register + deposit + rollover in one transaction. After

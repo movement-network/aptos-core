@@ -107,6 +107,9 @@ module aptos_framework::confidential_asset {
     /// Deposit or withdrawal amount must be greater than zero.
     const EZERO_AMOUNT: u64 = 25;
 
+    /// The sender and recipient of a confidential transfer must be different accounts.
+    const ESELF_TRANSFER: u64 = 26;
+
     //
     // Constants
     //
@@ -1153,6 +1156,7 @@ module aptos_framework::confidential_asset {
         proof: TransferProof,
         sender_auditor_hint: vector<u8>) acquires ConfidentialAssetStore, FAConfig, GlobalConfig
     {
+        assert!(signer::address_of(sender) != to, error::invalid_argument(ESELF_TRANSFER));
         assert!(is_safe_for_confidentiality(&token), error::invalid_argument(EUNSAFE_DISPATCHABLE_FA));
         assert!(is_token_allowed(token), error::invalid_argument(ETOKEN_DISABLED));
         assert!(!is_frozen(to, token), error::invalid_state(EALREADY_FROZEN));

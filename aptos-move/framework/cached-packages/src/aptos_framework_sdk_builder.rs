@@ -1306,11 +1306,14 @@ pub enum EntryFunctionCall {
     /// perform the transaction's effects when submitted. `salt` (32 bytes) disambiguates duplicate
     /// proposals of the same script. The table key is `keccak256(execution_hash || salt)`.
     /// `num_seconds_execute` must be >= `min_num_seconds_execute`.
+    /// `script_path` is an off-chain pointer (e.g. an IPFS URI) to the human-readable script
+    /// payload, capped at `MAX_SCRIPT_PATH_LENGTH` bytes; pass an empty vector to omit it.
     TimelockCreateTransaction {
         timelock_account: AccountAddress,
         execution_hash: Vec<u8>,
         num_seconds_execute: u64,
         salt: Vec<u8>,
+        script_path: Vec<u8>,
     },
 
     /// Remove creators from the timelock account. At least one creator must remain.
@@ -2177,11 +2180,13 @@ impl EntryFunctionCall {
                 execution_hash,
                 num_seconds_execute,
                 salt,
+                script_path,
             } => timelock_create_transaction(
                 timelock_account,
                 execution_hash,
                 num_seconds_execute,
                 salt,
+                script_path,
             ),
             TimelockRemoveCreators { creators_to_remove } => {
                 timelock_remove_creators(creators_to_remove)
@@ -5793,11 +5798,14 @@ pub fn timelock_create(
 /// perform the transaction's effects when submitted. `salt` (32 bytes) disambiguates duplicate
 /// proposals of the same script. The table key is `keccak256(execution_hash || salt)`.
 /// `num_seconds_execute` must be >= `min_num_seconds_execute`.
+/// `script_path` is an off-chain pointer (e.g. an IPFS URI) to the human-readable script
+/// payload, capped at `MAX_SCRIPT_PATH_LENGTH` bytes; pass an empty vector to omit it.
 pub fn timelock_create_transaction(
     timelock_account: AccountAddress,
     execution_hash: Vec<u8>,
     num_seconds_execute: u64,
     salt: Vec<u8>,
+    script_path: Vec<u8>,
 ) -> TransactionPayload {
     TransactionPayload::EntryFunction(EntryFunction::new(
         ModuleId::new(
@@ -5814,6 +5822,7 @@ pub fn timelock_create_transaction(
             bcs::to_bytes(&execution_hash).unwrap(),
             bcs::to_bytes(&num_seconds_execute).unwrap(),
             bcs::to_bytes(&salt).unwrap(),
+            bcs::to_bytes(&script_path).unwrap(),
         ],
     ))
 }
@@ -8257,6 +8266,7 @@ mod decoder {
                 execution_hash: bcs::from_bytes(script.args().get(1)?).ok()?,
                 num_seconds_execute: bcs::from_bytes(script.args().get(2)?).ok()?,
                 salt: bcs::from_bytes(script.args().get(3)?).ok()?,
+                script_path: bcs::from_bytes(script.args().get(4)?).ok()?,
             })
         } else {
             None

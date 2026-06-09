@@ -145,6 +145,8 @@ fn propose(
             bcs::to_bytes(&execution_hash.to_vec()).unwrap(),
             bcs::to_bytes(&delay).unwrap(),
             bcs::to_bytes(&salt.to_vec()).unwrap(),
+            // Optional off-chain script_path pointer; empty in these tests.
+            bcs::to_bytes(&Vec::<u8>::new()).unwrap(),
         ],
     )
 }
@@ -986,6 +988,8 @@ fn test_multisig_proposes_timelock_transaction() {
             bcs::to_bytes(&exec_hash).unwrap(),
             bcs::to_bytes(&DELAY).unwrap(),
             bcs::to_bytes(&salt).unwrap(),
+            // Optional off-chain script_path pointer; empty here.
+            bcs::to_bytes(&Vec::<u8>::new()).unwrap(),
         ],
     );
     let multisig_payload = MultisigTransactionPayload::EntryFunction(inner_fn);

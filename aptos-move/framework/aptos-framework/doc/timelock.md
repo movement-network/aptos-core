@@ -221,6 +221,12 @@ from the table key, which is <code>keccak256(execution_hash || salt)</code>.
 
 </dd>
 <dt>
+<code>script_path: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;</code>
+</dt>
+<dd>
+
+</dd>
+<dt>
 <code>executed: bool</code>
 </dt>
 <dd>
@@ -688,6 +694,16 @@ and a transaction's <code>num_seconds_execute</code> must be at least the accoun
 
 
 
+<a id="0x1_timelock_ESCRIPT_PATH_TOO_LONG"></a>
+
+The provided <code>script_path</code> exceeds <code><a href="timelock.md#0x1_timelock_MAX_SCRIPT_PATH_LENGTH">MAX_SCRIPT_PATH_LENGTH</a></code>.
+
+
+<pre><code><b>const</b> <a href="timelock.md#0x1_timelock_ESCRIPT_PATH_TOO_LONG">ESCRIPT_PATH_TOO_LONG</a>: u64 = 18;
+</code></pre>
+
+
+
 <a id="0x1_timelock_ESELF_CANNOT_BE_MEMBER"></a>
 
 The timelock account itself cannot be a creator or executor.
@@ -733,6 +749,16 @@ Removing these creators would leave the timelock account with zero creators.
 
 
 <pre><code><b>const</b> <a href="timelock.md#0x1_timelock_MAX_NUM_SECONDS_EXECUTE">MAX_NUM_SECONDS_EXECUTE</a>: u64 = 604800;
+</code></pre>
+
+
+
+<a id="0x1_timelock_MAX_SCRIPT_PATH_LENGTH"></a>
+
+Maximum byte length of the optional off-chain <code>script_path</code> pointer.
+
+
+<pre><code><b>const</b> <a href="timelock.md#0x1_timelock_MAX_SCRIPT_PATH_LENGTH">MAX_SCRIPT_PATH_LENGTH</a>: u64 = 256;
 </code></pre>
 
 
@@ -1356,9 +1382,11 @@ Propose a new transaction to be executed after the timelock period.
 perform the transaction's effects when submitted. <code>salt</code> (32 bytes) disambiguates duplicate
 proposals of the same script. The table key is <code>keccak256(execution_hash || salt)</code>.
 <code>num_seconds_execute</code> must be >= <code>min_num_seconds_execute</code>.
+<code>script_path</code> is an off-chain pointer (e.g. an IPFS URI) to the human-readable script
+payload, capped at <code><a href="timelock.md#0x1_timelock_MAX_SCRIPT_PATH_LENGTH">MAX_SCRIPT_PATH_LENGTH</a></code> bytes; pass an empty vector to omit it.
 
 
-<pre><code><b>public</b> entry <b>fun</b> <a href="timelock.md#0x1_timelock_create_transaction">create_transaction</a>(creator: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, timelock_account: <b>address</b>, execution_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, num_seconds_execute: u64, salt: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;)
+<pre><code><b>public</b> entry <b>fun</b> <a href="timelock.md#0x1_timelock_create_transaction">create_transaction</a>(creator: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, timelock_account: <b>address</b>, execution_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, num_seconds_execute: u64, salt: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, script_path: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;)
 </code></pre>
 
 
@@ -1372,7 +1400,8 @@ proposals of the same script. The table key is <code>keccak256(execution_hash ||
     timelock_account: <b>address</b>,
     execution_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
     num_seconds_execute: u64,
-    salt: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
+    salt: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
+    script_path: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
 ) <b>acquires</b> <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a> {
     <a href="timelock.md#0x1_timelock_assert_timelock_account_exists">assert_timelock_account_exists</a>(timelock_account);
     <a href="timelock.md#0x1_timelock_assert_is_creator">assert_is_creator</a>(creator, timelock_account);
@@ -1383,6 +1412,10 @@ proposals of the same script. The table key is <code>keccak256(execution_hash ||
     <b>assert</b>!(
         salt.length() == <a href="timelock.md#0x1_timelock_SALT_LENGTH">SALT_LENGTH</a>,
         <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="timelock.md#0x1_timelock_EINVALID_BYTES_LENGTH">EINVALID_BYTES_LENGTH</a>)
+    );
+    <b>assert</b>!(
+        script_path.length() &lt;= <a href="timelock.md#0x1_timelock_MAX_SCRIPT_PATH_LENGTH">MAX_SCRIPT_PATH_LENGTH</a>,
+        <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="timelock.md#0x1_timelock_ESCRIPT_PATH_TOO_LONG">ESCRIPT_PATH_TOO_LONG</a>)
     );
 
     <b>let</b> transaction_hash = <a href="timelock.md#0x1_timelock_get_transaction_hash">get_transaction_hash</a>(execution_hash, salt);
@@ -1403,6 +1436,7 @@ proposals of the same script. The table key is <code>keccak256(execution_hash ||
         creation_time_secs: now_seconds(),
         num_seconds_execute,
         salt,
+        script_path,
         executed: <b>false</b>
     };
     <a href="timelock.md#0x1_timelock">timelock</a>.transactions.add(transaction_hash, transaction);
@@ -2242,7 +2276,7 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 ### Function `create_transaction`
 
 
-<pre><code><b>public</b> entry <b>fun</b> <a href="timelock.md#0x1_timelock_create_transaction">create_transaction</a>(creator: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, timelock_account: <b>address</b>, execution_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, num_seconds_execute: u64, salt: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;)
+<pre><code><b>public</b> entry <b>fun</b> <a href="timelock.md#0x1_timelock_create_transaction">create_transaction</a>(creator: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, timelock_account: <b>address</b>, execution_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, num_seconds_execute: u64, salt: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, script_path: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;)
 </code></pre>
 
 

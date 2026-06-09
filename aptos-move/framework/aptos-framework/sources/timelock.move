@@ -48,6 +48,8 @@ module aptos_framework::timelock {
     const SALT_LENGTH: u64 = 32;
     const MIN_NUM_SECONDS_EXECUTE: u64 = 3600;
     const MAX_NUM_SECONDS_EXECUTE: u64 = 604800;
+    /// Maximum byte length of the optional off-chain `script_path` pointer.
+    const MAX_SCRIPT_PATH_LENGTH: u64 = 256;
 
     /// Creator list cannot contain duplicate addresses.
     const EDUPLICATE_CREATOR: u64 = 1;
@@ -86,6 +88,8 @@ module aptos_framework::timelock {
     const EINVALID_BYTES_LENGTH: u64 = 16;
     /// Current transaction script hash does not match the proposed execution hash.
     const EEXECUTION_HASH_NOT_MATCHING: u64 = 17;
+    /// The provided `script_path` exceeds `MAX_SCRIPT_PATH_LENGTH`.
+    const ESCRIPT_PATH_TOO_LONG: u64 = 18;
 
     /// Represents a timelock account's configuration and pending/historical transactions.
     /// Stored at the resource account address created during timelock account creation.
@@ -120,6 +124,10 @@ module aptos_framework::timelock {
         num_seconds_execute: u64,
         // User-provided salt used when deriving the transaction hash from execution_hash.
         salt: vector<u8>,
+        // Optional off-chain pointer (e.g. an IPFS URI or URL) to the human-readable script
+        // payload and metadata, capped at `MAX_SCRIPT_PATH_LENGTH` bytes. An empty vector means
+        // no pointer was provided.
+        script_path: vector<u8>,
         // True once the transaction is resolved (successfully) or canceled.
         executed: bool
     }
@@ -443,12 +451,15 @@ module aptos_framework::timelock {
     /// perform the transaction's effects when submitted. `salt` (32 bytes) disambiguates duplicate
     /// proposals of the same script. The table key is `keccak256(execution_hash || salt)`.
     /// `num_seconds_execute` must be >= `min_num_seconds_execute`.
+    /// `script_path` is an off-chain pointer (e.g. an IPFS URI) to the human-readable script
+    /// payload, capped at `MAX_SCRIPT_PATH_LENGTH` bytes; pass an empty vector to omit it.
     public entry fun create_transaction(
         creator: &signer,
         timelock_account: address,
         execution_hash: vector<u8>,
         num_seconds_execute: u64,
-        salt: vector<u8>
+        salt: vector<u8>,
+        script_path: vector<u8>
     ) acquires TimelockAccount {
         assert_timelock_account_exists(timelock_account);
         assert_is_creator(creator, timelock_account);
@@ -459,6 +470,10 @@ module aptos_framework::timelock {
         assert!(
             salt.length() == SALT_LENGTH,
             error::invalid_argument(EINVALID_BYTES_LENGTH)
+        );
+        assert!(
+            script_path.length() <= MAX_SCRIPT_PATH_LENGTH,
+            error::invalid_argument(ESCRIPT_PATH_TOO_LONG)
         );
 
         let transaction_hash = get_transaction_hash(execution_hash, salt);
@@ -479,6 +494,7 @@ module aptos_framework::timelock {
             creation_time_secs: now_seconds(),
             num_seconds_execute,
             salt,
+            script_path,
             executed: false
         };
         timelock.transactions.add(transaction_hash, transaction);
@@ -843,7 +859,8 @@ module aptos_framework::timelock {
             timelock_addr,
             EXECUTION_HASH,
             TIMELOCK_SECS,
-            SALT
+            SALT,
+            b""
         );
         let tx_hash = get_transaction_hash(EXECUTION_HASH, SALT);
         let tx = get_transaction(timelock_addr, tx_hash);
@@ -872,7 +889,8 @@ module aptos_framework::timelock {
             timelock_addr,
             EXECUTION_HASH,
             TIMELOCK_SECS,
-            SALT
+            SALT,
+            b""
         );
         // Same execution hash and salt — must fail.
         create_transaction(
@@ -880,7 +898,8 @@ module aptos_framework::timelock {
             timelock_addr,
             EXECUTION_HASH,
             TIMELOCK_SECS,
-            SALT
+            SALT,
+            b""
         );
     }
 
@@ -902,7 +921,8 @@ module aptos_framework::timelock {
             timelock_addr,
             EXECUTION_HASH,
             TIMELOCK_SECS,
-            SALT
+            SALT,
+            b""
         );
         // Different salt — must succeed.
         create_transaction(
@@ -910,7 +930,8 @@ module aptos_framework::timelock {
             timelock_addr,
             EXECUTION_HASH,
             TIMELOCK_SECS,
-            SALT_2
+            SALT_2,
+            b""
         );
     }
 
@@ -933,7 +954,8 @@ module aptos_framework::timelock {
             timelock_addr,
             INVALID_BYTES,
             TIMELOCK_SECS,
-            SALT
+            SALT,
+            b""
         );
     }
 
@@ -956,7 +978,8 @@ module aptos_framework::timelock {
             timelock_addr,
             EXECUTION_HASH,
             TIMELOCK_SECS,
-            INVALID_BYTES
+            INVALID_BYTES,
+            b""
         );
     }
 
@@ -979,7 +1002,8 @@ module aptos_framework::timelock {
             timelock_addr,
             EXECUTION_HASH,
             TIMELOCK_SECS,
-            SALT
+            SALT,
+            b""
         );
     }
 
@@ -1003,7 +1027,8 @@ module aptos_framework::timelock {
             timelock_addr,
             EXECUTION_HASH,
             TIMELOCK_SECS,
-            SALT
+            SALT,
+            b""
         );
         let tx_hash = get_transaction_hash(EXECUTION_HASH, SALT);
         cancel_transaction(creator, timelock_addr, tx_hash);
@@ -1029,7 +1054,8 @@ module aptos_framework::timelock {
             timelock_addr,
             EXECUTION_HASH,
             TIMELOCK_SECS,
-            SALT
+            SALT,
+            b""
         );
         let tx_hash = get_transaction_hash(EXECUTION_HASH, SALT);
         cancel_transaction(executor, timelock_addr, tx_hash);
@@ -1055,7 +1081,8 @@ module aptos_framework::timelock {
             timelock_addr,
             EXECUTION_HASH,
             TIMELOCK_SECS,
-            SALT
+            SALT,
+            b""
         );
         let tx_hash = get_transaction_hash(EXECUTION_HASH, SALT);
         cancel_transaction(creator, timelock_addr, tx_hash);
@@ -1082,7 +1109,8 @@ module aptos_framework::timelock {
             timelock_addr,
             EXECUTION_HASH,
             TIMELOCK_SECS,
-            SALT
+            SALT,
+            b""
         );
         let tx_hash = get_transaction_hash(EXECUTION_HASH, SALT);
         cancel_transaction(creator, timelock_addr, tx_hash);
@@ -1108,7 +1136,8 @@ module aptos_framework::timelock {
             timelock_addr,
             EXECUTION_HASH,
             TIMELOCK_SECS,
-            SALT
+            SALT,
+            b""
         );
         cancel_transaction(
             non_member,
@@ -1142,7 +1171,8 @@ module aptos_framework::timelock {
             timelock_addr,
             EXECUTION_HASH,
             TIMELOCK_SECS,
-            SALT
+            SALT,
+            b""
         );
         // No time advance — must fail with ETIMELOCK_NOT_EXPIRED.
         let _ = resolve(
@@ -1171,7 +1201,8 @@ module aptos_framework::timelock {
             timelock_addr,
             EXECUTION_HASH,
             TIMELOCK_SECS,
-            SALT
+            SALT,
+            b""
         );
         let tx_hash = get_transaction_hash(EXECUTION_HASH, SALT);
         cancel_transaction(creator, timelock_addr, tx_hash);
@@ -1198,7 +1229,8 @@ module aptos_framework::timelock {
             timelock_addr,
             EXECUTION_HASH,
             TIMELOCK_SECS,
-            SALT
+            SALT,
+            b""
         );
         timestamp::fast_forward_seconds(TIMELOCK_SECS + 1);
         let _ =
@@ -1227,7 +1259,8 @@ module aptos_framework::timelock {
             timelock_addr,
             EXECUTION_HASH,
             TIMELOCK_SECS,
-            SALT
+            SALT,
+            b""
         );
         let tx_hash = get_transaction_hash(EXECUTION_HASH, SALT);
         // Not yet executable — delay hasn't elapsed.
@@ -1380,5 +1413,65 @@ module aptos_framework::timelock {
         assert!(is_executor(address_of(creator), timelock_addr), 0);
         assert!(!is_executor(address_of(executor), timelock_addr), 1);
     }
+
+    // --- script_path tests ---
+
+    #[test(framework = @0x1, creator = @0x123)]
+    public entry fun test_create_transaction_with_script_path(
+        framework: &signer, creator: &signer
+    ) acquires TimelockAccount {
+        setup(framework);
+        create_account(address_of(creator));
+        let timelock_addr = get_next_timelock_account_address(address_of(creator));
+        create(
+            creator,
+            vector[address_of(creator)],
+            vector[],
+            TIMELOCK_SECS
+        );
+        let path = b"ipfs://bafybeigexampleexampleexamplecid";
+        create_transaction(
+            creator,
+            timelock_addr,
+            EXECUTION_HASH,
+            TIMELOCK_SECS,
+            SALT,
+            path
+        );
+        let tx = get_transaction(timelock_addr, get_transaction_hash(EXECUTION_HASH, SALT));
+        assert!(tx.script_path == path, 0);
+    }
+
+    #[test(framework = @0x1, creator = @0x123)]
+    #[expected_failure(abort_code = 0x10012, location = Self)]
+    public entry fun test_create_transaction_script_path_too_long_fails(
+        framework: &signer, creator: &signer
+    ) acquires TimelockAccount {
+        setup(framework);
+        create_account(address_of(creator));
+        let timelock_addr = get_next_timelock_account_address(address_of(creator));
+        create(
+            creator,
+            vector[address_of(creator)],
+            vector[],
+            TIMELOCK_SECS
+        );
+        // One byte over the cap.
+        let path: vector<u8> = vector[];
+        let i = 0;
+        while (i <= MAX_SCRIPT_PATH_LENGTH) {
+            path.push_back(0u8);
+            i += 1;
+        };
+        create_transaction(
+            creator,
+            timelock_addr,
+            EXECUTION_HASH,
+            TIMELOCK_SECS,
+            SALT,
+            path
+        );
+    }
+
 }
 

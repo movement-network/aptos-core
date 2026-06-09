@@ -288,6 +288,7 @@ spec aptos_framework::timelock {
         execution_hash: vector<u8>,
         num_seconds_execute: u64,
         salt: vector<u8>,
+        script_path: vector<u8>,
     ) {
         pragma aborts_if_is_partial;
         let timelock = TimelockAccount[timelock_account];

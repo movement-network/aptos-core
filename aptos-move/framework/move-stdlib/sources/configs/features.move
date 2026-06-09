@@ -267,7 +267,7 @@ module std::features {
     }
 
     /// Whether we refund storage costs to the user upon deletion
-    /// 
+    ///
     /// Lifetime: transient
     const STORAGE_DELETION_REFUND: u64 = 28;
 
@@ -594,30 +594,12 @@ module std::features {
     }
 
     const TRANSACTION_SIMULATION_ENHANCEMENT: u64 = 78;
-    /// Whether the Atomic bridge is available
-    /// Lifetime: transient
-    const ATOMIC_BRIDGE: u64 = 71;
 
-    #[deprecated]
-    public fun get_atomic_bridge_feature(): u64 { ATOMIC_BRIDGE }
-
-    #[deprecated]
-    public fun abort_atomic_bridge_enabled(): bool {
-        true
-    }
-
-
-    /// Whether the Atomic bridge is available
-    /// Lifetime: transient
-    const NATIVE_BRIDGE: u64 = 72;
-
-    #[deprecated]
-    public fun get_native_bridge_feature(): u64 { NATIVE_BRIDGE }
-
-    #[deprecated]
-    public fun abort_native_bridge_enabled(): bool {
-        true
-    }
+    // Feature flags 71 (_DISALLOW_USER_NATIVES) and 72 (ALLOW_SERIALIZED_SCRIPT_ARGS) are
+    // VM-only flags owned by the Rust `FeatureFlag` enum (types/src/on_chain_config/aptos_features.rs).
+    // They are gated entirely in the VM and intentionally have no Move-side constant here.
+    // Do not reuse these indices in Move: the deprecated NATIVE_BRIDGE/ATOMIC_BRIDGE features
+    // previously aliased them, masking ALLOW_SERIALIZED_SCRIPT_ARGS.
 
     /// Whether the Governed Gas Pool is used to capture gas fees
     ///
@@ -779,7 +761,7 @@ module std::features {
         is_enabled(DISTRIBUTE_TRANSACTION_FEE)
     }
 
-    /// Whether the staking rewards are mint (diseable) or withdraw from the gouverned gas pool treasury (enable). 
+    /// Whether the staking rewards are mint (diseable) or withdraw from the gouverned gas pool treasury (enable).
     ///
     /// Lifetime: permanent
     const STAKE_REWARD_USING_TREASURY: u64 = 224;

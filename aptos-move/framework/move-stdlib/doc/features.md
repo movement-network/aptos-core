@@ -295,6 +295,15 @@ Lifetime: transient
 
 
 
+<a id="0x1_features_ALLOW_SERIALIZED_SCRIPT_ARGS"></a>
+
+
+
+<pre><code><b>const</b> <a href="features.md#0x1_features_ALLOW_SERIALIZED_SCRIPT_ARGS">ALLOW_SERIALIZED_SCRIPT_ARGS</a>: u64 = 72;
+</code></pre>
+
+
+
 <a id="0x1_features_APTOS_STD_CHAIN_ID_NATIVES"></a>
 
 Whether the new <code>aptos_stdlib::type_info::chain_id()</code> native for fetching the chain ID is enabled.

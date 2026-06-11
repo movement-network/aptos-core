@@ -593,6 +593,20 @@ module std::features {
         is_enabled(ABORT_IF_MULTISIG_PAYLOAD_MISMATCH)
     }
 
+    /// Whether to allow serialized script arguments in the transaction payload.
+    /// Lifetime: transient
+    const ALLOW_SERIALIZED_SCRIPT_ARGS: u64 = 72;
+
+    public fun get_allow_serialized_script_args_feature(): u64 { ALLOW_SERIALIZED_SCRIPT_ARGS }
+
+    public fun allow_serialized_script_args_enabled(): bool acquires Features {
+        is_enabled(ALLOW_SERIALIZED_SCRIPT_ARGS)
+    }
+
+     /// Whether to enhance the transaction simulation with additional checks and features.
+     /// This is needed because of the introduction of new features in transaction simulation.
+     /// Lifetime: transient
+
     const TRANSACTION_SIMULATION_ENHANCEMENT: u64 = 78;
     /// Whether the Atomic bridge is available
     /// Lifetime: transient
@@ -605,7 +619,6 @@ module std::features {
     public fun abort_atomic_bridge_enabled(): bool {
         true
     }
-
 
     /// Whether the Atomic bridge is available
     /// Lifetime: transient

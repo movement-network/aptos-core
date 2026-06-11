@@ -25,6 +25,7 @@ It enables private transfers by obfuscating token amounts while keeping sender a
 -  [Struct `ChainAuditorAdminChanged`](#0x1_confidential_asset_ChainAuditorAdminChanged)
 -  [Constants](#@Constants_0)
 -  [Function `init_module`](#0x1_confidential_asset_init_module)
+-  [Function `initialize`](#0x1_confidential_asset_initialize)
 -  [Function `register`](#0x1_confidential_asset_register)
 -  [Function `register_and_deposit_and_rollover_pending_balance`](#0x1_confidential_asset_register_and_deposit_and_rollover_pending_balance)
 -  [Function `deposit_and_rollover_pending_balance`](#0x1_confidential_asset_deposit_and_rollover_pending_balance)
@@ -895,6 +896,16 @@ Chain-auditor admin assigned or rotated by governance.
 ## Constants
 
 
+<a id="0x1_confidential_asset_EZERO_AMOUNT"></a>
+
+Deposit or withdrawal amount must be greater than zero.
+
+
+<pre><code><b>const</b> <a href="confidential_asset.md#0x1_confidential_asset_EZERO_AMOUNT">EZERO_AMOUNT</a>: u64 = 25;
+</code></pre>
+
+
+
 <a id="0x1_confidential_asset_EINTERNAL_ERROR"></a>
 
 An internal error occurred, indicating unexpected behavior.
@@ -931,6 +942,16 @@ The confidential asset account is already frozen.
 
 
 <pre><code><b>const</b> <a href="confidential_asset.md#0x1_confidential_asset_EALREADY_FROZEN">EALREADY_FROZEN</a>: u64 = 7;
+</code></pre>
+
+
+
+<a id="0x1_confidential_asset_EALREADY_INITIALIZED"></a>
+
+The module's <code><a href="confidential_asset.md#0x1_confidential_asset_GlobalConfig">GlobalConfig</a></code> has already been initialized.
+
+
+<pre><code><b>const</b> <a href="confidential_asset.md#0x1_confidential_asset_EALREADY_INITIALIZED">EALREADY_INITIALIZED</a>: u64 = 27;
 </code></pre>
 
 
@@ -1105,6 +1126,16 @@ The range proof system does not support sufficient range.
 
 
 
+<a id="0x1_confidential_asset_ESELF_TRANSFER"></a>
+
+The sender and recipient of a confidential transfer must be different accounts.
+
+
+<pre><code><b>const</b> <a href="confidential_asset.md#0x1_confidential_asset_ESELF_TRANSFER">ESELF_TRANSFER</a>: u64 = 26;
+</code></pre>
+
+
+
 <a id="0x1_confidential_asset_ETOKEN_DISABLED"></a>
 
 The token is not allowed for confidential transfers.
@@ -1138,10 +1169,10 @@ supply hooks) are not yet supported in confidential transfers.
 
 <a id="0x1_confidential_asset_MAINNET_CHAIN_ID"></a>
 
-The mainnet chain ID. If the chain ID is 1, the allow list is enabled.
+The Movement mainnet chain ID. If the chain ID is 126, the allow list is enabled.
 
 
-<pre><code><b>const</b> <a href="confidential_asset.md#0x1_confidential_asset_MAINNET_CHAIN_ID">MAINNET_CHAIN_ID</a>: u8 = 1;
+<pre><code><b>const</b> <a href="confidential_asset.md#0x1_confidential_asset_MAINNET_CHAIN_ID">MAINNET_CHAIN_ID</a>: u8 = 126;
 </code></pre>
 
 
@@ -1170,6 +1201,8 @@ The maximum number of transactions can be aggregated on the pending balance befo
 
 ## Function `init_module`
 
+Runs when CA is first published onto an already-live network (governance framework upgrade).
+Does not run at genesis — genesis calls <code>initialize</code> directly (see <code><a href="genesis.md#0x1_genesis_initialize">genesis::initialize</a></code>).
 
 
 <pre><code><b>fun</b> <a href="confidential_asset.md#0x1_confidential_asset_init_module">init_module</a>(deployer: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>)
@@ -1182,16 +1215,47 @@ The maximum number of transactions can be aggregated on the pending balance befo
 
 
 <pre><code><b>fun</b> <a href="confidential_asset.md#0x1_confidential_asset_init_module">init_module</a>(deployer: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>) {
+    <a href="confidential_asset.md#0x1_confidential_asset_initialize">initialize</a>(deployer)
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_confidential_asset_initialize"></a>
+
+## Function `initialize`
+
+Publishes the chain-level <code><a href="confidential_asset.md#0x1_confidential_asset_GlobalConfig">GlobalConfig</a></code>. Invoked at genesis via <code><a href="genesis.md#0x1_genesis_initialize">genesis::initialize</a></code>, and on
+a first-time governance publish via <code>init_module</code>. Idempotent: aborts if already initialized.
+
+
+<pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="confidential_asset.md#0x1_confidential_asset_initialize">initialize</a>(aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>)
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="confidential_asset.md#0x1_confidential_asset_initialize">initialize</a>(aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>) {
+    <a href="system_addresses.md#0x1_system_addresses_assert_aptos_framework">system_addresses::assert_aptos_framework</a>(aptos_framework);
+    <b>assert</b>!(
+        !<b>exists</b>&lt;<a href="confidential_asset.md#0x1_confidential_asset_GlobalConfig">GlobalConfig</a>&gt;(@aptos_framework),
+        <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_already_exists">error::already_exists</a>(<a href="confidential_asset.md#0x1_confidential_asset_EALREADY_INITIALIZED">EALREADY_INITIALIZED</a>)
+    );
     <b>assert</b>!(
         bulletproofs::get_max_range_bits() &gt;= <a href="confidential_proof.md#0x1_confidential_proof_get_bulletproofs_num_bits">confidential_proof::get_bulletproofs_num_bits</a>(),
         <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_internal">error::internal</a>(<a href="confidential_asset.md#0x1_confidential_asset_ERANGE_PROOF_SYSTEM_HAS_INSUFFICIENT_RANGE">ERANGE_PROOF_SYSTEM_HAS_INSUFFICIENT_RANGE</a>)
     );
 
-    <b>let</b> deployer_address = <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(deployer);
+    <b>let</b> deployer_address = <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework);
 
     <b>let</b> global_config_ctor_ref = &<a href="object.md#0x1_object_create_object">object::create_object</a>(deployer_address);
 
-    <b>move_to</b>(deployer, <a href="confidential_asset.md#0x1_confidential_asset_GlobalConfig">GlobalConfig</a> {
+    <b>move_to</b>(aptos_framework, <a href="confidential_asset.md#0x1_confidential_asset_GlobalConfig">GlobalConfig</a> {
         allow_list_enabled: <a href="chain_id.md#0x1_chain_id_get">chain_id::get</a>() == <a href="confidential_asset.md#0x1_confidential_asset_MAINNET_CHAIN_ID">MAINNET_CHAIN_ID</a>,
         extend_ref: <a href="object.md#0x1_object_generate_extend_ref">object::generate_extend_ref</a>(global_config_ctor_ref),
         chain_auditor_ek: std::option::none(),
@@ -2486,7 +2550,7 @@ Asset auditor encryption key for <code>token</code>, or <code>None</code> if uns
 {
     <b>let</b> fa_config_address = <a href="confidential_asset.md#0x1_confidential_asset_get_fa_config_address">get_fa_config_address</a>(token);
 
-    <b>if</b> (!<a href="confidential_asset.md#0x1_confidential_asset_is_allow_list_enabled">is_allow_list_enabled</a>() && !<b>exists</b>&lt;<a href="confidential_asset.md#0x1_confidential_asset_FAConfig">FAConfig</a>&gt;(fa_config_address)) {
+    <b>if</b> (!<b>exists</b>&lt;<a href="confidential_asset.md#0x1_confidential_asset_FAConfig">FAConfig</a>&gt;(fa_config_address)) {
         <b>return</b> std::option::none();
     };
 
@@ -2708,6 +2772,9 @@ Implementation of the <code>deposit_to</code> entry function.
     <b>assert</b>!(<a href="confidential_asset.md#0x1_confidential_asset_is_safe_for_confidentiality">is_safe_for_confidentiality</a>(&token), <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="confidential_asset.md#0x1_confidential_asset_EUNSAFE_DISPATCHABLE_FA">EUNSAFE_DISPATCHABLE_FA</a>));
     <b>assert</b>!(<a href="confidential_asset.md#0x1_confidential_asset_is_token_allowed">is_token_allowed</a>(token), <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="confidential_asset.md#0x1_confidential_asset_ETOKEN_DISABLED">ETOKEN_DISABLED</a>));
     <b>assert</b>!(!<a href="confidential_asset.md#0x1_confidential_asset_is_frozen">is_frozen</a>(<b>to</b>, token), <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_state">error::invalid_state</a>(<a href="confidential_asset.md#0x1_confidential_asset_EALREADY_FROZEN">EALREADY_FROZEN</a>));
+    // A zero deposit moves no funds but still consumes one of the recipient's
+    // `<a href="confidential_asset.md#0x1_confidential_asset_MAX_TRANSFERS_BEFORE_ROLLOVER">MAX_TRANSFERS_BEFORE_ROLLOVER</a>` pending slots, letting anyone force rollovers on them.
+    <b>assert</b>!(amount &gt; 0, <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="confidential_asset.md#0x1_confidential_asset_EZERO_AMOUNT">EZERO_AMOUNT</a>));
 
     <b>let</b> from = <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(sender);
 
@@ -2779,6 +2846,9 @@ Withdrawals are always allowed, regardless of the token allow status.
     proof: WithdrawalProof) <b>acquires</b> <a href="confidential_asset.md#0x1_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>, <a href="confidential_asset.md#0x1_confidential_asset_GlobalConfig">GlobalConfig</a>
 {
     <b>assert</b>!(<a href="confidential_asset.md#0x1_confidential_asset_is_safe_for_confidentiality">is_safe_for_confidentiality</a>(&token), <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="confidential_asset.md#0x1_confidential_asset_EUNSAFE_DISPATCHABLE_FA">EUNSAFE_DISPATCHABLE_FA</a>));
+    // A zero withdrawal would re-randomize the actual balance and mark it normalized,
+    // acting <b>as</b> a `normalize` that skips the `<a href="confidential_asset.md#0x1_confidential_asset_EALREADY_NORMALIZED">EALREADY_NORMALIZED</a>` guard.
+    <b>assert</b>!(amount &gt; 0, <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="confidential_asset.md#0x1_confidential_asset_EZERO_AMOUNT">EZERO_AMOUNT</a>));
 
     <b>let</b> from = <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(sender);
 
@@ -2855,6 +2925,7 @@ Implementation of the <code>confidential_transfer</code> entry function.
     proof: TransferProof,
     sender_auditor_hint: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;) <b>acquires</b> <a href="confidential_asset.md#0x1_confidential_asset_ConfidentialAssetStore">ConfidentialAssetStore</a>, <a href="confidential_asset.md#0x1_confidential_asset_FAConfig">FAConfig</a>, <a href="confidential_asset.md#0x1_confidential_asset_GlobalConfig">GlobalConfig</a>
 {
+    <b>assert</b>!(<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(sender) != <b>to</b>, <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="confidential_asset.md#0x1_confidential_asset_ESELF_TRANSFER">ESELF_TRANSFER</a>));
     <b>assert</b>!(<a href="confidential_asset.md#0x1_confidential_asset_is_safe_for_confidentiality">is_safe_for_confidentiality</a>(&token), <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="confidential_asset.md#0x1_confidential_asset_EUNSAFE_DISPATCHABLE_FA">EUNSAFE_DISPATCHABLE_FA</a>));
     <b>assert</b>!(<a href="confidential_asset.md#0x1_confidential_asset_is_token_allowed">is_token_allowed</a>(token), <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="confidential_asset.md#0x1_confidential_asset_ETOKEN_DISABLED">ETOKEN_DISABLED</a>));
     <b>assert</b>!(!<a href="confidential_asset.md#0x1_confidential_asset_is_frozen">is_frozen</a>(<b>to</b>, token), <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_state">error::invalid_state</a>(<a href="confidential_asset.md#0x1_confidential_asset_EALREADY_FROZEN">EALREADY_FROZEN</a>));

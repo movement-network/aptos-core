@@ -27,6 +27,8 @@ module aptos_framework::confidential_asset {
     #[test_only]
     use aptos_std::ristretto255::Scalar;
 
+    friend aptos_framework::genesis;
+
     //
     // Errors
     //
@@ -109,6 +111,9 @@ module aptos_framework::confidential_asset {
 
     /// The sender and recipient of a confidential transfer must be different accounts.
     const ESELF_TRANSFER: u64 = 26;
+
+    /// The module's `GlobalConfig` has already been initialized.
+    const EALREADY_INITIALIZED: u64 = 27;
 
     //
     // Constants
@@ -356,20 +361,33 @@ module aptos_framework::confidential_asset {
     }
 
     //
-    // Module initialization, done only once when this module is first published on the blockchain
+    // Module initialization
     //
 
+    /// Runs when CA is first published onto an already-live network (governance framework upgrade).
+    /// Does not run at genesis — genesis calls `initialize` directly (see `genesis::initialize`).
     fun init_module(deployer: &signer) {
+        initialize(deployer)
+    }
+
+    /// Publishes the chain-level `GlobalConfig`. Invoked at genesis via `genesis::initialize`, and on
+    /// a first-time governance publish via `init_module`. Idempotent: aborts if already initialized.
+    public(friend) fun initialize(aptos_framework: &signer) {
+        system_addresses::assert_aptos_framework(aptos_framework);
+        assert!(
+            !exists<GlobalConfig>(@aptos_framework),
+            error::already_exists(EALREADY_INITIALIZED)
+        );
         assert!(
             bulletproofs::get_max_range_bits() >= confidential_proof::get_bulletproofs_num_bits(),
             error::internal(ERANGE_PROOF_SYSTEM_HAS_INSUFFICIENT_RANGE)
         );
 
-        let deployer_address = signer::address_of(deployer);
+        let deployer_address = signer::address_of(aptos_framework);
 
         let global_config_ctor_ref = &object::create_object(deployer_address);
 
-        move_to(deployer, GlobalConfig {
+        move_to(aptos_framework, GlobalConfig {
             allow_list_enabled: chain_id::get() == MAINNET_CHAIN_ID,
             extend_ref: object::generate_extend_ref(global_config_ctor_ref),
             chain_auditor_ek: std::option::none(),
@@ -1662,7 +1680,7 @@ module aptos_framework::confidential_asset {
 
     #[test_only]
     public fun init_module_for_testing(deployer: &signer) {
-        init_module(deployer)
+        initialize(deployer)
     }
 
     #[test_only]

@@ -594,7 +594,7 @@ module std::features {
     }
 
     /// Whether to allow serialized script arguments in the transaction payload.
-    /// Lifetime: transient
+    /// Lifetime: permanent
     const ALLOW_SERIALIZED_SCRIPT_ARGS: u64 = 72;
 
     public fun get_allow_serialized_script_args_feature(): u64 { ALLOW_SERIALIZED_SCRIPT_ARGS }

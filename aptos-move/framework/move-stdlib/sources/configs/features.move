@@ -267,7 +267,7 @@ module std::features {
     }
 
     /// Whether we refund storage costs to the user upon deletion
-    /// 
+    ///
     /// Lifetime: transient
     const STORAGE_DELETION_REFUND: u64 = 28;
 
@@ -792,7 +792,7 @@ module std::features {
         is_enabled(DISTRIBUTE_TRANSACTION_FEE)
     }
 
-    /// Whether the staking rewards are mint (diseable) or withdraw from the gouverned gas pool treasury (enable). 
+    /// Whether the staking rewards are mint (diseable) or withdraw from the gouverned gas pool treasury (enable).
     ///
     /// Lifetime: permanent
     const STAKE_REWARD_USING_TREASURY: u64 = 224;

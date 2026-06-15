@@ -622,7 +622,7 @@ module std::features {
 
     /// Whether the Atomic bridge is available
     /// Lifetime: transient
-    /// Deprecated in favor of `ALLOW_SERIALIZED_SCRIPT_ARGS` as feature flag 72 
+    /// Deprecated in favor of `ALLOW_SERIALIZED_SCRIPT_ARGS` as feature flag 72
     const NATIVE_BRIDGE: u64 = 72;
 
     #[deprecated]

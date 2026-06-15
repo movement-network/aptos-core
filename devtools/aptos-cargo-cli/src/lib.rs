@@ -462,9 +462,11 @@ fn run_targeted_unit_tests(
     mut direct_args: Vec<String>,
     push_through_args: Vec<String>,
 ) -> anyhow::Result<()> {
-    // Add each package to the arguments
+    // Add each package to the arguments using full package specifications to avoid ambiguity
     for package in packages_to_test {
         direct_args.push("-p".into());
+        // Use full package specification instead of just the name to resolve ambiguity
+        // when multiple packages with the same name exist (e.g., workspace vs git dependency)
         direct_args.push(package);
     }
 
@@ -712,5 +714,20 @@ mod tests {
 
         // Extract the package name from the path (this should panic)
         get_package_name_from_path(package_path);
+    }
+
+    #[test]
+    fn test_targeted_unit_tests_package_args_strip_paths() {
+        let affected_package_paths = [
+            "file:///home/aptos-core/crates/test-crate#test-crate".to_string(),
+            "file:///home/aptos-core/third_party/move/tools/move-cli#move-cli".to_string(),
+        ];
+
+        let package_names: Vec<_> = affected_package_paths
+            .iter()
+            .map(|package_path| get_package_name_from_path(package_path))
+            .collect();
+
+        assert_eq!(package_names, vec!["test-crate", "move-cli"]);
     }
 }

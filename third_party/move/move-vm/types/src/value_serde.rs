@@ -71,7 +71,7 @@ pub(crate) struct FunctionValueExtensionWithContext<'a> {
     extension: &'a dyn FunctionValueExtension,
 }
 
-impl<'a> FunctionValueExtensionWithContext<'a> {
+impl FunctionValueExtensionWithContext<'_> {
     /// Returns serialized function data.
     pub(crate) fn get_serialization_data(
         &self,

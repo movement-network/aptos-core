@@ -1167,7 +1167,7 @@ where
                 // in the end to determine which function to jump to. The native function shouldn't switch ordering of arguments.
                 //
                 // Runtime will use such convention to reconstruct the type stack required to perform paranoid mode checks.
-                if function.ty_param_abilities() != target_func.ty_param_abilities()
+                if function.param_tys().is_empty() || function.ty_param_abilities() != target_func.ty_param_abilities()
                     || function.return_tys() != target_func.return_tys()
                     || &function.param_tys()[0..function.param_tys().len() - 1]
                         != target_func.param_tys()

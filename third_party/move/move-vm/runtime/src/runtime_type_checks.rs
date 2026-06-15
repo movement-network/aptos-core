@@ -105,7 +105,7 @@ pub(crate) trait RuntimeTypeCheck {
 #[cfg_attr(feature = "force-inline", inline(always))]
 fn verify_pack<'a>(
     operand_stack: &mut Stack,
-    field_count: u16,
+    field_count: usize,
     field_tys: impl Iterator<Item = &'a Type>,
     output_ty: Type,
 ) -> PartialVMResult<()> {
@@ -155,7 +155,7 @@ pub fn verify_pack_closure(
     // signature, and that they are no references.
     let expected_capture_tys = mask.extract(func.param_tys(), true);
 
-    let given_capture_tys = operand_stack.popn_tys(expected_capture_tys.len() as u16)?;
+    let given_capture_tys = operand_stack.popn_tys(expected_capture_tys.len())?;
     for (expected, given) in expected_capture_tys
         .into_iter()
         .zip(given_capture_tys.into_iter())
@@ -570,7 +570,7 @@ impl RuntimeTypeCheck for FullRuntimeTypeCheck {
                 let args_ty = frame.get_struct(*idx);
                 let field_tys = args_ty.fields(None)?.iter().map(|(_, ty)| ty);
                 let output_ty = frame.get_struct_ty(*idx);
-                verify_pack(operand_stack, field_count, field_tys, output_ty)?;
+                verify_pack(operand_stack, field_count.into(), field_tys, output_ty)?;
             },
             Instruction::PackGeneric(idx) => {
                 let field_count = frame.field_instantiation_count(*idx);
@@ -590,7 +590,7 @@ impl RuntimeTypeCheck for FullRuntimeTypeCheck {
 
                 verify_pack(
                     operand_stack,
-                    field_count,
+                    field_count.into(),
                     args_ty.iter().map(|(ty, _)| ty),
                     output_ty,
                 )?;
@@ -621,7 +621,7 @@ impl RuntimeTypeCheck for FullRuntimeTypeCheck {
                     .iter()
                     .map(|(_, ty)| ty);
                 let output_ty = frame.create_struct_ty(&info.definition_struct_type);
-                verify_pack(operand_stack, info.field_count, field_tys, output_ty)?;
+                verify_pack(operand_stack, info.field_count.into(), field_tys, output_ty)?;
             },
             Instruction::PackVariantGeneric(idx) => {
                 let info = frame.get_struct_variant_instantiation_at(*idx);
@@ -629,7 +629,7 @@ impl RuntimeTypeCheck for FullRuntimeTypeCheck {
                 let args_ty = ty_cache.get_struct_variant_fields_types(*idx, frame)?;
                 verify_pack(
                     operand_stack,
-                    info.field_count,
+                    info.field_count.into(),
                     args_ty.iter().map(|(ty, _)| ty),
                     output_ty,
                 )?;
@@ -858,7 +858,10 @@ impl RuntimeTypeCheck for FullRuntimeTypeCheck {
             },
             Instruction::VecPack(si, num) => {
                 let (ty, _) = ty_cache.get_signature_index_type(*si, frame)?;
-                let elem_tys = operand_stack.popn_tys(*num as u16)?;
+                let num: u16 = (*num).try_into().map_err(|_| {
+                    PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR)
+                })?;
+                let elem_tys = operand_stack.popn_tys(num.into())?;
                 for elem_ty in elem_tys.iter() {
                     // For vector element types, use assignability
                     elem_ty.paranoid_check_assignable(ty)?;

@@ -690,7 +690,7 @@ if [[ "${SKIP_EXPERIMENTAL_PUBLISH:-0}" != "1" ]]; then
     --url "$NODE_URL" \
     --profile "$MOVEMENT_PROFILE" \
     --max-gas "$MOVE_RUN_SCRIPT_MAX_GAS" \
-    --function-id "${admin_addr}::confidential_asset::set_chain_auditor" \
+    --function-id "0x1::confidential_asset::set_chain_auditor" \
     --args "hex:$CHAIN_AUDITOR_EK"
 fi
 

@@ -509,12 +509,6 @@ pub enum EntryFunctionCall {
         new_chain_auditor_ek: Vec<u8>,
     },
 
-    /// Designates (or rotates) the account authorized to call [`set_chain_auditor`].
-    /// Governance-only. No clear form — rotate to a successor instead.
-    ConfidentialAssetSetChainAuditorAdmin {
-        new_admin: AccountAddress,
-    },
-
     /// Add `amount` of coins to the delegation pool `pool_address`.
     DelegationPoolAddStake {
         pool_address: AccountAddress,
@@ -1666,9 +1660,6 @@ impl EntryFunctionCall {
             ConfidentialAssetSetChainAuditor {
                 new_chain_auditor_ek,
             } => confidential_asset_set_chain_auditor(new_chain_auditor_ek),
-            ConfidentialAssetSetChainAuditorAdmin { new_admin } => {
-                confidential_asset_set_chain_auditor_admin(new_admin)
-            },
             DelegationPoolAddStake {
                 pool_address,
                 amount,
@@ -3458,23 +3449,6 @@ pub fn confidential_asset_set_chain_auditor(new_chain_auditor_ek: Vec<u8>) -> Tr
         ident_str!("set_chain_auditor").to_owned(),
         vec![],
         vec![bcs::to_bytes(&new_chain_auditor_ek).unwrap()],
-    ))
-}
-
-/// Designates (or rotates) the account authorized to call [`set_chain_auditor`].
-/// Governance-only. No clear form — rotate to a successor instead.
-pub fn confidential_asset_set_chain_auditor_admin(new_admin: AccountAddress) -> TransactionPayload {
-    TransactionPayload::EntryFunction(EntryFunction::new(
-        ModuleId::new(
-            AccountAddress::new([
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 1,
-            ]),
-            ident_str!("confidential_asset").to_owned(),
-        ),
-        ident_str!("set_chain_auditor_admin").to_owned(),
-        vec![],
-        vec![bcs::to_bytes(&new_admin).unwrap()],
     ))
 }
 
@@ -6796,18 +6770,6 @@ mod decoder {
         }
     }
 
-    pub fn confidential_asset_set_chain_auditor_admin(
-        payload: &TransactionPayload,
-    ) -> Option<EntryFunctionCall> {
-        if let TransactionPayload::EntryFunction(script) = payload {
-            Some(EntryFunctionCall::ConfidentialAssetSetChainAuditorAdmin {
-                new_admin: bcs::from_bytes(script.args().get(0)?).ok()?,
-            })
-        } else {
-            None
-        }
-    }
-
     pub fn delegation_pool_add_stake(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
         if let TransactionPayload::EntryFunction(script) = payload {
             Some(EntryFunctionCall::DelegationPoolAddStake {
@@ -8545,10 +8507,6 @@ static SCRIPT_FUNCTION_DECODER_MAP: once_cell::sync::Lazy<EntryFunctionDecoderMa
         map.insert(
             "confidential_asset_set_chain_auditor".to_string(),
             Box::new(decoder::confidential_asset_set_chain_auditor),
-        );
-        map.insert(
-            "confidential_asset_set_chain_auditor_admin".to_string(),
-            Box::new(decoder::confidential_asset_set_chain_auditor_admin),
         );
         map.insert(
             "delegation_pool_add_stake".to_string(),

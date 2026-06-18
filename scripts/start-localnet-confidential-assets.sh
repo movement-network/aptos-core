@@ -694,6 +694,54 @@ if [[ "${SKIP_EXPERIMENTAL_PUBLISH:-0}" != "1" ]]; then
     --args "hex:$CHAIN_AUDITOR_EK"
 fi
 
+# Set the asset-specific auditor key for the MOVE fungible asset (metadata object @0xa).
+# `set_asset_auditor` must be signed by `object::root_owner(token)`, which for the MOVE/APT
+# FA at 0xa is @aptos_framework (0x1). So this runs as a governance script: mint.key gets the
+# @0x1 signer via `get_signer_testnet_only`, then calls 0x1::confidential_asset::set_asset_auditor.
+# Pass an empty ASSET_AUDITOR_EK to skip (the entry function would clear the key on empty input,
+# so we just don't run the step). Re-running bumps the on-chain asset_auditor_epoch.
+ASSET_AUDITOR_EK="${ASSET_AUDITOR_EK:-0x5e7cbfdf6b100216d7541b0439704748225a90005cd4908a1ee3c90d1ab1ea00}"
+SKIP_ASSET_AUDITOR="${SKIP_ASSET_AUDITOR:-0}"
+
+if [[ "$SKIP_ASSET_AUDITOR" != "1" ]]; then
+  echo "Setting MOVE (FA @0xa) asset auditor encryption key to $ASSET_AUDITOR_EK ..."
+  ASSET_AUDITOR_SCRIPT_DIR="$(mktemp -d)"
+  ASSET_AUDITOR_SCRIPT="$ASSET_AUDITOR_SCRIPT_DIR/set-move-asset-auditor.move"
+  cat > "$ASSET_AUDITOR_SCRIPT" <<'EOF'
+// Sets the asset-specific auditor key for the MOVE fungible asset (metadata object @0xa).
+// Sender must be the core resources account (localnet: key in <test-dir>/mint.key); the script
+// obtains the @0x1 framework signer (root owner of the MOVE FA) via governance.
+script {
+    use aptos_framework::aptos_governance;
+    use aptos_framework::confidential_asset;
+    use aptos_framework::object;
+    use aptos_framework::fungible_asset::Metadata;
+
+    fun main(core_resources: &signer, auditor_ek: vector<u8>) {
+        let core_signer = aptos_governance::get_signer_testnet_only(core_resources, @0x1);
+        let framework_signer = &core_signer;
+
+        let move_metadata = object::address_to_object<Metadata>(
+            @0x000000000000000000000000000000000000000000000000000000000000000a
+        );
+
+        confidential_asset::set_asset_auditor(framework_signer, move_metadata, auditor_ek);
+    }
+}
+EOF
+  "$MOVEMENT" move run-script \
+    --assume-yes \
+    --url "$NODE_URL" \
+    --private-key-file "$TEST_DIR/mint.key" \
+    --encoding bcs \
+    --sender-account "$CORE_RESOURCES_ADDRESS" \
+    --max-gas "$MOVE_RUN_SCRIPT_MAX_GAS" \
+    --framework-local-dir "$FRAMEWORK_DIR" \
+    --script-path "$ASSET_AUDITOR_SCRIPT" \
+    --args "hex:$ASSET_AUDITOR_EK"
+  rm -rf "$ASSET_AUDITOR_SCRIPT_DIR"
+fi
+
 echo "Done — feature flag and (if enabled) publish finished."
 echo "REST: $NODE_URL/v1  (ready probe: $READY_URL — set WAIT_STRATEGY=node to wait only on REST)"
 

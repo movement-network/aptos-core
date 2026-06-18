@@ -2197,7 +2197,7 @@ Designates (or rotates) the account authorized to call [<code>set_chain_auditor<
 Governance-only. No clear form — rotate to a successor instead.
 
 
-<pre><code><b>public</b> entry <b>fun</b> <a href="confidential_asset.md#0x1_confidential_asset_set_chain_auditor_admin">set_chain_auditor_admin</a>(aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, new_admin: <b>address</b>)
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_asset.md#0x1_confidential_asset_set_chain_auditor_admin">set_chain_auditor_admin</a>(aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, new_admin: <b>address</b>)
 </code></pre>
 
 
@@ -2206,7 +2206,7 @@ Governance-only. No clear form — rotate to a successor instead.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> entry <b>fun</b> <a href="confidential_asset.md#0x1_confidential_asset_set_chain_auditor_admin">set_chain_auditor_admin</a>(
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_asset.md#0x1_confidential_asset_set_chain_auditor_admin">set_chain_auditor_admin</a>(
     aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>,
     new_admin: <b>address</b>) <b>acquires</b> <a href="confidential_asset.md#0x1_confidential_asset_GlobalConfig">GlobalConfig</a>
 {

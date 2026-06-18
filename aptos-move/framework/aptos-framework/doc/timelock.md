@@ -7,30 +7,31 @@ Timelock account module for Movement. Unlike multisig accounts which require n-o
 signatures, a timelock account enforces a time delay before transactions can be executed.
 
 Each timelock account is a resource account with:
-- A list of creators who can propose transactions (must have at least 1)
+- A list of creators who can propose transactions (must have at least 1). Creators can both
+propose and cancel transactions.
 - A list of executors who can execute transactions after the timelock period
 (if executors is empty, creators can also execute)
+- A list of cancelers who can cancel any pending transaction at any time (an emergency-response
+role). Cancelers can ONLY cancel — they cannot propose or execute. The list may be empty.
 - A configurable minimum delay (<code>min_num_seconds_execute</code>) that must elapse after a
 transaction is proposed before it can be executed
 
-Execution model (mirrors <code><a href="aptos_governance.md#0x1_aptos_governance">aptos_governance</a></code> resolution): a creator proposes the SHA3-256
-hash of a future resolution script's bytecode. After the delay, an authorized executor submits a
-<code>Script</code> transaction whose script hash equals the proposed <code>execution_hash</code>. The script
-calls <code>resolve</code>, which verifies the running script's hash via
-<code><a href="transaction_context.md#0x1_transaction_context_get_script_hash">transaction_context::get_script_hash</a>()</code> and returns the timelock account's signer. The
-script then performs arbitrary Move calls under that signer, including the self-governance
-entry functions in this module.
+Execution model (mirrors <code><a href="aptos_governance.md#0x1_aptos_governance">aptos_governance</a></code>): a creator proposes the SHA3-256 hash of a future
+resolution script's bytecode. After the delay, an authorized executor submits a <code>Script</code> whose
+hash matches; the script calls <code>resolve</code>, which verifies the hash via
+<code><a href="transaction_context.md#0x1_transaction_context_get_script_hash">transaction_context::get_script_hash</a>()</code> and returns the timelock account's signer for arbitrary
+Move calls (including this module's self-governance functions).
+
+Delegated approval: an executor that cannot submit a <code>Script</code> (notably an Aptos multisig, which
+dispatches entry functions) instead calls <code>approve_resolution</code>; any party may then submit the
+committed script, which <code>resolve</code> accepts on the strength of that approval. A direct executor
+needs no prior approval.
 
 Properties:
-- Transactions are indexed by <code>keccak256(execution_hash || salt)</code>. To submit the same
-script more than once, change the salt.
-- Changing <code>min_num_seconds_execute</code> or membership can only happen through the timelock
-proposal mechanism itself (the timelock account must be the signer).
-- Both creators and executors can cancel any pending transaction at any time.
-- Once executed or canceled, the transaction's <code>executed</code> field is set to true and the
-entry is kept permanently for historical record.
-- If the resolution script aborts, the entire transaction (including the <code>executed</code> flag
-flip) reverts atomically, so the proposal remains executable.
+- Transactions are indexed by <code>keccak256(execution_hash || salt)</code>; change the salt to resubmit.
+- Changing the delay or membership requires the timelock proposal mechanism (the account signs).
+- Executed/canceled transactions keep <code>executed = <b>true</b></code> permanently for historical record.
+- If the resolution script aborts, the whole transaction (including the <code>executed</code> flip) reverts.
 
 
 -  [Resource `TimelockAccount`](#0x1_timelock_TimelockAccount)
@@ -39,20 +40,25 @@ flip) reverts atomically, so the proposal remains executable.
 -  [Struct `RemoveCreators`](#0x1_timelock_RemoveCreators)
 -  [Struct `AddExecutors`](#0x1_timelock_AddExecutors)
 -  [Struct `RemoveExecutors`](#0x1_timelock_RemoveExecutors)
+-  [Struct `AddCancelers`](#0x1_timelock_AddCancelers)
+-  [Struct `RemoveCancelers`](#0x1_timelock_RemoveCancelers)
 -  [Struct `UpdateMinNumSecondsExecute`](#0x1_timelock_UpdateMinNumSecondsExecute)
 -  [Struct `CreateTransaction`](#0x1_timelock_CreateTransaction)
 -  [Struct `CancelTransaction`](#0x1_timelock_CancelTransaction)
 -  [Struct `ResolveTransaction`](#0x1_timelock_ResolveTransaction)
+-  [Struct `ApproveResolution`](#0x1_timelock_ApproveResolution)
 -  [Constants](#@Constants_0)
 -  [Function `creators`](#0x1_timelock_creators)
 -  [Function `executors`](#0x1_timelock_executors)
+-  [Function `cancelers`](#0x1_timelock_cancelers)
 -  [Function `min_num_seconds_execute`](#0x1_timelock_min_num_seconds_execute)
 -  [Function `is_creator`](#0x1_timelock_is_creator)
 -  [Function `is_executor`](#0x1_timelock_is_executor)
+-  [Function `is_canceler`](#0x1_timelock_is_canceler)
 -  [Function `get_transaction`](#0x1_timelock_get_transaction)
 -  [Function `can_be_executed`](#0x1_timelock_can_be_executed)
 -  [Function `get_next_timelock_account_address`](#0x1_timelock_get_next_timelock_account_address)
--  [Function `get_transaction_hash`](#0x1_timelock_get_transaction_hash)
+-  [Function `get_proposal_hash`](#0x1_timelock_get_proposal_hash)
 -  [Function `create`](#0x1_timelock_create)
     -  [Arguments](#@Arguments_1)
     -  [Aborts](#@Aborts_2)
@@ -61,38 +67,48 @@ flip) reverts atomically, so the proposal remains executable.
 -  [Function `remove_creators`](#0x1_timelock_remove_creators)
 -  [Function `add_executors`](#0x1_timelock_add_executors)
 -  [Function `remove_executors`](#0x1_timelock_remove_executors)
+-  [Function `add_cancelers`](#0x1_timelock_add_cancelers)
+-  [Function `remove_cancelers`](#0x1_timelock_remove_cancelers)
 -  [Function `update_min_num_seconds_execute`](#0x1_timelock_update_min_num_seconds_execute)
 -  [Function `create_transaction`](#0x1_timelock_create_transaction)
 -  [Function `cancel_transaction`](#0x1_timelock_cancel_transaction)
+-  [Function `approve_resolution`](#0x1_timelock_approve_resolution)
 -  [Function `resolve`](#0x1_timelock_resolve)
 -  [Function `create_timelock_account`](#0x1_timelock_create_timelock_account)
 -  [Function `create_timelock_account_seed`](#0x1_timelock_create_timelock_account_seed)
 -  [Function `validate_members`](#0x1_timelock_validate_members)
 -  [Function `assert_timelock_account_exists`](#0x1_timelock_assert_timelock_account_exists)
 -  [Function `assert_is_creator`](#0x1_timelock_assert_is_creator)
+-  [Function `is_executor_addr`](#0x1_timelock_is_executor_addr)
 -  [Function `assert_is_executor`](#0x1_timelock_assert_is_executor)
+-  [Function `assert_proposal_hash_length`](#0x1_timelock_assert_proposal_hash_length)
 -  [Function `assert_delay`](#0x1_timelock_assert_delay)
 -  [Specification](#@Specification_3)
     -  [High-level Requirements](#high-level-req)
     -  [Module-level Specification](#module-level-spec)
     -  [Function `creators`](#@Specification_3_creators)
     -  [Function `executors`](#@Specification_3_executors)
+    -  [Function `cancelers`](#@Specification_3_cancelers)
     -  [Function `min_num_seconds_execute`](#@Specification_3_min_num_seconds_execute)
     -  [Function `is_creator`](#@Specification_3_is_creator)
     -  [Function `is_executor`](#@Specification_3_is_executor)
+    -  [Function `is_canceler`](#@Specification_3_is_canceler)
     -  [Function `get_transaction`](#@Specification_3_get_transaction)
     -  [Function `can_be_executed`](#@Specification_3_can_be_executed)
     -  [Function `get_next_timelock_account_address`](#@Specification_3_get_next_timelock_account_address)
-    -  [Function `get_transaction_hash`](#@Specification_3_get_transaction_hash)
+    -  [Function `get_proposal_hash`](#@Specification_3_get_proposal_hash)
     -  [Function `create`](#@Specification_3_create)
     -  [Function `create_timelock_account_internal`](#@Specification_3_create_timelock_account_internal)
     -  [Function `add_creators`](#@Specification_3_add_creators)
     -  [Function `remove_creators`](#@Specification_3_remove_creators)
     -  [Function `add_executors`](#@Specification_3_add_executors)
     -  [Function `remove_executors`](#@Specification_3_remove_executors)
+    -  [Function `add_cancelers`](#@Specification_3_add_cancelers)
+    -  [Function `remove_cancelers`](#@Specification_3_remove_cancelers)
     -  [Function `update_min_num_seconds_execute`](#@Specification_3_update_min_num_seconds_execute)
     -  [Function `create_transaction`](#@Specification_3_create_transaction)
     -  [Function `cancel_transaction`](#@Specification_3_cancel_transaction)
+    -  [Function `approve_resolution`](#@Specification_3_approve_resolution)
     -  [Function `resolve`](#@Specification_3_resolve)
     -  [Function `create_timelock_account`](#@Specification_3_create_timelock_account)
     -  [Function `create_timelock_account_seed`](#@Specification_3_create_timelock_account_seed)
@@ -141,6 +157,12 @@ Stored at the resource account address created during timelock account creation.
 </dd>
 <dt>
 <code>executors: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;</code>
+</dt>
+<dd>
+
+</dd>
+<dt>
+<code>cancelers: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;</code>
 </dt>
 <dd>
 
@@ -228,6 +250,12 @@ from the table key, which is <code>keccak256(execution_hash || salt)</code>.
 </dd>
 <dt>
 <code>executed: bool</code>
+</dt>
+<dd>
+
+</dd>
+<dt>
+<code>approved: bool</code>
 </dt>
 <dd>
 
@@ -373,6 +401,74 @@ from the table key, which is <code>keccak256(execution_hash || salt)</code>.
 
 </details>
 
+<a id="0x1_timelock_AddCancelers"></a>
+
+## Struct `AddCancelers`
+
+
+
+<pre><code>#[<a href="event.md#0x1_event">event</a>]
+<b>struct</b> <a href="timelock.md#0x1_timelock_AddCancelers">AddCancelers</a> <b>has</b> drop, store
+</code></pre>
+
+
+
+<details>
+<summary>Fields</summary>
+
+
+<dl>
+<dt>
+<code>timelock_account: <b>address</b></code>
+</dt>
+<dd>
+
+</dd>
+<dt>
+<code>new_cancelers: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;</code>
+</dt>
+<dd>
+
+</dd>
+</dl>
+
+
+</details>
+
+<a id="0x1_timelock_RemoveCancelers"></a>
+
+## Struct `RemoveCancelers`
+
+
+
+<pre><code>#[<a href="event.md#0x1_event">event</a>]
+<b>struct</b> <a href="timelock.md#0x1_timelock_RemoveCancelers">RemoveCancelers</a> <b>has</b> drop, store
+</code></pre>
+
+
+
+<details>
+<summary>Fields</summary>
+
+
+<dl>
+<dt>
+<code>timelock_account: <b>address</b></code>
+</dt>
+<dd>
+
+</dd>
+<dt>
+<code>removed_cancelers: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;</code>
+</dt>
+<dd>
+
+</dd>
+</dl>
+
+
+</details>
+
 <a id="0x1_timelock_UpdateMinNumSecondsExecute"></a>
 
 ## Struct `UpdateMinNumSecondsExecute`
@@ -443,7 +539,7 @@ from the table key, which is <code>keccak256(execution_hash || salt)</code>.
 
 </dd>
 <dt>
-<code>transaction_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;</code>
+<code>proposal_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;</code>
 </dt>
 <dd>
 
@@ -489,7 +585,7 @@ from the table key, which is <code>keccak256(execution_hash || salt)</code>.
 
 </dd>
 <dt>
-<code>transaction_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;</code>
+<code>proposal_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;</code>
 </dt>
 <dd>
 
@@ -529,13 +625,53 @@ from the table key, which is <code>keccak256(execution_hash || salt)</code>.
 
 </dd>
 <dt>
-<code>transaction_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;</code>
+<code>proposal_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;</code>
 </dt>
 <dd>
 
 </dd>
 <dt>
 <code>execution_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;</code>
+</dt>
+<dd>
+
+</dd>
+</dl>
+
+
+</details>
+
+<a id="0x1_timelock_ApproveResolution"></a>
+
+## Struct `ApproveResolution`
+
+
+
+<pre><code>#[<a href="event.md#0x1_event">event</a>]
+<b>struct</b> <a href="timelock.md#0x1_timelock_ApproveResolution">ApproveResolution</a> <b>has</b> drop, store
+</code></pre>
+
+
+
+<details>
+<summary>Fields</summary>
+
+
+<dl>
+<dt>
+<code>timelock_account: <b>address</b></code>
+</dt>
+<dd>
+
+</dd>
+<dt>
+<code>executor: <b>address</b></code>
+</dt>
+<dd>
+
+</dd>
+<dt>
+<code>proposal_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;</code>
 </dt>
 <dd>
 
@@ -577,6 +713,16 @@ Specified account is not a timelock account.
 
 
 <pre><code><b>const</b> <a href="timelock.md#0x1_timelock_EACCOUNT_NOT_TIMELOCK">EACCOUNT_NOT_TIMELOCK</a>: u64 = 3;
+</code></pre>
+
+
+
+<a id="0x1_timelock_EDUPLICATE_CANCELER"></a>
+
+Canceler list cannot contain duplicate addresses.
+
+
+<pre><code><b>const</b> <a href="timelock.md#0x1_timelock_EDUPLICATE_CANCELER">EDUPLICATE_CANCELER</a>: u64 = 19;
 </code></pre>
 
 
@@ -641,12 +787,12 @@ The caller is not a creator.
 
 
 
-<a id="0x1_timelock_ENOT_CREATOR_OR_EXECUTOR"></a>
+<a id="0x1_timelock_ENOT_CREATOR_OR_CANCELER"></a>
 
-The caller is neither a creator nor an executor.
+The caller is neither a creator nor a canceler.
 
 
-<pre><code><b>const</b> <a href="timelock.md#0x1_timelock_ENOT_CREATOR_OR_EXECUTOR">ENOT_CREATOR_OR_EXECUTOR</a>: u64 = 13;
+<pre><code><b>const</b> <a href="timelock.md#0x1_timelock_ENOT_CREATOR_OR_CANCELER">ENOT_CREATOR_OR_CANCELER</a>: u64 = 13;
 </code></pre>
 
 
@@ -663,7 +809,8 @@ Timelock account must have at least one creator.
 
 <a id="0x1_timelock_ENOT_EXECUTOR"></a>
 
-The caller is not an executor (or a creator when the executor list is empty).
+The submitter is not authorized to resolve: it is neither an executor (nor a creator when
+the executor list is empty) nor resolving a transaction pre-approved via <code>approve_resolution</code>.
 
 
 <pre><code><b>const</b> <a href="timelock.md#0x1_timelock_ENOT_EXECUTOR">ENOT_EXECUTOR</a>: u64 = 5;
@@ -772,6 +919,15 @@ Maximum byte length of the optional off-chain <code>script_path</code> pointer.
 
 
 
+<a id="0x1_timelock_PROPOSAL_HASH_LENGTH"></a>
+
+
+
+<pre><code><b>const</b> <a href="timelock.md#0x1_timelock_PROPOSAL_HASH_LENGTH">PROPOSAL_HASH_LENGTH</a>: u64 = 32;
+</code></pre>
+
+
+
 <a id="0x1_timelock_SALT_LENGTH"></a>
 
 
@@ -786,15 +942,6 @@ Maximum byte length of the optional off-chain <code>script_path</code> pointer.
 
 
 <pre><code><b>const</b> <a href="timelock.md#0x1_timelock_SCRIPT_HASH_LENGTH">SCRIPT_HASH_LENGTH</a>: u64 = 32;
-</code></pre>
-
-
-
-<a id="0x1_timelock_TRANSACTION_HASH_LENGTH"></a>
-
-
-
-<pre><code><b>const</b> <a href="timelock.md#0x1_timelock_TRANSACTION_HASH_LENGTH">TRANSACTION_HASH_LENGTH</a>: u64 = 32;
 </code></pre>
 
 
@@ -844,6 +991,32 @@ Return the list of executors. An empty list means creators can also execute.
 
 <pre><code><b>public</b> <b>fun</b> <a href="timelock.md#0x1_timelock_executors">executors</a>(timelock_account: <b>address</b>): <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt; <b>acquires</b> <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a> {
     <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[timelock_account].executors
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_timelock_cancelers"></a>
+
+## Function `cancelers`
+
+Return the list of cancelers (the emergency-response role that can only cancel).
+
+
+<pre><code>#[view]
+<b>public</b> <b>fun</b> <a href="timelock.md#0x1_timelock_cancelers">cancelers</a>(timelock_account: <b>address</b>): <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="timelock.md#0x1_timelock_cancelers">cancelers</a>(timelock_account: <b>address</b>): <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt; <b>acquires</b> <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a> {
+    <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[timelock_account].cancelers
 }
 </code></pre>
 
@@ -922,12 +1095,33 @@ If the executor list is empty, creators are also authorized to execute.
 
 
 <pre><code><b>public</b> <b>fun</b> <a href="timelock.md#0x1_timelock_is_executor">is_executor</a>(addr: <b>address</b>, timelock_account: <b>address</b>): bool <b>acquires</b> <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a> {
-    <b>let</b> <a href="timelock.md#0x1_timelock">timelock</a> = &<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[timelock_account];
-    <b>if</b> (<a href="timelock.md#0x1_timelock">timelock</a>.executors.is_empty()) {
-        <a href="timelock.md#0x1_timelock">timelock</a>.creators.contains(&addr)
-    } <b>else</b> {
-        <a href="timelock.md#0x1_timelock">timelock</a>.executors.contains(&addr)
-    }
+    <a href="timelock.md#0x1_timelock_is_executor_addr">is_executor_addr</a>(&<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[timelock_account], addr)
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_timelock_is_canceler"></a>
+
+## Function `is_canceler`
+
+Return true if the given address is a canceler of the timelock account.
+
+
+<pre><code>#[view]
+<b>public</b> <b>fun</b> <a href="timelock.md#0x1_timelock_is_canceler">is_canceler</a>(addr: <b>address</b>, timelock_account: <b>address</b>): bool
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="timelock.md#0x1_timelock_is_canceler">is_canceler</a>(addr: <b>address</b>, timelock_account: <b>address</b>): bool <b>acquires</b> <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a> {
+    <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[timelock_account].cancelers.contains(&addr)
 }
 </code></pre>
 
@@ -939,11 +1133,11 @@ If the executor list is empty, creators are also authorized to execute.
 
 ## Function `get_transaction`
 
-Return the transaction stored under the given transaction hash.
+Return the transaction stored under the given proposal hash.
 
 
 <pre><code>#[view]
-<b>public</b> <b>fun</b> <a href="timelock.md#0x1_timelock_get_transaction">get_transaction</a>(timelock_account: <b>address</b>, transaction_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): <a href="timelock.md#0x1_timelock_TimelockTransaction">timelock::TimelockTransaction</a>
+<b>public</b> <b>fun</b> <a href="timelock.md#0x1_timelock_get_transaction">get_transaction</a>(timelock_account: <b>address</b>, proposal_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): <a href="timelock.md#0x1_timelock_TimelockTransaction">timelock::TimelockTransaction</a>
 </code></pre>
 
 
@@ -953,14 +1147,14 @@ Return the transaction stored under the given transaction hash.
 
 
 <pre><code><b>public</b> <b>fun</b> <a href="timelock.md#0x1_timelock_get_transaction">get_transaction</a>(
-    timelock_account: <b>address</b>, transaction_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
+    timelock_account: <b>address</b>, proposal_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
 ): <a href="timelock.md#0x1_timelock_TimelockTransaction">TimelockTransaction</a> <b>acquires</b> <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a> {
     <b>let</b> <a href="timelock.md#0x1_timelock">timelock</a> = &<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[timelock_account];
     <b>assert</b>!(
-        <a href="timelock.md#0x1_timelock">timelock</a>.transactions.contains(transaction_hash),
+        <a href="timelock.md#0x1_timelock">timelock</a>.transactions.contains(proposal_hash),
         <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_not_found">error::not_found</a>(<a href="timelock.md#0x1_timelock_ETRANSACTION_NOT_FOUND">ETRANSACTION_NOT_FOUND</a>)
     );
-    *<a href="timelock.md#0x1_timelock">timelock</a>.transactions.borrow(transaction_hash)
+    *<a href="timelock.md#0x1_timelock">timelock</a>.transactions.borrow(proposal_hash)
 }
 </code></pre>
 
@@ -977,7 +1171,7 @@ and has passed the timelock period.
 
 
 <pre><code>#[view]
-<b>public</b> <b>fun</b> <a href="timelock.md#0x1_timelock_can_be_executed">can_be_executed</a>(timelock_account: <b>address</b>, transaction_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): bool
+<b>public</b> <b>fun</b> <a href="timelock.md#0x1_timelock_can_be_executed">can_be_executed</a>(timelock_account: <b>address</b>, proposal_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): bool
 </code></pre>
 
 
@@ -987,13 +1181,13 @@ and has passed the timelock period.
 
 
 <pre><code><b>public</b> <b>fun</b> <a href="timelock.md#0x1_timelock_can_be_executed">can_be_executed</a>(
-    timelock_account: <b>address</b>, transaction_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
+    timelock_account: <b>address</b>, proposal_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
 ): bool <b>acquires</b> <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a> {
     <b>let</b> <a href="timelock.md#0x1_timelock">timelock</a> = &<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[timelock_account];
-    <b>if</b> (!<a href="timelock.md#0x1_timelock">timelock</a>.transactions.contains(transaction_hash)) {
+    <b>if</b> (!<a href="timelock.md#0x1_timelock">timelock</a>.transactions.contains(proposal_hash)) {
         <b>return</b> <b>false</b>
     };
-    <b>let</b> tx = <a href="timelock.md#0x1_timelock">timelock</a>.transactions.borrow(transaction_hash);
+    <b>let</b> tx = <a href="timelock.md#0x1_timelock">timelock</a>.transactions.borrow(proposal_hash);
     !tx.executed && now_seconds() &gt;= tx.creation_time_secs + tx.num_seconds_execute
 }
 </code></pre>
@@ -1033,16 +1227,16 @@ membership is determined entirely by the <code>creators</code> and <code>executo
 
 </details>
 
-<a id="0x1_timelock_get_transaction_hash"></a>
+<a id="0x1_timelock_get_proposal_hash"></a>
 
-## Function `get_transaction_hash`
+## Function `get_proposal_hash`
 
-Return the table key used to index a transaction with the given execution hash and salt.
-Clients use this to compute the hash before proposing a transaction.
+Return the proposal hash (the table key indexing a proposed transaction) for the given
+execution hash and salt. Clients use this to compute the proposal hash before proposing.
 
 
 <pre><code>#[view]
-<b>public</b> <b>fun</b> <a href="timelock.md#0x1_timelock_get_transaction_hash">get_transaction_hash</a>(execution_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, salt: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
+<b>public</b> <b>fun</b> <a href="timelock.md#0x1_timelock_get_proposal_hash">get_proposal_hash</a>(execution_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, salt: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
 </code></pre>
 
 
@@ -1051,7 +1245,7 @@ Clients use this to compute the hash before proposing a transaction.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="timelock.md#0x1_timelock_get_transaction_hash">get_transaction_hash</a>(
+<pre><code><b>public</b> <b>fun</b> <a href="timelock.md#0x1_timelock_get_proposal_hash">get_proposal_hash</a>(
     execution_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, salt: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
 ): <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt; {
     execution_hash.append(salt);
@@ -1067,37 +1261,29 @@ Clients use this to compute the hash before proposing a transaction.
 
 ## Function `create`
 
-Create a new timelock account.
-
-The <code>deployer</code> signer authorizes resource-account creation (and pays storage gas) but
-gains no ongoing authority over the timelock — they are not added to creators or
-executors. This lets a deployer (e.g. a multisig) instantiate a timelock that is owned
-by an entirely different set of addresses without first having to transfer ownership.
+Create a new timelock account. The <code>deployer</code> only authorizes resource-account creation
+and pays gas; it gains no role unless listed in <code>creators</code>/<code>executors</code>.
 
 
 <a id="@Arguments_1"></a>
 
 ### Arguments
 
-* <code>deployer</code> - Signer used to derive the resource-account address. Must not appear in
-<code>creators</code> or <code>executors</code> unless that role is intended.
-* <code>creators</code> - Addresses authorized to propose transactions. Must contain at least one
-address and have no duplicates. The timelock account address itself is not allowed.
-* <code>executors</code> - Addresses authorized to execute transactions after the timelock period.
-If empty, creators can also execute.
-* <code>num_seconds_execute</code> - Minimum delay in seconds before a proposed transaction can be executed.
+* <code>creators</code> - Authorized to propose. At least one, no duplicates, not the timelock address.
+* <code>executors</code> - Authorized to execute after the delay. If empty, creators may execute.
+* <code>cancelers</code> - Authorized to cancel at any time, but cannot propose or execute. If empty, no cancelers.
+* <code>num_seconds_execute</code> - Minimum delay in seconds before a proposed transaction can execute.
 
 
 <a id="@Aborts_2"></a>
 
 ### Aborts
 
-* If <code>creators</code> is empty
-* If <code>creators</code> or <code>executors</code> contains duplicate addresses or the timelock account address
+* If <code>creators</code> is empty, or any list has duplicates or includes the timelock address
 * If <code>num_seconds_execute</code> is outside the allowed delay bounds
 
 
-<pre><code><b>public</b> entry <b>fun</b> <a href="timelock.md#0x1_timelock_create">create</a>(deployer: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, creators: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;, executors: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;, num_seconds_execute: u64)
+<pre><code><b>public</b> entry <b>fun</b> <a href="timelock.md#0x1_timelock_create">create</a>(deployer: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, creators: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;, executors: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;, cancelers: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;, num_seconds_execute: u64)
 </code></pre>
 
 
@@ -1110,6 +1296,7 @@ If empty, creators can also execute.
     deployer: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>,
     creators: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;,
     executors: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;,
+    cancelers: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;,
     num_seconds_execute: u64
 ) {
     <b>let</b> (timelock_signer, timelock_signer_cap) = <a href="timelock.md#0x1_timelock_create_timelock_account">create_timelock_account</a>(deployer);
@@ -1117,6 +1304,7 @@ If empty, creators can also execute.
         &timelock_signer,
         creators,
         executors,
+        cancelers,
         num_seconds_execute,
         timelock_signer_cap
     );
@@ -1133,7 +1321,7 @@ If empty, creators can also execute.
 
 
 
-<pre><code><b>fun</b> <a href="timelock.md#0x1_timelock_create_timelock_account_internal">create_timelock_account_internal</a>(timelock_account: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, creators: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;, executors: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;, min_num_seconds_execute: u64, signer_cap: <a href="account.md#0x1_account_SignerCapability">account::SignerCapability</a>)
+<pre><code><b>fun</b> <a href="timelock.md#0x1_timelock_create_timelock_account_internal">create_timelock_account_internal</a>(timelock_account: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, creators: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;, executors: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;, cancelers: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;, min_num_seconds_execute: u64, signer_cap: <a href="account.md#0x1_account_SignerCapability">account::SignerCapability</a>)
 </code></pre>
 
 
@@ -1146,6 +1334,7 @@ If empty, creators can also execute.
     timelock_account: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>,
     creators: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;,
     executors: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;,
+    cancelers: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;,
     min_num_seconds_execute: u64,
     signer_cap: SignerCapability
 ) {
@@ -1154,12 +1343,14 @@ If empty, creators can also execute.
     <b>assert</b>!(creators.length() &gt;= 1, <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="timelock.md#0x1_timelock_ENOT_ENOUGH_CREATORS">ENOT_ENOUGH_CREATORS</a>));
     <a href="timelock.md#0x1_timelock_validate_members">validate_members</a>(&creators, timelock_address, <a href="timelock.md#0x1_timelock_EDUPLICATE_CREATOR">EDUPLICATE_CREATOR</a>);
     <a href="timelock.md#0x1_timelock_validate_members">validate_members</a>(&executors, timelock_address, <a href="timelock.md#0x1_timelock_EDUPLICATE_EXECUTOR">EDUPLICATE_EXECUTOR</a>);
+    <a href="timelock.md#0x1_timelock_validate_members">validate_members</a>(&cancelers, timelock_address, <a href="timelock.md#0x1_timelock_EDUPLICATE_CANCELER">EDUPLICATE_CANCELER</a>);
 
     <b>move_to</b>(
         timelock_account,
         <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a> {
             creators,
             executors,
+            cancelers,
             min_num_seconds_execute,
             transactions: <a href="../../aptos-stdlib/doc/table.md#0x1_table_new">table::new</a>&lt;<a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, <a href="timelock.md#0x1_timelock_TimelockTransaction">TimelockTransaction</a>&gt;(),
             signer_cap
@@ -1331,6 +1522,84 @@ Can only be invoked by the timelock account itself via the proposal flow.
 
 </details>
 
+<a id="0x1_timelock_add_cancelers"></a>
+
+## Function `add_cancelers`
+
+Add new cancelers (the emergency-response role that can only cancel) to the timelock account.
+Can only be invoked by the timelock account itself via the proposal flow.
+
+
+<pre><code><b>public</b> entry <b>fun</b> <a href="timelock.md#0x1_timelock_add_cancelers">add_cancelers</a>(timelock_account: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, new_cancelers: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;)
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> entry <b>fun</b> <a href="timelock.md#0x1_timelock_add_cancelers">add_cancelers</a>(
+    timelock_account: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, new_cancelers: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;
+) <b>acquires</b> <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a> {
+    <b>let</b> timelock_address = address_of(timelock_account);
+    <a href="timelock.md#0x1_timelock_assert_timelock_account_exists">assert_timelock_account_exists</a>(timelock_address);
+    // Pre-append validation kept for the prover's `<b>aborts_if</b>` (see `add_creators`); do not remove.
+    <a href="timelock.md#0x1_timelock_validate_members">validate_members</a>(&new_cancelers, timelock_address, <a href="timelock.md#0x1_timelock_EDUPLICATE_CANCELER">EDUPLICATE_CANCELER</a>);
+    <b>let</b> <a href="timelock.md#0x1_timelock">timelock</a> = &<b>mut</b> <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[timelock_address];
+    <a href="timelock.md#0x1_timelock">timelock</a>.cancelers.append(new_cancelers);
+    // Re-validate the combined list <b>to</b> also catch cross-list duplicates against existing cancelers.
+    <a href="timelock.md#0x1_timelock_validate_members">validate_members</a>(&<a href="timelock.md#0x1_timelock">timelock</a>.cancelers, timelock_address, <a href="timelock.md#0x1_timelock_EDUPLICATE_CANCELER">EDUPLICATE_CANCELER</a>);
+    emit(<a href="timelock.md#0x1_timelock_AddCancelers">AddCancelers</a> { timelock_account: timelock_address, new_cancelers });
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_timelock_remove_cancelers"></a>
+
+## Function `remove_cancelers`
+
+Remove cancelers from the timelock account. The canceler list may become empty.
+Can only be invoked by the timelock account itself via the proposal flow.
+
+
+<pre><code><b>public</b> entry <b>fun</b> <a href="timelock.md#0x1_timelock_remove_cancelers">remove_cancelers</a>(timelock_account: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, cancelers_to_remove: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;)
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> entry <b>fun</b> <a href="timelock.md#0x1_timelock_remove_cancelers">remove_cancelers</a>(
+    timelock_account: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, cancelers_to_remove: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;
+) <b>acquires</b> <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a> {
+    <b>let</b> timelock_address = address_of(timelock_account);
+    <a href="timelock.md#0x1_timelock_assert_timelock_account_exists">assert_timelock_account_exists</a>(timelock_address);
+    <b>let</b> <a href="timelock.md#0x1_timelock">timelock</a> = &<b>mut</b> <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[timelock_address];
+    <b>let</b> removed_cancelers = <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>[];
+    cancelers_to_remove.for_each_ref(|to_remove| {
+        <b>let</b> (found, index) = <a href="timelock.md#0x1_timelock">timelock</a>.cancelers.index_of(to_remove);
+        <b>if</b> (found) {
+            removed_cancelers.push_back(<a href="timelock.md#0x1_timelock">timelock</a>.cancelers.swap_remove(index));
+        }
+    });
+    <b>if</b> (!removed_cancelers.is_empty()) {
+        emit(
+            <a href="timelock.md#0x1_timelock_RemoveCancelers">RemoveCancelers</a> { timelock_account: timelock_address, removed_cancelers }
+        );
+    };
+}
+</code></pre>
+
+
+
+</details>
+
 <a id="0x1_timelock_update_min_num_seconds_execute"></a>
 
 ## Function `update_min_num_seconds_execute`
@@ -1418,7 +1687,7 @@ payload, capped at <code><a href="timelock.md#0x1_timelock_MAX_SCRIPT_PATH_LENGT
         <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="timelock.md#0x1_timelock_ESCRIPT_PATH_TOO_LONG">ESCRIPT_PATH_TOO_LONG</a>)
     );
 
-    <b>let</b> transaction_hash = <a href="timelock.md#0x1_timelock_get_transaction_hash">get_transaction_hash</a>(execution_hash, salt);
+    <b>let</b> proposal_hash = <a href="timelock.md#0x1_timelock_get_proposal_hash">get_proposal_hash</a>(execution_hash, salt);
     <b>let</b> creator_addr = address_of(creator);
     <b>let</b> <a href="timelock.md#0x1_timelock">timelock</a> = &<b>mut</b> <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[timelock_account];
     <b>assert</b>!(
@@ -1426,7 +1695,7 @@ payload, capped at <code><a href="timelock.md#0x1_timelock_MAX_SCRIPT_PATH_LENGT
         <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="timelock.md#0x1_timelock_ENUMBER_SECONDS_TOO_SMALL">ENUMBER_SECONDS_TOO_SMALL</a>)
     );
     <b>assert</b>!(
-        !<a href="timelock.md#0x1_timelock">timelock</a>.transactions.contains(transaction_hash),
+        !<a href="timelock.md#0x1_timelock">timelock</a>.transactions.contains(proposal_hash),
         <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_already_exists">error::already_exists</a>(<a href="timelock.md#0x1_timelock_EDUPLICATE_TRANSACTION">EDUPLICATE_TRANSACTION</a>)
     );
 
@@ -1437,15 +1706,16 @@ payload, capped at <code><a href="timelock.md#0x1_timelock_MAX_SCRIPT_PATH_LENGT
         num_seconds_execute,
         salt,
         script_path,
-        executed: <b>false</b>
+        executed: <b>false</b>,
+        approved: <b>false</b>
     };
-    <a href="timelock.md#0x1_timelock">timelock</a>.transactions.add(transaction_hash, transaction);
+    <a href="timelock.md#0x1_timelock">timelock</a>.transactions.add(proposal_hash, transaction);
 
     emit(
         <a href="timelock.md#0x1_timelock_CreateTransaction">CreateTransaction</a> {
             timelock_account,
             creator: creator_addr,
-            transaction_hash,
+            proposal_hash,
             transaction
         }
     );
@@ -1461,11 +1731,11 @@ payload, capped at <code><a href="timelock.md#0x1_timelock_MAX_SCRIPT_PATH_LENGT
 ## Function `cancel_transaction`
 
 Cancel a pending transaction. The transaction's executed field is set to true.
-Any creator or executor can cancel at any time.
-<code>transaction_hash</code> must be exactly 32 bytes.
+Any creator or canceler can cancel at any time. Executors cannot cancel.
+<code>proposal_hash</code> must be exactly 32 bytes.
 
 
-<pre><code><b>public</b> entry <b>fun</b> <a href="timelock.md#0x1_timelock_cancel_transaction">cancel_transaction</a>(actor: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, timelock_account: <b>address</b>, transaction_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;)
+<pre><code><b>public</b> entry <b>fun</b> <a href="timelock.md#0x1_timelock_cancel_transaction">cancel_transaction</a>(actor: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, timelock_account: <b>address</b>, proposal_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;)
 </code></pre>
 
 
@@ -1475,36 +1745,80 @@ Any creator or executor can cancel at any time.
 
 
 <pre><code><b>public</b> entry <b>fun</b> <a href="timelock.md#0x1_timelock_cancel_transaction">cancel_transaction</a>(
-    actor: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, timelock_account: <b>address</b>, transaction_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
+    actor: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, timelock_account: <b>address</b>, proposal_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
 ) <b>acquires</b> <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a> {
     <a href="timelock.md#0x1_timelock_assert_timelock_account_exists">assert_timelock_account_exists</a>(timelock_account);
-    <b>assert</b>!(
-        transaction_hash.length() == <a href="timelock.md#0x1_timelock_TRANSACTION_HASH_LENGTH">TRANSACTION_HASH_LENGTH</a>,
-        <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="timelock.md#0x1_timelock_EINVALID_BYTES_LENGTH">EINVALID_BYTES_LENGTH</a>)
-    );
+    <a href="timelock.md#0x1_timelock_assert_proposal_hash_length">assert_proposal_hash_length</a>(&proposal_hash);
     <b>let</b> actor_addr = address_of(actor);
-
-    // Evaluate authorization before acquiring the mutable borrow.
-    <b>let</b> actor_is_creator = <a href="timelock.md#0x1_timelock_is_creator">is_creator</a>(actor_addr, timelock_account);
-    <b>let</b> actor_is_executor = <a href="timelock.md#0x1_timelock_is_executor">is_executor</a>(actor_addr, timelock_account);
+    // Creators and cancelers may cancel; executors cannot.
     <b>assert</b>!(
-        actor_is_creator || actor_is_executor,
-        <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_permission_denied">error::permission_denied</a>(<a href="timelock.md#0x1_timelock_ENOT_CREATOR_OR_EXECUTOR">ENOT_CREATOR_OR_EXECUTOR</a>)
+        <a href="timelock.md#0x1_timelock_is_creator">is_creator</a>(actor_addr, timelock_account)
+            || <a href="timelock.md#0x1_timelock_is_canceler">is_canceler</a>(actor_addr, timelock_account),
+        <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_permission_denied">error::permission_denied</a>(<a href="timelock.md#0x1_timelock_ENOT_CREATOR_OR_CANCELER">ENOT_CREATOR_OR_CANCELER</a>)
     );
 
     <b>let</b> <a href="timelock.md#0x1_timelock">timelock</a> = &<b>mut</b> <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[timelock_account];
     <b>assert</b>!(
-        <a href="timelock.md#0x1_timelock">timelock</a>.transactions.contains(transaction_hash),
+        <a href="timelock.md#0x1_timelock">timelock</a>.transactions.contains(proposal_hash),
         <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_not_found">error::not_found</a>(<a href="timelock.md#0x1_timelock_ETRANSACTION_NOT_FOUND">ETRANSACTION_NOT_FOUND</a>)
     );
-    <b>let</b> transaction = <a href="timelock.md#0x1_timelock">timelock</a>.transactions.borrow_mut(transaction_hash);
+    <b>let</b> transaction = <a href="timelock.md#0x1_timelock">timelock</a>.transactions.borrow_mut(proposal_hash);
     <b>assert</b>!(
         !transaction.executed,
         <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_state">error::invalid_state</a>(<a href="timelock.md#0x1_timelock_ETRANSACTION_ALREADY_EXECUTED">ETRANSACTION_ALREADY_EXECUTED</a>)
     );
     transaction.executed = <b>true</b>;
 
-    emit(<a href="timelock.md#0x1_timelock_CancelTransaction">CancelTransaction</a> { timelock_account, actor: actor_addr, transaction_hash });
+    emit(<a href="timelock.md#0x1_timelock_CancelTransaction">CancelTransaction</a> { timelock_account, actor: actor_addr, proposal_hash });
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_timelock_approve_resolution"></a>
+
+## Function `approve_resolution`
+
+Pre-authorize resolution for an executor that cannot submit a <code>Script</code> itself (notably an
+Aptos multisig, which dispatches entry functions, not <code>Script</code>s). After approval, ANY party
+may submit the committed resolution script and <code>resolve</code> accepts it. Authorization mirrors
+execution (an executor, or a creator when the executor list is empty). The delay is NOT
+enforced here — <code>resolve</code> still enforces it — and the approval is bound to <code>proposal_hash</code>,
+which commits to the exact script, so it cannot authorize anything else.
+
+
+<pre><code><b>public</b> entry <b>fun</b> <a href="timelock.md#0x1_timelock_approve_resolution">approve_resolution</a>(executor: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, timelock_account: <b>address</b>, proposal_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;)
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> entry <b>fun</b> <a href="timelock.md#0x1_timelock_approve_resolution">approve_resolution</a>(
+    executor: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, timelock_account: <b>address</b>, proposal_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
+) <b>acquires</b> <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a> {
+    <a href="timelock.md#0x1_timelock_assert_timelock_account_exists">assert_timelock_account_exists</a>(timelock_account);
+    <a href="timelock.md#0x1_timelock_assert_proposal_hash_length">assert_proposal_hash_length</a>(&proposal_hash);
+    <a href="timelock.md#0x1_timelock_assert_is_executor">assert_is_executor</a>(executor, timelock_account);
+    <b>let</b> executor_addr = address_of(executor);
+
+    <b>let</b> <a href="timelock.md#0x1_timelock">timelock</a> = &<b>mut</b> <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[timelock_account];
+    <b>assert</b>!(
+        <a href="timelock.md#0x1_timelock">timelock</a>.transactions.contains(proposal_hash),
+        <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_not_found">error::not_found</a>(<a href="timelock.md#0x1_timelock_ETRANSACTION_NOT_FOUND">ETRANSACTION_NOT_FOUND</a>)
+    );
+    <b>let</b> transaction = <a href="timelock.md#0x1_timelock">timelock</a>.transactions.borrow_mut(proposal_hash);
+    <b>assert</b>!(
+        !transaction.executed,
+        <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_state">error::invalid_state</a>(<a href="timelock.md#0x1_timelock_ETRANSACTION_ALREADY_EXECUTED">ETRANSACTION_ALREADY_EXECUTED</a>)
+    );
+    transaction.approved = <b>true</b>;
+
+    emit(<a href="timelock.md#0x1_timelock_ApproveResolution">ApproveResolution</a> { timelock_account, executor: executor_addr, proposal_hash });
 }
 </code></pre>
 
@@ -1516,23 +1830,16 @@ Any creator or executor can cancel at any time.
 
 ## Function `resolve`
 
-Resolve a pending transaction and return the timelock account's signer.
-
-Asserts that:
-- The account exists and is a timelock account
-- The executor is authorized
-- The transaction exists and has not been executed or canceled
-- The timelock period (creation_time_secs + num_seconds_execute) has elapsed
-- The running script's hash equals the transaction's execution_hash
-
-Marks the transaction executed, emits ResolveTransaction, and returns the signer for
-the timelock account. The calling script uses this signer to perform the transaction's
-effects (including, optionally, the self-governance entry functions in this module).
-If the script later aborts, the entire transaction—including the executed flag flip—
-reverts atomically, leaving the proposal in its previous state.
+Resolve a pending transaction and return the timelock account's signer for the calling
+script to perform the transaction's effects. Asserts the account is a timelock; the submitter
+is authorized (an executor — a direct executor approves-and-resolves in one step — or any
+submitter when the transaction was pre-approved via <code>approve_resolution</code>); the transaction
+exists, is not executed/canceled, and its delay has elapsed; and the running script's hash
+equals the transaction's execution_hash. Marks it executed; if the calling script later
+aborts, the whole transaction reverts atomically.
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="timelock.md#0x1_timelock_resolve">resolve</a>(executor: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, timelock_account: <b>address</b>, transaction_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>
+<pre><code><b>public</b> <b>fun</b> <a href="timelock.md#0x1_timelock_resolve">resolve</a>(submitter: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, timelock_account: <b>address</b>, proposal_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>
 </code></pre>
 
 
@@ -1542,23 +1849,29 @@ reverts atomically, leaving the proposal in its previous state.
 
 
 <pre><code><b>public</b> <b>fun</b> <a href="timelock.md#0x1_timelock_resolve">resolve</a>(
-    executor: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, timelock_account: <b>address</b>, transaction_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
+    submitter: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, timelock_account: <b>address</b>, proposal_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
 ): <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a> <b>acquires</b> <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a> {
     <a href="timelock.md#0x1_timelock_assert_timelock_account_exists">assert_timelock_account_exists</a>(timelock_account);
-    <a href="timelock.md#0x1_timelock_assert_is_executor">assert_is_executor</a>(executor, timelock_account);
-    <b>assert</b>!(
-        transaction_hash.length() == <a href="timelock.md#0x1_timelock_TRANSACTION_HASH_LENGTH">TRANSACTION_HASH_LENGTH</a>,
-        <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="timelock.md#0x1_timelock_EINVALID_BYTES_LENGTH">EINVALID_BYTES_LENGTH</a>)
-    );
+    <a href="timelock.md#0x1_timelock_assert_proposal_hash_length">assert_proposal_hash_length</a>(&proposal_hash);
 
-    <b>let</b> executor_addr = address_of(executor);
-
+    <b>let</b> submitter_addr = address_of(submitter);
     <b>let</b> <a href="timelock.md#0x1_timelock">timelock</a> = &<b>mut</b> <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[timelock_account];
+    // Executor authorization, computed from the same borrow used for the lookup below so the
+    // resource is loaded once.
+    <b>let</b> submitter_is_executor = <a href="timelock.md#0x1_timelock_is_executor_addr">is_executor_addr</a>(<a href="timelock.md#0x1_timelock">timelock</a>, submitter_addr);
     <b>assert</b>!(
-        <a href="timelock.md#0x1_timelock">timelock</a>.transactions.contains(transaction_hash),
+        <a href="timelock.md#0x1_timelock">timelock</a>.transactions.contains(proposal_hash),
         <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_not_found">error::not_found</a>(<a href="timelock.md#0x1_timelock_ETRANSACTION_NOT_FOUND">ETRANSACTION_NOT_FOUND</a>)
     );
-    <b>let</b> transaction = <a href="timelock.md#0x1_timelock">timelock</a>.transactions.borrow_mut(transaction_hash);
+    <b>let</b> transaction = <a href="timelock.md#0x1_timelock">timelock</a>.transactions.borrow_mut(proposal_hash);
+    // Authorized <b>if</b> the submitter is an executor (direct execute = approve-and-resolve in one
+    // step) or the transaction was pre-approved by an executor via `approve_resolution`.
+    // Checked before the executed/delay checks so an unauthorized caller cannot probe a
+    // proposal's execution state.
+    <b>assert</b>!(
+        submitter_is_executor || transaction.approved,
+        <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_permission_denied">error::permission_denied</a>(<a href="timelock.md#0x1_timelock_ENOT_EXECUTOR">ENOT_EXECUTOR</a>)
+    );
     <b>assert</b>!(
         !transaction.executed,
         <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_state">error::invalid_state</a>(<a href="timelock.md#0x1_timelock_ETRANSACTION_ALREADY_EXECUTED">ETRANSACTION_ALREADY_EXECUTED</a>)
@@ -1576,8 +1889,8 @@ reverts atomically, leaving the proposal in its previous state.
     emit(
         <a href="timelock.md#0x1_timelock_ResolveTransaction">ResolveTransaction</a> {
             timelock_account,
-            executor: executor_addr,
-            transaction_hash,
+            executor: submitter_addr,
+            proposal_hash,
             execution_hash: transaction.execution_hash
         }
     );
@@ -1758,6 +2071,37 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 
 </details>
 
+<a id="0x1_timelock_is_executor_addr"></a>
+
+## Function `is_executor_addr`
+
+The single source of truth for executor authorization: an executor, or a creator when the
+executor list is empty. Operates on an already-borrowed resource so callers holding a
+borrow (e.g. <code>resolve</code>) reuse it instead of loading <code><a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a></code> again.
+
+
+<pre><code><b>fun</b> <a href="timelock.md#0x1_timelock_is_executor_addr">is_executor_addr</a>(<a href="timelock.md#0x1_timelock">timelock</a>: &<a href="timelock.md#0x1_timelock_TimelockAccount">timelock::TimelockAccount</a>, addr: <b>address</b>): bool
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code>inline <b>fun</b> <a href="timelock.md#0x1_timelock_is_executor_addr">is_executor_addr</a>(<a href="timelock.md#0x1_timelock">timelock</a>: &<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>, addr: <b>address</b>): bool {
+    <b>if</b> (<a href="timelock.md#0x1_timelock">timelock</a>.executors.is_empty()) {
+        <a href="timelock.md#0x1_timelock">timelock</a>.creators.contains(&addr)
+    } <b>else</b> {
+        <a href="timelock.md#0x1_timelock">timelock</a>.executors.contains(&addr)
+    }
+}
+</code></pre>
+
+
+
+</details>
+
 <a id="0x1_timelock_assert_is_executor"></a>
 
 ## Function `assert_is_executor`
@@ -1776,15 +2120,39 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 <pre><code>inline <b>fun</b> <a href="timelock.md#0x1_timelock_assert_is_executor">assert_is_executor</a>(
     executor: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, timelock_account: <b>address</b>
 ) {
-    <b>let</b> <a href="timelock.md#0x1_timelock">timelock</a> = &<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[timelock_account];
-    <b>let</b> executor_addr = address_of(executor);
-    <b>let</b> authorized =
-        <b>if</b> (<a href="timelock.md#0x1_timelock">timelock</a>.executors.is_empty()) {
-            <a href="timelock.md#0x1_timelock">timelock</a>.creators.contains(&executor_addr)
-        } <b>else</b> {
-            <a href="timelock.md#0x1_timelock">timelock</a>.executors.contains(&executor_addr)
-        };
-    <b>assert</b>!(authorized, <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_permission_denied">error::permission_denied</a>(<a href="timelock.md#0x1_timelock_ENOT_EXECUTOR">ENOT_EXECUTOR</a>));
+    <b>assert</b>!(
+        <a href="timelock.md#0x1_timelock_is_executor_addr">is_executor_addr</a>(&<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[timelock_account], address_of(executor)),
+        <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_permission_denied">error::permission_denied</a>(<a href="timelock.md#0x1_timelock_ENOT_EXECUTOR">ENOT_EXECUTOR</a>)
+    );
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_timelock_assert_proposal_hash_length"></a>
+
+## Function `assert_proposal_hash_length`
+
+Assert a proposal hash is exactly <code><a href="timelock.md#0x1_timelock_PROPOSAL_HASH_LENGTH">PROPOSAL_HASH_LENGTH</a></code> bytes. Shared by the
+transaction-mutating entry points (cancel/approve/resolve).
+
+
+<pre><code><b>fun</b> <a href="timelock.md#0x1_timelock_assert_proposal_hash_length">assert_proposal_hash_length</a>(proposal_hash: &<a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;)
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code>inline <b>fun</b> <a href="timelock.md#0x1_timelock_assert_proposal_hash_length">assert_proposal_hash_length</a>(proposal_hash: &<a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;) {
+    <b>assert</b>!(
+        proposal_hash.length() == <a href="timelock.md#0x1_timelock_PROPOSAL_HASH_LENGTH">PROPOSAL_HASH_LENGTH</a>,
+        <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="timelock.md#0x1_timelock_EINVALID_BYTES_LENGTH">EINVALID_BYTES_LENGTH</a>)
+    );
 }
 </code></pre>
 
@@ -1849,10 +2217,10 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 
 <tr>
 <td>2</td>
-<td>Creator and executor lists must not contain duplicate addresses, and the timelock account address itself cannot appear in either list.</td>
+<td>Creator, executor, and canceler lists must not contain duplicate addresses, and the timelock account address itself cannot appear in any of them.</td>
 <td>Critical</td>
-<td>The validate_members function iterates through the member list and aborts on any duplicate or self-reference. It is called for both creators and executors during account creation and member updates.</td>
-<td>Audited that duplicate detection aborts correctly (validate_members, add_creators, add_executors). Audited that self-reference is rejected (validate_members).</td>
+<td>The validate_members function iterates through the member list and aborts on any duplicate or self-reference. It is called for creators, executors, and cancelers during account creation and member updates.</td>
+<td>Audited that duplicate detection aborts correctly (validate_members, add_creators, add_executors, add_cancelers). Audited that self-reference is rejected (validate_members).</td>
 </tr>
 
 <tr>
@@ -1868,7 +2236,7 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 <td>Each transaction proposal is uniquely identified by keccak256(execution_hash || salt). Submitting a proposal whose computed key already exists is rejected. To submit the same script again, a new salt must be used.</td>
 <td>High</td>
 <td>The create_transaction function computes the table key and asserts that the key does not already exist as a key in the transactions table before adding the new entry.</td>
-<td>Audited that it aborts if the computed transaction hash already exists (create_transaction).</td>
+<td>Audited that it aborts if the computed proposal hash already exists (create_transaction).</td>
 </tr>
 
 <tr>
@@ -1881,9 +2249,9 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 
 <tr>
 <td>6</td>
-<td>Any creator or any executor can cancel any pending transaction at any time, before the transaction has been executed or canceled.</td>
+<td>Any creator or any canceler can cancel any pending transaction at any time, before the transaction has been executed or canceled. Executors cannot cancel; cancelers are an emergency-response role that can only cancel (they cannot propose or execute).</td>
 <td>High</td>
-<td>The cancel_transaction function checks that the caller is either a creator or an executor (applying the empty-executors fallback), then asserts that the transaction has not yet been executed, and sets executed = true.</td>
+<td>The cancel_transaction function checks that the caller is either a creator or a canceler, then asserts that the transaction has not yet been executed, and sets executed = true.</td>
 <td>Audited that it aborts if the caller has no cancellation rights (cancel_transaction). Audited that it aborts if the transaction is already executed or canceled (cancel_transaction).</td>
 </tr>
 
@@ -1897,15 +2265,15 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 
 <tr>
 <td>8</td>
-<td>Changes to num_seconds_execute, the creator list, and the executor list can only be made by the timelock account itself, enforced by requiring the timelock account signer on the self-governance entry functions.</td>
+<td>Changes to num_seconds_execute, the creator list, the executor list, and the canceler list can only be made by the timelock account itself, enforced by requiring the timelock account signer on the self-governance entry functions.</td>
 <td>Critical</td>
-<td>The self-governance functions (update_min_num_seconds_execute, add_creators, remove_creators, add_executors, remove_executors) all take timelock_account: &signer as first argument. The signer is produced only by <code>resolve</code>, which derives it from the stored signer_cap after verifying the running script.</td>
+<td>The self-governance functions (update_min_num_seconds_execute, add_creators, remove_creators, add_executors, remove_executors, add_cancelers, remove_cancelers) all take timelock_account: &signer as first argument. The signer is produced only by <code>resolve</code>, which derives it from the stored signer_cap after verifying the running script.</td>
 <td>Audited that the signer must be the timelock account address for self-governance functions.</td>
 </tr>
 
 <tr>
 <td>9</td>
-<td>Creating a timelock account properly initializes all resources and publishes the TimelockAccount resource under the resource account address derived from the deployer's address and sequence number. The deployer authorizes resource-account creation but does not gain creator or executor status; membership is determined entirely by the <code>creators</code> and <code>executors</code> arguments passed to <code>create</code>.</td>
+<td>Creating a timelock account properly initializes all resources and publishes the TimelockAccount resource under the resource account address derived from the deployer's address and sequence number. The deployer authorizes resource-account creation but does not gain creator, executor, or canceler status; membership is determined entirely by the <code>creators</code>, <code>executors</code>, and <code>cancelers</code> arguments passed to <code>create</code>.</td>
 <td>Medium</td>
 <td>The create function derives the resource account address, creates the account via account::create_resource_account, and calls create_timelock_account_internal which publishes the TimelockAccount resource with all fields initialized from the supplied creators and executors lists.</td>
 <td>Audited that TimelockAccount is initialized and published (create, create_timelock_account_internal).</td>
@@ -1921,10 +2289,10 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 
 <tr>
 <td>11</td>
-<td>Only authorized executors (or creators when executors is empty) are allowed to resolve transactions. The running script's hash must equal the proposed execution_hash.</td>
+<td>A transaction may be resolved only by an authorized executor (or a creator when executors is empty) submitting the script directly, OR by any submitter when the transaction was pre-approved by such an executor via approve_resolution. The running script's hash must equal the proposed execution_hash.</td>
 <td>Critical</td>
-<td>The resolve function checks executor authorization, transaction existence, executed status, timelock expiry, and equality between transaction_context::get_script_hash() and the stored execution_hash.</td>
-<td>Audited that it aborts if the caller is not an executor (resolve, assert_is_executor). Audited that it aborts if the script hash mismatches (resolve).</td>
+<td>The resolve function authorizes if the submitter is an executor or the transaction's <code>approved</code> flag is set, then checks transaction existence, executed status, timelock expiry, and equality between transaction_context::get_script_hash() and the stored execution_hash. approve_resolution sets <code>approved</code> only for an authorized executor and only on a not-yet-executed transaction.</td>
+<td>Audited that it aborts if the submitter is neither an executor nor resolving an approved transaction (resolve). Audited that approval requires executor authorization (approve_resolution). Audited that it aborts if the script hash mismatches (resolve).</td>
 </tr>
 
 </table>
@@ -1968,6 +2336,24 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 
 <pre><code><b>aborts_if</b> !<b>exists</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(timelock_account);
 <b>ensures</b> result == <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[timelock_account].executors;
+</code></pre>
+
+
+
+<a id="@Specification_3_cancelers"></a>
+
+### Function `cancelers`
+
+
+<pre><code>#[view]
+<b>public</b> <b>fun</b> <a href="timelock.md#0x1_timelock_cancelers">cancelers</a>(timelock_account: <b>address</b>): <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;
+</code></pre>
+
+
+
+
+<pre><code><b>aborts_if</b> !<b>exists</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(timelock_account);
+<b>ensures</b> result == <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[timelock_account].cancelers;
 </code></pre>
 
 
@@ -2028,13 +2414,31 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 
 
 
+<a id="@Specification_3_is_canceler"></a>
+
+### Function `is_canceler`
+
+
+<pre><code>#[view]
+<b>public</b> <b>fun</b> <a href="timelock.md#0x1_timelock_is_canceler">is_canceler</a>(addr: <b>address</b>, timelock_account: <b>address</b>): bool
+</code></pre>
+
+
+
+
+<pre><code><b>aborts_if</b> !<b>exists</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(timelock_account);
+<b>ensures</b> result == contains(<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[timelock_account].cancelers, addr);
+</code></pre>
+
+
+
 <a id="@Specification_3_get_transaction"></a>
 
 ### Function `get_transaction`
 
 
 <pre><code>#[view]
-<b>public</b> <b>fun</b> <a href="timelock.md#0x1_timelock_get_transaction">get_transaction</a>(timelock_account: <b>address</b>, transaction_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): <a href="timelock.md#0x1_timelock_TimelockTransaction">timelock::TimelockTransaction</a>
+<b>public</b> <b>fun</b> <a href="timelock.md#0x1_timelock_get_transaction">get_transaction</a>(timelock_account: <b>address</b>, proposal_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): <a href="timelock.md#0x1_timelock_TimelockTransaction">timelock::TimelockTransaction</a>
 </code></pre>
 
 
@@ -2042,8 +2446,8 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 
 <pre><code><b>let</b> <a href="timelock.md#0x1_timelock">timelock</a> = <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[timelock_account];
 <b>aborts_if</b> !<b>exists</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(timelock_account);
-<b>aborts_if</b> !<a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_contains">table::spec_contains</a>(<a href="timelock.md#0x1_timelock">timelock</a>.transactions, transaction_hash);
-<b>ensures</b> result == <a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_get">table::spec_get</a>(<a href="timelock.md#0x1_timelock">timelock</a>.transactions, transaction_hash);
+<b>aborts_if</b> !<a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_contains">table::spec_contains</a>(<a href="timelock.md#0x1_timelock">timelock</a>.transactions, proposal_hash);
+<b>ensures</b> result == <a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_get">table::spec_get</a>(<a href="timelock.md#0x1_timelock">timelock</a>.transactions, proposal_hash);
 </code></pre>
 
 
@@ -2054,7 +2458,7 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 
 
 <pre><code>#[view]
-<b>public</b> <b>fun</b> <a href="timelock.md#0x1_timelock_can_be_executed">can_be_executed</a>(timelock_account: <b>address</b>, transaction_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): bool
+<b>public</b> <b>fun</b> <a href="timelock.md#0x1_timelock_can_be_executed">can_be_executed</a>(timelock_account: <b>address</b>, proposal_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): bool
 </code></pre>
 
 
@@ -2063,12 +2467,12 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 <pre><code><b>pragma</b> aborts_if_is_partial;
 <b>aborts_if</b> !<b>exists</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(timelock_account);
 <b>let</b> <a href="timelock.md#0x1_timelock">timelock</a> = <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[timelock_account];
-<b>ensures</b> !<a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_contains">table::spec_contains</a>(<a href="timelock.md#0x1_timelock">timelock</a>.transactions, transaction_hash) ==&gt; !result;
-<b>ensures</b> <a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_contains">table::spec_contains</a>(<a href="timelock.md#0x1_timelock">timelock</a>.transactions, transaction_hash) ==&gt; result ==
-    (!<a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_get">table::spec_get</a>(<a href="timelock.md#0x1_timelock">timelock</a>.transactions, transaction_hash).executed
+<b>ensures</b> !<a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_contains">table::spec_contains</a>(<a href="timelock.md#0x1_timelock">timelock</a>.transactions, proposal_hash) ==&gt; !result;
+<b>ensures</b> <a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_contains">table::spec_contains</a>(<a href="timelock.md#0x1_timelock">timelock</a>.transactions, proposal_hash) ==&gt; result ==
+    (!<a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_get">table::spec_get</a>(<a href="timelock.md#0x1_timelock">timelock</a>.transactions, proposal_hash).executed
         && aptos_framework::timestamp::now_seconds()
-            &gt;= <a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_get">table::spec_get</a>(<a href="timelock.md#0x1_timelock">timelock</a>.transactions, transaction_hash).creation_time_secs
-                + <a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_get">table::spec_get</a>(<a href="timelock.md#0x1_timelock">timelock</a>.transactions, transaction_hash).num_seconds_execute);
+            &gt;= <a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_get">table::spec_get</a>(<a href="timelock.md#0x1_timelock">timelock</a>.transactions, proposal_hash).creation_time_secs
+                + <a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_get">table::spec_get</a>(<a href="timelock.md#0x1_timelock">timelock</a>.transactions, proposal_hash).num_seconds_execute);
 </code></pre>
 
 
@@ -2090,13 +2494,13 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 
 
 
-<a id="@Specification_3_get_transaction_hash"></a>
+<a id="@Specification_3_get_proposal_hash"></a>
 
-### Function `get_transaction_hash`
+### Function `get_proposal_hash`
 
 
 <pre><code>#[view]
-<b>public</b> <b>fun</b> <a href="timelock.md#0x1_timelock_get_transaction_hash">get_transaction_hash</a>(execution_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, salt: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
+<b>public</b> <b>fun</b> <a href="timelock.md#0x1_timelock_get_proposal_hash">get_proposal_hash</a>(execution_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, salt: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
 </code></pre>
 
 
@@ -2112,7 +2516,7 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 ### Function `create`
 
 
-<pre><code><b>public</b> entry <b>fun</b> <a href="timelock.md#0x1_timelock_create">create</a>(deployer: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, creators: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;, executors: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;, num_seconds_execute: u64)
+<pre><code><b>public</b> entry <b>fun</b> <a href="timelock.md#0x1_timelock_create">create</a>(deployer: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, creators: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;, executors: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;, cancelers: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;, num_seconds_execute: u64)
 </code></pre>
 
 
@@ -2131,7 +2535,7 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 ### Function `create_timelock_account_internal`
 
 
-<pre><code><b>fun</b> <a href="timelock.md#0x1_timelock_create_timelock_account_internal">create_timelock_account_internal</a>(timelock_account: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, creators: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;, executors: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;, min_num_seconds_execute: u64, signer_cap: <a href="account.md#0x1_account_SignerCapability">account::SignerCapability</a>)
+<pre><code><b>fun</b> <a href="timelock.md#0x1_timelock_create_timelock_account_internal">create_timelock_account_internal</a>(timelock_account: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, creators: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;, executors: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;, cancelers: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;, min_num_seconds_execute: u64, signer_cap: <a href="account.md#0x1_account_SignerCapability">account::SignerCapability</a>)
 </code></pre>
 
 
@@ -2145,10 +2549,13 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 <b>aborts_if</b> <b>exists</b> i in 0..len(creators): <b>exists</b> j in 0..i: creators[i] == creators[j];
 <b>aborts_if</b> <b>exists</b> i in 0..len(executors): executors[i] == address_of(timelock_account);
 <b>aborts_if</b> <b>exists</b> i in 0..len(executors): <b>exists</b> j in 0..i: executors[i] == executors[j];
+<b>aborts_if</b> <b>exists</b> i in 0..len(cancelers): cancelers[i] == address_of(timelock_account);
+<b>aborts_if</b> <b>exists</b> i in 0..len(cancelers): <b>exists</b> j in 0..i: cancelers[i] == cancelers[j];
 <b>ensures</b> <b>exists</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(address_of(timelock_account));
 <b>ensures</b> <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[address_of(timelock_account)].min_num_seconds_execute == min_num_seconds_execute;
 <b>ensures</b> <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[address_of(timelock_account)].creators == creators;
 <b>ensures</b> <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[address_of(timelock_account)].executors == executors;
+<b>ensures</b> <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[address_of(timelock_account)].cancelers == cancelers;
 </code></pre>
 
 
@@ -2174,6 +2581,8 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
     == concat(<b>old</b>(<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[addr].creators), new_creators);
 <b>ensures</b> <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[addr].executors
     == <b>old</b>(<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[addr].executors);
+<b>ensures</b> <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[addr].cancelers
+    == <b>old</b>(<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[addr].cancelers);
 <b>ensures</b> <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[addr].min_num_seconds_execute
     == <b>old</b>(<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[addr].min_num_seconds_execute);
 </code></pre>
@@ -2221,6 +2630,8 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
     == concat(<b>old</b>(<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[addr].executors), new_executors);
 <b>ensures</b> <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[addr].creators
     == <b>old</b>(<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[addr].creators);
+<b>ensures</b> <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[addr].cancelers
+    == <b>old</b>(<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[addr].cancelers);
 <b>ensures</b> <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[addr].min_num_seconds_execute
     == <b>old</b>(<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[addr].min_num_seconds_execute);
 <b>ensures</b> <b>forall</b> i in 0..len(<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[addr].executors):
@@ -2235,6 +2646,53 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 
 
 <pre><code><b>public</b> entry <b>fun</b> <a href="timelock.md#0x1_timelock_remove_executors">remove_executors</a>(timelock_account: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, executors_to_remove: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;)
+</code></pre>
+
+
+
+
+<pre><code><b>let</b> addr = address_of(timelock_account);
+<b>aborts_if</b> !<b>exists</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(addr);
+<b>ensures</b> <b>exists</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(addr);
+</code></pre>
+
+
+
+<a id="@Specification_3_add_cancelers"></a>
+
+### Function `add_cancelers`
+
+
+<pre><code><b>public</b> entry <b>fun</b> <a href="timelock.md#0x1_timelock_add_cancelers">add_cancelers</a>(timelock_account: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, new_cancelers: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;)
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> aborts_if_is_partial;
+<b>let</b> addr = address_of(timelock_account);
+<b>aborts_if</b> !<b>exists</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(addr);
+<b>aborts_if</b> <b>exists</b> i in 0..len(new_cancelers): new_cancelers[i] == addr;
+<b>aborts_if</b> <b>exists</b> i in 0..len(new_cancelers): <b>exists</b> j in 0..i: new_cancelers[i] == new_cancelers[j];
+<b>ensures</b> <b>exists</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(addr);
+<b>ensures</b> <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[addr].cancelers
+    == concat(<b>old</b>(<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[addr].cancelers), new_cancelers);
+<b>ensures</b> <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[addr].creators
+    == <b>old</b>(<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[addr].creators);
+<b>ensures</b> <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[addr].executors
+    == <b>old</b>(<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[addr].executors);
+<b>ensures</b> <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[addr].min_num_seconds_execute
+    == <b>old</b>(<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[addr].min_num_seconds_execute);
+</code></pre>
+
+
+
+<a id="@Specification_3_remove_cancelers"></a>
+
+### Function `remove_cancelers`
+
+
+<pre><code><b>public</b> entry <b>fun</b> <a href="timelock.md#0x1_timelock_remove_cancelers">remove_cancelers</a>(timelock_account: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, cancelers_to_remove: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;)
 </code></pre>
 
 
@@ -2267,6 +2725,8 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
     == <b>old</b>(<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[addr].creators);
 <b>ensures</b> <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[addr].executors
     == <b>old</b>(<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[addr].executors);
+<b>ensures</b> <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[addr].cancelers
+    == <b>old</b>(<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[addr].cancelers);
 </code></pre>
 
 
@@ -2317,6 +2777,10 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
     <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[timelock_account].transactions,
     aptos_std::aptos_hash::spec_keccak256(concat(execution_hash, salt)),
 ).executed;
+<b>ensures</b> !<a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_get">table::spec_get</a>(
+    <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[timelock_account].transactions,
+    aptos_std::aptos_hash::spec_keccak256(concat(execution_hash, salt)),
+).approved;
 </code></pre>
 
 
@@ -2326,7 +2790,7 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 ### Function `cancel_transaction`
 
 
-<pre><code><b>public</b> entry <b>fun</b> <a href="timelock.md#0x1_timelock_cancel_transaction">cancel_transaction</a>(actor: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, timelock_account: <b>address</b>, transaction_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;)
+<pre><code><b>public</b> entry <b>fun</b> <a href="timelock.md#0x1_timelock_cancel_transaction">cancel_transaction</a>(actor: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, timelock_account: <b>address</b>, proposal_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;)
 </code></pre>
 
 
@@ -2334,12 +2798,35 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 
 <pre><code><b>let</b> <a href="timelock.md#0x1_timelock">timelock</a> = <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[timelock_account];
 <b>aborts_if</b> !<b>exists</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(timelock_account);
-<b>aborts_if</b> len(transaction_hash) != 32;
+<b>aborts_if</b> len(proposal_hash) != 32;
 <b>aborts_if</b> !contains(<a href="timelock.md#0x1_timelock">timelock</a>.creators, address_of(actor))
-    && (len(<a href="timelock.md#0x1_timelock">timelock</a>.executors) == 0 || !contains(<a href="timelock.md#0x1_timelock">timelock</a>.executors, address_of(actor)));
-<b>aborts_if</b> !<a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_contains">table::spec_contains</a>(<a href="timelock.md#0x1_timelock">timelock</a>.transactions, transaction_hash);
-<b>aborts_if</b> <a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_get">table::spec_get</a>(<a href="timelock.md#0x1_timelock">timelock</a>.transactions, transaction_hash).executed;
-<b>ensures</b> <a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_get">table::spec_get</a>(<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[timelock_account].transactions, transaction_hash).executed;
+    && !contains(<a href="timelock.md#0x1_timelock">timelock</a>.cancelers, address_of(actor));
+<b>aborts_if</b> !<a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_contains">table::spec_contains</a>(<a href="timelock.md#0x1_timelock">timelock</a>.transactions, proposal_hash);
+<b>aborts_if</b> <a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_get">table::spec_get</a>(<a href="timelock.md#0x1_timelock">timelock</a>.transactions, proposal_hash).executed;
+<b>ensures</b> <a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_get">table::spec_get</a>(<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[timelock_account].transactions, proposal_hash).executed;
+</code></pre>
+
+
+
+<a id="@Specification_3_approve_resolution"></a>
+
+### Function `approve_resolution`
+
+
+<pre><code><b>public</b> entry <b>fun</b> <a href="timelock.md#0x1_timelock_approve_resolution">approve_resolution</a>(executor: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, timelock_account: <b>address</b>, proposal_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;)
+</code></pre>
+
+
+
+
+<pre><code><b>let</b> <a href="timelock.md#0x1_timelock">timelock</a> = <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[timelock_account];
+<b>aborts_if</b> !<b>exists</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(timelock_account);
+<b>aborts_if</b> len(proposal_hash) != 32;
+<b>aborts_if</b> len(<a href="timelock.md#0x1_timelock">timelock</a>.executors) == 0 && !contains(<a href="timelock.md#0x1_timelock">timelock</a>.creators, address_of(executor));
+<b>aborts_if</b> len(<a href="timelock.md#0x1_timelock">timelock</a>.executors) &gt; 0 && !contains(<a href="timelock.md#0x1_timelock">timelock</a>.executors, address_of(executor));
+<b>aborts_if</b> !<a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_contains">table::spec_contains</a>(<a href="timelock.md#0x1_timelock">timelock</a>.transactions, proposal_hash);
+<b>aborts_if</b> <a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_get">table::spec_get</a>(<a href="timelock.md#0x1_timelock">timelock</a>.transactions, proposal_hash).executed;
+<b>ensures</b> <a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_get">table::spec_get</a>(<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[timelock_account].transactions, proposal_hash).approved;
 </code></pre>
 
 
@@ -2349,7 +2836,7 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 ### Function `resolve`
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="timelock.md#0x1_timelock_resolve">resolve</a>(executor: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, timelock_account: <b>address</b>, transaction_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>
+<pre><code><b>public</b> <b>fun</b> <a href="timelock.md#0x1_timelock_resolve">resolve</a>(submitter: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, timelock_account: <b>address</b>, proposal_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>
 </code></pre>
 
 
@@ -2358,22 +2845,22 @@ when a duplicate is found (EDUPLICATE_CREATOR or EDUPLICATE_EXECUTOR).
 <pre><code><b>pragma</b> verify = <b>false</b>;
 <b>let</b> <a href="timelock.md#0x1_timelock">timelock</a> = <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[timelock_account];
 <b>aborts_if</b> !<b>exists</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(timelock_account);
-<b>aborts_if</b> len(transaction_hash) != 32;
-<b>aborts_if</b> {
+<b>aborts_if</b> len(proposal_hash) != 32;
+<b>aborts_if</b> !<a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_contains">table::spec_contains</a>(<a href="timelock.md#0x1_timelock">timelock</a>.transactions, proposal_hash);
+<b>aborts_if</b> <a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_get">table::spec_get</a>(<a href="timelock.md#0x1_timelock">timelock</a>.transactions, proposal_hash).executed;
+<b>aborts_if</b> !<a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_get">table::spec_get</a>(<a href="timelock.md#0x1_timelock">timelock</a>.transactions, proposal_hash).approved && {
     <b>let</b> execs = <a href="timelock.md#0x1_timelock">timelock</a>.executors;
     <b>let</b> creators = <a href="timelock.md#0x1_timelock">timelock</a>.creators;
     <b>if</b> (len(execs) == 0) {
-        !contains(creators, address_of(executor))
+        !contains(creators, address_of(submitter))
     } <b>else</b> {
-        !contains(execs, address_of(executor))
+        !contains(execs, address_of(submitter))
     }
 };
-<b>aborts_if</b> !<a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_contains">table::spec_contains</a>(<a href="timelock.md#0x1_timelock">timelock</a>.transactions, transaction_hash);
-<b>aborts_if</b> <a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_get">table::spec_get</a>(<a href="timelock.md#0x1_timelock">timelock</a>.transactions, transaction_hash).executed;
-<b>aborts_if</b> aptos_framework::timestamp::now_seconds() &lt; <a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_get">table::spec_get</a>(<a href="timelock.md#0x1_timelock">timelock</a>.transactions, transaction_hash).creation_time_secs
-    + <a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_get">table::spec_get</a>(<a href="timelock.md#0x1_timelock">timelock</a>.transactions, transaction_hash).num_seconds_execute;
-<b>ensures</b> <a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_get">table::spec_get</a>(<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[timelock_account].transactions, transaction_hash).executed;
-<b>ensures</b> <a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_contains">table::spec_contains</a>(<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[timelock_account].transactions, transaction_hash);
+<b>aborts_if</b> aptos_framework::timestamp::now_seconds() &lt; <a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_get">table::spec_get</a>(<a href="timelock.md#0x1_timelock">timelock</a>.transactions, proposal_hash).creation_time_secs
+    + <a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_get">table::spec_get</a>(<a href="timelock.md#0x1_timelock">timelock</a>.transactions, proposal_hash).num_seconds_execute;
+<b>ensures</b> <a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_get">table::spec_get</a>(<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[timelock_account].transactions, proposal_hash).executed;
+<b>ensures</b> <a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_contains">table::spec_contains</a>(<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[timelock_account].transactions, proposal_hash);
 </code></pre>
 
 

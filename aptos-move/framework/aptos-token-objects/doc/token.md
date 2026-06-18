@@ -396,6 +396,16 @@ The calling signer is not the owner
 
 
 
+<a id="0x4_token_ENOT_CREATOR"></a>
+
+The provided signer is not the creator
+
+
+<pre><code><b>const</b> <a href="token.md#0x4_token_ENOT_CREATOR">ENOT_CREATOR</a>: u64 = 2;
+</code></pre>
+
+
+
 <a id="0x4_token_ECOLLECTION_OWNER_NOT_SUPPORTED"></a>
 
 The collection owner feature is not supported
@@ -431,16 +441,6 @@ The field being changed is not mutable
 
 
 <pre><code><b>const</b> <a href="token.md#0x4_token_EFIELD_NOT_MUTABLE">EFIELD_NOT_MUTABLE</a>: u64 = 3;
-</code></pre>
-
-
-
-<a id="0x4_token_ENOT_CREATOR"></a>
-
-The provided signer is not the creator
-
-
-<pre><code><b>const</b> <a href="token.md#0x4_token_ENOT_CREATOR">ENOT_CREATOR</a>: u64 = 2;
 </code></pre>
 
 

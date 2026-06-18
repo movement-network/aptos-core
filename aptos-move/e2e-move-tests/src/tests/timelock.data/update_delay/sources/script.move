@@ -6,10 +6,10 @@ script {
     fun main(
         executor: &signer,
         timelock_addr: address,
-        transaction_hash: vector<u8>,
+        proposal_hash: vector<u8>,
         new_min_num_seconds_execute: u64,
     ) {
-        let timelock_signer = timelock::resolve(executor, timelock_addr, transaction_hash);
+        let timelock_signer = timelock::resolve(executor, timelock_addr, proposal_hash);
         timelock::update_min_num_seconds_execute(&timelock_signer, new_min_num_seconds_execute);
     }
 }

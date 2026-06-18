@@ -2,30 +2,31 @@
 /// signatures, a timelock account enforces a time delay before transactions can be executed.
 ///
 /// Each timelock account is a resource account with:
-/// - A list of creators who can propose transactions (must have at least 1)
+/// - A list of creators who can propose transactions (must have at least 1). Creators can both
+///   propose and cancel transactions.
 /// - A list of executors who can execute transactions after the timelock period
 ///   (if executors is empty, creators can also execute)
+/// - A list of cancelers who can cancel any pending transaction at any time (an emergency-response
+///   role). Cancelers can ONLY cancel — they cannot propose or execute. The list may be empty.
 /// - A configurable minimum delay (`min_num_seconds_execute`) that must elapse after a
 ///   transaction is proposed before it can be executed
 ///
-/// Execution model (mirrors `aptos_governance` resolution): a creator proposes the SHA3-256
-/// hash of a future resolution script's bytecode. After the delay, an authorized executor submits a
-/// `Script` transaction whose script hash equals the proposed `execution_hash`. The script
-/// calls `resolve`, which verifies the running script's hash via
-/// `transaction_context::get_script_hash()` and returns the timelock account's signer. The
-/// script then performs arbitrary Move calls under that signer, including the self-governance
-/// entry functions in this module.
+/// Execution model (mirrors `aptos_governance`): a creator proposes the SHA3-256 hash of a future
+/// resolution script's bytecode. After the delay, an authorized executor submits a `Script` whose
+/// hash matches; the script calls `resolve`, which verifies the hash via
+/// `transaction_context::get_script_hash()` and returns the timelock account's signer for arbitrary
+/// Move calls (including this module's self-governance functions).
+///
+/// Delegated approval: an executor that cannot submit a `Script` (notably an Aptos multisig, which
+/// dispatches entry functions) instead calls `approve_resolution`; any party may then submit the
+/// committed script, which `resolve` accepts on the strength of that approval. A direct executor
+/// needs no prior approval.
 ///
 /// Properties:
-/// - Transactions are indexed by `keccak256(execution_hash || salt)`. To submit the same
-///   script more than once, change the salt.
-/// - Changing `min_num_seconds_execute` or membership can only happen through the timelock
-///   proposal mechanism itself (the timelock account must be the signer).
-/// - Both creators and executors can cancel any pending transaction at any time.
-/// - Once executed or canceled, the transaction's `executed` field is set to true and the
-///   entry is kept permanently for historical record.
-/// - If the resolution script aborts, the entire transaction (including the `executed` flag
-///   flip) reverts atomically, so the proposal remains executable.
+/// - Transactions are indexed by `keccak256(execution_hash || salt)`; change the salt to resubmit.
+/// - Changing the delay or membership requires the timelock proposal mechanism (the account signs).
+/// - Executed/canceled transactions keep `executed = true` permanently for historical record.
+/// - If the resolution script aborts, the whole transaction (including the `executed` flip) reverts.
 module aptos_framework::timelock {
     use std::account::{Self, SignerCapability, create_resource_address};
     use std::aptos_coin::AptosCoin;
@@ -44,7 +45,7 @@ module aptos_framework::timelock {
     const DOMAIN_SEPARATOR: vector<u8> = b"aptos_framework::timelock";
 
     const SCRIPT_HASH_LENGTH: u64 = 32;
-    const TRANSACTION_HASH_LENGTH: u64 = 32;
+    const PROPOSAL_HASH_LENGTH: u64 = 32;
     const SALT_LENGTH: u64 = 32;
     const MIN_NUM_SECONDS_EXECUTE: u64 = 3600;
     const MAX_NUM_SECONDS_EXECUTE: u64 = 604800;
@@ -59,7 +60,8 @@ module aptos_framework::timelock {
     const EACCOUNT_NOT_TIMELOCK: u64 = 3;
     /// The caller is not a creator.
     const ENOT_CREATOR: u64 = 4;
-    /// The caller is not an executor (or a creator when the executor list is empty).
+    /// The submitter is not authorized to resolve: it is neither an executor (nor a creator when
+    /// the executor list is empty) nor resolving a transaction pre-approved via `approve_resolution`.
     const ENOT_EXECUTOR: u64 = 5;
     /// Timelock account must have at least one creator.
     const ENOT_ENOUGH_CREATORS: u64 = 6;
@@ -75,8 +77,8 @@ module aptos_framework::timelock {
     const EDUPLICATE_TRANSACTION: u64 = 11;
     /// Removing these creators would leave the timelock account with zero creators.
     const EWOULD_REMOVE_ALL_CREATORS: u64 = 12;
-    /// The caller is neither a creator nor an executor.
-    const ENOT_CREATOR_OR_EXECUTOR: u64 = 13;
+    /// The caller is neither a creator nor a canceler.
+    const ENOT_CREATOR_OR_CANCELER: u64 = 13;
     /// The specified number of seconds is below the required minimum: the account's
     /// `min_num_seconds_execute` must be at least `MIN_NUM_SECONDS_EXECUTE` (3600),
     /// and a transaction's `num_seconds_execute` must be at least the account's
@@ -90,6 +92,8 @@ module aptos_framework::timelock {
     const EEXECUTION_HASH_NOT_MATCHING: u64 = 17;
     /// The provided `script_path` exceeds `MAX_SCRIPT_PATH_LENGTH`.
     const ESCRIPT_PATH_TOO_LONG: u64 = 18;
+    /// Canceler list cannot contain duplicate addresses.
+    const EDUPLICATE_CANCELER: u64 = 19;
 
     /// Represents a timelock account's configuration and pending/historical transactions.
     /// Stored at the resource account address created during timelock account creation.
@@ -99,6 +103,9 @@ module aptos_framework::timelock {
         // Addresses allowed to execute transactions after the timelock period.
         // If empty, creators can also execute.
         executors: vector<address>,
+        // Addresses allowed only to cancel pending transactions (emergency response). May be empty.
+        // Cancelers cannot propose or execute.
+        cancelers: vector<address>,
         // Minimum seconds that must elapse after proposal before a transaction can be executed.
         min_num_seconds_execute: u64,
         // Map from `keccak256(execution_hash || salt)` to transaction. Entries are never
@@ -122,14 +129,20 @@ module aptos_framework::timelock {
         creation_time_secs: u64,
         // Seconds that must elapse after creation_time_secs before this transaction can be executed.
         num_seconds_execute: u64,
-        // User-provided salt used when deriving the transaction hash from execution_hash.
+        // User-provided salt used when deriving the proposal hash from execution_hash.
         salt: vector<u8>,
         // Optional off-chain pointer (e.g. an IPFS URI or URL) to the human-readable script
         // payload and metadata, capped at `MAX_SCRIPT_PATH_LENGTH` bytes. An empty vector means
         // no pointer was provided.
         script_path: vector<u8>,
         // True once the transaction is resolved (successfully) or canceled.
-        executed: bool
+        executed: bool,
+        // True once an executor has pre-authorized resolution via `approve_resolution`. This lets
+        // a party that cannot submit a `Script` transaction itself (e.g. a multisig account, which
+        // executes entry functions only) authorize execution; any party may then submit the
+        // committed resolution script, which `resolve` accepts on the strength of this approval.
+        // A direct executor calling `resolve` does not need this — see `resolve`.
+        approved: bool
     }
 
     // =============================== Events ===============================
@@ -159,6 +172,18 @@ module aptos_framework::timelock {
     }
 
     #[event]
+    struct AddCancelers has drop, store {
+        timelock_account: address,
+        new_cancelers: vector<address>
+    }
+
+    #[event]
+    struct RemoveCancelers has drop, store {
+        timelock_account: address,
+        removed_cancelers: vector<address>
+    }
+
+    #[event]
     struct UpdateMinNumSecondsExecute has drop, store {
         timelock_account: address,
         old_min_num_seconds_execute: u64,
@@ -169,7 +194,7 @@ module aptos_framework::timelock {
     struct CreateTransaction has drop, store {
         timelock_account: address,
         creator: address,
-        transaction_hash: vector<u8>,
+        proposal_hash: vector<u8>,
         transaction: TimelockTransaction
     }
 
@@ -177,15 +202,22 @@ module aptos_framework::timelock {
     struct CancelTransaction has drop, store {
         timelock_account: address,
         actor: address,
-        transaction_hash: vector<u8>
+        proposal_hash: vector<u8>
     }
 
     #[event]
     struct ResolveTransaction has drop, store {
         timelock_account: address,
         executor: address,
-        transaction_hash: vector<u8>,
+        proposal_hash: vector<u8>,
         execution_hash: vector<u8>
+    }
+
+    #[event]
+    struct ApproveResolution has drop, store {
+        timelock_account: address,
+        executor: address,
+        proposal_hash: vector<u8>
     }
 
     // =============================== View functions ===============================
@@ -200,6 +232,12 @@ module aptos_framework::timelock {
     /// Return the list of executors. An empty list means creators can also execute.
     public fun executors(timelock_account: address): vector<address> acquires TimelockAccount {
         TimelockAccount[timelock_account].executors
+    }
+
+    #[view]
+    /// Return the list of cancelers (the emergency-response role that can only cancel).
+    public fun cancelers(timelock_account: address): vector<address> acquires TimelockAccount {
+        TimelockAccount[timelock_account].cancelers
     }
 
     #[view]
@@ -218,38 +256,39 @@ module aptos_framework::timelock {
     /// Return true if the given address is authorized to execute transactions.
     /// If the executor list is empty, creators are also authorized to execute.
     public fun is_executor(addr: address, timelock_account: address): bool acquires TimelockAccount {
-        let timelock = &TimelockAccount[timelock_account];
-        if (timelock.executors.is_empty()) {
-            timelock.creators.contains(&addr)
-        } else {
-            timelock.executors.contains(&addr)
-        }
+        is_executor_addr(&TimelockAccount[timelock_account], addr)
     }
 
     #[view]
-    /// Return the transaction stored under the given transaction hash.
+    /// Return true if the given address is a canceler of the timelock account.
+    public fun is_canceler(addr: address, timelock_account: address): bool acquires TimelockAccount {
+        TimelockAccount[timelock_account].cancelers.contains(&addr)
+    }
+
+    #[view]
+    /// Return the transaction stored under the given proposal hash.
     public fun get_transaction(
-        timelock_account: address, transaction_hash: vector<u8>
+        timelock_account: address, proposal_hash: vector<u8>
     ): TimelockTransaction acquires TimelockAccount {
         let timelock = &TimelockAccount[timelock_account];
         assert!(
-            timelock.transactions.contains(transaction_hash),
+            timelock.transactions.contains(proposal_hash),
             error::not_found(ETRANSACTION_NOT_FOUND)
         );
-        *timelock.transactions.borrow(transaction_hash)
+        *timelock.transactions.borrow(proposal_hash)
     }
 
     #[view]
     /// Return true if the transaction exists, is not yet executed/canceled,
     /// and has passed the timelock period.
     public fun can_be_executed(
-        timelock_account: address, transaction_hash: vector<u8>
+        timelock_account: address, proposal_hash: vector<u8>
     ): bool acquires TimelockAccount {
         let timelock = &TimelockAccount[timelock_account];
-        if (!timelock.transactions.contains(transaction_hash)) {
+        if (!timelock.transactions.contains(proposal_hash)) {
             return false
         };
-        let tx = timelock.transactions.borrow(transaction_hash);
+        let tx = timelock.transactions.borrow(proposal_hash);
         !tx.executed && now_seconds() >= tx.creation_time_secs + tx.num_seconds_execute
     }
 
@@ -265,9 +304,9 @@ module aptos_framework::timelock {
     }
 
     #[view]
-    /// Return the table key used to index a transaction with the given execution hash and salt.
-    /// Clients use this to compute the hash before proposing a transaction.
-    public fun get_transaction_hash(
+    /// Return the proposal hash (the table key indexing a proposed transaction) for the given
+    /// execution hash and salt. Clients use this to compute the proposal hash before proposing.
+    public fun get_proposal_hash(
         execution_hash: vector<u8>, salt: vector<u8>
     ): vector<u8> {
         execution_hash.append(salt);
@@ -276,30 +315,23 @@ module aptos_framework::timelock {
 
     // =============================== Account creation ===============================
 
-    /// Create a new timelock account.
-    ///
-    /// The `deployer` signer authorizes resource-account creation (and pays storage gas) but
-    /// gains no ongoing authority over the timelock — they are not added to creators or
-    /// executors. This lets a deployer (e.g. a multisig) instantiate a timelock that is owned
-    /// by an entirely different set of addresses without first having to transfer ownership.
+    /// Create a new timelock account. The `deployer` only authorizes resource-account creation
+    /// and pays gas; it gains no role unless listed in `creators`/`executors`.
     ///
     /// # Arguments
-    /// * `deployer` - Signer used to derive the resource-account address. Must not appear in
-    ///   `creators` or `executors` unless that role is intended.
-    /// * `creators` - Addresses authorized to propose transactions. Must contain at least one
-    ///   address and have no duplicates. The timelock account address itself is not allowed.
-    /// * `executors` - Addresses authorized to execute transactions after the timelock period.
-    ///   If empty, creators can also execute.
-    /// * `num_seconds_execute` - Minimum delay in seconds before a proposed transaction can be executed.
+    /// * `creators` - Authorized to propose. At least one, no duplicates, not the timelock address.
+    /// * `executors` - Authorized to execute after the delay. If empty, creators may execute.
+    /// * `cancelers` - Authorized to cancel at any time, but cannot propose or execute. If empty, no cancelers.
+    /// * `num_seconds_execute` - Minimum delay in seconds before a proposed transaction can execute.
     ///
     /// # Aborts
-    /// * If `creators` is empty
-    /// * If `creators` or `executors` contains duplicate addresses or the timelock account address
+    /// * If `creators` is empty, or any list has duplicates or includes the timelock address
     /// * If `num_seconds_execute` is outside the allowed delay bounds
     public entry fun create(
         deployer: &signer,
         creators: vector<address>,
         executors: vector<address>,
+        cancelers: vector<address>,
         num_seconds_execute: u64
     ) {
         let (timelock_signer, timelock_signer_cap) = create_timelock_account(deployer);
@@ -307,6 +339,7 @@ module aptos_framework::timelock {
             &timelock_signer,
             creators,
             executors,
+            cancelers,
             num_seconds_execute,
             timelock_signer_cap
         );
@@ -316,6 +349,7 @@ module aptos_framework::timelock {
         timelock_account: &signer,
         creators: vector<address>,
         executors: vector<address>,
+        cancelers: vector<address>,
         min_num_seconds_execute: u64,
         signer_cap: SignerCapability
     ) {
@@ -324,12 +358,14 @@ module aptos_framework::timelock {
         assert!(creators.length() >= 1, error::invalid_argument(ENOT_ENOUGH_CREATORS));
         validate_members(&creators, timelock_address, EDUPLICATE_CREATOR);
         validate_members(&executors, timelock_address, EDUPLICATE_EXECUTOR);
+        validate_members(&cancelers, timelock_address, EDUPLICATE_CANCELER);
 
         move_to(
             timelock_account,
             TimelockAccount {
                 creators,
                 executors,
+                cancelers,
                 min_num_seconds_execute,
                 transactions: table::new<vector<u8>, TimelockTransaction>(),
                 signer_cap
@@ -422,6 +458,44 @@ module aptos_framework::timelock {
         };
     }
 
+    /// Add new cancelers (the emergency-response role that can only cancel) to the timelock account.
+    /// Can only be invoked by the timelock account itself via the proposal flow.
+    public entry fun add_cancelers(
+        timelock_account: &signer, new_cancelers: vector<address>
+    ) acquires TimelockAccount {
+        let timelock_address = address_of(timelock_account);
+        assert_timelock_account_exists(timelock_address);
+        // Pre-append validation kept for the prover's `aborts_if` (see `add_creators`); do not remove.
+        validate_members(&new_cancelers, timelock_address, EDUPLICATE_CANCELER);
+        let timelock = &mut TimelockAccount[timelock_address];
+        timelock.cancelers.append(new_cancelers);
+        // Re-validate the combined list to also catch cross-list duplicates against existing cancelers.
+        validate_members(&timelock.cancelers, timelock_address, EDUPLICATE_CANCELER);
+        emit(AddCancelers { timelock_account: timelock_address, new_cancelers });
+    }
+
+    /// Remove cancelers from the timelock account. The canceler list may become empty.
+    /// Can only be invoked by the timelock account itself via the proposal flow.
+    public entry fun remove_cancelers(
+        timelock_account: &signer, cancelers_to_remove: vector<address>
+    ) acquires TimelockAccount {
+        let timelock_address = address_of(timelock_account);
+        assert_timelock_account_exists(timelock_address);
+        let timelock = &mut TimelockAccount[timelock_address];
+        let removed_cancelers = vector[];
+        cancelers_to_remove.for_each_ref(|to_remove| {
+            let (found, index) = timelock.cancelers.index_of(to_remove);
+            if (found) {
+                removed_cancelers.push_back(timelock.cancelers.swap_remove(index));
+            }
+        });
+        if (!removed_cancelers.is_empty()) {
+            emit(
+                RemoveCancelers { timelock_account: timelock_address, removed_cancelers }
+            );
+        };
+    }
+
     /// Update the timelock delay. The new value takes effect immediately for future proposals.
     /// Existing pending transactions are not affected.
     /// Can only be invoked by the timelock account itself via the proposal flow.
@@ -476,7 +550,7 @@ module aptos_framework::timelock {
             error::invalid_argument(ESCRIPT_PATH_TOO_LONG)
         );
 
-        let transaction_hash = get_transaction_hash(execution_hash, salt);
+        let proposal_hash = get_proposal_hash(execution_hash, salt);
         let creator_addr = address_of(creator);
         let timelock = &mut TimelockAccount[timelock_account];
         assert!(
@@ -484,7 +558,7 @@ module aptos_framework::timelock {
             error::invalid_argument(ENUMBER_SECONDS_TOO_SMALL)
         );
         assert!(
-            !timelock.transactions.contains(transaction_hash),
+            !timelock.transactions.contains(proposal_hash),
             error::already_exists(EDUPLICATE_TRANSACTION)
         );
 
@@ -495,88 +569,112 @@ module aptos_framework::timelock {
             num_seconds_execute,
             salt,
             script_path,
-            executed: false
+            executed: false,
+            approved: false
         };
-        timelock.transactions.add(transaction_hash, transaction);
+        timelock.transactions.add(proposal_hash, transaction);
 
         emit(
             CreateTransaction {
                 timelock_account,
                 creator: creator_addr,
-                transaction_hash,
+                proposal_hash,
                 transaction
             }
         );
     }
 
     /// Cancel a pending transaction. The transaction's executed field is set to true.
-    /// Any creator or executor can cancel at any time.
-    /// `transaction_hash` must be exactly 32 bytes.
+    /// Any creator or canceler can cancel at any time. Executors cannot cancel.
+    /// `proposal_hash` must be exactly 32 bytes.
     public entry fun cancel_transaction(
-        actor: &signer, timelock_account: address, transaction_hash: vector<u8>
+        actor: &signer, timelock_account: address, proposal_hash: vector<u8>
     ) acquires TimelockAccount {
         assert_timelock_account_exists(timelock_account);
-        assert!(
-            transaction_hash.length() == TRANSACTION_HASH_LENGTH,
-            error::invalid_argument(EINVALID_BYTES_LENGTH)
-        );
+        assert_proposal_hash_length(&proposal_hash);
         let actor_addr = address_of(actor);
-
-        // Evaluate authorization before acquiring the mutable borrow.
-        let actor_is_creator = is_creator(actor_addr, timelock_account);
-        let actor_is_executor = is_executor(actor_addr, timelock_account);
+        // Creators and cancelers may cancel; executors cannot.
         assert!(
-            actor_is_creator || actor_is_executor,
-            error::permission_denied(ENOT_CREATOR_OR_EXECUTOR)
+            is_creator(actor_addr, timelock_account)
+                || is_canceler(actor_addr, timelock_account),
+            error::permission_denied(ENOT_CREATOR_OR_CANCELER)
         );
 
         let timelock = &mut TimelockAccount[timelock_account];
         assert!(
-            timelock.transactions.contains(transaction_hash),
+            timelock.transactions.contains(proposal_hash),
             error::not_found(ETRANSACTION_NOT_FOUND)
         );
-        let transaction = timelock.transactions.borrow_mut(transaction_hash);
+        let transaction = timelock.transactions.borrow_mut(proposal_hash);
         assert!(
             !transaction.executed,
             error::invalid_state(ETRANSACTION_ALREADY_EXECUTED)
         );
         transaction.executed = true;
 
-        emit(CancelTransaction { timelock_account, actor: actor_addr, transaction_hash });
+        emit(CancelTransaction { timelock_account, actor: actor_addr, proposal_hash });
     }
 
-    /// Resolve a pending transaction and return the timelock account's signer.
-    ///
-    /// Asserts that:
-    /// - The account exists and is a timelock account
-    /// - The executor is authorized
-    /// - The transaction exists and has not been executed or canceled
-    /// - The timelock period (creation_time_secs + num_seconds_execute) has elapsed
-    /// - The running script's hash equals the transaction's execution_hash
-    ///
-    /// Marks the transaction executed, emits ResolveTransaction, and returns the signer for
-    /// the timelock account. The calling script uses this signer to perform the transaction's
-    /// effects (including, optionally, the self-governance entry functions in this module).
-    /// If the script later aborts, the entire transaction—including the executed flag flip—
-    /// reverts atomically, leaving the proposal in its previous state.
-    public fun resolve(
-        executor: &signer, timelock_account: address, transaction_hash: vector<u8>
-    ): signer acquires TimelockAccount {
+    /// Pre-authorize resolution for an executor that cannot submit a `Script` itself (notably an
+    /// Aptos multisig, which dispatches entry functions, not `Script`s). After approval, ANY party
+    /// may submit the committed resolution script and `resolve` accepts it. Authorization mirrors
+    /// execution (an executor, or a creator when the executor list is empty). The delay is NOT
+    /// enforced here — `resolve` still enforces it — and the approval is bound to `proposal_hash`,
+    /// which commits to the exact script, so it cannot authorize anything else.
+    public entry fun approve_resolution(
+        executor: &signer, timelock_account: address, proposal_hash: vector<u8>
+    ) acquires TimelockAccount {
         assert_timelock_account_exists(timelock_account);
+        assert_proposal_hash_length(&proposal_hash);
         assert_is_executor(executor, timelock_account);
-        assert!(
-            transaction_hash.length() == TRANSACTION_HASH_LENGTH,
-            error::invalid_argument(EINVALID_BYTES_LENGTH)
-        );
-
         let executor_addr = address_of(executor);
 
         let timelock = &mut TimelockAccount[timelock_account];
         assert!(
-            timelock.transactions.contains(transaction_hash),
+            timelock.transactions.contains(proposal_hash),
             error::not_found(ETRANSACTION_NOT_FOUND)
         );
-        let transaction = timelock.transactions.borrow_mut(transaction_hash);
+        let transaction = timelock.transactions.borrow_mut(proposal_hash);
+        assert!(
+            !transaction.executed,
+            error::invalid_state(ETRANSACTION_ALREADY_EXECUTED)
+        );
+        transaction.approved = true;
+
+        emit(ApproveResolution { timelock_account, executor: executor_addr, proposal_hash });
+    }
+
+    /// Resolve a pending transaction and return the timelock account's signer for the calling
+    /// script to perform the transaction's effects. Asserts the account is a timelock; the submitter
+    /// is authorized (an executor — a direct executor approves-and-resolves in one step — or any
+    /// submitter when the transaction was pre-approved via `approve_resolution`); the transaction
+    /// exists, is not executed/canceled, and its delay has elapsed; and the running script's hash
+    /// equals the transaction's execution_hash. Marks it executed; if the calling script later
+    /// aborts, the whole transaction reverts atomically.
+    public fun resolve(
+        submitter: &signer, timelock_account: address, proposal_hash: vector<u8>
+    ): signer acquires TimelockAccount {
+        assert_timelock_account_exists(timelock_account);
+        assert_proposal_hash_length(&proposal_hash);
+
+        let submitter_addr = address_of(submitter);
+        let timelock = &mut TimelockAccount[timelock_account];
+        // Executor authorization, computed from the same borrow used for the lookup below so the
+        // resource is loaded once.
+        let submitter_is_executor = is_executor_addr(timelock, submitter_addr);
+        assert!(
+            timelock.transactions.contains(proposal_hash),
+            error::not_found(ETRANSACTION_NOT_FOUND)
+        );
+        let transaction = timelock.transactions.borrow_mut(proposal_hash);
+        // Authorized if the submitter is an executor (direct execute = approve-and-resolve in one
+        // step) or the transaction was pre-approved by an executor via `approve_resolution`.
+        // Checked before the executed/delay checks so an unauthorized caller cannot probe a
+        // proposal's execution state.
+        assert!(
+            submitter_is_executor || transaction.approved,
+            error::permission_denied(ENOT_EXECUTOR)
+        );
         assert!(
             !transaction.executed,
             error::invalid_state(ETRANSACTION_ALREADY_EXECUTED)
@@ -594,8 +692,8 @@ module aptos_framework::timelock {
         emit(
             ResolveTransaction {
                 timelock_account,
-                executor: executor_addr,
-                transaction_hash,
+                executor: submitter_addr,
+                proposal_hash,
                 execution_hash: transaction.execution_hash
             }
         );
@@ -673,18 +771,33 @@ module aptos_framework::timelock {
         );
     }
 
+    /// The single source of truth for executor authorization: an executor, or a creator when the
+    /// executor list is empty. Operates on an already-borrowed resource so callers holding a
+    /// borrow (e.g. `resolve`) reuse it instead of loading `TimelockAccount` again.
+    inline fun is_executor_addr(timelock: &TimelockAccount, addr: address): bool {
+        if (timelock.executors.is_empty()) {
+            timelock.creators.contains(&addr)
+        } else {
+            timelock.executors.contains(&addr)
+        }
+    }
+
     inline fun assert_is_executor(
         executor: &signer, timelock_account: address
     ) {
-        let timelock = &TimelockAccount[timelock_account];
-        let executor_addr = address_of(executor);
-        let authorized =
-            if (timelock.executors.is_empty()) {
-                timelock.creators.contains(&executor_addr)
-            } else {
-                timelock.executors.contains(&executor_addr)
-            };
-        assert!(authorized, error::permission_denied(ENOT_EXECUTOR));
+        assert!(
+            is_executor_addr(&TimelockAccount[timelock_account], address_of(executor)),
+            error::permission_denied(ENOT_EXECUTOR)
+        );
+    }
+
+    /// Assert a proposal hash is exactly `PROPOSAL_HASH_LENGTH` bytes. Shared by the
+    /// transaction-mutating entry points (cancel/approve/resolve).
+    inline fun assert_proposal_hash_length(proposal_hash: &vector<u8>) {
+        assert!(
+            proposal_hash.length() == PROPOSAL_HASH_LENGTH,
+            error::invalid_argument(EINVALID_BYTES_LENGTH)
+        );
     }
 
     inline fun assert_delay(num_seconds_execute: u64) {
@@ -750,6 +863,7 @@ module aptos_framework::timelock {
             creator,
             vector[address_of(creator)],
             vector[],
+            vector[],
             TIMELOCK_SECS
         );
         assert_timelock_account_exists(timelock_addr);
@@ -777,6 +891,7 @@ module aptos_framework::timelock {
             creator_1,
             vector[address_of(creator_1), address_of(creator_2)],
             vector[address_of(executor_1)],
+            vector[],
             TIMELOCK_SECS
         );
         assert!(is_creator(address_of(creator_1), timelock_addr), 0);
@@ -797,6 +912,7 @@ module aptos_framework::timelock {
         create(
             creator_1,
             vector[creator_2_addr, creator_2_addr],
+            vector[],
             vector[],
             TIMELOCK_SECS
         );
@@ -819,6 +935,7 @@ module aptos_framework::timelock {
             deployer,
             vector[address_of(owner)],
             vector[address_of(executor)],
+            vector[],
             TIMELOCK_SECS
         );
         assert!(
@@ -836,7 +953,7 @@ module aptos_framework::timelock {
     ) {
         setup(framework);
         create_account(address_of(deployer));
-        create(deployer, vector[], vector[], TIMELOCK_SECS);
+        create(deployer, vector[], vector[], vector[], TIMELOCK_SECS);
     }
 
     // --- Transaction creation tests ---
@@ -852,6 +969,7 @@ module aptos_framework::timelock {
             creator,
             vector[address_of(creator)],
             vector[address_of(executor)],
+            vector[],
             TIMELOCK_SECS
         );
         create_transaction(
@@ -862,8 +980,8 @@ module aptos_framework::timelock {
             SALT,
             b""
         );
-        let tx_hash = get_transaction_hash(EXECUTION_HASH, SALT);
-        let tx = get_transaction(timelock_addr, tx_hash);
+        let proposal_hash = get_proposal_hash(EXECUTION_HASH, SALT);
+        let tx = get_transaction(timelock_addr, proposal_hash);
         assert!(tx.creator == address_of(creator), 0);
         assert!(!tx.executed, 1);
         assert!(tx.salt == SALT, 2);
@@ -881,6 +999,7 @@ module aptos_framework::timelock {
         create(
             creator,
             vector[address_of(creator)],
+            vector[],
             vector[],
             TIMELOCK_SECS
         );
@@ -913,6 +1032,7 @@ module aptos_framework::timelock {
         create(
             creator,
             vector[address_of(creator)],
+            vector[],
             vector[],
             TIMELOCK_SECS
         );
@@ -947,6 +1067,7 @@ module aptos_framework::timelock {
             creator,
             vector[address_of(creator)],
             vector[],
+            vector[],
             TIMELOCK_SECS
         );
         create_transaction(
@@ -971,6 +1092,7 @@ module aptos_framework::timelock {
             creator,
             vector[address_of(creator)],
             vector[],
+            vector[],
             TIMELOCK_SECS
         );
         create_transaction(
@@ -994,6 +1116,7 @@ module aptos_framework::timelock {
         create(
             creator,
             vector[address_of(creator)],
+            vector[],
             vector[],
             TIMELOCK_SECS
         );
@@ -1020,6 +1143,7 @@ module aptos_framework::timelock {
             creator,
             vector[address_of(creator)],
             vector[address_of(executor)],
+            vector[],
             TIMELOCK_SECS
         );
         create_transaction(
@@ -1030,14 +1154,44 @@ module aptos_framework::timelock {
             SALT,
             b""
         );
-        let tx_hash = get_transaction_hash(EXECUTION_HASH, SALT);
-        cancel_transaction(creator, timelock_addr, tx_hash);
-        let tx = get_transaction(timelock_addr, tx_hash);
+        let proposal_hash = get_proposal_hash(EXECUTION_HASH, SALT);
+        cancel_transaction(creator, timelock_addr, proposal_hash);
+        let tx = get_transaction(timelock_addr, proposal_hash);
+        assert!(tx.executed, 0);
+    }
+
+    #[test(framework = @0x1, creator = @0x123, canceler = @0x124)]
+    public entry fun test_cancel_by_canceler(
+        framework: &signer, creator: &signer, canceler: &signer
+    ) acquires TimelockAccount {
+        setup(framework);
+        create_account(address_of(creator));
+        let timelock_addr = get_next_timelock_account_address(address_of(creator));
+        create(
+            creator,
+            vector[address_of(creator)],
+            vector[],
+            vector[address_of(canceler)],
+            TIMELOCK_SECS
+        );
+        create_transaction(
+            creator,
+            timelock_addr,
+            EXECUTION_HASH,
+            TIMELOCK_SECS,
+            SALT,
+            b""
+        );
+        let proposal_hash = get_proposal_hash(EXECUTION_HASH, SALT);
+        cancel_transaction(canceler, timelock_addr, proposal_hash);
+        let tx = get_transaction(timelock_addr, proposal_hash);
         assert!(tx.executed, 0);
     }
 
     #[test(framework = @0x1, creator = @0x123, executor = @0x124)]
-    public entry fun test_cancel_by_executor(
+    #[expected_failure(abort_code = 0x5000D, location = Self)]
+    /// Executors can execute but must not be able to cancel (only creators and cancelers can).
+    public entry fun test_executor_cannot_cancel(
         framework: &signer, creator: &signer, executor: &signer
     ) acquires TimelockAccount {
         setup(framework);
@@ -1047,6 +1201,7 @@ module aptos_framework::timelock {
             creator,
             vector[address_of(creator)],
             vector[address_of(executor)],
+            vector[],
             TIMELOCK_SECS
         );
         create_transaction(
@@ -1057,10 +1212,11 @@ module aptos_framework::timelock {
             SALT,
             b""
         );
-        let tx_hash = get_transaction_hash(EXECUTION_HASH, SALT);
-        cancel_transaction(executor, timelock_addr, tx_hash);
-        let tx = get_transaction(timelock_addr, tx_hash);
-        assert!(tx.executed, 0);
+        cancel_transaction(
+            executor,
+            timelock_addr,
+            get_proposal_hash(EXECUTION_HASH, SALT)
+        );
     }
 
     #[test(framework = @0x1, creator = @0x123)]
@@ -1074,6 +1230,7 @@ module aptos_framework::timelock {
             creator,
             vector[address_of(creator)],
             vector[],
+            vector[],
             TIMELOCK_SECS
         );
         create_transaction(
@@ -1084,9 +1241,9 @@ module aptos_framework::timelock {
             SALT,
             b""
         );
-        let tx_hash = get_transaction_hash(EXECUTION_HASH, SALT);
-        cancel_transaction(creator, timelock_addr, tx_hash);
-        let tx = get_transaction(timelock_addr, tx_hash);
+        let proposal_hash = get_proposal_hash(EXECUTION_HASH, SALT);
+        cancel_transaction(creator, timelock_addr, proposal_hash);
+        let tx = get_transaction(timelock_addr, proposal_hash);
         assert!(tx.executed, 0);
     }
 
@@ -1102,6 +1259,7 @@ module aptos_framework::timelock {
             creator,
             vector[address_of(creator)],
             vector[address_of(executor)],
+            vector[],
             TIMELOCK_SECS
         );
         create_transaction(
@@ -1112,9 +1270,9 @@ module aptos_framework::timelock {
             SALT,
             b""
         );
-        let tx_hash = get_transaction_hash(EXECUTION_HASH, SALT);
-        cancel_transaction(creator, timelock_addr, tx_hash);
-        cancel_transaction(creator, timelock_addr, tx_hash);
+        let proposal_hash = get_proposal_hash(EXECUTION_HASH, SALT);
+        cancel_transaction(creator, timelock_addr, proposal_hash);
+        cancel_transaction(creator, timelock_addr, proposal_hash);
     }
 
     #[test(framework = @0x1, creator = @0x123, non_member = @0x999)]
@@ -1129,6 +1287,7 @@ module aptos_framework::timelock {
             creator,
             vector[address_of(creator)],
             vector[],
+            vector[],
             TIMELOCK_SECS
         );
         create_transaction(
@@ -1142,7 +1301,7 @@ module aptos_framework::timelock {
         cancel_transaction(
             non_member,
             timelock_addr,
-            get_transaction_hash(EXECUTION_HASH, SALT)
+            get_proposal_hash(EXECUTION_HASH, SALT)
         );
     }
 
@@ -1164,6 +1323,7 @@ module aptos_framework::timelock {
             creator,
             vector[address_of(creator)],
             vector[address_of(executor)],
+            vector[],
             TIMELOCK_SECS
         );
         create_transaction(
@@ -1178,7 +1338,7 @@ module aptos_framework::timelock {
         let _ = resolve(
             executor,
             timelock_addr,
-            get_transaction_hash(EXECUTION_HASH, SALT)
+            get_proposal_hash(EXECUTION_HASH, SALT)
         );
     }
 
@@ -1194,6 +1354,7 @@ module aptos_framework::timelock {
             creator,
             vector[address_of(creator)],
             vector[address_of(executor)],
+            vector[],
             TIMELOCK_SECS
         );
         create_transaction(
@@ -1204,10 +1365,10 @@ module aptos_framework::timelock {
             SALT,
             b""
         );
-        let tx_hash = get_transaction_hash(EXECUTION_HASH, SALT);
-        cancel_transaction(creator, timelock_addr, tx_hash);
+        let proposal_hash = get_proposal_hash(EXECUTION_HASH, SALT);
+        cancel_transaction(creator, timelock_addr, proposal_hash);
         timestamp::fast_forward_seconds(TIMELOCK_SECS + 1);
-        let _ = resolve(executor, timelock_addr, tx_hash);
+        let _ = resolve(executor, timelock_addr, proposal_hash);
     }
 
     #[test(framework = @0x1, creator = @0x123, non_member = @0x999)]
@@ -1222,6 +1383,7 @@ module aptos_framework::timelock {
             creator,
             vector[address_of(creator)],
             vector[@0x124],
+            vector[],
             TIMELOCK_SECS
         );
         create_transaction(
@@ -1237,8 +1399,97 @@ module aptos_framework::timelock {
             resolve(
                 non_member,
                 timelock_addr,
-                get_transaction_hash(EXECUTION_HASH, SALT)
+                get_proposal_hash(EXECUTION_HASH, SALT)
             );
+    }
+
+    // --- approve_resolution tests ---
+
+    #[test(framework = @0x1, creator = @0x123, executor = @0x124)]
+    public entry fun test_approve_resolution_by_executor(
+        framework: &signer, creator: &signer, executor: &signer
+    ) acquires TimelockAccount {
+        setup(framework);
+        create_account(address_of(creator));
+        let timelock_addr = get_next_timelock_account_address(address_of(creator));
+        create(
+            creator,
+            vector[address_of(creator)],
+            vector[address_of(executor)],
+            vector[],
+            TIMELOCK_SECS
+        );
+        create_transaction(
+            creator, timelock_addr, EXECUTION_HASH, TIMELOCK_SECS, SALT, b""
+        );
+        let proposal_hash = get_proposal_hash(EXECUTION_HASH, SALT);
+        assert!(!get_transaction(timelock_addr, proposal_hash).approved, 0);
+        // Approval does not require the delay to have elapsed (it may be staged early).
+        approve_resolution(executor, timelock_addr, proposal_hash);
+        assert!(get_transaction(timelock_addr, proposal_hash).approved, 1);
+    }
+
+    #[test(framework = @0x1, creator = @0x123)]
+    public entry fun test_approve_resolution_by_creator_when_executors_empty(
+        framework: &signer, creator: &signer
+    ) acquires TimelockAccount {
+        setup(framework);
+        create_account(address_of(creator));
+        let timelock_addr = get_next_timelock_account_address(address_of(creator));
+        create(creator, vector[address_of(creator)], vector[], vector[], TIMELOCK_SECS);
+        create_transaction(
+            creator, timelock_addr, EXECUTION_HASH, TIMELOCK_SECS, SALT, b""
+        );
+        let proposal_hash = get_proposal_hash(EXECUTION_HASH, SALT);
+        // With no executors, a creator is the executor and may approve.
+        approve_resolution(creator, timelock_addr, proposal_hash);
+        assert!(get_transaction(timelock_addr, proposal_hash).approved, 0);
+    }
+
+    #[test(framework = @0x1, creator = @0x123, intruder = @0x125)]
+    #[expected_failure(abort_code = 0x50005, location = Self)]
+    public entry fun test_approve_resolution_by_non_executor_fails(
+        framework: &signer, creator: &signer, intruder: &signer
+    ) acquires TimelockAccount {
+        setup(framework);
+        create_account(address_of(creator));
+        let timelock_addr = get_next_timelock_account_address(address_of(creator));
+        create(
+            creator,
+            vector[address_of(creator)],
+            vector[@0x124],
+            vector[],
+            TIMELOCK_SECS
+        );
+        create_transaction(
+            creator, timelock_addr, EXECUTION_HASH, TIMELOCK_SECS, SALT, b""
+        );
+        // intruder is neither an executor nor (since executors is non-empty) a fallback creator.
+        approve_resolution(intruder, timelock_addr, get_proposal_hash(EXECUTION_HASH, SALT));
+    }
+
+    #[test(framework = @0x1, creator = @0x123, executor = @0x124)]
+    #[expected_failure(abort_code = 0x30009, location = Self)]
+    public entry fun test_approve_resolution_already_canceled_fails(
+        framework: &signer, creator: &signer, executor: &signer
+    ) acquires TimelockAccount {
+        setup(framework);
+        create_account(address_of(creator));
+        let timelock_addr = get_next_timelock_account_address(address_of(creator));
+        create(
+            creator,
+            vector[address_of(creator)],
+            vector[address_of(executor)],
+            vector[],
+            TIMELOCK_SECS
+        );
+        create_transaction(
+            creator, timelock_addr, EXECUTION_HASH, TIMELOCK_SECS, SALT, b""
+        );
+        let proposal_hash = get_proposal_hash(EXECUTION_HASH, SALT);
+        cancel_transaction(creator, timelock_addr, proposal_hash);
+        // Cannot approve a transaction that has already been executed or canceled.
+        approve_resolution(executor, timelock_addr, proposal_hash);
     }
 
     #[test(framework = @0x1, creator = @0x123, executor = @0x124)]
@@ -1252,6 +1503,7 @@ module aptos_framework::timelock {
             creator,
             vector[address_of(creator)],
             vector[address_of(executor)],
+            vector[],
             TIMELOCK_SECS
         );
         create_transaction(
@@ -1262,14 +1514,14 @@ module aptos_framework::timelock {
             SALT,
             b""
         );
-        let tx_hash = get_transaction_hash(EXECUTION_HASH, SALT);
+        let proposal_hash = get_proposal_hash(EXECUTION_HASH, SALT);
         // Not yet executable — delay hasn't elapsed.
-        assert!(!can_be_executed(timelock_addr, tx_hash), 0);
+        assert!(!can_be_executed(timelock_addr, proposal_hash), 0);
         timestamp::fast_forward_seconds(TIMELOCK_SECS + 1);
-        assert!(can_be_executed(timelock_addr, tx_hash), 1);
+        assert!(can_be_executed(timelock_addr, proposal_hash), 1);
         // Cancel makes it not executable.
-        cancel_transaction(creator, timelock_addr, tx_hash);
-        assert!(!can_be_executed(timelock_addr, tx_hash), 2);
+        cancel_transaction(creator, timelock_addr, proposal_hash);
+        assert!(!can_be_executed(timelock_addr, proposal_hash), 2);
     }
 
     // --- Self-governance tests ---
@@ -1290,6 +1542,7 @@ module aptos_framework::timelock {
             creator,
             vector[address_of(creator)],
             vector[],
+            vector[],
             TIMELOCK_SECS
         );
         let timelock_signer = get_timelock_signer(timelock_addr);
@@ -1308,6 +1561,7 @@ module aptos_framework::timelock {
             creator,
             vector[address_of(creator)],
             vector[],
+            vector[],
             MAX_NUM_SECONDS_EXECUTE + 1
         );
     }
@@ -1323,6 +1577,7 @@ module aptos_framework::timelock {
         create(
             creator,
             vector[address_of(creator)],
+            vector[],
             vector[],
             TIMELOCK_SECS
         );
@@ -1340,6 +1595,7 @@ module aptos_framework::timelock {
         create(
             creator_1,
             vector[address_of(creator_1)],
+            vector[],
             vector[],
             TIMELOCK_SECS
         );
@@ -1363,6 +1619,7 @@ module aptos_framework::timelock {
             creator,
             vector[address_of(creator)],
             vector[],
+            vector[],
             TIMELOCK_SECS
         );
         let timelock_signer = get_timelock_signer(timelock_addr);
@@ -1385,6 +1642,7 @@ module aptos_framework::timelock {
             creator,
             vector[address_of(creator)],
             vector[address_of(executor_1)],
+            vector[],
             TIMELOCK_SECS
         );
         let timelock_signer = get_timelock_signer(timelock_addr);
@@ -1406,12 +1664,113 @@ module aptos_framework::timelock {
             creator,
             vector[address_of(creator)],
             vector[address_of(executor)],
+            vector[],
             TIMELOCK_SECS
         );
         let timelock_signer = get_timelock_signer(timelock_addr);
         remove_executors(&timelock_signer, vector[address_of(executor)]);
         assert!(is_executor(address_of(creator), timelock_addr), 0);
         assert!(!is_executor(address_of(executor), timelock_addr), 1);
+    }
+
+    // --- canceler tests ---
+
+    #[test(framework = @0x1, creator = @0x123, canceler = @0x124)]
+    public entry fun test_create_with_cancelers_membership(
+        framework: &signer, creator: &signer, canceler: &signer
+    ) acquires TimelockAccount {
+        setup(framework);
+        create_account(address_of(creator));
+        let timelock_addr = get_next_timelock_account_address(address_of(creator));
+        create(
+            creator,
+            vector[address_of(creator)],
+            vector[],
+            vector[address_of(canceler)],
+            TIMELOCK_SECS
+        );
+        assert!(is_canceler(address_of(canceler), timelock_addr), 0);
+        assert!(cancelers(timelock_addr) == vector[address_of(canceler)], 1);
+        // A canceler is neither a creator nor an executor.
+        assert!(!is_creator(address_of(canceler), timelock_addr), 2);
+        assert!(!is_executor(address_of(canceler), timelock_addr), 3);
+    }
+
+    #[test(framework = @0x1, creator = @0x123, canceler = @0x124)]
+    #[expected_failure(abort_code = 0x10013, location = Self)]
+    public entry fun test_create_with_duplicate_cancelers_fails(
+        framework: &signer, creator: &signer, canceler: &signer
+    ) {
+        setup(framework);
+        create_account(address_of(creator));
+        create(
+            creator,
+            vector[address_of(creator)],
+            vector[],
+            vector[address_of(canceler), address_of(canceler)],
+            TIMELOCK_SECS
+        );
+    }
+
+    #[test(framework = @0x1, creator = @0x123, canceler = @0x124)]
+    #[expected_failure(abort_code = 0x50004, location = Self)]
+    /// A canceler can only cancel; it must not be able to propose transactions.
+    public entry fun test_canceler_cannot_propose(
+        framework: &signer, creator: &signer, canceler: &signer
+    ) acquires TimelockAccount {
+        setup(framework);
+        create_account(address_of(creator));
+        let timelock_addr = get_next_timelock_account_address(address_of(creator));
+        create(
+            creator,
+            vector[address_of(creator)],
+            vector[],
+            vector[address_of(canceler)],
+            TIMELOCK_SECS
+        );
+        create_transaction(
+            canceler,
+            timelock_addr,
+            EXECUTION_HASH,
+            TIMELOCK_SECS,
+            SALT,
+            b""
+        );
+    }
+
+    #[test(
+        framework = @0x1, creator = @0x123, canceler_1 = @0x124, canceler_2 = @0x125
+    )]
+    public entry fun test_add_and_remove_cancelers(
+        framework: &signer,
+        creator: &signer,
+        canceler_1: &signer,
+        canceler_2: &signer
+    ) acquires TimelockAccount {
+        setup(framework);
+        create_account(address_of(creator));
+        let timelock_addr = get_next_timelock_account_address(address_of(creator));
+        // Start with no cancelers; add and remove them through the self-governance flow.
+        create(
+            creator,
+            vector[address_of(creator)],
+            vector[],
+            vector[],
+            TIMELOCK_SECS
+        );
+        let timelock_signer = get_timelock_signer(timelock_addr);
+        add_cancelers(
+            &timelock_signer,
+            vector[address_of(canceler_1), address_of(canceler_2)]
+        );
+        assert!(is_canceler(address_of(canceler_1), timelock_addr), 0);
+        assert!(is_canceler(address_of(canceler_2), timelock_addr), 1);
+        remove_cancelers(&timelock_signer, vector[address_of(canceler_1)]);
+        assert!(!is_canceler(address_of(canceler_1), timelock_addr), 2);
+        assert!(is_canceler(address_of(canceler_2), timelock_addr), 3);
+        // The canceler list may be emptied entirely.
+        remove_cancelers(&timelock_signer, vector[address_of(canceler_2)]);
+        assert!(cancelers(timelock_addr) == vector[], 4);
     }
 
     // --- script_path tests ---
@@ -1427,6 +1786,7 @@ module aptos_framework::timelock {
             creator,
             vector[address_of(creator)],
             vector[],
+            vector[],
             TIMELOCK_SECS
         );
         let path = b"ipfs://bafybeigexampleexampleexamplecid";
@@ -1438,7 +1798,7 @@ module aptos_framework::timelock {
             SALT,
             path
         );
-        let tx = get_transaction(timelock_addr, get_transaction_hash(EXECUTION_HASH, SALT));
+        let tx = get_transaction(timelock_addr, get_proposal_hash(EXECUTION_HASH, SALT));
         assert!(tx.script_path == path, 0);
     }
 
@@ -1453,6 +1813,7 @@ module aptos_framework::timelock {
         create(
             creator,
             vector[address_of(creator)],
+            vector[],
             vector[],
             TIMELOCK_SECS
         );

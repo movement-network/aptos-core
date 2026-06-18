@@ -19,7 +19,7 @@ use crate::{
     epoch_state::EpochState,
     event::{EventHandle, EventKey},
     ledger_info::{generate_ledger_info_with_sig, LedgerInfo, LedgerInfoWithSignatures},
-    on_chain_config::ValidatorSet,
+    on_chain_config::{Features, ValidatorSet},
     proof::TransactionInfoListWithProof,
     state_store::state_key::StateKey,
     transaction::{
@@ -540,8 +540,8 @@ impl Arbitrary for TransactionExtraConfig {
 }
 
 prop_compose! {
-    fn arb_transaction_status()(vm_status in any::<VMStatus>()) -> TransactionStatus {
-        TransactionStatus::from_vm_status(vm_status, true)
+    fn arb_transaction_status()(vm_status in any::<VMStatus>(), memory_limit_exceeded_as_miscellaneous_error: bool) -> TransactionStatus {
+        TransactionStatus::from_vm_status(vm_status, &Features::default(), memory_limit_exceeded_as_miscellaneous_error)
     }
 }
 
@@ -796,7 +796,7 @@ impl AccountStateGen {
         self,
         account_index: Index,
         universe: &AccountInfoUniverse,
-    ) -> impl IntoIterator<Item = (StateKey, Vec<u8>)> {
+    ) -> impl IntoIterator<Item = (StateKey, Vec<u8>)> + use<> {
         let address = &universe.get_account_info(account_index).address;
         let account_resource = self
             .account_resource_gen
@@ -868,7 +868,7 @@ impl Arbitrary for TransactionToCommit {
             any_with::<AccountInfoUniverse>(1),
             any::<TransactionToCommitGen>(),
         )
-            .prop_map(|(mut universe, gen)| gen.materialize(&mut universe))
+            .prop_map(|(mut universe, r#gen)| r#gen.materialize(&mut universe))
             .boxed()
     }
 }

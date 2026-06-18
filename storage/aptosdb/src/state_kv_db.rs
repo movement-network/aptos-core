@@ -156,12 +156,8 @@ impl StateKvDb {
         Ok(state_kv_db)
     }
 
-    pub(crate) fn new_sharded_native_batches(&self) -> ShardedStateKvSchemaBatch {
-        (0..NUM_STATE_SHARDS)
-            .map(|shard_id| self.db_shard(shard_id as u8).new_native_batch())
-            .collect_vec()
-            .try_into()
-            .expect("known to be 16 shards")
+    pub(crate) fn new_sharded_native_batches(&self) -> ShardedStateKvSchemaBatch<'_> {
+        std::array::from_fn(|shard_id| self.db_shard(shard_id).new_native_batch())
     }
 
     pub(crate) fn commit(

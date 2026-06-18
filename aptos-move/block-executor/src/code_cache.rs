@@ -8,6 +8,8 @@ use crate::{
 };
 use ambassador::delegate_to_methods;
 use aptos_mvhashmap::types::TxnIndex;
+#[cfg(test)]
+use aptos_types::on_chain_config::CurrentTimeMicroseconds;
 use aptos_types::{
     executable::ModulePath,
     state_store::{state_value::StateValueMetadata, TStateView},
@@ -15,6 +17,8 @@ use aptos_types::{
     vm::modules::AptosModuleExtension,
 };
 use aptos_vm_types::module_and_script_storage::module_storage::AptosModuleStorage;
+#[cfg(test)]
+use fail::fail_point;
 use move_binary_format::{
     errors::{Location, PartialVMResult, VMResult},
     file_format::CompiledScript,
@@ -23,7 +27,10 @@ use move_binary_format::{
 use move_core_types::{
     account_address::AccountAddress, identifier::IdentStr, language_storage::ModuleId,
 };
-use move_vm_runtime::{Module, RuntimeEnvironment, Script, WithRuntimeEnvironment};
+use move_vm_runtime::{
+    LayoutCache, LayoutCacheEntry, Module, RuntimeEnvironment, Script, StructKey,
+    WithRuntimeEnvironment,
+};
 use move_vm_types::code::{
     ambassador_impl_ScriptCache, Code, ModuleCache, ModuleCode, ModuleCodeBuilder, ScriptCache,
     WithBytes,
@@ -46,10 +53,17 @@ impl<T: Transaction, S: TStateView<Key = T::Key>> ModuleCodeBuilder for LatestVi
         &self,
         key: &Self::Key,
     ) -> VMResult<Option<ModuleCode<Self::Deserialized, Self::Verified, Self::Extension>>> {
-        let key = T::Key::from_address_and_module_name(key.address(), key.name());
-        self.get_raw_base_value(&key)
+        let constructed_key = T::Key::from_address_and_module_name(key.address(), key.name());
+        self.get_raw_base_value(&constructed_key)
             .map_err(|err| err.finish(Location::Undefined))?
-            .map(|state_value| {
+            .map(|mut state_value| {
+                // TODO: remove this once framework on mainnet is using the new option module
+                if let Some(bytes) = self
+                    .runtime_environment()
+                    .get_module_bytes_override(key.address(), key.name())
+                {
+                    state_value.set_bytes(bytes);
+                }
                 let extension = Arc::new(AptosModuleExtension::new(state_value));
                 let compiled_module = self
                     .runtime_environment()
@@ -182,17 +196,28 @@ impl<T: Transaction, S: TStateView<Key = T::Key>> ModuleCache for LatestView<'_,
 }
 
 impl<T: Transaction, S: TStateView<Key = T::Key>> AptosModuleStorage for LatestView<'_, T, S> {
-    fn fetch_state_value_metadata(
+    fn unmetered_get_module_state_value_metadata(
         &self,
         address: &AccountAddress,
         module_name: &IdentStr,
     ) -> PartialVMResult<Option<StateValueMetadata>> {
         let id = ModuleId::new(*address, module_name.to_owned());
-        let state_value_metadata = self
+        let result = self
             .get_module_or_build_with(&id, self)
-            .map_err(|err| err.to_partial())?
-            .map(|(module, _)| module.extension().state_value_metadata().clone());
-        Ok(state_value_metadata)
+            .map_err(|err| err.to_partial())?;
+
+        // In order to test the module cache with combinatorial tests, we embed the version
+        // information into the state value metadata (execute_transaction has access via
+        // AptosModuleStorage trait only).
+        #[cfg(test)]
+        fail_point!("module_test", |_| {
+            Ok(result.clone().map(|(_, version)| {
+                let v = version.unwrap_or(u32::MAX) as u64;
+                StateValueMetadata::legacy(v, &CurrentTimeMicroseconds { microseconds: v })
+            }))
+        });
+
+        Ok(result.map(|(module, _)| module.extension().state_value_metadata().clone()))
     }
 }
 
@@ -223,5 +248,17 @@ impl<T: Transaction, S: TStateView<Key = T::Key>> LatestView<'_, T, S> {
             ViewState::Sync(state) => state.versioned_map.module_cache(),
             ViewState::Unsync(state) => state.unsync_map.module_cache(),
         }
+    }
+}
+
+impl<T: Transaction, S: TStateView<Key = T::Key>> LayoutCache for LatestView<'_, T, S> {
+    fn get_struct_layout(&self, key: &StructKey) -> Option<LayoutCacheEntry> {
+        self.global_module_cache.get_struct_layout_entry(key)
+    }
+
+    fn store_struct_layout(&self, key: &StructKey, entry: LayoutCacheEntry) -> PartialVMResult<()> {
+        self.global_module_cache
+            .store_struct_layout_entry(key, entry)?;
+        Ok(())
     }
 }

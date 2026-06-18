@@ -5,9 +5,7 @@ use crate::{assert_success, AptosPackageHooks};
 use aptos_cached_packages::aptos_stdlib;
 use aptos_framework::{natives::code::PackageMetadata, BuildOptions, BuiltPackage};
 use aptos_gas_profiling::TransactionGasLog;
-use aptos_gas_schedule::{
-    AptosGasParameters, FromOnChainGasSchedule, InitialGasSchedule, ToOnChainGasSchedule,
-};
+use aptos_gas_schedule::{AptosGasParameters, FromOnChainGasSchedule, ToOnChainGasSchedule};
 use aptos_language_e2e_tests::{
     account::{Account, TransactionBuilder},
     executor::FakeExecutor,
@@ -40,7 +38,6 @@ use claims::assert_ok;
 use move_core_types::{
     language_storage::{StructTag, TypeTag},
     move_resource::MoveStructType,
-    value::MoveValue,
 };
 use move_package::package_hooks::register_package_hooks;
 use once_cell::sync::Lazy;
@@ -196,6 +193,16 @@ impl MoveHarness {
     ) -> Self {
         let mut h = Self::new();
         h.enable_features(enabled_features, disabled_features);
+        h
+    }
+
+    pub fn new_with_lazy_loading(enable_lazy_loading: bool) -> Self {
+        let mut h = MoveHarness::new();
+        if enable_lazy_loading {
+            h.enable_features(vec![FeatureFlag::ENABLE_LAZY_LOADING], vec![]);
+        } else {
+            h.enable_features(vec![], vec![FeatureFlag::ENABLE_LAZY_LOADING]);
+        }
         h
     }
 
@@ -884,62 +891,18 @@ impl MoveHarness {
     /// Enables features
     pub fn enable_features(&mut self, enabled: Vec<FeatureFlag>, disabled: Vec<FeatureFlag>) {
         let acc = self.aptos_framework_account();
-        let enabled = enabled.into_iter().map(|f| f as u64).collect::<Vec<_>>();
-        let disabled = disabled.into_iter().map(|f| f as u64).collect::<Vec<_>>();
         self.executor
-            .exec("features", "change_feature_flags_internal", vec![], vec![
-                MoveValue::Signer(*acc.address())
-                    .simple_serialize()
-                    .unwrap(),
-                bcs::to_bytes(&enabled).unwrap(),
-                bcs::to_bytes(&disabled).unwrap(),
-            ]);
-    }
-
-    fn override_one_gas_param(&mut self, param: &str, param_value: u64) {
-        // TODO: The AptosGasParameters::zeros() schedule doesn't do what we want, so
-        // explicitly manipulating gas entries. Wasn't obvious from the gas code how to
-        // do this differently then below, so perhaps improve this...
-        let entries = AptosGasParameters::initial()
-            .to_on_chain_gas_schedule(aptos_gas_schedule::LATEST_GAS_FEATURE_VERSION);
-        let entries = entries
-            .into_iter()
-            .map(|(name, val)| {
-                if name == param {
-                    (name, param_value)
-                } else {
-                    (name, val)
-                }
-            })
-            .collect::<Vec<_>>();
-        let gas_schedule = GasScheduleV2 {
-            feature_version: aptos_gas_schedule::LATEST_GAS_FEATURE_VERSION,
-            entries,
-        };
-        let schedule_bytes = bcs::to_bytes(&gas_schedule).expect("bcs");
-        let core_signer_arg = MoveValue::Signer(AccountAddress::ONE)
-            .simple_serialize()
-            .unwrap();
-        self.executor
-            .exec("gas_schedule", "set_for_next_epoch", vec![], vec![
-                core_signer_arg.clone(),
-                MoveValue::vector_u8(schedule_bytes)
-                    .simple_serialize()
-                    .unwrap(),
-            ]);
-        self.executor
-            .exec("aptos_governance", "force_end_epoch", vec![], vec![
-                core_signer_arg,
-            ]);
+            .enable_features(acc.address(), enabled, disabled);
     }
 
     pub fn modify_gas_scaling(&mut self, gas_scaling_factor: u64) {
-        self.override_one_gas_param("txn.gas_unit_scaling_factor", gas_scaling_factor);
+        self.executor.modify_gas_scaling(gas_scaling_factor);
     }
 
     /// Increase maximal transaction size.
     pub fn increase_transaction_size(&mut self) {
-        self.override_one_gas_param("txn.max_transaction_size_in_bytes", 1000 * 1024);
+        self.executor
+            .override_one_gas_param("txn.max_transaction_size_in_bytes", 1000 * 1024);
     }
 
     pub fn sequence_number_opt(&self, addr: &AccountAddress) -> Option<u64> {

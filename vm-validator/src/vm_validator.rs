@@ -27,7 +27,7 @@ use move_binary_format::{
     CompiledModule,
 };
 use move_core_types::{language_storage::ModuleId, vm_status::StatusCode};
-use move_vm_runtime::{Module, RuntimeEnvironment, WithRuntimeEnvironment};
+use move_vm_runtime::{Module, NoOpLayoutCache, RuntimeEnvironment, WithRuntimeEnvironment};
 use move_vm_types::{
     code::{ModuleCache, ModuleCode, ModuleCodeBuilder, UnsyncModuleCache, WithHash},
     module_storage_error, sha3_256,
@@ -96,6 +96,8 @@ impl<S: StateView> ValidationState<S> {
         self.module_cache = UnsyncModuleCache::empty();
     }
 }
+
+impl<S: StateView> NoOpLayoutCache for ValidationState<S> {}
 
 impl<S> WithRuntimeEnvironment for ValidationState<S> {
     fn runtime_environment(&self) -> &RuntimeEnvironment {
@@ -212,7 +214,7 @@ impl<S: StateView> ModuleCodeBuilder for ValidationState<S> {
         &self,
         key: &Self::Key,
     ) -> VMResult<Option<ModuleCode<Self::Deserialized, Self::Verified, Self::Extension>>> {
-        let state_value = match self
+        let mut state_value = match self
             .state_view
             .get_state_value(&StateKey::module_id(key))
             .map_err(|err| module_storage_error!(key.address(), key.name(), err))?
@@ -220,6 +222,13 @@ impl<S: StateView> ModuleCodeBuilder for ValidationState<S> {
             Some(bytes) => bytes,
             None => return Ok(None),
         };
+        // TODO: remove this once framework on mainnet is using the new option module
+        if let Some(bytes) = self
+            .runtime_environment()
+            .get_module_bytes_override(key.address(), key.name())
+        {
+            state_value.set_bytes(bytes);
+        }
         let compiled_module = self
             .runtime_environment()
             .deserialize_into_compiled_module(state_value.bytes())?;
@@ -395,13 +404,13 @@ mod tests {
         assert_eq!(state.module_cache.num_modules(), 0);
 
         assert!(state
-            .fetch_deserialized_module(&AccountAddress::ZERO, ident_str!("d"))
+            .unmetered_get_deserialized_module(&AccountAddress::ZERO, ident_str!("d"))
             .unwrap()
             .is_none());
         assert_eq!(
             &a,
             state
-                .fetch_deserialized_module(a.self_addr(), a.self_name())
+                .unmetered_get_deserialized_module(a.self_addr(), a.self_name())
                 .unwrap()
                 .unwrap()
                 .as_ref()
@@ -409,7 +418,7 @@ mod tests {
         assert_eq!(
             &c,
             state
-                .fetch_deserialized_module(c.self_addr(), c.self_name())
+                .unmetered_get_deserialized_module(c.self_addr(), c.self_name())
                 .unwrap()
                 .unwrap()
                 .as_ref()
@@ -453,7 +462,7 @@ mod tests {
         assert_eq!(
             &a_new,
             state
-                .fetch_deserialized_module(a_new.self_addr(), a_new.self_name())
+                .unmetered_get_deserialized_module(a_new.self_addr(), a_new.self_name())
                 .unwrap()
                 .unwrap()
                 .as_ref()
@@ -461,7 +470,7 @@ mod tests {
         assert_eq!(
             &d,
             state
-                .fetch_deserialized_module(d.self_addr(), d.self_name())
+                .unmetered_get_deserialized_module(d.self_addr(), d.self_name())
                 .unwrap()
                 .unwrap()
                 .as_ref()
@@ -474,7 +483,7 @@ mod tests {
 
         // Get verified module, to load the transitive closure (modules "b" and "c") as well.
         assert!(state
-            .fetch_verified_module(a_new.self_addr(), a_new.self_name())
+            .unmetered_get_eagerly_verified_module(a_new.self_addr(), a_new.self_name())
             .unwrap()
             .is_some());
         assert_eq!(state.module_cache.num_modules(), 4);

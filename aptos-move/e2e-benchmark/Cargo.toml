@@ -20,3 +20,8 @@ aptos-types = { workspace = true }
 clap = { workspace = true }
 rand = { workspace = true }
 serde_json = { workspace = true }
+tokio = { workspace = true }
+
+[features]
+default = []
+profiling = ["e2e-move-tests/profiling"]

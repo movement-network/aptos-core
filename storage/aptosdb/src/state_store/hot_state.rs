@@ -47,14 +47,80 @@ impl HotStateBase {
         }
     }
 
-    fn get(&self, key: &StateKey) -> Option<StateSlot> {
-        self.inner.get(key).map(|val| val.clone())
+    fn contains_key(&self, key: &K) -> bool {
+        self.inner.contains_key(key)
+    }
+
+    fn get(&self, key: &K) -> Option<Ref<'_, K, V>> {
+        self.inner.get(key)
+    }
+
+    fn get_mut(&self, key: &K) -> Option<RefMut<'_, K, V>> {
+        self.inner.get_mut(key)
+    }
+
+    fn insert(&self, key: K, value: V) {
+        self.inner.insert(key, value);
+    }
+
+    fn remove(&self, key: &K) -> Option<(K, V)> {
+        self.inner.remove(key)
+    }
+
+    fn len(&self) -> usize {
+        self.inner.len()
     }
 }
 
-impl HotStateView for HotStateBase {
-    fn get_state_slot(&self, state_key: &StateKey) -> StateViewResult<Option<StateSlot>> {
-        Ok(self.get(state_key))
+#[derive(Debug)]
+pub struct HotStateBase<K = StateKey, V = StateSlot>
+where
+    K: Eq + std::hash::Hash,
+{
+    /// After committing a new batch to `inner`, items are evicted so that
+    ///  1. total number of items doesn't exceed this number
+    max_items_per_shard: usize,
+    ///  2. total number of bytes, incl. both keys and values doesn't exceed this number
+    #[allow(dead_code)] // TODO(HotState): not enforced for now
+    max_bytes_per_shard: usize,
+    /// No item is accepted to `inner` if the size of the value exceeds this number
+    #[allow(dead_code)] // TODO(HotState): not enforced for now
+    max_single_value_bytes: usize,
+
+    shards: [Shard<K, V>; NUM_STATE_SHARDS],
+}
+
+impl<K, V> HotStateBase<K, V>
+where
+    K: Eq + std::hash::Hash,
+    V: Clone,
+{
+    fn new_empty(
+        max_items_per_shard: usize,
+        max_bytes_per_shard: usize,
+        max_single_value_bytes: usize,
+    ) -> Self {
+        Self {
+            max_items_per_shard,
+            max_bytes_per_shard,
+            max_single_value_bytes,
+            shards: arr![Shard::new(max_items_per_shard); 16],
+        }
+    }
+
+    fn get_from_shard(&self, shard_id: usize, key: &K) -> Option<Ref<'_, K, V>> {
+        self.shards[shard_id].get(key)
+    }
+
+    fn len(&self) -> usize {
+        self.shards.iter().map(|s| s.len()).sum()
+    }
+}
+
+impl HotStateView for HotStateBase<StateKey, StateSlot> {
+    fn get_state_slot(&self, state_key: &StateKey) -> Option<StateSlot> {
+        let shard_id = state_key.get_shard_id();
+        self.get_from_shard(shard_id, state_key).map(|v| v.clone())
     }
 }
 
@@ -274,6 +340,71 @@ impl Committer {
 
     fn should_evict(&self) -> bool {
         self.base.inner.len() > self.base.max_items
-            || self.total_key_bytes + self.total_value_bytes > self.base.max_bytes
+    }
+
+    #[cfg(test)]
+    fn collect_all(&self) -> Vec<(K, V)> {
+        assert_eq!(self.head.is_some(), self.tail.is_some());
+
+        let mut keys = Vec::new();
+        let mut values = Vec::new();
+
+        let mut current_key = self.head.clone();
+        while let Some(key) = current_key {
+            let entry = self.base.inner.get(&key).unwrap();
+            assert_eq!(entry.lru.prev, keys.last().cloned());
+            keys.push(key);
+            values.push(entry.data.clone());
+            current_key = entry.lru.next.clone();
+        }
+        itertools::zip_eq(keys, values).collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{HotStateBase, LRUUpdater};
+    use lru::LruCache;
+    use proptest::{collection::vec, option, prelude::*};
+    use std::{num::NonZeroUsize, sync::Arc};
+
+    const MAX_BYTES: usize = 10000;
+    const MAX_SINGLE_VALUE_BYTES: usize = 100;
+
+    proptest! {
+        #[test]
+        fn test_hot_state_lru(
+            max_items in 1..10usize,
+            updates in vec((0..20u64, option::weighted(0.8, 0..1000u64)), 1..50),
+        ) {
+            let base = Arc::new(HotStateBase::new_empty(
+                max_items,
+                MAX_BYTES,
+                MAX_SINGLE_VALUE_BYTES,
+            ));
+            let mut head = None;
+            let mut tail = None;
+
+            let mut updater = LRUUpdater::new(base, &mut head, &mut tail);
+            let mut cache = LruCache::new(NonZeroUsize::new(max_items).unwrap());
+
+            for (key, value_opt) in updates {
+                match value_opt {
+                    Some(value) => {
+                        updater.insert(key, value);
+                        cache.put(key, value);
+                    }
+                    None => {
+                        updater.delete(&key);
+                        cache.pop(&key);
+                    }
+                }
+                updater.evict();
+
+                prop_assert_eq!(updater.base.inner.len(), cache.len());
+                let items = updater.collect_all();
+                prop_assert_eq!(items, cache.iter().map(|(k, v)| (*k, *v)).collect::<Vec<_>>());
+            }
+        }
     }
 }

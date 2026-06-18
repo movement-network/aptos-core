@@ -23,10 +23,10 @@ use arc_swap::ArcSwapOption;
 use crossbeam::utils::CachePadded;
 use move_binary_format::CompiledModule;
 use move_core_types::{language_storage::ModuleId, value::MoveTypeLayout};
-use move_vm_runtime::Module;
+use move_vm_runtime::{execution_tracing::Trace, Module, RuntimeEnvironment};
 use move_vm_types::delayed_values::delayed_field_id::DelayedFieldID;
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::HashSet,
     fmt::Debug,
     iter::{empty, Iterator},
     sync::Arc,
@@ -258,10 +258,7 @@ impl<T: Transaction, O: TransactionOutput<Txn = T>, E: Debug + Send + Clone>
             })
     }
 
-    pub(crate) fn module_write_set(
-        &self,
-        txn_idx: TxnIndex,
-    ) -> BTreeMap<T::Key, ModuleWrite<T::Value>> {
+    pub(crate) fn module_write_set(&self, txn_idx: TxnIndex) -> Vec<ModuleWrite<T::Value>> {
         use ExecutionStatus as E;
 
         match self.outputs[txn_idx as usize]
@@ -275,8 +272,14 @@ impl<T: Transaction, O: TransactionOutput<Txn = T>, E: Debug + Send + Clone>
                 | E::DelayedFieldsCodeInvariantError(_)
                 | E::SpeculativeExecutionAbortError(_),
             )
-            | None => BTreeMap::new(),
+            | None => Vec::new(),
         }
+        if published {
+            // Record validation requirements after the modules are published.
+            global_module_cache.flush_layout_cache();
+            scheduler.record_validation_requirements(txn_idx, module_ids_for_v2)?;
+        }
+        Ok(published)
     }
 
     pub(crate) fn delayed_field_keys(
@@ -357,24 +360,17 @@ impl<T: Transaction, O: TransactionOutput<Txn = T>, E: Debug + Send + Clone>
         delta_writes: Vec<(T::Key, WriteOp)>,
         patched_resource_write_set: Vec<(T::Key, T::Value)>,
         patched_events: Vec<T::Event>,
-    ) -> Result<(), PanicError> {
-        match self.outputs[txn_idx as usize]
-            .load_full()
-            .expect("Output must exist")
-            .as_ref()
-        {
-            ExecutionStatus::Success(t) | ExecutionStatus::SkipRest(t) => {
-                t.incorporate_materialized_txn_output(
-                    delta_writes,
-                    patched_resource_write_set,
-                    patched_events,
-                )?;
-            },
-            ExecutionStatus::Abort(_)
-            | ExecutionStatus::SpeculativeExecutionAbortError(_)
-            | ExecutionStatus::DelayedFieldsCodeInvariantError(_) => {},
-        };
-        Ok(())
+    ) -> Result<Trace, PanicError> {
+        with_success_or_skip_rest!(
+            self,
+            txn_idx,
+            |mut t| t.incorporate_materialized_txn_output(
+                delta_writes,
+                patched_resource_write_set,
+                patched_events
+            ),
+            Ok(Trace::empty())
+        )
     }
 
     pub(crate) fn get_txn_read_write_summary(&self, txn_idx: TxnIndex) -> ReadWriteSummary<T> {

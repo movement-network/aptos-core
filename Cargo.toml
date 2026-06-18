@@ -23,6 +23,7 @@ members = [
     "aptos-move/aptos-sdk-builder",
     "aptos-move/aptos-transaction-benchmarks",
     "aptos-move/aptos-transaction-simulation",
+    "aptos-move/aptos-transaction-simulation-session",
     "aptos-move/aptos-transactional-test-harness",
     "aptos-move/aptos-validator-interface",
     "aptos-move/aptos-vm",
@@ -233,11 +234,13 @@ members = [
     "third_party/move/move-symbol-pool",
     "third_party/move/move-vm/integration-tests",
     "third_party/move/move-vm/metrics",
+    "third_party/move/move-vm/profiler",
     "third_party/move/move-vm/runtime",
     "third_party/move/move-vm/test-utils",
     "third_party/move/move-vm/transactional-tests",
     "third_party/move/move-vm/types",
     "third_party/move/testing-infra/transactional-test-runner",
+    "third_party/move/tools/move-asm",
     "third_party/move/tools/move-bytecode-utils",
     "third_party/move/tools/move-bytecode-viewer",
     "third_party/move/tools/move-cli",
@@ -246,7 +249,9 @@ members = [
     "third_party/move/tools/move-disassembler",
     "third_party/move/tools/move-linter",
     "third_party/move/tools/move-package",
+    "third_party/move/tools/move-package-cache",
     "third_party/move/tools/move-package-manifest",
+    "third_party/move/tools/move-package-resolver",
     "third_party/move/tools/move-resource-viewer",
     "third_party/move/tools/move-unit-test",
     "tools/calc-dep-sizes",
@@ -279,12 +284,12 @@ default-members = [
 # for package declarations.
 [workspace.package]
 authors = ["Aptos Labs <opensource@aptoslabs.com>"]
-edition = "2021"
+edition = "2024"
 homepage = "https://aptoslabs.com"
 license = "Apache-2.0"
 publish = false
 repository = "https://github.com/aptos-labs/aptos-core"
-rust-version = "1.80.1"
+rust-version = "1.85"
 
 [workspace.dependencies]
 # Internal crate dependencies.
@@ -456,6 +461,7 @@ aptos-transaction-emitter-lib = { path = "crates/transaction-emitter-lib" }
 aptos-transaction-generator-lib = { path = "crates/transaction-generator-lib" }
 aptos-transaction-workloads-lib = { path = "crates/transaction-workloads-lib" }
 aptos-transaction-simulation = { path = "aptos-move/aptos-transaction-simulation" }
+aptos-transaction-simulation-session = { path = "aptos-move/aptos-transaction-simulation-session" }
 aptos-transactional-test-harness = { path = "aptos-move/aptos-transactional-test-harness" }
 aptos-types = { path = "types" }
 aptos-validator-interface = { path = "aptos-move/aptos-validator-interface" }
@@ -586,7 +592,7 @@ either = "1.6.1"
 enum_dispatch = "0.3.12"
 env_logger = "0.10.0"
 erased-serde = "0.3.13"
-ethnum = "1.5.0"
+ethnum = "1.5.2"
 ethers = { version = "2" }
 dearbitrary = { version = "1.0.4", features = ["derive"] }
 fail = "0.5.0"
@@ -604,6 +610,7 @@ futures-channel = "0.3.29"
 futures-core = "0.3.29"
 futures-util = "0.3.29"
 fxhash = "0.2.1"
+fs2 = "0.4.3"
 getrandom = "0.2.2"
 gcp-bigquery-client = "0.16.8"
 get_if_addrs = "0.5.3"
@@ -642,7 +649,7 @@ libfuzzer-sys = "0.4.6"
 libsecp256k1 = "0.7.0"
 libtest-mimic = "0.5.2"
 log = "0.4.17"
-lru = "0.7.5"
+lru = "0.16.0"
 lz4 = "1.28.0"
 maplit = "1.0.2"
 merlin = "3"
@@ -815,6 +822,7 @@ ureq = { version = "1.5.4", features = [
     "native-tls",
 ], default-features = false }
 url = { version = "2.4.0", features = ["serde"] }
+usdt = "0.6.0"
 uuid = { version = "1.0.0", features = ["v4", "serde"] }
 variant_count = "1.1.0"
 walkdir = "2.3.3"
@@ -831,6 +839,7 @@ z3tracer = "0.8.0"
 
 # MOVE DEPENDENCIES
 move-abigen = { path = "third_party/move/move-prover/move-abigen" }
+move-asm = { path = "third_party/move/tools/move-asm" }
 move-binary-format = { path = "third_party/move/move-binary-format" }
 move-borrow-graph = { path = "third_party/move/move-borrow-graph" }
 move-bytecode-source-map = { path = "third_party/move/move-ir-compiler/move-bytecode-source-map" }
@@ -855,6 +864,7 @@ move-ir-to-bytecode = { path = "third_party/move/move-ir-compiler/move-ir-to-byt
 move-linter = { path = "third_party/move/tools/move-linter" }
 move-model = { path = "third_party/move/move-model" }
 move-package = { path = "third_party/move/tools/move-package" }
+move-package-cache = { path = "third_party/move/tools/move-package-cache" }
 move-package-manifest = { path = "third_party/move/tools/move-package-manifest" }
 move-prover = { path = "third_party/move/move-prover" }
 move-prover-boogie-backend = { path = "third_party/move/move-prover/boogie-backend" }
@@ -873,6 +883,7 @@ move-unit-test = { path = "third_party/move/tools/move-unit-test", features = [
     "table-extension",
 ] }
 move-vm-metrics = { path = "third_party/move/move-vm/metrics" }
+move-vm-profiler = { path = "third_party/move/move-vm/profiler" }
 move-vm-runtime = { path = "third_party/move/move-vm/runtime" }
 move-vm-test-utils = { path = "third_party/move/move-vm/test-utils", features = [
     "table-extension",

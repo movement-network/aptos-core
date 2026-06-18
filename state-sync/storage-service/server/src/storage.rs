@@ -184,6 +184,831 @@ impl StorageReader {
             Ok(None)
         }
     }
+
+    /// Returns an epoch ending ledger info response (bound by the max response size in bytes)
+    fn get_epoch_ending_ledger_infos_by_size(
+        &self,
+        start_epoch: u64,
+        expected_end_epoch: u64,
+        max_response_size: u64,
+        use_size_and_time_aware_chunking: bool,
+    ) -> Result<EpochChangeProof, Error> {
+        // Calculate the number of ledger infos to fetch
+        let expected_num_ledger_infos = inclusive_range_len(start_epoch, expected_end_epoch)?;
+        let max_num_ledger_infos = self.config.max_epoch_chunk_size;
+        let num_ledger_infos_to_fetch = min(expected_num_ledger_infos, max_num_ledger_infos);
+
+        // If size and time-aware chunking are disabled, use the legacy implementation
+        if !use_size_and_time_aware_chunking {
+            return self.get_epoch_ending_ledger_infos_by_size_legacy(
+                start_epoch,
+                expected_end_epoch,
+                num_ledger_infos_to_fetch,
+                max_response_size,
+            );
+        }
+
+        // Calculate the end epoch for storage. This is required because the DbReader
+        // interface returns the epochs up to: `end_epoch - 1`. However, we wish to
+        // fetch epoch endings up to expected_end_epoch (inclusive).
+        let end_epoch = start_epoch
+            .checked_add(num_ledger_infos_to_fetch)
+            .ok_or_else(|| Error::UnexpectedErrorEncountered("End epoch has overflown!".into()))?;
+
+        // Get the epoch ending ledger info iterator
+        let mut epoch_ending_ledger_info_iterator = self
+            .storage
+            .get_epoch_ending_ledger_info_iterator(start_epoch, end_epoch)?;
+
+        // Initialize the fetched epoch ending ledger infos
+        let mut epoch_ending_ledger_infos = vec![];
+
+        // Create a response progress tracker
+        let mut response_progress_tracker = ResponseDataProgressTracker::new(
+            num_ledger_infos_to_fetch,
+            max_response_size,
+            self.config.max_storage_read_wait_time_ms,
+            self.time_service.clone(),
+        );
+
+        // Fetch as many epoch ending ledger infos as possible
+        while !response_progress_tracker.is_response_complete() {
+            match epoch_ending_ledger_info_iterator.next() {
+                Some(Ok(epoch_ending_ledger_info)) => {
+                    // Calculate the number of serialized bytes for the epoch ending ledger info
+                    let num_serialized_bytes = get_num_serialized_bytes(&epoch_ending_ledger_info)
+                        .map_err(|error| Error::UnexpectedErrorEncountered(error.to_string()))?;
+
+                    // Add the ledger info to the list
+                    if response_progress_tracker
+                        .data_items_fits_in_response(true, num_serialized_bytes)
+                    {
+                        epoch_ending_ledger_infos.push(epoch_ending_ledger_info);
+                        response_progress_tracker.add_data_item(num_serialized_bytes);
+                    } else {
+                        break; // Cannot add any more data items
+                    }
+                },
+                Some(Err(error)) => {
+                    return Err(Error::StorageErrorEncountered(error.to_string()));
+                },
+                None => {
+                    // Log a warning that the iterator did not contain all the expected data
+                    warn!(
+                        "The epoch ending ledger info iterator is missing data! \
+                        Start epoch: {:?}, expected end epoch: {:?}, num ledger infos to fetch: {:?}",
+                        start_epoch, expected_end_epoch, num_ledger_infos_to_fetch
+                    );
+                    break;
+                },
+            }
+        }
+
+        // Create the epoch change proof
+        let epoch_change_proof = EpochChangeProof::new(epoch_ending_ledger_infos, false);
+
+        // Update the data truncation metrics
+        response_progress_tracker
+            .update_data_truncation_metrics(DataResponse::get_epoch_ending_ledger_info_label());
+
+        Ok(epoch_change_proof)
+    }
+
+    /// Returns an epoch ending ledger info response (bound by the max response size in bytes).
+    /// This is the legacy implementation (that does not use size and time-aware chunking).
+    fn get_epoch_ending_ledger_infos_by_size_legacy(
+        &self,
+        start_epoch: u64,
+        expected_end_epoch: u64,
+        mut num_ledger_infos_to_fetch: u64,
+        max_response_size: u64,
+    ) -> Result<EpochChangeProof, Error> {
+        while num_ledger_infos_to_fetch >= 1 {
+            // The DbReader interface returns the epochs up to: `end_epoch - 1`.
+            // However, we wish to fetch epoch endings up to end_epoch (inclusive).
+            let end_epoch = start_epoch
+                .checked_add(num_ledger_infos_to_fetch)
+                .ok_or_else(|| {
+                    Error::UnexpectedErrorEncountered("End epoch has overflown!".into())
+                })?;
+            let epoch_change_proof = self
+                .storage
+                .get_epoch_ending_ledger_infos(start_epoch, end_epoch)?;
+            if num_ledger_infos_to_fetch == 1 {
+                return Ok(epoch_change_proof); // We cannot return less than a single item
+            }
+
+            // Attempt to divide up the request if it overflows the message size
+            let (overflow_frame, num_bytes) =
+                check_overflow_network_frame(&epoch_change_proof, max_response_size)?;
+            if !overflow_frame {
+                return Ok(epoch_change_proof);
+            } else {
+                metrics::increment_chunk_truncation_counter(
+                    metrics::TRUNCATION_FOR_SIZE,
+                    DataResponse::EpochEndingLedgerInfos(epoch_change_proof).get_label(),
+                );
+                let new_num_ledger_infos_to_fetch = num_ledger_infos_to_fetch / 2;
+                debug!("The request for {:?} ledger infos was too large (num bytes: {:?}, limit: {:?}). Retrying with {:?}.",
+                    num_ledger_infos_to_fetch, num_bytes, max_response_size, new_num_ledger_infos_to_fetch);
+                num_ledger_infos_to_fetch = new_num_ledger_infos_to_fetch; // Try again with half the amount of data
+            }
+        }
+
+        Err(Error::UnexpectedErrorEncountered(format!(
+            "Unable to serve the get_epoch_ending_ledger_infos request! Start epoch: {:?}, \
+            expected end epoch: {:?}. The data cannot fit into a single network frame!",
+            start_epoch, expected_end_epoch
+        )))
+    }
+
+    /// Returns a transaction with proof response (bound by the max response size in bytes)
+    fn get_transactions_with_proof_by_size(
+        &self,
+        proof_version: u64,
+        start_version: u64,
+        end_version: u64,
+        include_events: bool,
+        max_response_size: u64,
+        use_size_and_time_aware_chunking: bool,
+    ) -> Result<TransactionDataWithProofResponse, Error> {
+        // Calculate the number of transactions to fetch
+        let expected_num_transactions = inclusive_range_len(start_version, end_version)?;
+        let max_num_transactions = self.config.max_transaction_chunk_size;
+        let num_transactions_to_fetch = min(expected_num_transactions, max_num_transactions);
+
+        // If size and time-aware chunking are disabled, use the legacy implementation
+        if !use_size_and_time_aware_chunking {
+            return self.get_transactions_with_proof_by_size_legacy(
+                proof_version,
+                start_version,
+                end_version,
+                num_transactions_to_fetch,
+                include_events,
+                max_response_size,
+            );
+        }
+
+        // Get the iterators for the transaction, info, events and persisted auxiliary infos
+        let transaction_iterator = self
+            .storage
+            .get_transaction_iterator(start_version, num_transactions_to_fetch)?;
+        let transaction_info_iterator = self
+            .storage
+            .get_transaction_info_iterator(start_version, num_transactions_to_fetch)?;
+        let transaction_events_iterator = if include_events {
+            self.storage
+                .get_events_iterator(start_version, num_transactions_to_fetch)?
+        } else {
+            // If events are not included, create a fake iterator (they will be dropped anyway)
+            Box::new(std::iter::repeat_n(
+                Ok(vec![]),
+                num_transactions_to_fetch as usize,
+            ))
+        };
+        let persisted_auxiliary_info_iterator =
+            self.storage.get_persisted_auxiliary_info_iterator(
+                start_version,
+                num_transactions_to_fetch as usize,
+            )?;
+
+        let mut multizip_iterator = itertools::multizip((
+            transaction_iterator,
+            transaction_info_iterator,
+            transaction_events_iterator,
+            persisted_auxiliary_info_iterator,
+        ));
+
+        // Initialize the fetched data items
+        let mut transactions = vec![];
+        let mut transaction_infos = vec![];
+        let mut transaction_events = vec![];
+        let mut persisted_auxiliary_infos = vec![];
+
+        // Create a response progress tracker
+        let mut response_progress_tracker = ResponseDataProgressTracker::new(
+            num_transactions_to_fetch,
+            max_response_size,
+            self.config.max_storage_read_wait_time_ms,
+            self.time_service.clone(),
+        );
+
+        // Fetch as many transactions as possible
+        while !response_progress_tracker.is_response_complete() {
+            match multizip_iterator.next() {
+                Some((Ok(transaction), Ok(info), Ok(events), Ok(persisted_auxiliary_info))) => {
+                    // Calculate the number of serialized bytes for the data items
+                    let num_transaction_bytes = get_num_serialized_bytes(&transaction)
+                        .map_err(|error| Error::UnexpectedErrorEncountered(error.to_string()))?;
+                    let num_info_bytes = get_num_serialized_bytes(&info)
+                        .map_err(|error| Error::UnexpectedErrorEncountered(error.to_string()))?;
+                    let num_events_bytes = get_num_serialized_bytes(&events)
+                        .map_err(|error| Error::UnexpectedErrorEncountered(error.to_string()))?;
+                    let num_auxiliary_info_bytes =
+                        get_num_serialized_bytes(&persisted_auxiliary_info).map_err(|error| {
+                            Error::UnexpectedErrorEncountered(error.to_string())
+                        })?;
+
+                    // Add the data items to the lists
+                    let total_serialized_bytes = num_transaction_bytes
+                        + num_info_bytes
+                        + num_events_bytes
+                        + num_auxiliary_info_bytes;
+                    if response_progress_tracker
+                        .data_items_fits_in_response(true, total_serialized_bytes)
+                    {
+                        transactions.push(transaction);
+                        transaction_infos.push(info);
+                        transaction_events.push(events);
+                        persisted_auxiliary_infos.push(persisted_auxiliary_info);
+
+                        response_progress_tracker.add_data_item(total_serialized_bytes);
+                    } else {
+                        break; // Cannot add any more data items
+                    }
+                },
+                Some((Err(error), _, _, _))
+                | Some((_, Err(error), _, _))
+                | Some((_, _, Err(error), _))
+                | Some((_, _, _, Err(error))) => {
+                    return Err(Error::StorageErrorEncountered(error.to_string()));
+                },
+                None => {
+                    // Log a warning that the iterators did not contain all the expected data
+                    warn!(
+                        "The iterators for transactions, transaction infos, events and \
+                        persisted auxiliary infos are missing data! Start version: {:?}, \
+                        end version: {:?}, num transactions to fetch: {:?}, num fetched: {:?}.",
+                        start_version,
+                        end_version,
+                        num_transactions_to_fetch,
+                        transactions.len()
+                    );
+                    break;
+                },
+            }
+        }
+
+        // Create the transaction info list with proof
+        let accumulator_range_proof = self.storage.get_transaction_accumulator_range_proof(
+            start_version,
+            transactions.len() as u64,
+            proof_version,
+        )?;
+        let info_list_with_proof =
+            TransactionInfoListWithProof::new(accumulator_range_proof, transaction_infos);
+
+        // Create the transaction list with proof
+        let transaction_events = if include_events {
+            Some(transaction_events)
+        } else {
+            None
+        };
+        let transaction_list_with_proof = TransactionListWithProof::new(
+            transactions,
+            transaction_events,
+            Some(start_version),
+            info_list_with_proof,
+        );
+
+        // Update the data truncation metrics
+        response_progress_tracker
+            .update_data_truncation_metrics(DataResponse::get_transactions_with_proof_v2_label());
+
+        // Create the transaction data with proof response
+        let transaction_list_with_proof_v2 =
+            TransactionListWithProofV2::new(TransactionListWithAuxiliaryInfos::new(
+                transaction_list_with_proof,
+                persisted_auxiliary_infos,
+            ));
+        let response = TransactionDataWithProofResponse {
+            transaction_data_response_type: TransactionDataResponseType::TransactionData,
+            transaction_list_with_proof: Some(transaction_list_with_proof_v2),
+            transaction_output_list_with_proof: None,
+        };
+        Ok(response)
+    }
+
+    /// Returns a transaction with proof response (bound by the max response size in bytes).
+    /// This is the legacy implementation (that does not use size and time-aware chunking).
+    fn get_transactions_with_proof_by_size_legacy(
+        &self,
+        proof_version: u64,
+        start_version: u64,
+        end_version: u64,
+        mut num_transactions_to_fetch: u64,
+        include_events: bool,
+        max_response_size: u64,
+    ) -> Result<TransactionDataWithProofResponse, Error> {
+        while num_transactions_to_fetch >= 1 {
+            let transaction_list_with_proof = self.storage.get_transactions(
+                start_version,
+                num_transactions_to_fetch,
+                proof_version,
+                include_events,
+            )?;
+            let response = TransactionDataWithProofResponse {
+                transaction_data_response_type: TransactionDataResponseType::TransactionData,
+                transaction_list_with_proof: Some(transaction_list_with_proof),
+                transaction_output_list_with_proof: None,
+            };
+            if num_transactions_to_fetch == 1 {
+                return Ok(response); // We cannot return less than a single item
+            }
+
+            // Attempt to divide up the request if it overflows the message size
+            let (overflow_frame, num_bytes) =
+                check_overflow_network_frame(&response, max_response_size)?;
+            if !overflow_frame {
+                return Ok(response);
+            } else {
+                metrics::increment_chunk_truncation_counter(
+                    metrics::TRUNCATION_FOR_SIZE,
+                    DataResponse::TransactionDataWithProof(response).get_label(),
+                );
+                let new_num_transactions_to_fetch = num_transactions_to_fetch / 2;
+                debug!("The request for {:?} transactions was too large (num bytes: {:?}, limit: {:?}). Retrying with {:?}.",
+                    num_transactions_to_fetch, num_bytes, max_response_size, new_num_transactions_to_fetch);
+                num_transactions_to_fetch = new_num_transactions_to_fetch; // Try again with half the amount of data
+            }
+        }
+
+        Err(Error::UnexpectedErrorEncountered(format!(
+            "Unable to serve the get_transactions_with_proof request! Proof version: {:?}, \
+            start version: {:?}, end version: {:?}, include events: {:?}. The data cannot fit into \
+            a single network frame!",
+            proof_version, start_version, end_version, include_events,
+        )))
+    }
+
+    /// Returns a transaction output with proof response (bound by the max response size in bytes)
+    fn get_transaction_outputs_with_proof_by_size(
+        &self,
+        proof_version: u64,
+        start_version: u64,
+        end_version: u64,
+        max_response_size: u64,
+        is_transaction_or_output_request: bool,
+        use_size_and_time_aware_chunking: bool,
+    ) -> Result<TransactionDataWithProofResponse, Error> {
+        // Calculate the number of transaction outputs to fetch
+        let expected_num_outputs = inclusive_range_len(start_version, end_version)?;
+        let max_num_outputs = self.config.max_transaction_output_chunk_size;
+        let num_outputs_to_fetch = min(expected_num_outputs, max_num_outputs);
+
+        // If size and time-aware chunking are disabled, use the legacy implementation
+        if !use_size_and_time_aware_chunking {
+            return self.get_transaction_outputs_with_proof_by_size_legacy(
+                proof_version,
+                start_version,
+                end_version,
+                num_outputs_to_fetch,
+                max_response_size,
+            );
+        }
+
+        // Get the iterators for the transaction, info, write set, events,
+        // auxiliary data and persisted auxiliary infos.
+        let transaction_iterator = self
+            .storage
+            .get_transaction_iterator(start_version, num_outputs_to_fetch)?;
+        let transaction_info_iterator = self
+            .storage
+            .get_transaction_info_iterator(start_version, num_outputs_to_fetch)?;
+        let transaction_write_set_iterator = self
+            .storage
+            .get_write_set_iterator(start_version, num_outputs_to_fetch)?;
+        let transaction_events_iterator = self
+            .storage
+            .get_events_iterator(start_version, num_outputs_to_fetch)?;
+        let persisted_auxiliary_info_iterator = self
+            .storage
+            .get_persisted_auxiliary_info_iterator(start_version, num_outputs_to_fetch as usize)?;
+        let mut multizip_iterator = itertools::multizip((
+            transaction_iterator,
+            transaction_info_iterator,
+            transaction_write_set_iterator,
+            transaction_events_iterator,
+            persisted_auxiliary_info_iterator,
+        ));
+
+        // Initialize the fetched data items
+        let mut transactions_and_outputs = vec![];
+        let mut transaction_infos = vec![];
+        let mut persisted_auxiliary_infos = vec![];
+
+        // Create a response progress tracker
+        let mut response_progress_tracker = ResponseDataProgressTracker::new(
+            num_outputs_to_fetch,
+            max_response_size,
+            self.config.max_storage_read_wait_time_ms,
+            self.time_service.clone(),
+        );
+
+        // Fetch as many transaction outputs as possible
+        while !response_progress_tracker.is_response_complete() {
+            match multizip_iterator.next() {
+                Some((
+                    Ok(transaction),
+                    Ok(info),
+                    Ok(write_set),
+                    Ok(events),
+                    Ok(persisted_auxiliary_info),
+                )) => {
+                    // Create the transaction output
+                    let output = TransactionOutput::new(
+                        write_set,
+                        events,
+                        info.gas_used(),
+                        info.status().clone().into(),
+                        TransactionAuxiliaryData::None, // Auxiliary data is no longer supported
+                    );
+
+                    // Calculate the number of serialized bytes for the data items
+                    let num_transaction_bytes = get_num_serialized_bytes(&transaction)
+                        .map_err(|error| Error::UnexpectedErrorEncountered(error.to_string()))?;
+                    let num_info_bytes = get_num_serialized_bytes(&info)
+                        .map_err(|error| Error::UnexpectedErrorEncountered(error.to_string()))?;
+                    let num_output_bytes = get_num_serialized_bytes(&output)
+                        .map_err(|error| Error::UnexpectedErrorEncountered(error.to_string()))?;
+                    let num_auxiliary_info_bytes =
+                        get_num_serialized_bytes(&persisted_auxiliary_info).map_err(|error| {
+                            Error::UnexpectedErrorEncountered(error.to_string())
+                        })?;
+
+                    // Add the data items to the lists
+                    let total_serialized_bytes = num_transaction_bytes
+                        + num_info_bytes
+                        + num_output_bytes
+                        + num_auxiliary_info_bytes;
+                    if response_progress_tracker.data_items_fits_in_response(
+                        !is_transaction_or_output_request,
+                        total_serialized_bytes,
+                    ) {
+                        transactions_and_outputs.push((transaction, output));
+                        transaction_infos.push(info);
+                        persisted_auxiliary_infos.push(persisted_auxiliary_info);
+
+                        response_progress_tracker.add_data_item(total_serialized_bytes);
+                    } else {
+                        break; // Cannot add any more data items
+                    }
+                },
+                Some((Err(error), _, _, _, _))
+                | Some((_, Err(error), _, _, _))
+                | Some((_, _, Err(error), _, _))
+                | Some((_, _, _, Err(error), _))
+                | Some((_, _, _, _, Err(error))) => {
+                    return Err(Error::StorageErrorEncountered(error.to_string()));
+                },
+                None => {
+                    // Log a warning that the iterators did not contain all the expected data
+                    warn!(
+                        "The iterators for transactions, transaction infos, write sets, events, \
+                        auxiliary data and persisted auxiliary infos are missing data! Start version: {:?}, \
+                        end version: {:?}, num outputs to fetch: {:?}, num fetched: {:?}.",
+                        start_version, end_version, num_outputs_to_fetch, transactions_and_outputs.len()
+                    );
+                    break;
+                },
+            }
+        }
+
+        // Create the transaction output list with proof
+        let num_fetched_outputs = transactions_and_outputs.len();
+        let accumulator_range_proof = if num_fetched_outputs == 0 {
+            AccumulatorRangeProof::new_empty() // Return an empty proof if no outputs were fetched
+        } else {
+            self.storage.get_transaction_accumulator_range_proof(
+                start_version,
+                num_fetched_outputs as u64,
+                proof_version,
+            )?
+        };
+        let transaction_info_list_with_proof =
+            TransactionInfoListWithProof::new(accumulator_range_proof, transaction_infos);
+        let transaction_output_list_with_proof = TransactionOutputListWithProof::new(
+            transactions_and_outputs,
+            Some(start_version),
+            transaction_info_list_with_proof,
+        );
+
+        // Update the data truncation metrics
+        response_progress_tracker.update_data_truncation_metrics(
+            DataResponse::get_transaction_outputs_with_proof_v2_label(),
+        );
+
+        // Create the transaction data with proof response
+        let output_list_with_proof_v2 =
+            TransactionOutputListWithProofV2::new(TransactionOutputListWithAuxiliaryInfos::new(
+                transaction_output_list_with_proof,
+                persisted_auxiliary_infos,
+            ));
+        let response = TransactionDataWithProofResponse {
+            transaction_data_response_type: TransactionDataResponseType::TransactionOutputData,
+            transaction_list_with_proof: None,
+            transaction_output_list_with_proof: Some(output_list_with_proof_v2),
+        };
+
+        Ok(response)
+    }
+
+    /// Returns a transaction output with proof response (bound by the max response size in bytes).
+    /// This is the legacy implementation (that does not use size and time-aware chunking).
+    fn get_transaction_outputs_with_proof_by_size_legacy(
+        &self,
+        proof_version: u64,
+        start_version: u64,
+        end_version: u64,
+        mut num_outputs_to_fetch: u64,
+        max_response_size: u64,
+    ) -> Result<TransactionDataWithProofResponse, Error> {
+        while num_outputs_to_fetch >= 1 {
+            let output_list_with_proof = self.storage.get_transaction_outputs(
+                start_version,
+                num_outputs_to_fetch,
+                proof_version,
+            )?;
+            let response = TransactionDataWithProofResponse {
+                transaction_data_response_type: TransactionDataResponseType::TransactionOutputData,
+                transaction_list_with_proof: None,
+                transaction_output_list_with_proof: Some(output_list_with_proof),
+            };
+            if num_outputs_to_fetch == 1 {
+                return Ok(response); // We cannot return less than a single item
+            }
+
+            // Attempt to divide up the request if it overflows the message size
+            let (overflow_frame, num_bytes) =
+                check_overflow_network_frame(&response, max_response_size)?;
+            if !overflow_frame {
+                return Ok(response);
+            } else {
+                metrics::increment_chunk_truncation_counter(
+                    metrics::TRUNCATION_FOR_SIZE,
+                    DataResponse::TransactionDataWithProof(response).get_label(),
+                );
+                let new_num_outputs_to_fetch = num_outputs_to_fetch / 2;
+                debug!("The request for {:?} outputs was too large (num bytes: {:?}, limit: {:?}). Retrying with {:?}.",
+                    num_outputs_to_fetch, num_bytes, max_response_size, new_num_outputs_to_fetch);
+                num_outputs_to_fetch = new_num_outputs_to_fetch; // Try again with half the amount of data
+            }
+        }
+
+        Err(Error::UnexpectedErrorEncountered(format!(
+            "Unable to serve the get_transaction_outputs_with_proof request! Proof version: {:?}, \
+            start version: {:?}, end version: {:?}. The data cannot fit into a single network frame!",
+            proof_version, start_version, end_version
+        )))
+    }
+
+    /// Returns a transaction or output with proof response (bound by the max response size in bytes)
+    fn get_transactions_or_outputs_with_proof_by_size(
+        &self,
+        proof_version: u64,
+        start_version: u64,
+        end_version: u64,
+        include_events: bool,
+        max_num_output_reductions: u64,
+        max_response_size: u64,
+        use_size_and_time_aware_chunking: bool,
+    ) -> Result<TransactionDataWithProofResponse, Error> {
+        // Calculate the number of transaction outputs to fetch
+        let expected_num_outputs = inclusive_range_len(start_version, end_version)?;
+        let max_num_outputs = self.config.max_transaction_output_chunk_size;
+        let num_outputs_to_fetch = min(expected_num_outputs, max_num_outputs);
+
+        // If size and time-aware chunking are disabled, use the legacy implementation
+        if !use_size_and_time_aware_chunking {
+            return self.get_transactions_or_outputs_with_proof_by_size_legacy(
+                proof_version,
+                start_version,
+                end_version,
+                num_outputs_to_fetch,
+                include_events,
+                max_num_output_reductions,
+                max_response_size,
+            );
+        }
+
+        // Fetch the transaction outputs with proof
+        let response = self.get_transaction_outputs_with_proof_by_size(
+            proof_version,
+            start_version,
+            end_version,
+            max_response_size,
+            true, // This is a transaction or output request
+            use_size_and_time_aware_chunking,
+        )?;
+
+        // If the request was fully satisfied (all items were fetched), return the response
+        if let Some(output_list_with_proof) = response.transaction_output_list_with_proof.as_ref() {
+            if num_outputs_to_fetch == output_list_with_proof.get_num_outputs() as u64 {
+                return Ok(response);
+            }
+        }
+
+        // Otherwise, return as many transactions as possible
+        self.get_transactions_with_proof_by_size(
+            proof_version,
+            start_version,
+            end_version,
+            include_events,
+            max_response_size,
+            use_size_and_time_aware_chunking,
+        )
+    }
+
+    /// Returns a transaction or output with proof response (bound by the max response size in bytes).
+    /// This is the legacy implementation (that does not use size and time-aware chunking).
+    fn get_transactions_or_outputs_with_proof_by_size_legacy(
+        &self,
+        proof_version: u64,
+        start_version: u64,
+        end_version: u64,
+        mut num_outputs_to_fetch: u64,
+        include_events: bool,
+        max_num_output_reductions: u64,
+        max_response_size: u64,
+    ) -> Result<TransactionDataWithProofResponse, Error> {
+        let mut num_output_reductions = 0;
+        while num_output_reductions <= max_num_output_reductions {
+            let output_list_with_proof = self.storage.get_transaction_outputs(
+                start_version,
+                num_outputs_to_fetch,
+                proof_version,
+            )?;
+            let response = TransactionDataWithProofResponse {
+                transaction_data_response_type: TransactionDataResponseType::TransactionOutputData,
+                transaction_list_with_proof: None,
+                transaction_output_list_with_proof: Some(output_list_with_proof),
+            };
+
+            let (overflow_frame, num_bytes) =
+                check_overflow_network_frame(&response, max_response_size)?;
+
+            if !overflow_frame {
+                return Ok(response);
+            } else if num_outputs_to_fetch == 1 {
+                break; // We cannot return less than a single item. Fallback to transactions
+            } else {
+                metrics::increment_chunk_truncation_counter(
+                    metrics::TRUNCATION_FOR_SIZE,
+                    DataResponse::TransactionDataWithProof(response).get_label(),
+                );
+                let new_num_outputs_to_fetch = num_outputs_to_fetch / 2;
+                debug!("The request for {:?} outputs was too large (num bytes: {:?}, limit: {:?}). Current number of data reductions: {:?}",
+                    num_outputs_to_fetch, num_bytes, max_response_size, num_output_reductions);
+                num_outputs_to_fetch = new_num_outputs_to_fetch; // Try again with half the amount of data
+                num_output_reductions += 1;
+            }
+        }
+
+        // Return transactions only
+        self.get_transactions_with_proof_by_size(
+            proof_version,
+            start_version,
+            end_version,
+            include_events,
+            max_response_size,
+            self.config.enable_size_and_time_aware_chunking,
+        )
+    }
+
+    /// Returns a state value chunk with proof response (bound by the max response size in bytes)
+    fn get_state_value_chunk_with_proof_by_size(
+        &self,
+        version: u64,
+        start_index: u64,
+        end_index: u64,
+        max_response_size: u64,
+        use_size_and_time_aware_chunking: bool,
+    ) -> Result<StateValueChunkWithProof, Error> {
+        // Calculate the number of state values to fetch
+        let expected_num_state_values = inclusive_range_len(start_index, end_index)?;
+        let max_num_state_values = self.config.max_state_chunk_size;
+        let num_state_values_to_fetch = min(expected_num_state_values, max_num_state_values);
+
+        // If size and time-aware chunking are disabled, use the legacy implementation
+        if !use_size_and_time_aware_chunking {
+            return self.get_state_value_chunk_with_proof_by_size_legacy(
+                version,
+                start_index,
+                end_index,
+                num_state_values_to_fetch,
+                max_response_size,
+            );
+        }
+
+        // Get the state value chunk iterator
+        let mut state_value_iterator = self.storage.get_state_value_chunk_iter(
+            version,
+            start_index as usize,
+            num_state_values_to_fetch as usize,
+        )?;
+
+        // Initialize the fetched state values
+        let mut state_values = vec![];
+
+        // Create a response progress tracker
+        let mut response_progress_tracker = ResponseDataProgressTracker::new(
+            num_state_values_to_fetch,
+            max_response_size,
+            self.config.max_storage_read_wait_time_ms,
+            self.time_service.clone(),
+        );
+
+        // Fetch as many state values as possible
+        while !response_progress_tracker.is_response_complete() {
+            match state_value_iterator.next() {
+                Some(Ok(state_value)) => {
+                    // Calculate the number of serialized bytes for the state value
+                    let num_serialized_bytes = get_num_serialized_bytes(&state_value)
+                        .map_err(|error| Error::UnexpectedErrorEncountered(error.to_string()))?;
+
+                    // Add the state value to the list
+                    if response_progress_tracker
+                        .data_items_fits_in_response(true, num_serialized_bytes)
+                    {
+                        state_values.push(state_value);
+                        response_progress_tracker.add_data_item(num_serialized_bytes);
+                    } else {
+                        break; // Cannot add any more data items
+                    }
+                },
+                Some(Err(error)) => {
+                    return Err(Error::StorageErrorEncountered(error.to_string()));
+                },
+                None => {
+                    // Log a warning that the iterator did not contain all the expected data
+                    warn!(
+                        "The state value iterator is missing data! Version: {:?}, \
+                        start index: {:?}, end index: {:?}, num state values to fetch: {:?}",
+                        version, start_index, end_index, num_state_values_to_fetch
+                    );
+                    break;
+                },
+            }
+        }
+
+        // Create the state value chunk with proof
+        let state_value_chunk_with_proof = self.storage.get_state_value_chunk_proof(
+            version,
+            start_index as usize,
+            state_values,
+        )?;
+
+        // Update the data truncation metrics
+        response_progress_tracker
+            .update_data_truncation_metrics(DataResponse::get_state_value_chunk_with_proof_label());
+
+        Ok(state_value_chunk_with_proof)
+    }
+
+    /// Returns a state value chunk with proof response (bound by the max response size in bytes).
+    /// This is the legacy implementation (that does not use size and time-aware chunking).
+    fn get_state_value_chunk_with_proof_by_size_legacy(
+        &self,
+        version: u64,
+        start_index: u64,
+        end_index: u64,
+        mut num_state_values_to_fetch: u64,
+        max_response_size: u64,
+    ) -> Result<StateValueChunkWithProof, Error> {
+        while num_state_values_to_fetch >= 1 {
+            let state_value_chunk_with_proof = self.storage.get_state_value_chunk_with_proof(
+                version,
+                start_index as usize,
+                num_state_values_to_fetch as usize,
+            )?;
+            if num_state_values_to_fetch == 1 {
+                return Ok(state_value_chunk_with_proof); // We cannot return less than a single item
+            }
+
+            // Attempt to divide up the request if it overflows the message size
+            let (overflow_frame, num_bytes) =
+                check_overflow_network_frame(&state_value_chunk_with_proof, max_response_size)?;
+            if !overflow_frame {
+                return Ok(state_value_chunk_with_proof);
+            } else {
+                metrics::increment_chunk_truncation_counter(
+                    metrics::TRUNCATION_FOR_SIZE,
+                    DataResponse::StateValueChunkWithProof(state_value_chunk_with_proof)
+                        .get_label(),
+                );
+                let new_num_state_values_to_fetch = num_state_values_to_fetch / 2;
+                debug!("The request for {:?} state values was too large (num bytes: {:?}, limit: {:?}). Retrying with {:?}.",
+                    num_state_values_to_fetch, num_bytes, max_response_size, new_num_state_values_to_fetch);
+                num_state_values_to_fetch = new_num_state_values_to_fetch; // Try again with half the amount of data
+            }
+        }
+
+        Err(Error::UnexpectedErrorEncountered(format!(
+            "Unable to serve the get_state_value_chunk_with_proof request! Version: {:?}, \
+            start index: {:?}, end index: {:?}. The data cannot fit into a single network frame!",
+            version, start_index, end_index
+        )))
+    }
 }
 
 impl StorageReaderInterface for StorageReader {

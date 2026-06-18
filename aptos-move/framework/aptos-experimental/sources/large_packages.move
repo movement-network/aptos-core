@@ -168,8 +168,8 @@ module aptos_experimental::large_packages {
         owner: &signer,
         metadata_chunk: vector<u8>,
         code_indices: vector<u16>,
-        code_chunks: vector<vector<u8>>,
-    ): &mut StagingArea acquires StagingArea {
+        code_chunks: vector<vector<u8>>
+    ): &mut StagingArea {
         assert!(
             vector::length(&code_indices) == vector::length(&code_chunks),
             error::invalid_argument(ECODE_MISMATCH),

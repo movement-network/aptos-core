@@ -729,6 +729,16 @@ async fn test_signing_message_with_payload(
         "payload": payload,
     });
 
+        if context.use_orderless_transactions {
+            let nonce = match txn.replay_protector() {
+                ReplayProtector::Nonce(n) => n,
+                _ => rand::thread_rng().r#gen(),
+            };
+            json["replay_protection_nonce"] = json!(nonce.to_string());
+        }
+
+        json
+    };
     let resp = context
         .post("/transactions/encode_submission", body.clone())
         .await;
@@ -1633,6 +1643,24 @@ async fn test_runtime_error_message_in_interpreter() {
         .post_bcs_txn("/transactions", body)
         .await;
 
+    let mut payload = json!({
+        "sender": resp["sender"],
+        "sequence_number": resp["sequence_number"],
+        "max_gas_amount": resp["max_gas_amount"],
+        "gas_unit_price": resp["gas_unit_price"],
+        "expiration_timestamp_secs": resp["expiration_timestamp_secs"],
+        "payload": resp["payload"],
+        "signature": {
+            "type": resp["signature"]["type"],
+            "public_key": resp["signature"]["public_key"],
+            "signature": Ed25519Signature::dummy_signature().to_string(),
+        }
+    });
+
+    if context.use_orderless_transactions {
+        let nonce = rand::thread_rng().r#gen::<u64>();
+        payload["replay_protection_nonce"] = json!(nonce.to_string());
+    }
     let resp = context
         .expect_status_code(200)
         .post(

@@ -362,7 +362,7 @@ impl Block {
         );
         if parent.has_reconfiguration() {
             ensure!(
-                self.payload().map_or(true, |p| p.is_empty()),
+                self.payload().is_none_or(|p| p.is_empty()),
                 "Reconfiguration suffix should not carry payload"
             );
         }

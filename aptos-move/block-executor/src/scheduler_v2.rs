@@ -620,9 +620,13 @@ impl SchedulerV2 {
             // (which, inductively, must occur before the transaction is committed). Hence, it
             // must also be safe to commit the current transaction.
 
-            if self.committed_marker[next_to_commit_idx as usize]
-                .swap(CommitMarkerFlag::CommitStarted as u8, Ordering::Relaxed)
-                != CommitMarkerFlag::NotCommitted as u8
+            if self
+                .committed_marker
+                .get(next_to_commit_idx as usize)
+                .is_some_and(|marker| {
+                    marker.swap(CommitMarkerFlag::CommitStarted as u8, Ordering::Relaxed)
+                        != CommitMarkerFlag::NotCommitted as u8
+                })
             {
                 return Err(code_invariant_error(format!(
                     "Marking {} as PENDING_COMMIT_HOOK, but previous marker != NOT_COMMITTED",
@@ -778,7 +782,7 @@ impl SchedulerV2 {
     ///
     /// TODO: take worker ID, dedicate some workers to scan high priority tasks (can use armed lock).
     /// We can also have different versions (e.g. for testing) of next_task.
-    pub(crate) fn next_task(&self) -> Result<TaskKind, PanicError> {
+    pub(crate) fn next_task(&self, worker_id: u32) -> Result<TaskKind<'_>, PanicError> {
         if self.is_done() {
             return Ok(TaskKind::Done);
         }
@@ -981,6 +985,125 @@ impl SchedulerV2 {
 
 /// Private interfaces
 impl SchedulerV2 {
+    // TODO(BlockSTMv2): Tests for SchedulerV2 handling of cold validation requirements.
+    // (currently covered by cold validation tests & proptests).
+    fn handle_cold_validation_requirements(
+        &self,
+        worker_id: u32,
+    ) -> Result<Option<TaskKind<'_>>, PanicError> {
+        if !self
+            .cold_validation_requirements
+            .is_dedicated_worker(worker_id)
+        {
+            return Ok(None);
+        }
+
+        if let Some((
+            txn_idx,
+            incarnation,
+            ValidationRequirement {
+                requirements: modules_to_validate,
+                is_deferred,
+            },
+        )) = self
+            .cold_validation_requirements
+            .get_validation_requirement_to_process(
+                worker_id,
+                // Heuristic formula for when the cold validation requirement should be
+                // processed, based on the distance from the last committed index, and
+                // increasing linearly with the number of workers. If a requirement is for
+                // a txn with an index higher than the computed threshold, then the worker
+                // prioritizes other tasks, with additional benefit that when an incarnation
+                // aborts, its requirements become outdated and no need to be processed.
+                self.next_to_commit_idx.load(Ordering::Relaxed)
+                    + self.num_workers as TxnIndex * 3
+                    + 4,
+                &self.txn_statuses,
+            )?
+        {
+            if is_deferred {
+                let defer_outcome = self.txn_statuses.defer_module_validation(
+                    txn_idx,
+                    incarnation,
+                    modules_to_validate,
+                )?;
+
+                if defer_outcome == Some(false) {
+                    // defer call did not succeed because the incarnation had finished execution.
+                    // Ask the caller (the dedicated worker) to process the requirements normally.
+                    return Ok(Some(TaskKind::ModuleValidation(
+                        txn_idx,
+                        incarnation,
+                        modules_to_validate,
+                    )));
+                }
+
+                self.cold_validation_requirements
+                    .validation_requirement_processed(
+                        worker_id,
+                        txn_idx,
+                        incarnation,
+                        // When the defer call was not successful because the requirements were no
+                        // longer relevant, validation_still_needed parameter must be passed as false.
+                        defer_outcome == Some(true),
+                    )?;
+            } else {
+                // Cheap check for whether the requirement is already outdated.
+                if self
+                    .txn_statuses
+                    .already_started_abort(txn_idx, incarnation)
+                {
+                    self.cold_validation_requirements
+                        .validation_requirement_processed(worker_id, txn_idx, incarnation, false)?;
+                } else {
+                    return Ok(Some(TaskKind::ModuleValidation(
+                        txn_idx,
+                        incarnation,
+                        modules_to_validate,
+                    )));
+                }
+            }
+        }
+        Ok(None)
+    }
+
+    // Called when considering committing a txn. At this point, the commit hooks lock is held by
+    // the caller, and the marker here should be 'COMMITTED'. NOT_COMMITTED means the previous
+    // call to [SchedulerV2::start_commit] that increased the index did not set the status,
+    // while PENDING_COMMIT_HOOK would imply the caller never made the end_commit call
+    // (should only happen in error scenarios).
+    fn commit_marker_invariant_check(
+        &self,
+        next_to_commit_idx: TxnIndex,
+    ) -> Result<(), PanicError> {
+        if next_to_commit_idx > 0 {
+            let prev_committed_marker =
+                self.committed_marker[next_to_commit_idx as usize - 1].load(Ordering::Relaxed);
+            if prev_committed_marker != CommitMarkerFlag::Committed as u8 {
+                return Err(code_invariant_error(format!(
+                    "Trying to get commit hook for {}, but previous index marker {} != {} (COMMITTED)",
+                    next_to_commit_idx, prev_committed_marker, CommitMarkerFlag::Committed as u8,
+                )));
+            };
+        }
+        Ok(())
+    }
+
+    fn pop_post_commit_task(&self) -> Result<Option<TxnIndex>, PanicError> {
+        match self.post_commit_processing_queue.pop() {
+            Ok(txn_idx) => {
+                if txn_idx == self.num_txns - 1 {
+                    self.is_done.store(true, Ordering::SeqCst);
+                }
+                Ok(Some(txn_idx))
+            },
+            Err(PopError::Empty) => Ok(None),
+            Err(PopError::Closed) => {
+                Err(code_invariant_error("Commit queue should never be closed"))
+            },
+        }
+    }
+
     /// Propagates stall or unstall signals recursively through the dependency graph.
     ///
     /// This method processes a `stall_propagation_queue` containing transaction indices whose

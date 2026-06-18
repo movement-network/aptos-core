@@ -6,7 +6,7 @@ use aptos_infallible::Mutex;
 use aptos_jellyfish_merkle::node_type::NodeKey;
 use aptos_types::{nibble::nibble_path::NibblePath, transaction::Version};
 use lru::LruCache;
-use std::fmt;
+use std::{fmt, num::NonZeroUsize};
 
 const NUM_SHARDS: usize = 256;
 
@@ -21,7 +21,7 @@ impl fmt::Debug for LruNodeCache {
 }
 
 impl LruNodeCache {
-    pub fn new(max_nodes_per_shard: usize) -> Self {
+    pub fn new(max_nodes_per_shard: NonZeroUsize) -> Self {
         Self {
             // `arr!()` doesn't allow a const in place of the integer literal
             shards: arr_macro::arr![Mutex::new(LruCache::new(max_nodes_per_shard)); 256],
@@ -39,14 +39,13 @@ impl LruNodeCache {
 
     pub fn get(&self, node_key: &NodeKey) -> Option<Node> {
         let mut r = self.shards[Self::shard(node_key.nibble_path()) as usize].lock();
-        let ret = r.get(node_key.nibble_path()).and_then(|(version, node)| {
+        r.get(node_key.nibble_path()).and_then(|(version, node)| {
             if *version == node_key.version() {
                 Some(node.clone())
             } else {
                 None
             }
-        });
-        ret
+        })
     }
 
     pub fn put(&self, node_key: NodeKey, node: Node) {

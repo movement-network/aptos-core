@@ -76,7 +76,10 @@ use fail::fail_point;
 use futures::{channel::oneshot, stream::FuturesUnordered, Future, FutureExt, StreamExt};
 use lru::LruCache;
 use serde::Serialize;
-use std::{mem::Discriminant, pin::Pin, sync::Arc, time::Duration};
+use std::{
+    collections::BTreeMap, mem::Discriminant, num::NonZeroUsize, ops::Add, pin::Pin, sync::Arc,
+    time::Duration,
+};
 use tokio::{
     sync::oneshot as TokioOneshot,
     time::{sleep, Instant},
@@ -319,7 +322,9 @@ impl RoundManager {
             jwk_consensus_config,
             fast_rand_config,
             pending_order_votes: PendingOrderVotes::new(),
-            blocks_with_broadcasted_fast_shares: LruCache::new(5),
+            blocks_with_broadcasted_fast_shares: LruCache::new(
+                NonZeroUsize::new(5).expect("LRU capacity should be non-zero."),
+            ),
             futures: FuturesUnordered::new(),
             proposal_status_tracker,
         }

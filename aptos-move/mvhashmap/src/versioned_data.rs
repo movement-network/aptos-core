@@ -341,7 +341,36 @@ impl<K: Hash + Clone + Debug + Eq, V: TransactionWrite> VersionedData<K, V> {
         };
     }
 
-    /// Versioned write of data at a given key (and version).
+    fn write_impl(
+        versioned_values: &mut VersionedValue<V>,
+        txn_idx: TxnIndex,
+        incarnation: Incarnation,
+        value: ValueWithLayout<V>,
+        dependencies: BTreeMap<TxnIndex, Incarnation>,
+    ) {
+        let prev_entry = versioned_values.versioned_map.insert(
+            ShiftedTxnIndex::new(txn_idx),
+            CachePadded::new(new_write_entry(incarnation, value, dependencies)),
+        );
+
+        // Assert that the previous entry for txn_idx, if present, had lower incarnation.
+        assert!(prev_entry.is_none_or(|entry| -> bool {
+            if let EntryCell::ResourceWrite {
+                incarnation: prev_incarnation,
+                ..
+            } = &entry.value
+            {
+                // For BlockSTMv1, the dependencies are always empty.
+                *prev_incarnation < incarnation
+                // TODO(BlockSTMv2): when AggregatorV1 is deprecated, we can assert that
+                // prev_dependencies is empty: they must have been drained beforehand
+                // (into dependencies) if there was an entry at the same index before.
+            } else {
+                true
+            }
+        }));
+    }
+
     pub fn write(
         &self,
         key: K,
@@ -391,8 +420,12 @@ impl<K: Hash + Clone + Debug + Eq, V: TransactionWrite> VersionedData<K, V> {
         );
 
         // Changes versioned metadata that was stored.
-        prev_entry.map_or(true, |entry| -> bool {
-            if let EntryCell::Write(_, existing_v) = &entry.value {
+        prev_entry.is_none_or(|entry| -> bool {
+            if let EntryCell::ResourceWrite {
+                value_with_layout: existing_value_with_layout,
+                ..
+            } = &entry.value
+            {
                 arc_data.as_state_value_metadata()
                     != existing_v
                         .extract_value_no_layout()

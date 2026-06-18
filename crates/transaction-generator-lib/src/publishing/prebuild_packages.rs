@@ -23,7 +23,72 @@ fn get_local_framework_path() -> String {
         .to_string()
 }
 
-pub fn create_prebuilt_packages_rs_file(
+/// Prebuilt package that stores metadata, modules, and scripts.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PrebuiltPackage {
+    pub metadata: PackageMetadata,
+    pub modules: BTreeMap<String, Vec<u8>>,
+    pub scripts: Vec<Vec<u8>>,
+}
+
+/// Bundle of multiple prebuilt packages.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PrebuiltPackagesBundle {
+    pub packages: BTreeMap<String, PrebuiltPackage>,
+}
+
+impl PrebuiltPackagesBundle {
+    /// Returns the package corresponding to the given name. Panics if such a package does not
+    /// exist.
+    pub fn get_package(&self, package_name: &str) -> &PrebuiltPackage {
+        self.packages
+            .get(package_name)
+            .unwrap_or_else(|| panic!("Package {package_name} does not exist"))
+    }
+}
+
+/// Configuration for building a prebuilt package.
+#[derive(Debug, Clone)]
+pub struct PrebuiltPackageConfig {
+    /// If true, packages are compiled with latest (possibly unstable) version.
+    pub latest_language: bool,
+    /// If true, will use the local Aptos framework.
+    pub use_local_std: bool,
+    /// Experiments for compiler optimization.
+    pub experiments: Vec<String>,
+}
+
+impl PrebuiltPackageConfig {
+    pub fn new(latest_language: bool, use_local_std: bool, experiments: Vec<String>) -> Self {
+        Self {
+            latest_language,
+            use_local_std,
+            experiments,
+        }
+    }
+
+    /// Returns built options corresponding to the prebuilt config.
+    pub fn build_options(&self) -> BuildOptions {
+        let mut build_options = BuildOptions::move_2();
+        build_options.dev = true;
+        if self.latest_language {
+            build_options = build_options.set_latest_language();
+        }
+        if self.use_local_std {
+            build_options.override_std = Some(StdVersion::Local(get_local_framework_path()));
+        }
+        for exp in &self.experiments {
+            build_options = build_options.with_experiment(exp);
+        }
+        build_options
+    }
+}
+
+/// Creates a [PrebuiltPackagesBundle] from the provided list of packages, serializes it and saves
+/// as a file in `base_dir/prebuilt.mpb` (`base_dir` should be a Cargo crate). Also generates a
+/// Rust file in that crate that allows to access prebuilt information. The output file must live
+/// in the same crate.
+pub fn create_prebuilt_packages_bundle(
     base_dir: impl AsRef<Path>,
     packages_to_build: Vec<(&str, &str, bool)>,
     output_file: impl AsRef<Path>,

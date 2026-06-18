@@ -35,9 +35,41 @@ async fn simulate_aptos_transfer(
         signature,
     } = txn.authenticator_ref()
     {
-        let signature = use_valid_signature
-            .then(|| signature.to_string())
-            .unwrap_or(Ed25519Signature::dummy_signature().to_string());
+        let signature = if use_valid_signature {
+            signature.to_string()
+        } else {
+            Ed25519Signature::dummy_signature().to_string()
+        };
+
+        let mut request = json!({
+            "sender": txn.sender().to_string(),
+            "sequence_number": txn.sequence_number().to_string(),
+            "max_gas_amount": txn.max_gas_amount().to_string(),
+            "gas_unit_price": txn.gas_unit_price().to_string(),
+            "expiration_timestamp_secs": txn.expiration_timestamp_secs().to_string(),
+            "payload": {
+                "type": "entry_function_payload",
+                "function": "0x1::aptos_account::transfer",
+                "type_arguments": [],
+                "arguments": [
+                    bob.address().to_standard_string(), transfer_amount.to_string(),
+                ]
+            },
+            "signature": {
+                "type": "ed25519_signature",
+                "public_key": public_key.to_string(),
+                "signature": signature,
+            },
+        });
+
+        if context.use_orderless_transactions {
+            let nonce = match txn.replay_protector() {
+                ReplayProtector::SequenceNumber(_) => 0,
+                ReplayProtector::Nonce(nonce) => nonce,
+            };
+            request["replay_protection_nonce"] = json!(nonce.to_string());
+        }
+
         let req = warp::test::request()
             .method("POST")
             .path("/v1/transactions/simulate")
@@ -76,6 +108,53 @@ async fn simulate_aptos_transfer(
             );
         }
         serde_json::from_slice(resp.body()).unwrap()
+    } else {
+        unreachable!("Simulation uses Ed25519 authenticator.");
+    }
+}
+
+async fn simulate_aptos_transfer_bcs(
+    context: &mut TestContext,
+    use_valid_signature: bool,
+    transfer_amount: u64,
+    expected_status: u16,
+    assert_gas_used: bool,
+) -> serde_json::Value {
+    let alice = &mut context.gen_account();
+    let bob = &mut context.gen_account();
+    let txn = context.mint_user_account(alice).await;
+    context.commit_block(&vec![txn]).await;
+
+    let txn = context.account_transfer_to(alice, bob.address(), transfer_amount);
+
+    if let TransactionAuthenticator::Ed25519 {
+        public_key,
+        signature,
+    } = txn.authenticator_ref()
+    {
+        let signature = if use_valid_signature {
+            signature.clone()
+        } else {
+            Ed25519Signature::dummy_signature()
+        };
+
+        let txn = SignedTransaction::new(
+            txn.clone().into_raw_transaction(),
+            public_key.clone(),
+            signature.clone(),
+        );
+        let bcs_txn = bcs::to_bytes(&txn).unwrap();
+
+        let resp = context
+            .expect_status_code(expected_status)
+            .post_bcs_txn("/transactions/simulate", bcs_txn)
+            .await;
+        if assert_gas_used {
+            let gas_used = resp[0]["gas_used"].to_string();
+            let gas_used = gas_used[1..gas_used.len() - 1].parse::<u64>().unwrap(); // Removing double quotes in the string
+            assert!(gas_used > 0);
+        }
+        resp
     } else {
         unreachable!("Simulation uses Ed25519 authenticator.");
     }

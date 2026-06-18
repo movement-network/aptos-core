@@ -61,6 +61,7 @@ use crate::{
     fee_statement::FeeStatement,
     function_info::FunctionInfo,
     keyless::FederatedKeylessPublicKey,
+    on_chain_config::{FeatureFlag, Features},
     proof::accumulator::InMemoryEventAccumulator,
     state_store::{state_key::StateKey, state_value::StateValue},
     validator_txn::ValidatorTransaction,
@@ -542,7 +543,7 @@ impl RawTransaction {
         self.payload
     }
 
-    pub fn executable_ref(&self) -> Result<TransactionExecutableRef> {
+    pub fn executable_ref(&self) -> Result<TransactionExecutableRef<'_>> {
         self.payload.executable_ref()
     }
 
@@ -701,7 +702,7 @@ impl TransactionExecutable {
         matches!(self, Self::EntryFunction(_))
     }
 
-    pub fn as_ref(&self) -> TransactionExecutableRef {
+    pub fn as_ref(&self) -> TransactionExecutableRef<'_> {
         match self {
             TransactionExecutable::EntryFunction(entry_function) => {
                 TransactionExecutableRef::EntryFunction(entry_function)
@@ -788,7 +789,7 @@ impl TransactionPayload {
         }
     }
 
-    pub fn executable_ref(&self) -> Result<TransactionExecutableRef> {
+    pub fn executable_ref(&self) -> Result<TransactionExecutableRef<'_>> {
         match self {
             TransactionPayload::EntryFunction(entry_function) => {
                 Ok(TransactionExecutableRef::EntryFunction(entry_function))
@@ -846,6 +847,20 @@ impl TransactionPayload {
         use_txn_payload_v2_format: bool,
         use_orderless_transactions: bool,
     ) -> Self {
+        self.upgrade_payload_with_fn(
+            use_txn_payload_v2_format,
+            use_orderless_transactions.then_some(|| rng.r#gen()),
+        )
+    }
+
+    pub fn upgrade_payload_with_fn<F>(
+        self,
+        use_txn_payload_v2_format: bool,
+        use_orderless_transactions: Option<F>,
+    ) -> Self
+    where
+        F: FnOnce() -> u64,
+    {
         if use_txn_payload_v2_format {
             let executable = self
                 .executable()
@@ -1151,7 +1166,7 @@ impl SignedTransaction {
         &self.raw_txn.payload
     }
 
-    pub fn executable_ref(&self) -> Result<TransactionExecutableRef> {
+    pub fn executable_ref(&self) -> Result<TransactionExecutableRef<'_>> {
         self.raw_txn.executable_ref()
     }
 
@@ -1487,15 +1502,22 @@ impl TransactionStatus {
 
     pub fn as_kept_status(&self) -> Result<ExecutionStatus> {
         match self {
-            TransactionStatus::Keep(s) => Ok(s.clone()),
-            _ => Err(format_err!("Not Keep.")),
+            Self::Keep(s) => Ok(s.clone()),
+            status => Err(format_err!("Expected kept status, got {:?}", status)),
         }
     }
 
-    pub fn from_vm_status(vm_status: VMStatus, charge_invariant_violation: bool) -> Self {
+    pub fn from_vm_status(
+        vm_status: VMStatus,
+        features: &Features,
+        memory_limit_exceeded_as_miscellaneous_error: bool,
+    ) -> Self {
         let status_code = vm_status.status_code();
         // TODO: keep_or_discard logic should be deprecated from Move repo and refactored into here.
-        match vm_status.keep_or_discard() {
+        match vm_status.keep_or_discard(
+            features.is_enabled(FeatureFlag::ENABLE_FUNCTION_VALUES),
+            memory_limit_exceeded_as_miscellaneous_error,
+        ) {
             Ok(recorded) => match recorded {
                 // TODO(bowu):status code should be removed from transaction status
                 KeptVMStatus::MiscellaneousError => {
@@ -1505,7 +1527,7 @@ impl TransactionStatus {
             },
             Err(code) => {
                 if code.status_type() == StatusType::InvariantViolation
-                    && charge_invariant_violation
+                    && features.is_enabled(FeatureFlag::CHARGE_INVARIANT_VIOLATION)
                 {
                     TransactionStatus::Keep(ExecutionStatus::MiscellaneousError(Some(code)))
                 } else {
@@ -1621,37 +1643,6 @@ impl Default for TransactionAuxiliaryData {
 }
 
 impl TransactionAuxiliaryData {
-    pub fn from_vm_status(vm_status: &VMStatus) -> Self {
-        let detail_error_message = match vm_status.clone().keep_or_discard() {
-            Ok(KeptVMStatus::MiscellaneousError) => {
-                let status_code = vm_status.status_code();
-                Some(VMErrorDetail::new(status_code, None))
-            },
-            Ok(KeptVMStatus::ExecutionFailure {
-                location: _,
-                function: _,
-                code_offset: _,
-                message,
-            }) => {
-                let status_code = vm_status.status_code();
-                Some(VMErrorDetail::new(status_code, message))
-            },
-            Err(status_code) => {
-                // emulate the behavior of
-                if status_code.status_type() == StatusType::InvariantViolation {
-                    Some(VMErrorDetail::new(status_code, None))
-                } else {
-                    None
-                }
-            },
-            _ => None,
-        };
-
-        Self::V1(TransactionAuxiliaryDataV1 {
-            detail_error_message,
-        })
-    }
-
     pub fn get_detail_error_message(&self) -> Option<&VMErrorDetail> {
         match self {
             Self::V1(data) => data.detail_error_message.as_ref(),
@@ -2624,4 +2615,135 @@ impl ViewFunctionOutput {
     pub fn new(values: Result<Vec<Vec<u8>>>, gas_used: u64) -> Self {
         Self { values, gas_used }
     }
+
+    pub fn new_ok(values: Vec<Vec<u8>>, gas_used: u64) -> Self {
+        Self {
+            values: Ok(values),
+            gas_used,
+        }
+    }
+
+    pub fn new_error_message(
+        message: String,
+        vm_status: Option<StatusCode>,
+        gas_used: u64,
+    ) -> Self {
+        Self {
+            values: Err(ViewFunctionError::ErrorMessage(message, vm_status)),
+            gas_used,
+        }
+    }
+
+    pub fn new_move_abort_error(
+        status: ExecutionStatus,
+        vm_status: Option<StatusCode>,
+        gas_used: u64,
+    ) -> Self {
+        Self {
+            values: Err(ViewFunctionError::MoveAbort(status, vm_status)),
+            gas_used,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct AuxiliaryInfo {
+    persisted_info: PersistedAuxiliaryInfo,
+    ephemeral_info: Option<EphemeralAuxiliaryInfo>,
+}
+
+impl AuxiliaryInfo {
+    pub fn new(
+        persisted_info: PersistedAuxiliaryInfo,
+        ephemeral_info: Option<EphemeralAuxiliaryInfo>,
+    ) -> Self {
+        Self {
+            persisted_info,
+            ephemeral_info,
+        }
+    }
+
+    pub fn into_persisted_info(self) -> PersistedAuxiliaryInfo {
+        self.persisted_info
+    }
+
+    pub fn persisted_info(&self) -> &PersistedAuxiliaryInfo {
+        &self.persisted_info
+    }
+
+    pub fn ephemeral_info(&self) -> &Option<EphemeralAuxiliaryInfo> {
+        &self.ephemeral_info
+    }
+
+    pub fn persisted_info_hash(&self) -> Option<HashValue> {
+        match self.persisted_info {
+            PersistedAuxiliaryInfo::V1 { .. } => Some(self.persisted_info.hash()),
+            PersistedAuxiliaryInfo::None => None,
+        }
+    }
+}
+
+impl Default for AuxiliaryInfo {
+    fn default() -> Self {
+        Self {
+            persisted_info: PersistedAuxiliaryInfo::None, // Use None by default for compatibility
+            ephemeral_info: None,
+        }
+    }
+}
+
+impl AuxiliaryInfoTrait for AuxiliaryInfo {
+    fn new_empty() -> Self {
+        Self {
+            persisted_info: PersistedAuxiliaryInfo::None,
+            ephemeral_info: None,
+        }
+    }
+
+    fn transaction_index(&self) -> Option<u32> {
+        match self.persisted_info {
+            PersistedAuxiliaryInfo::V1 { transaction_index } => Some(transaction_index),
+            PersistedAuxiliaryInfo::None => None,
+        }
+    }
+
+    fn proposer_index(&self) -> Option<u64> {
+        self.ephemeral_info
+            .map(|EphemeralAuxiliaryInfo { proposer_index }| proposer_index)
+    }
+
+    fn auxiliary_info_at_txn_index(txn_index: u32) -> Self {
+        Self {
+            persisted_info: PersistedAuxiliaryInfo::V1 {
+                transaction_index: txn_index,
+            },
+            ephemeral_info: None,
+        }
+    }
+}
+
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, CryptoHasher, BCSCryptoHash,
+)]
+#[cfg_attr(any(test, feature = "fuzzing"), derive(Arbitrary))]
+pub enum PersistedAuxiliaryInfo {
+    None,
+    // The index of the transaction in a block (after shuffler, before execution).
+    // Note that this would be slightly different from the index of transactions that get committed
+    // onchain, as this considers transactions that may get discarded.
+    V1 { transaction_index: u32 },
+}
+
+pub trait AuxiliaryInfoTrait: Clone {
+    fn transaction_index(&self) -> Option<u32>;
+    fn proposer_index(&self) -> Option<u64>;
+    fn new_empty() -> Self;
+    fn auxiliary_info_at_txn_index(txn_index: u32) -> Self;
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct EphemeralAuxiliaryInfo {
+    // TODO(grao): After execution pool is implemented we might want this information be persisted
+    // onchain?
+    pub proposer_index: u64,
 }

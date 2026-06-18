@@ -48,15 +48,10 @@ fn test_new_initialized_configs() {
 
     // Bootstrap the database
     let (node_config, _) = test_config();
-    bootstrap_genesis::<AptosVMBlockExecutor>(&db_rw, get_genesis_txn(&node_config).unwrap())
-        .unwrap();
-
-    // Get the actual waypoint from the bootstrapped database
-    let genesis_ledger_info = db_rw.reader.get_latest_ledger_info().unwrap();
-    let waypoint = aptos_types::waypoint::Waypoint::new_any(genesis_ledger_info.ledger_info());
-
-    // Set the global waypoint version for event notifications
-    set_waypoint_version(waypoint.version());
+    let genesis_waypoint =
+        bootstrap_genesis::<AptosVMBlockExecutor>(&db_rw, get_genesis_txn(&node_config).unwrap())
+            .unwrap();
+    set_waypoint_version(genesis_waypoint.version());
 
     // Create mempool and consensus notifiers
     let (mempool_notifier, _) = new_mempool_notifier_listener_pair(100);
@@ -98,7 +93,7 @@ fn test_new_initialized_configs() {
     let _ = DriverFactory::create_and_spawn_driver(
         true,
         &node_config,
-        waypoint,
+        node_config.base.waypoint.waypoint(),
         db_rw,
         chunk_executor,
         mempool_notifier,

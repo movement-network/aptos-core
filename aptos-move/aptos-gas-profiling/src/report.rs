@@ -76,7 +76,19 @@ where
 impl TransactionGasLog {
     pub fn generate_html_report(&self, path: impl AsRef<Path>, header: String) -> Result<()> {
         let mut data = Map::new();
-        data.insert("title".to_string(), Value::String(header));
+        data.insert(
+            "title".to_string(),
+            Value::String(
+                if self.num_txns > 1 {
+                    format!(
+                        "{} - aggregated across {} transactions",
+                        header, self.num_txns
+                    )
+                } else {
+                    header
+                },
+            ),
+        );
 
         // Flamegraphs
         let graph_exec_io = self.exec_io.to_flamegraph("Execution & IO".to_string())?;
@@ -130,11 +142,7 @@ impl TransactionGasLog {
             Value::Array(
                 deps.iter()
                     .map(|dep| {
-                        let name = format!(
-                            "{}{}",
-                            Render(&dep.id),
-                            if dep.is_new { " (new)" } else { "" }
-                        );
+                        let name = dep.render();
                         let cost_scaled =
                             format!("{:.8}", (u64::from(dep.cost) as f64 / scaling_factor));
                         let cost_scaled =

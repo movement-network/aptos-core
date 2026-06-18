@@ -649,7 +649,7 @@ impl StateStore {
         &self.buffered_state
     }
 
-    pub fn current_state_locked(&self) -> MutexGuard<LedgerStateWithSummary> {
+    pub fn current_state_locked(&self) -> MutexGuard<'_, LedgerStateWithSummary> {
         self.current_state.lock()
     }
 
@@ -661,7 +661,7 @@ impl StateStore {
         key_prefix: &StateKeyPrefix,
         first_key_opt: Option<&StateKey>,
         desired_version: Version,
-    ) -> Result<PrefixedStateValueIterator> {
+    ) -> Result<PrefixedStateValueIterator<'_>> {
         // this can only handle non-sharded db scenario.
         // For sharded db, should look at API side using internal indexer to handle this request
         PrefixedStateValueIterator::new(
@@ -989,7 +989,7 @@ impl StateStore {
         self: &Arc<Self>,
         version: Version,
         start_idx: usize,
-    ) -> Result<impl Iterator<Item = Result<(StateKey, StateValue)>> + Send + Sync> {
+    ) -> Result<impl Iterator<Item = Result<(StateKey, StateValue)>> + Send + Sync + use<>> {
         let store = Arc::clone(self);
         Ok(JellyfishMerkleIterator::new_by_index(
             Arc::clone(&self.state_merkle_db),
@@ -1011,7 +1011,20 @@ impl StateStore {
         first_index: usize,
         chunk_size: usize,
     ) -> Result<StateValueChunkWithProof> {
-        let result_iter = JellyfishMerkleIterator::new_by_index(
+        let state_key_values: Vec<(StateKey, StateValue)> = self
+            .get_value_chunk_iter(version, first_index, chunk_size)?
+            .collect::<Result<Vec<_>>>()?;
+        self.get_value_chunk_proof(version, first_index, state_key_values)
+    }
+
+    pub fn get_value_chunk_iter(
+        self: &Arc<Self>,
+        version: Version,
+        first_index: usize,
+        chunk_size: usize,
+    ) -> Result<impl Iterator<Item = Result<(StateKey, StateValue)>> + Send + Sync + use<>> {
+        let store = Arc::clone(self);
+        let value_chunk_iter = JellyfishMerkleIterator::new_by_index(
             Arc::clone(&self.state_merkle_db),
             version,
             first_index,
@@ -1165,7 +1178,7 @@ impl StateValueWriter<StateKey, StateValue> for StateStore {
                 .unwrap()
                 .statekeys_enabled()
         {
-            let keys = node_batch.iter().map(|(key, _)| key.0.clone()).collect();
+            let keys = node_batch.keys().map(|key| key.0.clone()).collect();
             self.internal_indexer_db
                 .as_ref()
                 .unwrap()

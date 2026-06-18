@@ -161,6 +161,7 @@ impl CallFrame {
     fn to_erased(&self) -> Node<InternalGas> {
         let name = match &self.name {
             FrameName::Script => "script".to_string(),
+            FrameName::TransactionBatch => "transaction batch".to_string(),
             FrameName::Function {
                 module_id,
                 name,
@@ -200,14 +201,7 @@ impl WriteTransient {
 
 impl Dependency {
     fn to_erased(&self) -> Node<InternalGas> {
-        Node::new(
-            format!(
-                "{}{}",
-                Render(&self.id),
-                if self.is_new { " (new)" } else { "" }
-            ),
-            self.cost,
-        )
+        Node::new(self.render(), self.cost)
     }
 }
 

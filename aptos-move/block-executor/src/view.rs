@@ -1871,7 +1871,10 @@ mod test {
     use super::*;
     use crate::{
         captured_reads::{CapturedReads, DelayedFieldRead, DelayedFieldReadKind},
-        proptest_types::types::{KeyType, MockEvent, ValueType},
+        proptest_types::{
+            mock_executor::MockEvent,
+            types::{KeyType, ValueType},
+        },
         scheduler::{DependencyResult, Scheduler, TWaitForDependency},
         view::{delayed_field_try_add_delta_outcome_impl, get_delayed_field_value_impl, ViewState},
     };
@@ -2533,10 +2536,6 @@ mod test {
         Value::struct_(Struct::pack(vec![inner]))
     }
 
-    fn create_vector_value(inner: Vec<Value>) -> Value {
-        Value::vector_for_testing_only(inner)
-    }
-
     fn create_state_value(value: &Value, layout: &MoveTypeLayout) -> StateValue {
         StateValue::new_legacy(
             ValueSerDeContext::new(None)
@@ -2634,11 +2633,14 @@ mod test {
         let storage_layout = create_struct_layout(create_vector_layout(
             create_aggregator_storage_layout(MoveTypeLayout::U64),
         ));
-        let value = create_struct_value(create_vector_value(vec![
-            create_aggregator_value_u64(20, 50),
-            create_aggregator_value_u64(35, 65),
-            create_aggregator_value_u64(0, 20),
-        ]));
+        let value = create_struct_value(
+            Value::vector_unchecked(vec![
+                create_aggregator_value_u64(20, 50),
+                create_aggregator_value_u64(35, 65),
+                create_aggregator_value_u64(0, 20),
+            ])
+            .unwrap(),
+        );
         let state_value = create_state_value(&value, &storage_layout);
 
         let layout = create_struct_layout(create_vector_layout(create_aggregator_layout_u64()));
@@ -2655,21 +2657,21 @@ mod test {
             RefCell::new(9),
             "The counter should have been updated to 9"
         );
-        let patched_value =
-            Value::struct_(Struct::pack(vec![Value::vector_for_testing_only(vec![
-                Value::struct_(Struct::pack(vec![
-                    Value::u64(DelayedFieldID::new_with_width(6, 8).as_u64()),
-                    Value::u64(50),
-                ])),
-                Value::struct_(Struct::pack(vec![
-                    Value::u64(DelayedFieldID::new_with_width(7, 8).as_u64()),
-                    Value::u64(65),
-                ])),
-                Value::struct_(Struct::pack(vec![
-                    Value::u64(DelayedFieldID::new_with_width(8, 8).as_u64()),
-                    Value::u64(20),
-                ])),
-            ])]));
+        let patched_value = Value::struct_(Struct::pack(vec![Value::vector_unchecked(vec![
+            Value::struct_(Struct::pack(vec![
+                Value::u64(DelayedFieldID::new_with_width(6, 8).as_u64()),
+                Value::u64(50),
+            ])),
+            Value::struct_(Struct::pack(vec![
+                Value::u64(DelayedFieldID::new_with_width(7, 8).as_u64()),
+                Value::u64(65),
+            ])),
+            Value::struct_(Struct::pack(vec![
+                Value::u64(DelayedFieldID::new_with_width(8, 8).as_u64()),
+                Value::u64(20),
+            ])),
+        ])
+        .unwrap()]));
         assert_eq!(
             patched_state_value,
             create_state_value(&patched_value, &storage_layout),
@@ -2692,11 +2694,14 @@ mod test {
         let storage_layout = create_struct_layout(create_vector_layout(
             create_snapshot_storage_layout(MoveTypeLayout::U128),
         ));
-        let value = create_struct_value(create_vector_value(vec![
-            create_snapshot_value(Value::u128(20)),
-            create_snapshot_value(Value::u128(35)),
-            create_snapshot_value(Value::u128(0)),
-        ]));
+        let value = create_struct_value(
+            Value::vector_unchecked(vec![
+                create_snapshot_value(Value::u128(20)),
+                create_snapshot_value(Value::u128(35)),
+                create_snapshot_value(Value::u128(0)),
+            ])
+            .unwrap(),
+        );
         let state_value = create_state_value(&value, &storage_layout);
 
         let layout = create_struct_layout(create_vector_layout(create_snapshot_layout(
@@ -2715,18 +2720,18 @@ mod test {
             RefCell::new(12),
             "The counter should have been updated to 12"
         );
-        let patched_value =
-            Value::struct_(Struct::pack(vec![Value::vector_for_testing_only(vec![
-                create_snapshot_value(Value::u128(
-                    DelayedFieldID::new_with_width(9, 16).as_u64() as u128
-                )),
-                create_snapshot_value(Value::u128(
-                    DelayedFieldID::new_with_width(10, 16).as_u64() as u128
-                )),
-                create_snapshot_value(Value::u128(
-                    DelayedFieldID::new_with_width(11, 16).as_u64() as u128
-                )),
-            ])]));
+        let patched_value = Value::struct_(Struct::pack(vec![Value::vector_unchecked(vec![
+            create_snapshot_value(Value::u128(
+                DelayedFieldID::new_with_width(9, 16).as_u64() as u128
+            )),
+            create_snapshot_value(Value::u128(
+                DelayedFieldID::new_with_width(10, 16).as_u64() as u128
+            )),
+            create_snapshot_value(Value::u128(
+                DelayedFieldID::new_with_width(11, 16).as_u64() as u128
+            )),
+        ])
+        .unwrap()]));
         assert_eq!(
             patched_state_value,
             create_state_value(&patched_value, &storage_layout),
@@ -2749,11 +2754,14 @@ mod test {
         */
         let storage_layout =
             create_struct_layout(create_vector_layout(create_derived_string_storage_layout()));
-        let value = create_struct_value(create_vector_value(vec![
-            create_derived_value("hello", 60),
-            create_derived_value("ab", 55),
-            create_derived_value("c", 50),
-        ]));
+        let value = create_struct_value(
+            Value::vector_unchecked(vec![
+                create_derived_value("hello", 60),
+                create_derived_value("ab", 55),
+                create_derived_value("c", 50),
+            ])
+            .unwrap(),
+        );
         let state_value = create_state_value(&value, &storage_layout);
 
         let layout = create_struct_layout(create_vector_layout(create_derived_string_layout()));
@@ -2771,18 +2779,18 @@ mod test {
             "The counter should have been updated to 15"
         );
 
-        let patched_value =
-            Value::struct_(Struct::pack(vec![Value::vector_for_testing_only(vec![
-                DelayedFieldID::new_with_width(12, 60)
-                    .into_derived_string_struct()
-                    .unwrap(),
-                DelayedFieldID::new_with_width(13, 55)
-                    .into_derived_string_struct()
-                    .unwrap(),
-                DelayedFieldID::new_with_width(14, 50)
-                    .into_derived_string_struct()
-                    .unwrap(),
-            ])]));
+        let patched_value = Value::struct_(Struct::pack(vec![Value::vector_unchecked(vec![
+            DelayedFieldID::new_with_width(12, 60)
+                .into_derived_string_struct()
+                .unwrap(),
+            DelayedFieldID::new_with_width(13, 55)
+                .into_derived_string_struct()
+                .unwrap(),
+            DelayedFieldID::new_with_width(14, 50)
+                .into_derived_string_struct()
+                .unwrap(),
+        ])
+        .unwrap()]));
         assert_eq!(
             patched_state_value,
             create_state_value(&patched_value, &storage_layout),
@@ -3004,14 +3012,14 @@ mod test {
         let views = holder.new_view();
 
         assert_ok_eq!(
-            views.get_resource_state_value(&KeyType::<u32>(1, false), None),
+            views.get_resource_state_value(&KeyType::<u32>(1), None),
             None
         );
 
-        assert_ok_eq!(views.resource_exists(&KeyType::<u32>(1, false)), false,);
+        assert_ok_eq!(views.resource_exists(&KeyType::<u32>(1)), false,);
 
         assert_ok_eq!(
-            views.get_resource_state_value_metadata(&KeyType::<u32>(1, false)),
+            views.get_resource_state_value_metadata(&KeyType::<u32>(1)),
             None,
         );
     }
@@ -3019,14 +3027,14 @@ mod test {
     #[test]
     fn test_non_value_reads_not_recorded() {
         let state_value = create_state_value(&Value::u64(12321), &MoveTypeLayout::U64);
-        let data = HashMap::from([(KeyType::<u32>(1, false), state_value.clone())]);
+        let data = HashMap::from([(KeyType::<u32>(1), state_value.clone())]);
 
         let holder = ComparisonHolder::new(data, 1000);
         let views = holder.new_view();
 
-        assert_ok_eq!(views.resource_exists(&KeyType::<u32>(1, false)), true);
+        assert_ok_eq!(views.resource_exists(&KeyType::<u32>(1)), true);
         assert!(views
-            .get_resource_state_value_metadata(&KeyType::<u32>(1, false))
+            .get_resource_state_value_metadata(&KeyType::<u32>(1))
             .unwrap()
             .is_some(),);
 
@@ -3061,21 +3069,18 @@ mod test {
     #[test]
     fn test_regular_read_operations() {
         let state_value = create_state_value(&Value::u64(12321), &MoveTypeLayout::U64);
-        let data = HashMap::from([(KeyType::<u32>(1, false), state_value.clone())]);
+        let data = HashMap::from([(KeyType::<u32>(1), state_value.clone())]);
 
         let holder = ComparisonHolder::new(data, 1000);
         let views = holder.new_view();
 
         assert_ok_eq!(
-            views.get_resource_state_value(&KeyType::<u32>(1, false), None),
+            views.get_resource_state_value(&KeyType::<u32>(1), None),
             Some(state_value.clone())
         );
 
         assert_fetch_eq(
-            holder
-                .holder
-                .unsync_map
-                .fetch_data(&KeyType::<u32>(1, false)),
+            holder.holder.unsync_map.fetch_data(&KeyType::<u32>(1)),
             Some(TransactionWrite::from_state_value(Some(state_value))),
             None,
         );
@@ -3089,7 +3094,7 @@ mod test {
             create_struct_layout(create_aggregator_storage_layout(MoveTypeLayout::U64));
         let value = create_struct_value(create_aggregator_value_u64(25, 30));
         let state_value = create_state_value(&value, &storage_layout);
-        let data = HashMap::from([(KeyType::<u32>(1, false), state_value.clone())]);
+        let data = HashMap::from([(KeyType::<u32>(1), state_value.clone())]);
 
         let start_counter = 1000;
         let id = DelayedFieldID::new_with_width(start_counter, 8);
@@ -3103,29 +3108,26 @@ mod test {
         match check_metadata {
             Some(true) => {
                 views
-                    .get_resource_state_value_metadata(&KeyType::<u32>(1, false))
+                    .get_resource_state_value_metadata(&KeyType::<u32>(1))
                     .unwrap();
             },
             Some(false) => {
-                assert_ok_eq!(views.resource_exists(&KeyType::<u32>(1, false)), true,);
+                assert_ok_eq!(views.resource_exists(&KeyType::<u32>(1)), true,);
             },
             None => {},
         };
 
         let layout = create_struct_layout(create_aggregator_layout_u64());
         assert_ok_eq!(
-            views.get_resource_state_value(&KeyType::<u32>(1, false), Some(&layout)),
+            views.get_resource_state_value(&KeyType::<u32>(1), Some(&layout)),
             Some(patched_state_value.clone())
         );
         assert!(views
             .get_reads_needing_exchange(&HashSet::from([id]), &HashSet::new())
             .unwrap()
-            .contains_key(&KeyType(1, false)));
+            .contains_key(&KeyType::<u32>(1)));
         assert_fetch_eq(
-            holder
-                .holder
-                .unsync_map
-                .fetch_data(&KeyType::<u32>(1, false)),
+            holder.holder.unsync_map.fetch_data(&KeyType::<u32>(1)),
             Some(TransactionWrite::from_state_value(Some(
                 patched_state_value,
             ))),
@@ -3137,12 +3139,12 @@ mod test {
     fn test_read_operations() {
         let state_value_3 = create_state_value(&Value::u64(12321), &MoveTypeLayout::U64);
         let mut data = HashMap::new();
-        data.insert(KeyType::<u32>(3, false), state_value_3.clone());
+        data.insert(KeyType::<u32>(3), state_value_3.clone());
         let storage_layout =
             create_struct_layout(create_aggregator_storage_layout(MoveTypeLayout::U64));
         let value = create_struct_value(create_aggregator_value_u64(25, 30));
         let state_value_4 = create_state_value(&value, &storage_layout);
-        data.insert(KeyType::<u32>(4, false), state_value_4);
+        data.insert(KeyType::<u32>(4), state_value_4);
 
         let start_counter = 1000;
         let id = DelayedFieldID::new_with_width(start_counter, 8);
@@ -3151,20 +3153,20 @@ mod test {
 
         assert_eq!(
             views
-                .get_resource_state_value(&KeyType::<u32>(1, false), None)
+                .get_resource_state_value(&KeyType::<u32>(1), None)
                 .unwrap(),
             None
         );
         let layout = create_struct_layout(create_aggregator_layout_u64());
         assert_eq!(
             views
-                .get_resource_state_value(&KeyType::<u32>(2, false), Some(&layout))
+                .get_resource_state_value(&KeyType::<u32>(2), Some(&layout))
                 .unwrap(),
             None
         );
         assert_eq!(
             views
-                .get_resource_state_value(&KeyType::<u32>(3, false), None)
+                .get_resource_state_value(&KeyType::<u32>(3), None)
                 .unwrap(),
             Some(state_value_3.clone())
         );
@@ -3176,14 +3178,14 @@ mod test {
             holder
                 .versioned_map
                 .data()
-                .fetch_data(&KeyType::<u32>(3, false), 1)
+                .fetch_data(&KeyType::<u32>(3), 1)
         );
 
         let patched_value = create_struct_value(create_aggregator_value_u64(id.as_u64(), 30));
         let state_value_4 = create_state_value(&patched_value, &storage_layout);
         assert_eq!(
             views
-                .get_resource_state_value(&KeyType::<u32>(4, false), Some(&layout))
+                .get_resource_state_value(&KeyType::<u32>(4), Some(&layout))
                 .unwrap(),
             Some(state_value_4.clone())
         );
@@ -3217,6 +3219,6 @@ mod test {
 
         // TODO[agg_v2](test): This assertion fails.
         // let data_read = DataRead::Versioned(Ok((1,0)), Arc::new(TransactionWrite::from_state_value(Some(state_value_4))), Some(Arc::new(layout)));
-        // assert!(read_set_with_delayed_fields.any(|x| x == (&KeyType::<u32>(4, false), &data_read)));
+        // assert!(read_set_with_delayed_fields.any(|x| x == (&KeyType::<u32>(4), &data_read)));
     }
 }

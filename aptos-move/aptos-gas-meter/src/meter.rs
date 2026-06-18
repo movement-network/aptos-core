@@ -22,7 +22,7 @@ use move_core_types::{
     vm_status::StatusCode,
 };
 use move_vm_types::{
-    gas::{DependencyGasMeter, GasMeter, NativeGasMeter, SimpleInstruction},
+    gas::{DependencyGasMeter, DependencyKind, GasMeter, NativeGasMeter, SimpleInstruction},
     views::{TypeView, ValueView},
 };
 
@@ -53,7 +53,7 @@ where
     #[inline]
     fn charge_dependency(
         &mut self,
-        _is_new: bool,
+        _kind: DependencyKind,
         addr: &AccountAddress,
         _name: &IdentStr,
         size: NumBytes,
@@ -137,6 +137,14 @@ where
             LdU64 => LD_U64,
             LdU128 => LD_U128,
             LdU256 => LD_U256,
+
+            LdI8 => LD_U8,  // TODO(#17645): same cost as for unsigned?
+            LdI16 => LD_U16,
+            LdI32 => LD_U32,
+            LdI64 => LD_U64,
+            LdI128 => LD_U128,
+            LdI256 => LD_U256,
+
             LdTrue => LD_TRUE,
             LdFalse => LD_FALSE,
 
@@ -162,11 +170,19 @@ where
             CastU128 => CAST_U128,
             CastU256 => CAST_U256,
 
+            CastI8 => CAST_U8,   // TODO(#17645): same cost as for unsigned?
+            CastI16 => CAST_U16,
+            CastI32 => CAST_U32,
+            CastI64 => CAST_U64,
+            CastI128 => CAST_U128,
+            CastI256 => CAST_U256,
+
             Add => ADD,
             Sub => SUB,
             Mul => MUL,
             Mod => MOD_,
             Div => DIV,
+            Negate => SUB,  // TODO(#17645): same cost as for unsigned?
 
             BitOr => BIT_OR,
             BitAnd => BIT_AND,
@@ -340,6 +356,24 @@ where
     }
 
     #[inline]
+    fn charge_pack_closure(
+        &mut self,
+        is_generic: bool,
+        args: impl ExactSizeIterator<Item = impl ValueView>,
+    ) -> PartialVMResult<()> {
+        let num_args = NumArgs::new(args.len() as u64);
+
+        match is_generic {
+            false => self
+                .algebra
+                .charge_execution(PACK_CLOSURE_BASE + PACK_CLOSURE_PER_ARG * num_args),
+            true => self.algebra.charge_execution(
+                PACK_CLOSURE_GENERIC_BASE + PACK_CLOSURE_GENERIC_PER_ARG * num_args,
+            ),
+        }
+    }
+
+    #[inline]
     fn charge_read_ref(&mut self, val: impl ValueView) -> PartialVMResult<()> {
         let (stack_size, heap_size) = self
             .vm_gas_params()
@@ -448,9 +482,8 @@ where
     }
 
     #[inline]
-    fn charge_vec_pack<'a>(
+    fn charge_vec_pack(
         &mut self,
-        _ty: impl TypeView + 'a,
         args: impl ExactSizeIterator<Item = impl ValueView>,
     ) -> PartialVMResult<()> {
         let num_args = NumArgs::new(args.len() as u64);
@@ -462,7 +495,6 @@ where
     #[inline]
     fn charge_vec_unpack(
         &mut self,
-        _ty: impl TypeView,
         expect_num_elements: NumArgs,
         _elems: impl ExactSizeIterator<Item = impl ValueView>,
     ) -> PartialVMResult<()> {
@@ -471,17 +503,12 @@ where
     }
 
     #[inline]
-    fn charge_vec_len(&mut self, _ty: impl TypeView) -> PartialVMResult<()> {
+    fn charge_vec_len(&mut self) -> PartialVMResult<()> {
         self.algebra.charge_execution(VEC_LEN_BASE)
     }
 
     #[inline]
-    fn charge_vec_borrow(
-        &mut self,
-        is_mut: bool,
-        _ty: impl TypeView,
-        _is_success: bool,
-    ) -> PartialVMResult<()> {
+    fn charge_vec_borrow(&mut self, is_mut: bool) -> PartialVMResult<()> {
         match is_mut {
             false => self.algebra.charge_execution(VEC_IMM_BORROW_BASE),
             true => self.algebra.charge_execution(VEC_MUT_BORROW_BASE),
@@ -489,25 +516,17 @@ where
     }
 
     #[inline]
-    fn charge_vec_push_back(
-        &mut self,
-        _ty: impl TypeView,
-        _val: impl ValueView,
-    ) -> PartialVMResult<()> {
+    fn charge_vec_push_back(&mut self, _val: impl ValueView) -> PartialVMResult<()> {
         self.algebra.charge_execution(VEC_PUSH_BACK_BASE)
     }
 
     #[inline]
-    fn charge_vec_pop_back(
-        &mut self,
-        _ty: impl TypeView,
-        _val: Option<impl ValueView>,
-    ) -> PartialVMResult<()> {
+    fn charge_vec_pop_back(&mut self, _val: Option<impl ValueView>) -> PartialVMResult<()> {
         self.algebra.charge_execution(VEC_POP_BACK_BASE)
     }
 
     #[inline]
-    fn charge_vec_swap(&mut self, _ty: impl TypeView) -> PartialVMResult<()> {
+    fn charge_vec_swap(&mut self) -> PartialVMResult<()> {
         self.algebra.charge_execution(VEC_SWAP_BASE)
     }
 

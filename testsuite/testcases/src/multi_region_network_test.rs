@@ -86,13 +86,11 @@ fn create_link_stats_table_with_peer_groups(
 
     // Create the link stats table with peer groups
     let peer_chunks = chunk_peers(peers, number_of_regions);
-    let peer_groups = peer_chunks
+    peer_chunks
         .into_iter()
         .zip(link_stats_table.iter())
         .map(|(chunk, (from_region, stats))| (from_region.clone(), chunk, stats.clone()))
-        .collect();
-
-    peer_groups
+        .collect()
 }
 
 // A map of "source" regions to a map of "destination" region to (bandwidth, latency)
@@ -283,7 +281,7 @@ impl MultiRegionNetworkEmulationTest {
     /// the fullnodes).
     async fn create_netem_chaos(
         &self,
-        swarm: Arc<tokio::sync::RwLock<Box<(dyn Swarm)>>>,
+        swarm: Arc<tokio::sync::RwLock<Box<dyn Swarm>>>,
     ) -> SwarmNetEm {
         let (all_validators, all_vfns) = {
             let swarm = swarm.read().await;

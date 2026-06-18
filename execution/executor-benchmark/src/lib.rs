@@ -37,6 +37,9 @@ use aptos_transaction_generator_lib::{
 };
 use aptos_types::on_chain_config::{FeatureFlag, Features};
 use aptos_vm::{aptos_vm::AptosVMBlockExecutor, AptosVM, VMBlockExecutor};
+use aptos_vm_environment::prod_configs::{
+    set_async_runtime_checks, set_layout_caches, set_paranoid_type_checks,
+};
 use db_generator::create_db_with_accounts;
 use db_reliable_submitter::DbReliableTransactionSubmitter;
 use measurements::{EventMeasurements, OverallMeasurement, OverallMeasuring};
@@ -525,6 +528,9 @@ pub fn run_single_with_default_params(
 ) -> SingleRunResults {
     aptos_logger::Logger::new().init();
 
+    set_layout_caches(true);
+    set_paranoid_type_checks(true);
+    set_async_runtime_checks(true);
     AptosVM::set_num_shards_once(1);
     AptosVM::set_concurrency_level_once(concurrency_level);
     AptosVM::set_processed_transactions_detailed_counters();

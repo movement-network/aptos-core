@@ -826,7 +826,7 @@ module aptos_framework::confidential_asset {
 
     /// Designates (or rotates) the account authorized to call [`set_chain_auditor`].
     /// Governance-only. No clear form — rotate to a successor instead.
-    public entry fun set_chain_auditor_admin(
+    public fun set_chain_auditor_admin(
         aptos_framework: &signer,
         new_admin: address) acquires GlobalConfig
     {

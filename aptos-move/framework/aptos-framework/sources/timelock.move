@@ -631,9 +631,9 @@ module aptos_framework::timelock {
         emit(CancelTransaction { timelock_account, actor: actor_addr, proposal_hash });
     }
 
-    /// Pre-authorize resolution for an executor that cannot submit a `Script` itself (e.g. an Aptos
-    /// multisig). After approval any party may submit the committed script; `resolve` still enforces
-    /// the delay, and the approval is bound to proposal_hash so it cannot authorize anything else.
+    /// Pre-authorize resolution for an executor that cannot submit a `Script` itself.
+    /// After approval any party may submit the committed script; Both `approve_resolution` and `resolve`
+    /// enforce the delay, and the approval is bound to proposal_hash so it cannot authorize anything else.
     ///
     /// @param executor An executor's signer (or a creator when the executor list is empty).
     /// @param timelock_account The timelock account address.

@@ -315,18 +315,15 @@ module aptos_framework::timelock {
 
     // =============================== Account creation ===============================
 
-    /// Create a new timelock account. The `deployer` only authorizes resource-account creation
-    /// and pays gas; it gains no role unless listed in `creators`/`executors`.
+    /// Create a new timelock account. The deployer only authorizes resource-account creation and
+    /// pays gas; it gains no role unless listed in the member arguments.
     ///
-    /// # Arguments
-    /// * `creators` - Authorized to propose. At least one, no duplicates, not the timelock address.
-    /// * `executors` - Authorized to execute after the delay. If empty, creators may execute.
-    /// * `cancelers` - Authorized to cancel at any time, but cannot propose or execute. If empty, no cancelers.
-    /// * `num_seconds_execute` - Minimum delay in seconds before a proposed transaction can execute.
-    ///
-    /// # Aborts
-    /// * If `creators` is empty, or any list has duplicates or includes the timelock address
-    /// * If `num_seconds_execute` is outside the allowed delay bounds
+    /// @param deployer Signer that authorizes resource-account creation and pays gas.
+    /// @param creators Addresses allowed to propose. At least one, no duplicates, not the timelock address.
+    /// @param executors Addresses allowed to execute after the delay. If empty, creators may execute.
+    /// @param cancelers Addresses allowed only to cancel at any time. May be empty.
+    /// @param num_seconds_execute Minimum delay in seconds before a proposed transaction can execute.
+    /// @abort If a list is invalid or num_seconds_execute is outside the allowed delay bounds.
     public entry fun create(
         deployer: &signer,
         creators: vector<address>,
@@ -379,8 +376,10 @@ module aptos_framework::timelock {
     // timelock period elapses, an executor submits the script, the script calls `resolve` to
     // obtain the timelock signer, then invokes the entry function with that signer.
 
-    /// Add new creators to the timelock account.
-    /// Can only be invoked by the timelock account itself via the proposal flow.
+    /// Add new creators. Callable only by the timelock account itself via the proposal flow.
+    ///
+    /// @param timelock_account The timelock account's signer.
+    /// @param new_creators Addresses to add as creators.
     public entry fun add_creators(
         timelock_account: &signer, new_creators: vector<address>
     ) acquires TimelockAccount {
@@ -395,8 +394,10 @@ module aptos_framework::timelock {
         emit(AddCreators { timelock_account: timelock_address, new_creators });
     }
 
-    /// Remove creators from the timelock account. At least one creator must remain.
-    /// Can only be invoked by the timelock account itself via the proposal flow.
+    /// Remove creators; at least one must remain. Callable only by the timelock account itself.
+    ///
+    /// @param timelock_account The timelock account's signer.
+    /// @param creators_to_remove Addresses to remove from the creator list.
     public entry fun remove_creators(
         timelock_account: &signer, creators_to_remove: vector<address>
     ) acquires TimelockAccount {
@@ -419,8 +420,10 @@ module aptos_framework::timelock {
         };
     }
 
-    /// Add new executors to the timelock account.
-    /// Can only be invoked by the timelock account itself via the proposal flow.
+    /// Add new executors. Callable only by the timelock account itself via the proposal flow.
+    ///
+    /// @param timelock_account The timelock account's signer.
+    /// @param new_executors Addresses to add as executors.
     public entry fun add_executors(
         timelock_account: &signer, new_executors: vector<address>
     ) acquires TimelockAccount {
@@ -435,9 +438,11 @@ module aptos_framework::timelock {
         emit(AddExecutors { timelock_account: timelock_address, new_executors });
     }
 
-    /// Remove executors from the timelock account.
-    /// After removal the executor list may be empty, which means creators can execute.
-    /// Can only be invoked by the timelock account itself via the proposal flow.
+    /// Remove executors; the list may become empty, in which case creators can execute. Callable
+    /// only by the timelock account itself via the proposal flow.
+    ///
+    /// @param timelock_account The timelock account's signer.
+    /// @param executors_to_remove Addresses to remove from the executor list.
     public entry fun remove_executors(
         timelock_account: &signer, executors_to_remove: vector<address>
     ) acquires TimelockAccount {
@@ -458,8 +463,11 @@ module aptos_framework::timelock {
         };
     }
 
-    /// Add new cancelers (the emergency-response role that can only cancel) to the timelock account.
-    /// Can only be invoked by the timelock account itself via the proposal flow.
+    /// Add new cancelers (emergency-response role that can only cancel). Callable only by the
+    /// timelock account itself via the proposal flow.
+    ///
+    /// @param timelock_account The timelock account's signer.
+    /// @param new_cancelers Addresses to add as cancelers.
     public entry fun add_cancelers(
         timelock_account: &signer, new_cancelers: vector<address>
     ) acquires TimelockAccount {
@@ -474,8 +482,10 @@ module aptos_framework::timelock {
         emit(AddCancelers { timelock_account: timelock_address, new_cancelers });
     }
 
-    /// Remove cancelers from the timelock account. The canceler list may become empty.
-    /// Can only be invoked by the timelock account itself via the proposal flow.
+    /// Remove cancelers; the list may become empty. Callable only by the timelock account itself.
+    ///
+    /// @param timelock_account The timelock account's signer.
+    /// @param cancelers_to_remove Addresses to remove from the canceler list.
     public entry fun remove_cancelers(
         timelock_account: &signer, cancelers_to_remove: vector<address>
     ) acquires TimelockAccount {
@@ -496,9 +506,11 @@ module aptos_framework::timelock {
         };
     }
 
-    /// Update the timelock delay. The new value takes effect immediately for future proposals.
-    /// Existing pending transactions are not affected.
-    /// Can only be invoked by the timelock account itself via the proposal flow.
+    /// Update the timelock delay for future proposals; pending transactions are unaffected. Callable
+    /// only by the timelock account itself via the proposal flow.
+    ///
+    /// @param timelock_account The timelock account's signer.
+    /// @param new_min_num_seconds_execute The new minimum delay in seconds.
     public entry fun update_min_num_seconds_execute(
         timelock_account: &signer, new_min_num_seconds_execute: u64
     ) acquires TimelockAccount {
@@ -519,14 +531,15 @@ module aptos_framework::timelock {
 
     // =============================== Transaction flow ===============================
 
-    /// Propose a new transaction to be executed after the timelock period.
+    /// Propose a transaction to be executed after the timelock period. Indexed by
+    /// keccak256(execution_hash || salt).
     ///
-    /// `execution_hash` is the SHA3-256 hash of the resolution script's bytecode that will
-    /// perform the transaction's effects when submitted. `salt` (32 bytes) disambiguates duplicate
-    /// proposals of the same script. The table key is `keccak256(execution_hash || salt)`.
-    /// `num_seconds_execute` must be >= `min_num_seconds_execute`.
-    /// `script_path` is an off-chain pointer (e.g. an IPFS URI) to the human-readable script
-    /// payload, capped at `MAX_SCRIPT_PATH_LENGTH` bytes; pass an empty vector to omit it.
+    /// @param creator A creator's signer.
+    /// @param timelock_account The timelock account address.
+    /// @param execution_hash SHA3-256 hash (32 bytes) of the resolution script's bytecode.
+    /// @param num_seconds_execute Delay in seconds before execution; must be >= the account minimum.
+    /// @param salt 32 bytes disambiguating duplicate proposals of the same script.
+    /// @param script_path Optional off-chain pointer to the script payload (e.g. an IPFS URI); empty to omit.
     public entry fun create_transaction(
         creator: &signer,
         timelock_account: address,
@@ -584,9 +597,12 @@ module aptos_framework::timelock {
         );
     }
 
-    /// Cancel a pending transaction. The transaction's executed field is set to true.
-    /// Any creator or canceler can cancel at any time. Executors cannot cancel.
-    /// `proposal_hash` must be exactly 32 bytes.
+    /// Cancel a pending transaction (marks it executed). Any creator or canceler may cancel at any
+    /// time; executors cannot.
+    ///
+    /// @param actor A creator's or canceler's signer.
+    /// @param timelock_account The timelock account address.
+    /// @param proposal_hash The 32-byte hash indexing the transaction.
     public entry fun cancel_transaction(
         actor: &signer, timelock_account: address, proposal_hash: vector<u8>
     ) acquires TimelockAccount {
@@ -615,12 +631,13 @@ module aptos_framework::timelock {
         emit(CancelTransaction { timelock_account, actor: actor_addr, proposal_hash });
     }
 
-    /// Pre-authorize resolution for an executor that cannot submit a `Script` itself (notably an
-    /// Aptos multisig, which dispatches entry functions, not `Script`s). After approval, ANY party
-    /// may submit the committed resolution script and `resolve` accepts it. Authorization mirrors
-    /// execution (an executor, or a creator when the executor list is empty). The delay is NOT
-    /// enforced here — `resolve` still enforces it — and the approval is bound to `proposal_hash`,
-    /// which commits to the exact script, so it cannot authorize anything else.
+    /// Pre-authorize resolution for an executor that cannot submit a `Script` itself (e.g. an Aptos
+    /// multisig). After approval any party may submit the committed script; `resolve` still enforces
+    /// the delay, and the approval is bound to proposal_hash so it cannot authorize anything else.
+    ///
+    /// @param executor An executor's signer (or a creator when the executor list is empty).
+    /// @param timelock_account The timelock account address.
+    /// @param proposal_hash The 32-byte hash indexing the transaction.
     public entry fun approve_resolution(
         executor: &signer, timelock_account: address, proposal_hash: vector<u8>
     ) acquires TimelockAccount {
@@ -639,18 +656,24 @@ module aptos_framework::timelock {
             !transaction.executed,
             error::invalid_state(ETRANSACTION_ALREADY_EXECUTED)
         );
+        assert!(
+            now_seconds()
+                >= transaction.creation_time_secs + transaction.num_seconds_execute,
+            error::invalid_state(ETIMELOCK_NOT_EXPIRED)
+        );
         transaction.approved = true;
 
         emit(ApproveResolution { timelock_account, executor: executor_addr, proposal_hash });
     }
 
-    /// Resolve a pending transaction and return the timelock account's signer for the calling
-    /// script to perform the transaction's effects. Asserts the account is a timelock; the submitter
-    /// is authorized (an executor — a direct executor approves-and-resolves in one step — or any
-    /// submitter when the transaction was pre-approved via `approve_resolution`); the transaction
-    /// exists, is not executed/canceled, and its delay has elapsed; and the running script's hash
-    /// equals the transaction's execution_hash. Marks it executed; if the calling script later
-    /// aborts, the whole transaction reverts atomically.
+    /// Resolve a pending transaction and return the timelock account's signer for the calling script
+    /// to perform its effects. Requires authorization, an elapsed delay, and a matching script hash;
+    /// marks the transaction executed (reverted atomically if the calling script later aborts).
+    ///
+    /// @param submitter An executor's signer, or any signer when the transaction was pre-approved.
+    /// @param timelock_account The timelock account address.
+    /// @param proposal_hash The 32-byte hash indexing the transaction.
+    /// @return The timelock account's signer.
     public fun resolve(
         submitter: &signer, timelock_account: address, proposal_hash: vector<u8>
     ): signer acquires TimelockAccount {

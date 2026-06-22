@@ -4252,6 +4252,42 @@ module aptos_framework::delegation_pool {
         );
     }
 
+    #[test(aptos_framework = @aptos_framework, validator = @0x123)]
+    public entry fun test_delegation_pool_owner_can_create_and_vote(
+        aptos_framework: &signer,
+        validator: &signer,
+    ) acquires DelegationPoolOwnership, DelegationPool, GovernanceRecords, BeneficiaryForOperator, NextCommissionPercentage, DelegationPoolAllowlisting {
+        initialize_for_test(aptos_framework);
+        aptos_governance::initialize_for_test(
+            aptos_framework,
+            (10 * ONE_APT as u128),
+            100 * ONE_APT,
+            1000,
+        );
+        initialize_test_validator(validator, 100 * ONE_APT, true, false);
+        end_aptos_epoch();
+
+        let validator_address = signer::address_of(validator);
+        let pool_address = get_owned_pool_address(validator_address);
+        assert!(stake::get_delegated_voter(pool_address) == pool_address, 1);
+        assert!(partial_governance_voting_enabled(pool_address), 2);
+        assert!(calculate_and_update_voter_total_voting_power(pool_address, validator_address) == 100 * ONE_APT, 3);
+
+        let execution_hash = vector::empty<u8>();
+        vector::push_back(&mut execution_hash, 1);
+        create_proposal(
+            validator,
+            pool_address,
+            execution_hash,
+            b"",
+            b"",
+            true,
+        );
+
+        vote(validator, pool_address, 0, 100 * ONE_APT, true);
+        assert!(calculate_and_update_remaining_voting_power(pool_address, validator_address, 0) == 0, 4);
+    }
+
     #[test(
         aptos_framework = @aptos_framework,
         validator = @0x123,

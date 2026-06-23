@@ -369,11 +369,11 @@ fn test_delegated_resolution_via_approval() {
     let proposal_hash = proposal_hash_of(&exec_hash, &salt);
     assert_success!(propose(&mut h, &creator, timelock_addr, &exec_hash, DELAY, &salt));
 
-    // The executor pre-authorizes resolution via the entry function (the multisig-style path),
-    // staged before the delay elapses.
-    assert_success!(approve_resolution(&mut h, &executor, timelock_addr, &proposal_hash));
-
     fast_forward_block(&mut h, DELAY + 1);
+
+    // The executor pre-authorizes resolution via the entry function (the multisig-style path),
+    // once the delay has elapsed.
+    assert_success!(approve_resolution(&mut h, &executor, timelock_addr, &proposal_hash));
 
     // The relayer — not an executor — can now submit the committed script, because it was approved.
     let status = run_resolution_script(&mut h, &relayer, code, vec![], timelock_addr, &proposal_hash);

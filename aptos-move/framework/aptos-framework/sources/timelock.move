@@ -631,9 +631,12 @@ module aptos_framework::timelock {
         emit(CancelTransaction { timelock_account, actor: actor_addr, proposal_hash });
     }
 
-    /// Pre-authorize resolution for an executor that cannot submit a `Script` itself.
-    /// After approval any party may submit the committed script; Both `approve_resolution` and `resolve`
-    /// enforce the delay, and the approval is bound to proposal_hash so it cannot authorize anything else.
+    /// Pre-authorize resolution for an executor that cannot submit a `Script` itself (notably an
+    /// Aptos multisig, which dispatches entry functions, not `Script`s). After approval, any party
+    /// may submit the committed resolution script and `resolve` accepts it. Authorization mirrors
+    /// execution (an executor, or a creator when the executor list is empty). Both `approve_resolution`
+    /// and `resolve` enforce the delay, and the approval is bound to `proposal_hash`, which commits to
+    /// the exact script, so it cannot authorize anything else.
     ///
     /// @param executor An executor's signer (or a creator when the executor list is empty).
     /// @param timelock_account The timelock account address.
@@ -1447,7 +1450,8 @@ module aptos_framework::timelock {
         );
         let proposal_hash = get_proposal_hash(EXECUTION_HASH, SALT);
         assert!(!get_transaction(timelock_addr, proposal_hash).approved, 0);
-        // Approval does not require the delay to have elapsed (it may be staged early).
+        // Approval is only permitted once the delay has elapsed.
+        timestamp::fast_forward_seconds(TIMELOCK_SECS + 1);
         approve_resolution(executor, timelock_addr, proposal_hash);
         assert!(get_transaction(timelock_addr, proposal_hash).approved, 1);
     }
@@ -1464,7 +1468,8 @@ module aptos_framework::timelock {
             creator, timelock_addr, EXECUTION_HASH, TIMELOCK_SECS, SALT, b""
         );
         let proposal_hash = get_proposal_hash(EXECUTION_HASH, SALT);
-        // With no executors, a creator is the executor and may approve.
+        // With no executors, a creator is the executor and may approve once the delay has elapsed.
+        timestamp::fast_forward_seconds(TIMELOCK_SECS + 1);
         approve_resolution(creator, timelock_addr, proposal_hash);
         assert!(get_transaction(timelock_addr, proposal_hash).approved, 0);
     }
@@ -1513,6 +1518,30 @@ module aptos_framework::timelock {
         cancel_transaction(creator, timelock_addr, proposal_hash);
         // Cannot approve a transaction that has already been executed or canceled.
         approve_resolution(executor, timelock_addr, proposal_hash);
+    }
+
+    #[test(framework = @0x1, creator = @0x123, executor = @0x124)]
+    #[expected_failure(abort_code = 0x30008, location = Self)]
+    public entry fun test_approve_resolution_before_delay_fails(
+        framework: &signer, creator: &signer, executor: &signer
+    ) acquires TimelockAccount {
+        setup(framework);
+        create_account(address_of(creator));
+        let timelock_addr = get_next_timelock_account_address(address_of(creator));
+        create(
+            creator,
+            vector[address_of(creator)],
+            vector[address_of(executor)],
+            vector[],
+            TIMELOCK_SECS
+        );
+        create_transaction(
+            creator, timelock_addr, EXECUTION_HASH, TIMELOCK_SECS, SALT, b""
+        );
+        // The delay has not elapsed, so approval must abort with ETIMELOCK_NOT_EXPIRED.
+        approve_resolution(
+            executor, timelock_addr, get_proposal_hash(EXECUTION_HASH, SALT)
+        );
     }
 
     #[test(framework = @0x1, creator = @0x123, executor = @0x124)]

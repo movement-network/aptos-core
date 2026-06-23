@@ -1254,55 +1254,66 @@ pub enum EntryFunctionCall {
         new_voter: AccountAddress,
     },
 
-    /// Add new cancelers (the emergency-response role that can only cancel) to the timelock account.
-    /// Can only be invoked by the timelock account itself via the proposal flow.
+    /// Add new cancelers (emergency-response role that can only cancel). Callable only by the
+    /// timelock account itself via the proposal flow.
+    ///
+    /// @param timelock_account The timelock account's signer.
+    /// @param new_cancelers Addresses to add as cancelers.
     TimelockAddCancelers {
         new_cancelers: Vec<AccountAddress>,
     },
 
-    /// Add new creators to the timelock account.
-    /// Can only be invoked by the timelock account itself via the proposal flow.
+    /// Add new creators. Callable only by the timelock account itself via the proposal flow.
+    ///
+    /// @param timelock_account The timelock account's signer.
+    /// @param new_creators Addresses to add as creators.
     TimelockAddCreators {
         new_creators: Vec<AccountAddress>,
     },
 
-    /// Add new executors to the timelock account.
-    /// Can only be invoked by the timelock account itself via the proposal flow.
+    /// Add new executors. Callable only by the timelock account itself via the proposal flow.
+    ///
+    /// @param timelock_account The timelock account's signer.
+    /// @param new_executors Addresses to add as executors.
     TimelockAddExecutors {
         new_executors: Vec<AccountAddress>,
     },
 
     /// Pre-authorize resolution for an executor that cannot submit a `Script` itself (notably an
-    /// Aptos multisig, which dispatches entry functions, not `Script`s). After approval, ANY party
+    /// Aptos multisig, which dispatches entry functions, not `Script`s). After approval, any party
     /// may submit the committed resolution script and `resolve` accepts it. Authorization mirrors
-    /// execution (an executor, or a creator when the executor list is empty). The delay is NOT
-    /// enforced here — `resolve` still enforces it — and the approval is bound to `proposal_hash`,
-    /// which commits to the exact script, so it cannot authorize anything else.
+    /// execution (an executor, or a creator when the executor list is empty). Both `approve_resolution`
+    /// and `resolve` enforce the delay, and the approval is bound to `proposal_hash`, which commits to
+    /// the exact script, so it cannot authorize anything else.
+    ///
+    /// @param executor An executor's signer (or a creator when the executor list is empty).
+    /// @param timelock_account The timelock account address.
+    /// @param proposal_hash The 32-byte hash indexing the transaction.
     TimelockApproveResolution {
         timelock_account: AccountAddress,
         proposal_hash: Vec<u8>,
     },
 
-    /// Cancel a pending transaction. The transaction's executed field is set to true.
-    /// Any creator or canceler can cancel at any time. Executors cannot cancel.
-    /// `proposal_hash` must be exactly 32 bytes.
+    /// Cancel a pending transaction (marks it executed). Any creator or canceler may cancel at any
+    /// time; executors cannot.
+    ///
+    /// @param actor A creator's or canceler's signer.
+    /// @param timelock_account The timelock account address.
+    /// @param proposal_hash The 32-byte hash indexing the transaction.
     TimelockCancelTransaction {
         timelock_account: AccountAddress,
         proposal_hash: Vec<u8>,
     },
 
-    /// Create a new timelock account. The `deployer` only authorizes resource-account creation
-    /// and pays gas; it gains no role unless listed in `creators`/`executors`.
+    /// Create a new timelock account. The deployer only authorizes resource-account creation and
+    /// pays gas; it gains no role unless listed in the member arguments.
     ///
-    /// # Arguments
-    /// * `creators` - Authorized to propose. At least one, no duplicates, not the timelock address.
-    /// * `executors` - Authorized to execute after the delay. If empty, creators may execute.
-    /// * `cancelers` - Authorized to cancel at any time, but cannot propose or execute. If empty, no cancelers.
-    /// * `num_seconds_execute` - Minimum delay in seconds before a proposed transaction can execute.
-    ///
-    /// # Aborts
-    /// * If `creators` is empty, or any list has duplicates or includes the timelock address
-    /// * If `num_seconds_execute` is outside the allowed delay bounds
+    /// @param deployer Signer that authorizes resource-account creation and pays gas.
+    /// @param creators Addresses allowed to propose. At least one, no duplicates, not the timelock address.
+    /// @param executors Addresses allowed to execute after the delay. If empty, creators may execute.
+    /// @param cancelers Addresses allowed only to cancel at any time. May be empty.
+    /// @param num_seconds_execute Minimum delay in seconds before a proposed transaction can execute.
+    /// @abort If a list is invalid or num_seconds_execute is outside the allowed delay bounds.
     TimelockCreate {
         creators: Vec<AccountAddress>,
         executors: Vec<AccountAddress>,
@@ -1310,14 +1321,15 @@ pub enum EntryFunctionCall {
         num_seconds_execute: u64,
     },
 
-    /// Propose a new transaction to be executed after the timelock period.
+    /// Propose a transaction to be executed after the timelock period. Indexed by
+    /// keccak256(execution_hash || salt).
     ///
-    /// `execution_hash` is the SHA3-256 hash of the resolution script's bytecode that will
-    /// perform the transaction's effects when submitted. `salt` (32 bytes) disambiguates duplicate
-    /// proposals of the same script. The table key is `keccak256(execution_hash || salt)`.
-    /// `num_seconds_execute` must be >= `min_num_seconds_execute`.
-    /// `script_path` is an off-chain pointer (e.g. an IPFS URI) to the human-readable script
-    /// payload, capped at `MAX_SCRIPT_PATH_LENGTH` bytes; pass an empty vector to omit it.
+    /// @param creator A creator's signer.
+    /// @param timelock_account The timelock account address.
+    /// @param execution_hash SHA3-256 hash (32 bytes) of the resolution script's bytecode.
+    /// @param num_seconds_execute Delay in seconds before execution; must be >= the account minimum.
+    /// @param salt 32 bytes disambiguating duplicate proposals of the same script.
+    /// @param script_path Optional off-chain pointer to the script payload (e.g. an IPFS URI); empty to omit.
     TimelockCreateTransaction {
         timelock_account: AccountAddress,
         execution_hash: Vec<u8>,
@@ -1326,28 +1338,36 @@ pub enum EntryFunctionCall {
         script_path: Vec<u8>,
     },
 
-    /// Remove cancelers from the timelock account. The canceler list may become empty.
-    /// Can only be invoked by the timelock account itself via the proposal flow.
+    /// Remove cancelers; the list may become empty. Callable only by the timelock account itself.
+    ///
+    /// @param timelock_account The timelock account's signer.
+    /// @param cancelers_to_remove Addresses to remove from the canceler list.
     TimelockRemoveCancelers {
         cancelers_to_remove: Vec<AccountAddress>,
     },
 
-    /// Remove creators from the timelock account. At least one creator must remain.
-    /// Can only be invoked by the timelock account itself via the proposal flow.
+    /// Remove creators; at least one must remain. Callable only by the timelock account itself.
+    ///
+    /// @param timelock_account The timelock account's signer.
+    /// @param creators_to_remove Addresses to remove from the creator list.
     TimelockRemoveCreators {
         creators_to_remove: Vec<AccountAddress>,
     },
 
-    /// Remove executors from the timelock account.
-    /// After removal the executor list may be empty, which means creators can execute.
-    /// Can only be invoked by the timelock account itself via the proposal flow.
+    /// Remove executors; the list may become empty, in which case creators can execute. Callable
+    /// only by the timelock account itself via the proposal flow.
+    ///
+    /// @param timelock_account The timelock account's signer.
+    /// @param executors_to_remove Addresses to remove from the executor list.
     TimelockRemoveExecutors {
         executors_to_remove: Vec<AccountAddress>,
     },
 
-    /// Update the timelock delay. The new value takes effect immediately for future proposals.
-    /// Existing pending transactions are not affected.
-    /// Can only be invoked by the timelock account itself via the proposal flow.
+    /// Update the timelock delay for future proposals; pending transactions are unaffected. Callable
+    /// only by the timelock account itself via the proposal flow.
+    ///
+    /// @param timelock_account The timelock account's signer.
+    /// @param new_min_num_seconds_execute The new minimum delay in seconds.
     TimelockUpdateMinNumSecondsExecute {
         new_min_num_seconds_execute: u64,
     },
@@ -5716,8 +5736,11 @@ pub fn staking_proxy_set_voter(
     ))
 }
 
-/// Add new cancelers (the emergency-response role that can only cancel) to the timelock account.
-/// Can only be invoked by the timelock account itself via the proposal flow.
+/// Add new cancelers (emergency-response role that can only cancel). Callable only by the
+/// timelock account itself via the proposal flow.
+///
+/// @param timelock_account The timelock account's signer.
+/// @param new_cancelers Addresses to add as cancelers.
 pub fn timelock_add_cancelers(new_cancelers: Vec<AccountAddress>) -> TransactionPayload {
     TransactionPayload::EntryFunction(EntryFunction::new(
         ModuleId::new(
@@ -5733,8 +5756,10 @@ pub fn timelock_add_cancelers(new_cancelers: Vec<AccountAddress>) -> Transaction
     ))
 }
 
-/// Add new creators to the timelock account.
-/// Can only be invoked by the timelock account itself via the proposal flow.
+/// Add new creators. Callable only by the timelock account itself via the proposal flow.
+///
+/// @param timelock_account The timelock account's signer.
+/// @param new_creators Addresses to add as creators.
 pub fn timelock_add_creators(new_creators: Vec<AccountAddress>) -> TransactionPayload {
     TransactionPayload::EntryFunction(EntryFunction::new(
         ModuleId::new(
@@ -5750,8 +5775,10 @@ pub fn timelock_add_creators(new_creators: Vec<AccountAddress>) -> TransactionPa
     ))
 }
 
-/// Add new executors to the timelock account.
-/// Can only be invoked by the timelock account itself via the proposal flow.
+/// Add new executors. Callable only by the timelock account itself via the proposal flow.
+///
+/// @param timelock_account The timelock account's signer.
+/// @param new_executors Addresses to add as executors.
 pub fn timelock_add_executors(new_executors: Vec<AccountAddress>) -> TransactionPayload {
     TransactionPayload::EntryFunction(EntryFunction::new(
         ModuleId::new(
@@ -5768,11 +5795,15 @@ pub fn timelock_add_executors(new_executors: Vec<AccountAddress>) -> Transaction
 }
 
 /// Pre-authorize resolution for an executor that cannot submit a `Script` itself (notably an
-/// Aptos multisig, which dispatches entry functions, not `Script`s). After approval, ANY party
+/// Aptos multisig, which dispatches entry functions, not `Script`s). After approval, any party
 /// may submit the committed resolution script and `resolve` accepts it. Authorization mirrors
-/// execution (an executor, or a creator when the executor list is empty). The delay is NOT
-/// enforced here — `resolve` still enforces it — and the approval is bound to `proposal_hash`,
-/// which commits to the exact script, so it cannot authorize anything else.
+/// execution (an executor, or a creator when the executor list is empty). Both `approve_resolution`
+/// and `resolve` enforce the delay, and the approval is bound to `proposal_hash`, which commits to
+/// the exact script, so it cannot authorize anything else.
+///
+/// @param executor An executor's signer (or a creator when the executor list is empty).
+/// @param timelock_account The timelock account address.
+/// @param proposal_hash The 32-byte hash indexing the transaction.
 pub fn timelock_approve_resolution(
     timelock_account: AccountAddress,
     proposal_hash: Vec<u8>,
@@ -5794,9 +5825,12 @@ pub fn timelock_approve_resolution(
     ))
 }
 
-/// Cancel a pending transaction. The transaction's executed field is set to true.
-/// Any creator or canceler can cancel at any time. Executors cannot cancel.
-/// `proposal_hash` must be exactly 32 bytes.
+/// Cancel a pending transaction (marks it executed). Any creator or canceler may cancel at any
+/// time; executors cannot.
+///
+/// @param actor A creator's or canceler's signer.
+/// @param timelock_account The timelock account address.
+/// @param proposal_hash The 32-byte hash indexing the transaction.
 pub fn timelock_cancel_transaction(
     timelock_account: AccountAddress,
     proposal_hash: Vec<u8>,
@@ -5818,18 +5852,15 @@ pub fn timelock_cancel_transaction(
     ))
 }
 
-/// Create a new timelock account. The `deployer` only authorizes resource-account creation
-/// and pays gas; it gains no role unless listed in `creators`/`executors`.
+/// Create a new timelock account. The deployer only authorizes resource-account creation and
+/// pays gas; it gains no role unless listed in the member arguments.
 ///
-/// # Arguments
-/// * `creators` - Authorized to propose. At least one, no duplicates, not the timelock address.
-/// * `executors` - Authorized to execute after the delay. If empty, creators may execute.
-/// * `cancelers` - Authorized to cancel at any time, but cannot propose or execute. If empty, no cancelers.
-/// * `num_seconds_execute` - Minimum delay in seconds before a proposed transaction can execute.
-///
-/// # Aborts
-/// * If `creators` is empty, or any list has duplicates or includes the timelock address
-/// * If `num_seconds_execute` is outside the allowed delay bounds
+/// @param deployer Signer that authorizes resource-account creation and pays gas.
+/// @param creators Addresses allowed to propose. At least one, no duplicates, not the timelock address.
+/// @param executors Addresses allowed to execute after the delay. If empty, creators may execute.
+/// @param cancelers Addresses allowed only to cancel at any time. May be empty.
+/// @param num_seconds_execute Minimum delay in seconds before a proposed transaction can execute.
+/// @abort If a list is invalid or num_seconds_execute is outside the allowed delay bounds.
 pub fn timelock_create(
     creators: Vec<AccountAddress>,
     executors: Vec<AccountAddress>,
@@ -5855,14 +5886,15 @@ pub fn timelock_create(
     ))
 }
 
-/// Propose a new transaction to be executed after the timelock period.
+/// Propose a transaction to be executed after the timelock period. Indexed by
+/// keccak256(execution_hash || salt).
 ///
-/// `execution_hash` is the SHA3-256 hash of the resolution script's bytecode that will
-/// perform the transaction's effects when submitted. `salt` (32 bytes) disambiguates duplicate
-/// proposals of the same script. The table key is `keccak256(execution_hash || salt)`.
-/// `num_seconds_execute` must be >= `min_num_seconds_execute`.
-/// `script_path` is an off-chain pointer (e.g. an IPFS URI) to the human-readable script
-/// payload, capped at `MAX_SCRIPT_PATH_LENGTH` bytes; pass an empty vector to omit it.
+/// @param creator A creator's signer.
+/// @param timelock_account The timelock account address.
+/// @param execution_hash SHA3-256 hash (32 bytes) of the resolution script's bytecode.
+/// @param num_seconds_execute Delay in seconds before execution; must be >= the account minimum.
+/// @param salt 32 bytes disambiguating duplicate proposals of the same script.
+/// @param script_path Optional off-chain pointer to the script payload (e.g. an IPFS URI); empty to omit.
 pub fn timelock_create_transaction(
     timelock_account: AccountAddress,
     execution_hash: Vec<u8>,
@@ -5890,8 +5922,10 @@ pub fn timelock_create_transaction(
     ))
 }
 
-/// Remove cancelers from the timelock account. The canceler list may become empty.
-/// Can only be invoked by the timelock account itself via the proposal flow.
+/// Remove cancelers; the list may become empty. Callable only by the timelock account itself.
+///
+/// @param timelock_account The timelock account's signer.
+/// @param cancelers_to_remove Addresses to remove from the canceler list.
 pub fn timelock_remove_cancelers(cancelers_to_remove: Vec<AccountAddress>) -> TransactionPayload {
     TransactionPayload::EntryFunction(EntryFunction::new(
         ModuleId::new(
@@ -5907,8 +5941,10 @@ pub fn timelock_remove_cancelers(cancelers_to_remove: Vec<AccountAddress>) -> Tr
     ))
 }
 
-/// Remove creators from the timelock account. At least one creator must remain.
-/// Can only be invoked by the timelock account itself via the proposal flow.
+/// Remove creators; at least one must remain. Callable only by the timelock account itself.
+///
+/// @param timelock_account The timelock account's signer.
+/// @param creators_to_remove Addresses to remove from the creator list.
 pub fn timelock_remove_creators(creators_to_remove: Vec<AccountAddress>) -> TransactionPayload {
     TransactionPayload::EntryFunction(EntryFunction::new(
         ModuleId::new(
@@ -5924,9 +5960,11 @@ pub fn timelock_remove_creators(creators_to_remove: Vec<AccountAddress>) -> Tran
     ))
 }
 
-/// Remove executors from the timelock account.
-/// After removal the executor list may be empty, which means creators can execute.
-/// Can only be invoked by the timelock account itself via the proposal flow.
+/// Remove executors; the list may become empty, in which case creators can execute. Callable
+/// only by the timelock account itself via the proposal flow.
+///
+/// @param timelock_account The timelock account's signer.
+/// @param executors_to_remove Addresses to remove from the executor list.
 pub fn timelock_remove_executors(executors_to_remove: Vec<AccountAddress>) -> TransactionPayload {
     TransactionPayload::EntryFunction(EntryFunction::new(
         ModuleId::new(
@@ -5942,9 +5980,11 @@ pub fn timelock_remove_executors(executors_to_remove: Vec<AccountAddress>) -> Tr
     ))
 }
 
-/// Update the timelock delay. The new value takes effect immediately for future proposals.
-/// Existing pending transactions are not affected.
-/// Can only be invoked by the timelock account itself via the proposal flow.
+/// Update the timelock delay for future proposals; pending transactions are unaffected. Callable
+/// only by the timelock account itself via the proposal flow.
+///
+/// @param timelock_account The timelock account's signer.
+/// @param new_min_num_seconds_execute The new minimum delay in seconds.
 pub fn timelock_update_min_num_seconds_execute(
     new_min_num_seconds_execute: u64,
 ) -> TransactionPayload {

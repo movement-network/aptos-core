@@ -412,7 +412,7 @@ impl CliCommand<TransactionSummary> for CancelTransaction {
 /// resolve. A direct executor does not need this — they can run Execute directly once the timelock
 /// period has elapsed.
 ///
-/// Approval may be staged during the timelock period; the delay is still enforced at execution.
+/// Approval is only permitted after the timelock delay has elapsed; resolution enforces it too.
 #[derive(Debug, Parser)]
 pub struct ApproveResolution {
     #[clap(flatten)]

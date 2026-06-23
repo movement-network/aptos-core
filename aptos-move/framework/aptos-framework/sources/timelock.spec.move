@@ -389,6 +389,9 @@ spec aptos_framework::timelock {
     }
 
     spec approve_resolution(executor: &signer, timelock_account: address, proposal_hash: vector<u8>) {
+        // Partial: the `creation_time_secs + num_seconds_execute` sum can overflow (see
+        // `create_transaction`, which does not bound `num_seconds_execute` from above).
+        pragma aborts_if_is_partial;
         let timelock = TimelockAccount[timelock_account];
         aborts_if !exists<TimelockAccount>(timelock_account);
         aborts_if len(proposal_hash) != 32;
@@ -397,7 +400,10 @@ spec aptos_framework::timelock {
         aborts_if len(timelock.executors) > 0 && !contains(timelock.executors, address_of(executor));
         aborts_if !table::spec_contains(timelock.transactions, proposal_hash);
         aborts_if table::spec_get(timelock.transactions, proposal_hash).executed;
-        // The transaction is marked approved (the delay is not required to approve).
+        // Approval is only permitted once the delay has elapsed (mirrors `resolve`).
+        aborts_if aptos_framework::timestamp::now_seconds() < table::spec_get(timelock.transactions, proposal_hash).creation_time_secs
+            + table::spec_get(timelock.transactions, proposal_hash).num_seconds_execute;
+        // On success, the transaction is marked approved.
         ensures table::spec_get(TimelockAccount[timelock_account].transactions, proposal_hash).approved;
     }
 

@@ -60,8 +60,6 @@ Properties:
 -  [Function `get_next_timelock_account_address`](#0x1_timelock_get_next_timelock_account_address)
 -  [Function `get_proposal_hash`](#0x1_timelock_get_proposal_hash)
 -  [Function `create`](#0x1_timelock_create)
-    -  [Arguments](#@Arguments_1)
-    -  [Aborts](#@Aborts_2)
 -  [Function `create_timelock_account_internal`](#0x1_timelock_create_timelock_account_internal)
 -  [Function `add_creators`](#0x1_timelock_add_creators)
 -  [Function `remove_creators`](#0x1_timelock_remove_creators)
@@ -83,36 +81,36 @@ Properties:
 -  [Function `assert_is_executor`](#0x1_timelock_assert_is_executor)
 -  [Function `assert_proposal_hash_length`](#0x1_timelock_assert_proposal_hash_length)
 -  [Function `assert_delay`](#0x1_timelock_assert_delay)
--  [Specification](#@Specification_3)
+-  [Specification](#@Specification_1)
     -  [High-level Requirements](#high-level-req)
     -  [Module-level Specification](#module-level-spec)
-    -  [Function `creators`](#@Specification_3_creators)
-    -  [Function `executors`](#@Specification_3_executors)
-    -  [Function `cancelers`](#@Specification_3_cancelers)
-    -  [Function `min_num_seconds_execute`](#@Specification_3_min_num_seconds_execute)
-    -  [Function `is_creator`](#@Specification_3_is_creator)
-    -  [Function `is_executor`](#@Specification_3_is_executor)
-    -  [Function `is_canceler`](#@Specification_3_is_canceler)
-    -  [Function `get_transaction`](#@Specification_3_get_transaction)
-    -  [Function `can_be_executed`](#@Specification_3_can_be_executed)
-    -  [Function `get_next_timelock_account_address`](#@Specification_3_get_next_timelock_account_address)
-    -  [Function `get_proposal_hash`](#@Specification_3_get_proposal_hash)
-    -  [Function `create`](#@Specification_3_create)
-    -  [Function `create_timelock_account_internal`](#@Specification_3_create_timelock_account_internal)
-    -  [Function `add_creators`](#@Specification_3_add_creators)
-    -  [Function `remove_creators`](#@Specification_3_remove_creators)
-    -  [Function `add_executors`](#@Specification_3_add_executors)
-    -  [Function `remove_executors`](#@Specification_3_remove_executors)
-    -  [Function `add_cancelers`](#@Specification_3_add_cancelers)
-    -  [Function `remove_cancelers`](#@Specification_3_remove_cancelers)
-    -  [Function `update_min_num_seconds_execute`](#@Specification_3_update_min_num_seconds_execute)
-    -  [Function `create_transaction`](#@Specification_3_create_transaction)
-    -  [Function `cancel_transaction`](#@Specification_3_cancel_transaction)
-    -  [Function `approve_resolution`](#@Specification_3_approve_resolution)
-    -  [Function `resolve`](#@Specification_3_resolve)
-    -  [Function `create_timelock_account`](#@Specification_3_create_timelock_account)
-    -  [Function `create_timelock_account_seed`](#@Specification_3_create_timelock_account_seed)
-    -  [Function `validate_members`](#@Specification_3_validate_members)
+    -  [Function `creators`](#@Specification_1_creators)
+    -  [Function `executors`](#@Specification_1_executors)
+    -  [Function `cancelers`](#@Specification_1_cancelers)
+    -  [Function `min_num_seconds_execute`](#@Specification_1_min_num_seconds_execute)
+    -  [Function `is_creator`](#@Specification_1_is_creator)
+    -  [Function `is_executor`](#@Specification_1_is_executor)
+    -  [Function `is_canceler`](#@Specification_1_is_canceler)
+    -  [Function `get_transaction`](#@Specification_1_get_transaction)
+    -  [Function `can_be_executed`](#@Specification_1_can_be_executed)
+    -  [Function `get_next_timelock_account_address`](#@Specification_1_get_next_timelock_account_address)
+    -  [Function `get_proposal_hash`](#@Specification_1_get_proposal_hash)
+    -  [Function `create`](#@Specification_1_create)
+    -  [Function `create_timelock_account_internal`](#@Specification_1_create_timelock_account_internal)
+    -  [Function `add_creators`](#@Specification_1_add_creators)
+    -  [Function `remove_creators`](#@Specification_1_remove_creators)
+    -  [Function `add_executors`](#@Specification_1_add_executors)
+    -  [Function `remove_executors`](#@Specification_1_remove_executors)
+    -  [Function `add_cancelers`](#@Specification_1_add_cancelers)
+    -  [Function `remove_cancelers`](#@Specification_1_remove_cancelers)
+    -  [Function `update_min_num_seconds_execute`](#@Specification_1_update_min_num_seconds_execute)
+    -  [Function `create_transaction`](#@Specification_1_create_transaction)
+    -  [Function `cancel_transaction`](#@Specification_1_cancel_transaction)
+    -  [Function `approve_resolution`](#@Specification_1_approve_resolution)
+    -  [Function `resolve`](#@Specification_1_resolve)
+    -  [Function `create_timelock_account`](#@Specification_1_create_timelock_account)
+    -  [Function `create_timelock_account_seed`](#@Specification_1_create_timelock_account_seed)
+    -  [Function `validate_members`](#@Specification_1_validate_members)
 
 
 <pre><code><b>use</b> <a href="account.md#0x1_account">0x1::account</a>;
@@ -1261,26 +1259,15 @@ execution hash and salt. Clients use this to compute the proposal hash before pr
 
 ## Function `create`
 
-Create a new timelock account. The <code>deployer</code> only authorizes resource-account creation
-and pays gas; it gains no role unless listed in <code>creators</code>/<code>executors</code>.
+Create a new timelock account. The deployer only authorizes resource-account creation and
+pays gas; it gains no role unless listed in the member arguments.
 
-
-<a id="@Arguments_1"></a>
-
-### Arguments
-
-* <code>creators</code> - Authorized to propose. At least one, no duplicates, not the timelock address.
-* <code>executors</code> - Authorized to execute after the delay. If empty, creators may execute.
-* <code>cancelers</code> - Authorized to cancel at any time, but cannot propose or execute. If empty, no cancelers.
-* <code>num_seconds_execute</code> - Minimum delay in seconds before a proposed transaction can execute.
-
-
-<a id="@Aborts_2"></a>
-
-### Aborts
-
-* If <code>creators</code> is empty, or any list has duplicates or includes the timelock address
-* If <code>num_seconds_execute</code> is outside the allowed delay bounds
+@param deployer Signer that authorizes resource-account creation and pays gas.
+@param creators Addresses allowed to propose. At least one, no duplicates, not the timelock address.
+@param executors Addresses allowed to execute after the delay. If empty, creators may execute.
+@param cancelers Addresses allowed only to cancel at any time. May be empty.
+@param num_seconds_execute Minimum delay in seconds before a proposed transaction can execute.
+@abort If a list is invalid or num_seconds_execute is outside the allowed delay bounds.
 
 
 <pre><code><b>public</b> entry <b>fun</b> <a href="timelock.md#0x1_timelock_create">create</a>(deployer: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, creators: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;, executors: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;, cancelers: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;, num_seconds_execute: u64)
@@ -1367,8 +1354,10 @@ and pays gas; it gains no role unless listed in <code>creators</code>/<code>exec
 
 ## Function `add_creators`
 
-Add new creators to the timelock account.
-Can only be invoked by the timelock account itself via the proposal flow.
+Add new creators. Callable only by the timelock account itself via the proposal flow.
+
+@param timelock_account The timelock account's signer.
+@param new_creators Addresses to add as creators.
 
 
 <pre><code><b>public</b> entry <b>fun</b> <a href="timelock.md#0x1_timelock_add_creators">add_creators</a>(timelock_account: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, new_creators: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;)
@@ -1403,8 +1392,10 @@ Can only be invoked by the timelock account itself via the proposal flow.
 
 ## Function `remove_creators`
 
-Remove creators from the timelock account. At least one creator must remain.
-Can only be invoked by the timelock account itself via the proposal flow.
+Remove creators; at least one must remain. Callable only by the timelock account itself.
+
+@param timelock_account The timelock account's signer.
+@param creators_to_remove Addresses to remove from the creator list.
 
 
 <pre><code><b>public</b> entry <b>fun</b> <a href="timelock.md#0x1_timelock_remove_creators">remove_creators</a>(timelock_account: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, creators_to_remove: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;)
@@ -1447,8 +1438,10 @@ Can only be invoked by the timelock account itself via the proposal flow.
 
 ## Function `add_executors`
 
-Add new executors to the timelock account.
-Can only be invoked by the timelock account itself via the proposal flow.
+Add new executors. Callable only by the timelock account itself via the proposal flow.
+
+@param timelock_account The timelock account's signer.
+@param new_executors Addresses to add as executors.
 
 
 <pre><code><b>public</b> entry <b>fun</b> <a href="timelock.md#0x1_timelock_add_executors">add_executors</a>(timelock_account: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, new_executors: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;)
@@ -1483,9 +1476,11 @@ Can only be invoked by the timelock account itself via the proposal flow.
 
 ## Function `remove_executors`
 
-Remove executors from the timelock account.
-After removal the executor list may be empty, which means creators can execute.
-Can only be invoked by the timelock account itself via the proposal flow.
+Remove executors; the list may become empty, in which case creators can execute. Callable
+only by the timelock account itself via the proposal flow.
+
+@param timelock_account The timelock account's signer.
+@param executors_to_remove Addresses to remove from the executor list.
 
 
 <pre><code><b>public</b> entry <b>fun</b> <a href="timelock.md#0x1_timelock_remove_executors">remove_executors</a>(timelock_account: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, executors_to_remove: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;)
@@ -1526,8 +1521,11 @@ Can only be invoked by the timelock account itself via the proposal flow.
 
 ## Function `add_cancelers`
 
-Add new cancelers (the emergency-response role that can only cancel) to the timelock account.
-Can only be invoked by the timelock account itself via the proposal flow.
+Add new cancelers (emergency-response role that can only cancel). Callable only by the
+timelock account itself via the proposal flow.
+
+@param timelock_account The timelock account's signer.
+@param new_cancelers Addresses to add as cancelers.
 
 
 <pre><code><b>public</b> entry <b>fun</b> <a href="timelock.md#0x1_timelock_add_cancelers">add_cancelers</a>(timelock_account: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, new_cancelers: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;)
@@ -1562,8 +1560,10 @@ Can only be invoked by the timelock account itself via the proposal flow.
 
 ## Function `remove_cancelers`
 
-Remove cancelers from the timelock account. The canceler list may become empty.
-Can only be invoked by the timelock account itself via the proposal flow.
+Remove cancelers; the list may become empty. Callable only by the timelock account itself.
+
+@param timelock_account The timelock account's signer.
+@param cancelers_to_remove Addresses to remove from the canceler list.
 
 
 <pre><code><b>public</b> entry <b>fun</b> <a href="timelock.md#0x1_timelock_remove_cancelers">remove_cancelers</a>(timelock_account: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, cancelers_to_remove: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;)
@@ -1604,9 +1604,11 @@ Can only be invoked by the timelock account itself via the proposal flow.
 
 ## Function `update_min_num_seconds_execute`
 
-Update the timelock delay. The new value takes effect immediately for future proposals.
-Existing pending transactions are not affected.
-Can only be invoked by the timelock account itself via the proposal flow.
+Update the timelock delay for future proposals; pending transactions are unaffected. Callable
+only by the timelock account itself via the proposal flow.
+
+@param timelock_account The timelock account's signer.
+@param new_min_num_seconds_execute The new minimum delay in seconds.
 
 
 <pre><code><b>public</b> entry <b>fun</b> <a href="timelock.md#0x1_timelock_update_min_num_seconds_execute">update_min_num_seconds_execute</a>(timelock_account: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, new_min_num_seconds_execute: u64)
@@ -1645,14 +1647,15 @@ Can only be invoked by the timelock account itself via the proposal flow.
 
 ## Function `create_transaction`
 
-Propose a new transaction to be executed after the timelock period.
+Propose a transaction to be executed after the timelock period. Indexed by
+keccak256(execution_hash || salt).
 
-<code>execution_hash</code> is the SHA3-256 hash of the resolution script's bytecode that will
-perform the transaction's effects when submitted. <code>salt</code> (32 bytes) disambiguates duplicate
-proposals of the same script. The table key is <code>keccak256(execution_hash || salt)</code>.
-<code>num_seconds_execute</code> must be >= <code>min_num_seconds_execute</code>.
-<code>script_path</code> is an off-chain pointer (e.g. an IPFS URI) to the human-readable script
-payload, capped at <code><a href="timelock.md#0x1_timelock_MAX_SCRIPT_PATH_LENGTH">MAX_SCRIPT_PATH_LENGTH</a></code> bytes; pass an empty vector to omit it.
+@param creator A creator's signer.
+@param timelock_account The timelock account address.
+@param execution_hash SHA3-256 hash (32 bytes) of the resolution script's bytecode.
+@param num_seconds_execute Delay in seconds before execution; must be >= the account minimum.
+@param salt 32 bytes disambiguating duplicate proposals of the same script.
+@param script_path Optional off-chain pointer to the script payload (e.g. an IPFS URI); empty to omit.
 
 
 <pre><code><b>public</b> entry <b>fun</b> <a href="timelock.md#0x1_timelock_create_transaction">create_transaction</a>(creator: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, timelock_account: <b>address</b>, execution_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, num_seconds_execute: u64, salt: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, script_path: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;)
@@ -1730,9 +1733,12 @@ payload, capped at <code><a href="timelock.md#0x1_timelock_MAX_SCRIPT_PATH_LENGT
 
 ## Function `cancel_transaction`
 
-Cancel a pending transaction. The transaction's executed field is set to true.
-Any creator or canceler can cancel at any time. Executors cannot cancel.
-<code>proposal_hash</code> must be exactly 32 bytes.
+Cancel a pending transaction (marks it executed). Any creator or canceler may cancel at any
+time; executors cannot.
+
+@param actor A creator's or canceler's signer.
+@param timelock_account The timelock account address.
+@param proposal_hash The 32-byte hash indexing the transaction.
 
 
 <pre><code><b>public</b> entry <b>fun</b> <a href="timelock.md#0x1_timelock_cancel_transaction">cancel_transaction</a>(actor: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, timelock_account: <b>address</b>, proposal_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;)
@@ -1782,11 +1788,15 @@ Any creator or canceler can cancel at any time. Executors cannot cancel.
 ## Function `approve_resolution`
 
 Pre-authorize resolution for an executor that cannot submit a <code>Script</code> itself (notably an
-Aptos multisig, which dispatches entry functions, not <code>Script</code>s). After approval, ANY party
+Aptos multisig, which dispatches entry functions, not <code>Script</code>s). After approval, any party
 may submit the committed resolution script and <code>resolve</code> accepts it. Authorization mirrors
-execution (an executor, or a creator when the executor list is empty). The delay is NOT
-enforced here — <code>resolve</code> still enforces it — and the approval is bound to <code>proposal_hash</code>,
-which commits to the exact script, so it cannot authorize anything else.
+execution (an executor, or a creator when the executor list is empty). Both <code>approve_resolution</code>
+and <code>resolve</code> enforce the delay, and the approval is bound to <code>proposal_hash</code>, which commits to
+the exact script, so it cannot authorize anything else.
+
+@param executor An executor's signer (or a creator when the executor list is empty).
+@param timelock_account The timelock account address.
+@param proposal_hash The 32-byte hash indexing the transaction.
 
 
 <pre><code><b>public</b> entry <b>fun</b> <a href="timelock.md#0x1_timelock_approve_resolution">approve_resolution</a>(executor: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, timelock_account: <b>address</b>, proposal_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;)
@@ -1816,6 +1826,11 @@ which commits to the exact script, so it cannot authorize anything else.
         !transaction.executed,
         <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_state">error::invalid_state</a>(<a href="timelock.md#0x1_timelock_ETRANSACTION_ALREADY_EXECUTED">ETRANSACTION_ALREADY_EXECUTED</a>)
     );
+    <b>assert</b>!(
+        now_seconds()
+            &gt;= transaction.creation_time_secs + transaction.num_seconds_execute,
+        <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_state">error::invalid_state</a>(<a href="timelock.md#0x1_timelock_ETIMELOCK_NOT_EXPIRED">ETIMELOCK_NOT_EXPIRED</a>)
+    );
     transaction.approved = <b>true</b>;
 
     emit(<a href="timelock.md#0x1_timelock_ApproveResolution">ApproveResolution</a> { timelock_account, executor: executor_addr, proposal_hash });
@@ -1830,13 +1845,14 @@ which commits to the exact script, so it cannot authorize anything else.
 
 ## Function `resolve`
 
-Resolve a pending transaction and return the timelock account's signer for the calling
-script to perform the transaction's effects. Asserts the account is a timelock; the submitter
-is authorized (an executor — a direct executor approves-and-resolves in one step — or any
-submitter when the transaction was pre-approved via <code>approve_resolution</code>); the transaction
-exists, is not executed/canceled, and its delay has elapsed; and the running script's hash
-equals the transaction's execution_hash. Marks it executed; if the calling script later
-aborts, the whole transaction reverts atomically.
+Resolve a pending transaction and return the timelock account's signer for the calling script
+to perform its effects. Requires authorization, an elapsed delay, and a matching script hash;
+marks the transaction executed (reverted atomically if the calling script later aborts).
+
+@param submitter An executor's signer, or any signer when the transaction was pre-approved.
+@param timelock_account The timelock account address.
+@param proposal_hash The 32-byte hash indexing the transaction.
+@return The timelock account's signer.
 
 
 <pre><code><b>public</b> <b>fun</b> <a href="timelock.md#0x1_timelock_resolve">resolve</a>(submitter: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, timelock_account: <b>address</b>, proposal_hash: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>
@@ -2191,7 +2207,7 @@ transaction-mutating entry points (cancel/approve/resolve).
 
 </details>
 
-<a id="@Specification_3"></a>
+<a id="@Specification_1"></a>
 
 ## Specification
 
@@ -2304,7 +2320,7 @@ transaction-mutating entry points (cancel/approve/resolve).
 ### Module-level Specification
 
 
-<a id="@Specification_3_creators"></a>
+<a id="@Specification_1_creators"></a>
 
 ### Function `creators`
 
@@ -2322,7 +2338,7 @@ transaction-mutating entry points (cancel/approve/resolve).
 
 
 
-<a id="@Specification_3_executors"></a>
+<a id="@Specification_1_executors"></a>
 
 ### Function `executors`
 
@@ -2340,7 +2356,7 @@ transaction-mutating entry points (cancel/approve/resolve).
 
 
 
-<a id="@Specification_3_cancelers"></a>
+<a id="@Specification_1_cancelers"></a>
 
 ### Function `cancelers`
 
@@ -2358,7 +2374,7 @@ transaction-mutating entry points (cancel/approve/resolve).
 
 
 
-<a id="@Specification_3_min_num_seconds_execute"></a>
+<a id="@Specification_1_min_num_seconds_execute"></a>
 
 ### Function `min_num_seconds_execute`
 
@@ -2376,7 +2392,7 @@ transaction-mutating entry points (cancel/approve/resolve).
 
 
 
-<a id="@Specification_3_is_creator"></a>
+<a id="@Specification_1_is_creator"></a>
 
 ### Function `is_creator`
 
@@ -2394,7 +2410,7 @@ transaction-mutating entry points (cancel/approve/resolve).
 
 
 
-<a id="@Specification_3_is_executor"></a>
+<a id="@Specification_1_is_executor"></a>
 
 ### Function `is_executor`
 
@@ -2414,7 +2430,7 @@ transaction-mutating entry points (cancel/approve/resolve).
 
 
 
-<a id="@Specification_3_is_canceler"></a>
+<a id="@Specification_1_is_canceler"></a>
 
 ### Function `is_canceler`
 
@@ -2432,7 +2448,7 @@ transaction-mutating entry points (cancel/approve/resolve).
 
 
 
-<a id="@Specification_3_get_transaction"></a>
+<a id="@Specification_1_get_transaction"></a>
 
 ### Function `get_transaction`
 
@@ -2452,7 +2468,7 @@ transaction-mutating entry points (cancel/approve/resolve).
 
 
 
-<a id="@Specification_3_can_be_executed"></a>
+<a id="@Specification_1_can_be_executed"></a>
 
 ### Function `can_be_executed`
 
@@ -2477,7 +2493,7 @@ transaction-mutating entry points (cancel/approve/resolve).
 
 
 
-<a id="@Specification_3_get_next_timelock_account_address"></a>
+<a id="@Specification_1_get_next_timelock_account_address"></a>
 
 ### Function `get_next_timelock_account_address`
 
@@ -2494,7 +2510,7 @@ transaction-mutating entry points (cancel/approve/resolve).
 
 
 
-<a id="@Specification_3_get_proposal_hash"></a>
+<a id="@Specification_1_get_proposal_hash"></a>
 
 ### Function `get_proposal_hash`
 
@@ -2511,7 +2527,7 @@ transaction-mutating entry points (cancel/approve/resolve).
 
 
 
-<a id="@Specification_3_create"></a>
+<a id="@Specification_1_create"></a>
 
 ### Function `create`
 
@@ -2530,7 +2546,7 @@ transaction-mutating entry points (cancel/approve/resolve).
 
 
 
-<a id="@Specification_3_create_timelock_account_internal"></a>
+<a id="@Specification_1_create_timelock_account_internal"></a>
 
 ### Function `create_timelock_account_internal`
 
@@ -2560,7 +2576,7 @@ transaction-mutating entry points (cancel/approve/resolve).
 
 
 
-<a id="@Specification_3_add_creators"></a>
+<a id="@Specification_1_add_creators"></a>
 
 ### Function `add_creators`
 
@@ -2589,7 +2605,7 @@ transaction-mutating entry points (cancel/approve/resolve).
 
 
 
-<a id="@Specification_3_remove_creators"></a>
+<a id="@Specification_1_remove_creators"></a>
 
 ### Function `remove_creators`
 
@@ -2609,7 +2625,7 @@ transaction-mutating entry points (cancel/approve/resolve).
 
 
 
-<a id="@Specification_3_add_executors"></a>
+<a id="@Specification_1_add_executors"></a>
 
 ### Function `add_executors`
 
@@ -2640,7 +2656,7 @@ transaction-mutating entry points (cancel/approve/resolve).
 
 
 
-<a id="@Specification_3_remove_executors"></a>
+<a id="@Specification_1_remove_executors"></a>
 
 ### Function `remove_executors`
 
@@ -2658,7 +2674,7 @@ transaction-mutating entry points (cancel/approve/resolve).
 
 
 
-<a id="@Specification_3_add_cancelers"></a>
+<a id="@Specification_1_add_cancelers"></a>
 
 ### Function `add_cancelers`
 
@@ -2687,7 +2703,7 @@ transaction-mutating entry points (cancel/approve/resolve).
 
 
 
-<a id="@Specification_3_remove_cancelers"></a>
+<a id="@Specification_1_remove_cancelers"></a>
 
 ### Function `remove_cancelers`
 
@@ -2705,7 +2721,7 @@ transaction-mutating entry points (cancel/approve/resolve).
 
 
 
-<a id="@Specification_3_update_min_num_seconds_execute"></a>
+<a id="@Specification_1_update_min_num_seconds_execute"></a>
 
 ### Function `update_min_num_seconds_execute`
 
@@ -2731,7 +2747,7 @@ transaction-mutating entry points (cancel/approve/resolve).
 
 
 
-<a id="@Specification_3_create_transaction"></a>
+<a id="@Specification_1_create_transaction"></a>
 
 ### Function `create_transaction`
 
@@ -2785,7 +2801,7 @@ transaction-mutating entry points (cancel/approve/resolve).
 
 
 
-<a id="@Specification_3_cancel_transaction"></a>
+<a id="@Specification_1_cancel_transaction"></a>
 
 ### Function `cancel_transaction`
 
@@ -2808,7 +2824,7 @@ transaction-mutating entry points (cancel/approve/resolve).
 
 
 
-<a id="@Specification_3_approve_resolution"></a>
+<a id="@Specification_1_approve_resolution"></a>
 
 ### Function `approve_resolution`
 
@@ -2819,19 +2835,22 @@ transaction-mutating entry points (cancel/approve/resolve).
 
 
 
-<pre><code><b>let</b> <a href="timelock.md#0x1_timelock">timelock</a> = <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[timelock_account];
+<pre><code><b>pragma</b> aborts_if_is_partial;
+<b>let</b> <a href="timelock.md#0x1_timelock">timelock</a> = <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[timelock_account];
 <b>aborts_if</b> !<b>exists</b>&lt;<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>&gt;(timelock_account);
 <b>aborts_if</b> len(proposal_hash) != 32;
 <b>aborts_if</b> len(<a href="timelock.md#0x1_timelock">timelock</a>.executors) == 0 && !contains(<a href="timelock.md#0x1_timelock">timelock</a>.creators, address_of(executor));
 <b>aborts_if</b> len(<a href="timelock.md#0x1_timelock">timelock</a>.executors) &gt; 0 && !contains(<a href="timelock.md#0x1_timelock">timelock</a>.executors, address_of(executor));
 <b>aborts_if</b> !<a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_contains">table::spec_contains</a>(<a href="timelock.md#0x1_timelock">timelock</a>.transactions, proposal_hash);
 <b>aborts_if</b> <a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_get">table::spec_get</a>(<a href="timelock.md#0x1_timelock">timelock</a>.transactions, proposal_hash).executed;
+<b>aborts_if</b> aptos_framework::timestamp::now_seconds() &lt; <a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_get">table::spec_get</a>(<a href="timelock.md#0x1_timelock">timelock</a>.transactions, proposal_hash).creation_time_secs
+    + <a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_get">table::spec_get</a>(<a href="timelock.md#0x1_timelock">timelock</a>.transactions, proposal_hash).num_seconds_execute;
 <b>ensures</b> <a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_get">table::spec_get</a>(<a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[timelock_account].transactions, proposal_hash).approved;
 </code></pre>
 
 
 
-<a id="@Specification_3_resolve"></a>
+<a id="@Specification_1_resolve"></a>
 
 ### Function `resolve`
 
@@ -2865,7 +2884,7 @@ transaction-mutating entry points (cancel/approve/resolve).
 
 
 
-<a id="@Specification_3_create_timelock_account"></a>
+<a id="@Specification_1_create_timelock_account"></a>
 
 ### Function `create_timelock_account`
 
@@ -2882,7 +2901,7 @@ transaction-mutating entry points (cancel/approve/resolve).
 
 
 
-<a id="@Specification_3_create_timelock_account_seed"></a>
+<a id="@Specification_1_create_timelock_account_seed"></a>
 
 ### Function `create_timelock_account_seed`
 
@@ -2898,7 +2917,7 @@ transaction-mutating entry points (cancel/approve/resolve).
 
 
 
-<a id="@Specification_3_validate_members"></a>
+<a id="@Specification_1_validate_members"></a>
 
 ### Function `validate_members`
 

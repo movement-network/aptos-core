@@ -14,6 +14,7 @@
 -  [Function `create_resource_account_seed`](#0x1_governed_gas_pool_create_resource_account_seed)
 -  [Function `initialize`](#0x1_governed_gas_pool_initialize)
 -  [Function `initialize_governed_gas_pool_extension`](#0x1_governed_gas_pool_initialize_governed_gas_pool_extension)
+-  [Function `upgrade_pool_store_to_concurrent`](#0x1_governed_gas_pool_upgrade_pool_store_to_concurrent)
 -  [Function `init_module`](#0x1_governed_gas_pool_init_module)
 -  [Function `governed_gas_signer`](#0x1_governed_gas_pool_governed_gas_signer)
 -  [Function `governed_gas_pool_address`](#0x1_governed_gas_pool_governed_gas_pool_address)
@@ -313,7 +314,7 @@ Initializes the governed gas pool around a resource account creation seed.
 <pre><code><b>public</b> <b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_initialize">initialize</a>(
     aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>,
     delegation_pool_creation_seed: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
-) {
+) <b>acquires</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPool">GovernedGasPool</a> {
     <a href="system_addresses.md#0x1_system_addresses_assert_aptos_framework">system_addresses::assert_aptos_framework</a>(aptos_framework);
 
     // <b>return</b> <b>if</b> the governed gas pool <b>has</b> already been initialized
@@ -325,6 +326,8 @@ Initializes the governed gas pool around a resource account creation seed.
             });
         };
         <b>if</b> (!<b>exists</b>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolCounters">GovernedGasPoolCounters</a>&gt;(<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework))) {
+            <a href="governed_gas_pool.md#0x1_governed_gas_pool_upgrade_pool_store_to_concurrent">upgrade_pool_store_to_concurrent</a>(&<a href="governed_gas_pool.md#0x1_governed_gas_pool_governed_gas_signer">governed_gas_signer</a>());
+
             <b>move_to</b>(aptos_framework, <a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolCounters">GovernedGasPoolCounters</a>{
                 gas_fee_total: <a href="aggregator_v2.md#0x1_aggregator_v2_create_unbounded_aggregator">aggregator_v2::create_unbounded_aggregator</a>(),
                 treasury_total: <a href="aggregator_v2.md#0x1_aggregator_v2_create_unbounded_aggregator">aggregator_v2::create_unbounded_aggregator</a>(),
@@ -350,6 +353,8 @@ Initializes the governed gas pool around a resource account creation seed.
             deposited_treasury_counter: 0,
             withdraw_staking_reward_events: <a href="account.md#0x1_account_new_event_handle">account::new_event_handle</a>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_WithdrawStakingRewardEvent">WithdrawStakingRewardEvent</a>&gt;(aptos_framework),
         });
+
+        <a href="governed_gas_pool.md#0x1_governed_gas_pool_upgrade_pool_store_to_concurrent">upgrade_pool_store_to_concurrent</a>(&governed_gas_pool_signer);
 
         <b>move_to</b>(aptos_framework, <a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolCounters">GovernedGasPoolCounters</a>{
             gas_fee_total: <a href="aggregator_v2.md#0x1_aggregator_v2_create_unbounded_aggregator">aggregator_v2::create_unbounded_aggregator</a>(),
@@ -420,6 +425,32 @@ Initializes the governed gas pool extension alone.
 
 </details>
 
+<a id="0x1_governed_gas_pool_upgrade_pool_store_to_concurrent"></a>
+
+## Function `upgrade_pool_store_to_concurrent`
+
+
+
+<pre><code><b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_upgrade_pool_store_to_concurrent">upgrade_pool_store_to_concurrent</a>(pool_signer: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>)
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_upgrade_pool_store_to_concurrent">upgrade_pool_store_to_concurrent</a>(pool_signer: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>) {
+    <b>let</b> store_addr = <a href="governed_gas_pool.md#0x1_governed_gas_pool_primary_fungible_store_address">primary_fungible_store_address</a>(<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(pool_signer));
+    <b>let</b> store = <a href="object.md#0x1_object_address_to_object">object::address_to_object</a>&lt;<a href="fungible_asset.md#0x1_fungible_asset_FungibleStore">fungible_asset::FungibleStore</a>&gt;(store_addr);
+    <a href="fungible_asset.md#0x1_fungible_asset_upgrade_store_to_concurrent">fungible_asset::upgrade_store_to_concurrent</a>(pool_signer, store);
+}
+</code></pre>
+
+
+
+</details>
+
 <a id="0x1_governed_gas_pool_init_module"></a>
 
 ## Function `init_module`
@@ -437,7 +468,7 @@ Initialize the governed gas pool as a module
 <summary>Implementation</summary>
 
 
-<pre><code><b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_init_module">init_module</a>(aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>) {
+<pre><code><b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_init_module">init_module</a>(aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>) <b>acquires</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPool">GovernedGasPool</a> {
     // Initialize the governed gas pool
     <b>let</b> seed : <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt; = b"aptos_framework::governed_gas_pool";
     <a href="governed_gas_pool.md#0x1_governed_gas_pool_initialize">initialize</a>(aptos_framework, seed);

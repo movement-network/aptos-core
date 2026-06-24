@@ -82,7 +82,7 @@ module aptos_framework::governed_gas_pool {
     public fun initialize(
         aptos_framework: &signer,
         delegation_pool_creation_seed: vector<u8>,
-    ) {
+    ) acquires GovernedGasPool {
         system_addresses::assert_aptos_framework(aptos_framework);
 
         // return if the governed gas pool has already been initialized
@@ -94,6 +94,8 @@ module aptos_framework::governed_gas_pool {
                 });
             };
             if (!exists<GovernedGasPoolCounters>(signer::address_of(aptos_framework))) {
+                upgrade_pool_store_to_concurrent(&governed_gas_signer());
+
                 move_to(aptos_framework, GovernedGasPoolCounters{
                     gas_fee_total: aggregator_v2::create_unbounded_aggregator(),
                     treasury_total: aggregator_v2::create_unbounded_aggregator(),
@@ -119,6 +121,8 @@ module aptos_framework::governed_gas_pool {
                 deposited_treasury_counter: 0,
                 withdraw_staking_reward_events: account::new_event_handle<WithdrawStakingRewardEvent>(aptos_framework),
             });
+
+            upgrade_pool_store_to_concurrent(&governed_gas_pool_signer);
 
             move_to(aptos_framework, GovernedGasPoolCounters{
                 gas_fee_total: aggregator_v2::create_unbounded_aggregator(),
@@ -164,9 +168,15 @@ module aptos_framework::governed_gas_pool {
 
     }
 
+    fun upgrade_pool_store_to_concurrent(pool_signer: &signer) {
+        let store_addr = primary_fungible_store_address(signer::address_of(pool_signer));
+        let store = object::address_to_object<fungible_asset::FungibleStore>(store_addr);
+        fungible_asset::upgrade_store_to_concurrent(pool_signer, store);
+    }
+
     /// Initialize the governed gas pool as a module
     /// @param aptos_framework The signer of the aptos_framework module.
-    fun init_module(aptos_framework: &signer) {
+    fun init_module(aptos_framework: &signer) acquires GovernedGasPool {
         // Initialize the governed gas pool
         let seed : vector<u8> = b"aptos_framework::governed_gas_pool";
         initialize(aptos_framework, seed);

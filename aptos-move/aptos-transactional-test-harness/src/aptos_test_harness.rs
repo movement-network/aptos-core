@@ -58,11 +58,7 @@ use move_transactional_test_runner::{
     tasks::{InitCommand, SyntaxChoice, TaskInput},
     vm_test_harness::{PrecompiledFilesModules, TestRunConfig},
 };
-<<<<<<< HEAD
-use move_vm_runtime::{move_vm::SerializedReturnValues, AsFunctionValueExtension};
-=======
 use move_vm_runtime::AsFunctionValueExtension;
->>>>>>> e33e3c1b
 use move_vm_types::{
     value_serde::{FunctionValueExtension, ValueSerDeContext},
     values::Value,

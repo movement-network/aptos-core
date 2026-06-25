@@ -414,14 +414,8 @@ fn native_add_box(
     let mem_usage = if !fix_memory_double_counting || loaded.is_some() {
         gv.view()
             .map(|val| {
-<<<<<<< HEAD
-                context
-                    .abs_val_gas_params()
-                    .abstract_heap_size(&val, context.gas_feature_version())
-=======
                 abs_val_gas_params
                     .abstract_heap_size(&val, gas_feature_version)
->>>>>>> e33e3c1b
                     .map(u64::from)
             })
             .transpose()?
@@ -457,12 +451,8 @@ fn native_borrow_box(
     assert_eq!(args.len(), 2);
 
     context.charge(BORROW_BOX_BASE)?;
-<<<<<<< HEAD
-    let fix_memory_double_counting = context.timed_feature_enabled(TimedFeatureFlag::FixTableNativesMemoryDoubleCounting);
-=======
     let fix_memory_double_counting =
         context.timed_feature_enabled(TimedFeatureFlag::FixTableNativesMemoryDoubleCounting);
->>>>>>> e33e3c1b
 
     let (extensions, mut loader_context, abs_val_gas_params, gas_feature_version) =
         context.extensions_with_loader_context_and_gas_params();
@@ -484,14 +474,8 @@ fn native_borrow_box(
     let mem_usage = if !fix_memory_double_counting || loaded.is_some() {
         gv.view()
             .map(|val| {
-<<<<<<< HEAD
-                context
-                    .abs_val_gas_params()
-                    .abstract_heap_size(&val, context.gas_feature_version())
-=======
                 abs_val_gas_params
                     .abstract_heap_size(&val, gas_feature_version)
->>>>>>> e33e3c1b
                     .map(u64::from)
             })
             .transpose()?
@@ -550,25 +534,15 @@ fn native_contains_box(
     let mem_usage = if !fix_memory_double_counting || loaded.is_some() {
         gv.view()
             .map(|val| {
-<<<<<<< HEAD
-                context
-                    .abs_val_gas_params()
-                    .abstract_heap_size(&val, context.gas_feature_version())
-=======
                 abs_val_gas_params
                     .abstract_heap_size(&val, gas_feature_version)
->>>>>>> e33e3c1b
                     .map(u64::from)
             })
             .transpose()?
     } else {
         None
     };
-<<<<<<< HEAD
-    let exists = Value::bool(gv.exists()?);
-=======
     let exists = Value::bool(gv.exists());
->>>>>>> e33e3c1b
 
     drop(table_data);
 
@@ -614,14 +588,8 @@ fn native_remove_box(
     let mem_usage = if !fix_memory_double_counting || loaded.is_some() {
         gv.view()
             .map(|val| {
-<<<<<<< HEAD
-                context
-                    .abs_val_gas_params()
-                    .abstract_heap_size(&val, context.gas_feature_version())
-=======
                 abs_val_gas_params
                     .abstract_heap_size(&val, gas_feature_version)
->>>>>>> e33e3c1b
                     .map(u64::from)
             })
             .transpose()?
@@ -711,15 +679,9 @@ fn serialize_value(
     function_value_extension: &dyn FunctionValueExtension,
     layout_info: &LayoutInfo,
     val: &Value,
-<<<<<<< HEAD
-) -> PartialVMResult<(Bytes, Option<Arc<MoveTypeLayout>>)> {
-    let max_value_nest_depth = function_value_extension.max_value_nest_depth();
-    let serialization_result = if layout_info.has_identifier_mappings {
-=======
 ) -> PartialVMResult<(Bytes, Option<TriompheArc<MoveTypeLayout>>)> {
     let max_value_nest_depth = function_value_extension.max_value_nest_depth();
     let serialization_result = if layout_info.contains_delayed_fields {
->>>>>>> e33e3c1b
         // Value contains delayed fields, so we should be able to serialize it.
         ValueSerDeContext::new(max_value_nest_depth)
             .with_delayed_fields_serde()
@@ -743,11 +705,7 @@ fn deserialize_value(
     layout_info: &LayoutInfo,
 ) -> PartialVMResult<Value> {
     let layout = layout_info.layout.as_ref();
-<<<<<<< HEAD
-    let deserialization_result = if layout_info.has_identifier_mappings {
-=======
     let deserialization_result = if layout_info.contains_delayed_fields {
->>>>>>> e33e3c1b
         ValueSerDeContext::new(function_value_extension.max_value_nest_depth())
             .with_func_args_deserialization(function_value_extension)
             .with_delayed_fields_serde()

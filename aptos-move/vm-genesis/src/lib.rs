@@ -320,37 +320,15 @@ pub fn encode_genesis_change_set(
     } else {
         initialize_aptos_coin(&mut session, &module_storage, &mut traversal_context);
     }
-<<<<<<< HEAD
     // Initialize the governed gas pool with a default seed
     initialize_governed_gas_pool(&mut session, &module_storage);
-    initialize_config_buffer(&mut session, &module_storage);
-    initialize_dkg(&mut session, &module_storage);
-    initialize_reconfiguration_state(&mut session, &module_storage);
-=======
     initialize_config_buffer(&mut session, &module_storage, &mut traversal_context);
     initialize_dkg(&mut session, &module_storage, &mut traversal_context);
     initialize_reconfiguration_state(&mut session, &module_storage, &mut traversal_context);
->>>>>>> e33e3c1b
     let randomness_config = genesis_config
         .randomness_config_override
         .clone()
         .unwrap_or_else(OnChainRandomnessConfig::default_for_genesis);
-<<<<<<< HEAD
-    initialize_randomness_api_v0_config(&mut session, &module_storage);
-    initialize_randomness_config_seqnum(&mut session, &module_storage);
-    initialize_randomness_config(&mut session, &module_storage, randomness_config);
-    initialize_randomness_resources(&mut session, &module_storage);
-    initialize_on_chain_governance(&mut session, &module_storage, genesis_config);
-    let not_skip_aa: bool = if let Some(features) =  &genesis_config.initial_features_override {
-        features.is_enabled(FeatureFlag::ACCOUNT_ABSTRACTION) || features.is_enabled(FeatureFlag::DERIVABLE_ACCOUNT_ABSTRACTION)
-    } else {
-        false
-    };
-    if not_skip_aa {
-        initialize_account_abstraction(&mut session, &module_storage);
-    }
-    create_and_initialize_validators(&mut session, &module_storage, validators);
-=======
     initialize_randomness_api_v0_config(&mut session, &module_storage, &mut traversal_context);
     initialize_randomness_config_seqnum(&mut session, &module_storage, &mut traversal_context);
     initialize_randomness_config(
@@ -366,14 +344,20 @@ pub fn encode_genesis_change_set(
         &mut traversal_context,
         genesis_config,
     );
-    initialize_account_abstraction(&mut session, &module_storage, &mut traversal_context);
+    let not_skip_aa: bool = if let Some(features) = &genesis_config.initial_features_override {
+        features.is_enabled(FeatureFlag::ACCOUNT_ABSTRACTION) || features.is_enabled(FeatureFlag::DERIVABLE_ACCOUNT_ABSTRACTION)
+    } else {
+        false
+    };
+    if not_skip_aa {
+        initialize_account_abstraction(&mut session, &module_storage, &mut traversal_context);
+    }
     create_and_initialize_validators(
         &mut session,
         &module_storage,
         &mut traversal_context,
         validators,
     );
->>>>>>> e33e3c1b
     if genesis_config.is_test {
         allow_core_resources_to_set_version(&mut session, &module_storage, &mut traversal_context);
     }

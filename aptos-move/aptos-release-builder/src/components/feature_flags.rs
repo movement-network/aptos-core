@@ -149,11 +149,9 @@ pub enum FeatureFlag {
     EnableLazyLoading,
     CalculateTransactionFeeForDistribution,
     DistributeTransactionFee,
-<<<<<<< HEAD
     GovernedGasPool,
     SteakRewardUsingTreasury,
     ExtractAbortInfoExactMatch,
-=======
     MonotonicallyIncreasingCounter,
     EnableCaptureOption,
     EnableTrustedCode,
@@ -161,7 +159,6 @@ pub enum FeatureFlag {
     VMBinaryFormatV9,
     EnableFrameworkForOption,
     SessionContinuation,
->>>>>>> e33e3c1b
 }
 
 fn generate_features_blob(writer: &CodeWriter, data: &[u64]) {
@@ -408,13 +405,11 @@ impl From<FeatureFlag> for AptosFeatureFlag {
                 AptosFeatureFlag::CALCULATE_TRANSACTION_FEE_FOR_DISTRIBUTION
             },
             FeatureFlag::DistributeTransactionFee => AptosFeatureFlag::DISTRIBUTE_TRANSACTION_FEE,
-<<<<<<< HEAD
             FeatureFlag::GovernedGasPool => AptosFeatureFlag::GOVERNED_GAS_POOL,
             FeatureFlag::SteakRewardUsingTreasury => AptosFeatureFlag::STAKE_REWARD_USING_TREASURY,
             FeatureFlag::ExtractAbortInfoExactMatch => {
                 AptosFeatureFlag::EXTRACT_ABORT_INFO_EXACT_MATCH
             },
-=======
             FeatureFlag::MonotonicallyIncreasingCounter => {
                 AptosFeatureFlag::MONOTONICALLY_INCREASING_COUNTER
             },
@@ -424,7 +419,6 @@ impl From<FeatureFlag> for AptosFeatureFlag {
             FeatureFlag::VMBinaryFormatV9 => AptosFeatureFlag::VM_BINARY_FORMAT_V9,
             FeatureFlag::EnableFrameworkForOption => AptosFeatureFlag::ENABLE_FRAMEWORK_FOR_OPTION,
             FeatureFlag::SessionContinuation => AptosFeatureFlag::SESSION_CONTINUATION,
->>>>>>> e33e3c1b
         }
     }
 }
@@ -598,13 +592,11 @@ impl From<AptosFeatureFlag> for FeatureFlag {
                 FeatureFlag::CalculateTransactionFeeForDistribution
             },
             AptosFeatureFlag::DISTRIBUTE_TRANSACTION_FEE => FeatureFlag::DistributeTransactionFee,
-<<<<<<< HEAD
             AptosFeatureFlag::GOVERNED_GAS_POOL => FeatureFlag::GovernedGasPool,
             AptosFeatureFlag::STAKE_REWARD_USING_TREASURY => FeatureFlag::SteakRewardUsingTreasury,
             AptosFeatureFlag::EXTRACT_ABORT_INFO_EXACT_MATCH => {
                 FeatureFlag::ExtractAbortInfoExactMatch
             },
-=======
             AptosFeatureFlag::MONOTONICALLY_INCREASING_COUNTER => {
                 FeatureFlag::MonotonicallyIncreasingCounter
             },
@@ -614,7 +606,6 @@ impl From<AptosFeatureFlag> for FeatureFlag {
             AptosFeatureFlag::VM_BINARY_FORMAT_V9 => FeatureFlag::VMBinaryFormatV9,
             AptosFeatureFlag::ENABLE_FRAMEWORK_FOR_OPTION => FeatureFlag::EnableFrameworkForOption,
             AptosFeatureFlag::SESSION_CONTINUATION => FeatureFlag::SessionContinuation,
->>>>>>> e33e3c1b
         }
     }
 }

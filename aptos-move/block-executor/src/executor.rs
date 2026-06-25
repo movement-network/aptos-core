@@ -1992,25 +1992,8 @@ where
         // Explicit async drops even when there is an error.
         DEFAULT_DROPPER.schedule_drop((last_input_output, scheduler, versioned_cache));
 
-<<<<<<< HEAD
-        let block_end_info = shared_commit_state.into_inner().get_block_end_info();
-        let mut block_epilogue_txn = None;
-
-        let outputs = final_results.into_inner();
-
-        let has_reconfig = outputs
-            .iter()
-            .rposition(|t| !t.is_retry())
-            .map_or(false, |idx| outputs[idx].has_new_epoch_event());
-        if !has_reconfig {
-            if let Some(block_id) = transaction_slice_metadata.append_state_checkpoint_to_block() {
-                block_epilogue_txn = Some(self.gen_block_epilogue(block_id, block_end_info));
-                // TODO(grao): Call VM for block_epilogue_txn.
-            }
-=======
         if has_error {
             return Err(());
->>>>>>> e33e3c1b
         }
 
         // Return final result
@@ -2020,36 +2003,22 @@ where
         ))
     }
 
-<<<<<<< HEAD
-    fn gen_block_epilogue(
-=======
     fn gen_block_epilogue<'a>(
->>>>>>> e33e3c1b
         &self,
         block_id: HashValue,
         signature_verified_block: &TP,
         outputs: impl Iterator<Item = &'a E::Output>,
         epilogue_txn_idx: TxnIndex,
         block_end_info: TBlockEndInfoExt<T::Key>,
-<<<<<<< HEAD
-    ) -> Transaction {
-=======
         features: &Features,
     ) -> Result<T, PanicError> {
         // TODO(grao): Remove this check once AIP-88 is fully enabled.
->>>>>>> e33e3c1b
         if !self
             .config
             .onchain
             .block_gas_limit_type
             .add_block_limit_outcome_onchain()
         {
-<<<<<<< HEAD
-            return Transaction::StateCheckpoint(block_id);
-        }
-        Transaction::block_epilogue(block_id, block_end_info.to_persistent())
-    }
-=======
             return Ok(T::state_checkpoint(block_id));
         }
         if !features.is_calculate_transaction_fee_for_distribution_enabled() {
@@ -2058,7 +2027,6 @@ where
                 block_end_info.to_persistent(),
             ));
         }
->>>>>>> e33e3c1b
 
         let mut amount = BTreeMap::new();
 

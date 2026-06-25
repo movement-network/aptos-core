@@ -38,27 +38,11 @@ fn bit_length_is_valid(bits: usize) -> bool {
     matches!(bits, 8 | 16 | 32 | 64)
 }
 
-<<<<<<< HEAD
 fn batch_count_is_valid(n: usize) -> bool {
     matches!(n, 1 | 2 | 4 | 8 | 16)
 }
 
 static BP_GENS: Lazy<BulletproofGens> =
-=======
-/// The Bulletproofs library only supports batch sizes of 1, 2, 4, 8, or 16.
-/// The restriction to powers of two is unfortunate, but remains true. (One can deal with it in
-/// in applications by having the verifier append Pedersen commitment(s) to zero.)
-/// TODO: This is not true (at least not anymore). Consider relaxing.
-fn is_supported_batch_size(batch_size: usize) -> bool {
-    matches!(batch_size, 1 | 2 | 4 | 8 | 16)
-}
-
-/// Public parameters of the Bulletproof range proof system, for both individual and batch proving
-/// The `party_capacity` argument is the max batch size.
-/// TODO: As explained above `is_supported_batch_size`, consider relaxing this. (Ensure it remains
-///  backwards-compatible)
-static BULLETPROOF_GENERATORS: Lazy<BulletproofGens> =
->>>>>>> e33e3c1b
     Lazy::new(|| BulletproofGens::new(MAX_RANGE_BITS, 16));
 
 fn resolve_pedersen_bases(

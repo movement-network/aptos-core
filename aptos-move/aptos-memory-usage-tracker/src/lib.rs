@@ -319,11 +319,7 @@ where
             .vm_gas_params()
             .misc
             .abs_val
-<<<<<<< HEAD
-            .abstract_heap_size(&val, self.feature_version())?;
-=======
             .abstract_value_size_stack_and_heap(&val, self.feature_version())?;
->>>>>>> e33e3c1b
 
         self.charge_copy_loc_cached(stack_size, heap_size)
     }
@@ -397,11 +393,7 @@ where
             .vm_gas_params()
             .misc
             .abs_val
-<<<<<<< HEAD
-            .abstract_heap_size(&val, self.feature_version())?;
-=======
             .abstract_value_size_stack_and_heap(val, self.feature_version())?;
->>>>>>> e33e3c1b
 
         self.charge_read_ref_cached(stack_size, heap_size)
     }
@@ -502,15 +494,7 @@ where
     }
 
     #[inline]
-<<<<<<< HEAD
-    fn charge_vec_push_back(
-        &mut self,
-        ty: impl TypeView,
-        val: impl ValueView,
-    ) -> PartialVMResult<()> {
-=======
     fn charge_vec_push_back(&mut self, val: impl ValueView) -> PartialVMResult<()> {
->>>>>>> e33e3c1b
         self.use_heap_memory(
             self.vm_gas_params()
                 .misc

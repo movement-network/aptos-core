@@ -24,11 +24,8 @@ mod enum_variant_count;
 mod error_map;
 mod events;
 mod fee_payer;
-<<<<<<< HEAD
-=======
 mod friends;
 mod function_value_capture_option;
->>>>>>> e33e3c1b
 mod function_value_depth;
 mod function_values;
 mod fungible_asset;

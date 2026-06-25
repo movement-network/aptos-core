@@ -581,7 +581,6 @@ impl From<AptosFeatureFlag> for FeatureFlag {
             AptosFeatureFlag::EXTRACT_ABORT_INFO_EXACT_MATCH => {
                 FeatureFlag::ExtractAbortInfoExactMatch
             },
-            _ => todo!(),
         }
     }
 }

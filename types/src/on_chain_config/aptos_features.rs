@@ -149,7 +149,6 @@ pub enum FeatureFlag {
     /// compiler-generated abort codes (e.g. `UNSPECIFIED_ABORT_CODE`) against
     /// user-defined error constants whose lower bits happen to coincide.
     EXTRACT_ABORT_INFO_EXACT_MATCH = 225,
-    GOVERNED_GAS_POOL_AGGREGATORS = 226,
 }
 
 impl FeatureFlag {
@@ -250,7 +249,6 @@ impl FeatureFlag {
             // FeatureFlag::CALCULATE_TRANSACTION_FEE_FOR_DISTRIBUTION,
             // FeatureFlag::DISTRIBUTE_TRANSACTION_FEE,
             FeatureFlag::GOVERNED_GAS_POOL,
-            FeatureFlag::GOVERNED_GAS_POOL_AGGREGATORS,
         ]
     }
 }

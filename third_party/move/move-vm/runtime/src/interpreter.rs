@@ -1833,8 +1833,8 @@ impl Stack {
 
     /// Pop n types off the stack.
     // note(inline): bloats runtime_type_checks
-    pub(crate) fn popn_tys(&mut self, n: u16) -> PartialVMResult<Vec<Type>> {
-        let remaining_stack_size = self.types.len().checked_sub(n as usize).ok_or_else(|| {
+    pub(crate) fn popn_tys(&mut self, n: usize) -> PartialVMResult<Vec<Type>> {
+        let remaining_stack_size = self.types.len().checked_sub(n).ok_or_else(|| {
             PartialVMError::new(StatusCode::EMPTY_VALUE_STACK)
                 .with_message("runtime type stack empty")
         })?;

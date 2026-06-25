@@ -64,12 +64,14 @@ impl BlockStore {
     /// Check if we're far away from this ledger info and need to sync.
     /// This ensures that the block referred by the ledger info is not in buffer manager.
     pub fn need_sync_for_ledger_info(&self, li: &LedgerInfoWithSignatures) -> bool {
+        const MAX_PRECOMMIT_GAP: u64 = 200;
         let block_not_exist = self.ordered_root().round() < li.commit_info().round()
             && !self.block_exists(li.commit_info().id());
         // TODO move min gap to fallback (30) to config, and if configurable make sure the value is
         // larger than buffer manager MAX_BACKLOG (20)
         let max_commit_gap = 30.max(2 * self.vote_back_pressure_limit);
         let min_commit_round = li.commit_info().round().saturating_sub(max_commit_gap);
+        let current_commit_round = self.commit_root().round();
 
         if let Some(pre_commit_status) = self.pre_commit_status() {
             let mut status_guard = pre_commit_status.lock();
@@ -81,10 +83,13 @@ impl BlockStore {
                 status_guard.pause();
                 true
             } else {
+                if current_commit_round + MAX_PRECOMMIT_GAP < status_guard.round() {
+                    status_guard.pause();
+                }
                 false
             }
         } else {
-            block_not_exist || self.commit_root().round() < min_commit_round
+            block_not_exist || current_commit_round < min_commit_round
         }
     }
 
@@ -297,6 +302,7 @@ impl BlockStore {
             self.payload_manager.clone(),
             self.order_vote_enabled,
             self.window_size,
+            Some(self),
         )
         .await?
         .take();
@@ -366,6 +372,7 @@ impl BlockStore {
         payload_manager: Arc<dyn TPayloadManager>,
         order_vote_enabled: bool,
         window_size: Option<u64>,
+        maybe_block_store: Option<&'a BlockStore>,
     ) -> anyhow::Result<RecoveryData> {
         info!(
             LogSchema::new(LogEvent::StateSync).remote_peer(retriever.preferred_peer),
@@ -495,7 +502,14 @@ impl BlockStore {
             })?;
 
         storage.save_tree(blocks.clone(), quorum_certs.clone())?;
-
+        // abort any pending executor tasks before entering state sync
+        // with zaptos, things can run before hitting buffer manager
+        if let Some(block_store) = maybe_block_store {
+            monitor!(
+                "abort_pipeline_for_state_sync",
+                block_store.abort_pipeline_for_state_sync().await
+            );
+        }
         execution_client
             .sync_to_target(highest_commit_cert.ledger_info().clone())
             .await?;
@@ -709,6 +723,21 @@ impl BlockRetriever {
 
             loop {
                 tokio::select! {
+                    biased;
+                    Some((peer, response)) = futures.next() => {
+                        match response {
+                            Ok(result) => return Ok(result),
+                            e => {
+                                warn!(
+                                    remote_peer = peer,
+                                    block_id = block_id,
+                                    "{:?}, Failed to fetch block",
+                                    e,
+                                );
+                                failed_attempt += 1;
+                            },
+                        }
+                    },
                     _ = interval.tick() => {
                         // send batch request to a set of peers of size request_num_peers (or 1 for the first time)
                         let next_peers = if cur_retry < num_retries {
@@ -745,20 +774,6 @@ impl BlockRetriever {
                             futures.push(async move { (remote_peer, future.await) }.boxed());
                         }
                     }
-                    Some((peer, response)) = futures.next() => {
-                        match response {
-                            Ok(result) => return Ok(result),
-                            e => {
-                                warn!(
-                                    remote_peer = peer,
-                                    block_id = block_id,
-                                    "{:?}, Failed to fetch block",
-                                    e,
-                                );
-                                failed_attempt += 1;
-                            },
-                        }
-                    },
                 }
             }
         })

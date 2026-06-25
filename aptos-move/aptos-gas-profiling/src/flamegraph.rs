@@ -115,11 +115,7 @@ impl ExecutionAndIOCosts {
 
         for dep in &self.dependencies {
             lines.push(
-                format!(
-                    "dependencies;{}{}",
-                    Render(&dep.id),
-                    if dep.is_new { "(new)" } else { "" }
-                ),
+                format!("dependencies;{}", dep.render().trim_start(),),
                 dep.cost,
             )
         }
@@ -162,7 +158,7 @@ impl ExecutionAndIOCosts {
                     }
                 }
 
-                self.lines.push(&self.path(), frame_cost);
+                self.lines.push(self.path(), frame_cost);
                 self.path.pop();
             }
 

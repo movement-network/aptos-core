@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // @generated
-impl serde::Serialize for AbstractionSignature {
+impl serde::Serialize for AbstractSignature {
     #[allow(deprecated)]
     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
     where
@@ -16,7 +16,7 @@ impl serde::Serialize for AbstractionSignature {
         if !self.signature.is_empty() {
             len += 1;
         }
-        let mut struct_ser = serializer.serialize_struct("aptos.transaction.v1.AbstractionSignature", len)?;
+        let mut struct_ser = serializer.serialize_struct("aptos.transaction.v1.AbstractSignature", len)?;
         if !self.function_info.is_empty() {
             struct_ser.serialize_field("functionInfo", &self.function_info)?;
         }
@@ -26,7 +26,7 @@ impl serde::Serialize for AbstractionSignature {
         struct_ser.end()
     }
 }
-impl<'de> serde::Deserialize<'de> for AbstractionSignature {
+impl<'de> serde::Deserialize<'de> for AbstractSignature {
     #[allow(deprecated)]
     fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
     where
@@ -74,13 +74,13 @@ impl<'de> serde::Deserialize<'de> for AbstractionSignature {
         }
         struct GeneratedVisitor;
         impl<'de> serde::de::Visitor<'de> for GeneratedVisitor {
-            type Value = AbstractionSignature;
+            type Value = AbstractSignature;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                formatter.write_str("struct aptos.transaction.v1.AbstractionSignature")
+                formatter.write_str("struct aptos.transaction.v1.AbstractSignature")
             }
 
-            fn visit_map<V>(self, mut map: V) -> std::result::Result<AbstractionSignature, V::Error>
+            fn visit_map<V>(self, mut map: V) -> std::result::Result<AbstractSignature, V::Error>
                 where
                     V: serde::de::MapAccess<'de>,
             {
@@ -104,13 +104,13 @@ impl<'de> serde::Deserialize<'de> for AbstractionSignature {
                         }
                     }
                 }
-                Ok(AbstractionSignature {
+                Ok(AbstractSignature {
                     function_info: function_info__.unwrap_or_default(),
                     signature: signature__.unwrap_or_default(),
                 })
             }
         }
-        deserializer.deserialize_struct("aptos.transaction.v1.AbstractionSignature", FIELDS, GeneratedVisitor)
+        deserializer.deserialize_struct("aptos.transaction.v1.AbstractSignature", FIELDS, GeneratedVisitor)
     }
 }
 impl serde::Serialize for AccountSignature {
@@ -4407,6 +4407,9 @@ impl serde::Serialize for MoveStruct {
         if self.is_event {
             len += 1;
         }
+        if self.is_enum {
+            len += 1;
+        }
         if !self.abilities.is_empty() {
             len += 1;
         }
@@ -4425,6 +4428,9 @@ impl serde::Serialize for MoveStruct {
         }
         if self.is_event {
             struct_ser.serialize_field("isEvent", &self.is_event)?;
+        }
+        if self.is_enum {
+            struct_ser.serialize_field("isEnum", &self.is_enum)?;
         }
         if !self.abilities.is_empty() {
             let v = self.abilities.iter().cloned().map(|v| {
@@ -4454,6 +4460,8 @@ impl<'de> serde::Deserialize<'de> for MoveStruct {
             "isNative",
             "is_event",
             "isEvent",
+            "is_enum",
+            "isEnum",
             "abilities",
             "generic_type_params",
             "genericTypeParams",
@@ -4465,6 +4473,7 @@ impl<'de> serde::Deserialize<'de> for MoveStruct {
             Name,
             IsNative,
             IsEvent,
+            IsEnum,
             Abilities,
             GenericTypeParams,
             Fields,
@@ -4492,6 +4501,7 @@ impl<'de> serde::Deserialize<'de> for MoveStruct {
                             "name" => Ok(GeneratedField::Name),
                             "isNative" | "is_native" => Ok(GeneratedField::IsNative),
                             "isEvent" | "is_event" => Ok(GeneratedField::IsEvent),
+                            "isEnum" | "is_enum" => Ok(GeneratedField::IsEnum),
                             "abilities" => Ok(GeneratedField::Abilities),
                             "genericTypeParams" | "generic_type_params" => Ok(GeneratedField::GenericTypeParams),
                             "fields" => Ok(GeneratedField::Fields),
@@ -4517,6 +4527,7 @@ impl<'de> serde::Deserialize<'de> for MoveStruct {
                 let mut name__ = None;
                 let mut is_native__ = None;
                 let mut is_event__ = None;
+                let mut is_enum__ = None;
                 let mut abilities__ = None;
                 let mut generic_type_params__ = None;
                 let mut fields__ = None;
@@ -4539,6 +4550,12 @@ impl<'de> serde::Deserialize<'de> for MoveStruct {
                                 return Err(serde::de::Error::duplicate_field("isEvent"));
                             }
                             is_event__ = Some(map.next_value()?);
+                        }
+                        GeneratedField::IsEnum => {
+                            if is_enum__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("isEnum"));
+                            }
+                            is_enum__ = Some(map.next_value()?);
                         }
                         GeneratedField::Abilities => {
                             if abilities__.is_some() {
@@ -4564,6 +4581,7 @@ impl<'de> serde::Deserialize<'de> for MoveStruct {
                     name: name__.unwrap_or_default(),
                     is_native: is_native__.unwrap_or_default(),
                     is_event: is_event__.unwrap_or_default(),
+                    is_enum: is_enum__.unwrap_or_default(),
                     abilities: abilities__.unwrap_or_default(),
                     generic_type_params: generic_type_params__.unwrap_or_default(),
                     fields: fields__.unwrap_or_default(),

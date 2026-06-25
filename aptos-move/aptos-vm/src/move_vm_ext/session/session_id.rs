@@ -74,9 +74,20 @@ pub enum SessionId {
         expiration_time: u64,
         script_hash: Vec<u8>,
     },
+    BlockEpilogue {
+        // block id
+        id: HashValue,
+    },
 }
 
 impl SessionId {
+    pub fn txn_hash(&self) -> [u8; 32] {
+        self.as_uuid()
+            .to_vec()
+            .try_into()
+            .expect("HashValue should convert to [u8; 32]")
+    }
+
     pub fn txn_meta(txn_metadata: &TransactionMetadata) -> Self {
         match txn_metadata.replay_protector() {
             ReplayProtector::SequenceNumber(sequence_number) => Self::Txn {
@@ -107,6 +118,10 @@ impl SessionId {
         Self::BlockMetaExt {
             id: block_meta_ext.id(),
         }
+    }
+
+    pub fn block_epilogue(id: HashValue) -> Self {
+        Self::BlockEpilogue { id }
     }
 
     pub fn prologue_meta(txn_metadata: &TransactionMetadata) -> Self {
@@ -185,7 +200,49 @@ impl SessionId {
             Self::BlockMeta { id: _ }
             | Self::Genesis { id: _ }
             | Self::Void
+            | Self::BlockEpilogue { id: _ }
             | Self::BlockMetaExt { id: _ } => vec![],
+        }
+    }
+
+    // This is used in `monotonically_increasing_number` native function. Every call to the native function
+    // will output a monotonically increasing number.
+    // monotonically_increasing_number (128 bits) = 0 (8 bits -- Reserved for future use) || timestamp (64 bits) || transaction_index_inside_block (24 bits) || session_counter_inside_transaction (8 bits) || local_counter_inside_session (16 bits)
+    // This function is used to obtain `session_counter_inside_transaction`.
+    // The sessions here are organized in the increasing order in which they are created. Eg: Prologue < Txn < RunOnAbort < Epilogue.
+    // When introducing new session types, please check the order in which the sessions are created during a transaction execution and assign a number here accordingly.
+    pub(crate) fn session_counter(&self) -> u8 {
+        match self {
+            Self::Genesis { .. } => 0,
+
+            // This session is only used in simulation. Output is not committed.
+            // It's okay to use any number here.
+            Self::Void => 5,
+
+            // BlockMetadata and BlockMetaData transactions have no sub-sessions.
+            // It's okay to use any number here.
+            Self::BlockMeta { .. } => 10,
+            Self::BlockMetaExt { .. } => 15,
+
+            // Validator transactions have no sub-sessions.
+            // It's okay to use any number here.
+            Self::ValidatorTxn { .. } => 20,
+
+            // We should maintain the order: Prologue < Txn < RunOnAbort < Epilogue
+            Self::Prologue { .. } => 25,
+            Self::OrderlessTxnProlouge { .. } => 30,
+
+            Self::Txn { .. } => 35,
+            Self::OrderlessTxn { .. } => 40,
+
+            // RunOnAbort runs before epilogue, so it should be before epilogue
+            Self::RunOnAbort { .. } => 45,
+            Self::OrderlessRunOnAbort { .. } => 50,
+
+            Self::Epilogue { .. } => 55,
+            Self::OrderlessTxnEpilogue { .. } => 60,
+
+            Self::BlockEpilogue { .. } => 65,
         }
     }
 }

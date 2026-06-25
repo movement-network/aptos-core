@@ -27,7 +27,8 @@ use aptos_types::{
     transaction::{
         signature_verified_transaction::into_signature_verified_block,
         EntryFunction as TransactionEntryFunction, ExecutionStatus, RawTransaction,
-        Script as TransactionScript, Transaction, TransactionOutput, TransactionStatus,
+        Script as TransactionScript, SignatureCheckedTransaction, Transaction, TransactionOutput,
+        TransactionStatus,
     },
 };
 use aptos_vm::{aptos_vm::AptosVMBlockExecutor, VMBlockExecutor};
@@ -57,7 +58,11 @@ use move_transactional_test_runner::{
     tasks::{InitCommand, SyntaxChoice, TaskInput},
     vm_test_harness::{PrecompiledFilesModules, TestRunConfig},
 };
+<<<<<<< HEAD
 use move_vm_runtime::{move_vm::SerializedReturnValues, AsFunctionValueExtension};
+=======
+use move_vm_runtime::AsFunctionValueExtension;
+>>>>>>> e33e3c1b
 use move_vm_types::{
     value_serde::{FunctionValueExtension, ValueSerDeContext},
     values::Value,
@@ -504,7 +509,7 @@ impl AptosTestAdapter<'_> {
     fn run_transaction(&mut self, txn: Transaction) -> Result<TransactionOutput> {
         let txn_block = vec![txn];
         let sig_verified_block = into_signature_verified_block(txn_block);
-        let txn_provider = DefaultTxnProvider::new(sig_verified_block);
+        let txn_provider = DefaultTxnProvider::new_without_info(sig_verified_block);
         let mut outputs = AptosVMBlockExecutor::new()
             .execute_block_no_limit(&txn_provider, &self.storage.clone())?;
 
@@ -568,6 +573,15 @@ impl AptosTestAdapter<'_> {
         self.run_transaction(Transaction::UserTransaction(txn))
             .expect("Failed to mint aptos coin. This should not happen.");
     }
+}
+
+macro_rules! unwrap_or_return_some_err_str {
+    ($result:expr) => {
+        match $result {
+            Ok(results) => results,
+            Err(err) => return Some(format!("Error: {}", err)),
+        }
+    };
 }
 
 impl<'a> MoveTestAdapter<'a> for AptosTestAdapter<'a> {
@@ -806,7 +820,7 @@ impl<'a> MoveTestAdapter<'a> for AptosTestAdapter<'a> {
         txn_args: Vec<MoveValue>,
         gas_budget: Option<u64>,
         extra_args: Self::ExtraRunArgs,
-    ) -> Result<Option<String>> {
+    ) -> Option<String> {
         let signer0 = self.compiled_state().resolve_address(&signers[0]);
 
         if gas_budget.is_some() {
@@ -834,15 +848,15 @@ impl<'a> MoveTestAdapter<'a> for AptosTestAdapter<'a> {
         };
 
         let mut script_blob = vec![];
-        script.serialize(&mut script_blob)?;
+        unwrap_or_return_some_err_str!(script.serialize(&mut script_blob));
 
-        let params = self.fetch_transaction_parameters(
+        let params = unwrap_or_return_some_err_str!(self.fetch_transaction_parameters(
             &signer0,
             extra_args.sequence_number,
             None,
             None,
             None,
-        )?;
+        ));
 
         let txn = RawTransaction::new_script(
             signer0,
@@ -864,14 +878,13 @@ impl<'a> MoveTestAdapter<'a> for AptosTestAdapter<'a> {
         .unwrap()
         .into_inner();
 
-        let output = self.run_transaction(Transaction::UserTransaction(txn))?;
-
-        let output = if extra_args.show_events {
+        let output =
+            unwrap_or_return_some_err_str!(self.run_transaction(Transaction::UserTransaction(txn)));
+        if extra_args.show_events {
             render_events(output.events())
         } else {
             None
-        };
-        Ok(output)
+        }
     }
 
     fn call_function(
@@ -883,7 +896,7 @@ impl<'a> MoveTestAdapter<'a> for AptosTestAdapter<'a> {
         txn_args: Vec<MoveValue>,
         gas_budget: Option<u64>,
         extra_args: Self::ExtraRunArgs,
-    ) -> Result<(Option<String>, SerializedReturnValues)> {
+    ) -> Option<String> {
         if extra_args.script {
             panic!("Entry functions are not supported.")
         }
@@ -904,13 +917,13 @@ impl<'a> MoveTestAdapter<'a> for AptosTestAdapter<'a> {
             (None, ParsedAddress::Numerical(_)) => panic_missing_private_key("run"),
         };
 
-        let params = self.fetch_transaction_parameters(
+        let params = unwrap_or_return_some_err_str!(self.fetch_transaction_parameters(
             &signer,
             extra_args.sequence_number,
             extra_args.expiration_time,
             extra_args.gas_unit_price,
             gas_budget,
-        )?;
+        ));
         let txn = RawTransaction::new_entry_function(
             signer,
             params.sequence_number,
@@ -931,7 +944,7 @@ impl<'a> MoveTestAdapter<'a> for AptosTestAdapter<'a> {
             ChainId::test(),
         );
 
-        let txn = match &extra_args.secondary_signers {
+        let result = match &extra_args.secondary_signers {
             Some(secondary_signers) => {
                 let (secondary_signers, secondary_private_keys) =
                     self.resolve_secondary_signers(secondary_signers);
@@ -940,28 +953,22 @@ impl<'a> MoveTestAdapter<'a> for AptosTestAdapter<'a> {
                     &private_key,
                     secondary_signers,
                     secondary_private_keys.iter().collect(),
-                )?
-                .into_inner()
+                )
+                .map(SignatureCheckedTransaction::into_inner)
             },
             None => txn
-                .sign(&private_key, Ed25519PublicKey::from(&private_key))?
-                .into_inner(),
+                .sign(&private_key, Ed25519PublicKey::from(&private_key))
+                .map(SignatureCheckedTransaction::into_inner),
         };
+        let txn = unwrap_or_return_some_err_str!(result);
 
-        let output = self.run_transaction(Transaction::UserTransaction(txn))?;
-
-        let output = if extra_args.show_events {
+        let output =
+            unwrap_or_return_some_err_str!(self.run_transaction(Transaction::UserTransaction(txn)));
+        if extra_args.show_events {
             render_events(output.events())
         } else {
             None
-        };
-
-        //TODO: replace this dummy value with actual txn return value
-        let a = SerializedReturnValues {
-            mutable_reference_outputs: vec![(0, vec![0], MoveTypeLayout::U8)],
-            return_values: vec![(vec![0], MoveTypeLayout::U8)],
-        };
-        Ok((output, a))
+        }
     }
 
     fn view_data(
@@ -1100,7 +1107,7 @@ fn precompiled_v2_framework_with_experimental() -> &'static PrecompiledFilesModu
 pub fn run_aptos_test(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     run_aptos_test_with_config(
         path,
-        TestRunConfig::compiler_v2(LanguageVersion::default(), vec![(
+        TestRunConfig::new(LanguageVersion::default(), vec![(
             "attach-compiled-module".to_owned(),
             true,
         )]),
@@ -1112,17 +1119,13 @@ pub fn run_aptos_test_with_config(
     config: TestRunConfig,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let suffix = Some(EXP_EXT.to_owned());
-    let v2_lib = match &config {
-        // only latest language version can use experimental framework
-        TestRunConfig::CompilerV2 {
-            language_version, ..
-        } => {
-            if language_version == &LanguageVersion::latest() {
-                precompiled_v2_framework_with_experimental()
-            } else {
-                precompiled_v2_framework()
-            }
-        },
+    let v2_lib = {
+        let language_version = &config.language_version;
+        if language_version == &LanguageVersion::latest() {
+            precompiled_v2_framework_with_experimental()
+        } else {
+            precompiled_v2_framework()
+        }
     };
     set_paranoid_type_checks(true);
     run_test_impl::<AptosTestAdapter>(config, path, v2_lib, &suffix)

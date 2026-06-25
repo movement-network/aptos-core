@@ -19,16 +19,16 @@ use crate::{
     epoch_state::EpochState,
     event::{EventHandle, EventKey},
     ledger_info::{generate_ledger_info_with_sig, LedgerInfo, LedgerInfoWithSignatures},
-    on_chain_config::ValidatorSet,
+    on_chain_config::{Features, ValidatorSet},
     proof::TransactionInfoListWithProof,
     state_store::state_key::StateKey,
     transaction::{
-        block_epilogue::BlockEndInfo, ChangeSet, EntryFunction, ExecutionStatus,
-        IndexedTransactionSummary, Module, Multisig, MultisigTransactionPayload, RawTransaction,
-        ReplayProtector, Script, SignatureCheckedTransaction, SignedTransaction, Transaction,
-        TransactionArgument, TransactionAuxiliaryData, TransactionExecutable,
-        TransactionExtraConfig, TransactionInfo, TransactionListWithProof, TransactionPayload,
-        TransactionPayloadInner, TransactionStatus, TransactionToCommit, Version, WriteSetPayload,
+        ChangeSet, EntryFunction, ExecutionStatus, IndexedTransactionSummary, Module, Multisig,
+        MultisigTransactionPayload, RawTransaction, ReplayProtector, Script,
+        SignatureCheckedTransaction, SignedTransaction, Transaction, TransactionArgument,
+        TransactionAuxiliaryData, TransactionExecutable, TransactionExtraConfig, TransactionInfo,
+        TransactionListWithProof, TransactionPayload, TransactionPayloadInner, TransactionStatus,
+        TransactionToCommit, Version, WriteSetPayload,
     },
     validator_info::ValidatorInfo,
     validator_signer::ValidatorSigner,
@@ -540,8 +540,8 @@ impl Arbitrary for TransactionExtraConfig {
 }
 
 prop_compose! {
-    fn arb_transaction_status()(vm_status in any::<VMStatus>()) -> TransactionStatus {
-        TransactionStatus::from_vm_status(vm_status, true)
+    fn arb_transaction_status()(vm_status in any::<VMStatus>(), memory_limit_exceeded_as_miscellaneous_error: bool) -> TransactionStatus {
+        TransactionStatus::from_vm_status(vm_status, &Features::default(), memory_limit_exceeded_as_miscellaneous_error)
     }
 }
 
@@ -796,7 +796,7 @@ impl AccountStateGen {
         self,
         account_index: Index,
         universe: &AccountInfoUniverse,
-    ) -> impl IntoIterator<Item = (StateKey, Vec<u8>)> {
+    ) -> impl IntoIterator<Item = (StateKey, Vec<u8>)> + use<> {
         let address = &universe.get_account_info(account_index).address;
         let account_resource = self
             .account_resource_gen
@@ -868,7 +868,7 @@ impl Arbitrary for TransactionToCommit {
             any_with::<AccountInfoUniverse>(1),
             any::<TransactionToCommitGen>(),
         )
-            .prop_map(|(mut universe, gen)| gen.materialize(&mut universe))
+            .prop_map(|(mut universe, r#gen)| r#gen.materialize(&mut universe))
             .boxed()
     }
 }
@@ -1380,31 +1380,6 @@ impl Arbitrary for ValidatorTransaction {
                     transcript_bytes: payload,
                 })
             })
-            .boxed()
-    }
-}
-
-impl Arbitrary for BlockEndInfo {
-    type Parameters = SizeRange;
-    type Strategy = BoxedStrategy<Self>;
-
-    fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
-        (any::<bool>(), any::<bool>(), any::<u64>(), any::<u64>())
-            .prop_map(
-                |(
-                    block_gas_limit_reached,
-                    block_output_limit_reached,
-                    block_effective_block_gas,
-                    block_approx_output_size,
-                )| {
-                    BlockEndInfo::V0 {
-                        block_gas_limit_reached,
-                        block_output_limit_reached,
-                        block_effective_block_gas_units: block_effective_block_gas,
-                        block_approx_output_size,
-                    }
-                },
-            )
             .boxed()
     }
 }

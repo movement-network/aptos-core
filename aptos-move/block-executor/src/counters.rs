@@ -3,11 +3,13 @@
 
 use aptos_metrics_core::{
     exponential_buckets, register_avg_counter_vec, register_histogram, register_histogram_vec,
-    register_int_counter, register_int_counter_vec, register_int_gauge, Histogram, HistogramVec,
-    IntCounter, IntCounterVec, IntGauge,
+    register_int_counter, register_int_counter_vec, register_int_gauge, register_int_gauge_vec,
+    Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec, IntGaugeVecHelper,
+    TimerHelper,
 };
 use aptos_mvhashmap::BlockStateStats;
 use aptos_types::fee_statement::FeeStatement;
+use move_vm_runtime::execution_tracing::Trace;
 use once_cell::sync::Lazy;
 
 pub struct GasType;
@@ -57,15 +59,6 @@ pub static BLOCK_EXECUTOR_INNER_EXECUTE_BLOCK: Lazy<Histogram> = Lazy::new(|| {
         "The time spent in the most-inner part of executing a block of transactions, \
         i.e. for BlockSTM that is how long parallel or sequential execution took.",
         exponential_buckets(/*start=*/ 1e-3, /*factor=*/ 2.0, /*count=*/ 20).unwrap(),
-    )
-    .unwrap()
-});
-
-/// Count of times the module publishing fallback was triggered in parallel execution.
-pub static MODULE_PUBLISHING_FALLBACK_COUNT: Lazy<IntCounter> = Lazy::new(|| {
-    register_int_counter!(
-        "aptos_execution_module_publishing_fallback_count",
-        "Count times module was read and written in parallel execution (sequential fallback)"
     )
     .unwrap()
 });
@@ -121,6 +114,17 @@ pub static RAYON_EXECUTION_SECONDS: Lazy<Histogram> = Lazy::new(|| {
     .unwrap()
 });
 
+pub static PARALLEL_FINALIZE_SECONDS: Lazy<Histogram> = Lazy::new(|| {
+    register_histogram!(
+        // metric name
+        "aptos_finalize_parallel_execution_seconds",
+        // metric description
+        "The time spent in seconds in finalizing parallel execution",
+        time_buckets(),
+    )
+    .unwrap()
+});
+
 pub static VM_INIT_SECONDS: Lazy<Histogram> = Lazy::new(|| {
     register_histogram!(
         // metric name
@@ -160,6 +164,17 @@ pub static TASK_EXECUTE_SECONDS: Lazy<Histogram> = Lazy::new(|| {
         "aptos_execution_task_execute_seconds",
         // metric description
         "The time spent in seconds for task execution in Block STM",
+        time_buckets(),
+    )
+    .unwrap()
+});
+
+pub static TRACE_REPLAY_SECONDS: Lazy<Histogram> = Lazy::new(|| {
+    register_histogram!(
+        // metric name
+        "user_txn_trace_replay_seconds",
+        // metric description
+        "The time spent when replaying trace for async paranoid checks",
         time_buckets(),
     )
     .unwrap()
@@ -241,30 +256,36 @@ pub static BLOCK_VIEW_BASE_VALUES_MEMORY_USAGE: Lazy<HistogramVec> = Lazy::new(|
     )
 });
 
-fn observe_gas(counter: &Lazy<HistogramVec>, mode_str: &str, fee_statement: &FeeStatement) {
-    counter
-        .with_label_values(&[mode_str, GasType::TOTAL_GAS])
-        .observe(fee_statement.gas_used() as f64);
+fn observe_gas(counter: &'static Lazy<HistogramVec>, mode_str: &str, fee_statement: &FeeStatement) {
+    counter.observe_with(
+        &[mode_str, GasType::TOTAL_GAS],
+        fee_statement.gas_used() as f64,
+    );
 
-    counter
-        .with_label_values(&[mode_str, GasType::EXECUTION_GAS])
-        .observe(fee_statement.execution_gas_used() as f64);
+    counter.observe_with(
+        &[mode_str, GasType::EXECUTION_GAS],
+        fee_statement.execution_gas_used() as f64,
+    );
 
-    counter
-        .with_label_values(&[mode_str, GasType::IO_GAS])
-        .observe(fee_statement.io_gas_used() as f64);
+    counter.observe_with(
+        &[mode_str, GasType::IO_GAS],
+        fee_statement.io_gas_used() as f64,
+    );
 
-    counter
-        .with_label_values(&[mode_str, GasType::NON_STORAGE_GAS])
-        .observe((fee_statement.execution_gas_used() + fee_statement.io_gas_used()) as f64);
+    counter.observe_with(
+        &[mode_str, GasType::NON_STORAGE_GAS],
+        (fee_statement.execution_gas_used() + fee_statement.io_gas_used()) as f64,
+    );
 
-    counter
-        .with_label_values(&[mode_str, GasType::STORAGE_FEE])
-        .observe(fee_statement.storage_fee_used() as f64);
+    counter.observe_with(
+        &[mode_str, GasType::STORAGE_FEE],
+        fee_statement.storage_fee_used() as f64,
+    );
 
-    counter
-        .with_label_values(&[mode_str, GasType::STORAGE_FEE_REFUND])
-        .observe(fee_statement.storage_fee_refund() as f64);
+    counter.observe_with(
+        &[mode_str, GasType::STORAGE_FEE_REFUND],
+        fee_statement.storage_fee_refund() as f64,
+    );
 }
 
 pub(crate) fn update_block_gas_counters(
@@ -281,17 +302,11 @@ pub(crate) fn update_block_gas_counters(
     };
 
     observe_gas(&BLOCK_GAS, mode_str, accumulated_fee_statement);
-    BLOCK_COMMITTED_TXNS
-        .with_label_values(&[mode_str])
-        .observe(num_committed as f64);
+    BLOCK_COMMITTED_TXNS.observe_with(&[mode_str], num_committed as f64);
 
-    EFFECTIVE_BLOCK_GAS
-        .with_label_values(&[mode_str])
-        .observe(accumulated_effective_gas as f64);
+    EFFECTIVE_BLOCK_GAS.observe_with(&[mode_str], accumulated_effective_gas as f64);
 
-    APPROX_BLOCK_OUTPUT_SIZE
-        .with_label_values(&[mode_str])
-        .observe(accumulated_approx_output_size as f64);
+    APPROX_BLOCK_OUTPUT_SIZE.observe_with(&[mode_str], accumulated_approx_output_size as f64);
 }
 
 pub(crate) fn update_txn_gas_counters(txn_fee_statements: &Vec<FeeStatement>, is_parallel: bool) {
@@ -313,26 +328,38 @@ pub(crate) fn update_state_counters(block_state_stats: BlockStateStats, is_paral
         Mode::SEQUENTIAL
     };
 
+    BLOCK_VIEW_DISTINCT_KEYS.observe_with(
+        &[mode_str, "resource"],
+        block_state_stats.num_resources as f64,
+    );
+    BLOCK_VIEW_DISTINCT_KEYS.observe_with(
+        &[mode_str, "resource_group"],
+        block_state_stats.num_resource_groups as f64,
+    );
+    BLOCK_VIEW_DISTINCT_KEYS.observe_with(
+        &[mode_str, "delayed_field"],
+        block_state_stats.num_delayed_fields as f64,
+    );
     BLOCK_VIEW_DISTINCT_KEYS
-        .with_label_values(&[mode_str, "resource"])
-        .observe(block_state_stats.num_resources as f64);
-    BLOCK_VIEW_DISTINCT_KEYS
-        .with_label_values(&[mode_str, "resource_group"])
-        .observe(block_state_stats.num_resource_groups as f64);
-    BLOCK_VIEW_DISTINCT_KEYS
-        .with_label_values(&[mode_str, "delayed_field"])
-        .observe(block_state_stats.num_delayed_fields as f64);
-    BLOCK_VIEW_DISTINCT_KEYS
-        .with_label_values(&[mode_str, "module"])
-        .observe(block_state_stats.num_modules as f64);
+        .observe_with(&[mode_str, "module"], block_state_stats.num_modules as f64);
 
-    BLOCK_VIEW_BASE_VALUES_MEMORY_USAGE
-        .with_label_values(&[mode_str, "resource"])
-        .observe(block_state_stats.base_resources_size as f64);
-    BLOCK_VIEW_BASE_VALUES_MEMORY_USAGE
-        .with_label_values(&[mode_str, "delayed_field"])
-        .observe(block_state_stats.base_delayed_fields_size as f64);
+    BLOCK_VIEW_BASE_VALUES_MEMORY_USAGE.observe_with(
+        &[mode_str, "resource"],
+        block_state_stats.base_resources_size as f64,
+    );
+    BLOCK_VIEW_BASE_VALUES_MEMORY_USAGE.observe_with(
+        &[mode_str, "delayed_field"],
+        block_state_stats.base_delayed_fields_size as f64,
+    );
 }
+
+pub static BLOCKSTM_VERSION_NUMBER: Lazy<IntGauge> = Lazy::new(|| {
+    register_int_gauge!(
+        "blockstm_version_number",
+        "Blockstm version number (1 or 2)"
+    )
+    .unwrap()
+});
 
 pub static GLOBAL_MODULE_CACHE_SIZE_IN_BYTES: Lazy<IntGauge> = Lazy::new(|| {
     register_int_gauge!(
@@ -361,6 +388,22 @@ pub static GLOBAL_MODULE_CACHE_MISS_SECONDS: Lazy<Histogram> = Lazy::new(|| {
     .unwrap()
 });
 
+pub static GLOBAL_LAYOUT_CACHE_NUM_NON_ENTRIES: Lazy<IntGauge> = Lazy::new(|| {
+    register_int_gauge!(
+        "global_layout_cache_num_entries",
+        "Number of struct/enum layouts cached in global cache"
+    )
+    .unwrap()
+});
+
+pub static GLOBAL_LAYOUT_CACHE_MISSES: Lazy<IntCounter> = Lazy::new(|| {
+    register_int_counter!(
+        "global_layout_cache_misses",
+        "Number of misses when fetching struct/enum layouts from the global cache",
+    )
+    .unwrap()
+});
+
 pub static STRUCT_NAME_INDEX_MAP_NUM_ENTRIES: Lazy<IntGauge> = Lazy::new(|| {
     register_int_gauge!(
         "struct_name_index_map_num_entries",
@@ -380,3 +423,51 @@ pub static HOT_STATE_OP_ACCUMULATOR_COUNTER: Lazy<IntCounterVec> = Lazy::new(|| 
     )
     .unwrap()
 });
+
+pub static NUM_INTERNED_TYPES: Lazy<IntGauge> = Lazy::new(|| {
+    register_int_gauge!(
+        "num_interned_types",
+        "Number of interned types cached in execution environment"
+    )
+    .unwrap()
+});
+
+pub static NUM_INTERNED_TYPE_VECS: Lazy<IntGauge> = Lazy::new(|| {
+    register_int_gauge!(
+        "num_interned_type_vecs",
+        "Number of interned type vectors cached in execution environment"
+    )
+    .unwrap()
+});
+
+pub static NUM_INTERNED_MODULE_IDS: Lazy<IntGauge> = Lazy::new(|| {
+    register_int_gauge!(
+        "num_interned_module_ids",
+        "Number of interned module IDs cached in execution environment"
+    )
+    .unwrap()
+});
+
+/// Collection of counters for gathering statistics about the execution trace of the user
+/// transaction.
+static TRACE_COUNTERS: Lazy<IntGaugeVec> = Lazy::new(|| {
+    register_int_gauge_vec!(
+        "trace_counters",
+        "Various statistics for user payload execution trace",
+        &["name"],
+    )
+    .unwrap()
+});
+
+/// Records statistics about trace size.
+pub(crate) fn update_txn_trace_counters(trace: &Trace) {
+    TRACE_COUNTERS.set_with(
+        &["num_instructions"],
+        trace.num_recorded_instructions() as i64,
+    );
+    TRACE_COUNTERS.set_with(
+        &["num_branch_outcomes"],
+        trace.num_recorded_branch_outcomes() as i64,
+    );
+    TRACE_COUNTERS.set_with(&["num_calls"], trace.num_recorded_calls() as i64);
+}

@@ -1,9 +1,19 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use aptos_types::error::PanicError;
+use crate::counters::GLOBAL_LAYOUT_CACHE_MISSES;
+use aptos_mvhashmap::types::TxnIndex;
+use aptos_types::{
+    error::PanicError, transaction::BlockExecutableTransaction, vm::modules::AptosModuleExtension,
+    write_set::TransactionWrite,
+};
+use aptos_vm_types::module_write_set::ModuleWrite;
+use dashmap::DashMap;
 use hashbrown::HashMap;
-use move_vm_types::code::{ModuleCode, WithSize};
+use move_binary_format::{errors::PartialVMResult, CompiledModule};
+use move_core_types::language_storage::ModuleId;
+use move_vm_runtime::{LayoutCacheEntry, Module, RuntimeEnvironment, StructKey};
+use move_vm_types::code::{ModuleCache, ModuleCode, WithSize};
 use std::{
     hash::Hash,
     ops::Deref,
@@ -58,6 +68,21 @@ where
     }
 }
 
+#[cfg(fuzzing)]
+impl<Deserialized, Verified, Extension> Entry<Deserialized, Verified, Extension>
+where
+    Verified: Deref<Target = Arc<Deserialized>>,
+    Extension: WithSize,
+{
+    pub fn clone_for_fuzzing(&self) -> Self {
+        let overridden = self.overridden.load(Ordering::Relaxed);
+        Self {
+            overridden: AtomicBool::new(overridden),
+            module: Arc::clone(&self.module),
+        }
+    }
+}
+
 /// A global module cache for verified code that is read-only and concurrently accessed during the
 /// block execution. Modified safely only at block boundaries.
 pub struct GlobalModuleCache<K, D, V, E> {
@@ -65,6 +90,9 @@ pub struct GlobalModuleCache<K, D, V, E> {
     module_cache: HashMap<K, Entry<D, V, E>>,
     /// Sum of serialized sizes (in bytes) of all cached modules.
     size: usize,
+    /// Cached layouts of structs or enums. This cache stores roots only and is invalidated when
+    /// modules are published.
+    struct_layouts: DashMap<StructKey, LayoutCacheEntry>,
 }
 
 impl<K, D, V, E> GlobalModuleCache<K, D, V, E>
@@ -78,6 +106,7 @@ where
         Self {
             module_cache: HashMap::new(),
             size: 0,
+            struct_layouts: DashMap::new(),
         }
     }
 
@@ -112,15 +141,51 @@ where
         self.module_cache.len()
     }
 
+    /// Returns the number of layout entries in the cache.
+    pub fn num_cached_layouts(&self) -> usize {
+        self.struct_layouts.len()
+    }
+
     /// Returns the sum of serialized sizes of modules stored in cache.
     pub fn size_in_bytes(&self) -> usize {
         self.size
     }
 
-    /// Flushes the module cache.
+    /// Flushes all caches.
     pub fn flush(&mut self) {
         self.module_cache.clear();
         self.size = 0;
+        self.struct_layouts.clear();
+    }
+
+    /// Flushes only layout caches.
+    pub fn flush_layout_cache(&self) {
+        // TODO(layouts):
+        //   Flushing is only needed because of enums. Once we refactor layouts to store a single
+        //   variant instead, this can be removed.
+        self.struct_layouts.clear();
+    }
+
+    /// Returns layout entry if it exists in global cache.
+    pub(crate) fn get_struct_layout_entry(&self, key: &StructKey) -> Option<LayoutCacheEntry> {
+        match self.struct_layouts.get(key) {
+            None => {
+                GLOBAL_LAYOUT_CACHE_MISSES.inc();
+                None
+            },
+            Some(e) => Some(e.deref().clone()),
+        }
+    }
+
+    pub(crate) fn store_struct_layout_entry(
+        &self,
+        key: &StructKey,
+        entry: LayoutCacheEntry,
+    ) -> PartialVMResult<()> {
+        if let dashmap::Entry::Vacant(e) = self.struct_layouts.entry(*key) {
+            e.insert(entry);
+        }
+        Ok(())
     }
 
     /// Inserts modules into the cache.
@@ -180,6 +245,76 @@ where
             false
         }
     }
+}
+
+#[cfg(fuzzing)]
+impl<K, D, V, E> GlobalModuleCache<K, D, V, E>
+where
+    K: Hash + Eq + Clone,
+    V: Deref<Target = Arc<D>>,
+    E: WithSize,
+{
+    pub fn clone_for_fuzzing(&self) -> Self {
+        let mut module_cache: HashMap<K, Entry<D, V, E>> = HashMap::new();
+        for (k, v) in self.module_cache.iter() {
+            module_cache.insert(k.clone(), v.clone_for_fuzzing());
+        }
+        Self {
+            module_cache,
+            size: self.size,
+            struct_layouts: self.struct_layouts.clone(),
+        }
+    }
+}
+
+/// Converts module write into cached module representation, and adds it to the module cache.
+pub(crate) fn add_module_write_to_module_cache<T: BlockExecutableTransaction>(
+    write: &ModuleWrite<T::Value>,
+    txn_idx: TxnIndex,
+    runtime_environment: &RuntimeEnvironment,
+    global_module_cache: &GlobalModuleCache<ModuleId, CompiledModule, Module, AptosModuleExtension>,
+    per_block_module_cache: &impl ModuleCache<
+        Key = ModuleId,
+        Deserialized = CompiledModule,
+        Verified = Module,
+        Extension = AptosModuleExtension,
+        Version = Option<TxnIndex>,
+    >,
+) -> Result<(), PanicError> {
+    let state_value = write
+        .write_op()
+        .as_state_value()
+        .ok_or_else(|| PanicError::CodeInvariantError("Modules cannot be deleted".to_string()))?;
+
+    // Since we have successfully serialized the module when converting into this transaction
+    // write, the deserialization should never fail.
+    let compiled_module = runtime_environment
+        .deserialize_into_compiled_module(state_value.bytes())
+        .map_err(|err| {
+            let msg = format!("Failed to construct the module from state value: {:?}", err);
+            PanicError::CodeInvariantError(msg)
+        })?;
+    let extension = Arc::new(AptosModuleExtension::new(state_value));
+
+    per_block_module_cache
+        .insert_deserialized_module(
+            write.module_id().clone(),
+            compiled_module,
+            extension,
+            Some(txn_idx),
+        )
+        .map_err(|err| {
+            let msg = format!(
+                "Failed to insert code for module {}::{} at version {} to module cache: {:?}",
+                write.module_address(),
+                write.module_name(),
+                txn_idx,
+                err
+            );
+            PanicError::CodeInvariantError(msg)
+        })?;
+    global_module_cache.mark_overridden(write.module_id());
+    Ok(())
 }
 
 #[cfg(test)]

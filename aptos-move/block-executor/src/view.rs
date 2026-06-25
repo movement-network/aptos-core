@@ -1,8 +1,15 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
+// Cfg due to delayed_field_mock_serialization use and to avoid warning.
 #[cfg(test)]
-use crate::types::InputOutputKey;
+use crate::types::{
+    delayed_field_mock_serialization::{
+        deserialize_to_delayed_field_id, deserialize_to_delayed_field_u128, mock_layout,
+        serialize_from_delayed_field_id, serialize_from_delayed_field_u128,
+    },
+    InputOutputKey,
+};
 use crate::{
     captured_reads::{
         CapturedReads, DataRead, DelayedFieldRead, DelayedFieldReadKind, GroupRead, ReadKind,
@@ -24,8 +31,8 @@ use aptos_aggregator::{
 use aptos_logger::error;
 use aptos_mvhashmap::{
     types::{
-        MVDataError, MVDataOutput, MVDelayedFieldsError, MVGroupError, StorageVersion, TxnIndex,
-        UnknownOrLayout, UnsyncGroupError, ValueWithLayout,
+        Incarnation, MVDataError, MVDataOutput, MVDelayedFieldsError, MVGroupError, StorageVersion,
+        TxnIndex, UnknownOrLayout, UnsyncGroupError, ValueWithLayout,
     },
     unsync_map::UnsyncMap,
     versioned_delayed_fields::TVersionedDelayedFieldView,
@@ -51,6 +58,9 @@ use aptos_vm_types::resolver::{
 };
 use bytes::Bytes;
 use claims::assert_ok;
+// Cfg due to delayed_field_mock_serialization use and to avoid warning.
+#[cfg(test)]
+use fail::fail_point;
 use move_binary_format::{
     errors::{PartialVMError, PartialVMResult},
     CompiledModule,
@@ -65,11 +75,9 @@ use std::{
     cell::RefCell,
     collections::{BTreeMap, HashMap, HashSet},
     fmt::Debug,
-    sync::{
-        atomic::{AtomicU32, Ordering},
-        Arc,
-    },
+    sync::atomic::{AtomicU32, Ordering},
 };
+use triomphe::Arc as TriompheArc;
 
 /// [ReadResult] wraps the result of MVHashMap's data map, while [GroupReadResult]
 /// is for the groups' MVHashMap. The client can interpret these types to
@@ -77,7 +85,7 @@ use std::{
 
 #[derive(Debug)]
 pub(crate) enum ReadResult {
-    Value(Option<StateValue>, Option<Arc<MoveTypeLayout>>),
+    Value(Option<StateValue>, Option<TriompheArc<MoveTypeLayout>>),
     Metadata(Option<StateValueMetadata>),
     ResourceSize(Option<u64>),
     Exists(bool),
@@ -91,7 +99,7 @@ pub(crate) enum ReadResult {
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum GroupReadResult {
-    Value(Option<Bytes>, Option<Arc<MoveTypeLayout>>),
+    Value(Option<Bytes>, Option<TriompheArc<MoveTypeLayout>>),
     ResourceSize(Option<u64>),
     Exists(bool),
     Uninitialized,
@@ -227,6 +235,7 @@ pub(crate) struct ParallelState<'a, T: Transaction> {
     scheduler: SchedulerWrapper<'a>,
     start_counter: u32,
     counter: &'a AtomicU32,
+    incarnation: Incarnation,
     pub(crate) captured_reads:
         RefCell<CapturedReads<T, ModuleId, CompiledModule, Module, AptosModuleExtension>>,
 }
@@ -516,13 +525,16 @@ impl<'a, T: Transaction> ParallelState<'a, T> {
         shared_scheduler: SchedulerWrapper<'a>,
         start_shared_counter: u32,
         shared_counter: &'a AtomicU32,
+        incarnation: Incarnation,
     ) -> Self {
+        let blockstm_v2 = shared_scheduler.is_v2();
         Self {
             versioned_map: shared_map,
             scheduler: shared_scheduler,
             start_counter: start_shared_counter,
             counter: shared_counter,
-            captured_reads: RefCell::new(CapturedReads::new()),
+            incarnation,
+            captured_reads: RefCell::new(CapturedReads::new(blockstm_v2.then_some(incarnation))),
         }
     }
 
@@ -548,11 +560,17 @@ impl<'a, T: Transaction> ParallelState<'a, T> {
         }
 
         loop {
-            match self
-                .versioned_map
-                .group_data()
-                .get_group_size(group_key, txn_idx)
-            {
+            let group_size = if self.scheduler.is_v2() {
+                self.versioned_map
+                    .group_data()
+                    .get_group_size_and_record_dependency(group_key, txn_idx, self.incarnation)
+            } else {
+                self.versioned_map
+                    .group_data()
+                    .get_group_size_no_record(group_key, txn_idx)
+            };
+
+            match group_size {
                 Ok(group_size) => {
                     assert_ok!(
                         self.captured_reads
@@ -609,7 +627,17 @@ impl<T: Transaction> ResourceState<T> for ParallelState<'_, T> {
         }
 
         loop {
-            match self.versioned_map.data().fetch_data(key, txn_idx) {
+            let data = if self.scheduler.is_v2() {
+                self.versioned_map.data().fetch_data_and_record_dependency(
+                    key,
+                    txn_idx,
+                    self.incarnation,
+                )
+            } else {
+                self.versioned_map.data().fetch_data_no_record(key, txn_idx)
+            };
+
+            match data {
                 Ok(Versioned(version, value)) => {
                     // If we have a known layout, upgrade RawFromStorage value to Exchanged.
                     if let UnknownOrLayout::Known(layout) = layout {
@@ -620,8 +648,8 @@ impl<T: Transaction> ResourceState<T> for ParallelState<'_, T> {
                                     self.versioned_map.data().set_base_value(
                                         key.clone(),
                                         ValueWithLayout::Exchanged(
-                                            Arc::new(patched_value),
-                                            layout.cloned().map(Arc::new),
+                                            TriompheArc::new(patched_value),
+                                            layout.cloned().map(TriompheArc::new),
                                         ),
                                     );
                                     // Refetch in case a concurrent change went through.
@@ -727,11 +755,24 @@ impl<T: Transaction> ResourceGroupState<T> for ParallelState<'_, T> {
         }
 
         loop {
-            match self.versioned_map.group_data().fetch_tagged_data(
-                group_key,
-                resource_tag,
-                txn_idx,
-            ) {
+            let data = if self.scheduler.is_v2() {
+                self.versioned_map
+                    .group_data()
+                    .fetch_tagged_data_and_record_dependency(
+                        group_key,
+                        resource_tag,
+                        txn_idx,
+                        self.incarnation,
+                    )
+            } else {
+                self.versioned_map.group_data().fetch_tagged_data_no_record(
+                    group_key,
+                    resource_tag,
+                    txn_idx,
+                )
+            };
+
+            match data {
                 Ok((version, value_with_layout)) => {
                     // If we have a known layout, upgrade RawFromStorage value to Exchanged.
                     if let UnknownOrLayout::Known(layout) = layout {
@@ -747,7 +788,7 @@ impl<T: Transaction> ResourceGroupState<T> for ParallelState<'_, T> {
                                             group_key.clone(),
                                             resource_tag.clone(),
                                             patched_value,
-                                            layout.cloned().map(Arc::new),
+                                            layout.cloned().map(TriompheArc::new),
                                         );
                                     // Re-fetch in case a concurrent change went through.
                                     continue;
@@ -772,23 +813,18 @@ impl<T: Transaction> ResourceGroupState<T> for ParallelState<'_, T> {
                     return Ok(GroupReadResult::Uninitialized);
                 },
                 Err(TagNotFound) => {
-                    let empty_data_read = DataRead::Versioned(
-                        Err(StorageVersion),
-                        Arc::<T::Value>::new(TransactionWrite::from_state_value(None)),
-                        None,
-                    );
-                    // Capture empty / deletion as a read.
-                    self.captured_reads.borrow_mut().capture_group_read(
-                        group_key.clone(),
-                        resource_tag.clone(),
-                        empty_data_read.clone(),
-                        &target_kind,
-                    )?;
-                    return Ok(GroupReadResult::from_data_read(
-                        empty_data_read
-                            .convert_to(&target_kind)
-                            .expect("Converting from value must succeed"),
-                    ));
+                    // TagNotFound means group was initialized (o.w. Uninitialized branch
+                    // would be visited), but the tag didn't exist. So record an empty resource
+                    // as a base value, and do continue to retry the read.
+                    self.versioned_map
+                        .group_data()
+                        .update_tagged_base_value_with_layout(
+                            group_key.clone(),
+                            resource_tag.clone(),
+                            TransactionWrite::from_state_value(None),
+                            None,
+                        );
+                    continue;
                 },
                 Err(Dependency(dep_idx)) => {
                     if !wait_for_dependency(&self.scheduler, txn_idx, dep_idx)? {
@@ -860,8 +896,8 @@ impl<T: Transaction> ResourceState<T> for SequentialState<'_, T> {
                         match patch_base_value(v.as_ref(), layout) {
                             Ok(patched_value) => {
                                 let exchanged_value = ValueWithLayout::Exchanged(
-                                    Arc::new(patched_value.clone()),
-                                    layout.cloned().map(Arc::new),
+                                    TriompheArc::new(patched_value.clone()),
+                                    layout.cloned().map(TriompheArc::new),
                                 );
                                 self.unsync_map
                                     .set_base_value(key.clone(), exchanged_value.clone());
@@ -943,7 +979,7 @@ impl<T: Transaction> ResourceGroupState<T> for SequentialState<'_, T> {
                     if let ValueWithLayout::RawFromStorage(v) = value {
                         match patch_base_value(v.as_ref(), layout) {
                             Ok(patched_value) => {
-                                let arced_layout = layout.cloned().map(Arc::new);
+                                let arced_layout = layout.cloned().map(TriompheArc::new);
                                 self.unsync_map.update_tagged_base_value_with_layout(
                                     group_key.clone(),
                                     resource_tag.clone(),
@@ -952,7 +988,7 @@ impl<T: Transaction> ResourceGroupState<T> for SequentialState<'_, T> {
                                 );
 
                                 value = ValueWithLayout::Exchanged(
-                                    Arc::new(patched_value),
+                                    TriompheArc::new(patched_value),
                                     arced_layout,
                                 );
                             },
@@ -988,7 +1024,7 @@ impl<T: Transaction> ResourceGroupState<T> for SequentialState<'_, T> {
             Err(UnsyncGroupError::TagNotFound) => {
                 let empty_data_read = DataRead::Versioned(
                     Err(StorageVersion),
-                    Arc::<T::Value>::new(TransactionWrite::from_state_value(None)),
+                    TriompheArc::<T::Value>::new(TransactionWrite::from_state_value(None)),
                     None,
                 );
                 self.read_set
@@ -1131,6 +1167,37 @@ impl<'a, T: Transaction, S: TStateView<Key = T::Key>> LatestView<'a, T, S> {
         value: &T::Value,
         layout: Option<&MoveTypeLayout>,
     ) -> PartialVMResult<T::Value> {
+        // Cfg due to deserialize_to_delayed_field_u128 use.
+        #[cfg(test)]
+        fail_point!("delayed_field_test", |_| {
+            let mut ret_state_value = value.as_state_value().clone();
+            if let Some(layout) = layout {
+                assert_eq!(
+                    layout,
+                    &mock_layout(),
+                    "Layout does not match expected mock layout"
+                );
+                if let Some(state_value) = value.as_state_value() {
+                    let (value, txn_idx) = deserialize_to_delayed_field_u128(state_value.bytes())
+                        .expect("Mock deserialization failed in delayed field test.");
+                    let base_value = DelayedFieldValue::Aggregator(value);
+                    // Replicate the logic of value_to_identifier, we use width 8 in the tests.
+                    // The real width is irrelevant as test manages all serialization / deserialization.
+                    let id = self.generate_delayed_field_id(8);
+                    match &self.latest_view {
+                        ViewState::Sync(state) => state.set_delayed_field_value(id, base_value),
+                        ViewState::Unsync(state) => state.set_delayed_field_value(id, base_value),
+                    };
+
+                    ret_state_value
+                        .as_mut()
+                        .expect("Cloned value checked, must be Some")
+                        .set_bytes(serialize_from_delayed_field_id(id, txn_idx));
+                }
+            }
+            Ok(TransactionWrite::from_state_value(ret_state_value))
+        });
+
         let maybe_patched = match (value.as_state_value(), layout) {
             (Some(state_value), Some(layout)) => {
                 let res = self.replace_values_with_identifiers(state_value, layout);
@@ -1204,6 +1271,45 @@ impl<'a, T: Transaction, S: TStateView<Key = T::Key>> LatestView<'a, T, S> {
         bytes: &Bytes,
         layout: &MoveTypeLayout,
     ) -> anyhow::Result<(Bytes, HashSet<DelayedFieldID>)> {
+        // Cfg due to deserialize_to_delayed_field_id use.
+        #[cfg(test)]
+        fail_point!("delayed_field_test", |_| {
+            assert_eq!(
+                layout,
+                &mock_layout(),
+                "Layout does not match expected mock layout"
+            );
+
+            // Replicate the logic of identifier_to_value.
+            let (delayed_field_id, txn_idx) = deserialize_to_delayed_field_id(bytes)
+                .expect("Mock deserialization failed in delayed field test.");
+            let delayed_field = match &self.latest_view {
+                ViewState::Sync(state) => state
+                    .versioned_map
+                    .delayed_fields()
+                    .read_latest_predicted_value(
+                        &delayed_field_id,
+                        self.txn_idx,
+                        ReadPosition::AfterCurrentTxn,
+                    )
+                    .expect("Committed value for ID must always exist"),
+                ViewState::Unsync(state) => state
+                    .read_delayed_field(delayed_field_id)
+                    .expect("Delayed field value for ID must always exist in sequential execution"),
+            };
+
+            // Note: Test correctness relies on the fact that current proptests use the
+            // same layout for all values ever stored at any key, given that some value
+            // at the key contains a delayed field.
+            Ok((
+                serialize_from_delayed_field_u128(
+                    delayed_field.into_aggregator_value().unwrap(),
+                    txn_idx,
+                ),
+                HashSet::from([delayed_field_id]),
+            ))
+        });
+
         // This call will replace all occurrences of aggregator / snapshot
         // identifiers with values with the same type layout.
         let function_value_extension = self.as_function_value_extension();
@@ -1234,7 +1340,8 @@ impl<'a, T: Transaction, S: TStateView<Key = T::Key>> LatestView<'a, T, S> {
         unsync_map: &UnsyncMap<T::Key, T::Tag, T::Value, DelayedFieldID>,
         delayed_write_set_ids: &HashSet<DelayedFieldID>,
         skip: &HashSet<T::Key>,
-    ) -> Result<BTreeMap<T::Key, (StateValueMetadata, u64, Arc<MoveTypeLayout>)>, PanicError> {
+    ) -> Result<BTreeMap<T::Key, (StateValueMetadata, u64, TriompheArc<MoveTypeLayout>)>, PanicError>
+    {
         read_set
             .iter()
             .filter_map(|key| {
@@ -1440,7 +1547,7 @@ impl<'a, T: Transaction, S: TStateView<Key = T::Key>> LatestView<'a, T, S> {
                 TransactionWrite::from_state_value(self.get_raw_base_value(state_key)?);
             state.set_base_value(
                 state_key.clone(),
-                ValueWithLayout::RawFromStorage(Arc::new(from_storage)),
+                ValueWithLayout::RawFromStorage(TriompheArc::new(from_storage)),
             );
 
             // In case of concurrent storage fetches, we cannot use our value,
@@ -1506,7 +1613,7 @@ impl<'a, T: Transaction, S: TStateView<Key = T::Key>> LatestView<'a, T, S> {
             .set_raw_group_base_values(group_key.clone(), base_group_sentinel_ops)?;
         self.latest_view.get_resource_state().set_base_value(
             group_key.clone(),
-            ValueWithLayout::RawFromStorage(Arc::new(metadata_op)),
+            ValueWithLayout::RawFromStorage(TriompheArc::new(metadata_op)),
         );
         Ok(())
     }
@@ -1517,7 +1624,9 @@ impl<T: Transaction, S: TStateView<Key = T::Key>> BlockSynchronizationKillSwitch
 {
     fn interrupt_requested(&self) -> bool {
         match &self.latest_view {
-            ViewState::Sync(state) => state.scheduler.has_halted(),
+            ViewState::Sync(state) => state
+                .scheduler
+                .interrupt_requested(self.txn_idx, state.incarnation),
             ViewState::Unsync(_) => false,
         }
     }
@@ -1676,10 +1785,7 @@ impl<T: Transaction, S: TStateView<Key = T::Key>> TResourceGroupView for LatestV
     }
 
     fn is_resource_groups_split_in_change_set_capable(&self) -> bool {
-        match &self.latest_view {
-            ViewState::Sync(_) => true,
-            ViewState::Unsync(_) => true,
-        }
+        true
     }
 }
 
@@ -1707,6 +1813,13 @@ impl<T: Transaction, S: TStateView<Key = T::Key>> TAggregatorV1View for LatestVi
         &self,
         state_key: &Self::Identifier,
     ) -> PartialVMResult<Option<StateValue>> {
+        if let ViewState::Sync(parallel_state) = &self.latest_view {
+            parallel_state
+                .captured_reads
+                .borrow_mut()
+                .capture_aggregator_v1_read(state_key.clone());
+        }
+
         // TODO[agg_v1](cleanup):
         // Integrate aggregators V1. That is, we can lift the u128 value
         // from the state item by passing the right layout here. This can
@@ -1821,7 +1934,7 @@ impl<T: Transaction, S: TStateView<Key = T::Key>> TDelayedFieldView for LatestVi
         delayed_write_set_ids: &HashSet<Self::Identifier>,
         skip: &HashSet<Self::ResourceKey>,
     ) -> Result<
-        BTreeMap<Self::ResourceKey, (StateValueMetadata, u64, Arc<MoveTypeLayout>)>,
+        BTreeMap<Self::ResourceKey, (StateValueMetadata, u64, TriompheArc<MoveTypeLayout>)>,
         PanicError,
     > {
         match &self.latest_view {
@@ -1871,7 +1984,10 @@ mod test {
     use super::*;
     use crate::{
         captured_reads::{CapturedReads, DelayedFieldRead, DelayedFieldReadKind},
-        proptest_types::types::{KeyType, MockEvent, ValueType},
+        combinatorial_tests::{
+            mock_executor::MockEvent,
+            types::{KeyType, ValueType},
+        },
         scheduler::{DependencyResult, Scheduler, TWaitForDependency},
         view::{delayed_field_try_add_delta_outcome_impl, get_delayed_field_value_impl, ViewState},
     };
@@ -1980,7 +2096,7 @@ mod test {
             CompiledModule,
             Module,
             AptosModuleExtension,
-        >::new());
+        >::new(None));
         let wait_for = FakeWaitForDependency();
         let id = DelayedFieldID::new_for_test_for_u64(600);
         let max_value = 600;
@@ -2125,7 +2241,7 @@ mod test {
             CompiledModule,
             Module,
             AptosModuleExtension,
-        >::new());
+        >::new(None));
         let wait_for = FakeWaitForDependency();
         let id = DelayedFieldID::new_for_test_for_u64(600);
         let max_value = 600;
@@ -2270,7 +2386,7 @@ mod test {
             CompiledModule,
             Module,
             AptosModuleExtension,
-        >::new());
+        >::new(None));
         let wait_for = FakeWaitForDependency();
         let id = DelayedFieldID::new_for_test_for_u64(600);
         let max_value = 600;
@@ -2415,7 +2531,7 @@ mod test {
             CompiledModule,
             Module,
             AptosModuleExtension,
-        >::new());
+        >::new(None));
         let wait_for = FakeWaitForDependency();
         let id = DelayedFieldID::new_for_test_for_u64(600);
         let max_value = 600;
@@ -2533,10 +2649,6 @@ mod test {
         Value::struct_(Struct::pack(vec![inner]))
     }
 
-    fn create_vector_value(inner: Vec<Value>) -> Value {
-        Value::vector_for_testing_only(inner)
-    }
-
     fn create_state_value(value: &Value, layout: &MoveTypeLayout) -> StateValue {
         StateValue::new_legacy(
             ValueSerDeContext::new(None)
@@ -2634,11 +2746,14 @@ mod test {
         let storage_layout = create_struct_layout(create_vector_layout(
             create_aggregator_storage_layout(MoveTypeLayout::U64),
         ));
-        let value = create_struct_value(create_vector_value(vec![
-            create_aggregator_value_u64(20, 50),
-            create_aggregator_value_u64(35, 65),
-            create_aggregator_value_u64(0, 20),
-        ]));
+        let value = create_struct_value(
+            Value::vector_unchecked(vec![
+                create_aggregator_value_u64(20, 50),
+                create_aggregator_value_u64(35, 65),
+                create_aggregator_value_u64(0, 20),
+            ])
+            .unwrap(),
+        );
         let state_value = create_state_value(&value, &storage_layout);
 
         let layout = create_struct_layout(create_vector_layout(create_aggregator_layout_u64()));
@@ -2655,21 +2770,21 @@ mod test {
             RefCell::new(9),
             "The counter should have been updated to 9"
         );
-        let patched_value =
-            Value::struct_(Struct::pack(vec![Value::vector_for_testing_only(vec![
-                Value::struct_(Struct::pack(vec![
-                    Value::u64(DelayedFieldID::new_with_width(6, 8).as_u64()),
-                    Value::u64(50),
-                ])),
-                Value::struct_(Struct::pack(vec![
-                    Value::u64(DelayedFieldID::new_with_width(7, 8).as_u64()),
-                    Value::u64(65),
-                ])),
-                Value::struct_(Struct::pack(vec![
-                    Value::u64(DelayedFieldID::new_with_width(8, 8).as_u64()),
-                    Value::u64(20),
-                ])),
-            ])]));
+        let patched_value = Value::struct_(Struct::pack(vec![Value::vector_unchecked(vec![
+            Value::struct_(Struct::pack(vec![
+                Value::u64(DelayedFieldID::new_with_width(6, 8).as_u64()),
+                Value::u64(50),
+            ])),
+            Value::struct_(Struct::pack(vec![
+                Value::u64(DelayedFieldID::new_with_width(7, 8).as_u64()),
+                Value::u64(65),
+            ])),
+            Value::struct_(Struct::pack(vec![
+                Value::u64(DelayedFieldID::new_with_width(8, 8).as_u64()),
+                Value::u64(20),
+            ])),
+        ])
+        .unwrap()]));
         assert_eq!(
             patched_state_value,
             create_state_value(&patched_value, &storage_layout),
@@ -2692,11 +2807,14 @@ mod test {
         let storage_layout = create_struct_layout(create_vector_layout(
             create_snapshot_storage_layout(MoveTypeLayout::U128),
         ));
-        let value = create_struct_value(create_vector_value(vec![
-            create_snapshot_value(Value::u128(20)),
-            create_snapshot_value(Value::u128(35)),
-            create_snapshot_value(Value::u128(0)),
-        ]));
+        let value = create_struct_value(
+            Value::vector_unchecked(vec![
+                create_snapshot_value(Value::u128(20)),
+                create_snapshot_value(Value::u128(35)),
+                create_snapshot_value(Value::u128(0)),
+            ])
+            .unwrap(),
+        );
         let state_value = create_state_value(&value, &storage_layout);
 
         let layout = create_struct_layout(create_vector_layout(create_snapshot_layout(
@@ -2715,18 +2833,18 @@ mod test {
             RefCell::new(12),
             "The counter should have been updated to 12"
         );
-        let patched_value =
-            Value::struct_(Struct::pack(vec![Value::vector_for_testing_only(vec![
-                create_snapshot_value(Value::u128(
-                    DelayedFieldID::new_with_width(9, 16).as_u64() as u128
-                )),
-                create_snapshot_value(Value::u128(
-                    DelayedFieldID::new_with_width(10, 16).as_u64() as u128
-                )),
-                create_snapshot_value(Value::u128(
-                    DelayedFieldID::new_with_width(11, 16).as_u64() as u128
-                )),
-            ])]));
+        let patched_value = Value::struct_(Struct::pack(vec![Value::vector_unchecked(vec![
+            create_snapshot_value(Value::u128(
+                DelayedFieldID::new_with_width(9, 16).as_u64() as u128
+            )),
+            create_snapshot_value(Value::u128(
+                DelayedFieldID::new_with_width(10, 16).as_u64() as u128
+            )),
+            create_snapshot_value(Value::u128(
+                DelayedFieldID::new_with_width(11, 16).as_u64() as u128
+            )),
+        ])
+        .unwrap()]));
         assert_eq!(
             patched_state_value,
             create_state_value(&patched_value, &storage_layout),
@@ -2749,11 +2867,14 @@ mod test {
         */
         let storage_layout =
             create_struct_layout(create_vector_layout(create_derived_string_storage_layout()));
-        let value = create_struct_value(create_vector_value(vec![
-            create_derived_value("hello", 60),
-            create_derived_value("ab", 55),
-            create_derived_value("c", 50),
-        ]));
+        let value = create_struct_value(
+            Value::vector_unchecked(vec![
+                create_derived_value("hello", 60),
+                create_derived_value("ab", 55),
+                create_derived_value("c", 50),
+            ])
+            .unwrap(),
+        );
         let state_value = create_state_value(&value, &storage_layout);
 
         let layout = create_struct_layout(create_vector_layout(create_derived_string_layout()));
@@ -2771,18 +2892,18 @@ mod test {
             "The counter should have been updated to 15"
         );
 
-        let patched_value =
-            Value::struct_(Struct::pack(vec![Value::vector_for_testing_only(vec![
-                DelayedFieldID::new_with_width(12, 60)
-                    .into_derived_string_struct()
-                    .unwrap(),
-                DelayedFieldID::new_with_width(13, 55)
-                    .into_derived_string_struct()
-                    .unwrap(),
-                DelayedFieldID::new_with_width(14, 50)
-                    .into_derived_string_struct()
-                    .unwrap(),
-            ])]));
+        let patched_value = Value::struct_(Struct::pack(vec![Value::vector_unchecked(vec![
+            DelayedFieldID::new_with_width(12, 60)
+                .into_derived_string_struct()
+                .unwrap(),
+            DelayedFieldID::new_with_width(13, 55)
+                .into_derived_string_struct()
+                .unwrap(),
+            DelayedFieldID::new_with_width(14, 50)
+                .into_derived_string_struct()
+                .unwrap(),
+        ])
+        .unwrap()]));
         assert_eq!(
             patched_state_value,
             create_state_value(&patched_value, &storage_layout),
@@ -2885,6 +3006,7 @@ mod test {
                         SchedulerWrapper::V1(&self.scheduler, &self.holder.skip_module_validation),
                         self.start_counter,
                         &self.counter,
+                        0,
                     )),
                     1,
                 );
@@ -2961,7 +3083,7 @@ mod test {
             delayed_write_set_ids: &HashSet<DelayedFieldID>,
             skip: &HashSet<KeyType<u32>>,
         ) -> Result<
-            BTreeMap<KeyType<u32>, (StateValueMetadata, u64, Arc<MoveTypeLayout>)>,
+            BTreeMap<KeyType<u32>, (StateValueMetadata, u64, TriompheArc<MoveTypeLayout>)>,
             PanicError,
         > {
             let seq = self
@@ -3004,14 +3126,14 @@ mod test {
         let views = holder.new_view();
 
         assert_ok_eq!(
-            views.get_resource_state_value(&KeyType::<u32>(1, false), None),
+            views.get_resource_state_value(&KeyType::<u32>(1), None),
             None
         );
 
-        assert_ok_eq!(views.resource_exists(&KeyType::<u32>(1, false)), false,);
+        assert_ok_eq!(views.resource_exists(&KeyType::<u32>(1)), false,);
 
         assert_ok_eq!(
-            views.get_resource_state_value_metadata(&KeyType::<u32>(1, false)),
+            views.get_resource_state_value_metadata(&KeyType::<u32>(1)),
             None,
         );
     }
@@ -3019,14 +3141,14 @@ mod test {
     #[test]
     fn test_non_value_reads_not_recorded() {
         let state_value = create_state_value(&Value::u64(12321), &MoveTypeLayout::U64);
-        let data = HashMap::from([(KeyType::<u32>(1, false), state_value.clone())]);
+        let data = HashMap::from([(KeyType::<u32>(1), state_value.clone())]);
 
         let holder = ComparisonHolder::new(data, 1000);
         let views = holder.new_view();
 
-        assert_ok_eq!(views.resource_exists(&KeyType::<u32>(1, false)), true);
+        assert_ok_eq!(views.resource_exists(&KeyType::<u32>(1)), true);
         assert!(views
-            .get_resource_state_value_metadata(&KeyType::<u32>(1, false))
+            .get_resource_state_value_metadata(&KeyType::<u32>(1))
             .unwrap()
             .is_some(),);
 
@@ -3061,21 +3183,18 @@ mod test {
     #[test]
     fn test_regular_read_operations() {
         let state_value = create_state_value(&Value::u64(12321), &MoveTypeLayout::U64);
-        let data = HashMap::from([(KeyType::<u32>(1, false), state_value.clone())]);
+        let data = HashMap::from([(KeyType::<u32>(1), state_value.clone())]);
 
         let holder = ComparisonHolder::new(data, 1000);
         let views = holder.new_view();
 
         assert_ok_eq!(
-            views.get_resource_state_value(&KeyType::<u32>(1, false), None),
+            views.get_resource_state_value(&KeyType::<u32>(1), None),
             Some(state_value.clone())
         );
 
         assert_fetch_eq(
-            holder
-                .holder
-                .unsync_map
-                .fetch_data(&KeyType::<u32>(1, false)),
+            holder.holder.unsync_map.fetch_data(&KeyType::<u32>(1)),
             Some(TransactionWrite::from_state_value(Some(state_value))),
             None,
         );
@@ -3089,7 +3208,7 @@ mod test {
             create_struct_layout(create_aggregator_storage_layout(MoveTypeLayout::U64));
         let value = create_struct_value(create_aggregator_value_u64(25, 30));
         let state_value = create_state_value(&value, &storage_layout);
-        let data = HashMap::from([(KeyType::<u32>(1, false), state_value.clone())]);
+        let data = HashMap::from([(KeyType::<u32>(1), state_value.clone())]);
 
         let start_counter = 1000;
         let id = DelayedFieldID::new_with_width(start_counter, 8);
@@ -3103,29 +3222,26 @@ mod test {
         match check_metadata {
             Some(true) => {
                 views
-                    .get_resource_state_value_metadata(&KeyType::<u32>(1, false))
+                    .get_resource_state_value_metadata(&KeyType::<u32>(1))
                     .unwrap();
             },
             Some(false) => {
-                assert_ok_eq!(views.resource_exists(&KeyType::<u32>(1, false)), true,);
+                assert_ok_eq!(views.resource_exists(&KeyType::<u32>(1)), true,);
             },
             None => {},
         };
 
         let layout = create_struct_layout(create_aggregator_layout_u64());
         assert_ok_eq!(
-            views.get_resource_state_value(&KeyType::<u32>(1, false), Some(&layout)),
+            views.get_resource_state_value(&KeyType::<u32>(1), Some(&layout)),
             Some(patched_state_value.clone())
         );
         assert!(views
             .get_reads_needing_exchange(&HashSet::from([id]), &HashSet::new())
             .unwrap()
-            .contains_key(&KeyType(1, false)));
+            .contains_key(&KeyType::<u32>(1)));
         assert_fetch_eq(
-            holder
-                .holder
-                .unsync_map
-                .fetch_data(&KeyType::<u32>(1, false)),
+            holder.holder.unsync_map.fetch_data(&KeyType::<u32>(1)),
             Some(TransactionWrite::from_state_value(Some(
                 patched_state_value,
             ))),
@@ -3137,12 +3253,12 @@ mod test {
     fn test_read_operations() {
         let state_value_3 = create_state_value(&Value::u64(12321), &MoveTypeLayout::U64);
         let mut data = HashMap::new();
-        data.insert(KeyType::<u32>(3, false), state_value_3.clone());
+        data.insert(KeyType::<u32>(3), state_value_3.clone());
         let storage_layout =
             create_struct_layout(create_aggregator_storage_layout(MoveTypeLayout::U64));
         let value = create_struct_value(create_aggregator_value_u64(25, 30));
         let state_value_4 = create_state_value(&value, &storage_layout);
-        data.insert(KeyType::<u32>(4, false), state_value_4);
+        data.insert(KeyType::<u32>(4), state_value_4);
 
         let start_counter = 1000;
         let id = DelayedFieldID::new_with_width(start_counter, 8);
@@ -3151,20 +3267,20 @@ mod test {
 
         assert_eq!(
             views
-                .get_resource_state_value(&KeyType::<u32>(1, false), None)
+                .get_resource_state_value(&KeyType::<u32>(1), None)
                 .unwrap(),
             None
         );
         let layout = create_struct_layout(create_aggregator_layout_u64());
         assert_eq!(
             views
-                .get_resource_state_value(&KeyType::<u32>(2, false), Some(&layout))
+                .get_resource_state_value(&KeyType::<u32>(2), Some(&layout))
                 .unwrap(),
             None
         );
         assert_eq!(
             views
-                .get_resource_state_value(&KeyType::<u32>(3, false), None)
+                .get_resource_state_value(&KeyType::<u32>(3), None)
                 .unwrap(),
             Some(state_value_3.clone())
         );
@@ -3176,14 +3292,14 @@ mod test {
             holder
                 .versioned_map
                 .data()
-                .fetch_data(&KeyType::<u32>(3, false), 1)
+                .fetch_data_no_record(&KeyType::<u32>(3), 1)
         );
 
         let patched_value = create_struct_value(create_aggregator_value_u64(id.as_u64(), 30));
         let state_value_4 = create_state_value(&patched_value, &storage_layout);
         assert_eq!(
             views
-                .get_resource_state_value(&KeyType::<u32>(4, false), Some(&layout))
+                .get_resource_state_value(&KeyType::<u32>(4), Some(&layout))
                 .unwrap(),
             Some(state_value_4.clone())
         );
@@ -3217,6 +3333,6 @@ mod test {
 
         // TODO[agg_v2](test): This assertion fails.
         // let data_read = DataRead::Versioned(Ok((1,0)), Arc::new(TransactionWrite::from_state_value(Some(state_value_4))), Some(Arc::new(layout)));
-        // assert!(read_set_with_delayed_fields.any(|x| x == (&KeyType::<u32>(4, false), &data_read)));
+        // assert!(read_set_with_delayed_fields.any(|x| x == (&KeyType::<u32>(4), &data_read)));
     }
 }

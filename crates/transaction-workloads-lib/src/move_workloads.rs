@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 #![allow(unused)]
 
-pub use super::raw_module_data::PreBuiltPackagesImpl;
-use aptos_framework::natives::code::{MoveOption, PackageMetadata};
+pub use super::prebuilt_packages::PreBuiltPackagesImpl;
+use aptos_framework::natives::code::PackageMetadata;
 use aptos_sdk::{
     bcs,
     move_types::{
@@ -47,6 +47,20 @@ pub enum LoopType {
     BcsToBytes { len: u64 },
 }
 
+#[derive(Debug, Clone)]
+pub enum FibonacciFunctionType {
+    Recursive,
+    TailRecursive,
+    Iterative,
+}
+
+/// Monotonically increasing counter test variants
+#[derive(Debug, Copy, Clone)]
+pub enum MonotonicCounterType {
+    Single,                  // Call counter once per transaction
+    Multiple { count: u64 }, // Call counter multiple times per transaction
+}
+
 #[derive(Debug, Copy, Clone)]
 pub enum MapType {
     SimpleMap,
@@ -70,6 +84,15 @@ impl OrderBookState {
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum MoveVmMicroBenchmark {
+    /// Runs a function which creates many local variables (but do not do any expensive compute)
+    Locals,
+    /// Runs a function instantiation which creates many local variables (but do not do any
+    /// expensive compute)
+    LocalsGeneric,
+}
+
 //
 // List of entry points to expose
 //
@@ -80,6 +103,8 @@ pub enum EntryPoints {
     Republish,
     /// Empty (NoOp) function
     Nop,
+    /// Empty (NoOp) function, with replay protection nonce
+    NopOrderless,
     /// Empty (NoOp) function, signed by publisher as fee-payer
     NopFeePayer,
     /// Empty (NoOp) function, signed by 2 accounts
@@ -108,6 +133,11 @@ pub enum EntryPoints {
     Loop {
         loop_count: Option<u64>,
         loop_type: LoopType,
+    },
+    /// Compute the n-th fibonacci number using the given function type.
+    Fibonacci {
+        n: u64,
+        function_type: FibonacciFunctionType,
     },
     // next 2 functions, second arg must be existing account address with data
     // Sets `Resource` to the max from two addresses
@@ -255,6 +285,8 @@ pub enum EntryPoints {
 
     OrderBook {
         state: Arc<OrderBookState>,
+        /// Number of markets to use.
+        num_markets: u32,
         /// Buy and sell price is picked randomly from their respective ranges.
         ///  `overlap_ratio` defines what portion of the range they overlap on.
         overlap_ratio: f64,
@@ -265,6 +297,14 @@ pub enum EntryPoints {
         /// Buy size is picked randomly from [1, max_buy_size] range
         max_buy_size: u64,
     },
+
+    /// Test monotonically increasing counter native function throughput
+    MonotonicCounter {
+        counter_type: MonotonicCounterType,
+    },
+
+    /// Different microbenchmarks to stress-test Move VM.
+    MoveVmMicroBenchmark(MoveVmMicroBenchmark),
 }
 
 impl EntryPointTrait for EntryPoints {
@@ -276,6 +316,7 @@ impl EntryPointTrait for EntryPoints {
         match self {
             EntryPoints::Republish
             | EntryPoints::Nop
+            | EntryPoints::NopOrderless
             | EntryPoints::NopFeePayer
             | EntryPoints::Nop2Signers
             | EntryPoints::Nop5Signers
@@ -285,6 +326,7 @@ impl EntryPointTrait for EntryPoints {
             | EntryPoints::Double
             | EntryPoints::Half
             | EntryPoints::Loop { .. }
+            | EntryPoints::Fibonacci { .. }
             | EntryPoints::GetFromConst { .. }
             | EntryPoints::SetId
             | EntryPoints::SetName
@@ -319,7 +361,8 @@ impl EntryPointTrait for EntryPoints {
             | EntryPoints::CoinInitAndMint
             | EntryPoints::FungibleAssetMint
             | EntryPoints::APTTransferWithPermissionedSigner
-            | EntryPoints::APTTransferWithMasterSigner => "framework_usecases",
+            | EntryPoints::APTTransferWithMasterSigner
+            | EntryPoints::MonotonicCounter { .. } => "framework_usecases",
             EntryPoints::OrderBook { .. } => "experimental_usecases",
             EntryPoints::TokenV2AmbassadorMint { .. } | EntryPoints::TokenV2AmbassadorBurn => {
                 "ambassador_token"
@@ -334,6 +377,9 @@ impl EntryPointTrait for EntryPoints {
             EntryPoints::IncGlobalMilestoneAggV2 { .. }
             | EntryPoints::CreateGlobalMilestoneAggV2 { .. } => "aggregator_examples",
             EntryPoints::DeserializeU256 => "bcs_stream",
+            EntryPoints::MoveVmMicroBenchmark(entrypoint) => match entrypoint {
+                MoveVmMicroBenchmark::Locals | MoveVmMicroBenchmark::LocalsGeneric => "locals",
+            },
         }
     }
 
@@ -341,6 +387,7 @@ impl EntryPointTrait for EntryPoints {
         match self {
             EntryPoints::Republish
             | EntryPoints::Nop
+            | EntryPoints::NopOrderless
             | EntryPoints::NopFeePayer
             | EntryPoints::Nop2Signers
             | EntryPoints::Nop5Signers
@@ -350,6 +397,7 @@ impl EntryPointTrait for EntryPoints {
             | EntryPoints::Double
             | EntryPoints::Half
             | EntryPoints::Loop { .. }
+            | EntryPoints::Fibonacci { .. }
             | EntryPoints::GetFromConst { .. }
             | EntryPoints::SetId
             | EntryPoints::SetName
@@ -401,7 +449,11 @@ impl EntryPointTrait for EntryPoints {
             EntryPoints::DeserializeU256 => "bcs_stream",
             EntryPoints::APTTransferWithPermissionedSigner
             | EntryPoints::APTTransferWithMasterSigner => "permissioned_transfer",
+            EntryPoints::MonotonicCounter { .. } => "transaction_context_example",
             EntryPoints::OrderBook { .. } => "order_book_example",
+            EntryPoints::MoveVmMicroBenchmark(entrypoint) => match entrypoint {
+                MoveVmMicroBenchmark::Locals | MoveVmMicroBenchmark::LocalsGeneric => "locals",
+            },
         }
     }
 
@@ -431,6 +483,8 @@ impl EntryPointTrait for EntryPoints {
             EntryPoints::Nop5Signers => {
                 get_payload_void(module_id, ident_str!("nop_5_signers").to_owned())
             },
+            EntryPoints::NopOrderless => get_payload_void(module_id, ident_str!("nop").to_owned())
+                .set_replay_protection_nonce(rng.expect("Must provide RNG").r#gen()),
             EntryPoints::Step => get_payload_void(module_id, ident_str!("step").to_owned()),
             EntryPoints::GetCounter => {
                 get_payload_void(module_id, ident_str!("get_counter").to_owned())
@@ -460,6 +514,16 @@ impl EntryPointTrait for EntryPoints {
                     },
                 };
                 get_payload(module_id, ident_str!(method).to_owned(), args)
+            },
+            EntryPoints::Fibonacci { n, function_type } => {
+                let method = match function_type {
+                    FibonacciFunctionType::Recursive => "fibonacci_recursive",
+                    FibonacciFunctionType::TailRecursive => "fibonacci_tail_recursive",
+                    FibonacciFunctionType::Iterative => "fibonacci_iterative",
+                };
+                get_payload(module_id, ident_str!(method).to_owned(), vec![
+                    bcs::to_bytes(&n).unwrap(),
+                ])
             },
             EntryPoints::GetFromConst { const_idx } => get_from_random_const(
                 module_id,
@@ -506,9 +570,9 @@ impl EntryPointTrait for EntryPoints {
                 max_count,
             } => {
                 let rng = rng.expect("Must provide RNG");
-                let mut offset: u64 = rng.gen();
+                let mut offset: u64 = rng.r#gen();
                 offset %= max_offset;
-                let mut count: u64 = rng.gen();
+                let mut count: u64 = rng.r#gen();
                 count %= max_count;
                 get_payload(
                     module_id,
@@ -531,7 +595,7 @@ impl EntryPointTrait for EntryPoints {
                     module_id,
                     ident_str!("modify_bounded_agg_v2").to_owned(),
                     vec![
-                        bcs::to_bytes(&rng.gen::<bool>()).unwrap(),
+                        bcs::to_bytes(&rng.r#gen::<bool>()).unwrap(),
                         bcs::to_bytes(&step).unwrap(),
                     ],
                 )
@@ -834,8 +898,20 @@ impl EntryPointTrait for EntryPoints {
                     bcs::to_bytes(&1u64).unwrap(),
                 ])
             },
+            EntryPoints::MonotonicCounter { counter_type } => match counter_type {
+                MonotonicCounterType::Single => get_payload_void(
+                    module_id,
+                    ident_str!("test_monotonic_counter_single").to_owned(),
+                ),
+                MonotonicCounterType::Multiple { count } => get_payload(
+                    module_id,
+                    ident_str!("test_monotonic_counter_multiple").to_owned(),
+                    vec![bcs::to_bytes(&count).unwrap()],
+                ),
+            },
             EntryPoints::OrderBook {
                 state,
+                num_markets,
                 overlap_ratio,
                 buy_frequency,
                 max_buy_size,
@@ -843,17 +919,19 @@ impl EntryPointTrait for EntryPoints {
             } => {
                 let rng: &mut StdRng = rng.expect("Must provide RNG");
 
+                let market_id = rng.gen_range(0, *num_markets);
                 let price_range = 1000000;
-                let is_buy = rng.gen_bool(*buy_frequency);
-                let size = rng.gen_range(1, 1 + if is_buy { max_buy_size } else { max_sell_size });
-                let price = if is_buy {
+                let is_bid = rng.gen_bool(*buy_frequency);
+                let size = rng.gen_range(1, 1 + if is_bid { max_buy_size } else { max_sell_size });
+                let price = if is_bid {
                     0
                 } else {
                     (price_range as f64 * (1.0 - *overlap_ratio)) as u64
                 } + rng.gen_range(0, price_range);
 
-                // (account_order_id: u64, bid_price: u64, volume: u64, is_buy: bool)
+                // (account_order_id: u64, bid_price: u64, volume: u64, is_bid: bool)
                 get_payload(module_id, ident_str!("place_order").to_owned(), vec![
+                    bcs::to_bytes(&market_id).unwrap(),
                     bcs::to_bytes(&AccountAddress::random()).unwrap(),
                     bcs::to_bytes(
                         &state
@@ -863,8 +941,16 @@ impl EntryPointTrait for EntryPoints {
                     .unwrap(),
                     bcs::to_bytes(&price).unwrap(),  // bid_price
                     bcs::to_bytes(&size).unwrap(),   // volume
-                    bcs::to_bytes(&is_buy).unwrap(), // is_buy
+                    bcs::to_bytes(&is_bid).unwrap(), // is_bid
                 ])
+            },
+            EntryPoints::MoveVmMicroBenchmark(entrypoint) => match entrypoint {
+                MoveVmMicroBenchmark::Locals => {
+                    get_payload_void(module_id, ident_str!("benchmark").to_owned())
+                },
+                MoveVmMicroBenchmark::LocalsGeneric => {
+                    get_payload_void(module_id, ident_str!("benchmark_generic").to_owned())
+                },
             },
         }
     }
@@ -925,6 +1011,7 @@ impl EntryPointTrait for EntryPoints {
         match self {
             EntryPoints::Republish => AutomaticArgs::Signer,
             EntryPoints::Nop
+            | EntryPoints::NopOrderless
             | EntryPoints::NopFeePayer
             | EntryPoints::Step
             | EntryPoints::GetCounter
@@ -932,6 +1019,7 @@ impl EntryPointTrait for EntryPoints {
             | EntryPoints::Double
             | EntryPoints::Half
             | EntryPoints::Loop { .. }
+            | EntryPoints::Fibonacci { .. }
             | EntryPoints::GetFromConst { .. }
             | EntryPoints::SetId
             | EntryPoints::SetName
@@ -986,7 +1074,9 @@ impl EntryPointTrait for EntryPoints {
             EntryPoints::CreateGlobalMilestoneAggV2 { .. } => AutomaticArgs::Signer,
             EntryPoints::APTTransferWithPermissionedSigner
             | EntryPoints::APTTransferWithMasterSigner => AutomaticArgs::Signer,
+            EntryPoints::MonotonicCounter { .. } => AutomaticArgs::None,
             EntryPoints::OrderBook { .. } => AutomaticArgs::None,
+            EntryPoints::MoveVmMicroBenchmark(_) => AutomaticArgs::None,
         }
     }
 }
@@ -1004,7 +1094,7 @@ fn get_from_random_const(module_id: ModuleId, idx: u64) -> TransactionPayload {
 }
 
 fn set_id(rng: &mut StdRng, module_id: ModuleId) -> TransactionPayload {
-    let id: u64 = rng.gen();
+    let id: u64 = rng.r#gen();
     get_payload(module_id, ident_str!("set_id").to_owned(), vec![
         bcs::to_bytes(&id).unwrap(),
     ])
@@ -1045,7 +1135,7 @@ fn make_or_change(
     str_len: usize,
     data_len: usize,
 ) -> TransactionPayload {
-    let id: u64 = rng.gen();
+    let id: u64 = rng.r#gen();
     let name: String = rand_string(rng, str_len);
     let mut bytes = Vec::<u8>::with_capacity(data_len);
     rng.fill_bytes(&mut bytes);

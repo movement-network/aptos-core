@@ -1008,7 +1008,7 @@ impl TransactionStore {
         self.track_indices();
     }
 
-    pub(crate) fn iter_queue(&self) -> PriorityQueueIter {
+    pub(crate) fn iter_queue(&self) -> PriorityQueueIter<'_> {
         self.priority_index.iter()
     }
 

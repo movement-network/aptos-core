@@ -22,11 +22,10 @@ pub use aptos_api_types::{
     self, IndexResponseBcs, MoveModuleBytecode, PendingTransaction, Transaction,
 };
 use aptos_api_types::{
-    deserialize_from_string,
     mime_types::{BCS, BCS_SIGNED_TRANSACTION, BCS_VIEW_FUNCTION, JSON},
-    AptosError, AptosErrorCode, BcsBlock, Block, GasEstimation, HexEncodedBytes, IndexResponse,
-    MoveModuleId, TransactionData, TransactionOnChainData, TransactionsBatchSubmissionResult,
-    UserTransaction, VersionedEvent, ViewFunction, ViewRequest,
+    AptosError, AptosErrorCode, BcsBlock, Block, GasEstimation, IndexResponse, MoveModuleId,
+    TransactionData, TransactionOnChainData, TransactionsBatchSubmissionResult, UserTransaction,
+    VersionedEvent, ViewFunction, ViewRequest,
 };
 use aptos_crypto::HashValue;
 use aptos_logger::{debug, info, sample, sample::SampleRate};
@@ -37,7 +36,8 @@ use aptos_types::{
     keyless::{Groth16Proof, Pepper, ZeroKnowledgeSig, ZKP},
     state_store::state_key::StateKey,
     transaction::{
-        authenticator::EphemeralSignature, IndexedTransactionSummary, SignedTransaction,
+        authenticator::EphemeralSignature, IndexedTransactionSummary, PersistedAuxiliaryInfo,
+        SignedTransaction, Version,
     },
 };
 use move_core_types::{
@@ -1009,6 +1009,21 @@ impl Client {
         Ok(response.and_then(|inner| bcs::from_bytes(&inner))?)
     }
 
+    pub async fn get_persisted_auxiliary_infos(
+        &self,
+        start: Version,
+        limit: u64,
+    ) -> AptosResult<Vec<PersistedAuxiliaryInfo>> {
+        let mut url = self.build_path("transactions/auxiliary_info")?;
+        url.set_query(Some(&format!("start_version={}&limit={}", start, limit)));
+
+        let response = self.inner.get(url).header(ACCEPT, BCS).send().await?;
+        let response = self.check_and_parse_bcs_response(response).await?;
+        Ok(response
+            .and_then(|inner| bcs::from_bytes(&inner))?
+            .into_inner())
+    }
+
     pub async fn get_transaction_by_hash(
         &self,
         hash: HashValue,
@@ -1414,23 +1429,6 @@ impl Client {
         start: Option<u64>,
         limit: Option<u16>,
     ) -> Result<Response<Vec<VersionedNewBlockEvent>>> {
-        #[derive(Clone, Debug, Serialize, Deserialize)]
-        pub struct NewBlockEventResponse {
-            hash: String,
-            #[serde(deserialize_with = "deserialize_from_string")]
-            epoch: u64,
-            #[serde(deserialize_with = "deserialize_from_string")]
-            round: u64,
-            #[serde(deserialize_with = "deserialize_from_string")]
-            height: u64,
-            #[serde(deserialize_with = "deserialize_from_prefixed_hex_string")]
-            previous_block_votes_bitvec: HexEncodedBytes,
-            proposer: String,
-            failed_proposer_indices: Vec<String>,
-            #[serde(deserialize_with = "deserialize_from_string")]
-            time_microseconds: u64,
-        }
-
         let response = self
             .get_account_events_bcs(
                 CORE_CODE_ADDRESS,

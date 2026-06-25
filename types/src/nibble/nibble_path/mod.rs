@@ -117,7 +117,7 @@ impl NibblePath {
         assert!(num_nibbles <= ROOT_NIBBLE_HEIGHT);
         if num_nibbles % 2 == 1 {
             // Rounded up number of bytes to be considered
-            let num_bytes = (num_nibbles + 1) / 2;
+            let num_bytes = num_nibbles.div_ceil(2);
             assert!(bytes.len() >= num_bytes);
             let mut nibble_bytes = bytes[..num_bytes].to_vec();
             // If number of nibbles is odd, make sure to pad the last nibble with 0s.
@@ -184,7 +184,7 @@ impl NibblePath {
     }
 
     /// Get a bit iterator iterates over the whole nibble path.
-    pub fn bits(&self) -> BitIterator {
+    pub fn bits(&self) -> BitIterator<'_> {
         BitIterator {
             nibble_path: self,
             pos: (0..self.num_nibbles * 4),
@@ -192,7 +192,7 @@ impl NibblePath {
     }
 
     /// Get a nibble iterator iterates over the whole nibble path.
-    pub fn nibbles(&self) -> NibbleIterator {
+    pub fn nibbles(&self) -> NibbleIterator<'_> {
         NibbleIterator::new(self, 0, self.num_nibbles)
     }
 
@@ -214,16 +214,16 @@ impl NibblePath {
     pub fn truncate(&mut self, len: usize) {
         assert!(len <= self.num_nibbles);
         self.num_nibbles = len;
-        self.bytes.truncate((len + 1) / 2);
+        self.bytes.truncate(len.div_ceil(2));
         if len % 2 != 0 {
             *self.bytes.last_mut().expect("must exist.") &= 0xF0;
         }
     }
 
     // Returns the shard_id of the NibblePath, or None if it is root.
-    pub fn get_shard_id(&self) -> Option<u8> {
+    pub fn get_shard_id(&self) -> Option<usize> {
         if self.num_nibbles() > 0 {
-            Some(u8::from(self.get_nibble(0)))
+            Some(usize::from(self.get_nibble(0)))
         } else {
             None
         }

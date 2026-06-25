@@ -34,12 +34,12 @@ use aptos_metrics_core::TimerHelper;
 use aptos_storage_interface::{AptosDbError, Result as DbResult};
 use batch::{IntoRawBatch, NativeBatch, WriteBatch};
 use iterator::{ScanDirection, SchemaIterator};
-use rocksdb::ErrorKind;
 /// Type alias to `rocksdb::ReadOptions`. See [`rocksdb doc`](https://github.com/pingcap/rust-rocksdb/blob/master/src/rocksdb_options.rs)
 pub use rocksdb::{
-    BlockBasedOptions, Cache, ColumnFamilyDescriptor, DBCompressionType, Options, ReadOptions,
-    SliceTransform, DEFAULT_COLUMN_FAMILY_NAME,
+    BlockBasedIndexType, BlockBasedOptions, Cache, ColumnFamilyDescriptor, DBCompressionType, Env,
+    Options, ReadOptions, SliceTransform, DEFAULT_COLUMN_FAMILY_NAME,
 };
+use rocksdb::{ErrorKind, WriteOptions};
 use std::{collections::HashSet, fmt::Debug, iter::Iterator, path::Path};
 
 pub type ColumnFamilyName = &'static str;
@@ -66,20 +66,16 @@ impl DB {
         column_families: Vec<ColumnFamilyName>,
         db_opts: &Options,
     ) -> DbResult<Self> {
-        let db = DB::open_cf(
-            db_opts,
-            path,
-            name,
-            column_families
-                .iter()
-                .map(|cf_name| {
-                    let mut cf_opts = Options::default();
-                    cf_opts.set_compression_type(DBCompressionType::Lz4);
-                    ColumnFamilyDescriptor::new((*cf_name).to_string(), cf_opts)
-                })
-                .collect(),
-        )?;
-        Ok(db)
+        Self::open_impl(path, name, column_families, db_opts, OpenMode::ReadWrite)
+    }
+
+    pub fn open_readonly(
+        path: impl AsRef<Path>,
+        name: &str,
+        column_families: Vec<ColumnFamilyName>,
+        db_opts: &Options,
+    ) -> DbResult<Self> {
+        Self::open_impl(path, name, column_families, db_opts, OpenMode::ReadOnly)
     }
 
     pub fn open_cf(
@@ -117,6 +113,30 @@ impl DB {
             cfds,
             OpenMode::Secondary(secondary_path.as_ref()),
         )
+    }
+
+    fn open_impl(
+        path: impl AsRef<Path>,
+        name: &str,
+        column_families: Vec<ColumnFamilyName>,
+        db_opts: &Options,
+        open_mode: OpenMode,
+    ) -> DbResult<Self> {
+        let db = DB::open_cf_impl(
+            db_opts,
+            path,
+            name,
+            column_families
+                .iter()
+                .map(|cf_name| {
+                    let mut cf_opts = Options::default();
+                    cf_opts.set_compression_type(DBCompressionType::Lz4);
+                    ColumnFamilyDescriptor::new((*cf_name).to_string(), cf_opts)
+                })
+                .collect(),
+            open_mode,
+        )?;
+        Ok(db)
     }
 
     fn open_cf_impl(
@@ -195,17 +215,16 @@ impl DB {
 
     /// Reads single record by key.
     pub fn get<S: Schema>(&self, schema_key: &S::Key) -> DbResult<Option<S::Value>> {
-        let _timer = APTOS_SCHEMADB_GET_LATENCY_SECONDS
-            .with_label_values(&[S::COLUMN_FAMILY_NAME])
-            .start_timer();
+        let _timer = APTOS_SCHEMADB_GET_LATENCY_SECONDS.timer_with(&[S::COLUMN_FAMILY_NAME]);
 
         let k = <S::Key as KeyCodec<S>>::encode_key(schema_key)?;
         let cf_handle = self.get_cf_handle(S::COLUMN_FAMILY_NAME)?;
 
         let result = self.inner.get_cf(cf_handle, k).into_db_res()?;
-        APTOS_SCHEMADB_GET_BYTES
-            .with_label_values(&[S::COLUMN_FAMILY_NAME])
-            .observe(result.as_ref().map_or(0.0, |v| v.len() as f64));
+        APTOS_SCHEMADB_GET_BYTES.observe_with(
+            &[S::COLUMN_FAMILY_NAME],
+            result.as_ref().map_or(0.0, |v| v.len() as f64),
+        );
 
         result
             .map(|raw_value| <S::Value as ValueCodec<S>>::decode_value(&raw_value))
@@ -213,7 +232,7 @@ impl DB {
             .map_err(Into::into)
     }
 
-    pub fn new_native_batch(&self) -> NativeBatch {
+    pub fn new_native_batch(&self) -> NativeBatch<'_> {
         NativeBatch::new(self)
     }
 
@@ -237,7 +256,7 @@ impl DB {
         &self,
         opts: ReadOptions,
         direction: ScanDirection,
-    ) -> DbResult<SchemaIterator<S>> {
+    ) -> DbResult<SchemaIterator<'_, S>> {
         let cf_handle = self.get_cf_handle(S::COLUMN_FAMILY_NAME)?;
         Ok(SchemaIterator::new(
             self.inner.raw_iterator_cf_opt(cf_handle, opts),
@@ -246,42 +265,57 @@ impl DB {
     }
 
     /// Returns a forward [`SchemaIterator`] on a certain schema.
-    pub fn iter<S: Schema>(&self) -> DbResult<SchemaIterator<S>> {
+    pub fn iter<S: Schema>(&self) -> DbResult<SchemaIterator<'_, S>> {
         self.iter_with_opts(ReadOptions::default())
     }
 
     /// Returns a forward [`SchemaIterator`] on a certain schema, with non-default ReadOptions
-    pub fn iter_with_opts<S: Schema>(&self, opts: ReadOptions) -> DbResult<SchemaIterator<S>> {
+    pub fn iter_with_opts<S: Schema>(&self, opts: ReadOptions) -> DbResult<SchemaIterator<'_, S>> {
         self.iter_with_direction::<S>(opts, ScanDirection::Forward)
     }
 
     /// Returns a backward [`SchemaIterator`] on a certain schema.
-    pub fn rev_iter<S: Schema>(&self) -> DbResult<SchemaIterator<S>> {
+    pub fn rev_iter<S: Schema>(&self) -> DbResult<SchemaIterator<'_, S>> {
         self.rev_iter_with_opts(ReadOptions::default())
     }
 
     /// Returns a backward [`SchemaIterator`] on a certain schema, with non-default ReadOptions
-    pub fn rev_iter_with_opts<S: Schema>(&self, opts: ReadOptions) -> DbResult<SchemaIterator<S>> {
+    pub fn rev_iter_with_opts<S: Schema>(
+        &self,
+        opts: ReadOptions,
+    ) -> DbResult<SchemaIterator<'_, S>> {
         self.iter_with_direction::<S>(opts, ScanDirection::Backward)
     }
 
-    /// Writes a group of records wrapped in a [`SchemaBatch`].
-    pub fn write_schemas(&self, batch: impl IntoRawBatch) -> DbResult<()> {
-        let _timer = APTOS_SCHEMADB_BATCH_COMMIT_LATENCY_SECONDS.timer_with(&[&self.name]);
+    fn write_schemas_inner(&self, batch: impl IntoRawBatch, option: &WriteOptions) -> DbResult<()> {
+        let labels = [self.name.as_str()];
+        let _timer = APTOS_SCHEMADB_BATCH_COMMIT_LATENCY_SECONDS.timer_with(&labels);
 
         let raw_batch = batch.into_raw_batch(self)?;
 
         let serialized_size = raw_batch.inner.size_in_bytes();
         self.inner
-            .write_opt(raw_batch.inner, &default_write_options())
+            .write_opt(raw_batch.inner, option)
             .into_db_res()?;
 
         raw_batch.stats.commit();
-        APTOS_SCHEMADB_BATCH_COMMIT_BYTES
-            .with_label_values(&[&self.name])
-            .observe(serialized_size as f64);
+        APTOS_SCHEMADB_BATCH_COMMIT_BYTES.observe_with(&[&self.name], serialized_size as f64);
 
         Ok(())
+    }
+
+    /// Writes a group of records wrapped in a [`SchemaBatch`].
+    pub fn write_schemas(&self, batch: impl IntoRawBatch) -> DbResult<()> {
+        self.write_schemas_inner(batch, &sync_write_option())
+    }
+
+    /// Writes without sync flag in write option.
+    /// If this flag is false, and the machine crashes, some recent
+    /// writes may be lost.  Note that if it is just the process that
+    /// crashes (i.e., the machine does not reboot), no writes will be
+    /// lost even if sync==false.
+    pub fn write_schemas_relaxed(&self, batch: impl IntoRawBatch) -> DbResult<()> {
+        self.write_schemas_inner(batch, &WriteOptions::default())
     }
 
     fn get_cf_handle(&self, cf_name: &str) -> DbResult<&rocksdb::ColumnFamily> {
@@ -338,7 +372,7 @@ impl Drop for DB {
 /// For now we always use synchronous writes. This makes sure that once the operation returns
 /// `Ok(())` the data is persisted even if the machine crashes. In the future we might consider
 /// selectively turning this off for some non-critical writes to improve performance.
-fn default_write_options() -> rocksdb::WriteOptions {
+fn sync_write_option() -> rocksdb::WriteOptions {
     let mut opts = rocksdb::WriteOptions::default();
     opts.set_sync(true);
     opts

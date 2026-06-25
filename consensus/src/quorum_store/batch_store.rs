@@ -381,7 +381,7 @@ impl BatchStore {
     fn generate_signed_batch_info(
         &self,
         batch_info: BatchInfo,
-    ) -> Result<SignedBatchInfo, CryptoMaterialError> {
+    ) -> Result<SignedBatchInfo<BatchInfo>, CryptoMaterialError> {
         fail_point!("quorum_store::create_invalid_signed_batch_info", |_| {
             Ok(SignedBatchInfo::new_with_signature(
                 batch_info.clone(),
@@ -392,7 +392,7 @@ impl BatchStore {
         SignedBatchInfo::new(batch_info, &self.validator_signer)
     }
 
-    fn persist_inner(&self, persist_request: PersistedValue) -> Option<SignedBatchInfo> {
+    fn persist_inner(&self, persist_request: PersistedValue) -> Option<SignedBatchInfo<BatchInfo>> {
         match self.save(&persist_request) {
             Ok(needs_db) => {
                 let batch_info = persist_request.batch_info().clone();
@@ -483,7 +483,7 @@ impl BatchStore {
 }
 
 impl BatchWriter for BatchStore {
-    fn persist(&self, persist_requests: Vec<PersistedValue>) -> Vec<SignedBatchInfo> {
+    fn persist(&self, persist_requests: Vec<PersistedValue>) -> Vec<SignedBatchInfo<BatchInfo>> {
         let mut signed_infos = vec![];
         for persist_request in persist_requests.into_iter() {
             if let Some(signed_info) = self.persist_inner(persist_request.clone()) {
@@ -545,8 +545,6 @@ impl<T: QuorumStoreSender + Clone + Send + Sync + 'static> BatchReaderImpl<T> {
                 let responders = Arc::new(Mutex::new(responders));
                 let responders_clone = responders.clone();
 
-                let subscriber_rx = self.batch_store.subscribe(*batch_info.digest());
-
                 let inflight_requests_clone = self.inflight_fetch_requests.clone();
                 let batch_store = self.batch_store.clone();
                 let requester = self.batch_requester.clone();
@@ -561,6 +559,7 @@ impl<T: QuorumStoreSender + Clone + Send + Sync + 'static> BatchReaderImpl<T> {
                     } else {
                         // Quorum store metrics
                         counters::MISSED_BATCHES_COUNT.inc();
+                        let subscriber_rx = batch_store.subscribe(*batch_info.digest());
                         let payload = requester
                             .request_batch(
                                 batch_digest,
@@ -611,5 +610,5 @@ impl<T: QuorumStoreSender + Clone + Send + Sync + 'static> BatchReader for Batch
 }
 
 pub trait BatchWriter: Send + Sync {
-    fn persist(&self, persist_requests: Vec<PersistedValue>) -> Vec<SignedBatchInfo>;
+    fn persist(&self, persist_requests: Vec<PersistedValue>) -> Vec<SignedBatchInfo<BatchInfo>>;
 }

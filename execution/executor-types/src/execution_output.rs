@@ -15,6 +15,7 @@ use aptos_storage_interface::state_store::{
 use aptos_types::{
     contract_event::ContractEvent,
     epoch_state::EpochState,
+    state_store::hot_state::HotStateConfig,
     transaction::{
         block_epilogue::BlockEndInfo, ExecutionStatus, Transaction, TransactionStatus, Version,
     },
@@ -94,7 +95,7 @@ impl ExecutionOutput {
             to_commit: TransactionsToKeep::new_dummy_success(txns),
             to_discard: TransactionsWithOutput::new_empty(),
             to_retry: TransactionsWithOutput::new_empty(),
-            result_state: LedgerState::new_empty(),
+            result_state: LedgerState::new_empty(HotStateConfig::default()),
             state_reads: ShardedStateCache::new_empty(None),
             block_end_info: None,
             next_epoch_state: None,
@@ -178,12 +179,12 @@ impl Inner {
         let aborts = self
             .to_commit
             .iter()
-            .flat_map(|(txn, output)| match output.status().status() {
+            .flat_map(|(txn, output, aux_info)| match output.status().status() {
                 Ok(execution_status) => {
                     if execution_status.is_success() {
                         None
                     } else {
-                        Some(format!("{:?}: {:?}", txn, output.status()))
+                        Some(format!("{txn:?}: {:?} {aux_info:?}", output.status()))
                     }
                 },
                 Err(_) => None,
@@ -194,13 +195,13 @@ impl Inner {
             .to_discard
             .iter()
             .take(3)
-            .map(|(txn, output)| format!("{:?}: {:?}", txn, output.status()))
+            .map(|(txn, output, aux_info)| format!("{txn:?}: {:?} {aux_info:?}", output.status()))
             .collect::<Vec<_>>();
         let retries_3 = self
             .to_retry
             .iter()
             .take(3)
-            .map(|(txn, output)| format!("{:?}: {:?}", txn, output.status()))
+            .map(|(txn, output, aux_info)| format!("{txn:?}: {:?} {aux_info:?}", output.status()))
             .collect::<Vec<_>>();
 
         if !aborts.is_empty() || !discards_3.is_empty() || !retries_3.is_empty() {

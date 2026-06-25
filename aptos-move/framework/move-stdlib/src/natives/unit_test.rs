@@ -29,7 +29,7 @@ fn to_le_bytes(i: u64) -> [u8; AccountAddress::LENGTH] {
 
 fn native_create_signers_for_testing(
     _context: &mut SafeNativeContext,
-    ty_args: Vec<Type>,
+    ty_args: &[Type],
     mut args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     debug_assert!(ty_args.is_empty());
@@ -37,9 +37,9 @@ fn native_create_signers_for_testing(
 
     let num_signers = safely_pop_arg!(args, u64);
 
-    let signers = Value::vector_for_testing_only(
+    let signers = Value::vector_unchecked(
         (0..num_signers).map(|i| Value::master_signer(AccountAddress::new(to_le_bytes(i)))),
-    );
+    )?;
 
     Ok(smallvec![signers])
 }

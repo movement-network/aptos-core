@@ -4,7 +4,7 @@
 use anyhow::{bail, Result};
 use aptos_move_debugger::aptos_debugger::AptosDebugger;
 use aptos_rest_client::Client;
-use aptos_types::transaction::Transaction;
+use aptos_types::transaction::{AuxiliaryInfo, Transaction};
 use aptos_vm::AptosVM;
 use clap::{Parser, Subcommand};
 use std::path::{Path, PathBuf};
@@ -45,7 +45,7 @@ async fn main() -> Result<()> {
     };
 
     // Execute the transaction w/ the gas profiler
-    let (txn, _txn_info) = debugger
+    let (txn, _txn_info, aux_info) = debugger
         .get_committed_transaction_at_version(version)
         .await?;
 
@@ -54,8 +54,12 @@ async fn main() -> Result<()> {
         _ => bail!("not a user transaction"),
     };
 
-    let (_status, output, gas_log) =
-        debugger.execute_transaction_at_version_with_gas_profiler(version, txn)?;
+    // Use the auxiliary info retrieved from the database
+    let (_status, output, gas_log) = debugger.execute_transaction_at_version_with_gas_profiler(
+        version,
+        txn,
+        AuxiliaryInfo::new(aux_info, None),
+    )?;
 
     let txn_output =
         output.try_materialize_into_transaction_output(&debugger.state_view_at_version(version))?;

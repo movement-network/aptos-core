@@ -323,13 +323,13 @@ where
             framework,
             rng,
         )?;
-        if let Some(ref test_config_override_path) = test_config_override_path {
+        if let Some(test_config_override_path) = test_config_override_path {
             println!(
                 "\tMerged default config with override from path: {:?}",
                 test_config_override_path
             );
         }
-        if let Some(ref config_path) = config_path {
+        if let Some(config_path) = config_path {
             println!("\tUsed user-provided config from path: {:?}", config_path);
         }
         config
@@ -369,6 +369,12 @@ pub fn start_test_environment_node(
         println!(
             "\tIndexer gRPC node stream endpoint: {}",
             config.indexer_grpc.address
+        );
+    }
+    if config.admin_service.enabled.unwrap_or(false) {
+        println!(
+            "\tAdmin service: http://{}:{}/",
+            config.admin_service.address, config.admin_service.port
         );
     }
     if enable_lazy_mode {

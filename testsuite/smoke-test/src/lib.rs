@@ -39,6 +39,8 @@ mod network;
 #[cfg(test)]
 mod permissioned_delegation;
 #[cfg(test)]
+mod priority_fee;
+#[cfg(test)]
 mod randomness;
 #[cfg(test)]
 mod rest_api;
@@ -49,9 +51,13 @@ mod state_sync_utils;
 #[cfg(test)]
 mod storage;
 #[cfg(test)]
+mod sui_derivable_account;
+#[cfg(test)]
 mod test_smoke_tests;
 #[cfg(test)]
 mod transaction;
+#[cfg(test)]
+mod transaction_filter;
 #[cfg(test)]
 mod txn_broadcast;
 #[cfg(test)]

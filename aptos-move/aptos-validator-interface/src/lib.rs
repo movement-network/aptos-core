@@ -11,15 +11,16 @@ use aptos_framework::natives::code::PackageMetadata;
 use aptos_types::{
     account_address::AccountAddress,
     state_store::{
-        state_key::StateKey, state_storage_usage::StateStorageUsage, state_value::StateValue,
-        StateViewId, StateViewResult, TStateView,
+        state_key::StateKey, state_slot::StateSlot, state_storage_usage::StateStorageUsage,
+        state_value::StateValue, StateViewId, StateViewResult, TStateView,
     },
-    transaction::{Transaction, TransactionInfo, Version},
+    transaction::{PersistedAuxiliaryInfo, Transaction, TransactionInfo, Version},
 };
 use lru::LruCache;
 use move_core_types::language_storage::ModuleId;
 use std::{
     collections::HashMap,
+    num::NonZeroUsize,
     sync::{Arc, Mutex},
 };
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
@@ -46,7 +47,11 @@ pub trait AptosValidatorInterface: Sync {
         &self,
         start: Version,
         limit: u64,
-    ) -> Result<(Vec<Transaction>, Vec<TransactionInfo>)>;
+    ) -> Result<(
+        Vec<Transaction>,
+        Vec<TransactionInfo>,
+        Vec<PersistedAuxiliaryInfo>,
+    )>;
 
     async fn get_and_filter_committed_transactions(
         &self,
@@ -80,6 +85,12 @@ pub trait AptosValidatorInterface: Sync {
         account: AccountAddress,
         seq: u64,
     ) -> Result<Option<Version>>;
+
+    async fn get_persisted_auxiliary_infos(
+        &self,
+        start: Version,
+        limit: u64,
+    ) -> Result<Vec<PersistedAuxiliaryInfo>>;
 }
 
 pub struct DebuggerStateView {
@@ -101,7 +112,7 @@ async fn handler_thread(
         std::sync::mpsc::Sender<Result<Option<StateValue>>>,
     )>,
 ) {
-    const M: usize = 1024 * 1024;
+    const M: NonZeroUsize = NonZeroUsize::new(1024 * 1024).unwrap();
     let cache = Arc::new(Mutex::new(LruCache::<
         (StateKey, Version),
         Option<StateValue>,
@@ -143,18 +154,21 @@ impl DebuggerStateView {
         }
     }
 
-    fn get_state_value_internal(
-        &self,
-        state_key: &StateKey,
-        version: Version,
-    ) -> Result<Option<StateValue>> {
+    fn get_state_slot_internal(&self, state_key: &StateKey, version: Version) -> Result<StateSlot> {
         let (tx, rx) = std::sync::mpsc::channel();
         self.query_sender
             .lock()
             .unwrap()
             .send((state_key.clone(), version, tx))
             .unwrap();
-        rx.recv()?
+        let result = rx.recv()?;
+        result.map(|s| match s {
+            None => StateSlot::ColdVacant,
+            Some(value) => StateSlot::ColdOccupied {
+                value_version: version,
+                value,
+            },
+        })
     }
 }
 
@@ -165,13 +179,14 @@ impl TStateView for DebuggerStateView {
         StateViewId::Replay
     }
 
-    fn get_state_value(&self, state_key: &StateKey) -> StateViewResult<Option<StateValue>> {
-        self.get_state_value_internal(state_key, self.version)
+    fn get_state_slot(&self, state_key: &StateKey) -> StateViewResult<StateSlot> {
+        self.get_state_slot_internal(state_key, self.version)
             .map_err(Into::into)
     }
 
     fn get_usage(&self) -> StateViewResult<StateStorageUsage> {
-        unimplemented!()
+        // For debugger, we don't track exact usage statistics, so return default usage
+        Ok(StateStorageUsage::new_untracked())
     }
 
     fn next_version(&self) -> Version {

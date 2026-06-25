@@ -32,8 +32,8 @@ use aptos_types::{
         StateView,
     },
     transaction::{
-        BlockEndInfo, BlockEpiloguePayload, EntryFunction, ExecutionStatus, Multisig,
-        RawTransaction, Script, SignedTransaction, TransactionAuxiliaryData,
+        BlockEndInfo, EntryFunction, ExecutionStatus, Multisig, RawTransaction, Script,
+        SignedTransaction, TransactionAuxiliaryData,
     },
     vm::module_metadata::get_metadata,
     vm_status::AbortLocation,
@@ -139,11 +139,7 @@ impl<'a, S: StateView> MoveConverter<'a, S> {
         bytes: &[u8],
     ) -> Result<Vec<MoveResource>> {
         let resources_with_tag: Vec<(StructTag, Vec<u8>)> = bcs::from_bytes::<ResourceGroup>(bytes)
-            .map(|map| {
-                map.into_iter()
-                    .map(|(key, value)| (key, value))
-                    .collect::<Vec<_>>()
-            })?;
+            .map(|map| map.into_iter().collect::<Vec<_>>())?;
 
         resources_with_tag
             .iter()
@@ -217,26 +213,27 @@ impl<'a, S: StateView> MoveConverter<'a, S> {
                 })
             },
             BlockEpilogue(block_epilogue_payload) => {
+                let block_end_info = block_epilogue_payload
+                    .try_as_block_end_info()
+                    .unwrap()
+                    .clone();
+                let block_end_info = match block_end_info {
+                    BlockEndInfo::V0 {
+                        block_gas_limit_reached,
+                        block_output_limit_reached,
+                        block_effective_block_gas_units,
+                        block_approx_output_size,
+                    } => Some(crate::transaction::BlockEndInfo {
+                        block_gas_limit_reached,
+                        block_output_limit_reached,
+                        block_effective_block_gas_units,
+                        block_approx_output_size,
+                    }),
+                };
                 Transaction::BlockEpilogueTransaction(BlockEpilogueTransaction {
                     info,
                     timestamp: timestamp.into(),
-                    block_end_info: match block_epilogue_payload {
-                        BlockEpiloguePayload::V0 {
-                            block_end_info:
-                                BlockEndInfo::V0 {
-                                    block_gas_limit_reached,
-                                    block_output_limit_reached,
-                                    block_effective_block_gas_units,
-                                    block_approx_output_size,
-                                },
-                            ..
-                        } => Some(crate::transaction::BlockEndInfo {
-                            block_gas_limit_reached,
-                            block_output_limit_reached,
-                            block_effective_block_gas_units,
-                            block_approx_output_size,
-                        }),
-                    },
+                    block_end_info,
                 })
             },
             aptos_types::transaction::Transaction::ValidatorTransaction(txn) => {
@@ -406,6 +403,9 @@ impl<'a, S: StateView> MoveConverter<'a, S> {
             },
             // Deprecated.
             ModuleBundle(_) => bail!("Module bundle payload has been removed"),
+            EncryptedPayload(_) => {
+                bail!("Encrypted payload isn't supported yet")
+            },
         };
         Ok(ret)
     }
@@ -919,6 +919,12 @@ impl<'a, S: StateView> MoveConverter<'a, S> {
             MoveTypeLayout::U64 => serde_json::from_value::<crate::U64>(val)?.into(),
             MoveTypeLayout::U128 => serde_json::from_value::<crate::U128>(val)?.into(),
             MoveTypeLayout::U256 => serde_json::from_value::<crate::U256>(val)?.into(),
+            MoveTypeLayout::I8 => I8(serde_json::from_value::<i8>(val)?),
+            MoveTypeLayout::I16 => I16(serde_json::from_value::<i16>(val)?),
+            MoveTypeLayout::I32 => I32(serde_json::from_value::<i32>(val)?),
+            MoveTypeLayout::I64 => serde_json::from_value::<crate::I64>(val)?.into(),
+            MoveTypeLayout::I128 => serde_json::from_value::<crate::I128>(val)?.into(),
+            MoveTypeLayout::I256 => serde_json::from_value::<crate::I256>(val)?.into(),
             MoveTypeLayout::Address => serde_json::from_value::<crate::Address>(val)?.into(),
             MoveTypeLayout::Vector(item_layout) => {
                 self.try_into_vm_value_vector(item_layout.as_ref(), val)?
@@ -1027,10 +1033,10 @@ impl<'a, S: StateView> MoveConverter<'a, S> {
         let code = self.inner.view_existing_module(&module.clone().into())? as Arc<dyn Bytecode>;
         let func = code
             .find_function(function.name.0.as_ident_str())
-            .ok_or_else(|| format_err!("could not find entry function by {}", function))?;
+            .ok_or_else(|| format_err!("could not find view function by {}", function))?;
         ensure!(
             func.generic_type_params.len() == type_arguments.len(),
-            "expected {} type arguments for entry function {}, but got {}",
+            "expected {} type arguments for view function {}, but got {}",
             func.generic_type_params.len(),
             function,
             type_arguments.len()
@@ -1059,7 +1065,7 @@ impl<'a, S: StateView> MoveConverter<'a, S> {
         Ok(None)
     }
 
-    fn explain_vm_status(
+    pub fn explain_vm_status(
         &self,
         status: &ExecutionStatus,
         txn_aux_data: Option<TransactionAuxiliaryData>,
@@ -1176,7 +1182,7 @@ pub trait AsConverter<R> {
         &self,
         db: Arc<dyn DbReader>,
         indexer_reader: Option<Arc<dyn IndexerReader>>,
-    ) -> MoveConverter<R>;
+    ) -> MoveConverter<'_, R>;
 }
 
 impl<R: StateView> AsConverter<R> for R {
@@ -1184,7 +1190,7 @@ impl<R: StateView> AsConverter<R> for R {
         &self,
         db: Arc<dyn DbReader>,
         indexer_reader: Option<Arc<dyn IndexerReader>>,
-    ) -> MoveConverter<R> {
+    ) -> MoveConverter<'_, R> {
         MoveConverter::new(self, db, indexer_reader)
     }
 }

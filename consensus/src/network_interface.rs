@@ -14,9 +14,10 @@ use aptos_config::network_id::{NetworkId, PeerNetworkId};
 use aptos_consensus_types::{
     block_retrieval::{BlockRetrievalRequest, BlockRetrievalRequestV1, BlockRetrievalResponse},
     epoch_retrieval::EpochRetrievalRequest,
+    opt_proposal_msg::OptProposalMsg,
     order_vote_msg::OrderVoteMsg,
     pipeline::{commit_decision::CommitDecision, commit_vote::CommitVote},
-    proof_of_store::{ProofOfStoreMsg, SignedBatchInfoMsg},
+    proof_of_store::{BatchInfo, ProofOfStoreMsg, SignedBatchInfoMsg},
     proposal_msg::ProposalMsg,
     round_timeout::RoundTimeoutMsg,
     sync_info::SyncInfo,
@@ -70,9 +71,9 @@ pub enum ConsensusMsg {
     BatchResponse(Box<Batch>),
     /// Quorum Store: Send a signed batch digest. This is a vote for the batch and a promise that
     /// the batch of transactions was received and will be persisted until batch expiration.
-    SignedBatchInfo(Box<SignedBatchInfoMsg>),
+    SignedBatchInfo(Box<SignedBatchInfoMsg<BatchInfo>>),
     /// Quorum Store: Broadcast a certified proof of store (a digest that received 2f+1 votes).
-    ProofOfStoreMsg(Box<ProofOfStoreMsg>),
+    ProofOfStoreMsg(Box<ProofOfStoreMsg<BatchInfo>>),
     /// DAG protocol message
     DAGMessage(DAGNetworkMessage),
     /// Commit message
@@ -88,6 +89,8 @@ pub enum ConsensusMsg {
     RoundTimeoutMsg(Box<RoundTimeoutMsg>),
     /// RPC to get a chain of block of the given length starting from the given block id, using epoch and round.
     BlockRetrievalRequest(Box<BlockRetrievalRequest>),
+    /// OptProposalMsg contains the optimistic proposal and sync info.
+    OptProposalMsg(Box<OptProposalMsg>),
 }
 
 /// Network type for consensus
@@ -100,6 +103,7 @@ impl ConsensusMsg {
             ConsensusMsg::BlockRetrievalResponse(_) => "BlockRetrievalResponse",
             ConsensusMsg::EpochRetrievalRequest(_) => "EpochRetrievalRequest",
             ConsensusMsg::ProposalMsg(_) => "ProposalMsg",
+            ConsensusMsg::OptProposalMsg(_) => "OptProposalMsg",
             ConsensusMsg::SyncInfo(_) => "SyncInfo",
             ConsensusMsg::EpochChangeProof(_) => "EpochChangeProof",
             ConsensusMsg::VoteMsg(_) => "VoteMsg",

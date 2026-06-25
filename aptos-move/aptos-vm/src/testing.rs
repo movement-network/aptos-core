@@ -78,9 +78,14 @@ impl AptosVM {
         gas_meter_balance: u64,
     ) -> (VMStatus, VMOutput) {
         use crate::gas::make_prod_gas_meter;
+        use aptos_types::transaction::AuxiliaryInfo;
         use move_vm_runtime::module_traversal::{TraversalContext, TraversalStorage};
 
+<<<<<<< HEAD
         let txn_data = TransactionMetadata::new(txn, self.timed_features());
+=======
+        let txn_data = TransactionMetadata::new(txn, &AuxiliaryInfo::default());
+>>>>>>> e33e3c1b
         let log_context = AdapterLogSchema::new(state_view.id(), 0);
 
         let vm_gas_params = self

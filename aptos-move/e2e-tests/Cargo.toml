@@ -38,7 +38,6 @@ aptos-vm-logging = { workspace = true }
 aptos-vm-types = { workspace = true }
 bcs = { workspace = true }
 bytes = { workspace = true }
-claims = { workspace = true }
 goldenfile = { workspace = true }
 move-binary-format = { workspace = true }
 move-command-line-common = { workspace = true }
@@ -59,3 +58,6 @@ serde = { workspace = true }
 [features]
 default = []
 fuzzing = []
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }

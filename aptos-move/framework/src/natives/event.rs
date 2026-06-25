@@ -14,7 +14,7 @@ use aptos_types::event::EventKey;
 use better_any::{Tid, TidAble};
 use move_binary_format::errors::PartialVMError;
 use move_core_types::{language_storage::TypeTag, value::MoveTypeLayout, vm_status::StatusCode};
-use move_vm_runtime::native_functions::NativeFunction;
+use move_vm_runtime::{native_extensions::SessionListener, native_functions::NativeFunction};
 #[cfg(feature = "testing")]
 use move_vm_types::values::{Reference, Struct, StructRef};
 use move_vm_types::{
@@ -32,9 +32,30 @@ pub struct NativeEventContext {
     events: Vec<(ContractEvent, Option<MoveTypeLayout>)>,
 }
 
+impl SessionListener for NativeEventContext {
+    fn start(&mut self, _session_hash: &[u8; 32], _script_hash: &[u8], _session_counter: u8) {
+        // State is handled by finish-abort, session start does not impact anything.
+    }
+
+    fn finish(&mut self) {
+        // TODO(sessions): implement
+    }
+
+    fn abort(&mut self) {
+        // TODO(sessions): implement
+    }
+}
+
 impl NativeEventContext {
-    pub fn into_events(self) -> Vec<(ContractEvent, Option<MoveTypeLayout>)> {
+    /// Returns events from the current context. Only used for non-continuous sessions which are
+    /// now legacy.
+    pub fn legacy_into_events(self) -> Vec<(ContractEvent, Option<MoveTypeLayout>)> {
         self.events
+    }
+
+    /// Returns iterator over all events seen so far.
+    pub fn events_iter(&self) -> impl Iterator<Item = &ContractEvent> {
+        self.events.iter().map(|(event, _)| event)
     }
 
     #[cfg(feature = "testing")]
@@ -73,13 +94,13 @@ impl NativeEventContext {
 #[inline]
 fn native_write_to_event_store(
     context: &mut SafeNativeContext,
-    mut ty_args: Vec<Type>,
+    ty_args: &[Type],
     mut arguments: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     debug_assert!(ty_args.len() == 1);
     debug_assert!(arguments.len() == 3);
 
-    let ty = ty_args.pop().unwrap();
+    let ty = &ty_args[0];
     let msg = arguments.pop_back().unwrap();
     let seq_num = safely_pop_arg!(arguments, u64);
     let guid = safely_pop_arg!(arguments, Vec<u8>);
@@ -89,9 +110,10 @@ fn native_write_to_event_store(
         EVENT_WRITE_TO_EVENT_STORE_BASE
             + EVENT_WRITE_TO_EVENT_STORE_PER_ABSTRACT_VALUE_UNIT * context.abs_val_size(&msg)?,
     )?;
-    let ty_tag = context.type_to_type_tag(&ty)?;
-    let (layout, has_aggregator_lifting) =
-        context.type_to_type_layout_with_identifier_mappings(&ty)?;
+    let ty_tag = context.type_to_type_tag(ty)?;
+    let (layout, contains_delayed_fields) = context
+        .type_to_type_layout_with_delayed_fields(ty)?
+        .unpack();
 
     let function_value_extension = context.function_value_extension();
     let max_value_nest_depth = context.max_value_nest_depth();
@@ -113,21 +135,24 @@ fn native_write_to_event_store(
         ContractEvent::new_v1(key, seq_num, ty_tag, blob).map_err(|_| SafeNativeError::Abort {
             abort_code: ECANNOT_CREATE_EVENT,
         })?;
-    ctx.events
-        .push((event, has_aggregator_lifting.then_some(layout)));
+    // TODO(layouts): avoid cloning layouts for events with delayed fields.
+    ctx.events.push((
+        event,
+        contains_delayed_fields.then(|| layout.as_ref().clone()),
+    ));
     Ok(smallvec![])
 }
 
 #[cfg(feature = "testing")]
 fn native_emitted_events_by_handle(
     context: &mut SafeNativeContext,
-    mut ty_args: Vec<Type>,
+    ty_args: &[Type],
     mut arguments: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     debug_assert!(ty_args.len() == 1);
     debug_assert!(arguments.len() == 1);
 
-    let ty = ty_args.pop().unwrap();
+    let ty = &ty_args[0];
     let mut guid = safely_pop_arg!(arguments, StructRef)
         .borrow_field(1)?
         .value_as::<StructRef>()?
@@ -154,8 +179,8 @@ fn native_emitted_events_by_handle(
         })?
         .value_as::<AccountAddress>()?;
     let key = EventKey::new(creation_num, addr);
-    let ty_tag = context.type_to_type_tag(&ty)?;
-    let ty_layout = context.type_to_type_layout(&ty)?;
+    let ty_tag = context.type_to_type_tag(ty)?;
+    let ty_layout = context.type_to_type_layout_check_no_delayed_fields(ty)?;
     let ctx = context.extensions().get::<NativeEventContext>();
     let events = ctx
         .emitted_v1_events(&key, &ty_tag)
@@ -173,22 +198,22 @@ fn native_emitted_events_by_handle(
                 })
         })
         .collect::<SafeNativeResult<Vec<Value>>>()?;
-    Ok(smallvec![Value::vector_for_testing_only(events)])
+    Ok(smallvec![Value::vector_unchecked(events)?])
 }
 
 #[cfg(feature = "testing")]
 fn native_emitted_events(
     context: &mut SafeNativeContext,
-    mut ty_args: Vec<Type>,
+    ty_args: &[Type],
     arguments: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     debug_assert!(ty_args.len() == 1);
     debug_assert!(arguments.is_empty());
 
-    let ty = ty_args.pop().unwrap();
+    let ty = &ty_args[0];
 
-    let ty_tag = context.type_to_type_tag(&ty)?;
-    let ty_layout = context.type_to_type_layout(&ty)?;
+    let ty_tag = context.type_to_type_tag(ty)?;
+    let ty_layout = context.type_to_type_layout_check_no_delayed_fields(ty)?;
     let ctx = context.extensions().get::<NativeEventContext>();
 
     let events = ctx
@@ -208,19 +233,19 @@ fn native_emitted_events(
                 })
         })
         .collect::<SafeNativeResult<Vec<Value>>>()?;
-    Ok(smallvec![Value::vector_for_testing_only(events)])
+    Ok(smallvec![Value::vector_unchecked(events)?])
 }
 
 #[inline]
 fn native_write_module_event_to_store(
     context: &mut SafeNativeContext,
-    mut ty_args: Vec<Type>,
+    ty_args: &[Type],
     mut arguments: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     debug_assert!(ty_args.len() == 1);
     debug_assert!(arguments.len() == 1);
 
-    let ty = ty_args.pop().unwrap();
+    let ty = &ty_args[0];
     let msg = arguments.pop_back().unwrap();
 
     context.charge(
@@ -228,7 +253,7 @@ fn native_write_module_event_to_store(
             + EVENT_WRITE_TO_EVENT_STORE_PER_ABSTRACT_VALUE_UNIT * context.abs_val_size(&msg)?,
     )?;
 
-    let type_tag = context.type_to_type_tag(&ty)?;
+    let type_tag = context.type_to_type_tag(ty)?;
 
     // Additional runtime check for module call.
     let stack_frames = context.stack_frames(1);
@@ -261,8 +286,9 @@ fn native_write_module_event_to_store(
         )));
     }
 
-    let (layout, has_identifier_mappings) =
-        context.type_to_type_layout_with_identifier_mappings(&ty)?;
+    let (layout, contains_delayed_fields) = context
+        .type_to_type_layout_with_delayed_fields(ty)?
+        .unpack();
 
     let function_value_extension = context.function_value_extension();
     let max_value_nest_depth = context.max_value_nest_depth();
@@ -280,8 +306,11 @@ fn native_write_module_event_to_store(
     let event = ContractEvent::new_v2(type_tag, blob).map_err(|_| SafeNativeError::Abort {
         abort_code: ECANNOT_CREATE_EVENT,
     })?;
-    ctx.events
-        .push((event, has_identifier_mappings.then_some(layout)));
+    // TODO(layouts): avoid cloning layouts for events with delayed fields.
+    ctx.events.push((
+        event,
+        contains_delayed_fields.then(|| layout.as_ref().clone()),
+    ));
 
     Ok(smallvec![])
 }

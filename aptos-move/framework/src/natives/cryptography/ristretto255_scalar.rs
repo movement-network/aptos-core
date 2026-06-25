@@ -28,7 +28,7 @@ use std::{
 /// This is a test-only native that charges zero gas. It is only exported in testing mode.
 pub(crate) fn native_scalar_random(
     _context: &mut SafeNativeContext,
-    _ty_args: Vec<Type>,
+    _ty_args: &[Type],
     args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     debug_assert!(_ty_args.is_empty());
@@ -48,7 +48,7 @@ pub(crate) fn native_scalar_random(
 
 pub(crate) fn native_scalar_is_canonical(
     context: &mut SafeNativeContext,
-    _ty_args: Vec<Type>,
+    _ty_args: &[Type],
     mut arguments: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     safely_assert_eq!(_ty_args.len(), 0);
@@ -74,7 +74,7 @@ pub(crate) fn native_scalar_is_canonical(
 
 pub(crate) fn native_scalar_invert(
     context: &mut SafeNativeContext,
-    _ty_args: Vec<Type>,
+    _ty_args: &[Type],
     mut arguments: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     safely_assert_eq!(_ty_args.len(), 0);
@@ -91,7 +91,7 @@ pub(crate) fn native_scalar_invert(
 // NOTE: This was supposed to be more clearly named with *_sha2_512_*.
 pub(crate) fn native_scalar_from_sha512(
     context: &mut SafeNativeContext,
-    _ty_args: Vec<Type>,
+    _ty_args: &[Type],
     mut arguments: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     safely_assert_eq!(_ty_args.len(), 0);
@@ -112,7 +112,7 @@ pub(crate) fn native_scalar_from_sha512(
 
 pub(crate) fn native_scalar_mul(
     context: &mut SafeNativeContext,
-    _ty_args: Vec<Type>,
+    _ty_args: &[Type],
     mut arguments: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     safely_assert_eq!(_ty_args.len(), 0);
@@ -130,7 +130,7 @@ pub(crate) fn native_scalar_mul(
 
 pub(crate) fn native_scalar_add(
     context: &mut SafeNativeContext,
-    _ty_args: Vec<Type>,
+    _ty_args: &[Type],
     mut arguments: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     safely_assert_eq!(_ty_args.len(), 0);
@@ -148,7 +148,7 @@ pub(crate) fn native_scalar_add(
 
 pub(crate) fn native_scalar_sub(
     context: &mut SafeNativeContext,
-    _ty_args: Vec<Type>,
+    _ty_args: &[Type],
     mut arguments: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     safely_assert_eq!(_ty_args.len(), 0);
@@ -166,7 +166,7 @@ pub(crate) fn native_scalar_sub(
 
 pub(crate) fn native_scalar_neg(
     context: &mut SafeNativeContext,
-    _ty_args: Vec<Type>,
+    _ty_args: &[Type],
     mut arguments: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     safely_assert_eq!(_ty_args.len(), 0);
@@ -183,7 +183,7 @@ pub(crate) fn native_scalar_neg(
 
 pub(crate) fn native_scalar_from_u64(
     context: &mut SafeNativeContext,
-    _ty_args: Vec<Type>,
+    _ty_args: &[Type],
     mut arguments: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     safely_assert_eq!(_ty_args.len(), 0);
@@ -200,7 +200,7 @@ pub(crate) fn native_scalar_from_u64(
 
 pub(crate) fn native_scalar_from_u128(
     context: &mut SafeNativeContext,
-    _ty_args: Vec<Type>,
+    _ty_args: &[Type],
     mut arguments: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     safely_assert_eq!(_ty_args.len(), 0);
@@ -217,7 +217,7 @@ pub(crate) fn native_scalar_from_u128(
 
 pub(crate) fn native_scalar_reduced_from_32_bytes(
     context: &mut SafeNativeContext,
-    _ty_args: Vec<Type>,
+    _ty_args: &[Type],
     mut arguments: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     safely_assert_eq!(_ty_args.len(), 0);
@@ -234,7 +234,7 @@ pub(crate) fn native_scalar_reduced_from_32_bytes(
 
 pub(crate) fn native_scalar_uniform_from_64_bytes(
     context: &mut SafeNativeContext,
-    _ty_args: Vec<Type>,
+    _ty_args: &[Type],
     mut args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     safely_assert_eq!(_ty_args.len(), 0);

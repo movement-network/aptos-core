@@ -5,8 +5,7 @@
 use super::WaypointConfig;
 use crate::config::{
     config_optimizer::ConfigOptimizer, config_sanitizer::ConfigSanitizer,
-    node_config_loader::NodeType, transaction_filter_type::Filter, utils::RootPath, Error,
-    NodeConfig,
+    node_config_loader::NodeType, utils::RootPath, Error, NodeConfig,
 };
 use aptos_types::{chain_id::ChainId, transaction::Transaction, waypoint::Waypoint};
 use serde::{Deserialize, Serialize};
@@ -50,10 +49,15 @@ pub struct ExecutionConfig {
     pub paranoid_hot_potato_verification: bool,
     /// Enables enhanced metrics around processed transactions
     pub processed_transactions_detailed_counters: bool,
-    /// Enables filtering of transactions before they are sent to execution
-    pub transaction_filter: Filter,
     /// Used during DB bootstrapping
     pub genesis_waypoint: Option<WaypointConfig>,
+    /// Whether to use BlockSTMv2 for parallel execution.
+    pub blockstm_v2_enabled: bool,
+    /// Enables long-living concurrent caches for Move type layouts.
+    pub layout_caches_enabled: bool,
+    /// If enabled, runtime checks like paranoid type checks may be performed in parallel in post
+    /// commit hook in Block-STM.
+    pub async_runtime_checks: bool,
 }
 
 impl std::fmt::Debug for ExecutionConfig {
@@ -84,8 +88,11 @@ impl Default for ExecutionConfig {
             paranoid_hot_potato_verification: true,
             discard_failed_blocks: false,
             processed_transactions_detailed_counters: false,
-            transaction_filter: Filter::empty(),
             genesis_waypoint: None,
+            blockstm_v2_enabled: false,
+            // TODO: consider setting to be true by default.
+            layout_caches_enabled: false,
+            async_runtime_checks: false,
         }
     }
 }

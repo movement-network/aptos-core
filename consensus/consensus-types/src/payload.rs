@@ -13,7 +13,7 @@ use std::{
 
 pub type OptBatches = BatchPointer<BatchInfo>;
 
-pub type ProofBatches = BatchPointer<ProofOfStore>;
+pub type ProofBatches = BatchPointer<ProofOfStore<BatchInfo>>;
 
 pub trait TDataInfo {
     fn num_txns(&self) -> u64;
@@ -42,6 +42,10 @@ where
 
     pub fn extend(&mut self, other: BatchPointer<T>) {
         self.batch_summary.extend(other.batch_summary);
+    }
+
+    pub fn num_proofs(&self) -> usize {
+        self.batch_summary.len()
     }
 
     pub fn num_txns(&self) -> usize {
@@ -210,14 +214,18 @@ impl InlineBatch {
 pub struct InlineBatches(Vec<InlineBatch>);
 
 impl InlineBatches {
-    fn num_txns(&self) -> usize {
+    pub fn num_batches(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn num_txns(&self) -> usize {
         self.0
             .iter()
             .map(|batch| batch.batch_info.num_txns() as usize)
             .sum()
     }
 
-    fn num_bytes(&self) -> usize {
+    pub fn num_bytes(&self) -> usize {
         self.0
             .iter()
             .map(|batch| batch.batch_info.num_bytes() as usize)
@@ -302,6 +310,10 @@ impl OptQuorumStorePayloadV1 {
         self.execution_limits.max_txns_to_execute()
     }
 
+    pub fn block_gas_limit(&self) -> Option<u64> {
+        self.execution_limits.block_gas_limit()
+    }
+
     pub fn check_epoch(&self, epoch: u64) -> anyhow::Result<()> {
         ensure!(
             self.inline_batches
@@ -374,7 +386,7 @@ impl OptQuorumStorePayload {
         &self.inline_batches
     }
 
-    pub fn proof_with_data(&self) -> &BatchPointer<ProofOfStore> {
+    pub fn proof_with_data(&self) -> &BatchPointer<ProofOfStore<BatchInfo>> {
         &self.proofs
     }
 

@@ -49,7 +49,6 @@ variable "CARGO_TARGET_DIR" {
 group "all" {
   targets = flatten([
     "validator",
-    "node-checker",
     "tools",
     "faucet",
     "forge",
@@ -69,7 +68,7 @@ target "debian-base" {
   dockerfile = "docker/builder/debian-base.Dockerfile"
   contexts = {
     # Run `docker buildx imagetools inspect debian:bullseye` to find the latest multi-platform hash
-    debian = "docker-image://debian:bullseye@sha256:cf48c31af360e1c0a0aedd33aae4d928b68c2cdf093f1612650eb1ff434d1c34"
+    debian = "docker-image://debian:bullseye@sha256:25c0cab214b810db1b3c8adef5a12a92596979abddf86bb364e8d9c9d111df9f"
   }
 }
 
@@ -182,14 +181,6 @@ target "tools" {
   target     = "tools"
   tags       = generate_tags("tools")
 }
-
-target "node-checker" {
-  inherits   = ["_common"]
-  dockerfile = "docker/builder/node-checker.Dockerfile"
-  target     = "node-checker"
-  tags       = generate_tags("node-checker")
-}
-
 target "faucet" {
   inherits   = ["_common"]
   dockerfile = "docker/builder/faucet.Dockerfile"

@@ -33,8 +33,9 @@ use aptos_types::{
         signature_verified_transaction::{
             into_signature_verified_block, SignatureVerifiedTransaction,
         },
+        AuxiliaryInfo, AuxiliaryInfoTrait, EphemeralAuxiliaryInfo, PersistedAuxiliaryInfo,
         Transaction::{self, UserTransaction},
-        TransactionListWithProof, TransactionWithProof, WriteSetPayload,
+        TransactionListWithProofV2, TransactionWithProof, WriteSetPayload,
     },
     trusted_state::{TrustedState, TrustedStateChange},
     waypoint::Waypoint,
@@ -163,7 +164,7 @@ pub fn test_execution_with_storage_impl_inner(
     let reconfig2 = core_resources_account.sign_with_transaction_builder(
         txn_factory.payload(aptos_stdlib::aptos_governance_force_end_epoch_test_only()),
     );
-    let block2 = vec![block2_meta, UserTransaction(reconfig2)];
+    let block2 = into_signature_verified_block(vec![block2_meta, UserTransaction(reconfig2)]);
 
     let block3_id = gen_block_id(3);
     let block3_meta = Transaction::BlockMetadata(BlockMetadata::new(
@@ -182,16 +183,21 @@ pub fn test_execution_with_storage_impl_inner(
             txn_factory.transfer(account3.address(), 10 * B),
         )));
     }
-    let block3 = block(block3); // append state checkpoint txn
+    let block3 = block(block3);
 
     let output1 = executor
         .execute_block(
-            (block1_id, block1.clone()).into(),
+            (
+                block1_id,
+                block1.clone(),
+                gen_auxiliary_info_for_block(&block1),
+            )
+                .into(),
             parent_block_id,
             TEST_BLOCK_EXECUTOR_ONCHAIN_CONFIG,
         )
         .unwrap();
-    let li1 = gen_ledger_info_with_sigs(1, &output1, block1_id, &[signer.clone()]);
+    let li1 = gen_ledger_info_with_sigs(1, &output1, block1_id, std::slice::from_ref(&signer));
     let epoch2_genesis_id = Block::make_genesis_block_from_ledger_info(li1.ledger_info()).id();
     executor.commit_blocks(vec![block1_id], li1).unwrap();
 
@@ -298,12 +304,17 @@ pub fn test_execution_with_storage_impl_inner(
     // Execute block 2, 3, 4
     let output2 = executor
         .execute_block(
-            (block2_id, block2).into(),
+            (
+                block2_id,
+                block2.clone(),
+                gen_auxiliary_info_for_block(&block2),
+            )
+                .into(),
             epoch2_genesis_id,
             TEST_BLOCK_EXECUTOR_ONCHAIN_CONFIG,
         )
         .unwrap();
-    let li2 = gen_ledger_info_with_sigs(2, &output2, block2_id, &[signer.clone()]);
+    let li2 = gen_ledger_info_with_sigs(2, &output2, block2_id, std::slice::from_ref(&signer));
     let epoch3_genesis_id = Block::make_genesis_block_from_ledger_info(li2.ledger_info()).id();
     executor.commit_blocks(vec![block2_id], li2).unwrap();
 
@@ -319,7 +330,12 @@ pub fn test_execution_with_storage_impl_inner(
 
     let output3 = executor
         .execute_block(
-            (block3_id, block3.clone()).into(),
+            (
+                block3_id,
+                block3.clone(),
+                gen_auxiliary_info_for_block(&block3),
+            )
+                .into(),
             epoch3_genesis_id,
             TEST_BLOCK_EXECUTOR_ONCHAIN_CONFIG,
         )
@@ -388,14 +404,13 @@ pub fn create_db_and_executor<P: AsRef<std::path::Path>>(
     BlockExecutor<AptosVMBlockExecutor>,
     Waypoint,
 ) {
-    let (db, dbrw) = force_sharding
-        .then(|| {
-            DbReaderWriter::wrap(AptosDB::new_for_test_with_sharding(
-                &path,
-                DEFAULT_MAX_NUM_NODES_PER_LRU_CACHE_SHARD,
-            ))
-        })
-        .unwrap_or_else(|| DbReaderWriter::wrap(AptosDB::new_for_test(&path)));
+    let (db, dbrw) = DbReaderWriter::wrap(
+        if force_sharding {
+            AptosDB::new_for_test_with_sharding(&path, DEFAULT_MAX_NUM_NODES_PER_LRU_CACHE_SHARD)
+        } else {
+            AptosDB::new_for_test(&path)
+        },
+    );
     let waypoint = bootstrap_genesis::<AptosVMBlockExecutor>(&dbrw, genesis).unwrap();
     let executor = BlockExecutor::new(dbrw.clone());
 
@@ -425,10 +440,12 @@ where
 }
 
 pub fn verify_transactions(
-    txn_list_with_proof: &TransactionListWithProof,
+    txn_list_with_proof: &TransactionListWithProofV2,
     expected_txns: &[Transaction],
 ) -> Result<()> {
-    let txns = &txn_list_with_proof.transactions;
+    let txns = &txn_list_with_proof
+        .get_transaction_list_with_proof()
+        .transactions;
     ensure!(
         *txns == expected_txns,
         "expected txns {:?} doesn't equal to returned txns {:?}",
@@ -457,4 +474,21 @@ pub fn verify_committed_txn_status(
     );
 
     Ok(())
+}
+
+fn gen_auxiliary_info_for_block(block: &[SignatureVerifiedTransaction]) -> Vec<AuxiliaryInfo> {
+    block
+        .iter()
+        .map(|txn| {
+            txn.borrow_into_inner().try_as_signed_user_txn().map_or(
+                AuxiliaryInfo::new_empty(),
+                |_| {
+                    AuxiliaryInfo::new(
+                        PersistedAuxiliaryInfo::None,
+                        Some(EphemeralAuxiliaryInfo { proposer_index: 0 }),
+                    )
+                },
+            )
+        })
+        .collect()
 }

@@ -78,6 +78,7 @@ pub fn run_prover_for_pkg(
 }
 
 #[test]
+<<<<<<< HEAD
 #[ignore] // TODO: Re-enable after prover cleanup is completed
 fn move_framework_prover_tests_shard1() {
     run_prover_for_pkg("aptos-framework", 5, Some(1));
@@ -105,6 +106,10 @@ fn move_framework_prover_tests_shard4() {
 #[ignore] // TODO: Re-enable after prover cleanup is completed
 fn move_framework_prover_tests_shard5() {
     run_prover_for_pkg("aptos-framework", 5, Some(5));
+=======
+fn move_framework_prover_tests() {
+    run_prover_for_pkg("aptos-framework", 1, None);
+>>>>>>> e33e3c1b
 }
 
 #[test]

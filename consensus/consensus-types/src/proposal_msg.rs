@@ -2,7 +2,16 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+<<<<<<< HEAD
 use crate::{block::Block, common::{Author, BatchSizeLimits}, proof_of_store::ProofCache, sync_info::SyncInfo};
+=======
+use crate::{
+    block::Block,
+    common::Author,
+    proof_of_store::{BatchInfo, ProofCache},
+    sync_info::SyncInfo,
+};
+>>>>>>> e33e3c1b
 use anyhow::{anyhow, ensure, format_err, Context, Result};
 use aptos_short_hex_str::AsShortHexStr;
 use aptos_types::validator_verifier::ValidatorVerifier;
@@ -84,7 +93,7 @@ impl ProposalMsg {
         &self,
         sender: Author,
         validator: &ValidatorVerifier,
-        proof_cache: &ProofCache,
+        proof_cache: &ProofCache<BatchInfo>,
         quorum_store_enabled: bool,
         size_limits: BatchSizeLimits,
     ) -> Result<()> {
@@ -96,6 +105,7 @@ impl ProposalMsg {
                 sender
             );
         }
+<<<<<<< HEAD
         self.proposal().payload().map_or(Ok(()), |p| {
             p.verify(
                 validator,
@@ -104,10 +114,23 @@ impl ProposalMsg {
                 size_limits,
             )
         })?;
+=======
+        let (payload_result, sig_result) = rayon::join(
+            || {
+                self.proposal().payload().map_or(Ok(()), |p| {
+                    p.verify(validator, proof_cache, quorum_store_enabled)
+                })
+            },
+            || {
+                self.proposal()
+                    .validate_signature(validator)
+                    .map_err(|e| format_err!("{:?}", e))
+            },
+        );
+        payload_result?;
+        sig_result?;
+>>>>>>> e33e3c1b
 
-        self.proposal()
-            .validate_signature(validator)
-            .map_err(|e| format_err!("{:?}", e))?;
         // if there is a timeout certificate, verify its signatures
         if let Some(tc) = self.sync_info.highest_2chain_timeout_cert() {
             tc.verify(validator).map_err(|e| format_err!("{:?}", e))?;

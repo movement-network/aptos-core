@@ -69,10 +69,6 @@ impl DelayedFieldsExtension<'_> {
 #[derive(Clone)]
 pub(crate) struct FunctionValueExtensionWithContext<'a> {
     extension: &'a dyn FunctionValueExtension,
-    /// Marker to indicate that function value serialization failed. Used to ensure we propagate
-    /// error status code correctly, as otherwise any serialization failure is treated as an
-    /// invariant violation.
-    function_value_serialization_error: RefCell<Option<PartialVMError>>,
 }
 
 impl FunctionValueExtensionWithContext<'_> {
@@ -81,11 +77,7 @@ impl FunctionValueExtensionWithContext<'_> {
         &self,
         fun: &dyn AbstractFunction,
     ) -> PartialVMResult<SerializedFunctionData> {
-        self.extension
-            .get_serialization_data(fun)
-            .inspect_err(|err| {
-                *self.function_value_serialization_error.borrow_mut() = Some(err.clone());
-            })
+        self.extension.get_serialization_data(fun)
     }
 
     /// Creates a function from serialized data.
@@ -130,10 +122,7 @@ impl<'a> ValueSerDeContext<'a> {
         mut self,
         extension: &'a dyn FunctionValueExtension,
     ) -> Self {
-        self.function_extension = Some(FunctionValueExtensionWithContext {
-            extension,
-            function_value_serialization_error: RefCell::new(None),
-        });
+        self.function_extension = Some(FunctionValueExtensionWithContext { extension });
         self
     }
 
@@ -204,7 +193,11 @@ impl<'a> ValueSerDeContext<'a> {
         let value = SerializationReadyValue {
             ctx: &self,
             layout,
+<<<<<<< HEAD
             value: &value.0,
+=======
+            value,
+>>>>>>> e33e3c1b
             depth: 1,
         };
 
@@ -223,17 +216,6 @@ impl<'a> ValueSerDeContext<'a> {
                             ));
                     }
                 }
-
-                // Check if the error is because of function value serialization.
-                if let Some(function_extension) = self.function_extension {
-                    if let Some(err) = function_extension
-                        .function_value_serialization_error
-                        .into_inner()
-                    {
-                        return Err(err);
-                    }
-                }
-
                 Ok(None)
             },
         }
@@ -245,7 +227,11 @@ impl<'a> ValueSerDeContext<'a> {
         let value = SerializationReadyValue {
             ctx: &self,
             layout,
+<<<<<<< HEAD
             value: &value.0,
+=======
+            value,
+>>>>>>> e33e3c1b
             depth: 1,
         };
         bcs::serialized_size(&value).map_err(|e| {

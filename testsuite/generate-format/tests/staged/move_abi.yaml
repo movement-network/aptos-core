@@ -21,14 +21,28 @@ EntryABI:
       EntryFunction:
         NEWTYPE:
           TYPENAME: ScriptFunctionABI
+FunctionParamOrReturnTag:
+  ENUM:
+    0:
+      Reference:
+        NEWTYPE:
+          TYPENAME: TypeTag
+    1:
+      MutableReference:
+        NEWTYPE:
+          TYPENAME: TypeTag
+    2:
+      Value:
+        NEWTYPE:
+          TYPENAME: TypeTag
 FunctionTag:
   STRUCT:
     - args:
         SEQ:
-          TYPENAME: TypeTag
+          TYPENAME: FunctionParamOrReturnTag
     - results:
         SEQ:
-          TYPENAME: TypeTag
+          TYPENAME: FunctionParamOrReturnTag
     - abilities:
         TYPENAME: AbilitySet
 Identifier:
@@ -108,3 +122,15 @@ TypeTag:
       Function:
         NEWTYPE:
           TYPENAME: FunctionTag
+    12:
+      i8: UNIT
+    13:
+      i16: UNIT
+    14:
+      i32: UNIT
+    15:
+      i64: UNIT
+    16:
+      i128: UNIT
+    17:
+      i256: UNIT

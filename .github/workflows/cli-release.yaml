@@ -75,8 +75,32 @@ jobs:
           name: cli-builds-macos-arm64
           path: movement-cli-*.zip
 
+<<<<<<< HEAD
   release:
     name: "Create GitHub Release"
+=======
+  build-windows-binary:
+    name: "Build Windows binary"
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.source_git_ref_override }}
+      # Ensure that long paths work
+      - name: Ensure long paths work
+        run: git config --global core.longpaths true
+        shell: bash
+      - name: Build CLI
+        run: scripts\cli\build_cli_release.ps1
+      - name: Upload Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-builds-windows
+          path: aptos-cli-*.zip
+
+  release-binaries:
+    name: "Release binaries"
+>>>>>>> e33e3c1b
     needs:
       - build-linux-x86_64
       - build-macos-x86_64
@@ -102,5 +126,32 @@ jobs:
           name: "Movement CLI v${{ inputs.release_version }}"
           draft: false
           prerelease: false
+<<<<<<< HEAD
           files: movement-cli-*.zip
           generate_release_notes: true
+=======
+          title: "${{ format('Aptos CLI Release v{0}', inputs.release_version) }}"
+          files: |
+            aptos-cli-*.zip
+
+  bump-homebrew-version-pr:
+    name: "Make PR to bump version in Homebrew"
+    needs:
+      - release-binaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: mislav/bump-homebrew-formula-action@v3
+        with:
+          formula-name: aptos
+          tag-name: "${{ format('aptos-cli-v{0}', inputs.release_version) }}"
+          base-branch: main
+          create-pullrequest: true
+          commit-message: |
+            {{formulaName}} {{version}}
+
+            Created by https://github.com/mislav/bump-homebrew-formula-action
+
+            From CLI release run ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        env:
+          COMMITTER_TOKEN: ${{ secrets.APTOS_BOT_GH_PAT_APTOS_CORE_HOMEBREW_BUMPER }}
+>>>>>>> e33e3c1b

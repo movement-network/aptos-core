@@ -35,14 +35,19 @@ pub enum NativeTransaction {
         fail_on_recipient_account_existing: bool,
         fail_on_recipient_account_missing: bool,
     },
+    BlockEpilogue,
+    BlockMetadata,
 }
 
 impl NativeTransaction {
     pub fn parse(txn: &SignatureVerifiedTransaction) -> Self {
         match &txn.expect_valid() {
             aptos_types::transaction::Transaction::UserTransaction(user_txn) => {
-                match user_txn.payload() {
-                    aptos_types::transaction::TransactionPayload::EntryFunction(f) => {
+                // Use executable_ref() to handle both EntryFunction and Payload variants uniformly
+                match user_txn.payload().executable_ref() {
+                    Ok(aptos_types::transaction::TransactionExecutableRef::EntryFunction(f))
+                        if !user_txn.payload().is_multisig() =>
+                    {
                         match (
                             *f.module().address(),
                             f.module().name().as_str(),
@@ -112,10 +117,12 @@ impl NativeTransaction {
                             ),
                         }
                     },
-                    _ => unimplemented!(),
+                    _ => unimplemented!("user transaction {:?}", user_txn.payload()),
                 }
             },
-            _ => unimplemented!(),
+            aptos_types::transaction::Transaction::BlockEpilogue(_) => Self::BlockEpilogue,
+            aptos_types::transaction::Transaction::BlockMetadata(_) => Self::BlockMetadata,
+            _ => unimplemented!("non-user transaction {:?}", txn),
         }
     }
 }

@@ -1,6 +1,7 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::render::Render;
 use aptos_gas_algebra::{Fee, GasScalingFactor, InternalGas, NumBytes};
 use aptos_types::state_store::state_key::StateKey;
 use move_binary_format::{file_format::CodeOffset, file_format_common::Opcodes};
@@ -9,6 +10,7 @@ use move_core_types::{
     identifier::Identifier,
     language_storage::{ModuleId, TypeTag},
 };
+use move_vm_types::gas::DependencyKind;
 use smallvec::{smallvec, SmallVec};
 
 /// An event occurred during the execution of a function, along with the
@@ -42,7 +44,7 @@ pub enum ExecutionGasEvent {
 
 /// An enum representing the name of a call frame.
 /// Could be either a script or a function.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum FrameName {
     Script,
     Function {
@@ -50,6 +52,7 @@ pub enum FrameName {
         name: Identifier,
         ty_args: Vec<TypeTag>,
     },
+    TransactionBatch,
 }
 
 /// A struct containing information about a function call, including the name of the
@@ -106,10 +109,20 @@ pub struct EventStorage {
 #[derive(Debug, Clone)]
 /// Struct representing the cost of a dependency.
 pub struct Dependency {
-    pub is_new: bool,
+    pub kind: DependencyKind,
     pub id: ModuleId,
     pub size: NumBytes,
     pub cost: InternalGas,
+}
+
+impl Dependency {
+    pub(crate) fn render(&self) -> String {
+        let kind = match self.kind {
+            DependencyKind::New => " (new)",
+            DependencyKind::Existing => "",
+        };
+        format!("{}{}", Render(&self.id), kind,)
+    }
 }
 
 /// Struct containing all execution and io costs.
@@ -145,8 +158,8 @@ pub struct StorageFees {
 pub struct TransactionGasLog {
     pub exec_io: ExecutionAndIOCosts,
     pub storage: StorageFees,
+    pub num_txns: usize,
 }
-
 pub struct GasEventIter<'a> {
     stack: SmallVec<[(&'a CallFrame, usize); 16]>,
 }
@@ -192,6 +205,14 @@ impl CallFrame {
     pub fn new_script() -> Self {
         Self {
             name: FrameName::Script,
+            events: vec![],
+            native_gas: 0.into(),
+        }
+    }
+
+    pub fn new_transaction_batch() -> Self {
+        Self {
+            name: FrameName::TransactionBatch,
             events: vec![],
             native_gas: 0.into(),
         }

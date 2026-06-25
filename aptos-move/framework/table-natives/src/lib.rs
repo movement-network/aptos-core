@@ -24,7 +24,10 @@ use move_core_types::{
     value::MoveTypeLayout, vm_status::StatusCode,
 };
 pub use move_table_extension::{TableHandle, TableInfo, TableResolver};
-use move_vm_runtime::native_functions::NativeFunctionTable;
+use move_vm_runtime::{
+    native_extensions::SessionListener,
+    native_functions::{LoaderContext, NativeFunctionTable},
+};
 use move_vm_types::{
     loaded_data::runtime_types::Type,
     value_serde::{FunctionValueExtension, ValueSerDeContext},
@@ -36,8 +39,11 @@ use std::{
     cell::RefCell,
     collections::{btree_map::Entry, BTreeMap, BTreeSet, VecDeque},
     mem::drop,
-    sync::Arc,
 };
+use triomphe::Arc as TriompheArc;
+
+// ===========================================================================================
+// Public Data Structures and Constants
 
 // ===========================================================================================
 // Public Data Structures and Constants
@@ -48,7 +54,7 @@ use std::{
 #[derive(Tid)]
 pub struct NativeTableContext<'a> {
     resolver: &'a dyn TableResolver,
-    txn_hash: [u8; 32],
+    session_hash: [u8; 32],
     table_data: RefCell<TableData>,
 }
 
@@ -73,18 +79,17 @@ struct TableData {
     tables: BTreeMap<TableHandle, Table>,
 }
 
-/// A structure containing information about the layout of a value stored in a
-/// table. Needed in order to replace aggregator and snapshot values with
-/// identifiers.
+/// A structure containing information about the layout of a value stored in a table. Needed in
+/// order to replace delayed fields.
 struct LayoutInfo {
-    layout: Arc<MoveTypeLayout>,
-    has_identifier_mappings: bool,
+    layout: TriompheArc<MoveTypeLayout>,
+    contains_delayed_fields: bool,
 }
 
 /// A structure representing a single table.
 struct Table {
     handle: TableHandle,
-    key_layout: MoveTypeLayout,
+    key_layout: TriompheArc<MoveTypeLayout>,
     value_layout_info: LayoutInfo,
     content: BTreeMap<Vec<u8>, GlobalValue>,
 }
@@ -102,19 +107,34 @@ pub struct TableChangeSet {
 
 /// A change of a single table.
 pub struct TableChange {
-    pub entries: BTreeMap<Vec<u8>, Op<(Bytes, Option<Arc<MoveTypeLayout>>)>>,
+    pub entries: BTreeMap<Vec<u8>, Op<(Bytes, Option<TriompheArc<MoveTypeLayout>>)>>,
 }
 
 // =========================================================================================
 // Implementation of Native Table Context
 
+impl<'a> SessionListener for NativeTableContext<'a> {
+    fn start(&mut self, session_hash: &[u8; 32], _script_hash: &[u8], _session_counter: u8) {
+        self.session_hash = *session_hash;
+        // TODO(sessions): implement
+    }
+
+    fn finish(&mut self) {
+        // TODO(sessions): implement
+    }
+
+    fn abort(&mut self) {
+        // TODO(sessions): implement
+    }
+}
+
 impl<'a> NativeTableContext<'a> {
     /// Create a new instance of a native table context. This must be passed in via an
     /// extension into VM session functions.
-    pub fn new(txn_hash: [u8; 32], resolver: &'a dyn TableResolver) -> Self {
+    pub fn new(session_hash: [u8; 32], resolver: &'a dyn TableResolver) -> Self {
         Self {
             resolver,
-            txn_hash,
+            session_hash,
             table_data: Default::default(),
         }
     }
@@ -187,15 +207,18 @@ impl TableData {
     /// the table, like the type layout for keys and values.
     fn get_or_create_table(
         &mut self,
-        context: &SafeNativeContext,
+        loader_context: &mut LoaderContext,
         handle: TableHandle,
         key_ty: &Type,
         value_ty: &Type,
     ) -> PartialVMResult<&mut Table> {
         Ok(match self.tables.entry(handle) {
             Entry::Vacant(e) => {
-                let key_layout = context.type_to_type_layout(key_ty)?;
-                let value_layout_info = LayoutInfo::from_value_ty(context, value_ty)?;
+                let key_layout = loader_context
+                    .type_to_type_layout_with_delayed_fields(key_ty)?
+                    .unpack()
+                    .0;
+                let value_layout_info = LayoutInfo::from_value_ty(loader_context, value_ty)?;
                 let table = Table {
                     handle,
                     key_layout,
@@ -210,12 +233,13 @@ impl TableData {
 }
 
 impl LayoutInfo {
-    fn from_value_ty(context: &SafeNativeContext, value_ty: &Type) -> PartialVMResult<Self> {
-        let (layout, has_identifier_mappings) =
-            context.type_to_type_layout_with_identifier_mappings(value_ty)?;
+    fn from_value_ty(loader_context: &mut LoaderContext, value_ty: &Type) -> PartialVMResult<Self> {
+        let (layout, contains_delayed_fields) = loader_context
+            .type_to_type_layout_with_delayed_fields(value_ty)?
+            .unpack();
         Ok(Self {
-            layout: Arc::new(layout),
-            has_identifier_mappings,
+            layout,
+            contains_delayed_fields,
         })
     }
 }
@@ -236,7 +260,7 @@ impl Table {
                     .resolve_table_entry_bytes_with_layout(
                         &self.handle,
                         entry.key(),
-                        if self.value_layout_info.has_identifier_mappings {
+                        if self.value_layout_info.contains_delayed_fields {
                             Some(&self.value_layout_info.layout)
                         } else {
                             None
@@ -326,7 +350,7 @@ fn charge_load_cost(
 
 fn native_new_table_handle(
     context: &mut SafeNativeContext,
-    ty_args: Vec<Type>,
+    ty_args: &[Type],
     args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     assert_eq!(ty_args.len(), 2);
@@ -342,7 +366,7 @@ fn native_new_table_handle(
     // is unique, this should create a unique and deterministic global id.
     let mut digest = Sha3_256::new();
     let table_len = table_data.new_tables.len() as u32; // cast usize to u32 to ensure same length
-    Digest::update(&mut digest, table_context.txn_hash);
+    Digest::update(&mut digest, table_context.session_hash);
     Digest::update(&mut digest, table_len.to_be_bytes());
     let bytes = digest.finalize().to_vec();
     let handle = AccountAddress::from_bytes(&bytes[0..AccountAddress::LENGTH])
@@ -359,7 +383,7 @@ fn native_new_table_handle(
 
 fn native_add_box(
     context: &mut SafeNativeContext,
-    ty_args: Vec<Type>,
+    ty_args: &[Type],
     mut args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     assert_eq!(ty_args.len(), 3);
@@ -369,16 +393,19 @@ fn native_add_box(
     let fix_memory_double_counting =
         context.timed_feature_enabled(TimedFeatureFlag::FixTableNativesMemoryDoubleCounting);
 
-    let function_value_extension = context.function_value_extension();
-    let table_context = context.extensions().get::<NativeTableContext>();
+    let (extensions, mut loader_context, abs_val_gas_params, gas_feature_version) =
+        context.extensions_with_loader_context_and_gas_params();
+    let table_context = extensions.get::<NativeTableContext>();
     let mut table_data = table_context.table_data.borrow_mut();
 
     let val = args.pop_back().unwrap();
     let key = args.pop_back().unwrap();
     let handle = get_table_handle(&safely_pop_arg!(args, StructRef))?;
 
-    let table = table_data.get_or_create_table(context, handle, &ty_args[0], &ty_args[2])?;
+    let table =
+        table_data.get_or_create_table(&mut loader_context, handle, &ty_args[0], &ty_args[2])?;
 
+    let function_value_extension = loader_context.function_value_extension();
     let key_bytes = serialize_key(&function_value_extension, &table.key_layout, &key)?;
     let key_cost = ADD_BOX_PER_BYTE_SERIALIZED * NumBytes::new(key_bytes.len() as u64);
 
@@ -387,9 +414,14 @@ fn native_add_box(
     let mem_usage = if !fix_memory_double_counting || loaded.is_some() {
         gv.view()
             .map(|val| {
+<<<<<<< HEAD
                 context
                     .abs_val_gas_params()
                     .abstract_heap_size(&val, context.gas_feature_version())
+=======
+                abs_val_gas_params
+                    .abstract_heap_size(&val, gas_feature_version)
+>>>>>>> e33e3c1b
                     .map(u64::from)
             })
             .transpose()?
@@ -418,24 +450,32 @@ fn native_add_box(
 
 fn native_borrow_box(
     context: &mut SafeNativeContext,
-    ty_args: Vec<Type>,
+    ty_args: &[Type],
     mut args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     assert_eq!(ty_args.len(), 3);
     assert_eq!(args.len(), 2);
 
     context.charge(BORROW_BOX_BASE)?;
+<<<<<<< HEAD
     let fix_memory_double_counting = context.timed_feature_enabled(TimedFeatureFlag::FixTableNativesMemoryDoubleCounting);
+=======
+    let fix_memory_double_counting =
+        context.timed_feature_enabled(TimedFeatureFlag::FixTableNativesMemoryDoubleCounting);
+>>>>>>> e33e3c1b
 
-    let function_value_extension = context.function_value_extension();
-    let table_context = context.extensions().get::<NativeTableContext>();
+    let (extensions, mut loader_context, abs_val_gas_params, gas_feature_version) =
+        context.extensions_with_loader_context_and_gas_params();
+    let table_context = extensions.get::<NativeTableContext>();
     let mut table_data = table_context.table_data.borrow_mut();
 
     let key = args.pop_back().unwrap();
     let handle = get_table_handle(&safely_pop_arg!(args, StructRef))?;
 
-    let table = table_data.get_or_create_table(context, handle, &ty_args[0], &ty_args[2])?;
+    let table =
+        table_data.get_or_create_table(&mut loader_context, handle, &ty_args[0], &ty_args[2])?;
 
+    let function_value_extension = loader_context.function_value_extension();
     let key_bytes = serialize_key(&function_value_extension, &table.key_layout, &key)?;
     let key_cost = BORROW_BOX_PER_BYTE_SERIALIZED * NumBytes::new(key_bytes.len() as u64);
 
@@ -444,9 +484,14 @@ fn native_borrow_box(
     let mem_usage = if !fix_memory_double_counting || loaded.is_some() {
         gv.view()
             .map(|val| {
+<<<<<<< HEAD
                 context
                     .abs_val_gas_params()
                     .abstract_heap_size(&val, context.gas_feature_version())
+=======
+                abs_val_gas_params
+                    .abstract_heap_size(&val, gas_feature_version)
+>>>>>>> e33e3c1b
                     .map(u64::from)
             })
             .transpose()?
@@ -475,7 +520,7 @@ fn native_borrow_box(
 
 fn native_contains_box(
     context: &mut SafeNativeContext,
-    ty_args: Vec<Type>,
+    ty_args: &[Type],
     mut args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     assert_eq!(ty_args.len(), 3);
@@ -485,15 +530,18 @@ fn native_contains_box(
     let fix_memory_double_counting =
         context.timed_feature_enabled(TimedFeatureFlag::FixTableNativesMemoryDoubleCounting);
 
-    let function_value_extension = context.function_value_extension();
-    let table_context = context.extensions().get::<NativeTableContext>();
+    let (extensions, mut loader_context, abs_val_gas_params, gas_feature_version) =
+        context.extensions_with_loader_context_and_gas_params();
+    let table_context = extensions.get::<NativeTableContext>();
     let mut table_data = table_context.table_data.borrow_mut();
 
     let key = args.pop_back().unwrap();
     let handle = get_table_handle(&safely_pop_arg!(args, StructRef))?;
 
-    let table = table_data.get_or_create_table(context, handle, &ty_args[0], &ty_args[2])?;
+    let table =
+        table_data.get_or_create_table(&mut loader_context, handle, &ty_args[0], &ty_args[2])?;
 
+    let function_value_extension = loader_context.function_value_extension();
     let key_bytes = serialize_key(&function_value_extension, &table.key_layout, &key)?;
     let key_cost = CONTAINS_BOX_PER_BYTE_SERIALIZED * NumBytes::new(key_bytes.len() as u64);
 
@@ -502,16 +550,25 @@ fn native_contains_box(
     let mem_usage = if !fix_memory_double_counting || loaded.is_some() {
         gv.view()
             .map(|val| {
+<<<<<<< HEAD
                 context
                     .abs_val_gas_params()
                     .abstract_heap_size(&val, context.gas_feature_version())
+=======
+                abs_val_gas_params
+                    .abstract_heap_size(&val, gas_feature_version)
+>>>>>>> e33e3c1b
                     .map(u64::from)
             })
             .transpose()?
     } else {
         None
     };
+<<<<<<< HEAD
     let exists = Value::bool(gv.exists()?);
+=======
+    let exists = Value::bool(gv.exists());
+>>>>>>> e33e3c1b
 
     drop(table_data);
 
@@ -527,7 +584,7 @@ fn native_contains_box(
 
 fn native_remove_box(
     context: &mut SafeNativeContext,
-    ty_args: Vec<Type>,
+    ty_args: &[Type],
     mut args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     assert_eq!(ty_args.len(), 3);
@@ -537,15 +594,18 @@ fn native_remove_box(
     let fix_memory_double_counting =
         context.timed_feature_enabled(TimedFeatureFlag::FixTableNativesMemoryDoubleCounting);
 
-    let function_value_extension = context.function_value_extension();
-    let table_context = context.extensions().get::<NativeTableContext>();
+    let (extensions, mut loader_context, abs_val_gas_params, gas_feature_version) =
+        context.extensions_with_loader_context_and_gas_params();
+    let table_context = extensions.get::<NativeTableContext>();
     let mut table_data = table_context.table_data.borrow_mut();
 
     let key = args.pop_back().unwrap();
     let handle = get_table_handle(&safely_pop_arg!(args, StructRef))?;
 
-    let table = table_data.get_or_create_table(context, handle, &ty_args[0], &ty_args[2])?;
+    let table =
+        table_data.get_or_create_table(&mut loader_context, handle, &ty_args[0], &ty_args[2])?;
 
+    let function_value_extension = loader_context.function_value_extension();
     let key_bytes = serialize_key(&function_value_extension, &table.key_layout, &key)?;
     let key_cost = REMOVE_BOX_PER_BYTE_SERIALIZED * NumBytes::new(key_bytes.len() as u64);
 
@@ -554,9 +614,14 @@ fn native_remove_box(
     let mem_usage = if !fix_memory_double_counting || loaded.is_some() {
         gv.view()
             .map(|val| {
+<<<<<<< HEAD
                 context
                     .abs_val_gas_params()
                     .abstract_heap_size(&val, context.gas_feature_version())
+=======
+                abs_val_gas_params
+                    .abstract_heap_size(&val, gas_feature_version)
+>>>>>>> e33e3c1b
                     .map(u64::from)
             })
             .transpose()?
@@ -585,7 +650,7 @@ fn native_remove_box(
 
 fn native_destroy_empty_box(
     context: &mut SafeNativeContext,
-    ty_args: Vec<Type>,
+    ty_args: &[Type],
     mut args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     assert_eq!(ty_args.len(), 3);
@@ -593,12 +658,13 @@ fn native_destroy_empty_box(
 
     context.charge(DESTROY_EMPTY_BOX_BASE)?;
 
-    let table_context = context.extensions().get::<NativeTableContext>();
+    let (extensions, mut loader_context) = context.extensions_with_loader_context();
+    let table_context = extensions.get::<NativeTableContext>();
     let mut table_data = table_context.table_data.borrow_mut();
 
     let handle = get_table_handle(&safely_pop_arg!(args, StructRef))?;
     // TODO: Can the following line be removed?
-    table_data.get_or_create_table(context, handle, &ty_args[0], &ty_args[2])?;
+    table_data.get_or_create_table(&mut loader_context, handle, &ty_args[0], &ty_args[2])?;
 
     assert!(table_data.removed_tables.insert(handle));
 
@@ -607,7 +673,7 @@ fn native_destroy_empty_box(
 
 fn native_drop_unchecked_box(
     context: &mut SafeNativeContext,
-    ty_args: Vec<Type>,
+    ty_args: &[Type],
     args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     assert_eq!(ty_args.len(), 3);
@@ -645,9 +711,15 @@ fn serialize_value(
     function_value_extension: &dyn FunctionValueExtension,
     layout_info: &LayoutInfo,
     val: &Value,
+<<<<<<< HEAD
 ) -> PartialVMResult<(Bytes, Option<Arc<MoveTypeLayout>>)> {
     let max_value_nest_depth = function_value_extension.max_value_nest_depth();
     let serialization_result = if layout_info.has_identifier_mappings {
+=======
+) -> PartialVMResult<(Bytes, Option<TriompheArc<MoveTypeLayout>>)> {
+    let max_value_nest_depth = function_value_extension.max_value_nest_depth();
+    let serialization_result = if layout_info.contains_delayed_fields {
+>>>>>>> e33e3c1b
         // Value contains delayed fields, so we should be able to serialize it.
         ValueSerDeContext::new(max_value_nest_depth)
             .with_delayed_fields_serde()
@@ -671,7 +743,11 @@ fn deserialize_value(
     layout_info: &LayoutInfo,
 ) -> PartialVMResult<Value> {
     let layout = layout_info.layout.as_ref();
+<<<<<<< HEAD
     let deserialization_result = if layout_info.has_identifier_mappings {
+=======
+    let deserialization_result = if layout_info.contains_delayed_fields {
+>>>>>>> e33e3c1b
         ValueSerDeContext::new(function_value_extension.max_value_nest_depth())
             .with_func_args_deserialization(function_value_extension)
             .with_delayed_fields_serde()

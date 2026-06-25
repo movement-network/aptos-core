@@ -969,6 +969,7 @@ class MoveStruct(_message.Message):
         "name",
         "is_native",
         "is_event",
+        "is_enum",
         "abilities",
         "generic_type_params",
         "fields",
@@ -976,12 +977,14 @@ class MoveStruct(_message.Message):
     NAME_FIELD_NUMBER: _ClassVar[int]
     IS_NATIVE_FIELD_NUMBER: _ClassVar[int]
     IS_EVENT_FIELD_NUMBER: _ClassVar[int]
+    IS_ENUM_FIELD_NUMBER: _ClassVar[int]
     ABILITIES_FIELD_NUMBER: _ClassVar[int]
     GENERIC_TYPE_PARAMS_FIELD_NUMBER: _ClassVar[int]
     FIELDS_FIELD_NUMBER: _ClassVar[int]
     name: str
     is_native: bool
     is_event: bool
+    is_enum: bool
     abilities: _containers.RepeatedScalarFieldContainer[MoveAbility]
     generic_type_params: _containers.RepeatedCompositeFieldContainer[
         MoveStructGenericTypeParam
@@ -992,6 +995,7 @@ class MoveStruct(_message.Message):
         name: _Optional[str] = ...,
         is_native: bool = ...,
         is_event: bool = ...,
+        is_enum: bool = ...,
         abilities: _Optional[_Iterable[_Union[MoveAbility, str]]] = ...,
         generic_type_params: _Optional[
             _Iterable[_Union[MoveStructGenericTypeParam, _Mapping]]
@@ -1374,7 +1378,7 @@ class MultiKeySignature(_message.Message):
         signatures_required: _Optional[int] = ...,
     ) -> None: ...
 
-class AbstractionSignature(_message.Message):
+class AbstractSignature(_message.Message):
     __slots__ = ["function_info", "signature"]
     FUNCTION_INFO_FIELD_NUMBER: _ClassVar[int]
     SIGNATURE_FIELD_NUMBER: _ClassVar[int]
@@ -1427,7 +1431,7 @@ class AccountSignature(_message.Message):
     multi_ed25519: MultiEd25519Signature
     single_key_signature: SingleKeySignature
     multi_key_signature: MultiKeySignature
-    abstraction: AbstractionSignature
+    abstraction: AbstractSignature
     def __init__(
         self,
         type: _Optional[_Union[AccountSignature.Type, str]] = ...,
@@ -1435,7 +1439,7 @@ class AccountSignature(_message.Message):
         multi_ed25519: _Optional[_Union[MultiEd25519Signature, _Mapping]] = ...,
         single_key_signature: _Optional[_Union[SingleKeySignature, _Mapping]] = ...,
         multi_key_signature: _Optional[_Union[MultiKeySignature, _Mapping]] = ...,
-        abstraction: _Optional[_Union[AbstractionSignature, _Mapping]] = ...,
+        abstraction: _Optional[_Union[AbstractSignature, _Mapping]] = ...,
     ) -> None: ...
 
 class TransactionSizeInfo(_message.Message):

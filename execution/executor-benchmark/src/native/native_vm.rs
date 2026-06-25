@@ -40,8 +40,8 @@ use aptos_types::{
     on_chain_config::FeatureFlag,
     state_store::{state_key::StateKey, state_value::StateValueMetadata, StateView},
     transaction::{
-        signature_verified_transaction::SignatureVerifiedTransaction, BlockOutput, Transaction,
-        TransactionOutput, TransactionStatus, WriteSetPayload,
+        signature_verified_transaction::SignatureVerifiedTransaction, AuxiliaryInfo, BlockOutput,
+        Transaction, TransactionOutput, TransactionStatus, WriteSetPayload,
     },
     write_set::WriteOp,
     AptosCoinType,
@@ -86,14 +86,14 @@ impl VMBlockExecutor for NativeVMBlockExecutor {
     /// transaction output.
     fn execute_block(
         &self,
-        txn_provider: &DefaultTxnProvider<SignatureVerifiedTransaction>,
+        txn_provider: &DefaultTxnProvider<SignatureVerifiedTransaction, AuxiliaryInfo>,
         state_view: &(impl StateView + Sync),
         onchain_config: BlockExecutorConfigFromOnchain,
         transaction_slice_metadata: TransactionSliceMetadata,
-    ) -> Result<BlockOutput<TransactionOutput>, VMStatus> {
+    ) -> Result<BlockOutput<SignatureVerifiedTransaction, TransactionOutput>, VMStatus> {
         AptosBlockExecutorWrapper::<NativeVMExecutorTask>::execute_block_on_thread_pool::<
             _,
-            NoOpTransactionCommitHook<AptosTransactionOutput, VMStatus>,
+            NoOpTransactionCommitHook<VMStatus>,
             _,
         >(
             Arc::clone(&NATIVE_EXECUTOR_POOL),
@@ -118,11 +118,16 @@ pub(crate) struct NativeVMExecutorTask {
 }
 
 impl ExecutorTask for NativeVMExecutorTask {
+    type AuxiliaryInfo = AuxiliaryInfo;
     type Error = VMStatus;
     type Output = AptosTransactionOutput;
     type Txn = SignatureVerifiedTransaction;
 
-    fn init(env: &AptosEnvironment, _state_view: &impl StateView) -> Self {
+    fn init(
+        env: &AptosEnvironment,
+        _state_view: &impl StateView,
+        _async_runtime_checks_enabled: bool,
+    ) -> Self {
         let fa_migration_complete = env
             .features()
             .is_enabled(FeatureFlag::OPERATIONS_DEFAULT_TO_FA_APT_STORE);
@@ -147,22 +152,22 @@ impl ExecutorTask for NativeVMExecutorTask {
         &self,
         executor_with_group_view: &(impl ExecutorView + ResourceGroupView),
         txn: &SignatureVerifiedTransaction,
+        _auxiliary_info: &AuxiliaryInfo,
         _txn_idx: TxnIndex,
     ) -> ExecutionStatus<AptosTransactionOutput, VMStatus> {
-        let gas_units = 4;
-
         match self.execute_transaction_impl(
             executor_with_group_view,
             txn,
-            gas_units,
             self.fa_migration_complete,
         ) {
-            Ok(change_set) => ExecutionStatus::Success(AptosTransactionOutput::new(VMOutput::new(
-                change_set,
-                ModuleWriteSet::empty(),
-                FeeStatement::new(gas_units, gas_units, 0, 0, 0),
-                TransactionStatus::Keep(aptos_types::transaction::ExecutionStatus::Success),
-            ))),
+            Ok((change_set, gas_units)) => {
+                ExecutionStatus::Success(AptosTransactionOutput::new(VMOutput::new(
+                    change_set,
+                    ModuleWriteSet::empty(),
+                    FeeStatement::new(gas_units, gas_units, 0, 0, 0),
+                    TransactionStatus::Keep(aptos_types::transaction::ExecutionStatus::Success),
+                )))
+            },
             Err(_) => ExecutionStatus::SpeculativeExecutionAbortError("something".to_string()),
         }
     }
@@ -185,9 +190,9 @@ impl NativeVMExecutorTask {
         &self,
         view: &(impl ExecutorView + ResourceGroupView),
         txn: &SignatureVerifiedTransaction,
-        gas_units: u64,
         fa_migration_complete: bool,
-    ) -> Result<VMChangeSet, ()> {
+    ) -> Result<(VMChangeSet, u64), ()> {
+        let gas_units = 4;
         let gas = gas_units * 100;
 
         let mut resource_write_set = BTreeMap::new();
@@ -352,6 +357,8 @@ impl NativeVMExecutorTask {
                     }
                 }
             },
+            NativeTransaction::BlockEpilogue => return Ok((VMChangeSet::empty(), 0)),
+            NativeTransaction::BlockMetadata => return Ok((VMChangeSet::empty(), 0)),
         };
 
         events.push((
@@ -361,12 +368,15 @@ impl NativeVMExecutorTask {
             None,
         ));
 
-        Ok(VMChangeSet::new(
-            resource_write_set,
-            events,
-            delayed_field_change_set,
-            aggregator_v1_write_set,
-            aggregator_v1_delta_set,
+        Ok((
+            VMChangeSet::new(
+                resource_write_set,
+                events,
+                delayed_field_change_set,
+                aggregator_v1_write_set,
+                aggregator_v1_delta_set,
+            ),
+            gas_units,
         ))
     }
 

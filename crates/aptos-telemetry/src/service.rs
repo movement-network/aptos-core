@@ -1,8 +1,6 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-#![forbid(unsafe_code)]
-
 use crate::{
     constants::*, core_metrics::create_core_metric_telemetry_event, metrics,
     network_metrics::create_network_metric_telemetry_event, sender::TelemetrySender,
@@ -21,7 +19,6 @@ use once_cell::sync::Lazy;
 use rand::Rng;
 use rand_core::OsRng;
 use reqwest::Url;
-use serde::Deserialize;
 use std::{
     collections::BTreeMap,
     env,
@@ -33,8 +30,6 @@ use uuid::Uuid;
 
 // The chain ID key
 const CHAIN_ID_KEY: &str = "CHAIN_ID";
-// The IP address key
-const IP_ADDRESS_KEY: &str = "IP_ADDRESS";
 // The telemetry token key
 const TELEMETRY_TOKEN_KEY: &str = "TELEMETRY_TOKEN";
 // The default for unknown metric values
@@ -47,52 +42,70 @@ const APTOS_NODE_CONFIG_EVENT_NAME: &str = "APTOS_NODE_CONFIG";
 /// TODO(joshlind): leverage real authentication!
 static TELEMETRY_TOKEN: Lazy<String> = Lazy::new(|| {
     let mut rng = OsRng;
-    let token = rng.gen::<u32>();
+    let token = rng.r#gen::<u32>();
     format!("TOKEN_{:?}", token)
 });
+
+/// Returns true iff the given environment variable is set to true. Note: true
+/// values are "true", "t", "1", "yes" or "y" (all case-insensitive). Any other
+/// values are considered false (including when the variable is not set).
+#[inline]
+fn is_env_variable_true(env_variable: &str) -> bool {
+    match env::var(env_variable) {
+        Ok(value) => {
+            matches!(
+                value.to_lowercase().as_str(),
+                "true" | "t" | "1" | "yes" | "y"
+            )
+        },
+        Err(_) => false,
+    }
+}
 
 /// Returns true iff telemetry is disabled
 #[inline]
 pub fn telemetry_is_disabled() -> bool {
-    env::var(ENV_APTOS_DISABLE_TELEMETRY).is_ok()
+    is_env_variable_true(ENV_APTOS_DISABLE_TELEMETRY)
 }
 
 /// Flag to force enabling/disabling of telemetry
 #[inline]
 fn force_enable_telemetry() -> bool {
-    env::var(ENV_APTOS_FORCE_ENABLE_TELEMETRY).is_ok()
+    is_env_variable_true(ENV_APTOS_FORCE_ENABLE_TELEMETRY)
 }
 
 /// Flag to control enabling/disabling prometheus push metrics
 #[inline]
 fn enable_prometheus_push_metrics() -> bool {
     force_enable_telemetry()
-        || !(telemetry_is_disabled() || env::var(ENV_APTOS_DISABLE_TELEMETRY_PUSH_METRICS).is_ok())
+        || !(telemetry_is_disabled()
+            || is_env_variable_true(ENV_APTOS_DISABLE_TELEMETRY_PUSH_METRICS))
 }
 
 #[inline]
 fn enable_prometheus_node_metrics() -> bool {
-    env::var(ENV_APTOS_DISABLE_PROMETHEUS_NODE_METRICS).is_err()
+    !is_env_variable_true(ENV_APTOS_DISABLE_PROMETHEUS_NODE_METRICS)
 }
 
 /// Flag to control enabling/disabling push logs
 #[inline]
 fn enable_push_logs() -> bool {
     force_enable_telemetry()
-        || !(telemetry_is_disabled() || env::var(ENV_APTOS_DISABLE_TELEMETRY_PUSH_LOGS).is_ok())
+        || !(telemetry_is_disabled() || is_env_variable_true(ENV_APTOS_DISABLE_TELEMETRY_PUSH_LOGS))
 }
 
 /// Flag to control enabling/disabling telemetry push events
 #[inline]
 fn enable_push_custom_events() -> bool {
     force_enable_telemetry()
-        || !(telemetry_is_disabled() || env::var(ENV_APTOS_DISABLE_TELEMETRY_PUSH_EVENTS).is_ok())
+        || !(telemetry_is_disabled()
+            || is_env_variable_true(ENV_APTOS_DISABLE_TELEMETRY_PUSH_EVENTS))
 }
 
 #[inline]
 fn enable_log_env_polling() -> bool {
     force_enable_telemetry()
-        || !(telemetry_is_disabled() || env::var(ENV_APTOS_DISABLE_LOG_ENV_POLLING).is_ok())
+        || !(telemetry_is_disabled() || is_env_variable_true(ENV_APTOS_DISABLE_LOG_ENV_POLLING))
 }
 
 /// Starts the telemetry service and returns the execution runtime.
@@ -210,11 +223,14 @@ fn try_spawn_log_env_poll_task(sender: TelemetrySender) {
                         env::var(RUST_LOG_TELEMETRY).ok(),
                         env
                     );
-                    env::set_var(RUST_LOG_TELEMETRY, env)
+                    // TODO: Audit that the environment access only happens in single-threaded code.
+                    unsafe { env::set_var(RUST_LOG_TELEMETRY, env) }
                 } else if let Some(ref value) = original_value {
-                    env::set_var(RUST_LOG_TELEMETRY, value)
+                    // TODO: Audit that the environment access only happens in single-threaded code.
+                    unsafe { env::set_var(RUST_LOG_TELEMETRY, value) }
                 } else {
-                    env::remove_var(RUST_LOG_TELEMETRY)
+                    // TODO: Audit that the environment access only happens in single-threaded code.
+                    unsafe { env::remove_var(RUST_LOG_TELEMETRY) }
                 }
             }
         });
@@ -349,7 +365,7 @@ async fn send_build_information(
     telemetry_sender: Option<TelemetrySender>,
 ) {
     let telemetry_event = create_build_info_telemetry_event(build_info).await;
-    send_telemetry_event_with_ip(peer_id, chain_id, telemetry_sender, telemetry_event).await;
+    prepare_and_send_telemetry_event(peer_id, chain_id, telemetry_sender, telemetry_event).await;
 }
 
 /// Collects and sends the core node metrics via telemetry
@@ -376,7 +392,7 @@ async fn send_node_config(
         name: APTOS_NODE_CONFIG_EVENT_NAME.into(),
         params: node_config,
     };
-    send_telemetry_event_with_ip(peer_id, chain_id, telemetry_sender, telemetry_event).await;
+    prepare_and_send_telemetry_event(peer_id, chain_id, telemetry_sender, telemetry_event).await;
 }
 
 /// Collects and sends the core node metrics via telemetry
@@ -387,7 +403,7 @@ async fn send_node_core_metrics(
     telemetry_sender: Option<TelemetrySender>,
 ) {
     let telemetry_event = create_core_metric_telemetry_event(node_config).await;
-    send_telemetry_event_with_ip(peer_id, chain_id, telemetry_sender, telemetry_event).await;
+    prepare_and_send_telemetry_event(peer_id, chain_id, telemetry_sender, telemetry_event).await;
 }
 
 /// Collects and sends the node network metrics via telemetry
@@ -397,7 +413,7 @@ async fn send_node_network_metrics(
     telemetry_sender: Option<TelemetrySender>,
 ) {
     let telemetry_event = create_network_metric_telemetry_event().await;
-    send_telemetry_event_with_ip(peer_id, chain_id, telemetry_sender, telemetry_event).await;
+    prepare_and_send_telemetry_event(peer_id, chain_id, telemetry_sender, telemetry_event).await;
 }
 
 /// Collects and sends the system information via telemetry
@@ -407,13 +423,13 @@ async fn send_system_information(
     telemetry_sender: Option<TelemetrySender>,
 ) {
     let telemetry_event = create_system_info_telemetry_event().await;
-    send_telemetry_event_with_ip(peer_id, chain_id, telemetry_sender, telemetry_event).await;
+    prepare_and_send_telemetry_event(peer_id, chain_id, telemetry_sender, telemetry_event).await;
 }
 
 /// Fetches the IP address and sends the given telemetry event
 /// along with the IP address. Also sends a randomly generated
 /// token to help correlate metrics across events.
-pub(crate) async fn send_telemetry_event_with_ip(
+pub(crate) async fn prepare_and_send_telemetry_event(
     peer_id: String,
     chain_id: String,
     telemetry_sender: Option<TelemetrySender>,
@@ -421,26 +437,12 @@ pub(crate) async fn send_telemetry_event_with_ip(
 ) -> JoinHandle<()> {
     // Update the telemetry event with the ip address and random token
     let TelemetryEvent { name, mut params } = telemetry_event;
-    params.insert(IP_ADDRESS_KEY.to_string(), get_origin_ip().await);
     params.insert(TELEMETRY_TOKEN_KEY.to_string(), TELEMETRY_TOKEN.clone());
     params.insert(CHAIN_ID_KEY.into(), chain_id);
     let telemetry_event = TelemetryEvent { name, params };
 
     // Send the telemetry event
     send_telemetry_event(peer_id, telemetry_sender, telemetry_event).await
-}
-
-/// Gets the IP origin of the machine by pinging a url.
-/// If none is found, returns UNKNOWN.
-async fn get_origin_ip() -> String {
-    let resp = reqwest::get(HTTPBIN_URL).await;
-    match resp {
-        Ok(json) => match json.json::<OriginIP>().await {
-            Ok(origin_ip) => origin_ip.origin,
-            Err(_) => UNKNOWN_METRIC_VALUE.into(),
-        },
-        Err(_) => UNKNOWN_METRIC_VALUE.into(),
-    }
 }
 
 /// Sends the given event and params to the telemetry endpoint
@@ -545,10 +547,4 @@ fn spawn_event_sender_to_google_analytics(
             },
         }
     })
-}
-
-/// A json struct useful for fetching the machine origin/IP
-#[derive(Deserialize)]
-struct OriginIP {
-    origin: String,
 }

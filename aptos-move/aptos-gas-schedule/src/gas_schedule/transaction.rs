@@ -254,7 +254,7 @@ crate::gas_schedule::macros::define_gas_parameters!(
         [
             max_total_dependency_size: NumBytes,
             { RELEASE_V1_10.. => "max_total_dependency_size" },
-            1024 * 1024 * 12 / 10, // 1.2 MB
+            1024 * 1024 * 18 / 10, // 1.8 MB
         ],
         [
             keyless_base_cost: InternalGas,
@@ -295,7 +295,7 @@ impl TransactionGasParameters {
     pub fn calculate_intrinsic_gas(
         &self,
         transaction_size: NumBytes,
-    ) -> impl GasExpression<VMGasParameters, Unit = InternalGasUnit> {
+    ) -> impl GasExpression<VMGasParameters, Unit = InternalGasUnit> + use<> {
         let excess = transaction_size
             .checked_sub(self.large_transaction_cutoff)
             .unwrap_or_else(|| 0.into());

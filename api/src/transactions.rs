@@ -17,16 +17,17 @@ use crate::{
         BasicErrorWith404, BasicResponse, BasicResponseStatus, BasicResult, BasicResultWith404,
         ForbiddenError, InsufficientStorageError, InternalError,
     },
+    view_function::convert_view_function_error,
     ApiTags,
 };
 use anyhow::Context as AnyhowContext;
 use aptos_api_types::{
-    transaction::TransactionSummary, verify_function_identifier, verify_module_identifier, Address,
-    AptosError, AptosErrorCode, AsConverter, EncodeSubmissionRequest, GasEstimation,
-    GasEstimationBcs, HashValue, HexEncodedBytes, LedgerInfo, MoveType, PendingTransaction,
-    SubmitTransactionRequest, Transaction, TransactionData, TransactionOnChainData,
-    TransactionsBatchSingleSubmissionFailure, TransactionsBatchSubmissionResult, UserTransaction,
-    VerifyInput, VerifyInputWithRecursion, U64,
+    transaction::{PersistedAuxiliaryInfo, TransactionSummary},
+    verify_function_identifier, verify_module_identifier, Address, AptosError, AptosErrorCode,
+    AsConverter, EncodeSubmissionRequest, GasEstimation, GasEstimationBcs, HashValue,
+    HexEncodedBytes, LedgerInfo, MoveType, PendingTransaction, SubmitTransactionRequest,
+    Transaction, TransactionData, TransactionOnChainData, TransactionsBatchSingleSubmissionFailure,
+    TransactionsBatchSubmissionResult, UserTransaction, VerifyInput, VerifyInputWithRecursion, U64,
 };
 use aptos_crypto::{hash::CryptoHash, signing_message};
 use aptos_logger::error;
@@ -306,6 +307,42 @@ impl TransactionsApi {
         .await
     }
 
+    /// Get transactions auxiliary info
+    ///
+    /// Retrieves persisted auxiliary information (such as transaction indices within blocks) for
+    /// transactions in a given version range.
+    ///
+    /// If the version range has been pruned, a 410 will be returned.
+    #[oai(
+        path = "/transactions/auxiliary_info",
+        method = "get",
+        operation_id = "get_transactions_auxiliary_info",
+        tag = "ApiTags::Transactions"
+    )]
+    async fn get_transactions_auxiliary_info(
+        &self,
+        accept_type: AcceptType,
+        /// Starting ledger version to retrieve auxiliary info for
+        start_version: Query<U64>,
+        /// Max number of transactions to retrieve auxiliary info for.
+        ///
+        /// If not provided, defaults to default page size
+        limit: Query<Option<u16>>,
+    ) -> BasicResultWith404<Vec<PersistedAuxiliaryInfo>> {
+        fail_point_poem("endpoint_get_transactions_auxiliary_info")?;
+        self.context
+            .check_api_output_enabled("Get transactions auxiliary info", &accept_type)?;
+
+        let page = Page::new(
+            Some(start_version.0 .0),
+            limit.0,
+            self.context.max_transactions_page_size(),
+        );
+
+        let api = self.clone();
+        api_spawn_blocking(move || api.list_auxiliary_infos(&accept_type, page)).await
+    }
+
     /// Get account transactions
     ///
     /// Retrieves on-chain committed sequence-number based transactions from an account.
@@ -580,15 +617,13 @@ impl TransactionsApi {
             let ledger_info = context.get_latest_ledger_info()?;
             let mut signed_transaction = api.get_signed_transaction(&ledger_info, data)?;
 
-            // Confirm the simulation filter allows the transaction. We use HashValue::zero()
-            // here for the block ID because we don't allow filtering by block ID for the
-            // simulation filters. See the ConfigSanitizer for ApiConfig.
-            if !context.node_config.api.simulation_filter.allows(
-                aptos_crypto::HashValue::zero(),
-                ledger_info.epoch(),
-                ledger_info.timestamp(),
-                &signed_transaction,
-            ) {
+            // Confirm the API simulation filter allows the transaction
+            let api_filter = &context.node_config.transaction_filters.api_filter;
+            if api_filter.is_enabled()
+                && !api_filter
+                    .transaction_filter()
+                    .allows_transaction(&signed_transaction)
+            {
                 return Err(SubmitTransactionError::forbidden_with_code(
                     "Transaction not allowed by simulation filter",
                     AptosErrorCode::InvalidInput,
@@ -641,10 +676,14 @@ impl TransactionsApi {
                     vec![signed_transaction.sender().to_vec()],
                     context.node_config.api.max_gas_view_function,
                 );
-                let values = output.values.map_err(|err| {
-                    SubmitTransactionError::bad_request_with_code_no_info(
-                        err,
+                let values = output.values.map_err(|status| {
+                    let (err_string, vm_error_code) =
+                        convert_view_function_error(&status, &state_view, &context);
+                    SubmitTransactionError::bad_request_with_optional_vm_status_and_ledger_info(
+                        anyhow::anyhow!(err_string),
                         AptosErrorCode::InvalidInput,
+                        vm_error_code,
+                        Some(&ledger_info),
                     )
                 })?;
                 let balance: u64 = bcs::from_bytes(&values[0]).map_err(|err| {
@@ -1255,6 +1294,13 @@ impl TransactionsApi {
                             }
                         },
                     },
+                    TransactionPayload::EncryptedPayload(_) => {
+                        return Err(SubmitTransactionError::bad_request_with_code(
+                            "Encrypted Transaction is not supported yet",
+                            AptosErrorCode::InvalidInput,
+                            ledger_info,
+                        ));
+                    },
                 }
                 // TODO: Verify script args?
 
@@ -1405,6 +1451,10 @@ impl TransactionsApi {
                 format!("Transaction was rejected with status {}", mempool_status,),
                 AptosErrorCode::InternalError,
             )),
+            MempoolStatusCode::RejectedByFilter => Err(AptosError::new_with_error_code(
+                mempool_status.message,
+                AptosErrorCode::RejectedByFilter,
+            )),
         }
     }
 
@@ -1537,6 +1587,18 @@ impl TransactionsApi {
             ));
         }
 
+        if txn
+            .raw_transaction_ref()
+            .payload_ref()
+            .is_encrypted_variant()
+        {
+            return Err(SubmitTransactionError::bad_request_with_code(
+                "Encrypted transactions cannot be simulated",
+                AptosErrorCode::InvalidInput,
+                &ledger_info,
+            ));
+        }
+
         // Simulate transaction
         let state_view = self.context.latest_state_view_poem(&ledger_info)?;
         let (vm_status, output) =
@@ -1596,6 +1658,9 @@ impl TransactionsApi {
                 };
                 stats_key
             },
+            TransactionPayload::EncryptedPayload(_) => {
+                unreachable!("Encrypted transactions must not be simulated")
+            },
         };
         self.context
             .simulate_txn_stats()
@@ -1612,6 +1677,7 @@ impl TransactionsApi {
             None,
             output.gas_used(),
             exe_status,
+            None,
         );
         let mut events = output.events().to_vec();
         let _ = self
@@ -1732,6 +1798,69 @@ impl TransactionsApi {
             &ledger_info,
             BasicResponseStatus::Ok,
         ))
+    }
+
+    fn list_auxiliary_infos(
+        &self,
+        accept_type: &AcceptType,
+        page: Page,
+    ) -> BasicResultWith404<Vec<PersistedAuxiliaryInfo>> {
+        let latest_ledger_info = self.context.get_latest_ledger_info()?;
+        let ledger_version = latest_ledger_info.ledger_version;
+
+        let limit = page.limit(&latest_ledger_info)?;
+        let start_version = page.compute_start(limit, ledger_version.0, &latest_ledger_info)?;
+
+        // Use iterator for more efficient batch retrieval
+        let iterator = self
+            .context
+            .db
+            .get_persisted_auxiliary_info_iterator(start_version, limit as usize)
+            .context("Failed to get auxiliary info iterator from storage")
+            .map_err(|err| {
+                BasicErrorWith404::internal_with_code(
+                    err,
+                    AptosErrorCode::InternalError,
+                    &latest_ledger_info,
+                )
+            })?;
+
+        let mut raw_auxiliary_infos = Vec::new();
+        for result in iterator {
+            let raw_aux_info = result
+                .context("Failed to read auxiliary info from iterator")
+                .map_err(|err| {
+                    BasicErrorWith404::internal_with_code(
+                        err,
+                        AptosErrorCode::InternalError,
+                        &latest_ledger_info,
+                    )
+                })?;
+            raw_auxiliary_infos.push(raw_aux_info);
+        }
+
+        match accept_type {
+            AcceptType::Json => {
+                // Transform to API types for JSON (user-friendly, extensible)
+                let api_auxiliary_infos: Vec<PersistedAuxiliaryInfo> = raw_auxiliary_infos
+                    .into_iter()
+                    .map(PersistedAuxiliaryInfo::from)
+                    .collect();
+                BasicResponse::try_from_json((
+                    api_auxiliary_infos,
+                    &latest_ledger_info,
+                    BasicResponseStatus::Ok,
+                ))
+            },
+            AcceptType::Bcs => {
+                // Use raw core types for BCS (backward compatible, versioned enum)
+                BasicResponse::try_from_bcs((
+                    raw_auxiliary_infos,
+                    &latest_ledger_info,
+                    BasicResponseStatus::Ok,
+                ))
+            },
+        }
     }
 }
 

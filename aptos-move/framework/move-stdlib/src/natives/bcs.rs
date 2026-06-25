@@ -13,7 +13,8 @@ use aptos_native_interface::{
 use move_core_types::{
     account_address::AccountAddress,
     gas_algebra::{NumBytes, NumTypeNodes},
-    u256,
+    int256,
+    language_storage::{OPTION_NONE_TAG, OPTION_SOME_TAG},
     value::{MoveStructLayout, MoveTypeLayout},
     vm_status::{sub_status::NFE_BCS_SERIALIZATION_FAILURE, StatusCode},
 };
@@ -27,8 +28,17 @@ use move_vm_types::{
 use smallvec::{smallvec, SmallVec};
 use std::collections::VecDeque;
 
-pub fn create_option_u64(value: Option<u64>) -> Value {
-    Value::struct_(Struct::pack(vec![Value::vector_u64(value)]))
+pub fn create_option_u64(enum_option_enabled: bool, value: Option<u64>) -> Value {
+    if enum_option_enabled {
+        match value {
+            Some(value) => Value::struct_(Struct::pack_variant(OPTION_SOME_TAG, vec![Value::u64(
+                value,
+            )])),
+            None => Value::struct_(Struct::pack_variant(OPTION_NONE_TAG, vec![])),
+        }
+    } else {
+        Value::struct_(Struct::pack(vec![Value::vector_u64(value)]))
+    }
 }
 
 /***************************************************************************************************
@@ -43,26 +53,39 @@ pub fn create_option_u64(value: Option<u64>) -> Value {
  *
  **************************************************************************************************/
 /// Rust implementation of Move's `native public fun to_bytes<T>(&T): vector<u8>`
-#[inline]
 fn native_to_bytes(
     context: &mut SafeNativeContext,
-    mut ty_args: Vec<Type>,
+    ty_args: &[Type],
     mut args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     debug_assert!(ty_args.len() == 1);
     debug_assert!(args.len() == 1);
 
     let ref_to_val = safely_pop_arg!(args, Reference);
-    let arg_type = ty_args.pop().unwrap();
+    let arg_type = &ty_args[0];
 
-    let layout = match context.type_to_type_layout(&arg_type) {
-        Ok(layout) => layout,
-        Err(_) => {
-            context.charge(BCS_TO_BYTES_FAILURE)?;
-            return Err(SafeNativeError::Abort {
-                abort_code: NFE_BCS_SERIALIZATION_FAILURE,
-            });
-        },
+    let layout = if context.get_feature_flags().is_lazy_loading_enabled() {
+        // With lazy loading, propagate the error directly. This is because errors here are likely
+        // from metering, so we should not remap them in any way. Note that makes it possible to
+        // fail on constructing a very deep / large layout and not be charged, but this is already
+        // the case for regular execution, so we keep it simple. Also, charging more gas after
+        // out-of-gas failure in layout construction does not make any sense.
+        //
+        // Example:
+        //   - Constructing layout runs into dependency limit.
+        //   - We cannot do `context.charge(BCS_TO_BYTES_FAILURE)?;` because then we can end up in
+        //     the state where out of gas and dependency limit are hit at the same time.
+        context.type_to_type_layout(arg_type)?
+    } else {
+        match context.type_to_type_layout(arg_type) {
+            Ok(layout) => layout,
+            Err(_) => {
+                context.charge(BCS_TO_BYTES_FAILURE)?;
+                return Err(SafeNativeError::Abort {
+                    abort_code: NFE_BCS_SERIALIZATION_FAILURE,
+                });
+            },
+        }
     };
 
     // TODO(#14175): Reading the reference performs a deep copy, and we can
@@ -101,7 +124,7 @@ fn native_to_bytes(
  **************************************************************************************************/
 fn native_serialized_size(
     context: &mut SafeNativeContext,
-    mut ty_args: Vec<Type>,
+    ty_args: &[Type],
     mut args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     debug_assert!(ty_args.len() == 1);
@@ -110,9 +133,9 @@ fn native_serialized_size(
     context.charge(BCS_SERIALIZED_SIZE_BASE)?;
 
     let reference = safely_pop_arg!(args, Reference);
-    let ty = ty_args.pop().unwrap();
+    let ty = &ty_args[0];
 
-    let serialized_size = match serialized_size_impl(context, reference, &ty) {
+    let serialized_size = match serialized_size_impl(context, reference, ty) {
         Ok(serialized_size) => serialized_size as u64,
         Err(_) => {
             context.charge(BCS_SERIALIZED_SIZE_FAILURE)?;
@@ -149,22 +172,23 @@ fn serialized_size_impl(
 
 fn native_constant_serialized_size(
     context: &mut SafeNativeContext,
-    mut ty_args: Vec<Type>,
+    ty_args: &[Type],
     _args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     debug_assert!(ty_args.len() == 1);
 
     context.charge(BCS_CONSTANT_SERIALIZED_SIZE_BASE)?;
 
-    let ty = ty_args.pop().unwrap();
-    let ty_layout = context.type_to_type_layout(&ty)?;
+    let ty = &ty_args[0];
+    let ty_layout = context.type_to_type_layout(ty)?;
 
     let (visited_count, serialized_size_result) = constant_serialized_size(&ty_layout);
     context
         .charge(BCS_CONSTANT_SERIALIZED_SIZE_PER_TYPE_NODE * NumTypeNodes::new(visited_count))?;
 
+    let enum_option_enabled = context.get_feature_flags().is_enum_option_enabled();
     let result = match serialized_size_result {
-        Ok(value) => create_option_u64(value.map(|v| v as u64)),
+        Ok(value) => create_option_u64(enum_option_enabled, value.map(|v| v as u64)),
         Err(_) => {
             context.charge(BCS_SERIALIZED_SIZE_FAILURE)?;
 
@@ -191,7 +215,13 @@ fn constant_serialized_size(ty_layout: &MoveTypeLayout) -> (u64, PartialVMResult
         MoveTypeLayout::U32 => bcs::serialized_size(&0u32).map(Some),
         MoveTypeLayout::U64 => bcs::serialized_size(&0u64).map(Some),
         MoveTypeLayout::U128 => bcs::serialized_size(&0u128).map(Some),
-        MoveTypeLayout::U256 => bcs::serialized_size(&u256::U256::zero()).map(Some),
+        MoveTypeLayout::U256 => bcs::serialized_size(&int256::U256::ZERO).map(Some),
+        MoveTypeLayout::I8 => bcs::serialized_size(&0i8).map(Some),
+        MoveTypeLayout::I16 => bcs::serialized_size(&0i16).map(Some),
+        MoveTypeLayout::I32 => bcs::serialized_size(&0i32).map(Some),
+        MoveTypeLayout::I64 => bcs::serialized_size(&0i64).map(Some),
+        MoveTypeLayout::I128 => bcs::serialized_size(&0i128).map(Some),
+        MoveTypeLayout::I256 => bcs::serialized_size(&int256::I256::ZERO).map(Some),
         MoveTypeLayout::Address => bcs::serialized_size(&AccountAddress::ZERO).map(Some),
         // signer's size is VM implementation detail, and can change at will.
         MoveTypeLayout::Signer => Ok(None),

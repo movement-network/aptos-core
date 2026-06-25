@@ -2,7 +2,7 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use anyhow::{Error, Ok, Result};
+use anyhow::{bail, Error, Ok, Result};
 use aptos_backup_cli::utils::{ReplayConcurrencyLevelOpt, RocksdbOpt};
 use aptos_block_executor::txn_provider::default::DefaultTxnProvider;
 use aptos_config::config::{
@@ -15,17 +15,25 @@ use aptos_storage_interface::{
     state_store::state_view::db_state_view::DbStateViewAtVersion, AptosDbError, DbReader,
 };
 use aptos_types::{
+    block_executor::{
+        config::BlockExecutorConfigFromOnchain,
+        transaction_slice_metadata::TransactionSliceMetadata,
+    },
     contract_event::ContractEvent,
     transaction::{
-        signature_verified_transaction::SignatureVerifiedTransaction, Transaction, TransactionInfo,
-        Version,
+        signature_verified_transaction::SignatureVerifiedTransaction, AuxiliaryInfo, BlockOutput,
+        PersistedAuxiliaryInfo, Transaction, TransactionInfo, Version,
     },
     write_set::WriteSet,
 };
 use aptos_vm::{aptos_vm::AptosVMBlockExecutor, AptosVM, VMBlockExecutor};
+use aptos_vm_environment::prod_configs::{
+    set_async_runtime_checks, set_layout_caches, set_paranoid_type_checks,
+};
 use clap::Parser;
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use rayon::{iter::ParallelIterator, prelude::IntoParallelIterator};
 use std::{
+    panic,
     path::PathBuf,
     process,
     sync::{atomic::AtomicU64, Arc},
@@ -71,6 +79,13 @@ pub struct Opt {
         help = "The maximum time in seconds to wait for each transaction replay"
     )]
     pub timeout_secs: Option<u64>,
+
+    #[clap(
+        long,
+        default_value_t = false,
+        help = "Enable paranoid type checks in the Move VM"
+    )]
+    pub paranoid_type_checks: bool,
 }
 
 impl Opt {
@@ -134,6 +149,24 @@ struct Verifier {
 
 impl Verifier {
     pub fn new(config: &Opt) -> Result<Self> {
+        // Open in write mode to create any new DBs necessary.
+        {
+            if let Err(e) = panic::catch_unwind(|| {
+                AptosDB::open(
+                    StorageDirPaths::from_path(config.db_dir.as_path()),
+                    false,
+                    NO_OP_STORAGE_PRUNER_CONFIG,
+                    config.rocksdb_opt.clone().into(),
+                    false,
+                    BUFFERED_STATE_TARGET_ITEMS,
+                    DEFAULT_MAX_NUM_NODES_PER_LRU_CACHE_SHARD,
+                    None,
+                )
+            }) {
+                warn!("Unable to open AptosDB in write mode: {:?}", e);
+            };
+        }
+
         let aptos_db = AptosDB::open(
             StorageDirPaths::from_path(config.db_dir.as_path()),
             true,
@@ -151,6 +184,10 @@ impl Verifier {
         // calculate a valid start and limit
         let (start, limit) =
             Self::get_start_and_limit(&arc_db, config.start_version, config.end_version)?;
+        set_layout_caches(true);
+        set_paranoid_type_checks(config.paranoid_type_checks);
+        // Paranoid checks are done async if enabled.
+        set_async_runtime_checks(config.paranoid_type_checks);
         info!(
             start_version = start,
             limit = limit,
@@ -177,24 +214,22 @@ impl Verifier {
         }
 
         AptosVM::set_concurrency_level_once(self.replay_concurrency_level);
-        let task_size = self.limit / self.concurrent_replay as u64;
-        let ranges: Vec<(u64, u64)> = (0..self.concurrent_replay)
-            .map(|i| {
-                let chunk_start = self.start + (i as u64) * task_size;
-                let chunk_limit = if i == self.concurrent_replay - 1 {
-                    self.start + self.limit - chunk_start
-                } else {
-                    task_size
-                };
-                (chunk_start, chunk_limit)
-            })
-            .collect();
-
-        // Process each range in parallel using `par_iter`
-        let res = ranges
-            .par_iter()
-            .map(|(start, limit)| self.verify(*start, *limit))
-            .collect::<Vec<Result<Vec<Error>>>>();
+        let thread_pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(self.concurrent_replay)
+            .thread_name(|i| format!("replay-verify-{}", i))
+            .build()?;
+        let chunk_size = self.chunk_size as u64;
+        let total_chunks = self.limit.div_ceil(chunk_size);
+        let res: Vec<_> = thread_pool.install(|| {
+            (0..total_chunks)
+                .into_par_iter()
+                .map(|i| {
+                    let start = self.start + i * chunk_size;
+                    let end = std::cmp::min(start + chunk_size - 1, self.start + self.limit - 1);
+                    self.verify(start, end - start + 1)
+                })
+                .collect()
+        });
         let mut all_failed_txns = Vec::new();
         for iter in res.into_iter() {
             all_failed_txns.extend(iter?);
@@ -202,33 +237,42 @@ impl Verifier {
         Ok(all_failed_txns)
     }
 
-    // Execute the verify one valide range
+    // Execute the verify one valid range
     pub fn verify(&self, start: Version, limit: u64) -> Result<Vec<Error>> {
-        let mut total_failed_txns = Vec::new();
+        let mut total_failed_txns = Vec::with_capacity(limit as usize);
         let txn_iter = self
             .backup_handler
             .get_transaction_iter(start, limit as usize)?;
-        let mut cur_txns = Vec::new();
-        let mut expected_events = Vec::new();
-        let mut expected_writesets = Vec::new();
-        let mut expected_txn_infos = Vec::new();
+        let mut cur_txns = Vec::with_capacity(limit as usize);
+        let mut cur_persisted_aux_info = Vec::with_capacity(limit as usize);
+        let mut expected_events = Vec::with_capacity(limit as usize);
+        let mut expected_writesets = Vec::with_capacity(limit as usize);
+        let mut expected_txn_infos = Vec::with_capacity(limit as usize);
         let mut chunk_start_version = start;
+        let executor = AptosVMBlockExecutor::new();
         for item in txn_iter {
             // timeout check
             if let Some(duration) = self.timeout_secs {
                 if self.replay_stat.get_elapsed_secs() >= duration {
-                    error!(
-                        "Verify timeout: {}s elapsed. Deadline: {}s",
+                    bail!(
+                        "Verify timeout: {}s elapsed. Deadline: {}s. Failed txns count: {}",
                         self.replay_stat.get_elapsed_secs(),
-                        duration
+                        duration,
+                        total_failed_txns.len(),
                     );
-                    return Ok(total_failed_txns);
                 }
             }
 
-            let (input_txn, expected_txn_info, expected_event, expected_writeset) = item?;
+            let (
+                input_txn,
+                persisted_aux_info,
+                expected_txn_info,
+                expected_event,
+                expected_writeset,
+            ) = item?;
             let is_epoch_ending = expected_event.iter().any(ContractEvent::is_new_epoch_event);
             cur_txns.push(input_txn);
+            cur_persisted_aux_info.push(persisted_aux_info);
             expected_txn_infos.push(expected_txn_info);
             expected_events.push(expected_event);
             expected_writesets.push(expected_writeset);
@@ -237,8 +281,10 @@ impl Verifier {
                 while !cur_txns.is_empty() {
                     // verify results
                     let failed_txn_opt = self.execute_and_verify(
+                        &executor,
                         &mut chunk_start_version,
                         &mut cur_txns,
+                        &mut cur_persisted_aux_info,
                         &mut expected_txn_infos,
                         &mut expected_events,
                         &mut expected_writesets,
@@ -252,8 +298,10 @@ impl Verifier {
         }
         // verify results
         let fail_txns = self.execute_and_verify(
+            &executor,
             &mut chunk_start_version,
             &mut cur_txns,
+            &mut cur_persisted_aux_info,
             &mut expected_txn_infos,
             &mut expected_events,
             &mut expected_writesets,
@@ -298,8 +346,10 @@ impl Verifier {
 
     fn execute_and_verify(
         &self,
+        executor: &AptosVMBlockExecutor,
         current_version: &mut Version,
         cur_txns: &mut Vec<Transaction>,
+        cur_persisted_aux_info: &mut Vec<PersistedAuxiliaryInfo>,
         expected_txn_infos: &mut Vec<TransactionInfo>,
         expected_events: &mut Vec<Vec<ContractEvent>>,
         expected_writesets: &mut Vec<WriteSet>,
@@ -311,13 +361,26 @@ impl Verifier {
             .iter()
             .map(|txn| SignatureVerifiedTransaction::from(txn.clone()))
             .collect::<Vec<_>>();
-        let txns_provider = DefaultTxnProvider::new(txns);
-        let executed_outputs = AptosVMBlockExecutor::new().execute_block_no_limit(
-            &txns_provider,
-            &self
-                .arc_db
-                .state_view_at_version(current_version.checked_sub(1))?,
-        )?;
+        let txns_provider = DefaultTxnProvider::new(
+            txns,
+            cur_persisted_aux_info
+                .iter()
+                .map(|info| AuxiliaryInfo::new(*info, None))
+                .collect(),
+        );
+        let executed_outputs = executor
+            .execute_block(
+                &txns_provider,
+                &self
+                    .arc_db
+                    .state_view_at_version(current_version.checked_sub(1))?,
+                BlockExecutorConfigFromOnchain::new_no_block_limit(),
+                TransactionSliceMetadata::Chunk {
+                    begin: *current_version,
+                    end: *current_version + cur_txns.len() as u64,
+                },
+            )
+            .map(BlockOutput::into_transaction_outputs_forced)?;
         assert_eq!(executed_outputs.len(), cur_txns.len());
 
         for idx in 0..cur_txns.len() {
@@ -331,6 +394,7 @@ impl Verifier {
                 Some(&expected_events[idx]),
             ) {
                 cur_txns.drain(0..idx + 1);
+                cur_persisted_aux_info.drain(0..idx + 1);
                 expected_txn_infos.drain(0..idx + 1);
                 expected_events.drain(0..idx + 1);
                 expected_writesets.drain(0..idx + 1);
@@ -340,6 +404,7 @@ impl Verifier {
         }
 
         cur_txns.clear();
+        cur_persisted_aux_info.clear();
         expected_txn_infos.clear();
         expected_events.clear();
         expected_writesets.clear();

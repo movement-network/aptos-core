@@ -10,9 +10,9 @@ use aptos_types::{
     on_chain_config::{TimedFeatureFlag, TimedFeatures},
     transaction::{
         authenticator::AuthenticationProof, user_transaction_context::UserTransactionContext,
-        EntryFunction, Multisig, MultisigTransactionPayload, ReplayProtector, SignedTransaction,
-        TransactionExecutable, TransactionExecutableRef, TransactionExtraConfig,
-        TransactionPayload, TransactionPayloadInner,
+        AuxiliaryInfo, AuxiliaryInfoTrait, EntryFunction, Multisig, MultisigTransactionPayload,
+        ReplayProtector, SignedTransaction, TransactionExecutable, TransactionExecutableRef,
+        TransactionExtraConfig, TransactionPayload, TransactionPayloadInner,
     },
 };
 
@@ -36,9 +36,12 @@ pub struct TransactionMetadata {
     pub is_keyless: bool,
     pub entry_function_payload: Option<EntryFunction>,
     pub multisig_payload: Option<Multisig>,
+    // Index of the transaction in the block.
+    pub transaction_index: Option<u32>,
 }
 
 impl TransactionMetadata {
+<<<<<<< HEAD
     pub fn new(txn: &SignedTransaction, timed_features: &TimedFeatures) -> Self {
         let txn_size = if timed_features
             .is_enabled(TimedFeatureFlag::UseFullTransactionSizeForTransactionMetadata)
@@ -47,6 +50,9 @@ impl TransactionMetadata {
         } else {
             txn.raw_txn_bytes_len()
         };
+=======
+    pub fn new(txn: &SignedTransaction, auxiliary_info: &AuxiliaryInfo) -> Self {
+>>>>>>> e33e3c1b
         Self {
             sender: txn.sender(),
             authentication_proof: txn.authenticator().sender().authentication_proof(),
@@ -115,6 +121,7 @@ impl TransactionMetadata {
                 }),
                 _ => None,
             },
+            transaction_index: auxiliary_info.transaction_index(),
         }
     }
 
@@ -209,6 +216,11 @@ impl TransactionMetadata {
                 .map(|entry_func| entry_func.as_entry_function_payload()),
             self.multisig_payload()
                 .map(|multisig| multisig.as_multisig_payload()),
+            self.transaction_index,
         )
+    }
+
+    pub fn transaction_index(&self) -> Option<u32> {
+        self.transaction_index
     }
 }

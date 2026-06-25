@@ -805,6 +805,7 @@ export interface MoveStruct {
   name?: string | undefined;
   isNative?: boolean | undefined;
   isEvent?: boolean | undefined;
+  isEnum?: boolean | undefined;
   abilities?: MoveAbility[] | undefined;
   genericTypeParams?: MoveStructGenericTypeParam[] | undefined;
   fields?: MoveStructField[] | undefined;
@@ -1116,7 +1117,7 @@ export interface MultiKeySignature {
   signaturesRequired?: number | undefined;
 }
 
-export interface AbstractionSignature {
+export interface AbstractSignature {
   functionInfo?: string | undefined;
   signature?: Uint8Array | undefined;
 }
@@ -1134,7 +1135,7 @@ export interface AccountSignature {
   /** 4 is reserved. */
   singleKeySignature?: SingleKeySignature | undefined;
   multiKeySignature?: MultiKeySignature | undefined;
-  abstraction?: AbstractionSignature | undefined;
+  abstraction?: AbstractSignature | undefined;
 }
 
 export enum AccountSignature_Type {
@@ -7397,7 +7398,7 @@ export const MoveFunction = {
 };
 
 function createBaseMoveStruct(): MoveStruct {
-  return { name: "", isNative: false, isEvent: false, abilities: [], genericTypeParams: [], fields: [] };
+  return { name: "", isNative: false, isEvent: false, isEnum: false, abilities: [], genericTypeParams: [], fields: [] };
 }
 
 export const MoveStruct = {
@@ -7410,6 +7411,9 @@ export const MoveStruct = {
     }
     if (message.isEvent === true) {
       writer.uint32(48).bool(message.isEvent);
+    }
+    if (message.isEnum === true) {
+      writer.uint32(56).bool(message.isEnum);
     }
     if (message.abilities !== undefined && message.abilities.length !== 0) {
       writer.uint32(26).fork();
@@ -7458,6 +7462,13 @@ export const MoveStruct = {
           }
 
           message.isEvent = reader.bool();
+          continue;
+        case 7:
+          if (tag !== 56) {
+            break;
+          }
+
+          message.isEnum = reader.bool();
           continue;
         case 3:
           if (tag === 24) {
@@ -7536,6 +7547,7 @@ export const MoveStruct = {
       name: isSet(object.name) ? globalThis.String(object.name) : "",
       isNative: isSet(object.isNative) ? globalThis.Boolean(object.isNative) : false,
       isEvent: isSet(object.isEvent) ? globalThis.Boolean(object.isEvent) : false,
+      isEnum: isSet(object.isEnum) ? globalThis.Boolean(object.isEnum) : false,
       abilities: globalThis.Array.isArray(object?.abilities)
         ? object.abilities.map((e: any) => moveAbilityFromJSON(e))
         : [],
@@ -7559,6 +7571,9 @@ export const MoveStruct = {
     if (message.isEvent === true) {
       obj.isEvent = message.isEvent;
     }
+    if (message.isEnum === true) {
+      obj.isEnum = message.isEnum;
+    }
     if (message.abilities?.length) {
       obj.abilities = message.abilities.map((e) => moveAbilityToJSON(e));
     }
@@ -7579,6 +7594,7 @@ export const MoveStruct = {
     message.name = object.name ?? "";
     message.isNative = object.isNative ?? false;
     message.isEvent = object.isEvent ?? false;
+    message.isEnum = object.isEnum ?? false;
     message.abilities = object.abilities?.map((e) => e) || [];
     message.genericTypeParams = object.genericTypeParams?.map((e) => MoveStructGenericTypeParam.fromPartial(e)) || [];
     message.fields = object.fields?.map((e) => MoveStructField.fromPartial(e)) || [];
@@ -10404,12 +10420,12 @@ export const MultiKeySignature = {
   },
 };
 
-function createBaseAbstractionSignature(): AbstractionSignature {
+function createBaseAbstractSignature(): AbstractSignature {
   return { functionInfo: "", signature: new Uint8Array(0) };
 }
 
-export const AbstractionSignature = {
-  encode(message: AbstractionSignature, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+export const AbstractSignature = {
+  encode(message: AbstractSignature, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     if (message.functionInfo !== undefined && message.functionInfo !== "") {
       writer.uint32(10).string(message.functionInfo);
     }
@@ -10419,10 +10435,10 @@ export const AbstractionSignature = {
     return writer;
   },
 
-  decode(input: _m0.Reader | Uint8Array, length?: number): AbstractionSignature {
+  decode(input: _m0.Reader | Uint8Array, length?: number): AbstractSignature {
     const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
     let end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseAbstractionSignature();
+    const message = createBaseAbstractSignature();
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -10450,47 +10466,45 @@ export const AbstractionSignature = {
   },
 
   // encodeTransform encodes a source of message objects.
-  // Transform<AbstractionSignature, Uint8Array>
+  // Transform<AbstractSignature, Uint8Array>
   async *encodeTransform(
-    source:
-      | AsyncIterable<AbstractionSignature | AbstractionSignature[]>
-      | Iterable<AbstractionSignature | AbstractionSignature[]>,
+    source: AsyncIterable<AbstractSignature | AbstractSignature[]> | Iterable<AbstractSignature | AbstractSignature[]>,
   ): AsyncIterable<Uint8Array> {
     for await (const pkt of source) {
       if (globalThis.Array.isArray(pkt)) {
         for (const p of (pkt as any)) {
-          yield* [AbstractionSignature.encode(p).finish()];
+          yield* [AbstractSignature.encode(p).finish()];
         }
       } else {
-        yield* [AbstractionSignature.encode(pkt as any).finish()];
+        yield* [AbstractSignature.encode(pkt as any).finish()];
       }
     }
   },
 
   // decodeTransform decodes a source of encoded messages.
-  // Transform<Uint8Array, AbstractionSignature>
+  // Transform<Uint8Array, AbstractSignature>
   async *decodeTransform(
     source: AsyncIterable<Uint8Array | Uint8Array[]> | Iterable<Uint8Array | Uint8Array[]>,
-  ): AsyncIterable<AbstractionSignature> {
+  ): AsyncIterable<AbstractSignature> {
     for await (const pkt of source) {
       if (globalThis.Array.isArray(pkt)) {
         for (const p of (pkt as any)) {
-          yield* [AbstractionSignature.decode(p)];
+          yield* [AbstractSignature.decode(p)];
         }
       } else {
-        yield* [AbstractionSignature.decode(pkt as any)];
+        yield* [AbstractSignature.decode(pkt as any)];
       }
     }
   },
 
-  fromJSON(object: any): AbstractionSignature {
+  fromJSON(object: any): AbstractSignature {
     return {
       functionInfo: isSet(object.functionInfo) ? globalThis.String(object.functionInfo) : "",
       signature: isSet(object.signature) ? bytesFromBase64(object.signature) : new Uint8Array(0),
     };
   },
 
-  toJSON(message: AbstractionSignature): unknown {
+  toJSON(message: AbstractSignature): unknown {
     const obj: any = {};
     if (message.functionInfo !== undefined && message.functionInfo !== "") {
       obj.functionInfo = message.functionInfo;
@@ -10501,11 +10515,11 @@ export const AbstractionSignature = {
     return obj;
   },
 
-  create(base?: DeepPartial<AbstractionSignature>): AbstractionSignature {
-    return AbstractionSignature.fromPartial(base ?? {});
+  create(base?: DeepPartial<AbstractSignature>): AbstractSignature {
+    return AbstractSignature.fromPartial(base ?? {});
   },
-  fromPartial(object: DeepPartial<AbstractionSignature>): AbstractionSignature {
-    const message = createBaseAbstractionSignature();
+  fromPartial(object: DeepPartial<AbstractSignature>): AbstractSignature {
+    const message = createBaseAbstractSignature();
     message.functionInfo = object.functionInfo ?? "";
     message.signature = object.signature ?? new Uint8Array(0);
     return message;
@@ -10632,7 +10646,7 @@ export const AccountSignature = {
       MultiKeySignature.encode(message.multiKeySignature, writer.uint32(50).fork()).ldelim();
     }
     if (message.abstraction !== undefined) {
-      AbstractionSignature.encode(message.abstraction, writer.uint32(58).fork()).ldelim();
+      AbstractSignature.encode(message.abstraction, writer.uint32(58).fork()).ldelim();
     }
     return writer;
   },
@@ -10684,7 +10698,7 @@ export const AccountSignature = {
             break;
           }
 
-          message.abstraction = AbstractionSignature.decode(reader, reader.uint32());
+          message.abstraction = AbstractSignature.decode(reader, reader.uint32());
           continue;
       }
       if ((tag & 7) === 4 || tag === 0) {
@@ -10738,7 +10752,7 @@ export const AccountSignature = {
       multiKeySignature: isSet(object.multiKeySignature)
         ? MultiKeySignature.fromJSON(object.multiKeySignature)
         : undefined,
-      abstraction: isSet(object.abstraction) ? AbstractionSignature.fromJSON(object.abstraction) : undefined,
+      abstraction: isSet(object.abstraction) ? AbstractSignature.fromJSON(object.abstraction) : undefined,
     };
   },
 
@@ -10760,7 +10774,7 @@ export const AccountSignature = {
       obj.multiKeySignature = MultiKeySignature.toJSON(message.multiKeySignature);
     }
     if (message.abstraction !== undefined) {
-      obj.abstraction = AbstractionSignature.toJSON(message.abstraction);
+      obj.abstraction = AbstractSignature.toJSON(message.abstraction);
     }
     return obj;
   },
@@ -10784,7 +10798,7 @@ export const AccountSignature = {
       ? MultiKeySignature.fromPartial(object.multiKeySignature)
       : undefined;
     message.abstraction = (object.abstraction !== undefined && object.abstraction !== null)
-      ? AbstractionSignature.fromPartial(object.abstraction)
+      ? AbstractSignature.fromPartial(object.abstraction)
       : undefined;
     return message;
   },

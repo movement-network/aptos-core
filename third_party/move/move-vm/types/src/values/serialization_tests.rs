@@ -8,22 +8,23 @@ mod tests {
     use crate::{
         delayed_values::delayed_field_id::DelayedFieldID,
         value_serde::{MockFunctionValueExtension, ValueSerDeContext},
-        values::{values_impl, AbstractFunction, SerializedFunctionData, Struct, Value},
+        values::{function_values_impl::mock::MockAbstractFunction, values_impl, Struct, Value},
     };
-    use better_any::{Tid, TidAble, TidExt};
+    use better_any::TidExt;
     use claims::{assert_err, assert_ok, assert_some};
     use move_binary_format::errors::PartialVMResult;
     use move_core_types::{
         ability::AbilitySet,
         account_address::AccountAddress,
-        function::{ClosureMask, MoveClosure, FUNCTION_DATA_SERIALIZATION_FORMAT_V1},
+        function::{ClosureMask, MoveClosure},
         identifier::Identifier,
-        language_storage::{FunctionTag, ModuleId, StructTag, TypeTag},
-        u256,
+        int256,
+        language_storage::{FunctionParamOrReturnTag, FunctionTag, ModuleId, StructTag, TypeTag},
         value::{IdentifierMappingKind, MoveStruct, MoveStructLayout, MoveTypeLayout, MoveValue},
     };
     use serde::{Deserialize, Serialize};
-    use std::{cmp::Ordering, iter};
+    use std::iter;
+
     // ==========================================================================
     // Enums
 
@@ -214,13 +215,15 @@ mod tests {
         vec![
             TypeTag::Address,
             TypeTag::Function(Box::new(FunctionTag {
-                args: vec![TypeTag::Struct(Box::new(StructTag {
-                    address: AccountAddress::TEN,
-                    module: Identifier::new("mod").unwrap(),
-                    name: Identifier::new("st").unwrap(),
-                    type_args: vec![TypeTag::Signer],
-                }))],
-                results: vec![TypeTag::Address],
+                args: vec![FunctionParamOrReturnTag::Value(TypeTag::Struct(Box::new(
+                    StructTag {
+                        address: AccountAddress::TEN,
+                        module: Identifier::new("mod").unwrap(),
+                        name: Identifier::new("st").unwrap(),
+                        type_args: vec![TypeTag::Signer],
+                    },
+                )))],
+                results: vec![FunctionParamOrReturnTag::Value(TypeTag::Address)],
                 abilities: AbilitySet::PUBLIC_FUNCTIONS,
             })),
         ]
@@ -333,6 +336,7 @@ mod tests {
     // --------------------------------------------------------------------------------------
     // VM Values
 
+<<<<<<< HEAD
     // Since Abstract functions are `Tid`, we cannot auto-mock them, so need to mock manually.
     #[derive(Clone, Tid)]
     struct MockAbstractFunction {
@@ -388,6 +392,8 @@ mod tests {
         }
     }
 
+=======
+>>>>>>> e33e3c1b
     fn round_trip_vm_closure_value(
         fun: MockAbstractFunction,
         captured: Vec<Value>,
@@ -527,7 +533,7 @@ mod tests {
             (Value::u32(10), U32),
             (Value::u64(10), U64),
             (Value::u128(10), U128),
-            (Value::u256(u256::U256::one()), U256),
+            (Value::u256(int256::U256::ONE), U256),
             (Value::bool(true), Bool),
             (Value::address(AccountAddress::ONE), Address),
             (Value::master_signer(AccountAddress::ONE), Signer),

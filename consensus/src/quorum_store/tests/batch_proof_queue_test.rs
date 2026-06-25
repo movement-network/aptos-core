@@ -6,11 +6,14 @@ use crate::quorum_store::{
 };
 use aptos_consensus_types::{
     common::TxnSummaryWithExpiration,
-    proof_of_store::{BatchId, BatchInfo, ProofOfStore},
+    proof_of_store::{BatchInfo, ProofOfStore},
     utils::PayloadTxnsSize,
 };
 use aptos_crypto::HashValue;
-use aptos_types::{aggregate_signature::AggregateSignature, transaction::ReplayProtector, PeerId};
+use aptos_types::{
+    aggregate_signature::AggregateSignature, quorum_store::BatchId, transaction::ReplayProtector,
+    PeerId,
+};
 use maplit::hashset;
 use std::{collections::HashSet, time::Duration};
 
@@ -20,7 +23,7 @@ fn proof_of_store(
     batch_id: BatchId,
     gas_bucket_start: u64,
     expiration: u64,
-) -> ProofOfStore {
+) -> ProofOfStore<BatchInfo> {
     ProofOfStore::new(
         BatchInfo::new(
             author,
@@ -42,7 +45,7 @@ fn proof_of_store_with_size(
     gas_bucket_start: u64,
     expiration: u64,
     num_txns: u64,
-) -> ProofOfStore {
+) -> ProofOfStore<BatchInfo> {
     ProofOfStore::new(
         BatchInfo::new(
             author,
@@ -97,7 +100,7 @@ async fn test_proof_queue_sorting() {
     );
     let mut count_author_0 = 0;
     let mut count_author_1 = 0;
-    let mut prev: Option<&ProofOfStore> = None;
+    let mut prev: Option<&ProofOfStore<BatchInfo>> = None;
     for batch in &pulled {
         if let Some(prev) = prev {
             assert!(prev.gas_bucket_start() >= batch.gas_bucket_start());
@@ -126,7 +129,7 @@ async fn test_proof_queue_sorting() {
     );
     let mut count_author_0 = 0;
     let mut count_author_1 = 0;
-    let mut prev: Option<&ProofOfStore> = None;
+    let mut prev: Option<&ProofOfStore<BatchInfo>> = None;
     for batch in &pulled {
         if let Some(prev) = prev {
             assert!(prev.gas_bucket_start() >= batch.gas_bucket_start());

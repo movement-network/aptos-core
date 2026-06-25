@@ -3,6 +3,7 @@
 
 #![allow(clippy::useless_conversion)]
 
+use aptos_crypto::blstrs::{multi_pairing, random_scalar};
 use aptos_dkg::{
     algebra::{
         evaluation_domain::{BatchEvaluationDomain, EvaluationDomain},
@@ -10,16 +11,16 @@ use aptos_dkg::{
         polynomials,
     },
     utils::{
-        g1_multi_exp, g2_multi_exp, hash_to_scalar, multi_pairing, parallel_multi_pairing,
+        g1_multi_exp, g2_multi_exp, hash_to_scalar, parallel_multi_pairing,
         random::{
             insecure_random_gt_point, insecure_random_gt_points, random_g1_point, random_g1_points,
-            random_g2_point, random_g2_points, random_scalar, random_scalars,
+            random_g2_point, random_g2_points, random_scalars,
         },
     },
     weighted_vuf::pinkas::MIN_MULTIPAIR_NUM_JOBS,
 };
 use aptos_runtimes::spawn_rayon_thread_pool;
-use blstrs::{G1Projective, G2Projective, Gt};
+use blstrs::{G1Projective, G2Projective, Gt, Scalar};
 use criterion::{
     criterion_group, criterion_main, measurement::Measurement, BenchmarkGroup, BenchmarkId,
     Criterion, Throughput,
@@ -40,7 +41,10 @@ pub const LARGE_SIZES: [usize; 3] = [8192, 16_384, 32_768];
 pub fn crypto_group(c: &mut Criterion) {
     let mut group = c.benchmark_group("crypto");
 
-    for thresh in [333, 666, 3_333, 6_6666] {
+    field_ops(1_000_000, &mut group, "field_additions", |a, b| a + b);
+    field_ops(1_000_000, &mut group, "field_multiplications", |a, b| a * b);
+
+    for thresh in [333, 666, 3_333, 6_666] {
         batch_evaluation_domain_new(thresh, &mut group);
         fft_assign_bench(thresh, &mut group);
 
@@ -441,6 +445,31 @@ fn parallel_multipairing<M: Measurement>(n: usize, g: &mut BenchmarkGroup<M>, nu
             )
         },
     );
+}
+
+fn field_ops<M: Measurement>(
+    n: usize,
+    g: &mut BenchmarkGroup<M>,
+    name: &str,
+    op: impl Fn(Scalar, Scalar) -> Scalar + Copy,
+) {
+    let mut rng = thread_rng();
+    g.throughput(Throughput::Elements(n as u64));
+
+    g.bench_function(BenchmarkId::new(name, n), move |b| {
+        b.iter_with_setup(
+            || {
+                let a = random_scalars(n, &mut rng);
+                let b = random_scalars(n, &mut rng);
+                (a, b)
+            },
+            |(a, b)| {
+                for i in 0..a.len() {
+                    let _c = op(a[i], b[i]);
+                }
+            },
+        )
+    });
 }
 
 fn g1_multiexp<M: Measurement>(n: usize, g: &mut BenchmarkGroup<M>) {

@@ -15,7 +15,7 @@ use crate::{
         },
         utils::{
             check_if_file_exists, create_dir_if_not_exist, dir_default_to_current,
-            profile_or_submit, prompt_yes_with_override, write_to_file,
+            dispatch_transaction, prompt_yes_with_override, write_to_file,
         },
     },
     governance::CompileScriptFunction,
@@ -25,6 +25,7 @@ use crate::{
         fmt::Fmt,
         lint::LintPackage,
         manifest::{Dependency, ManifestNamedAddress, MovePackageManifest, PackageInfo},
+        sim::Sim,
     },
     CliCommand, CliResult,
 };
@@ -51,7 +52,9 @@ use aptos_types::{
     account_address::{create_resource_address, AccountAddress},
     object_address::create_object_code_deployment_address,
     on_chain_config::aptos_test_feature_flags_genesis,
-    transaction::{Transaction, TransactionArgument, TransactionPayload, TransactionStatus},
+    transaction::{
+        ReplayProtector, Transaction, TransactionArgument, TransactionPayload, TransactionStatus,
+    },
 };
 use aptos_vm::data_cache::AsMoveResolver;
 use async_trait::async_trait;
@@ -60,11 +63,12 @@ use colored::Colorize;
 use itertools::Itertools;
 use move_cli::{self, base::test::UnitTestResult};
 use move_command_line_common::{address::NumericalAddress, env::MOVE_HOME};
-use move_core_types::{identifier::Identifier, language_storage::ModuleId, u256::U256};
+use move_core_types::{identifier::Identifier, int256::U256, language_storage::ModuleId};
 use move_model::metadata::{CompilerVersion, LanguageVersion};
 use move_package::{source_package::layout::SourcePackageLayout, BuildConfig, CompilerConfig};
 use move_unit_test::UnitTestingConfig;
 pub use package_hooks::*;
+use rand::SeedableRng;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{
@@ -76,7 +80,6 @@ use std::{
 pub use stored_package::*;
 use tokio::task;
 use url::Url;
-
 pub mod aptos_debug_natives;
 mod bytecode;
 pub mod coverage;
@@ -85,6 +88,7 @@ mod lint;
 mod manifest;
 pub mod package_hooks;
 mod show;
+mod sim;
 pub mod stored_package;
 
 const HELLO_BLOCKCHAIN_EXAMPLE: &str = include_str!(
@@ -133,6 +137,8 @@ pub enum MoveTool {
     View(ViewFunction),
     Replay(Replay),
     Fmt(Fmt),
+    #[clap(subcommand)]
+    Sim(Sim),
 }
 
 impl MoveTool {
@@ -171,6 +177,7 @@ impl MoveTool {
             MoveTool::Replay(tool) => tool.execute_serialized().await,
             MoveTool::Fmt(tool) => tool.execute_serialized().await,
             MoveTool::Lint(tool) => tool.execute_serialized().await,
+            MoveTool::Sim(tool) => tool.execute().await,
         }
     }
 }
@@ -542,6 +549,10 @@ pub struct TestPackage {
     /// Dump storage state on failure.
     #[clap(long = "dump")]
     pub dump_state: bool,
+
+    /// Fail-fast mode: stop running tests after the first failure.
+    #[clap(long = "fail-fast")]
+    pub fail_fast: bool,
 }
 
 pub(crate) fn fix_bytecode_version(
@@ -590,6 +601,7 @@ impl CliCommand<&'static str> for TestPackage {
                     .language_version
                     .or_else(|| Some(LanguageVersion::latest_stable())),
                 experiments: self.move_options.compute_experiments(),
+                print_errors: true,
             },
             ..Default::default()
         };
@@ -600,7 +612,6 @@ impl CliCommand<&'static str> for TestPackage {
             config.clone(),
             UnitTestingConfig {
                 filter: self.filter.clone(),
-                report_stacktrace_on_abort: true,
                 report_storage_on_error: self.dump_state,
                 ignore_compile_warnings: self.ignore_compile_warnings,
                 named_address_values: self
@@ -614,6 +625,7 @@ impl CliCommand<&'static str> for TestPackage {
                         )
                     })
                     .collect(),
+                fail_fast: self.fail_fast,
                 ..UnitTestingConfig::default()
             },
             // TODO(Gas): we may want to switch to non-zero costs in the future
@@ -626,6 +638,7 @@ impl CliCommand<&'static str> for TestPackage {
             None,
             self.compute_coverage,
             &mut std::io::stdout(),
+            true,
         )
         .map_err(|err| CliError::UnexpectedError(format!("Failed to run tests: {:#}", err)))?;
 
@@ -897,14 +910,11 @@ impl FromStr for IncludedArtifacts {
 }
 
 impl IncludedArtifacts {
-    pub(crate) fn build_options(
-        self,
-        move_options: &MovePackageOptions,
-    ) -> CliTypedResult<BuildOptions> {
+    pub fn build_options(self, move_options: &MovePackageOptions) -> CliTypedResult<BuildOptions> {
         self.build_options_with_experiments(move_options, vec![], false)
     }
 
-    pub(crate) fn build_options_with_experiments(
+    pub fn build_options_with_experiments(
         self,
         move_options: &MovePackageOptions,
         mut more_experiments: Vec<String>,
@@ -1061,7 +1071,7 @@ impl CliCommand<TransactionSummary> for PublishPackage {
             .await
         } else {
             let package_publication_data: PackagePublicationData = (&self).try_into()?;
-            profile_or_submit(package_publication_data.payload, &self.txn_options).await
+            dispatch_transaction(package_publication_data.payload, &self.txn_options).await
         }
     }
 }
@@ -2141,7 +2151,7 @@ impl CliCommand<TransactionSummary> for RunFunction {
     }
 
     async fn execute(self) -> CliTypedResult<TransactionSummary> {
-        profile_or_submit(
+        dispatch_transaction(
             TransactionPayload::EntryFunction(self.entry_function_args.try_into()?),
             &self.txn_options,
         )
@@ -2181,7 +2191,8 @@ impl CliCommand<TransactionSummary> for Simulate {
         if self.local {
             self.txn_options.simulate_locally(payload).await
         } else {
-            self.txn_options.simulate_remotely(payload).await
+            let mut rng = rand::rngs::StdRng::from_entropy();
+            self.txn_options.simulate_remotely(&mut rng, payload).await
         }
     }
 }
@@ -2230,7 +2241,7 @@ impl CliCommand<TransactionSummary> for RunScript {
             .compile_proposal_args
             .compile("RunScript", self.txn_options.prompt_options)?;
 
-        profile_or_submit(
+        dispatch_transaction(
             self.script_function_args.create_script_payload(bytecode)?,
             &self.txn_options,
         )
@@ -2244,6 +2255,21 @@ pub enum ReplayNetworkSelection {
     Testnet,
     Devnet,
     RestEndpoint(String),
+}
+
+impl ReplayNetworkSelection {
+    pub fn to_base_url(&self) -> CliTypedResult<AptosBaseUrl> {
+        match self {
+            ReplayNetworkSelection::Mainnet => Ok(AptosBaseUrl::Mainnet),
+            ReplayNetworkSelection::Testnet => Ok(AptosBaseUrl::Testnet),
+            ReplayNetworkSelection::Devnet => Ok(AptosBaseUrl::Devnet),
+            ReplayNetworkSelection::RestEndpoint(url) => {
+                Ok(AptosBaseUrl::Custom(Url::parse(url).map_err(|e| {
+                    CliError::UnableToParse("url", e.to_string())
+                })?))
+            },
+        }
+    }
 }
 
 /// Replay a comitted transaction using a local VM.
@@ -2298,14 +2324,13 @@ impl CliCommand<TransactionSummary> for Replay {
     }
 
     async fn execute(self) -> CliTypedResult<TransactionSummary> {
-        use ReplayNetworkSelection::*;
-
         if self.profile_gas && self.benchmark {
             return Err(CliError::UnexpectedError(
                 "Cannot perform benchmarking and gas profiling at the same time.".to_string(),
             ));
         }
 
+<<<<<<< HEAD
         let rest_endpoint = match &self.network {
             Mainnet => "https://mainnet.movementnetwork.xyz",
             Testnet => "https://testnet.movementnetwork.xyz",
@@ -2313,11 +2338,10 @@ impl CliCommand<TransactionSummary> for Replay {
             RestEndpoint(url) => url,
         };
 
+=======
+>>>>>>> e33e3c1b
         // Build the client
-        let client = Client::builder(AptosBaseUrl::Custom(
-            Url::parse(rest_endpoint)
-                .map_err(|_err| CliError::UnableToParse("url", rest_endpoint.to_string()))?,
-        ));
+        let client = Client::builder(self.network.to_base_url()?);
 
         // add the node API key if it is provided
         let client = if let Some(api_key) = self.node_api_key {
@@ -2329,7 +2353,7 @@ impl CliCommand<TransactionSummary> for Replay {
         let debugger = AptosDebugger::rest_client(client)?;
 
         // Fetch the transaction to replay.
-        let (txn, txn_info) = debugger
+        let (txn, txn_info, aux_info) = debugger
             .get_committed_transaction_at_version(self.txn_id)
             .await?;
 
@@ -2353,6 +2377,7 @@ impl CliCommand<TransactionSummary> for Replay {
                 self.txn_id,
                 txn.clone(),
                 hash,
+                aux_info,
             )?
         } else if self.benchmark {
             println!("Benchmarking transaction...");
@@ -2361,6 +2386,7 @@ impl CliCommand<TransactionSummary> for Replay {
                 self.txn_id,
                 txn.clone(),
                 hash,
+                aux_info,
             )?
         } else {
             println!("Replaying transaction...");
@@ -2369,6 +2395,7 @@ impl CliCommand<TransactionSummary> for Replay {
                 self.txn_id,
                 txn.clone(),
                 hash,
+                aux_info,
             )?
         };
 
@@ -2403,7 +2430,11 @@ impl CliCommand<TransactionSummary> for Replay {
             gas_unit_price: Some(txn.gas_unit_price()),
             pending: None,
             sender: Some(txn.sender()),
-            sequence_number: Some(txn.sequence_number()),
+            sequence_number: match txn.replay_protector() {
+                ReplayProtector::SequenceNumber(sequence_number) => Some(sequence_number),
+                _ => None,
+            },
+            replay_protector: Some(txn.replay_protector()),
             success,
             timestamp_us: None,
             version: Some(self.txn_id),

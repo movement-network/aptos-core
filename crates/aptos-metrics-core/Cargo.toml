@@ -14,7 +14,13 @@ rust-version = { workspace = true }
 
 [dependencies]
 anyhow = { workspace = true }
+<<<<<<< HEAD
 prometheus = { workspace = true, features = ["protobuf"] }
+=======
+once_cell = { workspace = true }
+paste = { workspace = true }
+prometheus = { workspace = true }
+>>>>>>> e33e3c1b
 
 [dev-dependencies]
 claims = { workspace = true }

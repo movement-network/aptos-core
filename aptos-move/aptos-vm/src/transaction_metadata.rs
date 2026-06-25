@@ -41,8 +41,11 @@ pub struct TransactionMetadata {
 }
 
 impl TransactionMetadata {
-<<<<<<< HEAD
-    pub fn new(txn: &SignedTransaction, timed_features: &TimedFeatures) -> Self {
+    pub fn new(
+        txn: &SignedTransaction,
+        timed_features: &TimedFeatures,
+        auxiliary_info: &AuxiliaryInfo,
+    ) -> Self {
         let txn_size = if timed_features
             .is_enabled(TimedFeatureFlag::UseFullTransactionSizeForTransactionMetadata)
         {
@@ -50,9 +53,6 @@ impl TransactionMetadata {
         } else {
             txn.raw_txn_bytes_len()
         };
-=======
-    pub fn new(txn: &SignedTransaction, auxiliary_info: &AuxiliaryInfo) -> Self {
->>>>>>> e33e3c1b
         Self {
             sender: txn.sender(),
             authentication_proof: txn.authenticator().sender().authentication_proof(),

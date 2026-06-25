@@ -660,11 +660,9 @@ impl AptosVM {
             ..
         } = status
         {
-<<<<<<< HEAD
             let use_exact_match = self
                 .features()
                 .is_enabled(FeatureFlag::EXTRACT_ABORT_INFO_EXACT_MATCH);
-=======
             // Note: in general, this module should have been charged for (because the location is
             // set). This cannot be enforced though, so the best option is to perform unmetered
             // access in any case to get a consistent error message. In case it was not metered,
@@ -682,13 +680,11 @@ impl AptosVM {
                 );
             }
 
->>>>>>> e33e3c1b
             let info = module_storage
                 .unmetered_get_deserialized_module(module_id.address(), module_id.name())
                 .ok()
                 .flatten()
-<<<<<<< HEAD
-                .and_then(|metadata| get_metadata(&metadata))
+                .and_then(|module| get_metadata(&module.metadata))
                 .and_then(|m| {
                     if use_exact_match {
                         m.extract_abort_info(code)
@@ -696,11 +692,7 @@ impl AptosVM {
                         m.extract_abort_info_legacy(code)
                     }
                 });
-=======
-                .and_then(|module| get_metadata(&module.metadata))
-                .and_then(|m| m.extract_abort_info(code));
 
->>>>>>> e33e3c1b
             ExecutionStatus::MoveAbort {
                 location: AbortLocation::Module(module_id),
                 code,
@@ -2158,11 +2150,7 @@ impl AptosVM {
         G: AptosGasMeter,
         F: FnOnce(u64, VMGasParameters, StorageGasParameters, bool, Gas, &'a C) -> G,
     {
-<<<<<<< HEAD
-        let txn_metadata = TransactionMetadata::new(txn, self.timed_features());
-=======
-        let txn_metadata = TransactionMetadata::new(txn, auxiliary_info);
->>>>>>> e33e3c1b
+        let txn_metadata = TransactionMetadata::new(txn, self.timed_features(), auxiliary_info);
 
         let is_approved_gov_script = is_approved_gov_script(resolver, txn, &txn_metadata);
 
@@ -3229,12 +3217,8 @@ impl VMValidator for AptosVM {
                 return VMValidatorResult::error(StatusCode::INVALID_SIGNATURE);
             },
         };
-<<<<<<< HEAD
-        let txn_data = TransactionMetadata::new(&txn, self.timed_features());
-=======
         let auxiliary_info = AuxiliaryInfo::new_empty();
-        let txn_data = TransactionMetadata::new(&txn, &auxiliary_info);
->>>>>>> e33e3c1b
+        let txn_data = TransactionMetadata::new(&txn, self.timed_features(), &auxiliary_info);
 
         let resolver = self.as_move_resolver(&state_view);
         let is_approved_gov_script = is_approved_gov_script(&resolver, &txn, &txn_data);

@@ -192,21 +192,6 @@ impl TransactionDataCache {
     ///
     /// Gives all proper guarantees on lifetime of global data as well.
     pub fn into_effects(self, module_storage: &dyn ModuleStorage) -> PartialVMResult<ChangeSet> {
-<<<<<<< HEAD
-        let resource_converter =
-            |value: Value, layout: MoveTypeLayout, _: bool| -> PartialVMResult<Bytes> {
-                let function_value_extension = FunctionValueExtensionAdapter { module_storage };
-                let max_value_nest_depth = function_value_extension.max_value_nest_depth();
-                ValueSerDeContext::new(max_value_nest_depth)
-                    .with_func_args_deserialization(&function_value_extension)
-                    .serialize(&value, &layout)?
-                    .map(Into::into)
-                    .ok_or_else(|| {
-                        PartialVMError::new(StatusCode::INTERNAL_TYPE_ERROR)
-                            .with_message(format!("Error when serializing resource {}.", value))
-                    })
-            };
-=======
         let resource_converter = |value: Value,
                                   layout: TriompheArc<MoveTypeLayout>,
                                   _: bool|
@@ -222,7 +207,6 @@ impl TransactionDataCache {
                         .with_message(format!("Error when serializing resource {}.", value))
                 })
         };
->>>>>>> e33e3c1b
         self.into_custom_effects(&resource_converter)
     }
 

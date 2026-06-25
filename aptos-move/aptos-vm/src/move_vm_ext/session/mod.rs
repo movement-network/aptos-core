@@ -52,12 +52,8 @@ use move_vm_types::{
     value_serde::{FunctionValueExtension, ValueSerDeContext},
     values::Value,
 };
-<<<<<<< HEAD
-use std::{borrow::Borrow, collections::BTreeMap, sync::Arc};
-=======
 use std::{borrow::Borrow, collections::BTreeMap};
 use triomphe::Arc as TriompheArc;
->>>>>>> e33e3c1b
 
 pub mod respawned_session;
 pub mod session_id;

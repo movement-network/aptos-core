@@ -10,11 +10,7 @@ use aptos_gas_schedule::{
     NativeGasParameters,
 };
 use aptos_types::on_chain_config::{Features, TimedFeatureFlag, TimedFeatures};
-<<<<<<< HEAD
-use move_binary_format::errors::{PartialVMResult, VMResult};
-=======
 use move_binary_format::errors::{Location, PartialVMResult, VMResult};
->>>>>>> e33e3c1b
 use move_core_types::{
     gas_algebra::InternalGas, identifier::Identifier, language_storage::ModuleId,
 };

@@ -237,11 +237,8 @@ impl VMStatus {
                     | StatusCode::IO_LIMIT_REACHED
                     | StatusCode::STORAGE_LIMIT_REACHED
                     | StatusCode::TOO_MANY_DELAYED_FIELDS
-<<<<<<< HEAD
-                    | StatusCode::VM_MAX_VALUE_DEPTH_REACHED,
-=======
+                    | StatusCode::VM_MAX_VALUE_DEPTH_REACHED
                     | StatusCode::UNABLE_TO_CAPTURE_DELAYED_FIELDS,
->>>>>>> e33e3c1b
                 ..
             }
             | VMStatus::Error {
@@ -250,11 +247,8 @@ impl VMStatus {
                     | StatusCode::IO_LIMIT_REACHED
                     | StatusCode::STORAGE_LIMIT_REACHED
                     | StatusCode::TOO_MANY_DELAYED_FIELDS
-<<<<<<< HEAD
-                    | StatusCode::VM_MAX_VALUE_DEPTH_REACHED,
-=======
+                    | StatusCode::VM_MAX_VALUE_DEPTH_REACHED
                     | StatusCode::UNABLE_TO_CAPTURE_DELAYED_FIELDS,
->>>>>>> e33e3c1b
                 ..
             } => Ok(KeptVMStatus::MiscellaneousError),
 

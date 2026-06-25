@@ -19,7 +19,13 @@ pub enum TimedFeatureFlag {
 
     // Fixes the bug of table natives not tracking the memory usage of the global values they create.
     FixMemoryUsageTracking,
-<<<<<<< HEAD
+
+    // Movement-specific: consumed by aptos-vm-environment prod_configs; upstream never had this variant.
+    DisableInvariantViolationCheckInSwapLoc,
+
+    // Disable checking for captured option types.
+    // Only when this feature is turned on, feature flag ENABLE_CAPTURE_OPTION can control whether the option type can be captured.
+    DisabledCaptureOption,
 
     /// Fixes the bug that table natives double count the memory usage of the global values.
     FixTableNativesMemoryDoubleCounting,
@@ -29,14 +35,6 @@ pub enum TimedFeatureFlag {
 
     /// Uses full transaction size when computing transaction metadata.
     UseFullTransactionSizeForTransactionMetadata,
-=======
-    // Disable checking for captured option types.
-    // Only when this feature is turned on, feature flag ENABLE_CAPTURE_OPTION can control whether the option type can be captured.
-    DisabledCaptureOption,
-
-    /// Fixes the bug that table natives double count the memory usage of the global values.
-    FixTableNativesMemoryDoubleCounting,
->>>>>>> e33e3c1b
 }
 
 /// Representation of features that are gated by the block timestamps.
@@ -89,7 +87,6 @@ impl TimedFeatureFlag {
         use TimedFeatureFlag::*;
 
         match (self, chain_id) {
-<<<<<<< HEAD
             (UseFullTransactionSizeForTransactionMetadata, MOVEMAINNET | MOVETESTNET) => Los_Angeles
                 .with_ymd_and_hms(2026, 5, 4, 9, 45, 0)
                 .unwrap()
@@ -102,8 +99,6 @@ impl TimedFeatureFlag {
             (DisableInvariantViolationCheckInSwapLoc, TESTNET) => BEGINNING_OF_TIME,
             (DisableInvariantViolationCheckInSwapLoc, MAINNET) => BEGINNING_OF_TIME,
 
-=======
->>>>>>> e33e3c1b
             // Note: These have been enabled since the start due to a bug.
             (_LimitTypeTagSize, TESTNET) => BEGINNING_OF_TIME,
             (_LimitTypeTagSize, MAINNET) => BEGINNING_OF_TIME,

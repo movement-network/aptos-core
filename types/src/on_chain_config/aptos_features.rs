@@ -143,14 +143,6 @@ pub enum FeatureFlag {
     ENABLE_LAZY_LOADING = 95,
     CALCULATE_TRANSACTION_FEE_FOR_DISTRIBUTION = 96,
     DISTRIBUTE_TRANSACTION_FEE = 97,
-<<<<<<< HEAD
-    GOVERNED_GAS_POOL = 223,
-    STAKE_REWARD_USING_TREASURY = 224,
-    /// Use the fixed `extract_abort_info` lookup that does not spuriously match
-    /// compiler-generated abort codes (e.g. `UNSPECIFIED_ABORT_CODE`) against
-    /// user-defined error constants whose lower bits happen to coincide.
-    EXTRACT_ABORT_INFO_EXACT_MATCH = 225,
-=======
     MONOTONICALLY_INCREASING_COUNTER = 98,
     ENABLE_CAPTURE_OPTION = 99,
     /// Whether to allow trusted code optimizations.
@@ -162,7 +154,12 @@ pub enum FeatureFlag {
     /// If enabled, new single session is used by the VM to avoid squashing write-sets and cache
     /// reads between sessions (e.g., between transaction prologue, user session and epilogue).
     SESSION_CONTINUATION = 104,
->>>>>>> e33e3c1b
+    GOVERNED_GAS_POOL = 223,
+    STAKE_REWARD_USING_TREASURY = 224,
+    /// Use the fixed `extract_abort_info` lookup that does not spuriously match
+    /// compiler-generated abort codes (e.g. `UNSPECIFIED_ABORT_CODE`) against
+    /// user-defined error constants whose lower bits happen to coincide.
+    EXTRACT_ABORT_INFO_EXACT_MATCH = 225,
 }
 
 impl FeatureFlag {
@@ -259,14 +256,10 @@ impl FeatureFlag {
             FeatureFlag::JWK_CONSENSUS_PER_KEY_MODE,
             FeatureFlag::TRANSACTION_PAYLOAD_V2,
             FeatureFlag::ORDERLESS_TRANSACTIONS,
-<<<<<<< HEAD
             // TODO(grao): Enable priority fee feature flags.
             // FeatureFlag::CALCULATE_TRANSACTION_FEE_FOR_DISTRIBUTION,
             // FeatureFlag::DISTRIBUTE_TRANSACTION_FEE,
             FeatureFlag::GOVERNED_GAS_POOL,
-=======
-            FeatureFlag::CALCULATE_TRANSACTION_FEE_FOR_DISTRIBUTION,
-            FeatureFlag::DISTRIBUTE_TRANSACTION_FEE,
             FeatureFlag::ENABLE_LAZY_LOADING,
             FeatureFlag::MONOTONICALLY_INCREASING_COUNTER,
             FeatureFlag::ENABLE_CAPTURE_OPTION,
@@ -274,7 +267,6 @@ impl FeatureFlag {
             FeatureFlag::ENABLE_ENUM_OPTION,
             FeatureFlag::VM_BINARY_FORMAT_V9,
             FeatureFlag::ENABLE_FRAMEWORK_FOR_OPTION,
->>>>>>> e33e3c1b
         ]
     }
 }

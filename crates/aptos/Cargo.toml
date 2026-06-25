@@ -1,13 +1,7 @@
 [package]
-<<<<<<< HEAD
 name = "movement"
 description = "Movement tool for management of nodes and interacting with Movement"
 version = "7.4.0"
-=======
-name = "aptos"
-description = "Aptos tool for management of nodes and interacting with the blockchain"
-version = "7.11.1"
->>>>>>> e33e3c1b
 
 # Workspace inherited keys
 authors = { workspace = true }

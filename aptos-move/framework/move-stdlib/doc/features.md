@@ -166,13 +166,10 @@ return true.
 -  [Function `is_calculate_transaction_fee_for_distribution_enabled`](#0x1_features_is_calculate_transaction_fee_for_distribution_enabled)
 -  [Function `get_distribute_transaction_fee_feature`](#0x1_features_get_distribute_transaction_fee_feature)
 -  [Function `is_distribute_transaction_fee_enabled`](#0x1_features_is_distribute_transaction_fee_enabled)
-<<<<<<< HEAD
 -  [Function `get_stake_reward_using_treasury_feature`](#0x1_features_get_stake_reward_using_treasury_feature)
 -  [Function `stake_reward_using_treasury_enabled`](#0x1_features_stake_reward_using_treasury_enabled)
-=======
 -  [Function `get_monotonically_increasing_counter_feature`](#0x1_features_get_monotonically_increasing_counter_feature)
 -  [Function `is_monotonically_increasing_counter_enabled`](#0x1_features_is_monotonically_increasing_counter_enabled)
->>>>>>> e33e3c1b
 -  [Function `change_feature_flags`](#0x1_features_change_feature_flags)
 -  [Function `change_feature_flags_internal`](#0x1_features_change_feature_flags_internal)
 -  [Function `change_feature_flags_for_next_epoch`](#0x1_features_change_feature_flags_for_next_epoch)
@@ -863,6 +860,7 @@ Lifetime: transient
 
 Whether the Atomic bridge is available
 Lifetime: transient
+Deprecated in favor of <code><a href="features.md#0x1_features_ALLOW_SERIALIZED_SCRIPT_ARGS">ALLOW_SERIALIZED_SCRIPT_ARGS</a></code> as feature flag 72
 
 
 <pre><code><b>const</b> <a href="features.md#0x1_features_NATIVE_BRIDGE">NATIVE_BRIDGE</a>: u64 = 72;
@@ -4317,7 +4315,6 @@ Whether the Governed Gas Pool is enabled.
 
 </details>
 
-<<<<<<< HEAD
 <a id="0x1_features_get_stake_reward_using_treasury_feature"></a>
 
 ## Function `get_stake_reward_using_treasury_feature`
@@ -4325,15 +4322,6 @@ Whether the Governed Gas Pool is enabled.
 
 
 <pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_get_stake_reward_using_treasury_feature">get_stake_reward_using_treasury_feature</a>(): u64
-=======
-<a id="0x1_features_get_monotonically_increasing_counter_feature"></a>
-
-## Function `get_monotonically_increasing_counter_feature`
-
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_get_monotonically_increasing_counter_feature">get_monotonically_increasing_counter_feature</a>(): u64
->>>>>>> e33e3c1b
 </code></pre>
 
 
@@ -4342,18 +4330,13 @@ Whether the Governed Gas Pool is enabled.
 <summary>Implementation</summary>
 
 
-<<<<<<< HEAD
 <pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_get_stake_reward_using_treasury_feature">get_stake_reward_using_treasury_feature</a>(): u64 { <a href="features.md#0x1_features_STAKE_REWARD_USING_TREASURY">STAKE_REWARD_USING_TREASURY</a> }
-=======
-<pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_get_monotonically_increasing_counter_feature">get_monotonically_increasing_counter_feature</a>(): u64 { <a href="features.md#0x1_features_MONOTONICALLY_INCREASING_COUNTER">MONOTONICALLY_INCREASING_COUNTER</a> }
->>>>>>> e33e3c1b
 </code></pre>
 
 
 
 </details>
 
-<<<<<<< HEAD
 <a id="0x1_features_stake_reward_using_treasury_enabled"></a>
 
 ## Function `stake_reward_using_treasury_enabled`
@@ -4361,15 +4344,6 @@ Whether the Governed Gas Pool is enabled.
 
 
 <pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_stake_reward_using_treasury_enabled">stake_reward_using_treasury_enabled</a>(): bool
-=======
-<a id="0x1_features_is_monotonically_increasing_counter_enabled"></a>
-
-## Function `is_monotonically_increasing_counter_enabled`
-
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_is_monotonically_increasing_counter_enabled">is_monotonically_increasing_counter_enabled</a>(): bool
->>>>>>> e33e3c1b
 </code></pre>
 
 
@@ -4378,13 +4352,54 @@ Whether the Governed Gas Pool is enabled.
 <summary>Implementation</summary>
 
 
-<<<<<<< HEAD
 <pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_stake_reward_using_treasury_enabled">stake_reward_using_treasury_enabled</a>(): bool <b>acquires</b> <a href="features.md#0x1_features_Features">Features</a> {
     <a href="features.md#0x1_features_is_enabled">is_enabled</a>(<a href="features.md#0x1_features_STAKE_REWARD_USING_TREASURY">STAKE_REWARD_USING_TREASURY</a>)
-=======
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_features_get_monotonically_increasing_counter_feature"></a>
+
+## Function `get_monotonically_increasing_counter_feature`
+
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_get_monotonically_increasing_counter_feature">get_monotonically_increasing_counter_feature</a>(): u64
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_get_monotonically_increasing_counter_feature">get_monotonically_increasing_counter_feature</a>(): u64 { <a href="features.md#0x1_features_MONOTONICALLY_INCREASING_COUNTER">MONOTONICALLY_INCREASING_COUNTER</a> }
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_features_is_monotonically_increasing_counter_enabled"></a>
+
+## Function `is_monotonically_increasing_counter_enabled`
+
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_is_monotonically_increasing_counter_enabled">is_monotonically_increasing_counter_enabled</a>(): bool
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
 <pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_is_monotonically_increasing_counter_enabled">is_monotonically_increasing_counter_enabled</a>(): bool <b>acquires</b> <a href="features.md#0x1_features_Features">Features</a> {
     <a href="features.md#0x1_features_is_enabled">is_enabled</a>(<a href="features.md#0x1_features_MONOTONICALLY_INCREASING_COUNTER">MONOTONICALLY_INCREASING_COUNTER</a>)
->>>>>>> e33e3c1b
 }
 </code></pre>
 

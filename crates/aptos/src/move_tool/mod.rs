@@ -2330,7 +2330,6 @@ impl CliCommand<TransactionSummary> for Replay {
             ));
         }
 
-<<<<<<< HEAD
         let rest_endpoint = match &self.network {
             Mainnet => "https://mainnet.movementnetwork.xyz",
             Testnet => "https://testnet.movementnetwork.xyz",
@@ -2338,8 +2337,6 @@ impl CliCommand<TransactionSummary> for Replay {
             RestEndpoint(url) => url,
         };
 
-=======
->>>>>>> e33e3c1b
         // Build the client
         let client = Client::builder(self.network.to_base_url()?);
 

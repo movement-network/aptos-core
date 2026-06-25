@@ -51,15 +51,6 @@ use triomphe::Arc as TriompheArc;
 /// used there now).
 pub const DEFAULT_MAX_VM_VALUE_NESTED_DEPTH: u64 = 128;
 
-/// Values can be recursive, and so it is important that we do not use recursive algorithms over
-/// deeply nested values as it can cause stack overflow. Since it is not always possible to avoid
-/// recursion, we opt for a reasonable limit on VM value depth. It is defined in Move VM config,
-/// but since it is difficult to propagate config context everywhere, we use this constant.
-///
-/// IMPORTANT: When changing this constant, make sure it is in-sync with one in VM config (it is
-/// used there now).
-pub const DEFAULT_MAX_VM_VALUE_NESTED_DEPTH: u64 = 128;
-
 /***************************************************************************************
  *
  * Types
@@ -550,18 +541,12 @@ impl Value {
  *   surprising behaviors from happening.
  *
  **************************************************************************************/
-<<<<<<< HEAD
-impl ValueImpl {
-    fn copy_value(&self, depth: u64, max_depth: Option<u64>) -> PartialVMResult<Self> {
-        use ValueImpl::*;
-=======
 impl Value {
     // Note(inline): recursive function, but `#[cfg_attr(feature = "force-inline", inline(always))]` seems to improve perf slightly
     //               and doesn't add much compile time.
     #[inline(always)]
     fn copy_value(&self, depth: u64, max_depth: Option<u64>) -> PartialVMResult<Self> {
         use Value::*;
->>>>>>> e33e3c1b
 
         check_depth(depth, max_depth)?;
         Ok(match self {
@@ -609,16 +594,6 @@ impl Value {
 
 impl Container {
     fn copy_value(&self, depth: u64, max_depth: Option<u64>) -> PartialVMResult<Self> {
-<<<<<<< HEAD
-        let copy_rc_ref_vec_val = |r: &Rc<RefCell<Vec<ValueImpl>>>| {
-            Ok(Rc::new(RefCell::new(
-                r.borrow()
-                    .iter()
-                    .map(|v| v.copy_value(depth + 1, max_depth))
-                    .collect::<PartialVMResult<_>>()?,
-            )))
-        };
-=======
         fn copy_rc_ref_vec_val(
             r: &Rc<RefCell<Vec<Value>>>,
             depth: u64,
@@ -631,7 +606,6 @@ impl Container {
             }
             Ok(Rc::new(RefCell::new(copied_vals)))
         }
->>>>>>> e33e3c1b
 
         Ok(match self {
             Self::Vec(r) => Self::Vec(copy_rc_ref_vec_val(r, depth, max_depth)?),
@@ -688,10 +662,7 @@ impl Container {
 }
 
 impl IndexedRef {
-<<<<<<< HEAD
-=======
     #[cfg_attr(feature = "force-inline", inline(always))]
->>>>>>> e33e3c1b
     fn copy_by_ref(&self) -> Self {
         Self {
             idx: self.idx,
@@ -701,10 +672,7 @@ impl IndexedRef {
 }
 
 impl ContainerRef {
-<<<<<<< HEAD
-=======
     #[cfg_attr(feature = "force-inline", inline(always))]
->>>>>>> e33e3c1b
     fn copy_by_ref(&self) -> Self {
         match self {
             Self::Local(container) => Self::Local(container.copy_by_ref()),
@@ -719,11 +687,7 @@ impl ContainerRef {
 #[cfg(test)]
 impl Value {
     pub fn copy_value_with_depth(&self, max_depth: u64) -> PartialVMResult<Self> {
-<<<<<<< HEAD
-        Ok(Self(self.0.copy_value(1, Some(max_depth))?))
-=======
         self.copy_value(1, Some(max_depth))
->>>>>>> e33e3c1b
     }
 }
 
@@ -744,12 +708,6 @@ impl Value {
  *
  **************************************************************************************/
 
-<<<<<<< HEAD
-impl ValueImpl {
-    fn equals(&self, other: &Self, depth: u64, max_depth: Option<u64>) -> PartialVMResult<bool> {
-        use ValueImpl::*;
-
-=======
 impl Value {
     #[cfg_attr(feature = "force-inline", inline(always))]
     pub fn equals(&self, other: &Self) -> PartialVMResult<bool> {
@@ -770,7 +728,6 @@ impl Value {
     ) -> PartialVMResult<bool> {
         use Value::*;
 
->>>>>>> e33e3c1b
         check_depth(depth, max_depth)?;
         let res = match (self, other) {
             (U8(l), U8(r)) => l == r,
@@ -810,11 +767,7 @@ impl Value {
                     && captured1.len() == captured2.len()
                 {
                     for (v1, v2) in captured1.iter().zip(captured2.iter()) {
-<<<<<<< HEAD
-                        if !v1.equals(v2, depth + 1, max_depth)? {
-=======
                         if !v1.equals_with_depth(v2, depth + 1, max_depth)? {
->>>>>>> e33e3c1b
                             return Ok(false);
                         }
                     }
@@ -856,21 +809,13 @@ impl Value {
         Ok(res)
     }
 
-<<<<<<< HEAD
-    fn compare(
-=======
     pub fn compare_with_depth(
->>>>>>> e33e3c1b
         &self,
         other: &Self,
         depth: u64,
         max_depth: Option<u64>,
     ) -> PartialVMResult<Ordering> {
-<<<<<<< HEAD
-        use ValueImpl::*;
-=======
         use Value::*;
->>>>>>> e33e3c1b
 
         check_depth(depth, max_depth)?;
         let res = match (self, other) {
@@ -908,11 +853,7 @@ impl Value {
                     .then_with(|| fun1.closure_mask().cmp(&fun2.closure_mask()));
                 if o == Ordering::Equal {
                     for (v1, v2) in captured1.iter().zip(captured2.iter()) {
-<<<<<<< HEAD
-                        let o = v1.compare(v2, depth + 1, max_depth)?;
-=======
                         let o = v1.compare_with_depth(v2, depth + 1, max_depth)?;
->>>>>>> e33e3c1b
                         if o != Ordering::Equal {
                             return Ok(o);
                         }
@@ -989,11 +930,7 @@ impl Container {
                     return Ok(false);
                 }
                 for (v1, v2) in l.iter().zip(r.iter()) {
-<<<<<<< HEAD
-                    if !v1.equals(v2, depth + 1, max_depth)? {
-=======
                     if !v1.equals_with_depth(v2, depth + 1, max_depth)? {
->>>>>>> e33e3c1b
                         return Ok(false);
                     }
                 }
@@ -1057,11 +994,7 @@ impl Container {
                 let r = &r.borrow();
 
                 for (v1, v2) in l.iter().zip(r.iter()) {
-<<<<<<< HEAD
-                    let value_cmp = v1.compare(v2, depth + 1, max_depth)?;
-=======
                     let value_cmp = v1.compare_with_depth(v2, depth + 1, max_depth)?;
->>>>>>> e33e3c1b
                     if value_cmp.is_ne() {
                         return Ok(value_cmp);
                     }
@@ -1115,10 +1048,7 @@ impl Container {
 }
 
 impl ContainerRef {
-<<<<<<< HEAD
-=======
     #[cfg_attr(feature = "force-inline", inline(always))]
->>>>>>> e33e3c1b
     fn equals(&self, other: &Self, depth: u64, max_depth: Option<u64>) -> PartialVMResult<bool> {
         // Note: the depth passed in accounts for the container.
         check_depth(depth, max_depth)?;
@@ -1139,10 +1069,7 @@ impl ContainerRef {
 }
 
 impl IndexedRef {
-<<<<<<< HEAD
-=======
     // note(inline): do not inline, too big
->>>>>>> e33e3c1b
     fn equals(&self, other: &Self, depth: u64, max_depth: Option<u64>) -> PartialVMResult<bool> {
         use Container::*;
 
@@ -1160,17 +1087,11 @@ impl IndexedRef {
             | (Struct(r1), Locals(r2))
             | (Locals(r1), Vec(r2))
             | (Locals(r1), Struct(r2))
-<<<<<<< HEAD
-            | (Locals(r1), Locals(r2)) => {
-                r1.borrow()[self.idx].equals(&r2.borrow()[other.idx], depth + 1, max_depth)?
-            },
-=======
             | (Locals(r1), Locals(r2)) => r1.borrow()[self.idx].equals_with_depth(
                 &r2.borrow()[other.idx],
                 depth + 1,
                 max_depth,
             )?,
->>>>>>> e33e3c1b
 
             (VecU8(r1), VecU8(r2)) => r1.borrow()[self.idx] == r2.borrow()[other.idx],
             (VecU16(r1), VecU16(r2)) => r1.borrow()[self.idx] == r2.borrow()[other.idx],
@@ -1330,17 +1251,11 @@ impl IndexedRef {
             | (Struct(r1), Locals(r2))
             | (Locals(r1), Vec(r2))
             | (Locals(r1), Struct(r2))
-<<<<<<< HEAD
-            | (Locals(r1), Locals(r2)) => {
-                r1.borrow()[self.idx].compare(&r2.borrow()[other.idx], depth + 1, max_depth)?
-            },
-=======
             | (Locals(r1), Locals(r2)) => r1.borrow()[self.idx].compare_with_depth(
                 &r2.borrow()[other.idx],
                 depth + 1,
                 max_depth,
             )?,
->>>>>>> e33e3c1b
 
             (VecU8(r1), VecU8(r2)) => r1.borrow()[self.idx].cmp(&r2.borrow()[other.idx]),
             (VecU16(r1), VecU16(r2)) => r1.borrow()[self.idx].cmp(&r2.borrow()[other.idx]),
@@ -1480,33 +1395,6 @@ impl IndexedRef {
     }
 }
 
-<<<<<<< HEAD
-impl Value {
-    pub fn equals(&self, other: &Self) -> PartialVMResult<bool> {
-        self.0
-            .equals(&other.0, 1, Some(DEFAULT_MAX_VM_VALUE_NESTED_DEPTH))
-    }
-
-    pub fn compare(&self, other: &Self) -> PartialVMResult<Ordering> {
-        self.0
-            .compare(&other.0, 1, Some(DEFAULT_MAX_VM_VALUE_NESTED_DEPTH))
-    }
-
-    // Test-only API to test depth checks.
-    #[cfg(test)]
-    pub fn equals_with_depth(&self, other: &Self, max_depth: u64) -> PartialVMResult<bool> {
-        self.0.equals(&other.0, 1, Some(max_depth))
-    }
-
-    // Test-only API to test depth checks.
-    #[cfg(test)]
-    pub fn compare_with_depth(&self, other: &Self, max_depth: u64) -> PartialVMResult<Ordering> {
-        self.0.compare(&other.0, 1, Some(max_depth))
-    }
-}
-
-=======
->>>>>>> e33e3c1b
 /***************************************************************************************
  *
  * Read Ref
@@ -1517,15 +1405,9 @@ impl Value {
 
 impl ContainerRef {
     fn read_ref(self, depth: u64, max_depth: Option<u64>) -> PartialVMResult<Value> {
-<<<<<<< HEAD
-        Ok(Value(ValueImpl::Container(
-            self.container().copy_value(depth, max_depth)?,
-        )))
-=======
         Ok(Value::Container(
             self.container().copy_value(depth, max_depth)?,
         ))
->>>>>>> e33e3c1b
     }
 }
 
@@ -1560,10 +1442,7 @@ impl IndexedRef {
 }
 
 impl ReferenceImpl {
-<<<<<<< HEAD
-=======
     #[cfg_attr(feature = "force-inline", inline(always))]
->>>>>>> e33e3c1b
     fn read_ref(self, depth: u64, max_depth: Option<u64>) -> PartialVMResult<Value> {
         match self {
             Self::ContainerRef(r) => r.read_ref(depth, max_depth),
@@ -2076,23 +1955,6 @@ impl ContainerRef {
                     Value::Container(container) => container_ref!(container),
                     Value::ClosureValue(_) | Value::DelayedFieldID { .. } => indexed_ref!(),
 
-<<<<<<< HEAD
-                    ValueImpl::U8(_)
-                    | ValueImpl::U16(_)
-                    | ValueImpl::U32(_)
-                    | ValueImpl::U64(_)
-                    | ValueImpl::U128(_)
-                    | ValueImpl::U256(_)
-                    | ValueImpl::Bool(_)
-                    | ValueImpl::Address(_)
-                    | ValueImpl::ClosureValue(_)
-                    | ValueImpl::DelayedFieldID { .. } => ValueImpl::IndexedRef(IndexedRef {
-                        idx,
-                        container_ref: self.copy_by_ref(),
-                    }),
-
-                    ValueImpl::ContainerRef(_) | ValueImpl::Invalid | ValueImpl::IndexedRef(_) => {
-=======
                     Value::U8(_)
                     | Value::U16(_)
                     | Value::U32(_)
@@ -2110,7 +1972,6 @@ impl ContainerRef {
                     | Value::ContainerRef(_)
                     | Value::Invalid
                     | Value::IndexedRef(_) => {
->>>>>>> e33e3c1b
                         return Err(PartialVMError::new(
                             StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR,
                         )
@@ -2168,14 +2029,7 @@ impl ContainerRef {
             | Container::VecI128(_)
             | Container::VecI256(_)
             | Container::VecAddress(_)
-<<<<<<< HEAD
-            | Container::VecBool(_) => ValueImpl::IndexedRef(IndexedRef {
-                idx,
-                container_ref: self.copy_by_ref(),
-            }),
-=======
             | Container::VecBool(_) => indexed_ref!(),
->>>>>>> e33e3c1b
         })
     }
 }
@@ -2361,30 +2215,6 @@ impl Locals {
 
     #[cfg_attr(feature = "inline-locals", inline(always))]
     pub fn copy_loc(&self, idx: usize) -> PartialVMResult<Value> {
-<<<<<<< HEAD
-        self.copy_loc_impl(idx, Some(DEFAULT_MAX_VM_VALUE_NESTED_DEPTH))
-    }
-
-    // Test-only API to test depth checks.
-    #[cfg(test)]
-    pub fn copy_loc_with_depth(&self, idx: usize, max_depth: u64) -> PartialVMResult<Value> {
-        self.copy_loc_impl(idx, Some(max_depth))
-    }
-
-    fn copy_loc_impl(&self, idx: usize, max_depth: Option<u64>) -> PartialVMResult<Value> {
-        let v = self.0.borrow();
-        match v.get(idx) {
-            Some(ValueImpl::Invalid) => Err(PartialVMError::new(
-                StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR,
-            )
-            .with_message(format!("cannot copy invalid value at index {}", idx))),
-            Some(v) => Ok(Value(v.copy_value(1, max_depth)?)),
-            None => Err(
-                PartialVMError::new(StatusCode::VERIFIER_INVARIANT_VIOLATION).with_message(
-                    format!("local index out of bounds: got {}, len: {}", idx, v.len()),
-                ),
-            ),
-=======
         let locals = self.0.borrow();
         match locals.get(idx) {
             Some(Value::Invalid) => Err(PartialVMError::new(
@@ -2393,7 +2223,6 @@ impl Locals {
             .with_message(format!("cannot copy invalid value at index {}", idx))),
             Some(v) => Ok(v.copy_value(1, Some(DEFAULT_MAX_VM_VALUE_NESTED_DEPTH))?),
             None => Err(Self::local_index_out_of_bounds(idx, locals.len())),
->>>>>>> e33e3c1b
         }
     }
 
@@ -5018,11 +4847,7 @@ impl serde::Serialize for SerializationReadyValue<'_, '_, '_, MoveTypeLayout, Va
                         let value = SerializationReadyValue {
                             ctx: &ctx,
                             layout: layout.as_ref(),
-<<<<<<< HEAD
-                            value: &value.0,
-=======
                             value: &value,
->>>>>>> e33e3c1b
                             depth: self.depth,
                         };
                         value.serialize(serializer)
@@ -5592,11 +5417,7 @@ impl Closure {
     fn visit_impl(&self, visitor: &mut impl ValueVisitor, depth: u64) -> PartialVMResult<()> {
         let Self(_, captured) = self;
         if visitor.visit_closure(depth, captured.len())? {
-<<<<<<< HEAD
-            for val in captured {
-=======
             for val in captured.iter() {
->>>>>>> e33e3c1b
                 val.visit_impl(visitor, depth + 1)?;
             }
         }
@@ -5636,15 +5457,9 @@ impl IndexedRef {
     }
 }
 
-<<<<<<< HEAD
-impl ValueImpl {
-    fn visit_impl(&self, visitor: &mut impl ValueVisitor, depth: u64) -> PartialVMResult<()> {
-        use ValueImpl::*;
-=======
 impl Value {
     fn visit_impl(&self, visitor: &mut impl ValueVisitor, depth: u64) -> PartialVMResult<()> {
         use Value::*;
->>>>>>> e33e3c1b
 
         match self {
             Invalid => unreachable!("Should not be able to visit an invalid value"),
@@ -5661,11 +5476,7 @@ impl Value {
             I128(val) => visitor.visit_i128(depth, *val),
             I256(val) => visitor.visit_i256(depth, val.as_ref()),
             Bool(val) => visitor.visit_bool(depth, *val),
-<<<<<<< HEAD
-            Address(val) => visitor.visit_address(depth, *val),
-=======
             Address(val) => visitor.visit_address(depth, val.as_ref()),
->>>>>>> e33e3c1b
             Container(c) => c.visit_impl(visitor, depth),
             ContainerRef(r) => r.visit_impl(visitor, depth),
             IndexedRef(r) => r.visit_impl(visitor, depth),
@@ -5675,25 +5486,12 @@ impl Value {
     }
 }
 
-<<<<<<< HEAD
-impl ValueView for ValueImpl {
-=======
 impl ValueView for Value {
->>>>>>> e33e3c1b
     fn visit(&self, visitor: &mut impl ValueVisitor) -> PartialVMResult<()> {
         self.visit_impl(visitor, 0)
     }
 }
 
-<<<<<<< HEAD
-impl ValueView for Value {
-    fn visit(&self, visitor: &mut impl ValueVisitor) -> PartialVMResult<()> {
-        self.0.visit(visitor)
-    }
-}
-
-=======
->>>>>>> e33e3c1b
 impl ValueView for Struct {
     fn visit(&self, visitor: &mut impl ValueVisitor) -> PartialVMResult<()> {
         if visitor.visit_struct(0, self.fields.len())? {
@@ -6225,10 +6023,7 @@ fn try_get_variant_field_layouts<'a>(
     None
 }
 
-<<<<<<< HEAD
-=======
 #[inline]
->>>>>>> e33e3c1b
 fn check_depth(depth: u64, max_depth: Option<u64>) -> PartialVMResult<()> {
     if max_depth.is_some_and(|max_depth| depth > max_depth) {
         return Err(PartialVMError::new(StatusCode::VM_MAX_VALUE_DEPTH_REACHED));

@@ -14,10 +14,6 @@ proptest! {
     #![proptest_config(ProptestConfig::with_cases(10000))]
     #[test]
     fn serializer_round_trip((layout, value) in layout_and_value_strategy()) {
-<<<<<<< HEAD
-        let blob = ValueSerDeContext::new(None).serialize(&value, &layout).unwrap().expect("must serialize");
-        let value_deserialized = ValueSerDeContext::new(None).deserialize(&blob, &layout).expect("must deserialize");
-=======
         // Set up mock function extension for function value serialization
         let mut ext_mock = MockFunctionValueExtension::new();
         ext_mock
@@ -35,7 +31,6 @@ proptest! {
         let ctx = ValueSerDeContext::new(None).with_func_args_deserialization(&ext_mock);
         let blob = ctx.serialize(&value, &layout).unwrap().expect("must serialize");
         let value_deserialized = ValueSerDeContext::new(None).with_func_args_deserialization(&ext_mock).deserialize(&blob, &layout).expect("must deserialize");
->>>>>>> e33e3c1b
         assert!(value.equals(&value_deserialized).unwrap());
 
         let move_value = value.as_move_value(&layout);

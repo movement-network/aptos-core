@@ -193,11 +193,7 @@ impl<'a> ValueSerDeContext<'a> {
         let value = SerializationReadyValue {
             ctx: &self,
             layout,
-<<<<<<< HEAD
-            value: &value.0,
-=======
             value,
->>>>>>> e33e3c1b
             depth: 1,
         };
 
@@ -227,11 +223,7 @@ impl<'a> ValueSerDeContext<'a> {
         let value = SerializationReadyValue {
             ctx: &self,
             layout,
-<<<<<<< HEAD
-            value: &value.0,
-=======
             value,
->>>>>>> e33e3c1b
             depth: 1,
         };
         bcs::serialized_size(&value).map_err(|e| {

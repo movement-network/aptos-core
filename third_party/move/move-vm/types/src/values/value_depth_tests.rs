@@ -61,20 +61,12 @@ impl AbstractFunction for MockFunction {
 
 #[test]
 fn test_equals() {
-<<<<<<< HEAD
-    test_binop_with_max_depth(|l, r, max_depth| l.equals_with_depth(r, max_depth));
-=======
     test_binop_with_max_depth(|l, r, max_depth| l.equals_with_depth_for_test(r, max_depth));
->>>>>>> e33e3c1b
 }
 
 #[test]
 fn test_compare() {
-<<<<<<< HEAD
-    test_binop_with_max_depth(|l, r, max_depth| l.compare_with_depth(r, max_depth));
-=======
     test_binop_with_max_depth(|l, r, max_depth| l.compare_with_depth_for_test(r, max_depth));
->>>>>>> e33e3c1b
 }
 
 #[test]
@@ -131,11 +123,7 @@ fn test_serialization() {
             L::Struct(Runtime(vec![L::U16])),
         ),
         (
-<<<<<<< HEAD
-            Value::vector_for_testing_only(vec![Value::vector_u8(vec![0, 1])]),
-=======
             Value::vector_unchecked(vec![Value::vector_u8(vec![0, 1])]).unwrap(),
->>>>>>> e33e3c1b
             L::Vector(Box::new(L::Vector(Box::new(L::U8)))),
         ),
         (
@@ -154,11 +142,7 @@ fn test_serialization() {
         // Serialize second variant, so the depth is 3.
         Value::struct_(Struct::pack(vec![
             Value::u16(1),
-<<<<<<< HEAD
-            Value::vector_for_testing_only(vec![Value::vector_u8(vec![1, 2])]),
-=======
             Value::vector_unchecked(vec![Value::vector_u8(vec![1, 2])]).unwrap(),
->>>>>>> e33e3c1b
         ])),
         L::Struct(RuntimeVariants(vec![vec![L::Bool], vec![L::Vector(
             Box::new(L::Vector(Box::new(L::U8))),
@@ -202,11 +186,7 @@ where
     let v = Value::vector_u8(vec![0, 1]);
     assert_ok!(f(&v, &v, 1));
 
-<<<<<<< HEAD
-    let v = Value::vector_for_testing_only(vec![Value::vector_u8(vec![0, 1])]);
-=======
     let v = Value::vector_unchecked(vec![Value::vector_u8(vec![0, 1])]).unwrap();
->>>>>>> e33e3c1b
     let err = assert_err!(f(&v, &v, 1));
     assert_eq!(err.major_status(), StatusCode::VM_MAX_VALUE_DEPTH_REACHED);
 
@@ -217,17 +197,11 @@ where
     let v = MockFunction::closure(ClosureMask::empty(), vec![], vec![]);
     assert_ok!(f(&v, &v, 1));
 
-<<<<<<< HEAD
-    let v = MockFunction::closure(ClosureMask::new_for_leading(1), vec![Value::u8(0)], vec![
-        MoveTypeLayout::U8,
-    ]);
-=======
     let v = MockFunction::closure(
         ClosureMask::new_for_leading(1).expect("Capturing one argument should not fail"),
         vec![Value::u8(0)],
         vec![MoveTypeLayout::U8],
     );
->>>>>>> e33e3c1b
     let err = assert_err!(f(&v, &v, 1));
     assert_eq!(err.major_status(), StatusCode::VM_MAX_VALUE_DEPTH_REACHED);
 
@@ -252,11 +226,7 @@ where
     let v = Value::vector_u8(vec![0, 1]);
     assert_ok!(f(&v, 1));
 
-<<<<<<< HEAD
-    let v = Value::vector_for_testing_only(vec![Value::vector_u8(vec![0, 1])]);
-=======
     let v = Value::vector_unchecked(vec![Value::vector_u8(vec![0, 1])]).unwrap();
->>>>>>> e33e3c1b
     let err = assert_err!(f(&v, 1));
     assert_eq!(err.major_status(), StatusCode::VM_MAX_VALUE_DEPTH_REACHED);
 
@@ -267,17 +237,11 @@ where
     let v = MockFunction::closure(ClosureMask::empty(), vec![], vec![]);
     assert_ok!(f(&v, 1));
 
-<<<<<<< HEAD
-    let v = MockFunction::closure(ClosureMask::new_for_leading(1), vec![Value::u8(0)], vec![
-        MoveTypeLayout::U8,
-    ]);
-=======
     let v = MockFunction::closure(
         ClosureMask::new_for_leading(1).expect("Capturing one argument should not fail"),
         vec![Value::u8(0)],
         vec![MoveTypeLayout::U8],
     );
->>>>>>> e33e3c1b
     let err = assert_err!(f(&v, 1));
     assert_eq!(err.major_status(), StatusCode::VM_MAX_VALUE_DEPTH_REACHED);
 }

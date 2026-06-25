@@ -336,64 +336,6 @@ mod tests {
     // --------------------------------------------------------------------------------------
     // VM Values
 
-<<<<<<< HEAD
-    // Since Abstract functions are `Tid`, we cannot auto-mock them, so need to mock manually.
-    #[derive(Clone, Tid)]
-    struct MockAbstractFunction {
-        data: SerializedFunctionData,
-    }
-
-    impl MockAbstractFunction {
-        fn new(
-            fun_name: &str,
-            ty_args: Vec<TypeTag>,
-            mask: ClosureMask,
-            captured_layouts: Vec<MoveTypeLayout>,
-        ) -> MockAbstractFunction {
-            Self {
-                data: SerializedFunctionData {
-                    format_version: FUNCTION_DATA_SERIALIZATION_FORMAT_V1,
-                    module_id: ModuleId::new(AccountAddress::TWO, Identifier::new("m").unwrap()),
-                    fun_id: Identifier::new(fun_name).unwrap(),
-                    ty_args,
-                    mask,
-                    captured_layouts,
-                },
-            }
-        }
-
-        fn new_from_data(data: SerializedFunctionData) -> Self {
-            Self { data }
-        }
-    }
-
-    impl AbstractFunction for MockAbstractFunction {
-        fn closure_mask(&self) -> ClosureMask {
-            self.data.mask
-        }
-
-        fn cmp_dyn(&self, other: &dyn AbstractFunction) -> PartialVMResult<Ordering> {
-            // We only need equality for tests
-            let other_mock = other.downcast_ref::<MockAbstractFunction>().unwrap();
-            Ok(if self.data == other_mock.data {
-                Ordering::Equal
-            } else {
-                Ordering::Less
-            })
-        }
-
-        fn clone_dyn(&self) -> PartialVMResult<Box<dyn AbstractFunction>> {
-            unimplemented!()
-        }
-
-        fn to_canonical_string(&self) -> String {
-            // Needed for assertion failure printing
-            "<some function>".to_string()
-        }
-    }
-
-=======
->>>>>>> e33e3c1b
     fn round_trip_vm_closure_value(
         fun: MockAbstractFunction,
         captured: Vec<Value>,

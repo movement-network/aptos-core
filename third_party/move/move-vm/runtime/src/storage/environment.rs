@@ -30,16 +30,12 @@ use move_vm_metrics::{Timer, VERIFIED_MODULE_CACHE_SIZE, VM_TIMER};
 use move_vm_types::loaded_data::{
     runtime_types::StructIdentifier, struct_name_indexing::StructNameIndex,
 };
-<<<<<<< HEAD
-use move_vm_types::loaded_data::{runtime_types::Type, struct_name_indexing::StructNameIndexMap};
-use sha3::{Digest, Sha3_256};
-=======
 use move_vm_types::{
     loaded_data::{runtime_types::Type, struct_name_indexing::StructNameIndexMap},
     module_id_interner::InternedModuleIdPool,
     ty_interner::InternedTypePool,
 };
->>>>>>> e33e3c1b
+use sha3::{Digest, Sha3_256};
 use std::sync::Arc;
 
 const OPTION_MODULE_BYTES: &[u8] = include_bytes!("option.mv");
@@ -71,10 +67,9 @@ pub struct RuntimeEnvironment {
     /// speculatively because type tag information does not change with module publishes.
     ty_tag_cache: Arc<TypeTagCache>,
 
-<<<<<<< HEAD
     /// SHA3-256 digest of the BCS-serialized [VerifierConfig] from `vm_config`. Precomputed at
     /// construction time so it can be combined with the module hash to form the
-    /// [VERIFIED_MODULES_V2] cache key without re-hashing the config on every lookup.
+    /// [VERIFIED_MODULES_CACHE] cache key without re-hashing the config on every lookup.
     ///
     /// Why this exists: the verified-module cache is a process-global LRU shared across all
     /// runtime environments. Without a per-config component in the key, two threads using
@@ -85,13 +80,12 @@ pub struct RuntimeEnvironment {
     /// Invariant: must stay in line with `vm_config.verifier_config`. Any mutation of `vm_config.verifier_config` must
     /// recompute this digest.
     verifier_config_digest: [u8; 32],
-=======
+
     /// Pool of interned type representations. Same lifetime as struct index map.
     interned_ty_pool: Arc<InternedTypePool>,
 
     /// Pool of interned module ids.
     interned_module_id_pool: Arc<InternedModuleIdPool>,
->>>>>>> e33e3c1b
 }
 
 impl RuntimeEnvironment {
@@ -133,12 +127,9 @@ impl RuntimeEnvironment {
             natives,
             struct_name_index_map: Arc::new(StructNameIndexMap::empty()),
             ty_tag_cache: Arc::new(TypeTagCache::empty()),
-<<<<<<< HEAD
             verifier_config_digest,
-=======
             interned_ty_pool: Arc::new(InternedTypePool::new()),
             interned_module_id_pool: Arc::new(InternedModuleIdPool::new()),
->>>>>>> e33e3c1b
         }
     }
 
@@ -210,16 +201,10 @@ impl RuntimeEnvironment {
         module_size: usize,
         module_hash: &[u8; 32],
     ) -> VMResult<LocallyVerifiedModule> {
-<<<<<<< HEAD
-        if !VERIFIED_MODULES_V2.contains(module_hash, &self.verifier_config_digest) {
+        if !VERIFIED_MODULES_CACHE.contains(module_hash, &self.verifier_config_digest) {
             let _timer = VM_TIMER.timer_with_label(
                 "LoaderV2::build_locally_verified_module [verification cache miss]",
             );
-=======
-        if !VERIFIED_MODULES_CACHE.contains(module_hash) {
-            let _timer =
-                VM_TIMER.timer_with_label("move_bytecode_verifier::verify_module_with_config");
->>>>>>> e33e3c1b
 
             // For regular execution, we cache already verified modules. Note that this even caches
             // verification for the published modules. This should be ok because as long as both
@@ -231,11 +216,7 @@ impl RuntimeEnvironment {
                 compiled_module.as_ref(),
             )?;
             check_natives(compiled_module.as_ref())?;
-<<<<<<< HEAD
-            VERIFIED_MODULES_V2.put(*module_hash, self.verifier_config_digest);
-=======
-            VERIFIED_MODULES_CACHE.put(*module_hash);
->>>>>>> e33e3c1b
+            VERIFIED_MODULES_CACHE.put(*module_hash, self.verifier_config_digest);
         }
 
         Ok(LocallyVerifiedModule(compiled_module, module_size))
@@ -475,12 +456,9 @@ impl Clone for RuntimeEnvironment {
             natives: self.natives.clone(),
             struct_name_index_map: Arc::clone(&self.struct_name_index_map),
             ty_tag_cache: Arc::clone(&self.ty_tag_cache),
-<<<<<<< HEAD
             verifier_config_digest: self.verifier_config_digest,
-=======
             interned_ty_pool: Arc::clone(&self.interned_ty_pool),
             interned_module_id_pool: Arc::clone(&self.interned_module_id_pool),
->>>>>>> e33e3c1b
         }
     }
 }

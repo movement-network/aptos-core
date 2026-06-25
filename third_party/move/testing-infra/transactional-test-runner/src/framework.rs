@@ -1152,17 +1152,6 @@ fn handle_known_task<'a, Adapter: MoveTestAdapter<'a>>(
         Err(e) => format!("Error: {}", e),
     };
     let result_string = adapter.rewrite_temp_filenames(result_string);
-<<<<<<< HEAD
-    if result_string.is_empty() {
-        return;
-    }
-    writeln!(
-        output,
-        "\ntask {} '{}'. lines {}-{}:\n{}",
-        task_number, task_name, start_line, stop_line, result_string
-    )
-    .unwrap();
-=======
     assert!(!result_string.is_empty());
     if !adapter.run_config().echo {
         // Print this only if echo is off. With
@@ -1210,7 +1199,6 @@ fn handle_cross_compiled_output(
     let _ = fs::create_dir_all(path.parent().expect("parent path"));
     fs::write(&path, &text)?;
     Ok(path)
->>>>>>> e33e3c1b
 }
 
 fn handle_expected_output(

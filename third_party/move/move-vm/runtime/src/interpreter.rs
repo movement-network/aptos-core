@@ -1832,21 +1832,12 @@ impl Stack {
     }
 
     /// Pop n types off the stack.
-<<<<<<< HEAD
-    pub(crate) fn popn_tys(&mut self, n: usize) -> PartialVMResult<Vec<Type>> {
-        let remaining_stack_size = self
-            .types
-            .len()
-            .checked_sub(n)
-            .ok_or_else(|| PartialVMError::new(StatusCode::EMPTY_VALUE_STACK))?;
-=======
     // note(inline): bloats runtime_type_checks
     pub(crate) fn popn_tys(&mut self, n: u16) -> PartialVMResult<Vec<Type>> {
         let remaining_stack_size = self.types.len().checked_sub(n as usize).ok_or_else(|| {
             PartialVMError::new(StatusCode::EMPTY_VALUE_STACK)
                 .with_message("runtime type stack empty")
         })?;
->>>>>>> e33e3c1b
         let args = self.types.split_off(remaining_stack_size);
         Ok(args)
     }
@@ -1907,103 +1898,6 @@ impl CallStack {
     }
 }
 
-<<<<<<< HEAD
-fn check_depth_of_type(module_storage: &impl ModuleStorage, ty: &Type) -> PartialVMResult<()> {
-    let _timer = VM_TIMER.timer_with_label("Interpreter::check_depth_of_type");
-
-    // Start at 1 since we always call this right before we add a new node to the value's depth.
-    let max_depth = match module_storage
-        .runtime_environment()
-        .vm_config()
-        .max_value_nest_depth
-    {
-        Some(max_depth) => max_depth,
-        None => return Ok(()),
-    };
-    check_depth_of_type_impl(module_storage, ty, max_depth, 1)?;
-    Ok(())
-}
-
-fn check_depth_of_type_impl(
-    module_storage: &impl ModuleStorage,
-    ty: &Type,
-    max_depth: u64,
-    depth: u64,
-) -> PartialVMResult<u64> {
-    macro_rules! check_depth {
-        ($additional_depth:expr) => {{
-            let new_depth = depth.saturating_add($additional_depth);
-            if new_depth > max_depth {
-                return Err(PartialVMError::new(StatusCode::VM_MAX_VALUE_DEPTH_REACHED));
-            } else {
-                new_depth
-            }
-        }};
-    }
-
-    // Calculate depth of the type itself
-    let ty_depth = match ty {
-        Type::Bool
-        | Type::U8
-        | Type::U16
-        | Type::U32
-        | Type::U64
-        | Type::U128
-        | Type::U256
-        | Type::Address
-        | Type::Signer => check_depth!(0),
-        // Even though this is recursive this is OK since the depth of this recursion is
-        // bounded by the depth of the type arguments, which we have already checked.
-        Type::Reference(ty) | Type::MutableReference(ty) => {
-            check_depth_of_type_impl(module_storage, ty, max_depth, check_depth!(1))?
-        },
-        Type::Vector(ty) => {
-            check_depth_of_type_impl(module_storage, ty, max_depth, check_depth!(1))?
-        },
-        Type::Struct { idx, .. } => {
-            let formula =
-                DepthFormulaCalculator::new(module_storage).calculate_depth_of_struct(idx)?;
-            check_depth!(formula.solve(&[])?)
-        },
-        // NB: substitution must be performed before calling this function
-        Type::StructInstantiation { idx, ty_args, .. } => {
-            // Calculate depth of all type arguments, and make sure they themselves are not too deep.
-            let ty_arg_depths = ty_args
-                .iter()
-                .map(|ty| {
-                    // Ty args should be fully resolved and not need any type arguments
-                    check_depth_of_type_impl(module_storage, ty, max_depth, check_depth!(0))
-                })
-                .collect::<PartialVMResult<Vec<_>>>()?;
-            let formula =
-                DepthFormulaCalculator::new(module_storage).calculate_depth_of_struct(idx)?;
-            check_depth!(formula.solve(&ty_arg_depths)?)
-        },
-        Type::Function { args, results, .. } => {
-            let mut ty_max_depth = depth;
-            for ty in args.iter().chain(results) {
-                ty_max_depth = ty_max_depth.max(check_depth_of_type_impl(
-                    module_storage,
-                    ty,
-                    max_depth,
-                    check_depth!(1),
-                )?);
-            }
-            ty_max_depth
-        },
-        Type::TyParam(_) => {
-            return Err(
-                PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR)
-                    .with_message("Type parameter should be fully resolved".to_string()),
-            )
-        },
-    };
-
-    Ok(ty_depth)
-}
-
-=======
->>>>>>> e33e3c1b
 /// An `ExitCode` from `execute_code_unit`.
 #[derive(Debug)]
 enum ExitCode {
@@ -2595,19 +2489,8 @@ impl Frame {
                                 ty_args_id,
                             )
                             .map(Rc::new)?;
-<<<<<<< HEAD
-                        if RTTCheck::should_perform_checks() {
-                            verify_pack_closure(
-                                self.ty_builder(),
-                                &mut interpreter.operand_stack,
-                                &function,
-                                *mask,
-                            )?;
-                        }
-=======
                         RTTCheck::check_pack_closure_visibility(&self.function, &function)?;
 
->>>>>>> e33e3c1b
                         let captured = interpreter.operand_stack.popn(mask.captured_count())?;
                         let lazy_function = LazyLoadedFunction::new_resolved(
                             interpreter.layout_converter,
@@ -2619,8 +2502,6 @@ impl Frame {
                         interpreter
                             .operand_stack
                             .push(Value::closure(Box::new(lazy_function), captured))?;
-<<<<<<< HEAD
-=======
 
                         if RTTCheck::should_perform_checks(&self.function.function) {
                             verify_pack_closure(
@@ -2630,7 +2511,6 @@ impl Frame {
                                 *mask,
                             )?;
                         }
->>>>>>> e33e3c1b
                     },
                     Instruction::ReadRef => {
                         let reference = interpreter.operand_stack.pop_as::<Reference>()?;

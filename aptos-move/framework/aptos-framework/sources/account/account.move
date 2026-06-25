@@ -829,17 +829,10 @@ module aptos_framework::account {
     /// Kept as a private entry function to ensure that after an unproven rotation via
     /// `rotate_authentication_key_call()`, the `OriginatingAddress` table is only updated under the
     /// authority of the new authentication key.
-<<<<<<< HEAD
-    entry fun set_originating_address(account: &signer) acquires Account, OriginatingAddress {
-        abort error::invalid_state(ESET_ORIGINATING_ADDRESS_DISABLED);
-
-        let account_addr = signer::address_of(account);
-=======
     entry fun set_originating_address(_account: &signer) acquires Account, OriginatingAddress {
         abort error::invalid_state(ESET_ORIGINATING_ADDRESS_DISABLED);
 
         let account_addr = signer::address_of(_account);
->>>>>>> e33e3c1b
         assert!(exists<Account>(account_addr), error::not_found(EACCOUNT_DOES_NOT_EXIST));
         let auth_key_as_address =
             from_bcs::to_address(Account[account_addr].authentication_key);

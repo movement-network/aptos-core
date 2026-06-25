@@ -117,19 +117,9 @@ module aptos_experimental::large_packages {
         code_indices: vector<u16>,
         code_chunks: vector<vector<u8>>
     ) acquires StagingArea {
-<<<<<<< HEAD
         let owner_address = signer::address_of(owner);
         let staging_area = stage_code_chunk_internal(owner, metadata_chunk, code_indices, code_chunks);
         let module_count = staging_area.last_module_idx + 1;
-=======
-        let staging_area =
-            stage_code_chunk_internal(
-                owner,
-                metadata_chunk,
-                code_indices,
-                code_chunks
-            );
->>>>>>> e33e3c1b
         publish_to_account(owner, staging_area);
         event::emit(PackagePublished {
             publisher: owner_address,
@@ -146,19 +136,9 @@ module aptos_experimental::large_packages {
         code_indices: vector<u16>,
         code_chunks: vector<vector<u8>>
     ) acquires StagingArea {
-<<<<<<< HEAD
         let owner_address = signer::address_of(owner);
         let staging_area = stage_code_chunk_internal(owner, metadata_chunk, code_indices, code_chunks);
         let module_count = staging_area.last_module_idx + 1;
-=======
-        let staging_area =
-            stage_code_chunk_internal(
-                owner,
-                metadata_chunk,
-                code_indices,
-                code_chunks
-            );
->>>>>>> e33e3c1b
         publish_to_object(owner, staging_area);
         event::emit(PackagePublished {
             publisher: owner_address,
@@ -176,20 +156,10 @@ module aptos_experimental::large_packages {
         code_chunks: vector<vector<u8>>,
         code_object: Object<PackageRegistry>
     ) acquires StagingArea {
-<<<<<<< HEAD
         let owner_address = signer::address_of(owner);
         let code_object_address = object::object_address(&code_object);
         let staging_area = stage_code_chunk_internal(owner, metadata_chunk, code_indices, code_chunks);
         let module_count = staging_area.last_module_idx + 1;
-=======
-        let staging_area =
-            stage_code_chunk_internal(
-                owner,
-                metadata_chunk,
-                code_indices,
-                code_chunks
-            );
->>>>>>> e33e3c1b
         upgrade_object_code(owner, staging_area, code_object);
         event::emit(PackageUpgraded {
             publisher: owner_address,
@@ -309,7 +279,6 @@ module aptos_experimental::large_packages {
     }
 
     public entry fun cleanup_staging_area(owner: &signer) acquires StagingArea {
-<<<<<<< HEAD
         let owner_address = signer::address_of(owner);
         if (exists<StagingArea>(owner_address)) {
             let StagingArea {
@@ -320,10 +289,5 @@ module aptos_experimental::large_packages {
             smart_table::destroy(code);
             event::emit(StagingCleanedUp { owner: owner_address });
         };
-=======
-        let StagingArea { metadata_serialized: _, code, last_module_idx: _ } =
-            move_from<StagingArea>(signer::address_of(owner));
-        smart_table::destroy(code);
->>>>>>> e33e3c1b
     }
 }

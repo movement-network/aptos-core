@@ -762,7 +762,6 @@ module aptos_framework::fungible_asset {
         exists<DispatchFunctionStore>(metadata_addr)
     }
 
-<<<<<<< HEAD
     #[view]
     /// Return whether a fungible asset type has any dispatch or derived-supply hooks registered.
     public fun is_asset_type_dispatchable(metadata: Object<Metadata>): bool {
@@ -771,11 +770,6 @@ module aptos_framework::fungible_asset {
     }
 
     public fun deposit_dispatch_function<T: key>(store: Object<T>): Option<FunctionInfo> acquires FungibleStore, DispatchFunctionStore {
-=======
-    public fun deposit_dispatch_function<T: key>(
-        store: Object<T>
-    ): Option<FunctionInfo> acquires FungibleStore, DispatchFunctionStore {
->>>>>>> e33e3c1b
         let fa_store = borrow_store_resource(&store);
         let metadata_addr = object::object_address(&fa_store.metadata);
         if (exists<DispatchFunctionStore>(metadata_addr)) {
@@ -1464,18 +1458,10 @@ module aptos_framework::fungible_asset {
         assert!(!is_frozen(store), error::invalid_argument(ESTORE_IS_FROZEN));
         let fungible_store_address = object::object_address(&store);
         // be graceful if ConcurrentFungibleBalance already exists, but flag is off
-<<<<<<< HEAD
         if (exists<ConcurrentFungibleBalance>(fungible_store_address)) {
             return
         };
         assert!(allow_upgrade_to_concurrent_fungible_balance(), error::invalid_argument(ECONCURRENT_BALANCE_NOT_ENABLED));
-=======
-        if (exists<ConcurrentFungibleBalance>(fungible_store_address)) { return };
-        assert!(
-            allow_upgrade_to_concurrent_fungible_balance(),
-            error::invalid_argument(ECONCURRENT_BALANCE_NOT_ENABLED)
-        );
->>>>>>> e33e3c1b
         ensure_store_upgraded_to_concurrent_internal(fungible_store_address);
     }
 

@@ -822,7 +822,6 @@ mod dbtool_tests {
         rt.shutdown_timeout(Duration::from_secs(1));
     }
 
-<<<<<<< HEAD
     #[test]
     #[serial]
     fn test_restore_with_sharded_db() {
@@ -856,8 +855,6 @@ mod dbtool_tests {
         rt.shutdown_timeout(Duration::from_secs(1));
     }
 
-=======
->>>>>>> e33e3c1b
     fn dir_size<P: AsRef<Path>>(path: P) -> u64 {
         let mut size = 0;
 

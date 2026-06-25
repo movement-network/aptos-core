@@ -27,12 +27,8 @@ use aptos_types::{
     epoch_state::EpochState,
     ledger_info::LedgerInfoWithSignatures,
     state_store::state_value::StateValueChunkWithProof,
-<<<<<<< HEAD
-    transaction::{TransactionListWithProof, TransactionOutputListWithProof, Version},
-    validator_verifier::ValidatorVerifier,
-=======
     transaction::{TransactionListWithProofV2, TransactionOutputListWithProofV2, Version},
->>>>>>> e33e3c1b
+    validator_verifier::ValidatorVerifier,
     waypoint::Waypoint,
 };
 use futures::channel::oneshot;

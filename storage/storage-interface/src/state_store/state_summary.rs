@@ -9,16 +9,11 @@ use crate::{
     },
     DbReader,
 };
-<<<<<<< HEAD
 use anyhow::{ensure, Result};
-use aptos_crypto::{hash::CORRUPTION_SENTINEL, HashValue};
-=======
-use anyhow::Result;
 use aptos_crypto::{
     hash::{CryptoHash, CORRUPTION_SENTINEL},
     HashValue,
 };
->>>>>>> e33e3c1b
 use aptos_metrics_core::TimerHelper;
 use aptos_scratchpad::{ProofRead, SparseMerkleTree};
 use aptos_types::{proof::SparseMerkleProofExt, transaction::Version};

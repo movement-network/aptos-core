@@ -364,11 +364,6 @@ impl Parser {
                 .collect_vec()
         };
 
-<<<<<<< HEAD
-        // Isolate retries and discards.
-        let (to_retry, to_discard, has_reconfig) =
-            Self::extract_retries_and_discards(&mut transactions, &mut transaction_outputs);
-=======
         let mut persisted_auxiliary_infos = auxiliary_infos
             .into_iter()
             .map(|info| info.into_persisted_info())
@@ -380,7 +375,6 @@ impl Parser {
             &mut transaction_outputs,
             &mut persisted_auxiliary_infos,
         );
->>>>>>> e33e3c1b
 
         let mut block_end_info = None;
         if is_block {
@@ -465,44 +459,21 @@ impl Parser {
     fn extract_retries_and_discards(
         transactions: &mut Vec<Transaction>,
         transaction_outputs: &mut Vec<TransactionOutput>,
-<<<<<<< HEAD
-    ) -> (TransactionsWithOutput, TransactionsWithOutput, bool) {
-=======
         persisted_auxiliary_infos: &mut Vec<PersistedAuxiliaryInfo>,
     ) -> (TransactionsWithOutput, TransactionsWithOutput) {
->>>>>>> e33e3c1b
         let _timer = OTHER_TIMERS.timer_with(&["parse_raw_output__retries_and_discards"]);
 
         let mut to_discard = TransactionsWithOutput::new_empty();
         let mut to_retry = TransactionsWithOutput::new_empty();
 
-<<<<<<< HEAD
-        let mut to_discard = TransactionsWithOutput::new_empty();
-        let mut to_retry = TransactionsWithOutput::new_empty();
-
         let mut num_keep_txns = 0;
 
-=======
-        let mut num_keep_txns = 0;
-
->>>>>>> e33e3c1b
         for idx in 0..transactions.len() {
             match transaction_outputs[idx].status() {
                 TransactionStatus::Keep(_) => {
                     if num_keep_txns != idx {
                         transactions[num_keep_txns] = transactions[idx].clone();
                         transaction_outputs[num_keep_txns] = transaction_outputs[idx].clone();
-<<<<<<< HEAD
-                    }
-                    num_keep_txns += 1;
-                },
-                TransactionStatus::Retry => {
-                    to_retry.push(transactions[idx].clone(), transaction_outputs[idx].clone())
-                },
-                TransactionStatus::Discard(_) => {
-                    to_discard.push(transactions[idx].clone(), transaction_outputs[idx].clone())
-                },
-=======
                         persisted_auxiliary_infos[num_keep_txns] = persisted_auxiliary_infos[idx];
                     }
                     num_keep_txns += 1;
@@ -517,16 +488,12 @@ impl Parser {
                     transaction_outputs[idx].clone(),
                     persisted_auxiliary_infos[idx],
                 ),
->>>>>>> e33e3c1b
             }
         }
 
         transactions.truncate(num_keep_txns);
         transaction_outputs.truncate(num_keep_txns);
-<<<<<<< HEAD
-=======
         persisted_auxiliary_infos.truncate(num_keep_txns);
->>>>>>> e33e3c1b
 
         // Sanity check transactions with the Discard status:
         to_discard.iter().for_each(|(t, o, _)| {
@@ -546,11 +513,7 @@ impl Parser {
             }
         });
 
-<<<<<<< HEAD
-        (to_retry, to_discard, is_reconfig)
-=======
         (to_retry, to_discard)
->>>>>>> e33e3c1b
     }
 
     fn ensure_next_epoch_state(to_commit: &TransactionsWithOutput) -> Result<EpochState> {
@@ -713,11 +676,6 @@ mod tests {
                 TransactionAuxiliaryData::default(),
             ),
         ];
-<<<<<<< HEAD
-        let (to_retry, to_discard, is_reconfig) =
-            Parser::extract_retries_and_discards(&mut txns, &mut txn_outs);
-        assert!(!is_reconfig);
-=======
         let mut auxiliary_infos = vec![
             PersistedAuxiliaryInfo::V1 {
                 transaction_index: 0,
@@ -734,13 +692,10 @@ mod tests {
         ];
         let (to_retry, to_discard) =
             Parser::extract_retries_and_discards(&mut txns, &mut txn_outs, &mut auxiliary_infos);
->>>>>>> e33e3c1b
         assert_eq!(to_retry.len(), 1);
         assert_eq!(to_discard.len(), 1);
         assert_eq!(txns.len(), 2);
         assert_eq!(txn_outs.len(), 2);
-<<<<<<< HEAD
-=======
         assert_eq!(auxiliary_infos.len(), 2);
         assert_eq!(
             PersistedAuxiliaryInfo::V1 {
@@ -754,18 +709,10 @@ mod tests {
             },
             auxiliary_infos[1]
         );
->>>>>>> e33e3c1b
     }
 
     #[test]
     fn test_extract_retry_and_discard_reconfig() {
-<<<<<<< HEAD
-        let reconfig_event = ContractEvent::new_v2_with_type_tag_str(
-            "0x1::reconfiguration::NewEpochEvent",
-            b"".to_vec(),
-        );
-=======
->>>>>>> e33e3c1b
         let mut txns = vec![
             Transaction::dummy(),
             Transaction::dummy(),
@@ -774,11 +721,7 @@ mod tests {
         let mut txn_outs = vec![
             TransactionOutput::new(
                 WriteSet::default(),
-<<<<<<< HEAD
-                vec![reconfig_event],
-=======
                 vec![],
->>>>>>> e33e3c1b
                 0,
                 TransactionStatus::Keep(ExecutionStatus::Success),
                 TransactionAuxiliaryData::default(),
@@ -798,11 +741,6 @@ mod tests {
                 TransactionAuxiliaryData::default(),
             ),
         ];
-<<<<<<< HEAD
-        let (to_retry, to_discard, is_reconfig) =
-            Parser::extract_retries_and_discards(&mut txns, &mut txn_outs);
-        assert!(is_reconfig);
-=======
         let mut auxiliary_infos = vec![
             PersistedAuxiliaryInfo::V1 {
                 transaction_index: 0,
@@ -816,14 +754,10 @@ mod tests {
         ];
         let (to_retry, to_discard) =
             Parser::extract_retries_and_discards(&mut txns, &mut txn_outs, &mut auxiliary_infos);
->>>>>>> e33e3c1b
         assert_eq!(to_retry.len(), 2);
         assert_eq!(to_discard.len(), 0);
         assert_eq!(txns.len(), 1);
         assert_eq!(txn_outs.len(), 1);
-<<<<<<< HEAD
-=======
         assert_eq!(auxiliary_infos.len(), 1);
->>>>>>> e33e3c1b
     }
 }

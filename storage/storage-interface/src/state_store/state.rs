@@ -229,17 +229,14 @@ impl State {
         let new_metadata = new_metadata.try_into().expect("Known to be 16 shards.");
         let usage = self.update_usage(usage_delta_per_shard);
 
-<<<<<<< HEAD
-        Ok(State::new_with_updates(updates.last_version(), shards, usage))
-=======
         // TODO(HotState): extract and pass new hot state onchain config if needed.
-        State::new_with_updates(
+        Ok(State::new_with_updates(
             batched_updates.last_version(),
             shards,
             new_metadata,
             usage,
             self.hot_state_config,
-        )
+        ))
     }
 
     fn apply_one_update(
@@ -269,7 +266,6 @@ impl State {
             assert!(slot.is_cold());
             lru.insert((*key).clone(), slot.to_hot(update.version));
         }
->>>>>>> e33e3c1b
     }
 
     fn update_usage(&self, usage_delta_per_shard: Vec<(i64, i64)>) -> StateStorageUsage {
@@ -378,10 +374,6 @@ impl LedgerState {
     ) -> Result<LedgerState> {
         let _timer = TIMER.timer_with(&["ledger_state__update"]);
 
-<<<<<<< HEAD
-        let last_checkpoint = if let Some(updates) = &updates.for_last_checkpoint {
-            self.latest().update(persisted_snapshot, updates, reads)?
-=======
         let last_checkpoint = if let Some(batched) = updates.for_last_checkpoint_batched() {
             let per_version = updates
                 .for_last_checkpoint_per_version()
@@ -393,8 +385,7 @@ impl LedgerState {
                 per_version,
                 updates.all_checkpoint_versions(),
                 reads,
-            )
->>>>>>> e33e3c1b
+            )?
         } else {
             self.last_checkpoint.clone()
         };
@@ -404,10 +395,6 @@ impl LedgerState {
         } else {
             &last_checkpoint
         };
-<<<<<<< HEAD
-        let latest = if let Some(updates) = &updates.for_latest {
-            base_of_latest.update(persisted_snapshot, updates, reads)?
-=======
         let latest = if let Some(batched) = updates.for_latest_batched() {
             let per_version = updates
                 .for_latest_per_version()
@@ -419,8 +406,7 @@ impl LedgerState {
                 per_version,
                 &[],
                 reads,
-            )
->>>>>>> e33e3c1b
+            )?
         } else {
             base_of_latest.clone()
         };

@@ -159,15 +159,6 @@ impl TimedFeatureFlag {
                 .unwrap()
                 .with_timezone(&Utc),
 
-            (FixTableNativesMemoryDoubleCounting, TESTNET) => Los_Angeles
-                .with_ymd_and_hms(2025, 10, 16, 17, 0, 0)
-                .unwrap()
-                .with_timezone(&Utc),
-            (FixTableNativesMemoryDoubleCounting, MAINNET) => Los_Angeles
-                .with_ymd_and_hms(2025, 10, 21, 10, 0, 0)
-                .unwrap()
-                .with_timezone(&Utc),
-
             // 1 hour after the beginning of time
             (FixCryptoAlgebraNativesTypeTagConversion, _) => {
                 Utc.with_ymd_and_hms(1970, 1, 1, 1, 0, 0).unwrap()

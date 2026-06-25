@@ -657,11 +657,6 @@ impl<V: CompiledModuleView> MoveValueAnnotator<V> {
             TypeTag::I256 => FatType::I256,
             TypeTag::Vector(ty) => FatType::Vector(Box::new(self.resolve_type_impl(ty, limit)?)),
             TypeTag::Function(function_tag) => {
-<<<<<<< HEAD
-                let mut convert_tags = |tags: &[TypeTag]| {
-                    tags.iter()
-                        .map(|t| self.resolve_type_impl(t, limit))
-=======
                 let mut convert_tags = |tags: &[FunctionParamOrReturnTag]| {
                     tags.iter()
                         .map(|t| {
@@ -676,7 +671,6 @@ impl<V: CompiledModuleView> MoveValueAnnotator<V> {
                                 Value(t) => self.resolve_type_impl(t, limit)?,
                             })
                         })
->>>>>>> e33e3c1b
                         .collect::<anyhow::Result<Vec<_>>>()
                 };
                 FatType::Function(Box::new(FatFunctionType {

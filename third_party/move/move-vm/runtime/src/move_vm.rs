@@ -24,10 +24,6 @@ use move_vm_metrics::{Timer, VM_TIMER};
 use move_vm_types::{
     gas::GasMeter,
     loaded_data::runtime_types::Type,
-<<<<<<< HEAD
-    resolver::ResourceResolver,
-=======
->>>>>>> e33e3c1b
     value_serde::{FunctionValueExtension, ValueSerDeContext},
     values::{Locals, Reference, VMValueCast, Value},
 };
@@ -212,16 +208,9 @@ fn deserialize_arg(
         .into_layout_when_has_no_delayed_fields()
         .ok_or_else(deserialization_error)?;
 
-<<<<<<< HEAD
-    let function_value_extension = module_storage.as_function_value_extension();
-    let max_value_nest_depth = function_value_extension.max_value_nest_depth();
-    ValueSerDeContext::new(max_value_nest_depth)
-        .with_func_args_deserialization(&function_value_extension)
-=======
     let max_value_nest_depth = function_value_extension.max_value_nest_depth();
     ValueSerDeContext::new(max_value_nest_depth)
         .with_func_args_deserialization(function_value_extension)
->>>>>>> e33e3c1b
         .deserialize(arg.borrow(), &layout)
         .ok_or_else(deserialization_error)
 }
@@ -321,16 +310,9 @@ fn serialize_return_value(
         .into_layout_when_has_no_delayed_fields()
         .ok_or_else(serialization_error)?;
 
-<<<<<<< HEAD
-    let function_value_extension = module_storage.as_function_value_extension();
-    let max_value_nest_depth = function_value_extension.max_value_nest_depth();
-    let bytes = ValueSerDeContext::new(max_value_nest_depth)
-        .with_func_args_deserialization(&function_value_extension)
-=======
     let max_value_nest_depth = function_value_extension.max_value_nest_depth();
     let bytes = ValueSerDeContext::new(max_value_nest_depth)
         .with_func_args_deserialization(function_value_extension)
->>>>>>> e33e3c1b
         .serialize(&value, &layout)?
         .ok_or_else(serialization_error)?;
     // TODO(layouts): consider not cloning returned layouts?

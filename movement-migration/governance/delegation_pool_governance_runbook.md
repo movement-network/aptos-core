@@ -4,7 +4,7 @@ This runbook covers enabling delegation-pool governance and using delegated vote
 
 ## Enable Delegation-Pool Governance
 
-Use `movement-migration/governance/enable_delegation_pool_governance.move` as a multi-step governance proposal execution script. The script:
+Use `movement-migration/governance/enable_delegation_pool_governance.move` as a one-time core-resource-signer migration script. The script:
 
 - enables `PARTIAL_GOVERNANCE_VOTING` and `DELEGATION_POOL_PARTIAL_GOVERNANCE_VOTING`;
 - initializes global partial-voting records if missing;
@@ -13,10 +13,14 @@ Use `movement-migration/governance/enable_delegation_pool_governance.move` as a 
 - preserves the existing required proposer stake and voting duration;
 - forces an epoch change so pending feature flags take effect.
 
-The script takes the standard governance execution argument:
+The script takes the core resource signer and four delegation pool addresses:
 
 ```text
-proposal_id: u64
+core_resources: &signer
+pool_address_0: address
+pool_address_1: address
+pool_address_2: address
+pool_address_3: address
 ```
 
 As of June 29, 2026, the script initializes these mainnet delegated staking pools:
@@ -28,20 +32,24 @@ As of June 29, 2026, the script initializes these mainnet delegated staking pool
 0xccba2d929183a642f64d10d27bae0947c112ed7f5427ca3c64a1f0dd0b4b76ea
 ```
 
-If the delegated validator set changes before submission, update the pool list in `enable_delegation_pool_governance.move` before creating the proposal.
+If the delegated validator set changes before submission, pass the updated delegated staking pool addresses to the script. If the delegated validator count is no longer four, update the script arity before submitting the migration transaction.
 
-Example execution after the enablement proposal has passed:
+Example execution by the core resource signer:
 
 ```bash
-movement governance execute-proposal \
-  --proposal-id <ENABLEMENT_PROPOSAL_ID> \
+movement move run-script \
   --script-path movement-migration/governance/enable_delegation_pool_governance.move \
-  --framework-local-dir aptos-move/framework/aptos-framework \
+  --sender-account <CORE_RESOURCE_ADDRESS> \
+  --private-key-file <CORE_RESOURCE_KEY_FILE> \
+  --args address:0x1ef54ef84e7fb389095f83021755dd71bb51cbfbc8124a4349ec619f9d901f1f \
+  --args address:0x830bfd0cd58b06dc938d409b6f3bc8ee97818ffcf9b32d714c068454afb644c7 \
+  --args address:0x39f116ee9ef048895bff51a5ce62229d153a6fe855798fa75810fd2b85008b9c \
+  --args address:0xccba2d929183a642f64d10d27bae0947c112ed7f5427ca3c64a1f0dd0b4b76ea \
   --url <NODE_URL> \
   --assume-yes
 ```
 
-Do not use the core resource signer for mainnet execution. The script resolves the framework signer from the approved governance proposal.
+Do not run this migration after the core resource signer has been deprecated. This script intentionally uses the core resource signer to bootstrap delegated governance before proposal creation and voting are fully delegated.
 
 ## Create Delegated Voters
 

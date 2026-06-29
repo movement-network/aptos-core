@@ -5,15 +5,22 @@ script {
 
     const MIN_RESOLVABLE_VOTING_THRESHOLD_OCTAS: u128 = 20000000000000000;
 
-    fun main(proposal_id: u64) {
-        let framework_signer = aptos_governance::resolve_multi_step_proposal(
-            proposal_id,
+    fun main(
+        core_resources: &signer,
+        pool_address_0: address,
+        pool_address_1: address,
+        pool_address_2: address,
+        pool_address_3: address,
+    ) {
+        let framework_signer = aptos_governance::get_signer_testnet_only(
+            core_resources,
             @aptos_framework,
-            vector::empty<u8>(),
         );
 
         aptos_governance::toggle_features(&framework_signer, vector[17, 21], vector::empty<u64>());
-        aptos_governance::initialize_partial_voting_if_needed(&framework_signer);
+        if (!aptos_governance::partial_voting_initialized()) {
+            aptos_governance::initialize_partial_voting(&framework_signer);
+        };
         aptos_governance::update_governance_config(
             &framework_signer,
             MIN_RESOLVABLE_VOTING_THRESHOLD_OCTAS,
@@ -22,13 +29,15 @@ script {
         );
 
         let pool_addresses = vector[
-            @0x1ef54ef84e7fb389095f83021755dd71bb51cbfbc8124a4349ec619f9d901f1f,
-            @0x830bfd0cd58b06dc938d409b6f3bc8ee97818ffcf9b32d714c068454afb644c7,
-            @0x39f116ee9ef048895bff51a5ce62229d153a6fe855798fa75810fd2b85008b9c,
-            @0xccba2d929183a642f64d10d27bae0947c112ed7f5427ca3c64a1f0dd0b4b76ea,
+            pool_address_0,
+            pool_address_1,
+            pool_address_2,
+            pool_address_3,
         ];
         vector::for_each(pool_addresses, |pool_address| {
-            delegation_pool::enable_partial_governance_voting_if_needed(pool_address);
+            if (!delegation_pool::governance_records_initialized(pool_address)) {
+                delegation_pool::enable_partial_governance_voting(pool_address);
+            };
         });
 
         aptos_governance::force_end_epoch(&framework_signer);

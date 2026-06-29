@@ -534,9 +534,15 @@ module aptos_framework::delegation_pool {
     }
 
     #[view]
+    /// Return whether a delegation pool has governance records initialized.
+    public fun governance_records_initialized(pool_address: address): bool {
+        exists<GovernanceRecords>(pool_address)
+    }
+
+    #[view]
     /// Return whether a delegation pool has already enabled partial governance voting.
     public fun partial_governance_voting_enabled(pool_address: address): bool {
-        exists<GovernanceRecords>(pool_address) && stake::get_delegated_voter(pool_address) == pool_address
+        governance_records_initialized(pool_address) && stake::get_delegated_voter(pool_address) == pool_address
     }
 
     #[view]
@@ -954,6 +960,17 @@ module aptos_framework::delegation_pool {
             create_proposal_events: account::new_event_handle<CreateProposalEvent>(&stake_pool_signer),
             delegate_voting_power_events: account::new_event_handle<DelegateVotingPowerEvent>(&stake_pool_signer),
         });
+    }
+
+    /// Enable partial governance voting on a delegation pool if it has not already been initialized.
+    /// This is intended for idempotent migration scripts over existing delegation pools.
+    public entry fun enable_partial_governance_voting_if_needed(
+        pool_address: address,
+    ) acquires DelegationPool, GovernanceRecords, BeneficiaryForOperator, NextCommissionPercentage {
+        assert_delegation_pool_exists(pool_address);
+        if (!governance_records_initialized(pool_address)) {
+            enable_partial_governance_voting(pool_address);
+        }
     }
 
     /// Vote on a proposal with a voter's voting power. To successfully vote, the following conditions must be met:
@@ -4168,6 +4185,27 @@ module aptos_framework::delegation_pool {
         // pending_inactive balance would be under threshold => move entire balance
         reactivate_stake(delegator1, pool_address, 1);
         assert_delegation(delegator1_address, pool_address, 5049999998, 0, 0);
+    }
+
+    #[test(aptos_framework = @aptos_framework, validator = @0x123)]
+    public entry fun test_enable_partial_governance_voting_if_needed_is_idempotent(
+        aptos_framework: &signer,
+        validator: &signer,
+    ) acquires DelegationPoolOwnership, DelegationPool, GovernanceRecords, BeneficiaryForOperator, NextCommissionPercentage, DelegationPoolAllowlisting {
+        initialize_for_test(aptos_framework);
+        initialize_test_validator(validator, 100 * ONE_APT, true, false);
+
+        let pool_address = get_owned_pool_address(signer::address_of(validator));
+        assert!(governance_records_initialized(pool_address), 0);
+        assert!(partial_governance_voting_enabled(pool_address), 1);
+
+        enable_partial_governance_voting_if_needed(pool_address);
+        assert!(governance_records_initialized(pool_address), 2);
+        assert!(partial_governance_voting_enabled(pool_address), 3);
+
+        enable_partial_governance_voting_if_needed(pool_address);
+        assert!(governance_records_initialized(pool_address), 4);
+        assert!(partial_governance_voting_enabled(pool_address), 5);
     }
 
     #[test(aptos_framework = @aptos_framework, validator = @0x123, delegator1 = @0x010)]

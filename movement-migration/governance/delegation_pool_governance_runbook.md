@@ -4,7 +4,7 @@ This runbook covers enabling delegation-pool governance and using delegated vote
 
 ## Enable Delegation-Pool Governance
 
-Use `tools/scripts/enable_delegation_pool_governance.move` as a multi-step governance proposal execution script. The script:
+Use `movement-migration/governance/enable_delegation_pool_governance.move` as a multi-step governance proposal execution script. The script:
 
 - enables `PARTIAL_GOVERNANCE_VOTING` and `DELEGATION_POOL_PARTIAL_GOVERNANCE_VOTING`;
 - initializes global partial-voting records if missing;
@@ -35,7 +35,7 @@ Example execution after the enablement proposal has passed:
 ```bash
 movement governance execute-proposal \
   --proposal-id <ENABLEMENT_PROPOSAL_ID> \
-  --script-path tools/scripts/enable_delegation_pool_governance.move \
+  --script-path movement-migration/governance/enable_delegation_pool_governance.move \
   --framework-local-dir aptos-move/framework/aptos-framework \
   --url <NODE_URL> \
   --assume-yes

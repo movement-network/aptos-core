@@ -106,6 +106,44 @@ movement governance delegation-pool propose \
 
 The pool lockup must extend past `now + voting_duration_secs`; otherwise proposal creation aborts with `EINSUFFICIENT_STAKE_LOCKUP`.
 
+## Review A Proposal
+
+List recent governance proposals:
+
+```bash
+movement governance list-proposals \
+  --url <NODE_URL>
+```
+
+View a submitted proposal before voting:
+
+```bash
+movement governance show-proposal \
+  --proposal-id <PROPOSAL_ID> \
+  --url <NODE_URL>
+```
+
+Reviewers should confirm:
+
+- `metadata_verified` is `true`;
+- the metadata title, description, source code URL, and discussion URL match the intended change;
+- the `execution_hash` matches the expected script;
+- the proposal expiration and current vote totals are acceptable.
+
+Verify the submitted proposal against the local execution script:
+
+```bash
+movement governance verify-proposal \
+  --proposal-id <PROPOSAL_ID> \
+  --script-path <PROPOSAL_EXECUTION_SCRIPT.move> \
+  --framework-local-dir aptos-move/framework/aptos-framework \
+  --skip-fetch-latest-git-deps \
+  --url <NODE_URL> \
+  --assume-yes
+```
+
+Only vote after `verify-proposal` returns `verified: true` and the computed hash matches the on-chain `execution_hash`.
+
 ## Vote
 
 Each delegated voter votes through its own delegation pool.

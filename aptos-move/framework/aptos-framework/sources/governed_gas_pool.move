@@ -86,7 +86,6 @@ module aptos_framework::governed_gas_pool {
 
             upgrade_pool_store_to_concurrent(&governed_gas_signer());
         } else {
-
             // generate a seed to be used to create the resource account hosting the delegation pool
             let seed = create_resource_account_seed(delegation_pool_creation_seed);
 
@@ -123,6 +122,8 @@ module aptos_framework::governed_gas_pool {
         };
     }
 
+    /// Ensure the pool is using aggregator_v2 for concurrentcy.
+    /// @param pool_signer The signer of the gas pool.
     fun upgrade_pool_store_to_concurrent(pool_signer: &signer) {
         let store_addr = primary_fungible_store_address(signer::address_of(pool_signer));
         let store = object::address_to_object<fungible_asset::FungibleStore>(store_addr);

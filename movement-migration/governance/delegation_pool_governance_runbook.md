@@ -207,37 +207,55 @@ Migration transaction, using current testnet-only core resource signer flow to e
 0xc7ff3f97b59ddda40157c6b4b1b42e3560a25c74e50d224c5380e1a499611345
 ```
 
-Proposal created to remove non-delegated validator pool `0x4c724ccc61ec556afd6497ca469924eae0462b4a074b5d0fecfff3f4914f8dba`:
+An earlier raw test proposal used SHA-256 of the script bytecode as the execution hash and could not be resolved because governance compares against the VM script hash. The replacement proposal below was created through the governance CLI and verified before voting.
+
+Verified replacement proposal to remove non-delegated validator pool `0x4c724ccc61ec556afd6497ca469924eae0462b4a074b5d0fecfff3f4914f8dba`:
 
 ```text
-proposal_id = 1
-0x70a7934108d4b68686cd325c54b8625bcdad7a73f21698d0c470b081f21416bf
+proposal_id = 2
+create proposal tx = 0x8495b783ef5a57cbe99dad9ae9d04dd58b7b78091526999c057bdb7fbe47278f
+execution_hash = d2b7d808dab5908d96c62f18c3c63b12eef5d58ff0f4843b4863a5bc12ce356a
+verify-proposal = true
 ```
 
 Votes:
 
 ```text
-0x670cc49a30f4d2b7114f5ce8eac9c12982315a5ba28c0e0d1f7f1c435f57928f
+0x6674e79ad1742fa88be36b5f575dbb7ddfe8e573fe0e8dc2bb3f21d10c399209
   pool 0xd963d9415c267862a1d72ccf9f26aa1c4091442f0bbc73cbcc59bfe734a00f7
   voter 0x3943756b811bb96cbf282b28b71620a8674b7123583d6065212bc102f03bd3bf
-  yes votes 183012019356
+  yes votes 183044279128
 
-0x45f0e707725ad5be6189c05911e3c6b1b458b5644ee21f9b7ae0a427a07ed10c
+0xc975d5fe0cdabf28c3a7bdfa26a86df8b5e628410d6bdc06785bfa23355e7a38
   pool 0x5fb9e7d3c56e2036549b1fd0c4ca3b920ca5f7a1efeb5a14f87a6ab8a39974ba
   voter 0x4202d872db4bcacb8c13d3ecceae71baf2ad5fa74a95d7ef58ddaebf5fbdf915
-  yes votes 199347428823
+  yes votes 199382568060
 
-0x58abbfe1c0e881bf0f8aedfb5ea958f01ac1fd46577119dbf6cb67341c9bd5f1
+0x05cd7fde71991c3b5efa43a037f1352492755d60159a80e096f6766888cfa5ab
   pool 0xbd7327ed25db839bd97d11f621afd7c6bd9ef7fa9e4a5044e02bc4e449ad18a6
   voter 0xe86a127d883dedaece5acc609a6b8807f596e2aabb6aca9a9e6e8faa768535d1
-  yes votes 199458231626
+  yes votes 199493390394
 ```
 
 Verified vote totals:
 
 ```text
-yes = 581817679805
+yes = 581920237582
 no = 0
 ```
 
-The test proposal remained pending immediately after voting because the early-resolution threshold was higher than the submitted yes votes. It should become resolvable after expiration if yes remains greater than no.
+Resolution:
+
+```text
+0x74745ac756c65847e78fdbe7b62d682230c0ca0ad146e0993ca7e80c5490154b
+```
+
+Post-resolution checks:
+
+```text
+proposal_id = 2
+is_resolved = true
+target_active = false
+target_pending_inactive = true
+active_validator_count = 4
+```

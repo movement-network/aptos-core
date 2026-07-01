@@ -388,13 +388,9 @@ Object reference should be provided when upgrading object code.
     code_indices: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u16&gt;,
     code_chunks: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;&gt;
 ) <b>acquires</b> <a href="large_packages.md#0x7_large_packages_StagingArea">StagingArea</a> {
-    <b>let</b> staging_area =
-        <a href="large_packages.md#0x7_large_packages_stage_code_chunk_internal">stage_code_chunk_internal</a>(
-            owner,
-            metadata_chunk,
-            code_indices,
-            code_chunks
-        );
+    <b>let</b> owner_address = <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(owner);
+    <b>let</b> staging_area = <a href="large_packages.md#0x7_large_packages_stage_code_chunk_internal">stage_code_chunk_internal</a>(owner, metadata_chunk, code_indices, code_chunks);
+    <b>let</b> module_count = staging_area.last_module_idx + 1;
     <a href="large_packages.md#0x7_large_packages_publish_to_account">publish_to_account</a>(owner, staging_area);
     <a href="../../aptos-framework/doc/event.md#0x1_event_emit">event::emit</a>(<a href="large_packages.md#0x7_large_packages_PackagePublished">PackagePublished</a> {
         publisher: owner_address,
@@ -431,13 +427,9 @@ Object reference should be provided when upgrading object code.
     code_indices: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u16&gt;,
     code_chunks: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;&gt;
 ) <b>acquires</b> <a href="large_packages.md#0x7_large_packages_StagingArea">StagingArea</a> {
-    <b>let</b> staging_area =
-        <a href="large_packages.md#0x7_large_packages_stage_code_chunk_internal">stage_code_chunk_internal</a>(
-            owner,
-            metadata_chunk,
-            code_indices,
-            code_chunks
-        );
+    <b>let</b> owner_address = <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(owner);
+    <b>let</b> staging_area = <a href="large_packages.md#0x7_large_packages_stage_code_chunk_internal">stage_code_chunk_internal</a>(owner, metadata_chunk, code_indices, code_chunks);
+    <b>let</b> module_count = staging_area.last_module_idx + 1;
     <a href="large_packages.md#0x7_large_packages_publish_to_object">publish_to_object</a>(owner, staging_area);
     <a href="../../aptos-framework/doc/event.md#0x1_event_emit">event::emit</a>(<a href="large_packages.md#0x7_large_packages_PackagePublished">PackagePublished</a> {
         publisher: owner_address,
@@ -475,13 +467,10 @@ Object reference should be provided when upgrading object code.
     code_chunks: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;&gt;,
     code_object: Object&lt;PackageRegistry&gt;
 ) <b>acquires</b> <a href="large_packages.md#0x7_large_packages_StagingArea">StagingArea</a> {
-    <b>let</b> staging_area =
-        <a href="large_packages.md#0x7_large_packages_stage_code_chunk_internal">stage_code_chunk_internal</a>(
-            owner,
-            metadata_chunk,
-            code_indices,
-            code_chunks
-        );
+    <b>let</b> owner_address = <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(owner);
+    <b>let</b> code_object_address = <a href="../../aptos-framework/doc/object.md#0x1_object_object_address">object::object_address</a>(&code_object);
+    <b>let</b> staging_area = <a href="large_packages.md#0x7_large_packages_stage_code_chunk_internal">stage_code_chunk_internal</a>(owner, metadata_chunk, code_indices, code_chunks);
+    <b>let</b> module_count = staging_area.last_module_idx + 1;
     <a href="large_packages.md#0x7_large_packages_upgrade_object_code">upgrade_object_code</a>(owner, staging_area, code_object);
     <a href="../../aptos-framework/doc/event.md#0x1_event_emit">event::emit</a>(<a href="large_packages.md#0x7_large_packages_PackageUpgraded">PackageUpgraded</a> {
         publisher: owner_address,
@@ -721,9 +710,16 @@ Object reference should be provided when upgrading object code.
 
 
 <pre><code><b>public</b> entry <b>fun</b> <a href="large_packages.md#0x7_large_packages_cleanup_staging_area">cleanup_staging_area</a>(owner: &<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>) <b>acquires</b> <a href="large_packages.md#0x7_large_packages_StagingArea">StagingArea</a> {
-    <b>let</b> <a href="large_packages.md#0x7_large_packages_StagingArea">StagingArea</a> { metadata_serialized: _, <a href="../../aptos-framework/doc/code.md#0x1_code">code</a>, last_module_idx: _ } =
-        <b>move_from</b>&lt;<a href="large_packages.md#0x7_large_packages_StagingArea">StagingArea</a>&gt;(<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(owner));
-    <a href="../../aptos-framework/../aptos-stdlib/doc/smart_table.md#0x1_smart_table_destroy">smart_table::destroy</a>(<a href="../../aptos-framework/doc/code.md#0x1_code">code</a>);
+    <b>let</b> owner_address = <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(owner);
+    <b>if</b> (<b>exists</b>&lt;<a href="large_packages.md#0x7_large_packages_StagingArea">StagingArea</a>&gt;(owner_address)) {
+        <b>let</b> <a href="large_packages.md#0x7_large_packages_StagingArea">StagingArea</a> {
+            metadata_serialized: _,
+            <a href="../../aptos-framework/doc/code.md#0x1_code">code</a>,
+            last_module_idx: _,
+        } = <b>move_from</b>&lt;<a href="large_packages.md#0x7_large_packages_StagingArea">StagingArea</a>&gt;(owner_address);
+        <a href="../../aptos-framework/../aptos-stdlib/doc/smart_table.md#0x1_smart_table_destroy">smart_table::destroy</a>(<a href="../../aptos-framework/doc/code.md#0x1_code">code</a>);
+        <a href="../../aptos-framework/doc/event.md#0x1_event_emit">event::emit</a>(<a href="large_packages.md#0x7_large_packages_StagingCleanedUp">StagingCleanedUp</a> { owner: owner_address });
+    };
 }
 </code></pre>
 

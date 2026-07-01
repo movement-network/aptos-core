@@ -101,20 +101,10 @@ impl ProposalMsg {
                 sender
             );
         }
-<<<<<<< HEAD
-        self.proposal().payload().map_or(Ok(()), |p| {
-            p.verify(
-                validator,
-                proof_cache,
-                quorum_store_enabled,
-                size_limits,
-            )
-        })?;
-=======
         let (payload_result, sig_result) = rayon::join(
             || {
                 self.proposal().payload().map_or(Ok(()), |p| {
-                    p.verify(validator, proof_cache, quorum_store_enabled)
+                    p.verify(validator, proof_cache, quorum_store_enabled, size_limits)
                 })
             },
             || {
@@ -125,7 +115,6 @@ impl ProposalMsg {
         );
         payload_result?;
         sig_result?;
->>>>>>> e33e3c1b
 
         // if there is a timeout certificate, verify its signatures
         if let Some(tc) = self.sync_info.highest_2chain_timeout_cert() {

@@ -1092,13 +1092,8 @@ impl ConsensusObserver {
                 None, // rand_config
                 None, // fast_rand_config
                 rand_msg_rx,
-<<<<<<< HEAD
                 0, // highest_committed_round
-                self.observer_epoch_state.pipeline_enabled(),
                 None, // Consensus observer doesn't use virtual genesis
-=======
-                0,
->>>>>>> e33e3c1b
             )
             .await;
         self.pipeline_builder = Some(self.execution_client.pipeline_builder(signer));

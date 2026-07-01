@@ -128,7 +128,7 @@ impl UnverifiedEvent {
             },
             UnverifiedEvent::OptProposalMsg(p) => {
                 if !self_message {
-                    p.verify(peer_id, validator, proof_cache, quorum_store_enabled)?;
+                    p.verify(peer_id, validator, proof_cache, quorum_store_enabled, size_limits)?;
                     counters::VERIFY_MSG
                         .with_label_values(&["opt_proposal"])
                         .observe(start_time.elapsed().as_secs_f64());

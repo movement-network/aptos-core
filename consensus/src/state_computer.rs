@@ -12,6 +12,7 @@ use anyhow::Result;
 use aptos_config::config::BlockTransactionFilterConfig;
 use aptos_consensus_notifications::ConsensusNotificationSender;
 use aptos_consensus_types::common::Round;
+use aptos_crypto::HashValue;
 use aptos_executor_types::BlockExecutorTrait;
 use aptos_infallible::RwLock;
 use aptos_logger::prelude::*;
@@ -236,14 +237,10 @@ impl StateComputer for ExecutionProxy {
         block_executor_onchain_config: BlockExecutorConfigFromOnchain,
         transaction_deduper: Arc<dyn TransactionDeduper>,
         randomness_enabled: bool,
-<<<<<<< HEAD
-        order_vote_enabled: bool,
         virtual_genesis_block_id: Option<HashValue>,
-=======
         consensus_onchain_config: OnChainConsensusConfig,
         persisted_auxiliary_info_version: u8,
         network_sender: Arc<NetworkSender>,
->>>>>>> e33e3c1b
     ) {
         // Reset the executor with the virtual genesis block ID if provided
         if let Some(virtual_genesis_id) = virtual_genesis_block_id {
@@ -277,175 +274,3 @@ impl StateComputer for ExecutionProxy {
         self.state.write().take();
     }
 }
-<<<<<<< HEAD
-
-#[tokio::test]
-async fn test_commit_sync_race() {
-    use crate::{
-        error::MempoolError, payload_manager::DirectMempoolPayloadManager,
-        transaction_deduper::create_transaction_deduper,
-        transaction_shuffler::create_transaction_shuffler,
-    };
-    use aptos_config::config::transaction_filter_type::Filter;
-    use aptos_consensus_notifications::Error;
-    use aptos_infallible::Mutex;
-    use aptos_types::{
-        aggregate_signature::AggregateSignature,
-        block_executor::partitioner::ExecutableBlock,
-        block_info::BlockInfo,
-        contract_event::ContractEvent,
-        ledger_info::LedgerInfo,
-        on_chain_config::{TransactionDeduperType, TransactionShufflerType},
-        transaction::{SignedTransaction, Transaction, TransactionStatus},
-    };
-
-    struct RecordedCommit {
-        time: Mutex<LogicalTime>,
-    }
-
-    impl BlockExecutorTrait for RecordedCommit {
-        fn committed_block_id(&self) -> HashValue {
-            HashValue::zero()
-        }
-
-        fn reset(&self) -> Result<()> {
-            Ok(())
-        }
-
-        fn execute_block(
-            &self,
-            _block: ExecutableBlock,
-            _parent_block_id: HashValue,
-            _onchain_config: BlockExecutorConfigFromOnchain,
-        ) -> ExecutorResult<StateComputeResult> {
-            Ok(StateComputeResult::new_dummy())
-        }
-
-        fn execute_and_update_state(
-            &self,
-            _block: ExecutableBlock,
-            _parent_block_id: HashValue,
-            _onchain_config: BlockExecutorConfigFromOnchain,
-        ) -> ExecutorResult<()> {
-            todo!()
-        }
-
-        fn ledger_update(
-            &self,
-            _block_id: HashValue,
-            _parent_block_id: HashValue,
-        ) -> ExecutorResult<StateComputeResult> {
-            todo!()
-        }
-
-        fn pre_commit_block(&self, _block_id: HashValue) -> ExecutorResult<()> {
-            todo!()
-        }
-
-        fn commit_ledger(
-            &self,
-            ledger_info_with_sigs: LedgerInfoWithSignatures,
-        ) -> ExecutorResult<()> {
-            *self.time.lock() = LogicalTime::new(
-                ledger_info_with_sigs.ledger_info().epoch(),
-                ledger_info_with_sigs.ledger_info().round(),
-            );
-            Ok(())
-        }
-
-        fn finish(&self) {}
-    }
-
-    #[async_trait::async_trait]
-    impl TxnNotifier for RecordedCommit {
-        async fn notify_failed_txn(
-            &self,
-            _txns: &[SignedTransaction],
-            _compute_results: &[TransactionStatus],
-        ) -> Result<(), MempoolError> {
-            Ok(())
-        }
-    }
-
-    #[async_trait::async_trait]
-    impl ConsensusNotificationSender for RecordedCommit {
-        async fn notify_new_commit(
-            &self,
-            _transactions: Vec<Transaction>,
-            _subscribable_events: Vec<ContractEvent>,
-        ) -> std::result::Result<(), Error> {
-            Ok(())
-        }
-
-        async fn sync_for_duration(
-            &self,
-            _duration: std::time::Duration,
-        ) -> std::result::Result<LedgerInfoWithSignatures, Error> {
-            Err(Error::UnexpectedErrorEncountered(
-                "sync_for_duration() is not supported by the RecordedCommit!".into(),
-            ))
-        }
-
-        async fn sync_to_target(
-            &self,
-            target: LedgerInfoWithSignatures,
-        ) -> std::result::Result<(), Error> {
-            let logical_time =
-                LogicalTime::new(target.ledger_info().epoch(), target.ledger_info().round());
-            if logical_time <= *self.time.lock() {
-                return Err(Error::NotificationError(
-                    "Decreasing logical time".to_string(),
-                ));
-            }
-            *self.time.lock() = logical_time;
-            Ok(())
-        }
-    }
-
-    let callback = Box::new(move |_a: &[Arc<PipelinedBlock>], _b: LedgerInfoWithSignatures| {});
-    let recorded_commit = Arc::new(RecordedCommit {
-        time: Mutex::new(LogicalTime::new(0, 0)),
-    });
-    let generate_li = |epoch, round| {
-        LedgerInfoWithSignatures::new(
-            LedgerInfo::new(
-                BlockInfo::random_with_epoch(epoch, round),
-                HashValue::zero(),
-            ),
-            AggregateSignature::empty(),
-        )
-    };
-    let executor = ExecutionProxy::new(
-        recorded_commit.clone(),
-        recorded_commit.clone(),
-        recorded_commit.clone(),
-        &tokio::runtime::Handle::current(),
-        TransactionFilter::new(Filter::empty()),
-        true,
-    );
-
-    executor.new_epoch(
-        &EpochState::empty(),
-        Arc::new(DirectMempoolPayloadManager {}),
-        create_transaction_shuffler(TransactionShufflerType::NoShuffling),
-        BlockExecutorConfigFromOnchain::new_no_block_limit(),
-        create_transaction_deduper(TransactionDeduperType::NoDedup),
-        false,
-        false,
-        None,
-    );
-    executor
-        .commit(vec![], generate_li(1, 1), callback.clone())
-        .await
-        .unwrap();
-    executor
-        .commit(vec![], generate_li(1, 10), callback)
-        .await
-        .unwrap();
-    assert!(executor.sync_to_target(generate_li(1, 8)).await.is_ok());
-    assert_eq!(*recorded_commit.time.lock(), LogicalTime::new(1, 10));
-    assert!(executor.sync_to_target(generate_li(2, 8)).await.is_ok());
-    assert_eq!(*recorded_commit.time.lock(), LogicalTime::new(2, 8));
-}
-=======
->>>>>>> e33e3c1b

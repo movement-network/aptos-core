@@ -1,5 +1,4 @@
 spec aptos_framework::governed_gas_pool {
-    use aptos_framework::coin::EINSUFFICIENT_BALANCE;
     use aptos_framework::error;
 
     /// <high-level-req>
@@ -54,18 +53,34 @@ spec aptos_framework::governed_gas_pool {
     spec deposit<CoinType>(coin: Coin<CoinType>) {
         pragma aborts_if_is_partial = true;
 
+        let pool = signer::address_of(governed_gas_signer());
+
         /// [high-level-req-3]
-        /// Ensure the deposit increases the value in the CoinStore
+        /// The pool always has a registered CoinStore (register_coin at init),
+        /// so coin::deposit takes the merge branch and the balance increases by coin.value.
+        requires exists<coin::CoinStore<CoinType>>(pool);
 
-        /// Ensure the governed gas pool resource account exists
-        aborts_if !exists<CoinStore<CoinType>>(governed_gas_pool_address());
-
-        ensures global<CoinStore<CoinType>>(aptos_framework_address).coin.value == old(global<CoinStore<CoinType>>(aptos_framework_address).coin.value) + coin.value;
+        ensures global<coin::CoinStore<CoinType>>(pool).coin.value
+            == old(global<coin::CoinStore<CoinType>>(pool).coin.value) + coin.value;
     }
 
-    spec deposit_gas_fee_v2(_gas_payer: address, _gas_fee: u64) {
+    spec deposit_gas_fee_v2(gas_payer: address, gas_fee: u64) {
+        pragma aborts_if_is_partial = true;
+
+        let pool = signer::address_of(governed_gas_signer());
+
         /// [high-level-req-3]
-        ensures governed_gas_pool_balance<AptosCoin> == old(governed_gas_pool_balance<AptosCoin>) + gas_fee;
-        ensures gas_payer_balance<AptosCoin> == old(gas_payer_balance<AptosCoin>) - gas_fee;
+        /// Characterizes the legacy coin path. The FA-store path
+        /// (operations_default_to_fa_apt_store_enabled) routes the fee through the
+        /// payer's primary fungible store instead and is not covered here.
+        requires gas_payer != pool;
+        requires exists<coin::CoinStore<AptosCoin>>(pool);
+        requires exists<coin::CoinStore<AptosCoin>>(gas_payer);
+
+        /// The gas fee moves from the payer's store into the pool's store.
+        ensures global<coin::CoinStore<AptosCoin>>(pool).coin.value
+            == old(global<coin::CoinStore<AptosCoin>>(pool).coin.value) + gas_fee;
+        ensures global<coin::CoinStore<AptosCoin>>(gas_payer).coin.value
+            == old(global<coin::CoinStore<AptosCoin>>(gas_payer).coin.value) - gas_fee;
     }
 }

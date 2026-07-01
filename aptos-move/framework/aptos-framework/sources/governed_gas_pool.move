@@ -331,7 +331,7 @@ module aptos_framework::governed_gas_pool {
     /// @param aptos_framework The signer of the aptos_framework module.
     public fun initialize_for_test(
         aptos_framework: &signer,
-    ) {
+    ) acquires GovernedGasPool {
 
         // Create framework account to be able to send event.
         aptos_framework::account::create_account_for_test(@aptos_framework);
@@ -469,7 +469,7 @@ module aptos_framework::governed_gas_pool {
     }
 
     #[test(aptos_framework = @aptos_framework)]
-    fun test_initialize_is_idempotent(aptos_framework: &signer) {
+    fun test_initialize_is_idempotent(aptos_framework: &signer) acquires GovernedGasPool {
         // initialize the governed gas pool
         initialize_for_test(aptos_framework);
         // initialize the governed gas pool again, no abort

@@ -295,11 +295,16 @@ pub fn encode_genesis_change_set(
     initialize_randomness_config(&mut session, &module_storage, randomness_config);
     initialize_randomness_resources(&mut session, &module_storage);
     initialize_on_chain_governance(&mut session, &module_storage, genesis_config);
-    let not_skip_aa: bool = if let Some(features) =  &genesis_config.initial_features_override {
-        features.is_enabled(FeatureFlag::ACCOUNT_ABSTRACTION) || features.is_enabled(FeatureFlag::DERIVABLE_ACCOUNT_ABSTRACTION)
-    } else {
-        false
-    };
+    // Determine AA-enablement from the *effective* feature set, mirroring initialize_features
+    // above: when there is no override, genesis uses default_features(), which enables account
+    // abstraction. Gating on the override alone skipped AA initialization in the default case,
+    // leaving the on-chain feature flags on but the AA modules uninitialized.
+    let effective_features = genesis_config
+        .initial_features_override
+        .clone()
+        .unwrap_or_default();
+    let not_skip_aa = effective_features.is_enabled(FeatureFlag::ACCOUNT_ABSTRACTION)
+        || effective_features.is_enabled(FeatureFlag::DERIVABLE_ACCOUNT_ABSTRACTION);
     if not_skip_aa {
         initialize_account_abstraction(&mut session, &module_storage);
     }

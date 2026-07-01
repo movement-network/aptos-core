@@ -368,10 +368,10 @@ impl TExecutionClient for ExecutionProxyClient {
             onchain_consensus_config.order_vote_enabled(),
             virtual_genesis_block_id,
 =======
+>>>>>>> e33e3c1b
             onchain_consensus_config.clone(),
             aux_version,
             network_sender,
->>>>>>> e33e3c1b
         );
     }
 

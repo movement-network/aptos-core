@@ -240,10 +240,10 @@ impl StateComputer for ExecutionProxy {
         order_vote_enabled: bool,
         virtual_genesis_block_id: Option<HashValue>,
 =======
+>>>>>>> e33e3c1b
         consensus_onchain_config: OnChainConsensusConfig,
         persisted_auxiliary_info_version: u8,
         network_sender: Arc<NetworkSender>,
->>>>>>> e33e3c1b
     ) {
         // Reset the executor with the virtual genesis block ID if provided
         if let Some(virtual_genesis_id) = virtual_genesis_block_id {

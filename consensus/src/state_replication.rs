@@ -50,10 +50,10 @@ pub trait StateComputer: Send + Sync {
         order_vote_enabled: bool,
         virtual_genesis_block_id: Option<aptos_crypto::HashValue>,
 =======
+>>>>>>> e33e3c1b
         consensus_onchain_config: OnChainConsensusConfig,
         persisted_auxiliary_info_version: u8,
         network_sender: Arc<NetworkSender>,
->>>>>>> e33e3c1b
     );
 
     // Reconfigure to clear epoch state at end of epoch.

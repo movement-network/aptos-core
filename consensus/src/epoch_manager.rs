@@ -874,7 +874,6 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 rand_msg_rx,
                 recovery_data.commit_root_block().round(),
 <<<<<<< HEAD
-                self.config.enable_pipeline,
                 virtual_genesis_block_id,
 =======
 >>>>>>> e33e3c1b
@@ -1454,7 +1453,6 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 rand_msg_rx,
                 highest_committed_round,
 <<<<<<< HEAD
-                self.config.enable_pipeline,
                 None, // DAG doesn't use virtual genesis
 =======
 >>>>>>> e33e3c1b

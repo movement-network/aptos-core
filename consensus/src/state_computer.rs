@@ -12,6 +12,7 @@ use anyhow::Result;
 use aptos_config::config::BlockTransactionFilterConfig;
 use aptos_consensus_notifications::ConsensusNotificationSender;
 use aptos_consensus_types::common::Round;
+use aptos_crypto::HashValue;
 use aptos_executor_types::BlockExecutorTrait;
 use aptos_infallible::RwLock;
 use aptos_logger::prelude::*;

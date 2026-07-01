@@ -14,12 +14,8 @@ use crate::{
     },
 };
 use anyhow::ensure;
-<<<<<<< HEAD
-use aptos_consensus_types::{common::BatchSizeLimits, payload::TDataInfo};
-=======
 use aptos_config::config::BatchTransactionFilterConfig;
-use aptos_consensus_types::payload::TDataInfo;
->>>>>>> e33e3c1b
+use aptos_consensus_types::{common::BatchSizeLimits, payload::TDataInfo};
 use aptos_logger::prelude::*;
 use aptos_short_hex_str::AsShortHexStr;
 use aptos_types::PeerId;

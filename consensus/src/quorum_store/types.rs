@@ -8,11 +8,7 @@ use aptos_consensus_types::{
 };
 use aptos_crypto::{hash::CryptoHash, HashValue};
 use aptos_types::{
-<<<<<<< HEAD
-    ledger_info::LedgerInfoWithSignatures, transaction::SignedTransaction,
-=======
     ledger_info::LedgerInfoWithSignatures, quorum_store::BatchId, transaction::SignedTransaction,
->>>>>>> e33e3c1b
     validator_verifier::ValidatorVerifier, PeerId,
 };
 use serde::{Deserialize, Serialize};

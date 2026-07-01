@@ -2,16 +2,12 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-<<<<<<< HEAD
-use crate::{block::Block, common::{Author, BatchSizeLimits}, proof_of_store::ProofCache, sync_info::SyncInfo};
-=======
 use crate::{
     block::Block,
-    common::Author,
+    common::{Author, BatchSizeLimits},
     proof_of_store::{BatchInfo, ProofCache},
     sync_info::SyncInfo,
 };
->>>>>>> e33e3c1b
 use anyhow::{anyhow, ensure, format_err, Context, Result};
 use aptos_short_hex_str::AsShortHexStr;
 use aptos_types::validator_verifier::ValidatorVerifier;

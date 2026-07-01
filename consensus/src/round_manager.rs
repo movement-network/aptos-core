@@ -39,13 +39,9 @@ use aptos_config::config::{BlockTransactionFilterConfig, ConsensusConfig};
 use aptos_consensus_types::{
     block::Block,
     block_data::BlockType,
-<<<<<<< HEAD
     common::{Author, BatchSizeLimits, Round},
-=======
-    common::{Author, Round},
     opt_block_data::OptBlockData,
     opt_proposal_msg::OptProposalMsg,
->>>>>>> e33e3c1b
     order_vote::OrderVote,
     order_vote_msg::OrderVoteMsg,
     pipelined_block::PipelinedBlock,

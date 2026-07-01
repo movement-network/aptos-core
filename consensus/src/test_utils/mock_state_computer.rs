@@ -132,7 +132,6 @@ impl StateComputer for RandomComputeResultStateComputer {
         _: Arc<dyn TransactionDeduper>,
         _: bool,
 <<<<<<< HEAD
-        _: bool,
         _: Option<HashValue>,
 =======
 >>>>>>> e33e3c1b

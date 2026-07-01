@@ -361,7 +361,6 @@ impl TExecutionClient for ExecutionProxyClient {
             transaction_deduper,
             randomness_enabled,
 <<<<<<< HEAD
-            onchain_consensus_config.order_vote_enabled(),
             virtual_genesis_block_id,
 =======
 >>>>>>> e33e3c1b

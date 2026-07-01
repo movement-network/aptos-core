@@ -237,7 +237,6 @@ impl StateComputer for ExecutionProxy {
         transaction_deduper: Arc<dyn TransactionDeduper>,
         randomness_enabled: bool,
 <<<<<<< HEAD
-        order_vote_enabled: bool,
         virtual_genesis_block_id: Option<HashValue>,
 =======
 >>>>>>> e33e3c1b

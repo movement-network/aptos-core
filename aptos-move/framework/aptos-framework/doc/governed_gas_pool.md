@@ -30,11 +30,9 @@
 -  [Function `register_coin`](#0x1_governed_gas_pool_register_coin)
 -  [Specification](#@Specification_1)
     -  [Function `initialize`](#@Specification_1_initialize)
-    -  [Function `initialize_governed_gas_pool_extension`](#@Specification_1_initialize_governed_gas_pool_extension)
     -  [Function `fund`](#@Specification_1_fund)
+    -  [Function `deposit`](#@Specification_1_deposit)
     -  [Function `deposit_gas_fee_v2`](#@Specification_1_deposit_gas_fee_v2)
-    -  [Function `deposit_treasury`](#@Specification_1_deposit_treasury)
-    -  [Function `withdraw_staking_reward`](#@Specification_1_withdraw_staking_reward)
 
 
 <pre><code><b>use</b> <a href="account.md#0x1_account">0x1::account</a>;
@@ -270,7 +268,6 @@ Initializes the governed gas pool around a resource account creation seed.
 
         <a href="governed_gas_pool.md#0x1_governed_gas_pool_upgrade_pool_store_to_concurrent">upgrade_pool_store_to_concurrent</a>(&<a href="governed_gas_pool.md#0x1_governed_gas_pool_governed_gas_signer">governed_gas_signer</a>());
     } <b>else</b> {
-
         // generate a seed <b>to</b> be used <b>to</b> create the resource <a href="account.md#0x1_account">account</a> hosting the delegation pool
         <b>let</b> seed = <a href="governed_gas_pool.md#0x1_governed_gas_pool_create_resource_account_seed">create_resource_account_seed</a>(delegation_pool_creation_seed);
 
@@ -336,6 +333,8 @@ Initializes the governed gas pool extension alone.
 
 ## Function `upgrade_pool_store_to_concurrent`
 
+Ensure the pool is using aggregator_v2 for concurrentcy.
+@param pool_signer The signer of the gas pool.
 
 
 <pre><code><b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_upgrade_pool_store_to_concurrent">upgrade_pool_store_to_concurrent</a>(pool_signer: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>)
@@ -819,23 +818,6 @@ Register Aptos coin with Governed gas signer.
 
 
 
-<a id="@Specification_1_initialize_governed_gas_pool_extension"></a>
-
-### Function `initialize_governed_gas_pool_extension`
-
-
-<pre><code><b>public</b> entry <b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_initialize_governed_gas_pool_extension">initialize_governed_gas_pool_extension</a>(aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>)
-</code></pre>
-
-
-Spec for initialize_governed_gas_pool_extension
-
-
-<pre><code><b>pragma</b> aborts_if_is_partial = <b>true</b>;
-</code></pre>
-
-
-
 <a id="@Specification_1_fund"></a>
 
 ### Function `fund`
@@ -860,10 +842,24 @@ Abort if the governed gas pool has insufficient funds
 </code></pre>
 
 
-[high-level-req-5.2] Spec for fund
+
+<a id="@Specification_1_deposit"></a>
+
+### Function `deposit`
+
+
+<pre><code><b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_deposit">deposit</a>&lt;CoinType&gt;(<a href="coin.md#0x1_coin">coin</a>: <a href="coin.md#0x1_coin_Coin">coin::Coin</a>&lt;CoinType&gt;)
+</code></pre>
+
+
 
 
 <pre><code><b>pragma</b> aborts_if_is_partial = <b>true</b>;
+<b>let</b> pool = <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(<a href="governed_gas_pool.md#0x1_governed_gas_pool_governed_gas_signer">governed_gas_signer</a>());
+// This enforces <a id="high-level-req-3" href="#high-level-req">high-level requirement 3</a>:
+<b>requires</b> <b>exists</b>&lt;<a href="coin.md#0x1_coin_CoinStore">coin::CoinStore</a>&lt;CoinType&gt;&gt;(pool);
+<b>ensures</b> <b>global</b>&lt;<a href="coin.md#0x1_coin_CoinStore">coin::CoinStore</a>&lt;CoinType&gt;&gt;(pool).<a href="coin.md#0x1_coin">coin</a>.value
+    == <b>old</b>(<b>global</b>&lt;<a href="coin.md#0x1_coin_CoinStore">coin::CoinStore</a>&lt;CoinType&gt;&gt;(pool).<a href="coin.md#0x1_coin">coin</a>.value) + <a href="coin.md#0x1_coin">coin</a>.value;
 </code></pre>
 
 
@@ -877,44 +873,24 @@ Abort if the governed gas pool has insufficient funds
 </code></pre>
 
 
-[high-level-req-5] Spec for deposit_gas_fee_v2
 
 
 <pre><code><b>pragma</b> aborts_if_is_partial = <b>true</b>;
+<b>let</b> pool = <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(<a href="governed_gas_pool.md#0x1_governed_gas_pool_governed_gas_signer">governed_gas_signer</a>());
+// This enforces <a id="high-level-req-3" href="#high-level-req">high-level requirement 3</a>:
+<b>requires</b> gas_payer != pool;
+<b>requires</b> <b>exists</b>&lt;<a href="coin.md#0x1_coin_CoinStore">coin::CoinStore</a>&lt;AptosCoin&gt;&gt;(pool);
+<b>requires</b> <b>exists</b>&lt;<a href="coin.md#0x1_coin_CoinStore">coin::CoinStore</a>&lt;AptosCoin&gt;&gt;(gas_payer);
 </code></pre>
 
 
-
-<a id="@Specification_1_deposit_treasury"></a>
-
-### Function `deposit_treasury`
+The gas fee moves from the payer's store into the pool's store.
 
 
-<pre><code><b>public</b> entry <b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_deposit_treasury">deposit_treasury</a>(treasury_account: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, amount: u64)
-</code></pre>
-
-
-[high-level-req-5.1] Spec for deposit_treasury
-
-
-<pre><code><b>pragma</b> aborts_if_is_partial = <b>true</b>;
-</code></pre>
-
-
-
-<a id="@Specification_1_withdraw_staking_reward"></a>
-
-### Function `withdraw_staking_reward`
-
-
-<pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_withdraw_staking_reward">withdraw_staking_reward</a>&lt;CoinType&gt;(amount: u64): <a href="coin.md#0x1_coin_Coin">coin::Coin</a>&lt;CoinType&gt;
-</code></pre>
-
-
-[high-level-req-5.3] Spec for withdraw_staking_reward
-
-
-<pre><code><b>pragma</b> aborts_if_is_partial = <b>true</b>;
+<pre><code><b>ensures</b> <b>global</b>&lt;<a href="coin.md#0x1_coin_CoinStore">coin::CoinStore</a>&lt;AptosCoin&gt;&gt;(pool).<a href="coin.md#0x1_coin">coin</a>.value
+    == <b>old</b>(<b>global</b>&lt;<a href="coin.md#0x1_coin_CoinStore">coin::CoinStore</a>&lt;AptosCoin&gt;&gt;(pool).<a href="coin.md#0x1_coin">coin</a>.value) + gas_fee;
+<b>ensures</b> <b>global</b>&lt;<a href="coin.md#0x1_coin_CoinStore">coin::CoinStore</a>&lt;AptosCoin&gt;&gt;(gas_payer).<a href="coin.md#0x1_coin">coin</a>.value
+    == <b>old</b>(<b>global</b>&lt;<a href="coin.md#0x1_coin_CoinStore">coin::CoinStore</a>&lt;AptosCoin&gt;&gt;(gas_payer).<a href="coin.md#0x1_coin">coin</a>.value) - gas_fee;
 </code></pre>
 
 

@@ -256,7 +256,7 @@ module aptos_framework::governed_gas_pool {
     /// @return A `Coin<CoinType>` resource containing the withdrawn amount.
     public(friend) fun withdraw_staking_reward<CoinType>(
         amount: u64
-    ): Coin<CoinType> acquires GovernedGasPool, GovernedGasPoolExtension  {
+    ): Coin<CoinType> acquires GovernedGasPool, GovernedGasPoolExtension {
         let balance = get_balance<CoinType>();
         assert!(balance >= amount, EINSUFFICIENT_BALANCE);
 

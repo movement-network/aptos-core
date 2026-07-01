@@ -2331,14 +2331,17 @@ impl CliCommand<TransactionSummary> for Replay {
         }
 
         let rest_endpoint = match &self.network {
-            Mainnet => "https://mainnet.movementnetwork.xyz",
-            Testnet => "https://testnet.movementnetwork.xyz",
-            Devnet => "https://devnet.movementnetwork.xyz",
-            RestEndpoint(url) => url,
+            ReplayNetworkSelection::Mainnet => "https://mainnet.movementnetwork.xyz",
+            ReplayNetworkSelection::Testnet => "https://testnet.movementnetwork.xyz",
+            ReplayNetworkSelection::Devnet => "https://devnet.movementnetwork.xyz",
+            ReplayNetworkSelection::RestEndpoint(url) => url,
         };
 
         // Build the client
-        let client = Client::builder(self.network.to_base_url()?);
+        let client = Client::builder(AptosBaseUrl::Custom(
+            Url::parse(rest_endpoint)
+                .map_err(|_err| CliError::UnableToParse("url", rest_endpoint.to_string()))?,
+        ));
 
         // add the node API key if it is provided
         let client = if let Some(api_key) = self.node_api_key {

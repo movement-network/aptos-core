@@ -117,11 +117,8 @@ module aptos_framework::aptos_coin {
     /// Only callable in tests and testnets where the core resources account exists.
     /// Create delegated token for the address so the account could claim MintCapability later.
     public entry fun delegate_mint_capability(account: signer, to: address) acquires Delegations {
-        system_addresses::assert_aptos_framework(&account);
-        let delegations = &mut borrow_global_mut<Delegations>(@aptos_framework).inner;
-        if (!exists<Delegations>(signer::address_of(&account))) {
-          move_to(&account, Delegations { inner: vector[] });
-        };
+        system_addresses::assert_core_resource(&account);
+        let delegations = &mut borrow_global_mut<Delegations>(@core_resources).inner;
         vector::for_each_ref(delegations, |element| {
             let element: &DelegatedMintCapability = element;
             assert!(element.to != to, error::invalid_argument(EALREADY_DELEGATED));
@@ -136,16 +133,16 @@ module aptos_framework::aptos_coin {
         let maybe_index = find_delegation(signer::address_of(account));
         assert!(option::is_some(&maybe_index), EDELEGATION_NOT_FOUND);
         let idx = *option::borrow(&maybe_index);
-        let delegations = &mut borrow_global_mut<Delegations>(@aptos_framework).inner;
+        let delegations = &mut borrow_global_mut<Delegations>(@core_resources).inner;
         let DelegatedMintCapability { to: _ } = vector::swap_remove(delegations, idx);
 
         // Make a copy of mint cap and give it to the specified account.
-        let mint_cap = borrow_global<MintCapStore>(@aptos_framework).mint_cap;
+        let mint_cap = borrow_global<MintCapStore>(@core_resources).mint_cap;
         move_to(account, MintCapStore { mint_cap });
     }
 
     fun find_delegation(addr: address): Option<u64> acquires Delegations {
-        let delegations = &borrow_global<Delegations>(@aptos_framework).inner;
+        let delegations = &borrow_global<Delegations>(@core_resources).inner;
         let i = 0;
         let len = vector::length(delegations);
         let index = option::none();

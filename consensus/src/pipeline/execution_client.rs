@@ -318,9 +318,8 @@ impl TExecutionClient for ExecutionProxyClient {
         highest_committed_round: Round,
 <<<<<<< HEAD
         virtual_genesis_block_id: Option<aptos_crypto::HashValue>,
-    ) {
-        self.spawn_decoupled_execution(
 =======
+>>>>>>> e33e3c1b
     ) {
         let network_sender = Arc::new(NetworkSender::new(
             self.author,
@@ -328,8 +327,7 @@ impl TExecutionClient for ExecutionProxyClient {
             self.self_sender.clone(),
             epoch_state.verifier.clone(),
         ));
-        let maybe_rand_msg_tx = self.spawn_decoupled_execution(
->>>>>>> e33e3c1b
+        self.spawn_decoupled_execution(
             maybe_consensus_key,
             commit_signer_provider,
             epoch_state.clone(),

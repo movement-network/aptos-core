@@ -90,6 +90,10 @@ fn bytes_to_base58(bytes: &[u8]) -> String {
     String::from_utf8(result).unwrap()
 }
 
+// Ignored: account abstraction is not supported on Movement. Genesis AA initialization is
+// intentionally gated off (see #238), so the derivable authenticators are never registered and
+// this test cannot pass. Re-enable if/when AA is supported.
+#[ignore]
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn test_solana_derivable_account() {
     let swarm = SwarmBuilder::new_local(1).with_aptos().build().await;
@@ -152,6 +156,10 @@ async fn test_solana_derivable_account() {
         .unwrap_or_else(|_| panic!("aa: {:?}", create_txn));
 }
 
+// Ignored: account abstraction is not supported on Movement. Genesis AA initialization is
+// intentionally gated off (see #238), so the derivable authenticators are never registered and
+// this test cannot pass. Re-enable if/when AA is supported.
+#[ignore]
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn test_ethereum_derivable_account() {
     let swarm = SwarmBuilder::new_local(1).with_aptos().build().await;

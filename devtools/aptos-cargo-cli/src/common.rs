@@ -155,6 +155,22 @@ impl SelectedPackageArgs {
         // Identify the merge base
         let merge_base = self.identify_merge_base()?;
 
+        // If the branch is already up to date with the base branch (i.e. the merge base is the
+        // current base branch tip), it is not stale regardless of the base branch's commit
+        // cadence, so skip the age check below. This matters for slow-moving base branches like
+        // m1: the age check assumes the base branch gets frequent commits (true for upstream
+        // main), and would otherwise fail every PR whenever the base tip happens to be older
+        // than MAX_NUM_DAYS_SINCE_MERGE_BASE.
+        let base_ref = env::var("GITHUB_BASE_REF").unwrap_or_else(|_| "m1".to_string());
+        let base_tip = self.git_rev_parse(&format!("origin/{base_ref}"));
+        if !base_tip.is_empty() && merge_base == base_tip {
+            info!(
+                "The branch is up to date with the base branch (origin/{}); skipping the merge-base age check.",
+                base_ref
+            );
+            return Ok(());
+        }
+
         // Get the commit timestamp of the merge-base
         let commit_timestamp_output = Command::new("git")
             .arg("show")
@@ -226,7 +242,9 @@ impl SelectedPackageArgs {
     ///
     /// Note: if the merge-base is too old, an error will be returned.
     fn identify_merge_base(&self) -> anyhow::Result<String> {
-        let base_ref = env::var("GITHUB_BASE_REF").unwrap_or_else(|_| "main".to_string());
+        // On pull_request events GITHUB_BASE_REF is the target branch. On push events it is
+        // unset, so fall back to this fork's default branch (m1), not upstream's "main".
+        let base_ref = env::var("GITHUB_BASE_REF").unwrap_or_else(|_| "m1".to_string());
         let origin_base_ref = format!("origin/{base_ref}");
 
         // Run the git merge-base command

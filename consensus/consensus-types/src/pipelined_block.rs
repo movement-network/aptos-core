@@ -342,6 +342,8 @@ impl PipelinedBlock {
         *self.pre_commit_fut.lock() = Some(Box::pin(async { Ok(()) }));
     }
 
+=======
+>>>>>>> e33e3c1b
     // GUARD: keep this function a pure write to `self.randomness`.
     // `ShareAggregator` runs synchronously in `consensus/src/rand/rand_gen/rand_store.rs`
     // and its result reaches `set_randomness` through a channel, with no
@@ -358,8 +360,6 @@ impl PipelinedBlock {
     // rand aggregation wait on a pipeline-derived future — this function
     // MUST also eagerly forward `rand_tx`, similar as in
     // https://github.com/aptos-labs/aptos-core/blob/fefcfade3edf26f0396d63963f7ea04364f3666f/consensus/consensus-types/src/pipelined_block.rs#L368-L380
-=======
->>>>>>> e33e3c1b
     pub fn set_randomness(&self, randomness: Randomness) {
         assert!(self.randomness.set(randomness.clone()).is_ok());
     }

@@ -190,6 +190,14 @@ pub trait FuzzValueSource: Send + Sync {
     ) -> Option<MoveValue> {
         None
     }
+
+    /// The base RNG seed this source draws from, when it is seed-driven.
+    /// Surfaced so the plan builder can label expanded fuzz cases with the seed
+    /// needed to reproduce them (e.g. `#3[seed=0,amount=28]`). Returns `None`
+    /// for sources without a reproducible seed.
+    fn base_seed(&self) -> Option<u64> {
+        None
+    }
 }
 
 /// Default source that produces no samples and reports a clear error. Plug a
@@ -236,12 +244,29 @@ impl FuzzValueSource for NoFuzzSource {
 /// [`MAX_FUZZ_CASES`]: crate::plan_builder
 pub const DEFAULT_FUZZ_RUNS: usize = 64;
 
-/// Default base RNG seed for the fuzz value source.
+/// Fallback base RNG seed for [`FuzzConfig::default`].
 ///
-/// Single source of truth shared by [`FuzzConfig::default`] and the
-/// `--fuzz-seed` CLI flag. Deterministic by default (0) so runs reproduce;
-/// override to search the space differently across CI runs.
+/// This is only the *library-level* default used when a `FuzzConfig` is built
+/// directly. The unit-test CLI does NOT default `--fuzz-seed` to this: when the
+/// flag is omitted, a fresh random seed is drawn per run (see [`random_seed`])
+/// so each run explores a different slice of the input space; pass
+/// `--fuzz-seed N` to pin it and reproduce a specific run.
 pub const DEFAULT_FUZZ_SEED: u64 = 0;
+
+/// Draw a nondeterministic `u64` seed for a fuzz run. Used when the caller did
+/// not pin `--fuzz-seed`, so every run searches differently while still being
+/// reproducible once the drawn value is logged.
+///
+/// Sourced from `RandomState` (OS-seeded, per-instance random) to avoid pulling
+/// in the `rand` crate — consistent with this module's no-`rand` policy. Only
+/// used to pick a starting seed, never for the value stream itself, which stays
+/// the deterministic SplitMix64 in [`Rng`].
+pub fn random_seed() -> u64 {
+    use std::hash::{BuildHasher, Hasher};
+    std::collections::hash_map::RandomState::new()
+        .build_hasher()
+        .finish()
+}
 
 /// Default relative weight (0..=100) of dictionary draws against the
 /// random+edge strategies. Matches Foundry's `dictionary_weight` of 40.
@@ -514,6 +539,10 @@ impl FuzzValueSource for DefaultFuzzSource {
     ) -> Option<MoveValue> {
         let mut rng = Rng(self.config.seed.wrapping_add(seed));
         mutate_value(&mut rng, ty, current, domain, exclude, &self.dictionary)
+    }
+
+    fn base_seed(&self) -> Option<u64> {
+        Some(self.config.seed)
     }
 }
 

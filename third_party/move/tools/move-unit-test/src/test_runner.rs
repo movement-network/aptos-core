@@ -235,6 +235,20 @@ impl<W: Write> TestOutput<'_, '_, W> {
         .unwrap()
     }
 
+    /// One-line banner printed at the top of a fuzz batch (all expanded cases of
+    /// one fuzzed function) carrying the seed needed to reproduce that batch.
+    fn fuzz_header(&self, fn_name: &str, seed: u64) {
+        writeln!(
+            self.writer.lock().unwrap(),
+            "[ {}    ] {}::{} (seed={})",
+            "FUZZ".bold().bright_cyan(),
+            format_module_id(&self.test_plan.module_id),
+            fn_name,
+            seed
+        )
+        .unwrap()
+    }
+
     fn timeout(&self, fn_name: &str) {
         writeln!(
             self.writer.lock().unwrap(),
@@ -246,11 +260,6 @@ impl<W: Write> TestOutput<'_, '_, W> {
         .unwrap();
     }
 
-    /// Free-form note printed underneath the last status line. Used by the
-    /// shrink path to surface the minimal counterexample.
-    fn note(&self, message: &str) {
-        writeln!(self.writer.lock().unwrap(), "         {}", message).unwrap()
-    }
 }
 
 /// Project a `VMError` onto the `MoveError` identity used to compare failures
@@ -268,18 +277,121 @@ fn move_error_of(e: &VMError) -> MoveError {
 /// Human-readable argument vector used in shrink output. Renders each value
 /// through the compiler's `format_move_value` so the shrink counterexample and
 /// the expanded-case name (built in the plan builder) format identically.
-fn format_arguments(args: &[move_core_types::value::MoveValue]) -> String {
-    let parts: Vec<String> = args
-        .iter()
-        .map(move_compiler_v2::plan_builder::format_move_value)
-        .collect();
-    format!("[{}]", parts.join(", "))
+/// Per-case pass/fail classification, computed once per case so the caller can
+/// either print it immediately (non-fuzz) or fold it into a [`FuzzBatch`].
+enum CaseStatus {
+    Pass,
+    Fail,
+    Timeout,
+}
+
+/// One fuzzed function's accumulated outcome. A fuzz batch is reported as a
+/// single line — every drawn value gathered into a per-parameter array —
+/// instead of one line per expanded case. If any draw failed, the batch reports
+/// `FAIL` and lists the failing draws; otherwise it reports `PASS` and lists all
+/// draws.
+struct FuzzBatch {
+    /// Real function symbol (undecorated), used as the reported name.
+    function_name: String,
+    /// `(argument index, parameter name)` for each fuzzed parameter, in argument
+    /// order. Fixed arguments (e.g. a pinned signer) are excluded.
+    cols: Vec<(usize, String)>,
+    /// Formatted fuzzed-argument values, one row per case; each row has one entry
+    /// per `cols` entry, in `cols` order.
+    passed: Vec<Vec<String>>,
+    failed: Vec<Vec<String>>,
+}
+
+impl FuzzBatch {
+    fn new(function_name: String, cols: Vec<(usize, String)>) -> Self {
+        Self {
+            function_name,
+            cols,
+            passed: Vec::new(),
+            failed: Vec::new(),
+        }
+    }
+
+    fn record(&mut self, passed: bool, test_info: &TestCase) {
+        let row: Vec<String> = self
+            .cols
+            .iter()
+            .map(|(i, _)| {
+                move_compiler_v2::plan_builder::format_move_value(&test_info.arguments[*i])
+            })
+            .collect();
+        if passed {
+            self.passed.push(row);
+        } else {
+            self.failed.push(row);
+        }
+    }
+
+    /// Transpose `rows` over `cols` into a `p0=[v0,v1,..],p1=[..]` suffix.
+    fn suffix(&self, rows: &[Vec<String>]) -> String {
+        self.cols
+            .iter()
+            .enumerate()
+            .map(|(c, (_, name))| {
+                let vals: Vec<&str> = rows.iter().map(|r| r[c].as_str()).collect();
+                format!("{}=[{}]", name, vals.join(","))
+            })
+            .collect::<Vec<_>>()
+            .join(",")
+    }
+
+    /// Emit the single aggregated status line: `FAIL` listing the failing draws
+    /// when any case failed, else `PASS` listing every draw.
+    fn flush<W: Write>(self, output: &TestOutput<W>) {
+        if self.failed.is_empty() {
+            let decorated = format!("{}[{}]", self.function_name, self.suffix(&self.passed));
+            output.pass(&decorated);
+        } else {
+            let decorated = format!("{}[{}]", self.function_name, self.suffix(&self.failed));
+            output.fail(&decorated);
+        }
+    }
 }
 
 impl SharedTestingConfig {
     /// Topic 2: write the failing argument vector to the regression corpus
     /// when a corpus directory is configured. Prefers the shrunk-minimal
     /// vector when available — that's the cleanest reproducer to persist.
+    /// The base fuzz seed to advertise for `function_name`, or `None` when the
+    /// case is not fuzz-origin (fixed matrix/concrete args) or the source has no
+    /// reproducible seed. `function_name` is the expanded case name, matching how
+    /// the fuzz metadata is keyed.
+    fn fuzz_seed_for(&self, test_plan: &ModuleTestPlan, function_name: &str) -> Option<u64> {
+        let ctx = self.fuzz_ctx.as_ref()?;
+        let origins = ctx.metadata.get(&test_plan.module_id, function_name)?;
+        if origins.iter().all(|o| matches!(o, ArgOrigin::Fixed)) {
+            return None;
+        }
+        ctx.source.base_seed()
+    }
+
+    /// The fuzzed argument columns for `function_name`: `(arg_index, param_name)`
+    /// for each `Fuzz`-origin parameter, in argument order. Fixed arguments (e.g.
+    /// a pinned signer) are excluded so the aggregated batch line lists only the
+    /// values that actually varied. `function_name` is the expanded case name,
+    /// matching how the fuzz metadata is keyed.
+    fn fuzz_cols(&self, test_plan: &ModuleTestPlan, function_name: &str) -> Vec<(usize, String)> {
+        let Some(ctx) = self.fuzz_ctx.as_ref() else {
+            return Vec::new();
+        };
+        let Some(origins) = ctx.metadata.get(&test_plan.module_id, function_name) else {
+            return Vec::new();
+        };
+        origins
+            .iter()
+            .enumerate()
+            .filter_map(|(i, o)| match o {
+                ArgOrigin::Fuzz { param_name, .. } => Some((i, param_name.clone())),
+                ArgOrigin::Fixed => None,
+            })
+            .collect()
+    }
+
     fn persist_to_corpus(
         &self,
         test_plan: &ModuleTestPlan,
@@ -390,31 +502,6 @@ impl SharedTestingConfig {
         }
     }
 
-    /// Shrink a fuzz failure (if applicable), persist the resulting minimal
-    /// (or, if shrinking did nothing, original) failing arguments to the
-    /// regression corpus, and emit the minimal counterexample as a note. A
-    /// no-op for non-fuzz cases — every step gates on fuzz metadata internally —
-    /// so it is safe to call from any failure branch.
-    fn shrink_persist_and_note<F: UnitTestFactory, W: Write>(
-        &self,
-        test_plan: &ModuleTestPlan,
-        function_name: &str,
-        test_info: &TestCase,
-        factory: &Mutex<F>,
-        original: &MoveError,
-        output: &TestOutput<W>,
-    ) {
-        let shrunk =
-            self.shrink_if_fuzz(test_plan, function_name, test_info, factory, original);
-        self.persist_to_corpus(test_plan, function_name, test_info, shrunk.as_deref());
-        if let Some(args) = shrunk.as_ref() {
-            output.note(&format!(
-                "└─ minimal counterexample: {}",
-                format_arguments(args)
-            ));
-        }
-    }
-
     #[allow(clippy::field_reassign_with_default)]
     fn execute_via_move_vm<F: UnitTestFactory>(
         &self,
@@ -509,7 +596,32 @@ impl SharedTestingConfig {
     ) -> TestStatistics {
         let mut stats = TestStatistics::new();
 
+        // Fuzz cases of one function are reported as a single aggregated line
+        // (every drawn value gathered into per-parameter arrays) rather than one
+        // line per case. `batch` holds the in-progress fuzz batch: cases of one
+        // function are contiguous in this `BTreeMap` (keyed by the `fn#idx[..]`
+        // display name, which shares the function prefix), so we flush on the
+        // function transition and once more after the loop. Non-fuzz cases keep
+        // printing one line each.
+        let mut batch: Option<FuzzBatch> = None;
         for (function_name, test_info) in &test_plan.tests {
+            let fuzz_seed = self.fuzz_seed_for(test_plan, function_name);
+            if batch.as_ref().map(|b| b.function_name.as_str())
+                != Some(test_info.function_name.as_str())
+            {
+                if let Some(prev) = batch.take() {
+                    prev.flush(output);
+                }
+                if let Some(seed) = fuzz_seed {
+                    // Seed banner once, at the top of the batch.
+                    output.fuzz_header(&test_info.function_name, seed);
+                    batch = Some(FuzzBatch::new(
+                        test_info.function_name.clone(),
+                        self.fuzz_cols(test_plan, function_name),
+                    ));
+                }
+            }
+
             let (cs_result, ext_result, exec_result, test_run_info) =
                 self.execute_via_move_vm(test_plan, function_name, test_info, factory);
 
@@ -538,32 +650,34 @@ impl SharedTestingConfig {
                 }
             };
 
-            match exec_result {
+            // Classify the case, running the same stats / shrink / corpus side
+            // effects as before, but defer the printed status so a fuzz batch can
+            // be collapsed into one line at flush time.
+            let status = match exec_result {
                 Err(err) => {
                     let actual_err = move_error_of(&err);
                     assert!(err.major_status() != StatusCode::EXECUTED);
                     match test_info.expected_failure.as_ref() {
                         Some(ExpectedFailure::Expected) => {
-                            output.pass(function_name);
                             stats.test_success(test_run_info, test_plan);
+                            CaseStatus::Pass
                         },
                         Some(ExpectedFailure::ExpectedWithError(expected_err))
                             if expected_err == &actual_err =>
                         {
-                            output.pass(function_name);
                             stats.test_success(test_run_info, test_plan);
+                            CaseStatus::Pass
                         },
                         Some(ExpectedFailure::ExpectedWithCodeDEPRECATED(code))
                             if actual_err.0 == StatusCode::ABORTED
                                 && actual_err.1.is_some()
                                 && actual_err.1.unwrap() == *code =>
                         {
-                            output.pass(function_name);
                             stats.test_success(test_run_info, test_plan);
+                            CaseStatus::Pass
                         },
                         // incorrect cases
                         Some(ExpectedFailure::ExpectedWithError(expected_err)) => {
-                            output.fail(function_name);
                             stats.test_failure(
                                 TestFailure::new(
                                     FailureReason::wrong_error(expected_err.clone(), actual_err),
@@ -572,10 +686,10 @@ impl SharedTestingConfig {
                                     save_session_state(),
                                 ),
                                 test_plan,
-                            )
+                            );
+                            CaseStatus::Fail
                         },
                         Some(ExpectedFailure::ExpectedWithCodeDEPRECATED(expected_code)) => {
-                            output.fail(function_name);
                             stats.test_failure(
                                 TestFailure::new(
                                     FailureReason::wrong_abort_deprecated(
@@ -587,11 +701,10 @@ impl SharedTestingConfig {
                                     save_session_state(),
                                 ),
                                 test_plan,
-                            )
+                            );
+                            CaseStatus::Fail
                         },
                         None if err.major_status() == StatusCode::OUT_OF_GAS => {
-                            // Ran out of ticks, report a test timeout and log a test failure
-                            output.timeout(function_name);
                             // A gas blow-up is a real, replayable fuzz finding, so
                             // persist the failing input so the regression doesn't
                             // silently vanish next run. We deliberately do NOT
@@ -599,8 +712,7 @@ impl SharedTestingConfig {
                             // that still hits OUT_OF_GAS, but smaller inputs almost
                             // always consume less gas, so each probe is a full
                             // gas-bounded re-execution that nearly always fails to
-                            // reproduce — up to ~100×args wasted executions for no
-                            // benefit. No-op for non-fuzz cases.
+                            // reproduce. No-op for non-fuzz cases.
                             self.persist_to_corpus(test_plan, function_name, test_info, None);
                             stats.test_failure(
                                 TestFailure::new(
@@ -610,22 +722,26 @@ impl SharedTestingConfig {
                                     save_session_state(),
                                 ),
                                 test_plan,
-                            )
+                            );
+                            CaseStatus::Timeout
                         },
                         None => {
-                            output.fail(function_name);
-                            // Topic 3 + 2: if this failure originated from a
-                            // fuzz-sampled case, shrink it to a minimal
-                            // counterexample (reproducing the *same* error) and
-                            // persist the failing arguments so the next run
-                            // replays them.
-                            self.shrink_persist_and_note(
+                            // If this failure originated from a fuzz-sampled case,
+                            // shrink it to a minimal counterexample (reproducing the
+                            // *same* error) and persist the failing arguments so the
+                            // next run replays them. No-op for non-fuzz cases.
+                            let shrunk = self.shrink_if_fuzz(
                                 test_plan,
                                 function_name,
                                 test_info,
                                 factory,
                                 &actual_err,
-                                output,
+                            );
+                            self.persist_to_corpus(
+                                test_plan,
+                                function_name,
+                                test_info,
+                                shrunk.as_deref(),
                             );
                             stats.test_failure(
                                 TestFailure::new(
@@ -635,14 +751,14 @@ impl SharedTestingConfig {
                                     save_session_state(),
                                 ),
                                 test_plan,
-                            )
+                            );
+                            CaseStatus::Fail
                         },
                     }
                 },
                 Ok(_) => {
                     // Expected the test to fail, but it executed
                     if test_info.expected_failure.is_some() {
-                        output.fail(function_name);
                         stats.test_failure(
                             TestFailure::new(
                                 FailureReason::no_error(),
@@ -651,14 +767,30 @@ impl SharedTestingConfig {
                                 save_session_state(),
                             ),
                             test_plan,
-                        )
+                        );
+                        CaseStatus::Fail
                     } else {
                         // Expected the test to execute fully and it did
-                        output.pass(function_name);
                         stats.test_success(test_run_info, test_plan);
+                        CaseStatus::Pass
                     }
                 },
+            };
+
+            match batch.as_mut() {
+                // Fuzz batch: accumulate; the aggregated line prints at flush.
+                Some(b) => b.record(matches!(status, CaseStatus::Pass), test_info),
+                // Non-fuzz: report the case immediately, as before.
+                None => match status {
+                    CaseStatus::Pass => output.pass(function_name),
+                    CaseStatus::Fail => output.fail(function_name),
+                    CaseStatus::Timeout => output.timeout(function_name),
+                },
             }
+        }
+
+        if let Some(prev) = batch.take() {
+            prev.flush(output);
         }
 
         stats

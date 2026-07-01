@@ -619,4 +619,44 @@ module aptos_framework::storage_gas {
             assert!(gas_parameter.per_byte_read == 1000, 0);
         };
     }
+
+    //
+    // Fuzz tests
+    //
+
+    // `interpolate` is integer linear interpolation:
+    //   y0 + (x - x0) * (y1 - y0) / (x1 - x0)
+    // It is only well-defined when x0 < x1 (else division by zero), x0 <= x <= x1
+    // and y0 <= y1 (else u64 underflow in the subtractions), and when the
+    // intermediate product stays within u64. Fuzz constraints are applied per
+    // parameter and cannot express these cross-parameter relationships, so we
+    // draw five unconstrained u64s and fold them into a valid configuration in
+    // the body. The property under test is the defining one for linear
+    // interpolation: the output never leaves the [y0, y1] band, and the
+    // endpoints map exactly.
+    #[test]
+    fun fuzz_interpolate_stays_within_bounds(
+        x0_raw: u64,
+        span_raw: u64,
+        frac_raw: u64,
+        y0_raw: u64,
+        dy_raw: u64,
+    ) {
+        // Keep the x-coordinates in basis-point territory (the only domain
+        // `interpolate` is ever called with) and the y-values well below the
+        // overflow threshold: (x - x0) <= 10_000 and (y1 - y0) < 1_000_000_000, so
+        // the product is at most ~1e13, comfortably inside u64.
+        let x0 = x0_raw % 10000;
+        let x1 = x0 + 1 + (span_raw % 10000); // x1 in [x0 + 1, x0 + 10000]
+        let x = x0 + (frac_raw % (x1 - x0 + 1)); // x in [x0, x1]
+        let y0 = y0_raw % 1000000000;
+        let y1 = y0 + (dy_raw % 1000000000); // y1 in [y0, y0 + 1e9 - 1]
+
+        let y = interpolate(x0, x1, y0, y1, x);
+        assert!(y >= y0, 0);
+        assert!(y <= y1, 1);
+        // Endpoints are exact: at x0 the offset is 0, at x1 it is the full (y1 - y0).
+        assert!(interpolate(x0, x1, y0, y1, x0) == y0, 2);
+        assert!(interpolate(x0, x1, y0, y1, x1) == y1, 3);
+    }
 }

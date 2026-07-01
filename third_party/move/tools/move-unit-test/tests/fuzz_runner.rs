@@ -64,7 +64,8 @@ module 0x42::fuzz_mod {
 "#,
     );
     let (output, ok, total) = run(&config);
-    // Two functions, each kept at the full run count thanks to unique names.
+    // The plan still expands to one uniquely-named TestCase per draw (this count
+    // comes from the plan, not the printed lines).
     assert_eq!(
         total,
         2 * DEFAULT_FUZZ_RUNS,
@@ -73,10 +74,59 @@ module 0x42::fuzz_mod {
         output
     );
     assert!(ok, "all fuzz cases should pass; output:\n{}", output);
+    // At report time, each fuzzed function collapses to a single aggregated PASS
+    // line (every draw gathered into per-parameter arrays), preceded by one FUZZ
+    // seed banner. Two fuzzed functions => 2 of each.
     assert_eq!(
         output.matches("[ PASS").count(),
-        2 * DEFAULT_FUZZ_RUNS,
-        "every expanded case should report PASS; output:\n{}",
+        2,
+        "each fuzz fn should report one aggregated PASS line; output:\n{}",
+        output
+    );
+    assert_eq!(
+        output.matches("[ FUZZ").count(),
+        2,
+        "each fuzz fn should print one seed banner; output:\n{}",
+        output
+    );
+}
+
+/// A fuzz batch whose cases fail collapses to a single aggregated `[ FAIL ]`
+/// line (the failing draws gathered into the array), not one line per case, and
+/// still fails the run. Guards the FAIL side of the batch reporting.
+#[test]
+fn failing_fuzz_batch_reports_single_fail_line() {
+    let (_dir, config) = config_for(
+        r#"
+module 0x42::fuzz_mod {
+    #[test]
+    fun always_aborts(_x: u8) { abort 7 }
+}
+"#,
+    );
+    let (output, ok, total) = run(&config);
+    assert_eq!(
+        total, DEFAULT_FUZZ_RUNS,
+        "the batch still expands to the full run count; output:\n{}",
+        output
+    );
+    assert!(!ok, "a failing fuzz batch must fail the run; output:\n{}", output);
+    assert_eq!(
+        output.matches("[ FAIL").count(),
+        1,
+        "the whole batch should collapse to one aggregated FAIL line; output:\n{}",
+        output
+    );
+    assert_eq!(
+        output.matches("[ PASS").count(),
+        0,
+        "no case passed, so no PASS line; output:\n{}",
+        output
+    );
+    assert_eq!(
+        output.matches("[ FUZZ").count(),
+        1,
+        "one seed banner for the batch; output:\n{}",
         output
     );
 }

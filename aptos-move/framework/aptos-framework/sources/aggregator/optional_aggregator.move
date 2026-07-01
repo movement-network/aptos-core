@@ -283,4 +283,54 @@ module aptos_framework::optional_aggregator {
 
         destroy(aggregator);
     }
+
+    //
+    // Fuzz tests
+    //
+
+    // `add_integer` aborts unless `value <= limit - current`, and `sub_integer`
+    // aborts unless `value <= current`. The bug classes worth hunting are an
+    // off-by-one at the limit boundary and an underflow in the `limit - value`
+    // headroom computation. We fuzz the limit and both operands independently
+    // and fold each operand into the always-legal range inside the body, then
+    // assert the stored value tracks the adds and subs exactly and never exceeds
+    // the limit. The fold keeps every drawn case on the success path, so the
+    // assertions — not aborts — are what catch a regression.
+    #[test]
+    fun fuzz_integer_add_sub_tracks_value(limit: u128, add_raw: u128, sub_raw: u128) {
+        let integer = new_integer(limit);
+        assert!(read_integer(&integer) == 0, 0);
+
+        // `v` in [0, limit]. `limit + 1` would overflow only at limit == MAX_U128,
+        // where every u128 already satisfies v <= limit.
+        let v = if (limit == MAX_U128) { add_raw } else { add_raw % (limit + 1) };
+        add_integer(&mut integer, v);
+        assert!(read_integer(&integer) == v, 1);
+        assert!(read_integer(&integer) <= limit, 2);
+
+        // `s` in [0, v]; same overflow guard against v == MAX_U128.
+        let s = if (v == MAX_U128) { sub_raw } else { sub_raw % (v + 1) };
+        sub_integer(&mut integer, s);
+        assert!(read_integer(&integer) == v - s, 3);
+
+        destroy_integer(integer);
+    }
+
+    // Same accounting property exercised end-to-end through the public
+    // `add`/`sub`/`read` surface on the integer-backed aggregator, whose limit is
+    // MAX_U128 (so any single u128 operand fits). This covers the option dispatch
+    // in `add`/`sub`/`read` that the internal test above bypasses.
+    #[test(account = @aptos_framework)]
+    fun fuzz_optional_aggregator_roundtrip(account: signer, a: u128, b: u128) {
+        aggregator_factory::initialize_aggregator_factory(&account);
+        let aggregator = new(false);
+        add(&mut aggregator, a);
+        assert!(read(&aggregator) == a, 0);
+
+        let s = if (a == MAX_U128) { b } else { b % (a + 1) };
+        sub(&mut aggregator, s);
+        assert!(read(&aggregator) == a - s, 1);
+
+        destroy(aggregator);
+    }
 }

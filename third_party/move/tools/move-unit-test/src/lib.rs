@@ -17,8 +17,8 @@ use move_command_line_common::files::verify_and_create_named_address_mapping;
 use legacy_move_compiler::unit_test::{ExpectedFailure, TestCase};
 use move_compiler_v2::{
     fuzz::{
-        DefaultFuzzSource, FuzzConfig, FuzzPlanMetadata, FuzzValueSource,
-        DEFAULT_FUZZ_DICTIONARY_WEIGHT, DEFAULT_FUZZ_RUNS, DEFAULT_FUZZ_SEED,
+        random_seed, DefaultFuzzSource, FuzzConfig, FuzzPlanMetadata, FuzzValueSource,
+        DEFAULT_FUZZ_DICTIONARY_WEIGHT, DEFAULT_FUZZ_RUNS,
     },
     fuzz_corpus, plan_builder as plan_builder_v2,
 };
@@ -140,10 +140,11 @@ pub struct UnitTestingConfig {
     #[clap(long = "fuzz-runs", default_value_t = DEFAULT_FUZZ_RUNS)]
     pub fuzz_runs: usize,
 
-    /// Deterministic seed for the fuzz value source. Defaults to 0; change to
-    /// search the space differently across CI runs.
-    #[clap(long = "fuzz-seed", default_value_t = DEFAULT_FUZZ_SEED)]
-    pub fuzz_seed: u64,
+    /// Base seed for the fuzz value source. When omitted, a fresh random seed is
+    /// drawn per run (logged at the top of each fuzz batch) so every run searches
+    /// differently; pass an explicit value to pin it and reproduce a prior run.
+    #[clap(long = "fuzz-seed")]
+    pub fuzz_seed: Option<u64>,
 
     /// Percentage weight (0..=100) of dictionary draws against random+edge
     /// draws when fuzzing primitive parameters. Mirrors Foundry's
@@ -182,7 +183,7 @@ impl Default for UnitTestingConfig {
             list: false,
             named_address_values: vec![],
             fuzz_runs: DEFAULT_FUZZ_RUNS,
-            fuzz_seed: DEFAULT_FUZZ_SEED,
+            fuzz_seed: None,
             fuzz_dictionary_weight: DEFAULT_FUZZ_DICTIONARY_WEIGHT,
             fuzz_corpus_dir: None,
         }
@@ -227,7 +228,8 @@ impl UnitTestingConfig {
             let (files, units, env) = build_and_report_v2_driver(options).unwrap();
             let fuzz_config = FuzzConfig {
                 runs: self.fuzz_runs,
-                seed: self.fuzz_seed,
+                // Omitted `--fuzz-seed` => fresh random seed per run.
+                seed: self.fuzz_seed.unwrap_or_else(random_seed),
                 dictionary_weight: self.fuzz_dictionary_weight,
                 ..FuzzConfig::default()
             };

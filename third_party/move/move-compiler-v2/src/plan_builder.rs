@@ -115,13 +115,23 @@ fn construct_module_test_plan(
     // }
 
     let current_module = module.get_name();
-    let module_id_for_meta = module.get_identifier().map(|name| {
+    // Key fuzz metadata by the SAME `ModuleId` that `ModuleTestPlan::new` builds
+    // (numeric address + the module's name string). Deriving it from
+    // `module.get_identifier()` instead is a trap: that returns `None` for source
+    // (non-bytecode) modules, so the plan would still be built from the name
+    // string while every metadata insert was silently skipped — leaving the
+    // runner unable to recognize fuzz cases (no seed banner, no shrinking).
+    let module_id_for_meta = {
         let addr_bytes = match current_module.addr() {
             Address::Numerical(num_addr) => Some(*num_addr),
             Address::Symbolic(sym) => env.resolve_address_alias(*sym),
         };
-        (addr_bytes, name)
-    });
+        let name = Identifier::new(env.symbol_pool().string(current_module.name()).to_string()).ok();
+        match (addr_bytes, name) {
+            (Some(addr), Some(name)) => Some(ModuleId::new(addr, name)),
+            _ => None,
+        }
+    };
 
     let expanded: Vec<ExpandedCase> = module
         .get_functions()
@@ -129,12 +139,8 @@ fn construct_module_test_plan(
         .collect();
     let mut tests: BTreeMap<String, TestCase> = BTreeMap::new();
     for ex in expanded {
-        if let Some((Some(addr), name)) = module_id_for_meta.as_ref() {
-            metadata.insert(
-                ModuleId::new(*addr, name.clone()),
-                ex.case.test_name.clone(),
-                ex.origins,
-            );
+        if let Some(module_id) = module_id_for_meta.as_ref() {
+            metadata.insert(module_id.clone(), ex.case.test_name.clone(), ex.origins);
         }
         tests.insert(ex.case.test_name.clone(), ex.case);
     }

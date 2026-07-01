@@ -321,7 +321,7 @@ pub fn encode_genesis_change_set(
         initialize_aptos_coin(&mut session, &module_storage, &mut traversal_context);
     }
     // Initialize the governed gas pool with a default seed
-    initialize_governed_gas_pool(&mut session, &module_storage);
+    initialize_governed_gas_pool(&mut session, &module_storage, &mut traversal_context);
     initialize_config_buffer(&mut session, &module_storage, &mut traversal_context);
     initialize_dkg(&mut session, &module_storage, &mut traversal_context);
     initialize_reconfiguration_state(&mut session, &module_storage, &mut traversal_context);
@@ -624,11 +624,13 @@ fn initialize_aptos_coin(
 fn initialize_governed_gas_pool(
     session: &mut SessionExt<impl AptosMoveResolver>,
     module_storage: &impl AptosModuleStorage,
+    traversal_context: &mut TraversalContext,
 ) {
     let delegation_pool_creation_seed = b"aptos_framework::governed_gas_pool";
     exec_function(
         session,
         module_storage,
+        traversal_context,
         GENESIS_MODULE_NAME,
         "initialize_governed_gas_pool",
         vec![],

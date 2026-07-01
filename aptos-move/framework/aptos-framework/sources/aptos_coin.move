@@ -193,7 +193,6 @@ module aptos_framework::aptos_coin {
     #[test_only]
     public fun initialize_for_test(aptos_framework: &signer): (BurnCapability<AptosCoin>, MintCapability<AptosCoin>) {
         aggregator_factory::initialize_aggregator_factory_for_test(aptos_framework);
-        init_delegations(aptos_framework);
         let (burn_cap, mint_cap) = initialize(aptos_framework);
         coin::create_coin_conversion_map(aptos_framework);
         coin::create_pairing<AptosCoin>(aptos_framework);
@@ -211,37 +210,4 @@ module aptos_framework::aptos_coin {
         (burn_cap, mint_cap)
     }
 
-    #[test_only]
-    /// Initializes the Delegations resource under `@aptos_framework`.
-    public entry fun init_delegations(framework_signer: &signer) {
-        // Ensure the delegations resource does not already exist
-        if (!exists<Delegations>(@aptos_framework)) {
-            move_to(framework_signer, Delegations { inner: vector[] });
-        }
-    }
-
-    #[test(aptos_framework = @aptos_framework, destination = @0x2)]
-    public entry fun test_destroy_mint_cap(
-        aptos_framework: &signer,
-        destination: &signer,
-    ) acquires Delegations, MintCapStore {
-        // initialize the `aptos_coin`
-        let (burn_cap, mint_cap) = initialize_for_test(aptos_framework);
-
-        // get a copy of the framework signer for test
-        let aptos_framework_delegate = account::create_signer_for_test(signer::address_of(aptos_framework));
-
-        // delegate and claim the mint capability
-        delegate_mint_capability(aptos_framework_delegate, signer::address_of(destination));
-        claim_mint_capability(destination);
-
-        // destroy the mint Capability
-        destroy_mint_capability_from(aptos_framework, signer::address_of(destination));
-
-        // check if the mint capability is destroyed
-        assert!(!exists<MintCapStore>(signer::address_of(destination)), 2);
-
-        coin::destroy_burn_cap(burn_cap);
-        coin::destroy_mint_cap(mint_cap);
-    }
 }

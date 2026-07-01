@@ -738,7 +738,7 @@ governed gas pool to authorize the withdrawal.
 
 <pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_withdraw_staking_reward">withdraw_staking_reward</a>&lt;CoinType&gt;(
     amount: u64
-): Coin&lt;CoinType&gt; <b>acquires</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPool">GovernedGasPool</a>, <a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolExtension">GovernedGasPoolExtension</a>  {
+): Coin&lt;CoinType&gt; <b>acquires</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPool">GovernedGasPool</a>, <a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolExtension">GovernedGasPoolExtension</a> {
     <b>let</b> balance = <a href="governed_gas_pool.md#0x1_governed_gas_pool_get_balance">get_balance</a>&lt;CoinType&gt;();
     <b>assert</b>!(balance &gt;= amount, <a href="governed_gas_pool.md#0x1_governed_gas_pool_EINSUFFICIENT_BALANCE">EINSUFFICIENT_BALANCE</a>);
 

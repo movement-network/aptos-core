@@ -15,7 +15,7 @@ use std::{
 
 /// [ This class is used when consensus.decoupled = true ]
 /// ExecutionSchedulePhase is a singleton that receives ordered blocks from
-/// the buffer manager and send them to the ExecutionPipeline.
+/// the buffer manager and schedules a future that awaits their per-block compute results.
 
 pub struct ExecutionRequest {
     pub ordered_blocks: Vec<Arc<PipelinedBlock>>,

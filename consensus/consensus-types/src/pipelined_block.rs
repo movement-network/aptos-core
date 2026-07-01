@@ -323,27 +323,6 @@ impl PipelinedBlock {
         }
     }
 
-<<<<<<< HEAD
-    pub fn set_execution_result(&self, pipeline_execution_result: PipelineExecutionResult) {
-        let PipelineExecutionResult {
-            input_txns: _,
-            result,
-            execution_time,
-            pre_commit_fut,
-        } = pipeline_execution_result;
-
-        *self.pre_commit_fut.lock() = Some(pre_commit_fut);
-
-        self.set_compute_result(result, execution_time);
-    }
-
-    #[cfg(any(test, feature = "fuzzing"))]
-    pub fn mark_successful_pre_commit_for_test(&self) {
-        *self.pre_commit_fut.lock() = Some(Box::pin(async { Ok(()) }));
-    }
-
-=======
->>>>>>> e33e3c1b
     // GUARD: keep this function a pure write to `self.randomness`.
     // `ShareAggregator` runs synchronously in `consensus/src/rand/rand_gen/rand_store.rs`
     // and its result reaches `set_randomness` through a channel, with no

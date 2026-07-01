@@ -873,10 +873,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 fast_rand_config.clone(),
                 rand_msg_rx,
                 recovery_data.commit_root_block().round(),
-<<<<<<< HEAD
                 virtual_genesis_block_id,
-=======
->>>>>>> e33e3c1b
             )
             .await;
         let consensus_sk = consensus_key;
@@ -1452,10 +1449,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 fast_rand_config,
                 rand_msg_rx,
                 highest_committed_round,
-<<<<<<< HEAD
                 None, // DAG doesn't use virtual genesis
-=======
->>>>>>> e33e3c1b
             )
             .await;
 

@@ -131,10 +131,7 @@ impl StateComputer for RandomComputeResultStateComputer {
         _: BlockExecutorConfigFromOnchain,
         _: Arc<dyn TransactionDeduper>,
         _: bool,
-<<<<<<< HEAD
         _: Option<HashValue>,
-=======
->>>>>>> e33e3c1b
         _: OnChainConsensusConfig,
         _: u8,
         _: Arc<crate::network::NetworkSender>,

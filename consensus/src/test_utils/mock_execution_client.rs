@@ -122,10 +122,7 @@ impl TExecutionClient for MockExecutionClient {
         _fast_rand_config: Option<RandConfig>,
         _rand_msg_rx: aptos_channel::Receiver<AccountAddress, IncomingRandGenRequest>,
         _highest_committed_round: Round,
-<<<<<<< HEAD
         _virtual_genesis_block_id: Option<aptos_crypto::HashValue>,
-=======
->>>>>>> e33e3c1b
     ) {
     }
 

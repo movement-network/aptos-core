@@ -71,10 +71,7 @@ pub trait TExecutionClient: Send + Sync {
         fast_rand_config: Option<RandConfig>,
         rand_msg_rx: aptos_channel::Receiver<AccountAddress, IncomingRandGenRequest>,
         highest_committed_round: Round,
-<<<<<<< HEAD
         virtual_genesis_block_id: Option<aptos_crypto::HashValue>,
-=======
->>>>>>> e33e3c1b
     );
 
     /// This is needed for some DAG tests. Clean this up as a TODO.
@@ -316,10 +313,7 @@ impl TExecutionClient for ExecutionProxyClient {
         fast_rand_config: Option<RandConfig>,
         rand_msg_rx: aptos_channel::Receiver<AccountAddress, IncomingRandGenRequest>,
         highest_committed_round: Round,
-<<<<<<< HEAD
         virtual_genesis_block_id: Option<aptos_crypto::HashValue>,
-=======
->>>>>>> e33e3c1b
     ) {
         let network_sender = Arc::new(NetworkSender::new(
             self.author,
@@ -360,10 +354,7 @@ impl TExecutionClient for ExecutionProxyClient {
             block_executor_onchain_config,
             transaction_deduper,
             randomness_enabled,
-<<<<<<< HEAD
             virtual_genesis_block_id,
-=======
->>>>>>> e33e3c1b
             onchain_consensus_config.clone(),
             aux_version,
             network_sender,
@@ -551,10 +542,7 @@ impl TExecutionClient for DummyExecutionClient {
         _fast_rand_config: Option<RandConfig>,
         _rand_msg_rx: aptos_channel::Receiver<AccountAddress, IncomingRandGenRequest>,
         _highest_committed_round: Round,
-<<<<<<< HEAD
         _virtual_genesis_block_id: Option<aptos_crypto::HashValue>,
-=======
->>>>>>> e33e3c1b
     ) {
     }
 

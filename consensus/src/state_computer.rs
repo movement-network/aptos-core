@@ -236,10 +236,7 @@ impl StateComputer for ExecutionProxy {
         block_executor_onchain_config: BlockExecutorConfigFromOnchain,
         transaction_deduper: Arc<dyn TransactionDeduper>,
         randomness_enabled: bool,
-<<<<<<< HEAD
         virtual_genesis_block_id: Option<HashValue>,
-=======
->>>>>>> e33e3c1b
         consensus_onchain_config: OnChainConsensusConfig,
         persisted_auxiliary_info_version: u8,
         network_sender: Arc<NetworkSender>,

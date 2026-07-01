@@ -226,7 +226,9 @@ impl SelectedPackageArgs {
     ///
     /// Note: if the merge-base is too old, an error will be returned.
     fn identify_merge_base(&self) -> anyhow::Result<String> {
-        let base_ref = env::var("GITHUB_BASE_REF").unwrap_or_else(|_| "main".to_string());
+        // On pull_request events GITHUB_BASE_REF is the target branch. On push events it is
+        // unset, so fall back to this fork's default branch (m1), not upstream's "main".
+        let base_ref = env::var("GITHUB_BASE_REF").unwrap_or_else(|_| "m1".to_string());
         let origin_base_ref = format!("origin/{base_ref}");
 
         // Run the git merge-base command

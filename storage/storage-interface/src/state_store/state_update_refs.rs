@@ -26,7 +26,7 @@ pub struct PerVersionStateUpdateRefs<'kv> {
 }
 
 impl<'kv> PerVersionStateUpdateRefs<'kv> {
-    fn new_empty(first_version: Version) -> Self {
+    pub(crate) fn new_empty(first_version: Version) -> Self {
         Self {
             first_version,
             num_versions: 0,
@@ -81,7 +81,7 @@ pub struct BatchedStateUpdateRefs<'kv> {
 }
 
 impl BatchedStateUpdateRefs<'_> {
-    fn new_empty(first_version: Version, num_versions: usize) -> Self {
+    pub(crate) fn new_empty(first_version: Version, num_versions: usize) -> Self {
         Self {
             first_version,
             num_versions,

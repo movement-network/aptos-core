@@ -53,7 +53,7 @@ fn test_wvuf_verify_proof_accepts_full_participation() {
         Vec<<WVUF as WeightedVUF>::SecretKeyShare>,
         Vec<<WVUF as WeightedVUF>::PubKeyShare>,
     ) = (0..wc.get_total_num_players())
-        .map(|p| trx.decrypt_own_share(&wc, &wc.get_player(p), &d.dks[p]))
+        .map(|p| trx.decrypt_own_share(&wc, &wc.get_player(p), &d.dks[p], &d.pp))
         .collect::<Vec<_>>()
         .into_iter()
         .unzip();

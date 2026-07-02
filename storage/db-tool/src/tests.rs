@@ -836,7 +836,6 @@ mod dbtool_tests {
             PathBuf::from(backup_dir.path()),
             PathBuf::from(old_db_dir.path()),
             PathBuf::from(new_db_dir.path()),
-            true,
         );
         let backup_size = dir_size(backup_dir.path());
         let db_size = dir_size(new_db_dir.path());

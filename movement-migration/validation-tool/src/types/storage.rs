@@ -122,7 +122,7 @@ impl GlobalStateKeyIterable {
             Ok(write_set) => {
                 // It should be okay to collect because there should not be that many state keys in a write set.
                 let items: Vec<_> = write_set
-                    .expect_v0()
+                    .as_v0()
                     .iter()
                     .map(|(key, _)| Ok(key.clone()))
                     .collect();

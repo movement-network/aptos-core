@@ -451,7 +451,9 @@ impl LedgerState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state_store::state_view::cached_state_view::ShardedStateCache;
+    use crate::state_store::state_view::{
+        cached_state_view::ShardedStateCache, hot_state_view::EmptyHotState,
+    };
     use aptos_types::state_store::state_storage_usage::StateStorageUsage;
 
     /// When the persisted version advances past the cache version (fork race),
@@ -459,15 +461,25 @@ mod tests {
     #[test]
     fn state_update_returns_error_when_persisted_exceeds_cache() {
         // "self" state at version 5 (next_version = 6)
-        let current = State::new_at_version(Some(5), StateStorageUsage::new(0, 0));
+        let current =
+            State::new_at_version(Some(5), StateStorageUsage::new(0, 0), HotStateConfig::default());
         // Persisted state has advanced to version 8 (next_version = 9) — fork race
-        let persisted = State::new_at_version(Some(8), StateStorageUsage::new(0, 0));
+        let persisted =
+            State::new_at_version(Some(8), StateStorageUsage::new(0, 0), HotStateConfig::default());
         // Cache is still at version 5 (next_version = 6) — behind persisted
         let cache = ShardedStateCache::new_empty(Some(5));
         // Updates starting at version 6 (matching current.next_version)
         let updates = BatchedStateUpdateRefs::new_empty(6, 1);
+        let per_version_updates = PerVersionStateUpdateRefs::new_empty(6);
 
-        let result = current.update(&persisted, &updates, &cache);
+        let result = current.update(
+            Arc::new(EmptyHotState),
+            &persisted,
+            &updates,
+            &per_version_updates,
+            &[],
+            &cache,
+        );
         assert!(result.is_err(), "expected error when persisted > cache version");
         let msg = result.unwrap_err().to_string();
         assert!(msg.contains("fork race"), "error should mention fork race, got: {msg}");
@@ -476,17 +488,27 @@ mod tests {
     /// Boundary: persisted.next_version == cache.next_version should pass the check.
     #[test]
     fn state_update_does_not_error_when_persisted_equals_cache() {
-        let current = State::new_at_version(Some(5), StateStorageUsage::new(0, 0));
-        let persisted = State::new_at_version(Some(5), StateStorageUsage::new(0, 0));
+        let current =
+            State::new_at_version(Some(5), StateStorageUsage::new(0, 0), HotStateConfig::default());
+        let persisted =
+            State::new_at_version(Some(5), StateStorageUsage::new(0, 0), HotStateConfig::default());
         let cache = ShardedStateCache::new_empty(Some(5));
         let updates = BatchedStateUpdateRefs::new_empty(6, 1);
+        let per_version_updates = PerVersionStateUpdateRefs::new_empty(6);
 
         // We only care that the ensure! check passes (persisted <= cache).
         // The call will panic later on the descendant-of check (states aren't
         // from the same family in this unit harness), but that's a different
         // invariant — catch it and verify the panic isn't from the fork-race guard.
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = current.update(&persisted, &updates, &cache);
+            let _ = current.update(
+                Arc::new(EmptyHotState),
+                &persisted,
+                &updates,
+                &per_version_updates,
+                &[],
+                &cache,
+            );
         }));
         if let Err(panic) = result {
             let msg = panic

@@ -897,9 +897,9 @@ impl fmt::Display for PayloadFilter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::proof_of_store::{BatchId, BatchInfo};
+    use crate::proof_of_store::BatchInfo;
     use aptos_crypto::HashValue;
-    use aptos_types::PeerId;
+    use aptos_types::{quorum_store::BatchId, PeerId};
 
     fn make_batch(num_txns: u64, num_bytes: u64) -> BatchInfo {
         BatchInfo::new(

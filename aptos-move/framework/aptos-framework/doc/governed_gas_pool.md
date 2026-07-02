@@ -30,9 +30,12 @@
 -  [Function `register_coin`](#0x1_governed_gas_pool_register_coin)
 -  [Specification](#@Specification_1)
     -  [Function `initialize`](#@Specification_1_initialize)
+    -  [Function `init_module`](#@Specification_1_init_module)
     -  [Function `fund`](#@Specification_1_fund)
     -  [Function `deposit`](#@Specification_1_deposit)
+    -  [Function `deposit_from`](#@Specification_1_deposit_from)
     -  [Function `deposit_gas_fee_v2`](#@Specification_1_deposit_gas_fee_v2)
+    -  [Function `deposit_treasury`](#@Specification_1_deposit_treasury)
 
 
 <pre><code><b>use</b> <a href="account.md#0x1_account">0x1::account</a>;
@@ -818,6 +821,22 @@ Register Aptos coin with Governed gas signer.
 
 
 
+<a id="@Specification_1_init_module"></a>
+
+### Function `init_module`
+
+
+<pre><code><b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_init_module">init_module</a>(aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>)
+</code></pre>
+
+
+
+
+<pre><code><b>requires</b> <a href="system_addresses.md#0x1_system_addresses_is_aptos_framework_address">system_addresses::is_aptos_framework_address</a>(<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework));
+</code></pre>
+
+
+
 <a id="@Specification_1_fund"></a>
 
 ### Function `fund`
@@ -835,13 +854,6 @@ Register Aptos coin with Governed gas signer.
 </code></pre>
 
 
-Abort if the governed gas pool has insufficient funds
-
-
-<pre><code><b>aborts_with</b> <a href="coin.md#0x1_coin_EINSUFFICIENT_BALANCE">coin::EINSUFFICIENT_BALANCE</a>, <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="governed_gas_pool.md#0x1_governed_gas_pool_EINSUFFICIENT_BALANCE">EINSUFFICIENT_BALANCE</a>), 0x1, 0x5, 0x7;
-</code></pre>
-
-
 
 <a id="@Specification_1_deposit"></a>
 
@@ -855,11 +867,29 @@ Abort if the governed gas pool has insufficient funds
 
 
 <pre><code><b>pragma</b> aborts_if_is_partial = <b>true</b>;
-<b>let</b> pool = <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(<a href="governed_gas_pool.md#0x1_governed_gas_pool_governed_gas_signer">governed_gas_signer</a>());
+<b>let</b> pool = <b>global</b>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPool">GovernedGasPool</a>&gt;(@aptos_framework).signer_capability.<a href="account.md#0x1_account">account</a>;
 // This enforces <a id="high-level-req-3" href="#high-level-req">high-level requirement 3</a>:
 <b>requires</b> <b>exists</b>&lt;<a href="coin.md#0x1_coin_CoinStore">coin::CoinStore</a>&lt;CoinType&gt;&gt;(pool);
 <b>ensures</b> <b>global</b>&lt;<a href="coin.md#0x1_coin_CoinStore">coin::CoinStore</a>&lt;CoinType&gt;&gt;(pool).<a href="coin.md#0x1_coin">coin</a>.value
     == <b>old</b>(<b>global</b>&lt;<a href="coin.md#0x1_coin_CoinStore">coin::CoinStore</a>&lt;CoinType&gt;&gt;(pool).<a href="coin.md#0x1_coin">coin</a>.value) + <a href="coin.md#0x1_coin">coin</a>.value;
+</code></pre>
+
+
+
+<a id="@Specification_1_deposit_from"></a>
+
+### Function `deposit_from`
+
+
+<pre><code><b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_deposit_from">deposit_from</a>&lt;CoinType&gt;(<a href="account.md#0x1_account">account</a>: <b>address</b>, amount: u64)
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> aborts_if_is_partial = <b>true</b>;
+<b>let</b> pool = <b>global</b>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPool">GovernedGasPool</a>&gt;(@aptos_framework).signer_capability.<a href="account.md#0x1_account">account</a>;
+<b>requires</b> <b>exists</b>&lt;<a href="coin.md#0x1_coin_CoinStore">coin::CoinStore</a>&lt;CoinType&gt;&gt;(pool);
 </code></pre>
 
 
@@ -876,11 +906,13 @@ Abort if the governed gas pool has insufficient funds
 
 
 <pre><code><b>pragma</b> aborts_if_is_partial = <b>true</b>;
-<b>let</b> pool = <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(<a href="governed_gas_pool.md#0x1_governed_gas_pool_governed_gas_signer">governed_gas_signer</a>());
+<b>let</b> pool = <b>global</b>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPool">GovernedGasPool</a>&gt;(@aptos_framework).signer_capability.<a href="account.md#0x1_account">account</a>;
 // This enforces <a id="high-level-req-3" href="#high-level-req">high-level requirement 3</a>:
 <b>requires</b> gas_payer != pool;
 <b>requires</b> <b>exists</b>&lt;<a href="coin.md#0x1_coin_CoinStore">coin::CoinStore</a>&lt;AptosCoin&gt;&gt;(pool);
 <b>requires</b> <b>exists</b>&lt;<a href="coin.md#0x1_coin_CoinStore">coin::CoinStore</a>&lt;AptosCoin&gt;&gt;(gas_payer);
+<b>requires</b> !<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_spec_is_enabled">features::spec_is_enabled</a>(<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_OPERATIONS_DEFAULT_TO_FA_APT_STORE">features::OPERATIONS_DEFAULT_TO_FA_APT_STORE</a>);
+<b>requires</b> <b>global</b>&lt;<a href="coin.md#0x1_coin_CoinStore">coin::CoinStore</a>&lt;AptosCoin&gt;&gt;(gas_payer).<a href="coin.md#0x1_coin">coin</a>.value &gt;= gas_fee;
 </code></pre>
 
 
@@ -891,6 +923,25 @@ The gas fee moves from the payer's store into the pool's store.
     == <b>old</b>(<b>global</b>&lt;<a href="coin.md#0x1_coin_CoinStore">coin::CoinStore</a>&lt;AptosCoin&gt;&gt;(pool).<a href="coin.md#0x1_coin">coin</a>.value) + gas_fee;
 <b>ensures</b> <b>global</b>&lt;<a href="coin.md#0x1_coin_CoinStore">coin::CoinStore</a>&lt;AptosCoin&gt;&gt;(gas_payer).<a href="coin.md#0x1_coin">coin</a>.value
     == <b>old</b>(<b>global</b>&lt;<a href="coin.md#0x1_coin_CoinStore">coin::CoinStore</a>&lt;AptosCoin&gt;&gt;(gas_payer).<a href="coin.md#0x1_coin">coin</a>.value) - gas_fee;
+</code></pre>
+
+
+
+<a id="@Specification_1_deposit_treasury"></a>
+
+### Function `deposit_treasury`
+
+
+<pre><code><b>public</b> entry <b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_deposit_treasury">deposit_treasury</a>(treasury_account: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, amount: u64)
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> aborts_if_is_partial = <b>true</b>;
+<b>let</b> pool = <b>global</b>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPool">GovernedGasPool</a>&gt;(@aptos_framework).signer_capability.<a href="account.md#0x1_account">account</a>;
+<b>requires</b> <b>exists</b>&lt;<a href="coin.md#0x1_coin_CoinStore">coin::CoinStore</a>&lt;AptosCoin&gt;&gt;(pool);
+<b>requires</b> <b>exists</b>&lt;<a href="governed_gas_pool.md#0x1_governed_gas_pool_GovernedGasPoolExtension">GovernedGasPoolExtension</a>&gt;(@aptos_framework);
 </code></pre>
 
 

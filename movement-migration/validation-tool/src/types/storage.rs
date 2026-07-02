@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use anyhow::Context;
-use aptos_config::config::{StorageConfig, StorageDirPaths, NO_OP_STORAGE_PRUNER_CONFIG};
+use aptos_config::config::{
+    RocksdbConfigs, StorageConfig, StorageDirPaths, NO_OP_STORAGE_PRUNER_CONFIG,
+};
 use aptos_db::AptosDB;
 use aptos_storage_interface::{
     state_store::state_view::db_state_view::{DbStateView, DbStateViewAtVersion},
@@ -21,7 +23,13 @@ impl Storage {
             StorageDirPaths::from_path(path),
             true,
             NO_OP_STORAGE_PRUNER_CONFIG,
-            Default::default(),
+            RocksdbConfigs {
+                // Movement node databases use the unsharded (monolithic)
+                // ledger_db layout. Upstream defaults this to sharded, so pin
+                // it explicitly rather than relying on Default.
+                enable_storage_sharding: false,
+                ..Default::default()
+            },
             false,
             config.buffered_state_target_items,
             config.max_num_nodes_per_lru_cache_shard,

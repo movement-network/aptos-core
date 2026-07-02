@@ -1659,7 +1659,7 @@ async fn submit_chunked_publish_transactions(
         let message = format!(
             "The resource {}::large_packages::StagingArea under account {} is not empty.\
         \nThis may cause package publishing to fail if the data is unexpected. \
-        \nUse the `aptos move clear-staging-area` command to clean up the `StagingArea` resource under the account.",
+        \nUse the `movement move clear-staging-area` command to clean up the `StagingArea` resource under the account.",
             large_packages_module_address, account_address,
         )
             .bold();
@@ -1693,7 +1693,7 @@ async fn submit_chunked_publish_transactions(
                 println!("{}", "Caution: An error occurred while submitting chunked publish transactions. \
                 \nDue to this error, there may be incomplete data left in the `StagingArea` resource. \
                 \nThis could cause further errors if you attempt to run the chunked publish command again. \
-                \nTo avoid this, use the `aptos move clear-staging-area` command to clean up the `StagingArea` resource under your account before retrying.".bold());
+                \nTo avoid this, use the `movement move clear-staging-area` command to clean up the `StagingArea` resource under your account before retrying.".bold());
                 return Err(e);
             },
         }

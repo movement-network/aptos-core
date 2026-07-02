@@ -712,7 +712,7 @@ mod tests {
         fa_features.enable(FeatureFlag::NEW_ACCOUNTS_DEFAULT_TO_FA_APT_STORE);
         fa_features.enable(FeatureFlag::OPERATIONS_DEFAULT_TO_FA_APT_STORE);
         fa_features.enable(FeatureFlag::NEW_ACCOUNTS_DEFAULT_TO_FA_STORE);
-        fa_features.disable(FeatureFlag::CONCURRENT_FUNGIBLE_BALANCE);
+        //fa_features.disable(FeatureFlag::CONCURRENT_FUNGIBLE_BALANCE);
 
         test_compare_prod_and_another::<E>(values_match, fa_features.clone(), |address| {
             aptos_stdlib::aptos_account_fungible_transfer_only(address, 1000)

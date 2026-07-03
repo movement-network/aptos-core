@@ -241,4 +241,48 @@ mod tests {
         .unwrap_err();
         assert!(matches!(error, Error::ConfigSanitizerFailed(_, _)));
     }
+
+    // Mainnet validators must not expose configuration. Passes for Aptos mainnet
+    // (1); fails for Movement mainnet (126) until is_mainnet() matches 126.
+    fn validator_exposing_configuration() -> NodeConfig {
+        NodeConfig {
+            inspection_service: InspectionServiceConfig {
+                expose_configuration: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn inspection_rejects_config_exposure_on_aptos_mainnet() {
+        InspectionServiceConfig::sanitize(
+            &validator_exposing_configuration(),
+            NodeType::Validator,
+            Some(ChainId::new(1)), // Aptos mainnet
+        )
+        .expect_err("mainnet validator must not expose configuration");
+    }
+
+    #[test]
+    fn inspection_rejects_config_exposure_on_movement_mainnet() {
+        InspectionServiceConfig::sanitize(
+            &validator_exposing_configuration(),
+            NodeType::Validator,
+            Some(ChainId::new(126)),
+        )
+        .expect_err("mainnet validator must not expose configuration");
+    }
+
+    // Same as the new(1) case but via the ChainId::mainnet() helper — cross-checks
+    // that the number behind the `mainnet` name still resolves to a production chain.
+    #[test]
+    fn inspection_rejects_config_exposure_on_aptos_mainnet_via_helper() {
+        InspectionServiceConfig::sanitize(
+            &validator_exposing_configuration(),
+            NodeType::Validator,
+            Some(ChainId::mainnet()),
+        )
+        .expect_err("mainnet validator must not expose configuration");
+    }
 }

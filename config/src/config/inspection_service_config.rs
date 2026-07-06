@@ -254,14 +254,16 @@ mod tests {
         }
     }
 
+    // Chain 1 (Aptos mainnet) is not this network's mainnet, so the mainnet
+    // hardening gate does not fire and the exposed configuration is accepted.
     #[test]
-    fn inspection_rejects_config_exposure_on_aptos_mainnet() {
+    fn inspection_treats_aptos_mainnet_as_non_production() {
         InspectionServiceConfig::sanitize(
             &validator_exposing_configuration(),
             NodeType::Validator,
-            Some(ChainId::new(1)), // Aptos mainnet
+            Some(ChainId::new(1)), // Aptos mainnet — not this network's mainnet
         )
-        .expect_err("mainnet validator must not expose configuration");
+        .expect("chain 1 is not this network's mainnet; gate does not fire");
     }
 
     #[test]

@@ -241,14 +241,16 @@ mod tests {
         }
     }
 
+    // Chain 1 (Aptos mainnet) is not this network's mainnet, so the mainnet
+    // hardening gate does not fire and the empty auth list is accepted.
     #[test]
-    fn admin_service_requires_auth_on_aptos_mainnet() {
+    fn admin_service_treats_aptos_mainnet_as_non_production() {
         AdminServiceConfig::sanitize(
             &admin_service_enabled_without_auth(),
             NodeType::Validator,
-            Some(ChainId::new(1)), // Aptos mainnet
+            Some(ChainId::new(1)), // Aptos mainnet — not this network's mainnet
         )
-        .expect_err("mainnet must reject admin service with empty auth");
+        .expect("chain 1 is not this network's mainnet; gate does not fire");
     }
 
     #[test]

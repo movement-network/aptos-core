@@ -83,22 +83,14 @@ impl FromStr for NamedChain {
 pub struct ChainId(u8);
 
 impl ChainId {
-    /// Returns true iff the chain ID matches testnet
+    /// Returns true iff the chain ID matches Movement testnet.
     pub fn is_testnet(&self) -> bool {
-        self.matches_named_chain(NamedChain::TESTNET)
-    }
-
-    /// Returns true iff the chain ID matches mainnet
-    pub fn is_mainnet(&self) -> bool {
-        self.matches_named_chain(NamedChain::MAINNET)
-    }
-
-    pub fn is_movement_mainnet(&self) -> bool {
-        self.matches_named_chain(NamedChain::MOVEMAINNET)
-    }
-
-    pub fn is_movement_testnet(&self) -> bool {
         self.matches_named_chain(NamedChain::MOVETESTNET)
+    }
+
+    /// Returns true iff the chain ID matches Movement mainnet.
+    pub fn is_mainnet(&self) -> bool {
+        self.matches_named_chain(NamedChain::MOVEMAINNET)
     }
 
     /// Returns true iff the chain ID matches the given named chain
@@ -211,11 +203,11 @@ impl ChainId {
     }
 
     pub fn testnet() -> Self {
-        ChainId::new(NamedChain::TESTNET.id())
+        ChainId::new(NamedChain::MOVETESTNET.id())
     }
 
     pub fn mainnet() -> Self {
-        ChainId::new(NamedChain::MAINNET.id())
+        ChainId::new(NamedChain::MOVEMAINNET.id())
     }
 }
 

@@ -26,7 +26,7 @@ pub enum PublishType {
 }
 
 pub fn default_large_packages_module_address(chain_id: &ChainId) -> &'static str {
-    if chain_id.is_movement_mainnet() || chain_id.is_movement_testnet() {
+    if chain_id.is_mainnet() || chain_id.is_testnet() {
         LARGE_PACKAGES_PROD_MODULE_ADDRESS
     } else {
         LARGE_PACKAGES_DEV_MODULE_ADDRESS

@@ -869,7 +869,9 @@ module aptos_framework::transaction_validation {
             } else {
                 let mint_amount = storage_fee_refunded - transaction_fee_amount;
                 // TODO: Should storage refunds go to the governed gas pool or a separate storage refund pool?
-                transaction_fee::mint_and_refund(gas_payer_address, mint_amount);
+                if (mint_amount > 0) {
+                    transaction_fee::mint_and_refund(gas_payer_address, mint_amount);
+                };
 
                 permissioned_signer::increase_limit(
                     &gas_payer,

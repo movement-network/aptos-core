@@ -23,6 +23,7 @@ module aptos_framework::governed_gas_pool {
 
     friend aptos_framework::stake;
     friend aptos_framework::transaction_fee;
+    friend aptos_framework::reconfiguration;
 
     /// Insufficient balance in the pool.
     const EINSUFFICIENT_BALANCE: u64 = 1;
@@ -106,6 +107,11 @@ module aptos_framework::governed_gas_pool {
         }
     }
 
+    /// If the CONCURRENT_FUNGIBLE_BALANCE feature is enabled, upgrade the governed gas pool to a concurrent store
+    public(friend) fun on_reconfig() acquires GovernedGasPool {
+        upgrade_pool_store_to_concurrent(&governed_gas_signer());
+    }
+
     /// Initializes the governed gas pool extension alone.
     /// @param aptos_framework The signer of the aptos_framework module.
     public entry fun initialize_governed_gas_pool_extension(
@@ -125,9 +131,11 @@ module aptos_framework::governed_gas_pool {
     /// Ensure the pool is using aggregator_v2 for concurrentcy.
     /// @param pool_signer The signer of the gas pool.
     fun upgrade_pool_store_to_concurrent(pool_signer: &signer) {
-        let store_addr = primary_fungible_store_address(signer::address_of(pool_signer));
-        let store = object::address_to_object<fungible_asset::FungibleStore>(store_addr);
-        fungible_asset::upgrade_store_to_concurrent(pool_signer, store);
+        if (features::concurrent_fungible_balance_enabled()) {
+            let store_addr = primary_fungible_store_address(signer::address_of(pool_signer));
+            let store = object::address_to_object<fungible_asset::FungibleStore>(store_addr);
+            fungible_asset::upgrade_store_to_concurrent(pool_signer, store);
+        };
     }
 
     /// Initialize the governed gas pool as a module

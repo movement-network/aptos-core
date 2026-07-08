@@ -109,7 +109,9 @@ module aptos_framework::governed_gas_pool {
 
     /// If the CONCURRENT_FUNGIBLE_BALANCE feature is enabled, upgrade the governed gas pool to a concurrent store
     public(friend) fun on_reconfig() acquires GovernedGasPool {
-        upgrade_pool_store_to_concurrent(&governed_gas_signer());
+        if (exists<GovernedGasPool>(@aptos_framework)) {
+            upgrade_pool_store_to_concurrent(&governed_gas_signer());
+        }
     }
 
     /// Initializes the governed gas pool extension alone.
@@ -268,8 +270,6 @@ module aptos_framework::governed_gas_pool {
         let balance = get_balance<CoinType>();
         assert!(balance >= amount, EINSUFFICIENT_BALANCE);
 
-        // Perform the withdrawal first so that any insufficient-balance aborts happen
-        // before event emission or aggregator updates (reduces wasted work on abort/retry).
         let reward = coin::withdraw<CoinType>(&governed_gas_signer(), amount);
 
         // Use aggregators only if feature is enabled AND counters are initialized.

@@ -137,14 +137,6 @@ where
             .struct_name_index_map_size()
             .map_err(|err| err.finish(Location::Undefined).into_vm_status())?;
         STRUCT_NAME_INDEX_MAP_NUM_ENTRIES.set(struct_name_index_map_size as i64);
-
-        // If the environment caches too many struct names, flush type caches. Also flush module
-        // caches because they contain indices for struct names.
-        if struct_name_index_map_size > config.max_struct_name_index_map_num_entries {
-            runtime_environment.flush_all_caches();
-            self.module_cache.flush();
-        }
-
         let num_interned_tys = runtime_environment.ty_pool().num_interned_tys();
         NUM_INTERNED_TYPES.set(num_interned_tys as i64);
         let num_interned_ty_vecs = runtime_environment.ty_pool().num_interned_ty_vecs();
@@ -152,16 +144,11 @@ where
         let num_interned_module_ids = runtime_environment.module_id_pool().len();
         NUM_INTERNED_MODULE_IDS.set(num_interned_module_ids as i64);
 
-        if num_interned_tys > config.max_interned_tys
+        if struct_name_index_map_size > config.max_struct_name_index_map_num_entries
+            || num_interned_tys > config.max_interned_tys
             || num_interned_ty_vecs > config.max_interned_ty_vecs
-        {
-            runtime_environment.ty_pool().flush();
-            self.module_cache.flush();
-        }
-
-        if num_interned_module_ids > config.max_interned_module_ids {
-            runtime_environment.module_id_pool().flush();
-            runtime_environment.struct_name_index_map().flush();
+            || num_interned_module_ids > config.max_interned_module_ids {
+            runtime_environment.flush_all_caches();
             self.module_cache.flush();
         }
 

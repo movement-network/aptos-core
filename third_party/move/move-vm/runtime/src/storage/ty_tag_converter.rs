@@ -160,6 +160,13 @@ impl TypeTagCache {
         self.cache.write().clear();
     }
 
+    /// Returns the number of cached struct tags. Used by tests to check that the cache is
+    /// flushed correctly.
+    #[cfg(any(test, feature = "testing"))]
+    pub(crate) fn num_entries(&self) -> usize {
+        self.cache.read().len()
+    }
+
     /// Returns cached struct tag and its pseudo-gas cost if it exists, and [None] otherwise.
     pub(crate) fn get_struct_tag(
         &self,

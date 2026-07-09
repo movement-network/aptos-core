@@ -422,6 +422,12 @@ impl RuntimeEnvironment {
         self.struct_name_index_map.idx_to_struct_name(idx)
     }
 
+    /// Test-only function to be able to check the number of cached struct tags.
+    #[cfg(any(test, feature = "testing"))]
+    pub fn num_ty_tags_cached_for_test(&self) -> usize {
+        self.ty_tag_cache.num_entries()
+    }
+
     pub fn get_option_module_bytes(&self) -> Bytes {
         Bytes::from(OPTION_MODULE_BYTES.to_vec())
     }

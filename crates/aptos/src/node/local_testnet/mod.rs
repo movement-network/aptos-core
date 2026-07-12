@@ -31,6 +31,7 @@ use crate::{
         utils::prompt_yes_with_override,
     },
     config::GlobalConfig,
+    human_eprintln, human_println,
     node::local_testnet::{
         faucet::FaucetManager, indexer_api::IndexerApiManager, node::NodeManager,
         processors::ProcessorManager, ready_server::ReadyServerManager, traits::ShutdownStep,
@@ -53,6 +54,9 @@ use tracing::{info, warn};
 use tracing_subscriber::fmt::MakeWriter;
 
 const TESTNET_FOLDER: &str = "testnet";
+
+/// Use with `--destructive-confirm` and `--force-restart` (without `--assume-yes`) to wipe localnet data non-interactively.
+pub const CONFIRM_DELETE_LOCALNET_DATA: &str = "delete-localnet-data";
 
 /// Run a localnet
 ///
@@ -105,6 +109,10 @@ pub struct RunLocalnet {
     /// By default, tracing output goes to files. With this set, it goes to stdout.
     #[clap(long, hide = true)]
     log_to_stdout: bool,
+
+    /// With `--force-restart`, must be exactly `delete-localnet-data` to skip the confirmation prompt when not using `--assume-yes`.
+    #[clap(long)]
+    destructive_confirm: Option<String>,
 }
 
 impl RunLocalnet {
@@ -135,14 +143,14 @@ impl RunLocalnet {
                 HealthChecker::IndexerApiMetadata(_) => continue,
             };
             if !silent {
-                println!("{} is starting, please wait...", health_checker);
+                human_println!("{} is starting, please wait...", health_checker);
             } else {
                 info!("[silent] {} is starting, please wait...", health_checker);
             }
             let fut = async move {
                 health_checker.wait(None).await?;
                 if !silent {
-                    println!(
+                    human_println!(
                         "{} is ready. Endpoint: {}",
                         health_checker,
                         health_checker.address_str()
@@ -159,7 +167,7 @@ impl RunLocalnet {
             futures.push(Box::pin(fut));
         }
 
-        eprintln!();
+        human_eprintln!();
 
         // We use join_all because we expect all of these to return.
         for f in futures::future::join_all(futures).await {
@@ -197,10 +205,22 @@ impl CliCommand<()> for RunLocalnet {
 
         // If asked, remove the current test directory and start with a new node.
         if self.force_restart && test_dir.exists() {
-            prompt_yes_with_override(
-                "Are you sure you want to delete the existing localnet data?",
-                self.prompt_options,
-            )?;
+            if !self.prompt_options.assume_yes {
+                match self.destructive_confirm.as_deref() {
+                    Some(CONFIRM_DELETE_LOCALNET_DATA) => {},
+                    Some(_) => {
+                        return Err(CliError::CommandArgumentError(format!(
+                            "`--destructive-confirm` must be exactly `{CONFIRM_DELETE_LOCALNET_DATA}` when deleting existing localnet data"
+                        )));
+                    },
+                    None => {
+                        prompt_yes_with_override(
+                            "Are you sure you want to delete the existing localnet data?",
+                            self.prompt_options,
+                        )?;
+                    },
+                }
+            }
             remove_dir_all(test_dir.as_path()).map_err(|err| {
                 CliError::IO(format!("Failed to delete {}", test_dir.display()), err)
             })?;
@@ -337,9 +357,10 @@ impl CliCommand<()> for RunLocalnet {
             })?;
         }
 
-        println!(
+        human_println!(
             "\nReadiness endpoint: http://{}:{}/\n",
-            bind_to, self.ready_server_args.ready_server_listen_port,
+            bind_to,
+            self.ready_server_args.ready_server_listen_port,
         );
 
         // Collect post healthy steps to run after the services start.
@@ -365,9 +386,9 @@ impl CliCommand<()> for RunLocalnet {
                 res?
             },
             res = join_set.join_next() => {
-                eprintln!("\nOne of the services failed to start up, running shutdown steps...");
+                human_eprintln!("\nOne of the services failed to start up, running shutdown steps...");
                 run_shutdown_steps(shutdown_steps).await?;
-                eprintln!("Ran shutdown steps");
+                human_eprintln!("Ran shutdown steps");
                 return Err(CliError::UnexpectedError(format!(
                     "\nOne of the services crashed on startup:\n{:#?}\nPlease check the logs in {}",
                     // We can unwrap because we know for certain that the JoinSet is
@@ -378,7 +399,7 @@ impl CliCommand<()> for RunLocalnet {
             }
         }
 
-        eprintln!("\nApplying post startup steps...");
+        human_eprintln!("\nApplying post startup steps...");
 
         // Run any post healthy steps.
         for post_healthy_step in post_healthy_steps {
@@ -388,7 +409,7 @@ impl CliCommand<()> for RunLocalnet {
                 .context("Failed to run post startup step")?;
         }
 
-        eprintln!("\nSetup is complete, you can now use the localnet!");
+        human_eprintln!("\nSetup is complete, you can now use the localnet!");
 
         // Create a task that listens for ctrl-c. We want to intercept it so we can run
         // the shutdown steps before properly exiting. This is of course best effort,
@@ -419,9 +440,9 @@ impl CliCommand<()> for RunLocalnet {
 
         let was_ctrl_c = finished_task_id == ctrl_c_task_id;
         if was_ctrl_c {
-            eprintln!("\nReceived ctrl-c, running shutdown steps...");
+            human_eprintln!("\nReceived ctrl-c, running shutdown steps...");
         } else {
-            eprintln!("\nOne of the services exited unexpectedly, running shutdown steps...");
+            human_eprintln!("\nOne of the services exited unexpectedly, running shutdown steps...");
         }
 
         // At this point register another ctrl-c handler so the user can kill the CLI
@@ -431,14 +452,14 @@ impl CliCommand<()> for RunLocalnet {
                 .await
                 .expect("Failed to register ctrl-c hook");
             warn!("Received ctrl-c twice and exited immediately");
-            eprintln!();
+            human_eprintln!();
             std::process::exit(1);
         });
 
         // Run post shutdown steps, if any.
         run_shutdown_steps(shutdown_steps).await?;
 
-        eprintln!("Done, goodbye!");
+        human_eprintln!("Done, goodbye!");
 
         match was_ctrl_c {
             true => Ok(()),

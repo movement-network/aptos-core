@@ -9,6 +9,7 @@ use crate::{
             write_to_user_only_file,
         },
     },
+    human_println,
     update::get_revela_path,
 };
 use anyhow::Context;
@@ -253,7 +254,7 @@ impl BytecodeCommand {
                 compilation_metadata: get_compilation_metadata(&module).unwrap_or(v1_metadata),
             }
         };
-        println!(
+        human_println!(
             "Metadata: {}",
             serde_json::to_string_pretty(&metadata).expect("expect metadata")
         );

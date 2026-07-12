@@ -1,14 +1,17 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::common::{
-    local_simulation,
-    types::{
-        AccountType, CliConfig, CliError, CliTypedResult, ConfigSearchMode, EncodingOptions,
-        ExtractEd25519PublicKey, GasOptions, PrivateKeyInputOptions, ProfileOptions, PromptOptions,
-        RestOptions, TransactionSummary, ACCEPTED_CLOCK_SKEW_US, US_IN_SECS,
+use crate::{
+    common::{
+        local_simulation,
+        types::{
+            AccountType, CliConfig, CliError, CliTypedResult, ConfigSearchMode, EncodingOptions,
+            ExtractEd25519PublicKey, GasOptions, PrivateKeyInputOptions, ProfileOptions,
+            PromptOptions, RestOptions, TransactionSummary, ACCEPTED_CLOCK_SKEW_US, US_IN_SECS,
+        },
+        utils::{get_account_with_state, get_sequence_number},
     },
-    utils::{get_account_with_state, get_sequence_number},
+    human_eprintln, human_println,
 };
 use aptos_api_types::ViewFunction;
 use aptos_crypto::{
@@ -162,7 +165,7 @@ impl TxnOptions {
         // Warn local user that clock is skewed behind the blockchain.
         // There will always be a little lag from real time to blockchain time
         if now_usecs < state.timestamp_usecs - ACCEPTED_CLOCK_SKEW_US {
-            eprintln!("Local clock is is skewed from blockchain clock.  Clock is more than {} seconds behind the blockchain {}", ACCEPTED_CLOCK_SKEW_US, state.timestamp_usecs / US_IN_SECS );
+            human_eprintln!("Local clock is is skewed from blockchain clock.  Clock is more than {} seconds behind the blockchain {}", ACCEPTED_CLOCK_SKEW_US, state.timestamp_usecs / US_IN_SECS );
         }
         let expiration_time_secs = now + self.gas_options.expiration_secs;
 
@@ -205,6 +208,7 @@ impl TxnOptions {
             timestamp_us: None,
             version: Some(simulated_txn.version),
             vm_status: Some(format!("{:?}", simulated_txn.info.status())), // TODO: add proper status
+            explorer_url: None,
         })
     }
 
@@ -281,6 +285,7 @@ impl TxnOptions {
             timestamp_us: None,
             version: Some(version), // The transaction is not committed so there is no new version.
             vm_status: Some(vm_status.to_string()),
+            explorer_url: None,
         })
     }
 
@@ -289,8 +294,8 @@ impl TxnOptions {
         &self,
         payload: TransactionPayload,
     ) -> CliTypedResult<TransactionSummary> {
-        println!();
-        println!("Simulating transaction locally...");
+        human_println!();
+        human_println!("Simulating transaction locally...");
 
         self.simulate_using_debugger(payload, local_simulation::run_transaction_using_debugger)
             .await
@@ -303,8 +308,8 @@ impl TxnOptions {
         &self,
         payload: TransactionPayload,
     ) -> CliTypedResult<TransactionSummary> {
-        println!();
-        println!("Benchmarking transaction locally...");
+        human_println!();
+        human_println!("Benchmarking transaction locally...");
 
         self.simulate_using_debugger(
             payload,
@@ -318,8 +323,8 @@ impl TxnOptions {
         &self,
         payload: TransactionPayload,
     ) -> CliTypedResult<TransactionSummary> {
-        println!();
-        println!("Simulating transaction locally using the gas profiler...");
+        human_println!();
+        human_println!("Simulating transaction locally using the gas profiler...");
 
         self.simulate_using_debugger(
             payload,

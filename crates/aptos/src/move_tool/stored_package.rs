@@ -1,6 +1,7 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::human_println;
 use anyhow::bail;
 use aptos_framework::{
     natives::code::{ModuleMetadata, PackageMetadata, PackageRegistry, UpgradePolicy},
@@ -169,7 +170,7 @@ impl CachedPackageMetadata<'_> {
         for module in &self.metadata.modules {
             match module.source.is_empty() {
                 true => {
-                    println!("module without code: {}", module.name);
+                    human_println!("module without code: {}", module.name);
                 },
                 false => {
                     let source = unzip_metadata_str(&module.source)?;

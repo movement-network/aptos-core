@@ -92,7 +92,7 @@ impl CliCommand<Vec<TransactionSummary>> for AddStake {
                         self.txn_options
                             .submit_transaction(aptos_stdlib::stake_add_stake(amount))
                             .await
-                            .map(|inner| inner.into())?,
+                            .map(|t| self.txn_options.summarize_submitted_transaction(t))?,
                     );
                 },
                 StakePoolType::StakingContract => {
@@ -103,7 +103,7 @@ impl CliCommand<Vec<TransactionSummary>> for AddStake {
                                 amount,
                             ))
                             .await
-                            .map(|inner| inner.into())?,
+                            .map(|t| self.txn_options.summarize_submitted_transaction(t))?,
                     );
                 },
                 StakePoolType::Vesting => {
@@ -153,7 +153,7 @@ impl CliCommand<Vec<TransactionSummary>> for UnlockStake {
                         self.txn_options
                             .submit_transaction(aptos_stdlib::stake_unlock(amount))
                             .await
-                            .map(|inner| inner.into())?,
+                            .map(|t| self.txn_options.summarize_submitted_transaction(t))?,
                     );
                 },
                 StakePoolType::StakingContract => {
@@ -164,7 +164,7 @@ impl CliCommand<Vec<TransactionSummary>> for UnlockStake {
                                 amount,
                             ))
                             .await
-                            .map(|inner| inner.into())?,
+                            .map(|t| self.txn_options.summarize_submitted_transaction(t))?,
                     );
                 },
                 StakePoolType::Vesting => {
@@ -217,7 +217,7 @@ impl CliCommand<Vec<TransactionSummary>> for WithdrawStake {
                         self.node_op_options
                             .submit_transaction(aptos_stdlib::stake_withdraw(amount))
                             .await
-                            .map(|inner| inner.into())?,
+                            .map(|t| self.node_op_options.summarize_submitted_transaction(t))?,
                     );
                 },
                 StakePoolType::StakingContract => {
@@ -228,7 +228,7 @@ impl CliCommand<Vec<TransactionSummary>> for WithdrawStake {
                                 stake_pool.operator_address,
                             ))
                             .await
-                            .map(|inner| inner.into())?,
+                            .map(|t| self.node_op_options.summarize_submitted_transaction(t))?,
                     );
                 },
                 StakePoolType::Vesting => {
@@ -274,7 +274,7 @@ impl CliCommand<Vec<TransactionSummary>> for IncreaseLockup {
                         self.txn_options
                             .submit_transaction(aptos_stdlib::stake_increase_lockup())
                             .await
-                            .map(|inner| inner.into())?,
+                            .map(|t| self.txn_options.summarize_submitted_transaction(t))?,
                     );
                 },
                 StakePoolType::StakingContract => {
@@ -284,7 +284,7 @@ impl CliCommand<Vec<TransactionSummary>> for IncreaseLockup {
                                 stake_pool.operator_address,
                             ))
                             .await
-                            .map(|inner| inner.into())?,
+                            .map(|t| self.txn_options.summarize_submitted_transaction(t))?,
                     );
                 },
                 StakePoolType::Vesting => {
@@ -294,7 +294,7 @@ impl CliCommand<Vec<TransactionSummary>> for IncreaseLockup {
                                 stake_pool.vesting_contract.unwrap(),
                             ))
                             .await
-                            .map(|inner| inner.into())?,
+                            .map(|t| self.txn_options.summarize_submitted_transaction(t))?,
                     );
                 },
             }
@@ -340,7 +340,7 @@ impl CliCommand<TransactionSummary> for InitializeStakeOwner {
                 self.voter_address.unwrap_or(owner_address),
             ))
             .await
-            .map(|inner| inner.into())
+            .map(|t| self.txn_options.summarize_submitted_transaction(t))
     }
 }
 
@@ -385,7 +385,7 @@ impl CliCommand<Vec<TransactionSummary>> for SetOperator {
                                 new_operator_address,
                             ))
                             .await
-                            .map(|inner| inner.into())?,
+                            .map(|t| self.txn_options.summarize_submitted_transaction(t))?,
                     );
                 },
                 StakePoolType::StakingContract => {
@@ -398,7 +398,7 @@ impl CliCommand<Vec<TransactionSummary>> for SetOperator {
                                 ),
                             )
                             .await
-                            .map(|inner| inner.into())?,
+                            .map(|t| self.txn_options.summarize_submitted_transaction(t))?,
                     );
                 },
                 StakePoolType::Vesting => {
@@ -411,7 +411,7 @@ impl CliCommand<Vec<TransactionSummary>> for SetOperator {
                                 ),
                             )
                             .await
-                            .map(|inner| inner.into())?,
+                            .map(|t| self.txn_options.summarize_submitted_transaction(t))?,
                     );
                 },
             }
@@ -461,7 +461,7 @@ impl CliCommand<Vec<TransactionSummary>> for SetDelegatedVoter {
                                 new_voter_address,
                             ))
                             .await
-                            .map(|inner| inner.into())?,
+                            .map(|t| self.txn_options.summarize_submitted_transaction(t))?,
                     );
                 },
                 StakePoolType::StakingContract => {
@@ -472,7 +472,7 @@ impl CliCommand<Vec<TransactionSummary>> for SetDelegatedVoter {
                                 new_voter_address,
                             ))
                             .await
-                            .map(|inner| inner.into())?,
+                            .map(|t| self.txn_options.summarize_submitted_transaction(t))?,
                     );
                 },
                 StakePoolType::Vesting => {
@@ -483,7 +483,7 @@ impl CliCommand<Vec<TransactionSummary>> for SetDelegatedVoter {
                                 new_voter_address,
                             ))
                             .await
-                            .map(|inner| inner.into())?,
+                            .map(|t| self.txn_options.summarize_submitted_transaction(t))?,
                     );
                 },
             }
@@ -545,7 +545,7 @@ impl CliCommand<TransactionSummary> for CreateStakingContract {
                 vec![],
             ))
             .await
-            .map(|inner| inner.into())
+            .map(|t| self.txn_options.summarize_submitted_transaction(t))
     }
 }
 
@@ -574,7 +574,7 @@ impl CliCommand<TransactionSummary> for DistributeVestedCoins {
         self.txn_options
             .submit_transaction(aptos_stdlib::vesting_distribute(vesting_contract_address))
             .await
-            .map(|inner| inner.into())
+            .map(|t| self.txn_options.summarize_submitted_transaction(t))
     }
 }
 
@@ -607,7 +607,7 @@ impl CliCommand<TransactionSummary> for UnlockVestedCoins {
         self.txn_options
             .submit_transaction(aptos_stdlib::vesting_vest(vesting_contract_address))
             .await
-            .map(|inner| inner.into())
+            .map(|t| self.txn_options.summarize_submitted_transaction(t))
     }
 }
 
@@ -663,6 +663,6 @@ impl CliCommand<TransactionSummary> for RequestCommission {
                 self.operator_address,
             ))
             .await
-            .map(|inner| inner.into())
+            .map(|t| self.txn_options.summarize_submitted_transaction(t))
     }
 }

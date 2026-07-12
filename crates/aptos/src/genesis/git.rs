@@ -6,7 +6,7 @@ use crate::{
         types::{CliError, CliTypedResult},
         utils::{create_dir_if_not_exist, write_to_file},
     },
-    CliCommand,
+    human_eprintln, CliCommand,
 };
 use aptos_config::config::Token;
 use aptos_framework::ReleaseBundle;
@@ -168,7 +168,7 @@ impl Client {
                     ));
                 }
 
-                eprintln!("Reading {}", path.display());
+                human_eprintln!("Reading {}", path.display());
                 let mut file = std::fs::File::open(path.as_path())
                     .map_err(|e| CliError::IO(path.display().to_string(), e))?;
 

@@ -10,7 +10,7 @@
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
 use clap::Parser;
-use movement::{move_tool, Tool};
+use movement::{move_tool, MovementCli};
 use std::{process::exit, time::Duration};
 
 fn main() {
@@ -23,8 +23,11 @@ fn main() {
         .build()
         .unwrap();
 
+    let cli = MovementCli::parse();
+    cli.install_output_mode();
+
     // Run the corresponding tool.
-    let result = runtime.block_on(Tool::parse().execute());
+    let result = runtime.block_on(cli.execute());
 
     // Shutdown the runtime with a timeout. We do this to make sure that we don't sit
     // here waiting forever waiting for tasks that sometimes don't want to exit on

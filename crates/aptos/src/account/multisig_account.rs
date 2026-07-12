@@ -88,7 +88,8 @@ impl CliCommand<CreateSummary> for Create {
     }
 
     async fn execute(self) -> CliTypedResult<CreateSummary> {
-        self.txn_options
+        let txn = self
+            .txn_options
             .submit_transaction(aptos_stdlib::multisig_account_create_with_owners(
                 self.additional_owners,
                 self.num_signatures_required,
@@ -96,8 +97,11 @@ impl CliCommand<CreateSummary> for Create {
                 vec![],
                 vec![],
             ))
-            .await
-            .map(CreateSummary::from)
+            .await?;
+        let mut summary = CreateSummary::from(txn);
+        self.txn_options
+            .attach_explorer_url(&mut summary.transaction_summary);
+        Ok(summary)
     }
 }
 
@@ -142,7 +146,7 @@ impl CliCommand<TransactionSummary> for CreateTransaction {
         self.txn_options
             .submit_transaction(transaction_payload)
             .await
-            .map(|inner| inner.into())
+            .map(|t| self.txn_options.summarize_submitted_transaction(t))
     }
 }
 
@@ -251,7 +255,7 @@ impl CliCommand<TransactionSummary> for Approve {
                 self.multisig_account_with_sequence_number.sequence_number,
             ))
             .await
-            .map(|inner| inner.into())
+            .map(|t| self.txn_options.summarize_submitted_transaction(t))
     }
 }
 
@@ -283,7 +287,7 @@ impl CliCommand<TransactionSummary> for Reject {
                 self.multisig_account_with_sequence_number.sequence_number,
             ))
             .await
-            .map(|inner| inner.into())
+            .map(|t| self.txn_options.summarize_submitted_transaction(t))
     }
 }
 
@@ -310,7 +314,7 @@ impl CliCommand<TransactionSummary> for Execute {
                 transaction_payload: None,
             }))
             .await
-            .map(|inner| inner.into())
+            .map(|t| self.txn_options.summarize_submitted_transaction(t))
     }
 }
 
@@ -330,14 +334,21 @@ impl CliCommand<TransactionSummary> for ExecuteWithPayload {
     }
 
     async fn execute(self) -> CliTypedResult<TransactionSummary> {
-        self.execute
-            .txn_options
+        let ExecuteWithPayload {
+            execute:
+                Execute {
+                    multisig_account,
+                    txn_options,
+                },
+            entry_function_args,
+        } = self;
+        txn_options
             .submit_transaction(TransactionPayload::Multisig(Multisig {
-                multisig_address: self.execute.multisig_account.multisig_address,
-                transaction_payload: Some(self.entry_function_args.try_into()?),
+                multisig_address: multisig_account.multisig_address,
+                transaction_payload: Some(entry_function_args.try_into()?),
             }))
             .await
-            .map(|inner| inner.into())
+            .map(|t| txn_options.summarize_submitted_transaction(t))
     }
 }
 
@@ -365,6 +376,6 @@ impl CliCommand<TransactionSummary> for ExecuteReject {
                 self.multisig_account.multisig_address,
             ))
             .await
-            .map(|inner| inner.into())
+            .map(|t| self.txn_options.summarize_submitted_transaction(t))
     }
 }

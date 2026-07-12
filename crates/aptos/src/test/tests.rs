@@ -3,7 +3,7 @@
 
 use crate::{
     move_tool::{ArgWithType, FunctionArgType},
-    CliResult, Tool,
+    CliResult, MovementCli,
 };
 use clap::Parser;
 use std::str::FromStr;
@@ -55,6 +55,9 @@ async fn ensure_every_command_args_work() {
     .await;
 
     assert_cmd_not_panic(&["aptos", "info"]).await;
+
+    assert_cmd_not_panic(&["aptos", "meta"]).await;
+    assert_cmd_not_panic(&["aptos", "meta", "commands-schema", "--help"]).await;
 
     assert_cmd_not_panic(&["aptos", "init", "--help"]).await;
 
@@ -143,6 +146,7 @@ async fn assert_cmd_not_panic(args: &[&str]) {
 }
 
 async fn run_cmd(args: &[&str]) -> CliResult {
-    let tool: Tool = Tool::try_parse_from(args).map_err(|msg| msg.to_string())?;
-    tool.execute().await
+    let cli = MovementCli::try_parse_from(args).map_err(|msg| msg.to_string())?;
+    cli.install_output_mode();
+    cli.tool.execute().await
 }

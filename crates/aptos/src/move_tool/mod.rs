@@ -19,6 +19,7 @@ use crate::{
         },
     },
     governance::CompileScriptFunction,
+    human_println,
     move_tool::{
         bytecode::{Decompile, Disassemble},
         coverage::SummaryCoverage,
@@ -641,7 +642,7 @@ impl CliCommand<&'static str> for TestPackage {
             };
             summary.coverage()?;
 
-            println!("Please use `aptos move coverage -h` for more detailed source or bytecode test coverage of this package");
+            human_println!("Please use `aptos move coverage -h` for more detailed source or bytecode test coverage of this package");
         }
 
         match result {
@@ -816,7 +817,7 @@ impl TryInto<PackagePublicationData> for &PublishPackage {
             create_package_publication_data(package, PublishType::AccountDeploy, None)?;
 
         let size = bcs::serialized_size(&package_publication_data.payload)?;
-        println!("package size {} bytes", size);
+        human_println!("package size {} bytes", size);
         if !self.override_size_check_option.override_size_check && size > MAX_PUBLISH_PACKAGE_SIZE {
             return Err(CliError::PackageSizeExceeded(
                 size,
@@ -858,7 +859,7 @@ impl AsyncTryInto<ChunkedPublishPayloads> for &PublishPackage {
             .iter()
             .map(bcs::serialized_size)
             .sum::<Result<usize, _>>()?;
-        println!("package size {} bytes", size);
+        human_println!("package size {} bytes", size);
 
         Ok(chunked_publish_payloads)
     }
@@ -1049,7 +1050,7 @@ impl CliCommand<TransactionSummary> for PublishPackage {
             let chunked_package_payloads: ChunkedPublishPayloads = (&self).async_try_into().await?;
 
             let message = format!("Publishing package in chunked mode will submit {} transactions for staging and publishing code.\n", &chunked_package_payloads.payloads.len());
-            println!("{}", message.bold());
+            human_println!("{}", message.bold());
             submit_chunked_publish_transactions(
                 chunked_package_payloads.payloads,
                 &self.txn_options,
@@ -1211,9 +1212,9 @@ impl CliCommand<TransactionSummary> for CreateObjectAndPublishPackage {
                 .iter()
                 .map(bcs::serialized_size)
                 .sum::<Result<usize, _>>()?;
-            println!("package size {} bytes", size);
+            human_println!("package size {} bytes", size);
             let message = format!("Publishing package in chunked mode will submit {} transactions for staging and publishing code.\n", &payloads.len());
-            println!("{}", message.bold());
+            human_println!("{}", message.bold());
 
             submit_chunked_publish_transactions(
                 payloads,
@@ -1229,7 +1230,7 @@ impl CliCommand<TransactionSummary> for CreateObjectAndPublishPackage {
             )?
             .payload;
             let size = bcs::serialized_size(&payload)?;
-            println!("package size {} bytes", size);
+            human_println!("package size {} bytes", size);
 
             if !self.override_size_check_option.override_size_check
                 && size > MAX_PUBLISH_PACKAGE_SIZE
@@ -1242,11 +1243,11 @@ impl CliCommand<TransactionSummary> for CreateObjectAndPublishPackage {
             self.txn_options
                 .submit_transaction(payload)
                 .await
-                .map(TransactionSummary::from)
+                .map(|t| self.txn_options.summarize_submitted_transaction(t))
         };
 
         if result.is_ok() {
-            println!(
+            human_println!(
                 "Code was successfully deployed to object address {}",
                 object_address
             );
@@ -1330,9 +1331,9 @@ impl CliCommand<TransactionSummary> for UpgradeObjectPackage {
                 .iter()
                 .map(bcs::serialized_size)
                 .sum::<Result<usize, _>>()?;
-            println!("package size {} bytes", size);
+            human_println!("package size {} bytes", size);
             let message = format!("Upgrading package in chunked mode will submit {} transactions for staging and upgrading code.\n", &payloads.len());
-            println!("{}", message.bold());
+            human_println!("{}", message.bold());
             submit_chunked_publish_transactions(
                 payloads,
                 &self.txn_options,
@@ -1348,7 +1349,7 @@ impl CliCommand<TransactionSummary> for UpgradeObjectPackage {
             .payload;
 
             let size = bcs::serialized_size(&payload)?;
-            println!("package size {} bytes", size);
+            human_println!("package size {} bytes", size);
 
             if !self.override_size_check_option.override_size_check
                 && size > MAX_PUBLISH_PACKAGE_SIZE
@@ -1361,11 +1362,11 @@ impl CliCommand<TransactionSummary> for UpgradeObjectPackage {
             self.txn_options
                 .submit_transaction(payload)
                 .await
-                .map(TransactionSummary::from)
+                .map(|t| self.txn_options.summarize_submitted_transaction(t))
         };
 
         if result.is_ok() {
-            println!(
+            human_println!(
                 "Code was successfully upgraded at object address {}",
                 self.object_address
             );
@@ -1463,9 +1464,9 @@ impl CliCommand<TransactionSummary> for DeployObjectCode {
                 .iter()
                 .map(bcs::serialized_size)
                 .sum::<Result<usize, _>>()?;
-            println!("package size {} bytes", size);
+            human_println!("package size {} bytes", size);
             let message = format!("Publishing package in chunked mode will submit {} transactions for staging and publishing code.\n", &payloads.len());
-            println!("{}", message.bold());
+            human_println!("{}", message.bold());
 
             submit_chunked_publish_transactions(
                 payloads,
@@ -1482,7 +1483,7 @@ impl CliCommand<TransactionSummary> for DeployObjectCode {
             .payload;
 
             let size = bcs::serialized_size(&payload)?;
-            println!("package size {} bytes", size);
+            human_println!("package size {} bytes", size);
 
             if !self.override_size_check_option.override_size_check
                 && size > MAX_PUBLISH_PACKAGE_SIZE
@@ -1495,11 +1496,11 @@ impl CliCommand<TransactionSummary> for DeployObjectCode {
             self.txn_options
                 .submit_transaction(payload)
                 .await
-                .map(TransactionSummary::from)
+                .map(|t| self.txn_options.summarize_submitted_transaction(t))
         };
 
         if result.is_ok() {
-            println!(
+            human_println!(
                 "Code was successfully deployed to object address {}",
                 object_address
             );
@@ -1588,9 +1589,9 @@ impl CliCommand<TransactionSummary> for UpgradeCodeObject {
                 .iter()
                 .map(bcs::serialized_size)
                 .sum::<Result<usize, _>>()?;
-            println!("package size {} bytes", size);
+            human_println!("package size {} bytes", size);
             let message = format!("Upgrading package in chunked mode will submit {} transactions for staging and upgrading code.\n", &payloads.len());
-            println!("{}", message.bold());
+            human_println!("{}", message.bold());
             submit_chunked_publish_transactions(
                 payloads,
                 &self.txn_options,
@@ -1606,7 +1607,7 @@ impl CliCommand<TransactionSummary> for UpgradeCodeObject {
             .payload;
 
             let size = bcs::serialized_size(&payload)?;
-            println!("package size {} bytes", size);
+            human_println!("package size {} bytes", size);
 
             if !self.override_size_check_option.override_size_check
                 && size > MAX_PUBLISH_PACKAGE_SIZE
@@ -1619,11 +1620,11 @@ impl CliCommand<TransactionSummary> for UpgradeCodeObject {
             self.txn_options
                 .submit_transaction(payload)
                 .await
-                .map(TransactionSummary::from)
+                .map(|t| self.txn_options.summarize_submitted_transaction(t))
         };
 
         if result.is_ok() {
-            println!(
+            human_println!(
                 "Code was successfully upgraded at object address {}",
                 self.object_address
             );
@@ -1663,16 +1664,16 @@ async fn submit_chunked_publish_transactions(
             large_packages_module_address, account_address,
         )
             .bold();
-        println!("{}", message);
+        human_println!("{}", message);
         prompt_yes_with_override("Do you want to proceed?", txn_options.prompt_options)?;
     }
 
     for (idx, payload) in payloads.into_iter().enumerate() {
-        println!("Transaction {} of {}", idx + 1, payloads_length);
+        human_println!("Transaction {} of {}", idx + 1, payloads_length);
         let result = txn_options
             .submit_transaction(payload)
             .await
-            .map(TransactionSummary::from);
+            .map(|t| txn_options.summarize_submitted_transaction(t));
 
         match result {
             Ok(tx_summary) => {
@@ -1684,13 +1685,13 @@ async fn submit_chunked_publish_transactions(
                         "Failed".to_string()
                     }
                 });
-                println!("Transaction executed: {} ({})\n", status, &tx_hash);
+                human_println!("Transaction executed: {} ({})\n", status, &tx_hash);
                 tx_hashes.push(tx_hash);
                 publishing_result = Ok(tx_summary);
             },
 
             Err(e) => {
-                println!("{}", "Caution: An error occurred while submitting chunked publish transactions. \
+                human_println!("{}", "Caution: An error occurred while submitting chunked publish transactions. \
                 \nDue to this error, there may be incomplete data left in the `StagingArea` resource. \
                 \nThis could cause further errors if you attempt to run the chunked publish command again. \
                 \nTo avoid this, use the `aptos move clear-staging-area` command to clean up the `StagingArea` resource under your account before retrying.".bold());
@@ -1699,7 +1700,7 @@ async fn submit_chunked_publish_transactions(
         }
     }
 
-    println!(
+    human_println!(
         "{}",
         "All Transactions Submitted Successfully.".bold().green()
     );
@@ -1711,7 +1712,7 @@ async fn submit_chunked_publish_transactions(
             .collect::<Vec<_>>()
             .join(",\n    ")
     );
-    println!("\n{}\n", tx_hash_formatted);
+    human_println!("\n{}\n", tx_hash_formatted);
     publishing_result
 }
 
@@ -1769,15 +1770,16 @@ impl CliCommand<TransactionSummary> for ClearStagingArea {
             .large_packages_module
             .large_packages_module_address(&self.txn_options.rest_client()?)
             .await?;
-        println!(
+        human_println!(
             "Cleaning up resource {}::large_packages::StagingArea under account {}.",
-            &large_packages_module_address, account_address,
+            &large_packages_module_address,
+            account_address,
         );
         let payload = large_packages_cleanup_staging_area(large_packages_module_address);
         self.txn_options
             .submit_transaction(payload)
             .await
-            .map(TransactionSummary::from)
+            .map(|t| self.txn_options.summarize_submitted_transaction(t))
     }
 }
 
@@ -1858,7 +1860,7 @@ impl CliCommand<TransactionSummary> for CreateResourceAccountAndPublishPackage {
             compiled_units,
         );
         let size = bcs::serialized_size(&payload)?;
-        println!("package size {} bytes", size);
+        human_println!("package size {} bytes", size);
         if !override_size_check_option.override_size_check && size > MAX_PUBLISH_PACKAGE_SIZE {
             return Err(CliError::UnexpectedError(format!(
                 "The package is larger than {} bytes ({} bytes)! To lower the size \
@@ -1870,7 +1872,7 @@ impl CliCommand<TransactionSummary> for CreateResourceAccountAndPublishPackage {
         txn_options
             .submit_transaction(payload)
             .await
-            .map(TransactionSummary::from)
+            .map(|t| txn_options.summarize_submitted_transaction(t))
     }
 }
 
@@ -1928,7 +1930,7 @@ impl CliCommand<&'static str> for DownloadPackage {
             ));
         }
         if self.print_metadata {
-            println!("{}", package);
+            human_println!("{}", package);
         }
         let package_path = output_dir.join(package.name());
         package
@@ -1941,7 +1943,7 @@ impl CliCommand<&'static str> for DownloadPackage {
                 }
             }
         };
-        println!(
+        human_println!(
             "Saved package with {} module(s) to `{}`",
             package.module_names().len(),
             package_path.display()
@@ -2071,11 +2073,11 @@ impl CliCommand<&'static str> for ListPackage {
             MoveListQuery::Packages => {
                 for name in registry.package_names() {
                     let data = registry.get_package(name).await?;
-                    println!("package {}", data.name());
-                    println!("  upgrade_policy: {}", data.upgrade_policy());
-                    println!("  upgrade_number: {}", data.upgrade_number());
-                    println!("  source_digest: {}", data.source_digest());
-                    println!("  modules: {}", data.module_names().into_iter().join(", "));
+                    human_println!("package {}", data.name());
+                    human_println!("  upgrade_policy: {}", data.upgrade_policy());
+                    human_println!("  upgrade_number: {}", data.upgrade_number());
+                    human_println!("  source_digest: {}", data.source_digest());
+                    human_println!("  modules: {}", data.module_names().into_iter().join(", "));
                 }
             },
         }
@@ -2347,7 +2349,7 @@ impl CliCommand<TransactionSummary> for Replay {
 
         // Execute the transaction.
         let (vm_status, vm_output) = if self.profile_gas {
-            println!("Profiling transaction...");
+            human_println!("Profiling transaction...");
             local_simulation::profile_transaction_using_debugger(
                 &debugger,
                 self.txn_id,
@@ -2355,7 +2357,7 @@ impl CliCommand<TransactionSummary> for Replay {
                 hash,
             )?
         } else if self.benchmark {
-            println!("Benchmarking transaction...");
+            human_println!("Benchmarking transaction...");
             local_simulation::benchmark_transaction_using_debugger(
                 &debugger,
                 self.txn_id,
@@ -2363,7 +2365,7 @@ impl CliCommand<TransactionSummary> for Replay {
                 hash,
             )?
         } else {
-            println!("Replaying transaction...");
+            human_println!("Replaying transaction...");
             local_simulation::run_transaction_using_debugger(
                 &debugger,
                 self.txn_id,
@@ -2408,6 +2410,7 @@ impl CliCommand<TransactionSummary> for Replay {
             timestamp_us: None,
             version: Some(self.txn_id),
             vm_status: Some(vm_status.to_string()),
+            explorer_url: None,
         };
 
         Ok(summary)

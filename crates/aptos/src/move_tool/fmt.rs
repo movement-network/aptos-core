@@ -6,6 +6,7 @@ use crate::{
         types::{CliCommand, CliError, CliTypedResult},
         utils::dir_default_to_current,
     },
+    human_eprint, human_eprintln,
     update::get_movefmt_path,
 };
 use async_trait::async_trait;
@@ -211,10 +212,10 @@ impl FmtCommand {
                     String::from_utf8(out.stderr).unwrap_or_default()
                 )));
             } else {
-                eprintln!("Formatting file: {}", file.display());
+                human_eprintln!("Formatting file: {}", file.display());
                 match String::from_utf8(out.stdout) {
                     Ok(output) => {
-                        eprint!("{}", output);
+                        human_eprint!("{}", output);
                     },
                     Err(err) => {
                         return Err(CliError::UnexpectedError(format!(

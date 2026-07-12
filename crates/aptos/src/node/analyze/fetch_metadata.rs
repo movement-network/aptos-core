@@ -1,6 +1,7 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::human_println;
 use anyhow::{anyhow, Result};
 use aptos_rest_client::{
     aptos_api_types::{IdentifierWrapper, MoveResource, WriteSetChange},
@@ -159,7 +160,7 @@ impl FetchMetadata {
                 .ok_or_else(|| anyhow!("No blocks at oldest_block_height {}", start_seq_num))?;
             let oldest_fetchable_epoch = std::cmp::max(oldest_event.event.epoch() + 1, 2);
             if oldest_fetchable_epoch > wanted_start_epoch as u64 {
-                println!(
+                human_println!(
                     "Oldest full epoch that can be retreived is {} ",
                     oldest_fetchable_epoch
                 );
@@ -208,7 +209,7 @@ impl FetchMetadata {
 
         let mut batch_index = 0;
 
-        println!(
+        human_println!(
             "Fetching {} to {} sequence number, wanting epochs [{}, {}), last version: {} and epoch: {}",
             start_seq_num, last_seq_num, wanted_start_epoch, wanted_end_epoch, state.version, state.epoch,
         );
@@ -228,7 +229,7 @@ impl FetchMetadata {
                 .await;
 
             if response.is_err() {
-                println!(
+                human_println!(
                     "Failed to read new_block_events beyond {}, stopping. {:?}",
                     cursor,
                     response.unwrap_err()
@@ -312,7 +313,7 @@ impl FetchMetadata {
             }
 
             if batch_index % 100 == 0 {
-                println!(
+                human_println!(
                     "Fetched {} epochs (in epoch {} with {} blocks) from {} NewBlockEvents",
                     result.len(),
                     epoch,

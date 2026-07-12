@@ -10,6 +10,7 @@ use super::{
     traits::{PostHealthyStep, ServiceManager, ShutdownStep},
     RunLocalnet,
 };
+use crate::human_eprintln;
 use anyhow::{anyhow, Context, Result};
 pub use aptos_localnet::indexer_api::{
     make_hasura_metadata_request, post_metadata, HASURA_IMAGE, HASURA_METADATA,
@@ -119,7 +120,7 @@ impl ServiceManager for IndexerApiManager {
 
         // Warn the user about DOCKER_DEFAULT_PLATFORM.
         if let Ok(var) = std::env::var("DOCKER_DEFAULT_PLATFORM") {
-            eprintln!(
+            human_eprintln!(
                 "WARNING: DOCKER_DEFAULT_PLATFORM is set to {}. This may cause problems \
                 with running the indexer API. If it fails to start up, try unsetting \
                 this env var.\n",
@@ -157,9 +158,10 @@ impl ServiceManager for IndexerApiManager {
             let checker = HealthChecker::Http(url.clone(), "Indexer API".to_string());
             loop {
                 if let Err(e) = checker.wait(None).await {
-                    eprintln!(
+                    human_eprintln!(
                         "Existing Hasura instance at {} became unhealthy: {}",
-                        url, e
+                        url,
+                        e
                     );
                     break;
                 }

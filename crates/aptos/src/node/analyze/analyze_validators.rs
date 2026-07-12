@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::fetch_metadata::ValidatorInfo;
+use crate::{human_print, human_println};
 use anyhow::Result;
 use aptos_bitvec::BitVec;
 use aptos_logger::error;
@@ -326,7 +327,7 @@ impl AnalyzeValidators {
             let end = raw_events.len() < batch;
             for raw_event in raw_events {
                 if cursor <= raw_event.event.v1()?.sequence_number() {
-                    println!(
+                    human_println!(
                         "Duplicate event found for {} : {:?}",
                         cursor,
                         raw_event.event.v1()?.sequence_number()
@@ -402,13 +403,17 @@ impl AnalyzeValidators {
         ]
         .into_iter()
         .map(|v| {
-            (v, VecDeque::new(), MaxTpsStats {
-                tps: 0.0,
-                end_version: 0,
-                txns: 0,
-                blocks: 0,
-                duration: 0.0,
-            })
+            (
+                v,
+                VecDeque::new(),
+                MaxTpsStats {
+                    tps: 0.0,
+                    end_version: 0,
+                    txns: 0,
+                    blocks: 0,
+                    duration: 0.0,
+                },
+            )
         })
         .collect::<Vec<_>>();
         let mut trimmed_rounds = 0;
@@ -423,9 +428,10 @@ impl AnalyzeValidators {
             let expected_round =
                 previous_round + u64::from(!is_nil) + event.failed_proposer_indices().len() as u64;
             if event.round() != expected_round {
-                println!(
+                human_println!(
                     "Missing failed AccountAddresss : {} {:?}",
-                    previous_round, &event
+                    previous_round,
+                    &event
                 );
                 assert!(expected_round < event.round());
                 trimmed_rounds += event.round() - expected_round;
@@ -530,13 +536,16 @@ impl AnalyzeValidators {
             validator_stats: validators
                 .iter()
                 .map(|validator| {
-                    (validator.address, ValidatorStats {
-                        proposal_successes: *successes.get(&validator.address).unwrap_or(&0),
-                        proposal_failures: *failures.get(&validator.address).unwrap_or(&0),
-                        votes: *votes.get(&validator.address).unwrap_or(&0),
-                        transactions: *transactions.get(&validator.address).unwrap_or(&0),
-                        voting_power: validator.voting_power,
-                    })
+                    (
+                        validator.address,
+                        ValidatorStats {
+                            proposal_successes: *successes.get(&validator.address).unwrap_or(&0),
+                            proposal_failures: *failures.get(&validator.address).unwrap_or(&0),
+                            votes: *votes.get(&validator.address).unwrap_or(&0),
+                            transactions: *transactions.get(&validator.address).unwrap_or(&0),
+                            voting_power: validator.voting_power,
+                        },
+                    )
                 })
                 .collect(),
             total_rounds,
@@ -632,13 +641,13 @@ impl AnalyzeValidators {
         extra: Option<(&str, &HashMap<AccountAddress, String>)>,
         sort_by_health: bool,
     ) {
-        println!(
+        human_println!(
             "Rounds: {} successes, {} failures, {} NIL blocks, failure rate: {}%, nil block rate: {}%",
             epoch_stats.round_successes, epoch_stats.round_failures, epoch_stats.nil_blocks,
             100.0 * epoch_stats.round_failures as f32 / epoch_stats.total_rounds as f32,
             100.0 * epoch_stats.nil_blocks as f32 / epoch_stats.total_rounds as f32,
         );
-        println!(
+        human_println!(
             "{: <10} | {: <10} | {: <10} | {: <10} | {: <10} | {: <10} | {: <10} | {: <30}",
             "elected",
             "% rounds",
@@ -676,7 +685,7 @@ impl AnalyzeValidators {
 
         for validator in validator_order {
             let cur_stats = epoch_stats.validator_stats.get(validator).unwrap();
-            println!(
+            human_println!(
                 "{: <10} | {:5.2}%     | {:7.3}%   | {: <10} | {: <10} | {: <10} | {: <10} | {}",
                 cur_stats.proposal_failures + cur_stats.proposal_successes,
                 100.0 * (cur_stats.proposal_failures + cur_stats.proposal_successes) as f32
@@ -724,7 +733,7 @@ impl AnalyzeValidators {
         });
 
         for validator in sorted_validators {
-            print!(
+            human_print!(
                 "{}:  ",
                 if let Some(extra_map) = extra {
                     format!(
@@ -737,12 +746,12 @@ impl AnalyzeValidators {
                 }
             );
             for cur_epoch in epochs.iter() {
-                print!(
+                human_print!(
                     "{}",
                     stats.get(cur_epoch).unwrap().to_state(&validator).to_char()
                 );
             }
-            println!();
+            human_println!();
         }
     }
 
@@ -752,7 +761,7 @@ impl AnalyzeValidators {
     ) {
         let epochs = stats.keys().sorted();
 
-        println!(
+        human_println!(
             "{: <8} | {: <10} | {: <10} | {: <10} | {: <10} | {: <10} | {: <10} | {: <10} | {: <10} | {: <10}",
             "epoch",
             "reliable",
@@ -781,7 +790,7 @@ impl AnalyzeValidators {
                 })
                 .sum();
 
-            println!(
+            human_println!(
                 "{: <8} | {: <10} | {: <10} | {: <10} | {: <10} | {: <10} | {: <10} | {: <10} | {:10.2} | {:10.2}",
                 cur_epoch,
                 counts.get(&NodeState::Reliable).unwrap_or(&0),
@@ -805,12 +814,12 @@ impl AnalyzeValidators {
     {
         let gap_info = Self::analyze_gap(blocks);
 
-        println!(
+        human_println!(
             "Max non-epoch-change gaps: {}, {}.",
             gap_info.non_epoch_round_gap.to_string_as_round(),
             gap_info.non_epoch_time_gap.to_string_as_time(),
         );
-        println!(
+        human_println!(
             "Max epoch-change gaps: {}, {}.",
             gap_info.epoch_round_gap.to_string_as_round(),
             gap_info.epoch_time_gap.to_string_as_time(),

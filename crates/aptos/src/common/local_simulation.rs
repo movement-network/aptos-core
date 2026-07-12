@@ -1,7 +1,10 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::common::types::{CliError, CliTypedResult};
+use crate::{
+    common::types::{CliError, CliTypedResult},
+    human_println,
+};
 use aptos_crypto::HashValue;
 use aptos_gas_profiling::FrameName;
 use aptos_move_debugger::aptos_debugger::AptosDebugger;
@@ -101,8 +104,8 @@ pub fn benchmark_transaction_using_debugger(
         times[n / 2]
     };
 
-    println!("Running time (cold code cache): {:?}", time_cold);
-    println!("Running time (warm code cache): {:?}", time_warm);
+    human_println!("Running time (cold code cache): {:?}", time_cold);
+    human_println!("Running time (warm code cache): {:?}", time_warm);
 
     Ok((vm_status, vm_output))
 }
@@ -142,7 +145,7 @@ pub fn profile_transaction_using_debugger(
     let path = Path::new("gas-profiling").join(raw_file_name);
     gas_log.generate_html_report(&path, format!("Gas Report - {}", human_readable_name))?;
 
-    println!("Gas report saved to {}.", path.display());
+    human_println!("Gas report saved to {}.", path.display());
 
     Ok((vm_status, vm_output))
 }

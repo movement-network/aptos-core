@@ -1,11 +1,15 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::common::types::{
-    account_address_from_auth_key, account_address_from_public_key, AuthenticationKeyInputOptions,
-    CliCommand, CliConfig, CliError, CliTypedResult, ConfigSearchMode, EncodingOptions,
-    ExtractEd25519PublicKey, HardwareWalletOptions, ParseEd25519PrivateKey, ProfileConfig,
-    ProfileOptions, PublicKeyInputOptions, RestOptions, TransactionOptions, TransactionSummary,
+use crate::{
+    common::types::{
+        account_address_from_auth_key, account_address_from_public_key,
+        AuthenticationKeyInputOptions, CliCommand, CliConfig, CliError, CliTypedResult,
+        ConfigSearchMode, EncodingOptions, ExtractEd25519PublicKey, HardwareWalletOptions,
+        ParseEd25519PrivateKey, ProfileConfig, ProfileOptions, PublicKeyInputOptions, RestOptions,
+        TransactionOptions, TransactionSummary,
+    },
+    human_eprintln,
 };
 use aptos_cached_packages::aptos_stdlib;
 use aptos_crypto::{
@@ -248,7 +252,7 @@ impl CliCommand<RotateSummary> for RotateKey {
         if current_derivation_path.is_some() {
             eprintln!("Approve transaction on your Ledger device");
         };
-        let txn_summary = self
+        let txn = self
             .txn_options
             .submit_transaction(aptos_stdlib::account_rotate_authentication_key(
                 0,
@@ -260,12 +264,12 @@ impl CliCommand<RotateSummary> for RotateKey {
                     .to_vec(),
                 rotation_proof_signed_by_new_private_key.to_bytes().to_vec(),
             ))
-            .await
-            .map(TransactionSummary::from)?;
+            .await?;
+        let txn_summary = self.txn_options.summarize_submitted_transaction_ref(&txn);
 
         let txn_string = serde_json::to_string_pretty(&txn_summary)
             .map_err(|err| CliError::UnableToParse("transaction summary", err.to_string()))?;
-        eprintln!("{}", txn_string);
+        human_eprintln!("{}", txn_string);
 
         if let Some(txn_success) = txn_summary.success {
             if !txn_success {

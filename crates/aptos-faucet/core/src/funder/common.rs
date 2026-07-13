@@ -76,9 +76,10 @@ pub struct ApiConnectionConfig {
     #[clap(long, value_parser = ConfigKey::<Ed25519PrivateKey>::from_encoded_string)]
     key: Option<ConfigKey<Ed25519PrivateKey>>,
 
-    /// Chain ID of the network this client is connecting to. For example, for mainnet:
-    /// "MAINNET" or 1, testnet: "TESTNET" or 2. If there is no predefined string
-    /// alias (e.g. "MAINNET"), just use the number. Note: Chain ID of 0 is not allowed.
+    /// Chain ID of the network this client is connecting to, as a number
+    /// (e.g. 126 for Movement mainnet, 250 for testnet). The aliases
+    /// "movement_mainnet" / "movement_testnet" are also accepted.
+    /// Note: Chain ID of 0 is not allowed.
     #[clap(long, default_value_t = ChainId::testnet())]
     pub chain_id: ChainId,
 }

@@ -89,61 +89,9 @@ impl TimedFeatureFlag {
                 .with_ymd_and_hms(2025, 8, 11, 17, 0, 0)
                 .unwrap()
                 .with_timezone(&Utc),
-            // Enabled from the beginning of time.
-            (DisableInvariantViolationCheckInSwapLoc, TESTNET) => BEGINNING_OF_TIME,
-            (DisableInvariantViolationCheckInSwapLoc, MAINNET) => BEGINNING_OF_TIME,
-
-            // Note: These have been enabled since the start due to a bug.
-            (_LimitTypeTagSize, TESTNET) => BEGINNING_OF_TIME,
-            (_LimitTypeTagSize, MAINNET) => BEGINNING_OF_TIME,
-
-            (_ModuleComplexityCheck, TESTNET) => Los_Angeles
-                .with_ymd_and_hms(2024, 6, 25, 16, 0, 0)
-                .unwrap()
-                .with_timezone(&Utc),
-            (_ModuleComplexityCheck, MAINNET) => Los_Angeles
-                .with_ymd_and_hms(2024, 7, 3, 12, 0, 0)
-                .unwrap()
-                .with_timezone(&Utc),
-
-            (EntryCompatibility, TESTNET) => Los_Angeles
-                .with_ymd_and_hms(2024, 11, 6, 12, 0, 0)
-                .unwrap()
-                .with_timezone(&Utc),
-            (EntryCompatibility, MAINNET) => Los_Angeles
-                .with_ymd_and_hms(2024, 11, 12, 12, 0, 0)
-                .unwrap()
-                .with_timezone(&Utc),
-
             // Note: Activation time set to 1 hour after the beginning of time
             //       so we can test the old and new behaviors in tests.
             (FixMemoryUsageTracking, TESTING) => Utc.with_ymd_and_hms(1970, 1, 1, 1, 0, 0).unwrap(),
-            (FixMemoryUsageTracking, TESTNET) => Los_Angeles
-                .with_ymd_and_hms(2025, 3, 7, 12, 0, 0)
-                .unwrap()
-                .with_timezone(&Utc),
-            (FixMemoryUsageTracking, MAINNET) => Los_Angeles
-                .with_ymd_and_hms(2025, 3, 11, 17, 0, 0)
-                .unwrap()
-                .with_timezone(&Utc),
-
-            (ChargeBytesForPrints, TESTNET) => Los_Angeles
-                .with_ymd_and_hms(2025, 3, 7, 12, 0, 0)
-                .unwrap()
-                .with_timezone(&Utc),
-            (ChargeBytesForPrints, MAINNET) => Los_Angeles
-                .with_ymd_and_hms(2025, 3, 11, 17, 0, 0)
-                .unwrap()
-                .with_timezone(&Utc),
-
-            (FixTableNativesMemoryDoubleCounting, TESTNET) => Los_Angeles
-                .with_ymd_and_hms(2025, 10, 16, 17, 0, 0)
-                .unwrap()
-                .with_timezone(&Utc),
-            (FixTableNativesMemoryDoubleCounting, MAINNET) => Los_Angeles
-                .with_ymd_and_hms(2025, 10, 21, 10, 0, 0)
-                .unwrap()
-                .with_timezone(&Utc),
 
             // 1 hour after the beginning of time
             (FixCryptoAlgebraNativesTypeTagConversion, _) => {
@@ -153,8 +101,8 @@ impl TimedFeatureFlag {
             // Irrelevant for us except for testing
             (UseFullTransactionSizeForTransactionMetadata, _) => BEGINNING_OF_TIME,
 
-            // For chains other than testnet and mainnet, a timed feature is considered enabled from
-            // the very beginning, if left unspecified.
+            // For chains other than Movement mainnet and testnet, a timed feature is considered
+            // enabled from the very beginning, if left unspecified.
             (_, TESTING | DEVNET | PREMAINNET) => BEGINNING_OF_TIME,
         }
     }
@@ -250,8 +198,6 @@ mod test {
 
     #[test]
     fn test_micros_conversion() {
-        use NamedChain::*;
-
         assert_eq!(
             Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0)
                 .unwrap()
@@ -264,32 +210,6 @@ mod test {
                 .unwrap()
                 .timestamp_micros(),
             1_731_628_800_000_000
-        );
-
-        assert_eq!(
-            TimedFeatureFlag::_ModuleComplexityCheck
-                .activation_time_on(&TESTNET)
-                .timestamp_micros(),
-            1_719_356_400_000_000
-        );
-        assert_eq!(
-            TimedFeatureFlag::_ModuleComplexityCheck
-                .activation_time_on(&MAINNET)
-                .timestamp_micros(),
-            1_720_033_200_000_000
-        );
-
-        assert_eq!(
-            TimedFeatureFlag::EntryCompatibility
-                .activation_time_on(&TESTNET)
-                .timestamp_micros(),
-            1_730_923_200_000_000
-        );
-        assert_eq!(
-            TimedFeatureFlag::EntryCompatibility
-                .activation_time_on(&MAINNET)
-                .timestamp_micros(),
-            1_731_441_600_000_000
         );
     }
 

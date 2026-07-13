@@ -9,12 +9,15 @@ use crate::{
     config::{
         node_config_loader::NodeType, utils::get_config_name, AdminServiceConfig, Error,
         ExecutionConfig, IndexerConfig, InspectionServiceConfig, LoggerConfig, MempoolConfig,
-        NodeConfig, StateSyncConfig,
+        NodeConfig, Peer, PeerRole, PeerSet, StateSyncConfig,
     },
     network_id::NetworkId,
 };
-use aptos_types::chain_id::ChainId;
+use aptos_crypto::{x25519, ValidCryptoMaterialStringExt};
+use aptos_types::{chain_id::ChainId, network_address::NetworkAddress, PeerId};
+use maplit::hashset;
 use serde_yaml::Value;
+use std::{collections::HashMap, str::FromStr};
 
 // Useful optimizer constants
 const OPTIMIZER_STRING: &str = "Optimizer";
@@ -23,6 +26,22 @@ const PUBLIC_NETWORK_OPTIMIZER_NAME: &str = "PublicNetworkConfigOptimizer";
 const VALIDATOR_NETWORK_OPTIMIZER_NAME: &str = "ValidatorNetworkConfigOptimizer";
 
 const IDENTITY_KEY_FILE: &str = "ephemeral_identity_key";
+
+// Movement mainnet seed peers. Each seed peer entry is a tuple
+// of (account address, public key, network address).
+const MAINNET_SEED_PEERS: [(&str, &str, &str); 1] = [(
+    "9967EBF40AC8C2CCB38709488952DA1826176584EA3067B63B1695362ECB3D1F",
+    "0x9967EBF40AC8C2CCB38709488952DA1826176584EA3067B63B1695362ECB3D1F",
+    "/dns/consensus.mainnet.movementnetwork.xyz/tcp/6182/noise-ik/9967EBF40AC8C2CCB38709488952DA1826176584EA3067B63B1695362ECB3D1F/handshake/0",
+)];
+
+// Movement testnet seed peers. Each seed peer entry is a tuple
+// of (account address, public key, network address).
+const TESTNET_SEED_PEERS: [(&str, &str, &str); 1] = [(
+    "9967EBF40AC8C2CCB38709488952DA1826176584EA3067B63B1695362ECB3D1F",
+    "0x9967EBF40AC8C2CCB38709488952DA1826176584EA3067B63B1695362ECB3D1F",
+    "/dns/consensus.testnet.movementnetwork.xyz/tcp/6182/noise-ik/9967EBF40AC8C2CCB38709488952DA1826176584EA3067B63B1695362ECB3D1F/handshake/0",
+)];
 
 /// A trait for optimizing node configs (and their sub-configs) by tweaking
 /// config values based on node types, chain IDs and compiler features.
@@ -144,20 +163,37 @@ fn optimize_all_network_configs(
 /// Optimize the public network config according to the node type and chain ID
 fn optimize_public_network_config(
     node_config: &mut NodeConfig,
-    _local_config_yaml: &Value,
+    local_config_yaml: &Value,
     node_type: NodeType,
-    _chain_id: Option<ChainId>,
+    chain_id: Option<ChainId>,
 ) -> Result<bool, Error> {
     // We only need to optimize the public network config for VFNs and PFNs
     if node_type.is_validator() {
         return Ok(false);
     }
 
+    // Add seeds to the public network config
     let mut modified_config = false;
-    for fullnode_network_config in node_config.full_node_networks.iter_mut() {
-        // No automatic seed injection. Public fullnodes configure their seeds
-        // via node config.
+    for (index, fullnode_network_config) in node_config.full_node_networks.iter_mut().enumerate() {
+        let local_network_config_yaml = &local_config_yaml["full_node_networks"][index];
+
+        // Optimize the public network configs
         if fullnode_network_config.network_id == NetworkId::Public {
+            // Only add seeds to testnet and mainnet (as they are long living networks)
+            if local_network_config_yaml["seeds"].is_null() {
+                if let Some(chain_id) = chain_id {
+                    if chain_id.is_testnet() {
+                        fullnode_network_config.seeds =
+                            create_seed_peers(TESTNET_SEED_PEERS.into())?;
+                        modified_config = true;
+                    } else if chain_id.is_mainnet() {
+                        fullnode_network_config.seeds =
+                            create_seed_peers(MAINNET_SEED_PEERS.into())?;
+                        modified_config = true;
+                    }
+                }
+            }
+
             // If the identity key was not set in the config, attempt to
             // load it from disk. Otherwise, save the already generated
             // one to disk (for future runs).
@@ -208,6 +244,61 @@ fn optimize_validator_network_config(
     Ok(modified_config)
 }
 
+/// Creates and returns a set of seed peers from the given entries
+fn create_seed_peers(seed_peer_entries: Vec<(&str, &str, &str)>) -> Result<PeerSet, Error> {
+    // Create a map of seed peers
+    let mut seed_peers = HashMap::new();
+
+    // Add the seed peers
+    for (account_address, public_key, network_address) in seed_peer_entries {
+        let (peer_address, peer) = build_seed_peer(account_address, public_key, network_address)?;
+        seed_peers.insert(peer_address, peer);
+    }
+
+    Ok(seed_peers)
+}
+
+/// Builds a seed peer using the specified peer information
+fn build_seed_peer(
+    account_address_hex: &str,
+    public_key_hex: &str,
+    network_address_str: &str,
+) -> Result<(PeerId, Peer), Error> {
+    // Parse the account address
+    let account_address = PeerId::from_hex(account_address_hex).map_err(|error| {
+        Error::Unexpected(format!(
+            "Failed to parse peer account address: {:?}. Error: {:?}",
+            account_address_hex, error
+        ))
+    })?;
+
+    // Parse the x25519 public key
+    let public_key = x25519::PublicKey::from_encoded_string(public_key_hex).map_err(|error| {
+        Error::Unexpected(format!(
+            "Failed to parse peer public key: {:?}. Error: {:?}",
+            public_key_hex, error
+        ))
+    })?;
+
+    // Parse the network address string
+    let network_address = NetworkAddress::from_str(network_address_str).map_err(|error| {
+        Error::Unexpected(format!(
+            "Failed to parse peer network address: {:?}. Error: {:?}",
+            network_address_str, error
+        ))
+    })?;
+
+    // Build the peer struct
+    let peer = Peer {
+        addresses: vec![network_address],
+        keys: hashset! {public_key},
+        role: PeerRole::Upstream,
+    };
+
+    // Return the account address and peer
+    Ok((account_address, peer))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -217,10 +308,10 @@ mod tests {
         },
         network_id::NetworkId,
     };
-    use aptos_crypto::{x25519, Uniform, ValidCryptoMaterial};
-    use aptos_types::waypoint::Waypoint;
+    use aptos_crypto::{Uniform, ValidCryptoMaterial};
+    use aptos_types::{account_address::AccountAddress, waypoint::Waypoint};
     use rand::rngs::OsRng;
-    use std::{collections::HashMap, io::Write, path::PathBuf};
+    use std::{io::Write, path::PathBuf};
     use tempfile::{tempdir, NamedTempFile};
 
     fn setup_storage_config_with_temp_dir() -> (StorageConfig, PathBuf) {
@@ -266,6 +357,98 @@ mod tests {
         )
         .unwrap();
         assert!(!modified_config);
+    }
+
+    #[test]
+    fn test_optimize_public_network_config_mainnet() {
+        // Create a public network config with no seeds
+        let mut node_config = NodeConfig {
+            storage: setup_storage_config_with_temp_dir().0,
+            full_node_networks: vec![NetworkConfig {
+                network_id: NetworkId::Public,
+                seeds: HashMap::new(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        // Optimize the public network config and verify modifications are made
+        let modified_config = optimize_public_network_config(
+            &mut node_config,
+            &serde_yaml::from_str("{}").unwrap(), // An empty local config
+            NodeType::ValidatorFullnode,
+            Some(ChainId::mainnet()),
+        )
+        .unwrap();
+        assert!(modified_config);
+
+        // Verify that the mainnet seed peers have been added to the config
+        let public_network_config = &node_config.full_node_networks[0];
+        let public_seeds = &public_network_config.seeds;
+        assert_eq!(public_seeds.len(), MAINNET_SEED_PEERS.len());
+
+        // Verify that the seed peers contain the expected values
+        for (account_address, public_key, network_address) in MAINNET_SEED_PEERS {
+            // Fetch the seed peer
+            let seed_peer = public_seeds
+                .get(&AccountAddress::from_hex(account_address).unwrap())
+                .unwrap();
+
+            // Verify the seed peer properties
+            assert_eq!(seed_peer.role, PeerRole::Upstream);
+            assert!(seed_peer
+                .addresses
+                .contains(&NetworkAddress::from_str(network_address).unwrap()));
+            assert!(seed_peer
+                .keys
+                .contains(&x25519::PublicKey::from_encoded_string(public_key).unwrap()));
+        }
+    }
+
+    #[test]
+    fn test_optimize_public_network_config_testnet() {
+        // Create a public network config with no seeds
+        let mut node_config = NodeConfig {
+            storage: setup_storage_config_with_temp_dir().0,
+            full_node_networks: vec![NetworkConfig {
+                network_id: NetworkId::Public,
+                seeds: HashMap::new(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        // Optimize the public network config and verify modifications are made
+        let modified_config = optimize_public_network_config(
+            &mut node_config,
+            &serde_yaml::from_str("{}").unwrap(), // An empty local config
+            NodeType::PublicFullnode,
+            Some(ChainId::testnet()),
+        )
+        .unwrap();
+        assert!(modified_config);
+
+        // Verify that the testnet seed peers have been added to the config
+        let public_network_config = &node_config.full_node_networks[0];
+        let public_seeds = &public_network_config.seeds;
+        assert_eq!(public_seeds.len(), TESTNET_SEED_PEERS.len());
+
+        // Verify that the seed peers contain the expected values
+        for (account_address, public_key, network_address) in TESTNET_SEED_PEERS {
+            // Fetch the seed peer
+            let seed_peer = public_seeds
+                .get(&AccountAddress::from_hex(account_address).unwrap())
+                .unwrap();
+
+            // Verify the seed peer properties
+            assert_eq!(seed_peer.role, PeerRole::Upstream);
+            assert!(seed_peer
+                .addresses
+                .contains(&NetworkAddress::from_str(network_address).unwrap()));
+            assert!(seed_peer
+                .keys
+                .contains(&x25519::PublicKey::from_encoded_string(public_key).unwrap()));
+        }
     }
 
     #[test]

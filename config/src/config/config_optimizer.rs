@@ -27,16 +27,18 @@ const VALIDATOR_NETWORK_OPTIMIZER_NAME: &str = "ValidatorNetworkConfigOptimizer"
 
 const IDENTITY_KEY_FILE: &str = "ephemeral_identity_key";
 
-// Movement mainnet seed peers. Each seed peer entry is a tuple
-// of (account address, public key, network address).
+// Movement mainnet seed peers, published at
+// https://github.com/movementlabsxyz/movement-networks (mainnet/configs/fullnode.yaml).
+// Each seed peer entry is a tuple of (account address, public key, network address).
 const MAINNET_SEED_PEERS: [(&str, &str, &str); 1] = [(
     "9967EBF40AC8C2CCB38709488952DA1826176584EA3067B63B1695362ECB3D1F",
     "0x9967EBF40AC8C2CCB38709488952DA1826176584EA3067B63B1695362ECB3D1F",
     "/dns/consensus.mainnet.movementnetwork.xyz/tcp/6182/noise-ik/9967EBF40AC8C2CCB38709488952DA1826176584EA3067B63B1695362ECB3D1F/handshake/0",
 )];
 
-// Movement testnet seed peers. Each seed peer entry is a tuple
-// of (account address, public key, network address).
+// Movement testnet seed peers, published at
+// https://github.com/movementlabsxyz/movement-networks (testnet/configs/fullnode.yaml).
+// Each seed peer entry is a tuple of (account address, public key, network address).
 const TESTNET_SEED_PEERS: [(&str, &str, &str); 1] = [(
     "9967EBF40AC8C2CCB38709488952DA1826176584EA3067B63B1695362ECB3D1F",
     "0x9967EBF40AC8C2CCB38709488952DA1826176584EA3067B63B1695362ECB3D1F",

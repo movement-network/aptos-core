@@ -8,13 +8,14 @@ use crate::config::{
     node_config_loader::NodeType, transaction_filter_type::Filter, utils::RootPath, Error,
     NodeConfig,
 };
-use aptos_types::{chain_id::ChainId, transaction::Transaction};
+use aptos_types::{chain_id::ChainId, transaction::Transaction, waypoint::Waypoint};
 use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
 use std::{
     fs::File,
     io::{Read, Write},
     path::PathBuf,
+    str::FromStr,
 };
 
 // Default execution concurrency level
@@ -22,6 +23,13 @@ pub const DEFAULT_EXECUTION_CONCURRENCY_LEVEL: u16 = 32;
 
 // Genesis constants
 const GENESIS_BLOB_FILENAME: &str = "genesis.blob";
+const GENESIS_VERSION: u64 = 0;
+// Movement genesis waypoints, published at
+// https://github.com/movementlabsxyz/movement-networks (<network>/genesis_waypoint.txt).
+const MAINNET_GENESIS_WAYPOINT: &str =
+    "0:fb098815125443b6337c61b81aade770e7dcf69d93e8a636365a664939f100a3";
+const TESTNET_GENESIS_WAYPOINT: &str =
+    "0:1b6eeb5566c6267b610340e17d47849742ff488a21eeb3fc1971fb8c2b128133";
 
 #[derive(Clone, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(default, deny_unknown_fields)]
@@ -181,9 +189,46 @@ impl ConfigOptimizer for ExecutionConfig {
         _node_type: NodeType,
         chain_id: Option<ChainId>,
     ) -> Result<bool, Error> {
-        // No automatic genesis-waypoint injection. A genesis waypoint, if
-        // needed, is provided via node config (genesis_waypoint).
-        let _ = (node_config, local_config_yaml, chain_id);
+        let execution_config = &mut node_config.execution;
+        let local_execution_config_yaml = &local_config_yaml["execution"];
+
+        // If the base config has a non-genesis waypoint, we should automatically
+        // inject the genesis waypoint into the execution config (if it doesn't exist).
+        // We do this for testnet and mainnet only (as they are long lived networks).
+        if node_config.base.waypoint.waypoint().version() != GENESIS_VERSION
+            && execution_config.genesis_waypoint.is_none()
+            && local_execution_config_yaml["genesis_waypoint"].is_null()
+        {
+            // Determine the genesis waypoint string to use
+            let genesis_waypoint_str = match chain_id {
+                Some(chain_id) => {
+                    if chain_id.is_mainnet() {
+                        MAINNET_GENESIS_WAYPOINT
+                    } else if chain_id.is_testnet() {
+                        TESTNET_GENESIS_WAYPOINT
+                    } else {
+                        return Ok(false); // Return early (this is not testnet or mainnet)
+                    }
+                },
+                None => return Ok(false), // Return early (no chain ID was specified!)
+            };
+
+            // Construct a genesis waypoint from the string
+            let genesis_waypoint = match Waypoint::from_str(genesis_waypoint_str) {
+                Ok(waypoint) => waypoint,
+                Err(error) => panic!(
+                    "Invalid genesis waypoint string: {:?}. Error: {:?}",
+                    genesis_waypoint_str, error
+                ),
+            };
+            let genesis_waypoint_config = WaypointConfig::FromConfig(genesis_waypoint);
+
+            // Inject the genesis waypoint into the execution config
+            execution_config.genesis_waypoint = Some(genesis_waypoint_config);
+
+            return Ok(true); // The config was modified
+        }
+
         Ok(false) // The config was not modified
     }
 }
@@ -194,10 +239,9 @@ mod test {
     use aptos_temppath::TempPath;
     use aptos_types::{
         transaction::{ChangeSet, Transaction, WriteSetPayload},
-        waypoint::Waypoint,
         write_set::WriteSetMut,
     };
-    use std::{assert_eq, matches, str::FromStr, vec};
+    use std::{assert_eq, matches, vec};
 
     // Useful test constants
     const GENESIS_WAYPOINT: &str =
@@ -226,6 +270,68 @@ mod test {
         )
         .unwrap();
         assert!(!modified_config);
+    }
+
+    #[test]
+    fn test_optimize_execution_config_non_genesis_mainnet() {
+        // Create a default node config
+        let mut node_config = NodeConfig::default();
+
+        // Verify the execution config does not have a genesis waypoint
+        assert!(&node_config.execution.genesis_waypoint.is_none());
+
+        // Inject a non-genesis waypoint into the base config
+        let non_genesis_waypoint = Waypoint::from_str(NON_GENESIS_WAYPOINT).unwrap();
+        node_config.base.waypoint = WaypointConfig::FromConfig(non_genesis_waypoint);
+
+        // Optimize the config for mainnet and verify modifications are made
+        let modified_config = ExecutionConfig::optimize(
+            &mut node_config,
+            &serde_yaml::from_str("{}").unwrap(), // An empty local config,
+            NodeType::Validator,
+            Some(ChainId::mainnet()),
+        )
+        .unwrap();
+        assert!(modified_config);
+
+        // Verify that the mainnet genesis waypoint was injected into the execution config
+        let expected_genesis_waypoint =
+            WaypointConfig::FromConfig(Waypoint::from_str(MAINNET_GENESIS_WAYPOINT).unwrap());
+        assert_eq!(
+            &node_config.execution.genesis_waypoint,
+            &Some(expected_genesis_waypoint)
+        );
+    }
+
+    #[test]
+    fn test_optimize_execution_config_non_genesis_testnet() {
+        // Create a default node config
+        let mut node_config = NodeConfig::default();
+
+        // Verify the execution config does not have a genesis waypoint
+        assert!(&node_config.execution.genesis_waypoint.is_none());
+
+        // Inject a non-genesis waypoint into the base config
+        let non_genesis_waypoint = Waypoint::from_str(NON_GENESIS_WAYPOINT).unwrap();
+        node_config.base.waypoint = WaypointConfig::FromConfig(non_genesis_waypoint);
+
+        // Optimize the config for testnet and verify modifications are made
+        let modified_config = ExecutionConfig::optimize(
+            &mut node_config,
+            &serde_yaml::from_str("{}").unwrap(), // An empty local config,
+            NodeType::PublicFullnode,
+            Some(ChainId::testnet()),
+        )
+        .unwrap();
+        assert!(modified_config);
+
+        // Verify that the testnet genesis waypoint was injected into the execution config
+        let expected_genesis_waypoint =
+            WaypointConfig::FromConfig(Waypoint::from_str(TESTNET_GENESIS_WAYPOINT).unwrap());
+        assert_eq!(
+            &node_config.execution.genesis_waypoint,
+            &Some(expected_genesis_waypoint)
+        );
     }
 
     #[test]

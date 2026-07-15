@@ -137,14 +137,6 @@ where
             .struct_name_index_map_size()
             .map_err(|err| err.finish(Location::Undefined).into_vm_status())?;
         STRUCT_NAME_INDEX_MAP_NUM_ENTRIES.set(struct_name_index_map_size as i64);
-
-        // If the environment caches too many struct names, flush type caches. Also flush module
-        // caches because they contain indices for struct names.
-        if struct_name_index_map_size > config.max_struct_name_index_map_num_entries {
-            runtime_environment.flush_all_caches();
-            self.module_cache.flush();
-        }
-
         let num_interned_tys = runtime_environment.ty_pool().num_interned_tys();
         NUM_INTERNED_TYPES.set(num_interned_tys as i64);
         let num_interned_ty_vecs = runtime_environment.ty_pool().num_interned_ty_vecs();
@@ -152,16 +144,11 @@ where
         let num_interned_module_ids = runtime_environment.module_id_pool().len();
         NUM_INTERNED_MODULE_IDS.set(num_interned_module_ids as i64);
 
-        if num_interned_tys > config.max_interned_tys
+        if struct_name_index_map_size > config.max_struct_name_index_map_num_entries
+            || num_interned_tys > config.max_interned_tys
             || num_interned_ty_vecs > config.max_interned_ty_vecs
-        {
-            runtime_environment.ty_pool().flush();
-            self.module_cache.flush();
-        }
-
-        if num_interned_module_ids > config.max_interned_module_ids {
-            runtime_environment.module_id_pool().flush();
-            runtime_environment.struct_name_index_map().flush();
+            || num_interned_module_ids > config.max_interned_module_ids {
+            runtime_environment.flush_all_caches();
             self.module_cache.flush();
         }
 
@@ -388,10 +375,10 @@ mod test {
         state_store::{state_key::StateKey, state_value::StateValue, MockStateView},
     };
     use claims::assert_ok;
-    use move_core_types::identifier::Identifier;
+    use move_core_types::{ability::AbilitySet, identifier::Identifier};
     use move_vm_types::{
-        code::{mock_verified_code, MockExtension},
-        loaded_data::runtime_types::StructIdentifier,
+        code::{mock_verified_code, MockDeserializedCode, MockExtension, MockVerifiedCode},
+        loaded_data::runtime_types::{AbilityInfo, StructIdentifier, Type},
     };
     use std::{
         collections::HashMap,
@@ -617,6 +604,146 @@ mod test {
         assert!(manager.environment.is_some());
         assert_eq!(manager.module_cache.num_modules(), 0);
         assert_struct_name_index_map_size_eq(&manager, 0);
+    }
+
+    type TestCacheManager =
+        ModuleCacheManager<i32, MockDeserializedCode, MockVerifiedCode, MockExtension>;
+
+    /// Puts a couple of entries into every cache tracked by [ModuleCacheManager::check_ready]:
+    /// the module cache, the module id pool, the struct name index map, the type pool, and the
+    /// type tag cache.
+    fn populate_all_caches(manager: &mut TestCacheManager) {
+        manager
+            .module_cache
+            .insert(0, mock_verified_code(0, MockExtension::new(8)));
+        manager
+            .module_cache
+            .insert(1, mock_verified_code(1, MockExtension::new(8)));
+        assert_eq!(manager.module_cache.num_modules(), 2);
+
+        let runtime_environment = manager.environment.as_ref().unwrap().runtime_environment();
+        runtime_environment.module_id_pool().intern(ModuleId::new(
+            AccountAddress::ONE,
+            Identifier::new("extra").unwrap(),
+        ));
+        // Not part of the warmed-up type pool, so this interns a new type and type vector.
+        runtime_environment
+            .ty_pool()
+            .intern_ty_args(&[Type::Vector(triomphe::Arc::new(Type::U64))]);
+
+        for name in ["S1", "S2"] {
+            let idx = assert_ok!(runtime_environment.struct_name_to_idx_for_test(
+                StructIdentifier::new(
+                    runtime_environment.module_id_pool(),
+                    ModuleId::new(AccountAddress::ZERO, Identifier::new("m").unwrap()),
+                    Identifier::new(name).unwrap(),
+                )
+            ));
+            // Populate the type tag cache by converting the struct type to its tag.
+            assert_ok!(runtime_environment.ty_to_ty_tag(&Type::Struct {
+                idx,
+                ability: AbilityInfo::struct_(AbilitySet::EMPTY),
+            }));
+        }
+
+        // Module ids: "extra" plus "m" interned via the struct identifiers.
+        assert_eq!(runtime_environment.module_id_pool().len(), 2);
+        assert_eq!(
+            assert_ok!(runtime_environment.struct_name_index_map_size()),
+            2
+        );
+        assert_eq!(runtime_environment.num_ty_tags_cached_for_test(), 2);
+    }
+
+    /// Regression test for a cache inconsistency: type tags, interned types and module caches
+    /// store indices into the interner pools, so when any single interner limit is exceeded, all
+    /// of these caches must be flushed together. A partial flush leaves entries referring to
+    /// indices that no longer exist (or worse, get reused for different data).
+    #[test]
+    fn test_intern_pool_overflow_flushes_all_caches() {
+        let permissive_config = BlockExecutorModuleCacheLocalConfig {
+            prefetch_framework_code: false,
+            ..Default::default()
+        };
+        let restrictive_configs = [
+            BlockExecutorModuleCacheLocalConfig {
+                max_interned_module_ids: 0,
+                ..permissive_config.clone()
+            },
+            BlockExecutorModuleCacheLocalConfig {
+                max_struct_name_index_map_num_entries: 0,
+                ..permissive_config.clone()
+            },
+            BlockExecutorModuleCacheLocalConfig {
+                max_interned_tys: 0,
+                ..permissive_config.clone()
+            },
+            BlockExecutorModuleCacheLocalConfig {
+                max_interned_ty_vecs: 0,
+                ..permissive_config.clone()
+            },
+        ];
+
+        for (case, restrictive_config) in restrictive_configs.into_iter().enumerate() {
+            let state_view = MockStateView::empty();
+            let mut manager = TestCacheManager::new();
+            assert_ok!(manager.check_ready(
+                AptosEnvironment::new(&state_view),
+                &permissive_config,
+                TransactionSliceMetadata::block_from_u64(0, 1),
+            ));
+
+            // The type pool is warmed up with common types, and flushing re-warms it. Snapshot
+            // the warmed-up sizes to compare against after the flush.
+            let runtime_environment = manager.environment.as_ref().unwrap().runtime_environment();
+            let warm_num_tys = runtime_environment.ty_pool().num_interned_tys();
+            let warm_num_ty_vecs = runtime_environment.ty_pool().num_interned_ty_vecs();
+
+            populate_all_caches(&mut manager);
+
+            // Within the permissive limits, the next block keeps all caches.
+            assert_ok!(manager.check_ready(
+                AptosEnvironment::new(&state_view),
+                &permissive_config,
+                TransactionSliceMetadata::block_from_u64(1, 2),
+            ));
+            assert_eq!(manager.module_cache.num_modules(), 2, "case {}", case);
+            assert_struct_name_index_map_size_eq(&manager, 2);
+
+            // Exceeding a single interner limit must flush all caches at once.
+            assert_ok!(manager.check_ready(
+                AptosEnvironment::new(&state_view),
+                &restrictive_config,
+                TransactionSliceMetadata::block_from_u64(2, 3),
+            ));
+            assert_eq!(manager.module_cache.num_modules(), 0, "case {}", case);
+            let runtime_environment = manager.environment.as_ref().unwrap().runtime_environment();
+            assert_eq!(runtime_environment.module_id_pool().len(), 0, "case {}", case);
+            assert_eq!(
+                assert_ok!(runtime_environment.struct_name_index_map_size()),
+                0,
+                "case {}",
+                case
+            );
+            assert_eq!(
+                runtime_environment.num_ty_tags_cached_for_test(),
+                0,
+                "case {}",
+                case
+            );
+            assert_eq!(
+                runtime_environment.ty_pool().num_interned_tys(),
+                warm_num_tys,
+                "case {}",
+                case
+            );
+            assert_eq!(
+                runtime_environment.ty_pool().num_interned_ty_vecs(),
+                warm_num_ty_vecs,
+                "case {}",
+                case
+            );
+        }
     }
 
     #[test]

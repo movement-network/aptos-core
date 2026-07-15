@@ -1,1 +1,4 @@
 processed 3 tasks
+task 0 lines 1-22:  publish [module 0x99::closure_compare {]
+task 1 lines 24-24:  run 0x99::closure_compare::different_masks_are_not_equal
+task 2 lines 26-26:  run 0x99::closure_compare::same_mask_and_captures_are_equal

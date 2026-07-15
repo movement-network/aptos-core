@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::schema::*;
-use aptos_config::config::RocksdbConfig;
+use aptos_config::config::{IndexType, RocksdbConfig};
 use aptos_schemadb::{
-    BlockBasedOptions, Cache, ColumnFamilyDescriptor, ColumnFamilyName, DBCompressionType, Options,
-    SliceTransform, DEFAULT_COLUMN_FAMILY_NAME,
+    BlockBasedIndexType, BlockBasedOptions, Cache, ColumnFamilyDescriptor, ColumnFamilyName,
+    DBCompressionType, Options, SliceTransform, DEFAULT_COLUMN_FAMILY_NAME,
 };
 use aptos_types::transaction::Version;
 
@@ -22,6 +22,7 @@ pub(super) fn ledger_db_column_families() -> Vec<ColumnFamilyName> {
         EVENT_BY_VERSION_CF_NAME,
         EVENT_CF_NAME,
         LEDGER_INFO_CF_NAME,
+        PERSISTED_AUXILIARY_INFO_CF_NAME,
         STALE_STATE_VALUE_INDEX_CF_NAME,
         STATE_VALUE_CF_NAME,
         TRANSACTION_CF_NAME,
@@ -46,6 +47,14 @@ pub(super) fn event_db_column_families() -> Vec<ColumnFamilyName> {
         EVENT_BY_KEY_CF_NAME,
         EVENT_BY_VERSION_CF_NAME,
         EVENT_CF_NAME,
+    ]
+}
+
+pub(super) fn persisted_auxiliary_info_db_column_families() -> Vec<ColumnFamilyName> {
+    vec![
+        /* empty cf */ DEFAULT_COLUMN_FAMILY_NAME,
+        DB_METADATA_CF_NAME,
+        PERSISTED_AUXILIARY_INFO_CF_NAME,
     ]
 }
 
@@ -148,19 +157,17 @@ pub(super) fn hot_state_kv_db_column_families() -> Vec<ColumnFamilyName> {
 
 fn gen_cfds<F>(
     rocksdb_config: &RocksdbConfig,
+    block_cache: Option<&Cache>,
     cfs: Vec<ColumnFamilyName>,
     cf_opts_post_processor: F,
 ) -> Vec<ColumnFamilyDescriptor>
 where
     F: Fn(ColumnFamilyName, &mut Options),
 {
-    let mut table_options = BlockBasedOptions::default();
-    table_options.set_cache_index_and_filter_blocks(rocksdb_config.cache_index_and_filter_blocks);
-    table_options.set_block_size(rocksdb_config.block_size as usize);
-    let cache = Cache::new_lru_cache(rocksdb_config.block_cache_size as usize);
-    table_options.set_block_cache(&cache);
     let mut cfds = Vec::with_capacity(cfs.len());
     for cf_name in cfs {
+        let table_options = gen_table_options(rocksdb_config, block_cache, cf_name);
+
         let mut cf_opts = Options::default();
         cf_opts.set_compression_type(DBCompressionType::Lz4);
         cf_opts.set_block_based_table_factory(&table_options);
@@ -169,6 +176,50 @@ where
         cfds.push(ColumnFamilyDescriptor::new((*cf_name).to_string(), cf_opts));
     }
     cfds
+}
+
+fn gen_table_options(
+    rocksdb_config: &RocksdbConfig,
+    block_cache: Option<&Cache>,
+    cf_name: ColumnFamilyName,
+) -> BlockBasedOptions {
+    let mut table_options = BlockBasedOptions::default();
+
+    table_options.set_block_size(rocksdb_config.block_size as usize);
+
+    table_options.set_index_type(convert_index_type(rocksdb_config.index_type));
+    table_options.set_partition_filters(rocksdb_config.partition_filters);
+    table_options.set_cache_index_and_filter_blocks(rocksdb_config.cache_index_and_filter_blocks);
+    table_options.set_pin_l0_filter_and_index_blocks_in_cache(
+        rocksdb_config.pin_l0_filter_and_index_blocks_in_cache,
+    );
+
+    if let Some(cache) = block_cache {
+        table_options.set_block_cache(cache);
+    }
+
+    if let Some(bits) = rocksdb_config.bloom_filter_bits {
+        match rocksdb_config.bloom_before_level {
+            Some(level) => table_options.set_hybrid_ribbon_filter(bits, level),
+            None => table_options.set_bloom_filter(bits, /* block_based = */ false),
+        }
+    }
+
+    if cf_name == STATE_VALUE_BY_KEY_HASH_CF_NAME || cf_name == HOT_STATE_VALUE_BY_KEY_HASH_CF_NAME
+    {
+        // We do not generally perform point queries on these tables.
+        table_options.set_whole_key_filtering(false);
+    }
+
+    table_options
+}
+
+fn convert_index_type(index_type: IndexType) -> BlockBasedIndexType {
+    match index_type {
+        IndexType::BinarySearch => BlockBasedIndexType::BinarySearch,
+        IndexType::HashSearch => BlockBasedIndexType::HashSearch,
+        IndexType::TwoLevelIndexSearch => BlockBasedIndexType::TwoLevelIndexSearch,
+    }
 }
 
 fn with_state_key_extractor_processor(cf_name: ColumnFamilyName, cf_opts: &mut Options) {
@@ -186,68 +237,112 @@ fn state_key_extractor(state_value_raw_key: &[u8]) -> &[u8] {
     &state_value_raw_key[..(state_value_raw_key.len() - VERSION_SIZE)]
 }
 
-pub(super) fn gen_event_cfds(rocksdb_config: &RocksdbConfig) -> Vec<ColumnFamilyDescriptor> {
+pub(super) fn gen_event_cfds(
+    rocksdb_config: &RocksdbConfig,
+    block_cache: Option<&Cache>,
+) -> Vec<ColumnFamilyDescriptor> {
     let cfs = event_db_column_families();
-    gen_cfds(rocksdb_config, cfs, |_, _| {})
+    gen_cfds(rocksdb_config, block_cache, cfs, |_, _| {})
+}
+
+pub(super) fn gen_persisted_auxiliary_info_cfds(
+    rocksdb_config: &RocksdbConfig,
+    block_cache: Option<&Cache>,
+) -> Vec<ColumnFamilyDescriptor> {
+    let cfs = persisted_auxiliary_info_db_column_families();
+    gen_cfds(rocksdb_config, block_cache, cfs, |_, _| {})
 }
 
 pub(super) fn gen_transaction_accumulator_cfds(
     rocksdb_config: &RocksdbConfig,
+    block_cache: Option<&Cache>,
 ) -> Vec<ColumnFamilyDescriptor> {
     let cfs = transaction_accumulator_db_column_families();
-    gen_cfds(rocksdb_config, cfs, |_, _| {})
+    gen_cfds(rocksdb_config, block_cache, cfs, |_, _| {})
 }
 
 pub(super) fn gen_transaction_auxiliary_data_cfds(
     rocksdb_config: &RocksdbConfig,
+    block_cache: Option<&Cache>,
 ) -> Vec<ColumnFamilyDescriptor> {
     let cfs = transaction_auxiliary_data_db_column_families();
-    gen_cfds(rocksdb_config, cfs, |_, _| {})
+    gen_cfds(rocksdb_config, block_cache, cfs, |_, _| {})
 }
-pub(super) fn gen_transaction_cfds(rocksdb_config: &RocksdbConfig) -> Vec<ColumnFamilyDescriptor> {
+pub(super) fn gen_transaction_cfds(
+    rocksdb_config: &RocksdbConfig,
+    block_cache: Option<&Cache>,
+) -> Vec<ColumnFamilyDescriptor> {
     let cfs = transaction_db_column_families();
-    gen_cfds(rocksdb_config, cfs, |_, _| {})
+    gen_cfds(rocksdb_config, block_cache, cfs, |_, _| {})
 }
 
 pub(super) fn gen_transaction_info_cfds(
     rocksdb_config: &RocksdbConfig,
+    block_cache: Option<&Cache>,
 ) -> Vec<ColumnFamilyDescriptor> {
     let cfs = transaction_info_db_column_families();
-    gen_cfds(rocksdb_config, cfs, |_, _| {})
+    gen_cfds(rocksdb_config, block_cache, cfs, |_, _| {})
 }
 
-pub(super) fn gen_write_set_cfds(rocksdb_config: &RocksdbConfig) -> Vec<ColumnFamilyDescriptor> {
+pub(super) fn gen_write_set_cfds(
+    rocksdb_config: &RocksdbConfig,
+    block_cache: Option<&Cache>,
+) -> Vec<ColumnFamilyDescriptor> {
     let cfs = write_set_db_column_families();
-    gen_cfds(rocksdb_config, cfs, |_, _| {})
+    gen_cfds(rocksdb_config, block_cache, cfs, |_, _| {})
 }
 
 pub(super) fn gen_ledger_metadata_cfds(
     rocksdb_config: &RocksdbConfig,
+    block_cache: Option<&Cache>,
 ) -> Vec<ColumnFamilyDescriptor> {
     let cfs = ledger_metadata_db_column_families();
-    gen_cfds(rocksdb_config, cfs, |_, _| {})
+    gen_cfds(rocksdb_config, block_cache, cfs, |_, _| {})
 }
 
-pub(super) fn gen_ledger_cfds(rocksdb_config: &RocksdbConfig) -> Vec<ColumnFamilyDescriptor> {
+pub(super) fn gen_ledger_cfds(
+    rocksdb_config: &RocksdbConfig,
+    block_cache: Option<&Cache>,
+) -> Vec<ColumnFamilyDescriptor> {
     let cfs = ledger_db_column_families();
-    gen_cfds(rocksdb_config, cfs, with_state_key_extractor_processor)
+    gen_cfds(
+        rocksdb_config,
+        block_cache,
+        cfs,
+        with_state_key_extractor_processor,
+    )
 }
 
-pub(super) fn gen_state_merkle_cfds(rocksdb_config: &RocksdbConfig) -> Vec<ColumnFamilyDescriptor> {
+pub(super) fn gen_state_merkle_cfds(
+    rocksdb_config: &RocksdbConfig,
+    block_cache: Option<&Cache>,
+) -> Vec<ColumnFamilyDescriptor> {
     let cfs = state_merkle_db_column_families();
-    gen_cfds(rocksdb_config, cfs, |_, _| {})
+    gen_cfds(rocksdb_config, block_cache, cfs, |_, _| {})
 }
 
 pub(super) fn gen_state_kv_shard_cfds(
     rocksdb_config: &RocksdbConfig,
+    block_cache: Option<&Cache>,
 ) -> Vec<ColumnFamilyDescriptor> {
     let cfs = state_kv_db_new_key_column_families();
-    gen_cfds(rocksdb_config, cfs, with_state_key_extractor_processor)
+    gen_cfds(
+        rocksdb_config,
+        block_cache,
+        cfs,
+        with_state_key_extractor_processor,
+    )
 }
 
 pub(super) fn gen_hot_state_kv_shard_cfds(
     rocksdb_config: &RocksdbConfig,
+    block_cache: Option<&Cache>,
 ) -> Vec<ColumnFamilyDescriptor> {
     let cfs = hot_state_kv_db_column_families();
-    gen_cfds(rocksdb_config, cfs, with_state_key_extractor_processor)
+    gen_cfds(
+        rocksdb_config,
+        block_cache,
+        cfs,
+        with_state_key_extractor_processor,
+    )
 }

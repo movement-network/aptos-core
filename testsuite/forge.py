@@ -61,6 +61,7 @@ FORGE_TEST_RUNNER_TEMPLATE_PATH = "forge-test-runner-template.yaml"
 MULTIREGION_KUBECONFIG_DIR = "/etc/multiregion-kubeconfig"
 MULTIREGION_KUBECONFIG_PATH = f"{MULTIREGION_KUBECONFIG_DIR}/kubeconfig"
 GAR_REPO_NAME = "us-docker.pkg.dev/aptos-registry/docker"
+DEFAULT_FORGE_IMAGE_NAME = "forge"
 
 
 @dataclass
@@ -134,6 +135,7 @@ HELM_CHARTS = ["aptos-node", "aptos-genesis"]
 class ForgeState(Enum):
     RUNNING = "RUNNING"
     PASS = "PASS"
+    SOFT_FAIL = "SOFT_FAIL"
     FAIL = "FAIL"
     SKIP = "SKIP"
     EMPTY = "EMPTY"
@@ -202,12 +204,18 @@ class ForgeResult:
                 )
             )
         result._end_time = context.time.now()
-        if result.state not in (ForgeState.PASS, ForgeState.FAIL, ForgeState.SKIP):
+        if result.state not in (
+            ForgeState.PASS,
+            ForgeState.SOFT_FAIL,
+            ForgeState.FAIL,
+            ForgeState.SKIP,
+        ):
             raise Exception("Forge result never entered terminal state")
         if result.output is None:
             raise Exception("Forge result didnt record output")
 
     def set_state(self, state: ForgeState) -> None:
+        log.info(f"Setting state to {state.value}")
         self.state = state
 
     def set_output(self, output: str) -> None:
@@ -238,6 +246,9 @@ class ForgeResult:
     def succeeded(self) -> bool:
         return self.state == ForgeState.PASS
 
+    def is_hard_failure(self) -> bool:
+        return self.state == ForgeState.FAIL
+
 
 @dataclass
 class SystemContext:
@@ -258,6 +269,7 @@ class ForgeContext:
     forge_namespace: str
     forge_args: Sequence[str]
 
+    forge_image_name: str
     forge_image_tag: str
     image_tag: str
     upgrade_image_tag: str
@@ -343,7 +355,7 @@ def format_report(context: ForgeContext, result: ForgeResult) -> str:
             debugging_appendix
         )
     else:
-        if result.state == ForgeState.FAIL:
+        if result.state in (ForgeState.FAIL, ForgeState.SOFT_FAIL):
             return "{}\n{}".format(report_text, debugging_appendix)
         return report_text
 
@@ -532,7 +544,7 @@ def get_axiom_link_for_test_runner_logs(
         ['k8s.labels.app.kubernetes.io/name'] = "forge" and ['k8s.namespace'] == "{forge_namespace}"
         """
 
-    logs_url = f"https://app.axiom.co/aptoslabs-hghf/explorer?initForm={urlquote( json.dumps({ 'apl': apl_query, 'queryOptions': apply_axiom_time_filter(time_filter), }) )}"
+    logs_url = f"https://app.axiom.co/aptoslabs-hghf/explorer?initForm={urlquote(json.dumps({'apl': apl_query, 'queryOptions': apply_axiom_time_filter(time_filter), }))}"
 
     return logs_url
 
@@ -553,7 +565,7 @@ def get_axiom_link_for_node_logs(
             )
         """
 
-    logs_url = f"https://app.axiom.co/aptoslabs-hghf/explorer?initForm={urlquote( json.dumps({ 'apl': apl_query, 'queryOptions': apply_axiom_time_filter(time_filter), }) )}"
+    logs_url = f"https://app.axiom.co/aptoslabs-hghf/explorer?initForm={urlquote(json.dumps({'apl': apl_query, 'queryOptions': apply_axiom_time_filter(time_filter), }))}"
 
     return logs_url
 
@@ -663,8 +675,10 @@ def format_comment(context: ForgeContext, result: ForgeResult) -> str:
 
     if result.state == ForgeState.PASS:
         forge_comment_header = f"### :white_check_mark: Forge suite `{context.forge_test_suite}` success on {get_testsuite_images(context)}"
+    elif result.state == ForgeState.SOFT_FAIL:
+        forge_comment_header = f"### :heavy_exclamation_mark: Forge suite `{context.forge_test_suite}` soft failure on {get_testsuite_images(context)}"
     elif result.state == ForgeState.FAIL:
-        forge_comment_header = f"### :x: Forge suite `{context.forge_test_suite}` failure on {get_testsuite_images(context)}"
+        forge_comment_header = f"### :x: Forge suite `{context.forge_test_suite}` hard failure on {get_testsuite_images(context)}"
     elif result.state == ForgeState.SKIP:
         forge_comment_header = f"### :thought_balloon: Forge suite `{context.forge_test_suite}` preempted on {get_testsuite_images(context)}"
     else:
@@ -849,10 +863,11 @@ class K8sForgeRunner(ForgeRunner):
         if context.cloud == Cloud.AWS:
             forge_image_full = f"{context.aws_account_num}.dkr.ecr.{context.aws_region}.amazonaws.com/{ECR_REPO_PREFIX}/forge:{context.forge_image_tag}"
             validator_node_selector = "eks.amazonaws.com/nodegroup: validators"
-        elif (
-            context.cloud == Cloud.GCP
-        ):  # the GCP project for images is separate than the cluster
-            forge_image_full = f"{GAR_REPO_NAME}/forge:{context.forge_image_tag}"
+        elif context.cloud == Cloud.GCP:
+            # the GCP project for images is separate from the cluster
+            forge_image_full = (
+                f"{GAR_REPO_NAME}/{context.forge_image_name}:{context.forge_image_tag}"
+            )
             validator_node_selector = ""  # no selector
             # TODO: also no NAP node selector yet
             # TODO: also registries need to be set up such that the default compute service account can access it:  $PROJECT_ID-compute@developer.gserviceaccount.com
@@ -966,7 +981,25 @@ class K8sForgeRunner(ForgeRunner):
                         )
                     )
                 else:
-                    state = ForgeState.FAIL
+                    exit_code = context.shell.run(
+                        [
+                            "kubectl",
+                            "--kubeconfig",
+                            context.forge_cluster.kubeconf,
+                            "get",
+                            "pod",
+                            "-n",
+                            "default",
+                            forge_pod_name,
+                            "-o",
+                            "jsonpath={.status.containerStatuses[*].state.terminated.exitCode}",
+                        ]
+                    ).output.decode()
+                    log.info(f"Forge runner exit code: {exit_code}")
+                    if exit_code == "51":
+                        state = ForgeState.SOFT_FAIL
+                    else:
+                        state = ForgeState.FAIL
 
                 attempts -= 1
                 if attempts <= 0:
@@ -1373,6 +1406,7 @@ def seeded_random_choice(namespace: str, cluster_names: Sequence[str]) -> str:
 @envoption("FORGE_ENABLE_FAILPOINTS")
 @envoption("FORGE_ENABLE_PERFORMANCE")
 @envoption("FORGE_RUNNER_DURATION_SECS", "300")
+@envoption("FORGE_IMAGE_NAME")
 @envoption("FORGE_IMAGE_TAG")
 @envoption("FORGE_RETAIN_DEBUG_LOGS", "false")
 @envoption("FORGE_JUNIT_XML_PATH")
@@ -1384,6 +1418,7 @@ def seeded_random_choice(namespace: str, cluster_names: Sequence[str]) -> str:
 @envoption("GITHUB_ACTIONS", "false")
 @click.option("--balance-clusters", is_flag=True)
 @envoption("FORGE_BLOCKING", "true")
+@envoption("FORGE_CONTINUOUS_TEST_MODE", "false")
 @envoption("GITHUB_SERVER_URL")
 @envoption("GITHUB_REPOSITORY")
 @envoption("GITHUB_RUN_ID")
@@ -1420,6 +1455,7 @@ def test(
     forge_deployer_profile: Optional[str],
     forge_test_suite: str,
     forge_runner_duration_secs: str,
+    forge_image_name: Optional[str],
     forge_image_tag: Optional[str],
     forge_retain_debug_logs: str,
     forge_junit_xml_path: Optional[str],
@@ -1430,6 +1466,7 @@ def test(
     github_actions: str,
     balance_clusters: bool,
     forge_blocking: Optional[str],
+    forge_continuous_test_mode: str,
     github_server_url: Optional[str],
     github_repository: Optional[str],
     github_run_id: Optional[str],
@@ -1589,6 +1626,7 @@ def test(
         image_tag = image_tag or second_latest_image
         forge_image_tag = forge_image_tag or default_latest_image
         upgrade_image_tag = upgrade_image_tag or default_latest_image
+        forge_image_name = DEFAULT_FORGE_IMAGE_NAME
     else:
         # All other tests use just one image tag
         # Only try finding exactly 1 image
@@ -1601,8 +1639,16 @@ def test(
             cloud=cloud_enum,
         )[0]
 
+        forge_image_name = forge_image_name or DEFAULT_FORGE_IMAGE_NAME
+        if forge_image_name == DEFAULT_FORGE_IMAGE_NAME:
+            forge_image_tag = forge_image_tag or default_latest_image
+        else:
+            latest_image_tag_for_forge_image_with_name = "main"
+            forge_image_tag = (
+                forge_image_tag or latest_image_tag_for_forge_image_with_name
+            )
+
         image_tag = image_tag or default_latest_image
-        forge_image_tag = forge_image_tag or default_latest_image
         upgrade_image_tag = upgrade_image_tag or default_latest_image
 
     image_tag, upgrade_image_tag = ensure_provided_image_tags_has_profile_or_features(
@@ -1615,7 +1661,11 @@ def test(
     assert image_tag is not None, "Image tag is required"
     assert forge_image_tag is not None, "Forge image tag is required"
     assert upgrade_image_tag is not None, "Upgrade image tag is required"
+    assert forge_image_name is not None, "Forge image name is required"
 
+    log.info(
+        f"Using image name {forge_image_name} and tag {forge_image_tag} for forge runner"
+    )
     log.info("Using the following image tags:")
     log.info(f"\tforge:  {forge_image_tag}")
     log.info(f"\tswarm:  {image_tag}")
@@ -1665,6 +1715,7 @@ def test(
         aws_account_num=aws_account_num,
         aws_region=aws_region,
         gcp_zone=gcp_zone,
+        forge_image_name=forge_image_name,
         forge_image_tag=forge_image_tag,
         image_tag=image_tag,
         upgrade_image_tag=upgrade_image_tag,
@@ -1703,6 +1754,11 @@ def test(
 
     try:
         forge_runner = forge_runner_mapping[forge_runner_mode]()
+
+        # For debug! if forge_runner_duration_secs is 0, then just quit
+        if forge_runner_duration_secs == "0":
+            raise SystemExit(0)
+
         result = forge_runner.run(forge_context)
 
         outputs = []
@@ -1725,7 +1781,14 @@ def test(
 
         log.info(result.format(forge_context))
 
-        if not result.succeeded() and forge_blocking == "true":
+        # Exit with error if required based on test result and mode
+        if (
+            forge_blocking == "true"
+            and forge_continuous_test_mode == "false"
+            and not result.succeeded()
+        ):
+            raise SystemExit(1)
+        if forge_continuous_test_mode == "true" and result.is_hard_failure():
             raise SystemExit(1)
 
     except Exception as e:

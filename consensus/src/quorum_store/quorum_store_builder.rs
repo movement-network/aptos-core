@@ -28,9 +28,11 @@ use crate::{
     round_manager::VerifiedEvent,
 };
 use aptos_channels::{aptos_channel, message_queues::QueueStyle};
-use aptos_config::config::QuorumStoreConfig;
+use aptos_config::config::{BatchTransactionFilterConfig, QuorumStoreConfig};
 use aptos_consensus_types::{
-    common::Author, proof_of_store::ProofCache, request_response::GetPayloadCommand,
+    common::Author,
+    proof_of_store::{BatchInfo, ProofCache},
+    request_response::GetPayloadCommand,
 };
 use aptos_crypto::bls12381::PrivateKey;
 use aptos_logger::prelude::*;
@@ -125,13 +127,14 @@ pub struct InnerBuilder {
     author: Author,
     num_validators: u64,
     config: QuorumStoreConfig,
+    transaction_filter_config: BatchTransactionFilterConfig,
     consensus_to_quorum_store_receiver: Receiver<GetPayloadCommand>,
     quorum_store_to_mempool_sender: Sender<QuorumStoreRequest>,
     mempool_txn_pull_timeout_ms: u64,
     aptos_db: Arc<dyn DbReader>,
     network_sender: NetworkSender,
     verifier: Arc<ValidatorVerifier>,
-    proof_cache: ProofCache,
+    proof_cache: ProofCache<BatchInfo>,
     coordinator_tx: Sender<CoordinatorCommand>,
     coordinator_rx: Option<Receiver<CoordinatorCommand>>,
     batch_generator_cmd_tx: tokio::sync::mpsc::Sender<BatchGeneratorCommand>,
@@ -160,13 +163,14 @@ impl InnerBuilder {
         author: Author,
         num_validators: u64,
         config: QuorumStoreConfig,
+        transaction_filter_config: BatchTransactionFilterConfig,
         consensus_to_quorum_store_receiver: Receiver<GetPayloadCommand>,
         quorum_store_to_mempool_sender: Sender<QuorumStoreRequest>,
         mempool_txn_pull_timeout_ms: u64,
         aptos_db: Arc<dyn DbReader>,
         network_sender: NetworkSender,
         verifier: Arc<ValidatorVerifier>,
-        proof_cache: ProofCache,
+        proof_cache: ProofCache<BatchInfo>,
         quorum_store_storage: Arc<dyn QuorumStoreStorage>,
         broadcast_proofs: bool,
         consensus_key: Arc<PrivateKey>,
@@ -199,6 +203,7 @@ impl InnerBuilder {
             author,
             num_validators,
             config,
+            transaction_filter_config,
             consensus_to_quorum_store_receiver,
             quorum_store_to_mempool_sender,
             mempool_txn_pull_timeout_ms,
@@ -327,6 +332,7 @@ impl InnerBuilder {
                 self.config.receiver_max_total_txns as u64,
                 self.config.receiver_max_total_bytes as u64,
                 self.config.batch_expiry_gap_when_init_usecs,
+                self.transaction_filter_config.clone(),
             );
             #[allow(unused_variables)]
             let name = format!("batch_coordinator-{}", i);

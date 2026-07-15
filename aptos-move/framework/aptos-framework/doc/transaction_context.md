@@ -39,6 +39,9 @@
 -  [Function `multisig_payload_internal`](#0x1_transaction_context_multisig_payload_internal)
 -  [Function `multisig_address`](#0x1_transaction_context_multisig_address)
 -  [Function `inner_entry_function_payload`](#0x1_transaction_context_inner_entry_function_payload)
+-  [Function `monotonically_increasing_counter`](#0x1_transaction_context_monotonically_increasing_counter)
+-  [Function `monotonically_increasing_counter_internal`](#0x1_transaction_context_monotonically_increasing_counter_internal)
+-  [Function `monotonically_increasing_counter_internal_for_test_only`](#0x1_transaction_context_monotonically_increasing_counter_internal_for_test_only)
 -  [Specification](#@Specification_1)
     -  [Function `get_txn_hash`](#@Specification_1_get_txn_hash)
     -  [Function `get_transaction_hash`](#@Specification_1_get_transaction_hash)
@@ -56,12 +59,15 @@
     -  [Function `chain_id_internal`](#@Specification_1_chain_id_internal)
     -  [Function `entry_function_payload_internal`](#@Specification_1_entry_function_payload_internal)
     -  [Function `multisig_payload_internal`](#@Specification_1_multisig_payload_internal)
+    -  [Function `monotonically_increasing_counter_internal`](#@Specification_1_monotonically_increasing_counter_internal)
+    -  [Function `monotonically_increasing_counter_internal_for_test_only`](#@Specification_1_monotonically_increasing_counter_internal_for_test_only)
 
 
 <pre><code><b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error">0x1::error</a>;
 <b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features">0x1::features</a>;
 <b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option">0x1::option</a>;
 <b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/string.md#0x1_string">0x1::string</a>;
+<b>use</b> <a href="timestamp.md#0x1_timestamp">0x1::timestamp</a>;
 </code></pre>
 
 
@@ -186,6 +192,26 @@ Represents the multisig payload.
 ## Constants
 
 
+<a id="0x1_transaction_context_EMONOTONICALLY_INCREASING_COUNTER_NOT_ENABLED"></a>
+
+The monotonically increasing counter is not enabled.
+
+
+<pre><code><b>const</b> <a href="transaction_context.md#0x1_transaction_context_EMONOTONICALLY_INCREASING_COUNTER_NOT_ENABLED">EMONOTONICALLY_INCREASING_COUNTER_NOT_ENABLED</a>: u64 = 3;
+</code></pre>
+
+
+
+<a id="0x1_transaction_context_EMONOTONICALLY_INCREASING_COUNTER_OVERFLOW"></a>
+
+The monotonically increasing counter has overflowed (too many calls in a single session).
+
+
+<pre><code><b>const</b> <a href="transaction_context.md#0x1_transaction_context_EMONOTONICALLY_INCREASING_COUNTER_OVERFLOW">EMONOTONICALLY_INCREASING_COUNTER_OVERFLOW</a>: u64 = 4;
+</code></pre>
+
+
+
 <a id="0x1_transaction_context_ETRANSACTION_CONTEXT_EXTENSION_NOT_ENABLED"></a>
 
 The transaction context extension feature is not enabled.
@@ -202,6 +228,16 @@ Transaction context is only available in the user transaction prologue, executio
 
 
 <pre><code><b>const</b> <a href="transaction_context.md#0x1_transaction_context_ETRANSACTION_CONTEXT_NOT_AVAILABLE">ETRANSACTION_CONTEXT_NOT_AVAILABLE</a>: u64 = 1;
+</code></pre>
+
+
+
+<a id="0x1_transaction_context_ETRANSACTION_INDEX_NOT_AVAILABLE"></a>
+
+Transaction index is not avaulable in this execution context.
+
+
+<pre><code><b>const</b> <a href="transaction_context.md#0x1_transaction_context_ETRANSACTION_INDEX_NOT_AVAILABLE">ETRANSACTION_INDEX_NOT_AVAILABLE</a>: u64 = 5;
 </code></pre>
 
 
@@ -965,6 +1001,87 @@ Returns the inner entry function payload of the multisig payload.
 
 </details>
 
+<a id="0x1_transaction_context_monotonically_increasing_counter"></a>
+
+## Function `monotonically_increasing_counter`
+
+Returns a monotonically increasing counter value that combines timestamp, transaction index,
+session counter, and local counter into a 128-bit value.
+Format: <code>&lt;reserved_byte (8 bits)&gt; || timestamp_us (64 bits) || transaction_index (32 bits) || session_counter (8 bits) || local_counter (16 bits)</code>
+The function aborts if the local counter overflows (after 65535 calls in a single session).
+When compiled for testing, this function bypasses feature checks and returns a simplified counter value.
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="transaction_context.md#0x1_transaction_context_monotonically_increasing_counter">monotonically_increasing_counter</a>(): u128
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="transaction_context.md#0x1_transaction_context_monotonically_increasing_counter">monotonically_increasing_counter</a>(): u128 {
+    <b>if</b> (__COMPILE_FOR_TESTING__) {
+        <a href="transaction_context.md#0x1_transaction_context_monotonically_increasing_counter_internal_for_test_only">monotonically_increasing_counter_internal_for_test_only</a>()
+    } <b>else</b> {
+        <b>assert</b>!(<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_is_monotonically_increasing_counter_enabled">features::is_monotonically_increasing_counter_enabled</a>(), <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_state">error::invalid_state</a>(<a href="transaction_context.md#0x1_transaction_context_EMONOTONICALLY_INCREASING_COUNTER_NOT_ENABLED">EMONOTONICALLY_INCREASING_COUNTER_NOT_ENABLED</a>));
+        <a href="transaction_context.md#0x1_transaction_context_monotonically_increasing_counter_internal">monotonically_increasing_counter_internal</a>(<a href="timestamp.md#0x1_timestamp_now_microseconds">timestamp::now_microseconds</a>())
+    }
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_transaction_context_monotonically_increasing_counter_internal"></a>
+
+## Function `monotonically_increasing_counter_internal`
+
+
+
+<pre><code><b>fun</b> <a href="transaction_context.md#0x1_transaction_context_monotonically_increasing_counter_internal">monotonically_increasing_counter_internal</a>(timestamp_us: u64): u128
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>native</b> <b>fun</b> <a href="transaction_context.md#0x1_transaction_context_monotonically_increasing_counter_internal">monotonically_increasing_counter_internal</a>(timestamp_us: u64): u128;
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_transaction_context_monotonically_increasing_counter_internal_for_test_only"></a>
+
+## Function `monotonically_increasing_counter_internal_for_test_only`
+
+Test-only version of monotonically_increasing_counter that returns increasing values
+without requiring a user transaction context. This allows unit tests to verify
+the monotonically increasing behavior.
+
+
+<pre><code><b>fun</b> <a href="transaction_context.md#0x1_transaction_context_monotonically_increasing_counter_internal_for_test_only">monotonically_increasing_counter_internal_for_test_only</a>(): u128
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>native</b> <b>fun</b> <a href="transaction_context.md#0x1_transaction_context_monotonically_increasing_counter_internal_for_test_only">monotonically_increasing_counter_internal_for_test_only</a>(): u128;
+</code></pre>
+
+
+
+</details>
+
 <a id="@Specification_1"></a>
 
 ## Specification
@@ -1278,6 +1395,38 @@ Returns the inner entry function payload of the multisig payload.
 
 
 <pre><code><b>fun</b> <a href="transaction_context.md#0x1_transaction_context_multisig_payload_internal">multisig_payload_internal</a>(): <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_Option">option::Option</a>&lt;<a href="transaction_context.md#0x1_transaction_context_MultisigPayload">transaction_context::MultisigPayload</a>&gt;
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+</code></pre>
+
+
+
+<a id="@Specification_1_monotonically_increasing_counter_internal"></a>
+
+### Function `monotonically_increasing_counter_internal`
+
+
+<pre><code><b>fun</b> <a href="transaction_context.md#0x1_transaction_context_monotonically_increasing_counter_internal">monotonically_increasing_counter_internal</a>(timestamp_us: u64): u128
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+</code></pre>
+
+
+
+<a id="@Specification_1_monotonically_increasing_counter_internal_for_test_only"></a>
+
+### Function `monotonically_increasing_counter_internal_for_test_only`
+
+
+<pre><code><b>fun</b> <a href="transaction_context.md#0x1_transaction_context_monotonically_increasing_counter_internal_for_test_only">monotonically_increasing_counter_internal_for_test_only</a>(): u128
 </code></pre>
 
 

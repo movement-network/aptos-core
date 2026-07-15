@@ -4,11 +4,11 @@
 use anyhow::ensure;
 use aptos_consensus_types::{
     common::{BatchPayload, TxnSummaryWithExpiration},
-    proof_of_store::{BatchId, BatchInfo},
+    proof_of_store::BatchInfo,
 };
 use aptos_crypto::{hash::CryptoHash, HashValue};
 use aptos_types::{
-    ledger_info::LedgerInfoWithSignatures, transaction::SignedTransaction,
+    ledger_info::LedgerInfoWithSignatures, quorum_store::BatchId, transaction::SignedTransaction,
     validator_verifier::ValidatorVerifier, PeerId,
 };
 use serde::{Deserialize, Serialize};
@@ -177,7 +177,11 @@ impl Batch {
             ensure!(
                 txn.gas_unit_price() >= self.gas_bucket_start(),
                 "Payload gas unit price doesn't match batch info"
-            )
+            );
+            ensure!(
+                !txn.payload().is_encrypted_variant(),
+                "Encrypted transaction is not supported yet"
+            );
         }
         Ok(())
     }

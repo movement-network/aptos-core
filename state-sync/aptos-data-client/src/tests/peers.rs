@@ -20,7 +20,7 @@ use aptos_storage_service_types::{
     responses::{CompleteDataRange, DataResponse, StorageServerSummary, StorageServiceResponse},
     StorageServiceError,
 };
-use aptos_types::transaction::TransactionListWithProof;
+use aptos_types::transaction::{TransactionListWithProof, TransactionListWithProofV2};
 use claims::{assert_err, assert_matches, assert_ok};
 use maplit::hashset;
 use rand::{rngs::OsRng, Rng};
@@ -182,7 +182,7 @@ async fn bad_peer_is_eventually_banned_internal() {
             .get_transactions_with_proof(100, 50, 100, false, response_timeout_ms)
             .await
             .unwrap();
-        assert_eq!(response.payload, TransactionListWithProof::new_empty());
+        assert_eq!(response.payload, TransactionListWithProofV2::new_empty());
     }
 }
 
@@ -279,6 +279,7 @@ async fn bad_peer_is_eventually_added_back() {
 
         // Create a data client config with peer ignoring enabled
         let data_client_config = AptosDataClientConfig {
+            enable_transaction_data_v2: false,
             ignore_low_score_peers: true,
             ..Default::default()
         };
@@ -579,7 +580,7 @@ async fn single_good_peer() {
                         send_transaction_response(network_request);
                     } else {
                         // Send an error or drop the request
-                        if !OsRng.gen::<bool>() {
+                        if !OsRng.r#gen::<bool>() {
                             send_error_response(network_request);
                         }
                     }
@@ -663,7 +664,7 @@ async fn single_good_peer_across_priorities() {
                     send_transaction_response(network_request);
                 } else {
                     // Send an error or drop the request
-                    if !OsRng.gen::<bool>() {
+                    if !OsRng.r#gen::<bool>() {
                         send_error_response(network_request);
                     }
                 }
@@ -682,7 +683,7 @@ async fn single_good_peer_across_priorities() {
 /// If no duration is specified, the sleep duration is randomly chosen.
 async fn emulate_network_latencies(sleep_duration_ms: Option<u64>) {
     let sleep_duration_ms = sleep_duration_ms.unwrap_or_else(|| {
-        OsRng.gen::<u64>() % 500 // Up to 0.5 seconds
+        OsRng.r#gen::<u64>() % 500 // Up to 0.5 seconds
     });
     tokio::time::sleep(Duration::from_millis(sleep_duration_ms)).await;
 }

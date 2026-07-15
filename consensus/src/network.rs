@@ -25,9 +25,12 @@ use aptos_config::network_id::NetworkId;
 use aptos_consensus_types::{
     block_retrieval::{BlockRetrievalRequest, BlockRetrievalRequestV1, BlockRetrievalResponse},
     common::Author,
+    opt_proposal_msg::OptProposalMsg,
     order_vote_msg::OrderVoteMsg,
     pipeline::{commit_decision::CommitDecision, commit_vote::CommitVote},
-    proof_of_store::{ProofOfStore, ProofOfStoreMsg, SignedBatchInfo, SignedBatchInfoMsg},
+    proof_of_store::{
+        BatchInfo, ProofOfStore, ProofOfStoreMsg, SignedBatchInfo, SignedBatchInfoMsg,
+    },
     proposal_msg::ProposalMsg,
     round_timeout::RoundTimeoutMsg,
     sync_info::SyncInfo,
@@ -201,15 +204,18 @@ pub trait QuorumStoreSender: Send + Clone {
 
     async fn send_signed_batch_info_msg(
         &self,
-        signed_batch_infos: Vec<SignedBatchInfo>,
+        signed_batch_infos: Vec<SignedBatchInfo<BatchInfo>>,
         recipients: Vec<Author>,
     );
 
     async fn broadcast_batch_msg(&mut self, batches: Vec<Batch>);
 
-    async fn broadcast_proof_of_store_msg(&mut self, proof_of_stores: Vec<ProofOfStore>);
+    async fn broadcast_proof_of_store_msg(&mut self, proof_of_stores: Vec<ProofOfStore<BatchInfo>>);
 
-    async fn send_proof_of_store_msg_to_self(&mut self, proof_of_stores: Vec<ProofOfStore>);
+    async fn send_proof_of_store_msg_to_self(
+        &mut self,
+        proof_of_stores: Vec<ProofOfStore<BatchInfo>>,
+    );
 }
 
 /// Implements the actual networking support for all consensus messaging.
@@ -406,6 +412,12 @@ impl NetworkSender {
         self.broadcast(msg).await
     }
 
+    pub async fn broadcast_opt_proposal(&self, proposal_msg: OptProposalMsg) {
+        fail_point!("consensus::send::broadcast_opt_proposal", |_| ());
+        let msg = ConsensusMsg::OptProposalMsg(Box::new(proposal_msg));
+        self.broadcast(msg).await
+    }
+
     pub async fn broadcast_sync_info(&self, sync_info_msg: SyncInfo) {
         fail_point!("consensus::send::broadcast_sync_info", |_| ());
         let msg = ConsensusMsg::SyncInfo(Box::new(sync_info_msg));
@@ -452,6 +464,12 @@ impl NetworkSender {
     pub async fn broadcast_order_vote(&self, order_vote_msg: OrderVoteMsg) {
         fail_point!("consensus::send::order_vote", |_| ());
         let msg = ConsensusMsg::OrderVoteMsg(Box::new(order_vote_msg));
+        self.broadcast(msg).await
+    }
+
+    pub async fn broadcast_commit_vote(&self, commit_vote_msg: CommitVote) {
+        fail_point!("consensus::send::commit_vote", |_| ());
+        let msg = ConsensusMsg::CommitVoteMsg(Box::new(commit_vote_msg));
         self.broadcast(msg).await
     }
 
@@ -543,7 +561,7 @@ impl QuorumStoreSender for NetworkSender {
 
     async fn send_signed_batch_info_msg(
         &self,
-        signed_batch_infos: Vec<SignedBatchInfo>,
+        signed_batch_infos: Vec<SignedBatchInfo<BatchInfo>>,
         recipients: Vec<Author>,
     ) {
         fail_point!("consensus::send::signed_batch_info", |_| ());
@@ -558,13 +576,13 @@ impl QuorumStoreSender for NetworkSender {
         self.broadcast(msg).await
     }
 
-    async fn broadcast_proof_of_store_msg(&mut self, proofs: Vec<ProofOfStore>) {
+    async fn broadcast_proof_of_store_msg(&mut self, proofs: Vec<ProofOfStore<BatchInfo>>) {
         fail_point!("consensus::send::proof_of_store", |_| ());
         let msg = ConsensusMsg::ProofOfStoreMsg(Box::new(ProofOfStoreMsg::new(proofs)));
         self.broadcast(msg).await
     }
 
-    async fn send_proof_of_store_msg_to_self(&mut self, proofs: Vec<ProofOfStore>) {
+    async fn send_proof_of_store_msg_to_self(&mut self, proofs: Vec<ProofOfStore<BatchInfo>>) {
         fail_point!("consensus::send::proof_of_store", |_| ());
         let msg = ConsensusMsg::ProofOfStoreMsg(Box::new(ProofOfStoreMsg::new(proofs)));
         self.send(msg, vec![self.author]).await
@@ -793,6 +811,7 @@ impl NetworkTask {
                             };
                         },
                         consensus_msg @ (ConsensusMsg::ProposalMsg(_)
+                        | ConsensusMsg::OptProposalMsg(_)
                         | ConsensusMsg::VoteMsg(_)
                         | ConsensusMsg::RoundTimeoutMsg(_)
                         | ConsensusMsg::OrderVoteMsg(_)
@@ -809,6 +828,23 @@ impl NetworkTask {
                                         .remote_peer(peer_id),
                                     block_round = proposal.proposal().round(),
                                     block_hash = proposal.proposal().id(),
+                                );
+                            }
+                            if let ConsensusMsg::OptProposalMsg(proposal) = &consensus_msg {
+                                observe_block(
+                                    proposal.timestamp_usecs(),
+                                    BlockStage::NETWORK_RECEIVED,
+                                );
+                                observe_block(
+                                    proposal.timestamp_usecs(),
+                                    BlockStage::NETWORK_RECEIVED_OPT_PROPOSAL,
+                                );
+                                info!(
+                                    LogSchema::new(LogEvent::NetworkReceiveOptProposal)
+                                        .remote_peer(peer_id),
+                                    block_author = proposal.proposer(),
+                                    block_epoch = proposal.epoch(),
+                                    block_round = proposal.round(),
                                 );
                             }
                             Self::push_msg(peer_id, consensus_msg, &self.consensus_messages_tx);

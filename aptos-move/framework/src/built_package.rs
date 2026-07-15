@@ -4,7 +4,7 @@
 use crate::{
     docgen::DocgenOptions,
     extended_checks,
-    natives::code::{ModuleMetadata, MoveOption, PackageDep, PackageMetadata, UpgradePolicy},
+    natives::code::{ModuleMetadata, PackageDep, PackageMetadata, UpgradePolicy},
     zip_metadata, zip_metadata_str,
 };
 use anyhow::bail;
@@ -26,7 +26,7 @@ use legacy_move_compiler::{
     compiled_unit::{CompiledUnit, NamedCompiledModule},
     shared::NumericalAddress,
 };
-use move_binary_format::{file_format_common, file_format_common::VERSION_7, CompiledModule};
+use move_binary_format::{file_format_common, file_format_common::VERSION_DEFAULT, CompiledModule};
 use move_command_line_common::files::MOVE_COMPILED_EXTENSION;
 use move_compiler_v2::{external_checks::ExternalChecks, options::Options, Experiment};
 use move_core_types::{language_storage::ModuleId, metadata::Metadata};
@@ -144,7 +144,7 @@ impl Default for BuildOptions {
 impl BuildOptions {
     pub fn move_2() -> Self {
         BuildOptions {
-            bytecode_version: Some(VERSION_7),
+            bytecode_version: Some(VERSION_DEFAULT),
             language_version: Some(LanguageVersion::latest_stable()),
             compiler_version: Some(CompilerVersion::latest_stable()),
             ..Self::default()
@@ -216,6 +216,7 @@ pub fn build_model(
             skip_attribute_checks,
             known_attributes,
             experiments,
+            print_errors: true,
         },
     };
     let compiler_version = compiler_version.unwrap_or_default();
@@ -266,6 +267,7 @@ impl BuiltPackage {
                 skip_attribute_checks,
                 known_attributes: options.known_attributes.clone(),
                 experiments: options.experiments.clone(),
+                print_errors: true,
             },
         })
     }
@@ -321,11 +323,11 @@ impl BuiltPackage {
             }
 
             if let Some(model_options) = model.get_extension::<Options>() {
-                if model_options.experiment_on(Experiment::FAIL_ON_WARNING) && model.has_warnings()
-                {
+                let has_target_warnings = model.has_diag_in_primary_targets(Severity::Warning);
+                if model_options.experiment_on(Experiment::FAIL_ON_WARNING) && has_target_warnings {
                     bail!("found warning(s), and `--fail-on-warning` is set")
                 } else if model_options.experiment_on(Experiment::STOP_AFTER_EXTENDED_CHECKS) {
-                    std::process::exit(if model.has_warnings() { 1 } else { 0 })
+                    std::process::exit(if has_target_warnings { 1 } else { 0 })
                 }
             }
 
@@ -431,6 +433,16 @@ impl BuiltPackage {
             .collect()
     }
 
+    /// Returns an iterator over the bytecode for the modules of the built package, along with the
+    /// module names.
+    pub fn module_code_iter<'a>(&'a self) -> impl Iterator<Item = (String, Vec<u8>)> + 'a {
+        self.package.root_modules().map(|unit_with_source| {
+            let bytecode_version = self.options.inferred_bytecode_version();
+            let code = unit_with_source.unit.serialize(Some(bytecode_version));
+            (unit_with_source.unit.name().as_str().to_string(), code)
+        })
+    }
+
     /// Returns the abis for this package, if available.
     pub fn extract_abis(&self) -> Option<Vec<EntryABI>> {
         self.package.compiled_abis.as_ref().map(|abis| {
@@ -459,6 +471,28 @@ impl BuiltPackage {
                 CompiledUnit::Module(NamedCompiledModule { module, .. }) => Some(module),
                 CompiledUnit::Script(_) => None,
             })
+    }
+
+    /// Replaces a module by name with a new CompiledModule instance
+    #[cfg(feature = "testing")]
+    pub fn replace_module(
+        &mut self,
+        module_name: &str,
+        new_module: CompiledModule,
+    ) -> anyhow::Result<()> {
+        for unit_with_source in &mut self.package.root_compiled_units {
+            if let CompiledUnit::Module(named_module) = &mut unit_with_source.unit {
+                if named_module.name.as_str() == module_name {
+                    named_module.module = new_module;
+                    return Ok(());
+                }
+            }
+        }
+
+        Err(anyhow::anyhow!(
+            "Module '{}' not found in package",
+            module_name
+        ))
     }
 
     /// Returns the number of scripts in the package.
@@ -512,7 +546,7 @@ impl BuiltPackage {
                 name,
                 source,
                 source_map,
-                extension: MoveOption::default(),
+                extension: None,
             })
         }
         let deps = self
@@ -552,7 +586,7 @@ impl BuiltPackage {
             manifest,
             modules,
             deps,
-            extension: MoveOption::none(),
+            extension: None,
         })
     }
 

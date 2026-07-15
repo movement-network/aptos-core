@@ -22,7 +22,7 @@ use crate::{
         types::{AugmentedData, RandConfig, Share},
     },
     state_computer::ExecutionProxy,
-    state_replication::{StateComputer, StateComputerCommitCallBackType},
+    state_replication::StateComputer,
     transaction_deduper::create_transaction_deduper,
     transaction_shuffler::create_transaction_shuffler,
 };
@@ -71,7 +71,6 @@ pub trait TExecutionClient: Send + Sync {
         fast_rand_config: Option<RandConfig>,
         rand_msg_rx: aptos_channel::Receiver<AccountAddress, IncomingRandGenRequest>,
         highest_committed_round: Round,
-        new_pipeline_enabled: bool,
         virtual_genesis_block_id: Option<aptos_crypto::HashValue>,
     );
 
@@ -83,7 +82,6 @@ pub trait TExecutionClient: Send + Sync {
         &self,
         blocks: Vec<Arc<PipelinedBlock>>,
         ordered_proof: WrappedLedgerInfo,
-        callback: StateComputerCommitCallBackType,
     ) -> ExecutorResult<()>;
 
     fn send_commit_msg(
@@ -211,15 +209,8 @@ impl ExecutionProxyClient {
         buffer_manager_back_pressure_enabled: bool,
         consensus_observer_config: ConsensusObserverConfig,
         consensus_publisher: Option<Arc<ConsensusPublisher>>,
-        new_pipeline_enabled: bool,
+        network_sender: Arc<NetworkSender>,
     ) {
-        let network_sender = NetworkSender::new(
-            self.author,
-            self.network_sender.clone(),
-            self.self_sender.clone(),
-            epoch_state.verifier.clone(),
-        );
-
         let (reset_buffer_manager_tx, reset_buffer_manager_rx) = unbounded::<ResetRequest>();
 
         let (commit_msg_tx, commit_msg_rx) =
@@ -244,7 +235,7 @@ impl ExecutionProxyClient {
                     rand_config,
                     fast_rand_config,
                     rand_ready_block_tx,
-                    Arc::new(network_sender.clone()),
+                    network_sender.clone(),
                     self.rand_storage.clone(),
                     self.bounded_executor.clone(),
                     &self.consensus_config.rand_rb_config,
@@ -283,11 +274,9 @@ impl ExecutionProxyClient {
             buffer_manager,
         ) = prepare_phases_and_buffer_manager(
             self.author,
-            self.execution_proxy.clone(),
             commit_signer_provider,
             network_sender,
             commit_msg_rx,
-            self.execution_proxy.clone(),
             execution_ready_block_rx,
             reset_buffer_manager_rx,
             epoch_state,
@@ -299,7 +288,6 @@ impl ExecutionProxyClient {
             consensus_publisher,
             self.consensus_config
                 .max_pending_rounds_in_commit_vote_cache,
-            new_pipeline_enabled,
         );
 
         tokio::spawn(execution_schedule_phase.start());
@@ -325,9 +313,14 @@ impl TExecutionClient for ExecutionProxyClient {
         fast_rand_config: Option<RandConfig>,
         rand_msg_rx: aptos_channel::Receiver<AccountAddress, IncomingRandGenRequest>,
         highest_committed_round: Round,
-        new_pipeline_enabled: bool,
         virtual_genesis_block_id: Option<aptos_crypto::HashValue>,
     ) {
+        let network_sender = Arc::new(NetworkSender::new(
+            self.author,
+            self.network_sender.clone(),
+            self.self_sender.clone(),
+            epoch_state.verifier.clone(),
+        ));
         self.spawn_decoupled_execution(
             maybe_consensus_key,
             commit_signer_provider,
@@ -340,17 +333,20 @@ impl TExecutionClient for ExecutionProxyClient {
             self.consensus_config.enable_pre_commit,
             self.consensus_observer_config,
             self.consensus_publisher.clone(),
-            new_pipeline_enabled,
+            network_sender.clone(),
         );
 
         let transaction_shuffler =
             create_transaction_shuffler(onchain_execution_config.transaction_shuffler_type());
-        let block_executor_onchain_config =
+        let block_executor_onchain_config: aptos_types::block_executor::config::BlockExecutorConfigFromOnchain =
             onchain_execution_config.block_executor_onchain_config();
         let transaction_deduper =
             create_transaction_deduper(onchain_execution_config.transaction_deduper_type());
         let randomness_enabled = onchain_consensus_config.is_vtxn_enabled()
             && onchain_randomness_config.randomness_enabled();
+
+        let aux_version = onchain_execution_config.persisted_auxiliary_info_version();
+
         self.execution_proxy.new_epoch(
             &epoch_state,
             payload_manager,
@@ -358,8 +354,10 @@ impl TExecutionClient for ExecutionProxyClient {
             block_executor_onchain_config,
             transaction_deduper,
             randomness_enabled,
-            onchain_consensus_config.order_vote_enabled(),
             virtual_genesis_block_id,
+            onchain_consensus_config.clone(),
+            aux_version,
+            network_sender,
         );
     }
 
@@ -371,7 +369,6 @@ impl TExecutionClient for ExecutionProxyClient {
         &self,
         blocks: Vec<Arc<PipelinedBlock>>,
         ordered_proof: WrappedLedgerInfo,
-        callback: StateComputerCommitCallBackType,
     ) -> ExecutorResult<()> {
         assert!(!blocks.is_empty());
         let mut execute_tx = match self.handle.read().execute_tx.clone() {
@@ -395,7 +392,6 @@ impl TExecutionClient for ExecutionProxyClient {
             .send(OrderedBlocks {
                 ordered_blocks: blocks,
                 ordered_proof: ordered_proof.ledger_info().clone(),
-                callback,
             })
             .await
             .is_err()
@@ -546,7 +542,6 @@ impl TExecutionClient for DummyExecutionClient {
         _fast_rand_config: Option<RandConfig>,
         _rand_msg_rx: aptos_channel::Receiver<AccountAddress, IncomingRandGenRequest>,
         _highest_committed_round: Round,
-        _new_pipeline_enabled: bool,
         _virtual_genesis_block_id: Option<aptos_crypto::HashValue>,
     ) {
     }
@@ -559,7 +554,6 @@ impl TExecutionClient for DummyExecutionClient {
         &self,
         _: Vec<Arc<PipelinedBlock>>,
         _: WrappedLedgerInfo,
-        _: StateComputerCommitCallBackType,
     ) -> ExecutorResult<()> {
         Ok(())
     }

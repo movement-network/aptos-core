@@ -39,7 +39,13 @@ async fn test_get_index() {
 
 #[tokio::test]
 async fn test_basic_client() {
-    let swarm = new_local_swarm_with_aptos(1).await;
+    let swarm = SwarmBuilder::new_local(1)
+        .with_aptos()
+        .with_init_config(Arc::new(|_, conf, _| {
+            conf.indexer_db_config.enable_statekeys = true;
+        }))
+        .build()
+        .await;
     let mut info = swarm.aptos_public_info();
 
     info.client().get_ledger_information().await.unwrap();
@@ -125,6 +131,8 @@ async fn test_gas_estimation_inner(swarm: &mut LocalSwarm) {
                 sender_use_account_pool: false,
                 non_conflicting: false,
                 use_fa_transfer: true,
+                use_txn_payload_v2_format: false,
+                use_orderless_transactions: false,
             },
             100,
         )]],
@@ -246,7 +254,15 @@ async fn test_gas_estimation_gas_used_limit() {
 
 #[tokio::test]
 async fn test_bcs() {
-    let swarm = new_local_swarm_with_aptos(1).await;
+    let swarm = SwarmBuilder::new_local(1)
+        .with_aptos()
+        .with_init_config(Arc::new(|_, conf, _| {
+            conf.indexer_db_config.enable_statekeys = true;
+            conf.indexer_db_config.enable_transaction = true;
+            conf.indexer_db_config.enable_event = true;
+        }))
+        .build()
+        .await;
     let mut info = swarm.aptos_public_info();
 
     // Create accounts

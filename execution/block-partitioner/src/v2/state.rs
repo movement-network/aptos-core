@@ -14,6 +14,7 @@ use crate::{
     },
     Sender,
 };
+use aptos_metrics_core::TimerHelper;
 use aptos_types::{
     block_executor::partitioner::{
         CrossShardDependencies, RoundId, ShardId, ShardedTxnIndex, SubBlock,
@@ -116,9 +117,7 @@ impl PartitionState {
         cross_shard_dep_avoid_threshold: f32,
         partition_last_round: bool,
     ) -> Self {
-        let _timer = MISC_TIMERS_SECONDS
-            .with_label_values(&["new"])
-            .start_timer();
+        let _timer = MISC_TIMERS_SECONDS.timer_with(&["new"]);
         let num_txns = txns.len();
         let sender_counter = AtomicUsize::new(0);
         let key_counter = AtomicUsize::new(0);
@@ -246,12 +245,11 @@ impl PartitionState {
         let tracker = tracker_ref.read().unwrap();
         let start = ShardedTxnIndexV2::new(sub_block.round_id, sub_block.shard_id, 0);
         let end = ShardedTxnIndexV2::new(sub_block.round_id, sub_block.shard_id + 1, 0);
-        let ret = tracker
+        tracker
             .finalized_writes
             .range(start..end)
             .last()
-            .map(|t| t.pre_partitioned_txn_idx);
-        ret
+            .map(|t| t.pre_partitioned_txn_idx)
     }
 
     /// Get the 1st txn after `since` that writes a given key.

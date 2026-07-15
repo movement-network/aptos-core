@@ -58,6 +58,7 @@ impl Display for FrameName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Script => write!(f, "<script>"),
+            Self::TransactionBatch => write!(f, "<transaction batch>"),
             Self::Function {
                 module_id,
                 name: fn_name,
@@ -93,8 +94,13 @@ pub struct TableKey<'a> {
 
 impl Display for TableKey<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        assert!(self.bytes.len() > 2);
-        write!(f, "0x{:02x}{:02x}..", self.bytes[0], self.bytes[1])
+        if self.bytes.is_empty() {
+            write!(f, "0x")
+        } else if self.bytes.len() == 1 {
+            write!(f, "0x{:02x}", self.bytes[0])
+        } else {
+            write!(f, "0x{:02x}{:02x}..", self.bytes[0], self.bytes[1])
+        }
     }
 }
 

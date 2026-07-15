@@ -2,14 +2,26 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use super::new_test_context;
+use super::new_test_context_with_orderless_flags;
 use aptos_api_test_context::{current_function_name, TestContext};
+use rstest::rstest;
 use serde_json::json;
 use std::path::PathBuf;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn test_function_values() {
-    let mut context = new_test_context(current_function_name!());
+#[rstest(
+    use_txn_payload_v2_format,
+    use_orderless_transactions,
+    case(false, false),
+    case(true, false),
+    case(true, true)
+)]
+async fn test_function_values(use_txn_payload_v2_format: bool, use_orderless_transactions: bool) {
+    let mut context = new_test_context_with_orderless_flags(
+        current_function_name!(),
+        use_txn_payload_v2_format,
+        use_orderless_transactions,
+    );
     let mut account = context.create_account().await;
     let account_addr = account.address();
 
@@ -81,4 +93,130 @@ async fn test_function_values() {
         .await
         .unwrap()["data"];
     assert_eq!(state, &json!({"__variant__": "Value", "_0": "33"}));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[rstest(
+    use_txn_payload_v2_format,
+    use_orderless_transactions,
+    case(false, false),
+    case(true, false),
+    case(true, true)
+)]
+async fn test_function_values_with_references(
+    use_txn_payload_v2_format: bool,
+    use_orderless_transactions: bool,
+) {
+    let mut context = new_test_context_with_orderless_flags(
+        current_function_name!(),
+        use_txn_payload_v2_format,
+        use_orderless_transactions,
+    );
+    let mut account = context.create_account().await;
+    let addr = account.address();
+
+    let named_addresses = vec![("account".to_string(), addr)];
+    let txn = futures::executor::block_on(async move {
+        let path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/tests/move/pack_function_values");
+        TestContext::build_package_with_latest_language(path, named_addresses)
+    });
+    context.publish_package(&mut account, txn).await;
+
+    let resource = format!("{}::test::FunctionStore", addr);
+    let response = &context.gen_resource(&addr, &resource).await.unwrap();
+
+    let expected_name = format!("{}::test::freeze_ref", addr);
+    assert_eq!(
+        response["data"],
+        json!({
+            "f": {
+                "__fun_name__": &expected_name,
+                "__mask__": "0",
+            }
+        })
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[rstest(
+    use_txn_payload_v2_format,
+    use_orderless_transactions,
+    case(false, false),
+    case(true, false),
+    case(true, true)
+)]
+async fn test_function_values_with_captured_struct(
+    use_txn_payload_v2_format: bool,
+    use_orderless_transactions: bool,
+) {
+    let mut context = new_test_context_with_orderless_flags(
+        current_function_name!(),
+        use_txn_payload_v2_format,
+        use_orderless_transactions,
+    );
+    let mut account = context.create_account().await;
+    let addr = account.address();
+
+    let named_addresses = vec![("account".to_string(), addr)];
+    let txn = futures::executor::block_on(async move {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("src/tests/move/pack_function_values_with_struct");
+        TestContext::build_package_with_latest_language(path, named_addresses)
+    });
+    context.publish_package(&mut account, txn).await;
+
+    let resource = format!("{}::test::FunctionStore", addr);
+    let response = &context.gen_resource(&addr, &resource).await.unwrap();
+
+    let expected_name = format!("{}::test::id", addr);
+    assert_eq!(
+        response["data"],
+        json!({
+            "f": {
+                "__captured__": [ {"_0": "1"} ],
+                "__fun_name__": &expected_name,
+                "__mask__": "1",
+            }
+        })
+    );
+
+    let resource = format!("{}::test::R2<0x1::option::Option<u64>>", addr);
+    let response = &context.gen_resource(&addr, &resource).await.unwrap();
+
+    assert_eq!(
+        response["data"],
+        json!({
+            "_0": {"vec": []},
+        })
+    );
+
+    let resource = format!("{}::test::R2<0x1::option::Option<u32>>", addr);
+    let response = &context.gen_resource(&addr, &resource).await.unwrap();
+
+    assert_eq!(
+        response["data"],
+        json!({
+            "_0": {"vec": [1]},
+        })
+    );
+
+    context
+        .api_execute_entry_function(
+            &mut account,
+            &format!("0x{}::test::entry_function", addr.to_hex()),
+            json!([]),
+            json!([{"vec": ["1"]}]),
+        )
+        .await;
+
+    let resource = format!("{}::test::R2<0x1::option::Option<u128>>", addr);
+    let response = &context.gen_resource(&addr, &resource).await.unwrap();
+
+    assert_eq!(
+        response["data"],
+        json!({
+            "_0": {"vec":["1"]},
+        })
+    );
 }

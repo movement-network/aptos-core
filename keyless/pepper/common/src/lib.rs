@@ -70,6 +70,30 @@ pub struct BadPepperRequestError {
     pub message: String,
 }
 
+/// A pepper request V2, which extends the original pepper request with additional
+/// information. Note: this is an enum, to allow for future modifications and
+/// extensibility, without needing to change the pepper service API.
+#[derive(Debug, Deserialize, Serialize)]
+pub enum PepperRequestV2 {
+    RequestWithAudOverride(PepperRequestWithAudOverride),
+}
+
+impl PepperRequestV2 {
+    pub fn get_request_with_aud_override(self) -> PepperRequestWithAudOverride {
+        match self {
+            PepperRequestV2::RequestWithAudOverride(pepper_request_with_aud_override) => {
+                pepper_request_with_aud_override
+            },
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct PepperRequestWithAudOverride {
+    pub aud_override: String,
+    pub pepper_request: PepperRequest,
+}
+
 /// A pepper scheme where:
 /// - The pepper input contains `JWT, epk, blinder, expiry_time, uid_key`, wrapped in type `PepperRequest`.
 /// - The pepper output is the `BLS12381_G1_BLS` VUF output of the input, wrapped in type `PepperResponse`.
@@ -193,7 +217,13 @@ pub struct PepperV0VufPubKey {
     pub public_key: Vec<u8>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+impl PepperV0VufPubKey {
+    pub fn new(public_key: Vec<u8>) -> Self {
+        Self { public_key }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct PepperInput {
     pub iss: String,
     pub aud: String,

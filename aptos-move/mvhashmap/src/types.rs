@@ -6,8 +6,10 @@ use aptos_types::{
     error::PanicOr,
     write_set::{TransactionWrite, WriteOpKind},
 };
+use fail::fail_point;
 use move_core_types::value::MoveTypeLayout;
-use std::sync::{atomic::AtomicU32, Arc};
+use std::sync::atomic::AtomicU32;
+use triomphe::Arc;
 
 pub type AtomicTxnIndex = AtomicU32;
 pub type TxnIndex = u32;
@@ -158,6 +160,7 @@ impl<V: TransactionWrite> ValueWithLayout<V> {
     }
 
     pub fn bytes_len(&self) -> Option<usize> {
+        fail_point!("value_with_layout_bytes_len", |_| { Some(10) });
         match self {
             ValueWithLayout::RawFromStorage(value) | ValueWithLayout::Exchanged(value, _) => {
                 value.bytes().map(|b| b.len())
@@ -193,7 +196,7 @@ pub(crate) mod test {
     use bytes::Bytes;
     use claims::{assert_err, assert_ok_eq};
     use move_core_types::{account_address::AccountAddress, identifier::IdentStr};
-    use std::{fmt::Debug, hash::Hash, sync::Arc};
+    use std::{fmt::Debug, hash::Hash};
 
     #[derive(Clone, Eq, Hash, PartialEq, Debug)]
     pub(crate) struct KeyType<K: Hash + Clone + Debug + Eq>(

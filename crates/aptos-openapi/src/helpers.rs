@@ -171,12 +171,14 @@ macro_rules! impl_poem_parameter {
     };
 }
 
+#[cfg(test)]
 mod test {
     #[allow(unused_imports)]
     use poem_openapi::types::ParseFromParameter;
     use serde::{Deserialize, Serialize};
     use std::str::FromStr;
 
+    #[allow(dead_code)]
     #[derive(Debug, Deserialize, Serialize)]
     struct This {
         value: String,
@@ -193,13 +195,12 @@ mod test {
         }
     }
 
+    impl_poem_type!(This, "string", ());
+    impl_poem_type!(That, "string", ());
+    impl_poem_parameter!(That);
+
     #[test]
     fn test() {
-        impl_poem_type!(This, "string", ());
-
-        impl_poem_type!(That, "string", ());
-        impl_poem_parameter!(That);
-
         assert_eq!(
             That::parse_from_parameter("0x1::coin::CoinStore::%3C0x1::aptos_coin::AptosCoin%3E")
                 .unwrap()

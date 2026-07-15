@@ -255,41 +255,34 @@ impl ConsensusObserver {
             ))
         );
 
-        // If the new pipeline is enabled, build the pipeline for the ordered blocks
-        if self.pipeline_enabled() {
-            let block = ordered_block.first_block();
-            let get_parent_pipeline_futs = self
-                .observer_block_data
-                .lock()
-                .get_parent_pipeline_futs(&block, self.pipeline_builder());
+        let block = ordered_block.first_block();
+        let get_parent_pipeline_futs = self
+            .observer_block_data
+            .lock()
+            .get_parent_pipeline_futs(&block, self.pipeline_builder());
 
-            let mut parent_fut = if let Some(futs) = get_parent_pipeline_futs {
-                Some(futs)
-            } else {
-                warn!(
-                    LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                        "Parent block's pipeline futures for ordered block is missing! Ignoring: {:?}",
-                        ordered_block.proof_block_info()
-                    ))
-                );
-                return;
-            };
+        let mut parent_fut = if let Some(futs) = get_parent_pipeline_futs {
+            Some(futs)
+        } else {
+            warn!(
+                LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
+                    "Parent block's pipeline futures for ordered block is missing! Ignoring: {:?}",
+                    ordered_block.proof_block_info()
+                ))
+            );
+            return;
+        };
 
-            for block in ordered_block.blocks() {
-                let commit_callback =
-                    block_data::create_commit_callback(self.observer_block_data.clone());
-                self.pipeline_builder().build(
-                    block,
-                    parent_fut.take().expect("future should be set"),
-                    commit_callback,
-                );
-                parent_fut = Some(block.pipeline_futs().expect("pipeline futures just built"));
-            }
+        for block in ordered_block.blocks() {
+            let commit_callback =
+                block_data::create_commit_callback(self.observer_block_data.clone());
+            self.pipeline_builder().build_for_observer(
+                block,
+                parent_fut.take().expect("future should be set"),
+                commit_callback,
+            );
+            parent_fut = Some(block.pipeline_futs().expect("pipeline futures just built"));
         }
-
-        // Create the commit callback (to be called after the execution pipeline)
-        let commit_callback =
-            block_data::create_commit_callback_deprecated(self.observer_block_data.clone());
 
         // Send the ordered block to the execution pipeline
         if let Err(error) = self
@@ -297,7 +290,6 @@ impl ConsensusObserver {
             .finalize_order(
                 ordered_block.blocks().clone(),
                 WrappedLedgerInfo::new(VoteData::dummy(), ordered_block.ordered_proof().clone()),
-                commit_callback,
             )
             .await
         {
@@ -980,14 +972,14 @@ impl ConsensusObserver {
     ) {
         // Get the epoch and round for the synced commit decision
         let ledger_info = latest_synced_ledger_info.ledger_info();
-        let epoch = ledger_info.epoch();
-        let round = ledger_info.round();
+        let synced_epoch = ledger_info.epoch();
+        let synced_round = ledger_info.round();
 
         // Log the state sync notification
         info!(
             LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
-                "Received state sync notification for commit completion! Epoch {}, round: {}!",
-                epoch, round
+                "Received state sync notification for commit completion! Synced epoch {}, round: {}!",
+                synced_epoch, synced_round
             ))
         );
 
@@ -1000,26 +992,41 @@ impl ConsensusObserver {
             return;
         }
 
-        // Verify that the state sync notification is for the current epoch and round
-        if !self
-            .observer_block_data
-            .lock()
-            .check_root_epoch_and_round(epoch, round)
-        {
+        // Get the block data root epoch and round
+        let block_data_root = self.observer_block_data.lock().root();
+        let block_data_epoch = block_data_root.ledger_info().epoch();
+        let block_data_round = block_data_root.ledger_info().round();
+
+        // If the commit sync notification is behind the block data root, ignore it. This
+        // is possible due to a race condition where we started syncing to a newer commit
+        // at the same time that state sync sent the notification for a previous commit.
+        if (synced_epoch, synced_round) < (block_data_epoch, block_data_round) {
+            info!(
+                LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
+                    "Ignoring old commit sync notification for epoch: {}, round: {}! Current root: {:?}",
+                    synced_epoch, synced_round, block_data_root
+                ))
+            );
+            return;
+        }
+
+        // If the commit sync notification is ahead the block data root, something has gone wrong!
+        if (synced_epoch, synced_round) > (block_data_epoch, block_data_round) {
             // Log the error, reset the state sync manager and return early
             error!(
                 LogSchema::new(LogEntry::ConsensusObserver).message(&format!(
                     "Received invalid commit sync notification for epoch: {}, round: {}! Current root: {:?}",
-                    epoch, round, self.observer_block_data.lock().root()
+                    synced_epoch, synced_round, block_data_root
                 ))
             );
             self.state_sync_manager.clear_active_commit_sync();
             return;
         }
 
-        // If the epoch has changed, end the current epoch and start the latest one
+        // Otherwise, the commit sync notification matches the block data root.
+        // If the epoch has changed, end the current epoch and start the latest one.
         let current_epoch_state = self.get_epoch_state();
-        if epoch > current_epoch_state.epoch {
+        if synced_epoch > current_epoch_state.epoch {
             // Wait for the latest epoch to start
             self.execution_client.end_epoch().await;
             self.wait_for_epoch_start().await;
@@ -1086,13 +1093,10 @@ impl ConsensusObserver {
                 None, // fast_rand_config
                 rand_msg_rx,
                 0, // highest_committed_round
-                self.observer_epoch_state.pipeline_enabled(),
                 None, // Consensus observer doesn't use virtual genesis
             )
             .await;
-        if self.pipeline_enabled() {
-            self.pipeline_builder = Some(self.execution_client.pipeline_builder(signer))
-        }
+        self.pipeline_builder = Some(self.execution_client.pipeline_builder(signer));
     }
 
     /// Starts the consensus observer loop that processes incoming
@@ -1137,11 +1141,6 @@ impl ConsensusObserver {
         // Log the exit of the consensus observer loop
         error!(LogSchema::new(LogEntry::ConsensusObserver)
             .message("The consensus observer loop exited unexpectedly!"));
-    }
-
-    /// Returns whether the pipeline is enabled
-    pub fn pipeline_enabled(&self) -> bool {
-        self.observer_epoch_state.pipeline_enabled()
     }
 
     /// Returns the builder, should only be called if pipeline is enabled

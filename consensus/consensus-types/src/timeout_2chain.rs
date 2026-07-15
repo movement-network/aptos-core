@@ -140,28 +140,34 @@ impl TwoChainTimeoutCertificate {
     /// 2. all signatures are properly formed (timeout.epoch, timeout.round, round)
     /// 3. timeout.hqc_round == max(signed round)
     pub fn verify(&self, validators: &ValidatorVerifier) -> anyhow::Result<()> {
-        // Verify the highest timeout validity.
-        self.timeout.verify(validators)?;
         let hqc_round = self.timeout.hqc_round();
-        let timeout_messages: Vec<_> = self
-            .signatures_with_rounds
-            .get_voters_and_rounds(
-                &validators
-                    .get_ordered_account_addresses_iter()
-                    .collect_vec(),
-            )
-            .into_iter()
-            .map(|(_, round)| TimeoutSigningRepr {
-                epoch: self.timeout.epoch(),
-                round: self.timeout.round(),
-                hqc_round: round,
-            })
-            .collect();
-        let timeout_messages_ref: Vec<_> = timeout_messages.iter().collect();
-        validators.verify_aggregate_signatures(
-            &timeout_messages_ref,
-            self.signatures_with_rounds.sig(),
-        )?;
+        // Verify the highest timeout validity.
+        let (timeout_result, sig_result) = rayon::join(
+            || self.timeout.verify(validators),
+            || {
+                let timeout_messages: Vec<_> = self
+                    .signatures_with_rounds
+                    .get_voters_and_rounds(
+                        &validators
+                            .get_ordered_account_addresses_iter()
+                            .collect_vec(),
+                    )
+                    .into_iter()
+                    .map(|(_, round)| TimeoutSigningRepr {
+                        epoch: self.timeout.epoch(),
+                        round: self.timeout.round(),
+                        hqc_round: round,
+                    })
+                    .collect();
+                let timeout_messages_ref: Vec<_> = timeout_messages.iter().collect();
+                validators.verify_aggregate_signatures(
+                    &timeout_messages_ref,
+                    self.signatures_with_rounds.sig(),
+                )
+            },
+        );
+        timeout_result?;
+        sig_result?;
         let signed_hqc = self
             .signatures_with_rounds
             .rounds()
@@ -230,7 +236,7 @@ impl TwoChainTimeoutWithPartialSignatures {
 
     /// Returns the signatures certifying the round
     pub fn signers(&self) -> impl Iterator<Item = &Author> {
-        self.signatures.signatures().iter().map(|(k, _)| k)
+        self.signatures.signatures().keys()
     }
 
     /// Add a new timeout message from author, the timeout should already be verified in upper layer.

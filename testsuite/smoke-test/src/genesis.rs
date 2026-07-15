@@ -99,7 +99,7 @@ async fn test_fullnode_genesis_transaction_flow() {
     let first_validator_storage_dir = first_validator_config.storage.dir();
     let output = Command::new(aptos_debugger.as_path())
         .current_dir(workspace_root())
-        .args(&vec![
+        .args(vec![
             "aptos-db",
             "bootstrap",
             first_validator_storage_dir.to_str().unwrap(),
@@ -236,7 +236,7 @@ async fn test_validator_genesis_transaction_and_db_restore_flow() {
     let first_validator_storage_dir = first_validator_config.storage.dir();
     let output = Command::new(aptos_debugger.as_path())
         .current_dir(workspace_root())
-        .args(&vec![
+        .args(vec![
             "aptos-db",
             "bootstrap",
             first_validator_storage_dir.to_str().unwrap(),
@@ -373,18 +373,7 @@ async fn delete_db_and_execute_restore(
     fs::remove_dir_all(&db_dir).unwrap();
 
     // Perform a DB restore on the specified validator
-    let enable_storage_sharding = validator
-        .config()
-        .storage
-        .rocksdb_configs
-        .enable_storage_sharding;
-    db_restore(
-        backup_path.path(),
-        db_dir.as_path(),
-        &[waypoint],
-        enable_storage_sharding,
-        None,
-    );
+    db_restore(backup_path.path(), db_dir.as_path(), &[waypoint], None);
 
     // Restart the validator and wait for it to become healthy
     validator.start().unwrap();
@@ -484,7 +473,7 @@ fn generate_genesis_transaction(
     // Generate the genesis write-set transaction
     Command::new(aptos_cli.as_path())
         .current_dir(workspace_root())
-        .args(&vec![
+        .args(vec![
             "genesis",
             "generate-admin-write-set",
             "--output-file",

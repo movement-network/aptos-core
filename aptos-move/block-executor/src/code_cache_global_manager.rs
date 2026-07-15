@@ -4,10 +4,12 @@
 use crate::{
     code_cache_global::GlobalModuleCache,
     counters::{
-        GLOBAL_MODULE_CACHE_NUM_MODULES, GLOBAL_MODULE_CACHE_SIZE_IN_BYTES,
-        STRUCT_NAME_INDEX_MAP_NUM_ENTRIES,
+        GLOBAL_LAYOUT_CACHE_NUM_NON_ENTRIES, GLOBAL_MODULE_CACHE_NUM_MODULES,
+        GLOBAL_MODULE_CACHE_SIZE_IN_BYTES, NUM_INTERNED_MODULE_IDS, NUM_INTERNED_TYPES,
+        NUM_INTERNED_TYPE_VECS, STRUCT_NAME_INDEX_MAP_NUM_ENTRIES,
     },
 };
+use aptos_gas_schedule::gas_feature_versions::RELEASE_V1_34;
 use aptos_types::{
     block_executor::{
         config::BlockExecutorModuleCacheLocalConfig,
@@ -28,7 +30,7 @@ use move_binary_format::{
 use move_core_types::{
     account_address::AccountAddress, ident_str, language_storage::ModuleId, vm_status::VMStatus,
 };
-use move_vm_runtime::{Module, ModuleStorage, WithRuntimeEnvironment};
+use move_vm_runtime::{Module, ModuleStorage, RuntimeEnvironment, WithRuntimeEnvironment};
 use move_vm_types::code::WithSize;
 use parking_lot::{Mutex, MutexGuard};
 use std::{hash::Hash, ops::Deref, sync::Arc};
@@ -47,6 +49,13 @@ macro_rules! alert_or_println {
         }
     };
 }
+
+#[cfg(fuzzing)]
+/// This snapshot of the global module cache for fuzzing allows comparison of parallel and sequential
+/// executions of the same block. It captures the cache state before the block is executed for the first
+/// time and rolls it back afterwards.
+pub type ModuleHotCacheSnapshot =
+    GlobalModuleCache<ModuleId, CompiledModule, Module, AptosModuleExtension>;
 
 /// Manages module caches and the execution environment, possibly across multiple blocks.
 pub struct ModuleCacheManager<K, D, V, E> {
@@ -105,12 +114,24 @@ where
         // different, we reset it to the new one, and flush the module cache.
         let environment_requires_update = self.environment.as_ref() != Some(&storage_environment);
         if environment_requires_update {
+            if storage_environment.gas_feature_version() >= RELEASE_V1_34 {
+                let flush_verifier_cache = self.environment.as_ref().is_none_or(|e| {
+                    e.verifier_config_bytes() != storage_environment.verifier_config_bytes()
+                });
+                if flush_verifier_cache {
+                    // Additionally, if the verifier config changes, we flush static verifier cache
+                    // as well.
+                    RuntimeEnvironment::flush_verified_module_cache();
+                }
+            }
+
             self.environment = Some(storage_environment);
             self.module_cache.flush();
         }
 
         let environment = self.environment.as_ref().expect("Environment must be set");
         let runtime_environment = environment.runtime_environment();
+        RuntimeEnvironment::log_verified_cache_size();
 
         let struct_name_index_map_size = runtime_environment
             .struct_name_index_map_size()
@@ -120,7 +141,27 @@ where
         // If the environment caches too many struct names, flush type caches. Also flush module
         // caches because they contain indices for struct names.
         if struct_name_index_map_size > config.max_struct_name_index_map_num_entries {
-            runtime_environment.flush_struct_name_and_tag_caches();
+            runtime_environment.flush_all_caches();
+            self.module_cache.flush();
+        }
+
+        let num_interned_tys = runtime_environment.ty_pool().num_interned_tys();
+        NUM_INTERNED_TYPES.set(num_interned_tys as i64);
+        let num_interned_ty_vecs = runtime_environment.ty_pool().num_interned_ty_vecs();
+        NUM_INTERNED_TYPE_VECS.set(num_interned_ty_vecs as i64);
+        let num_interned_module_ids = runtime_environment.module_id_pool().len();
+        NUM_INTERNED_MODULE_IDS.set(num_interned_module_ids as i64);
+
+        if num_interned_tys > config.max_interned_tys
+            || num_interned_ty_vecs > config.max_interned_ty_vecs
+        {
+            runtime_environment.ty_pool().flush();
+            self.module_cache.flush();
+        }
+
+        if num_interned_module_ids > config.max_interned_module_ids {
+            runtime_environment.module_id_pool().flush();
+            runtime_environment.struct_name_index_map().flush();
             self.module_cache.flush();
         }
 
@@ -131,6 +172,12 @@ where
         // If module cache stores too many modules, flush it as well.
         if module_cache_size_in_bytes > config.max_module_cache_size_in_bytes {
             self.module_cache.flush();
+        }
+
+        let num_non_generic_layout_entries = self.module_cache.num_cached_layouts();
+        GLOBAL_LAYOUT_CACHE_NUM_NON_ENTRIES.set(num_non_generic_layout_entries as i64);
+        if num_non_generic_layout_entries > config.max_layout_cache_size {
+            self.module_cache.flush_layout_cache();
         }
 
         Ok(())
@@ -276,6 +323,20 @@ impl AptosModuleCacheManagerGuard<'_> {
             module_cache: GlobalModuleCache::empty(),
         }
     }
+
+    /// Takes a shallow snapshot of the current global module cache (hot cache).
+    /// Only available under fuzzing. The snapshot shares underlying Arc module code.
+    #[cfg(fuzzing)]
+    pub fn snapshot_hot_cache(&self) -> ModuleHotCacheSnapshot {
+        self.module_cache().clone_for_fuzzing()
+    }
+
+    /// Rolls back the global module cache to a previously captured snapshot.
+    /// Only available under fuzzing.
+    #[cfg(fuzzing)]
+    pub fn rollback_hot_cache(&mut self, snapshot: ModuleHotCacheSnapshot) {
+        *self.module_cache_mut() = snapshot;
+    }
 }
 
 /// If Aptos framework exists, loads "transaction_validation.move" and all its transitive
@@ -287,17 +348,20 @@ fn prefetch_aptos_framework(
 ) -> Result<(), PanicError> {
     let code_storage = state_view.as_aptos_code_storage(guard.environment());
 
+    // INVARIANT:
+    //   If framework code exists in storage, the transitive closure will be verified and cached to
+    //   avoid cold starts. From metering perspective, all modules are at special addresses, so we
+    //   do not need to meter anything.
     cfg_if! {
         if #[cfg(fuzzing)] {
-            let maybe_loaded = code_storage.fetch_module_skip_verification(
-                &AccountAddress::ONE,
-                ident_str!("transaction_validation"),
-            ).map_err(|err| {
-                PanicError::CodeInvariantError(format!("Unable to fetch Aptos framework: {:?}", err))
-            })?;
+            let maybe_loaded = code_storage
+                .unmetered_get_module_skip_verification(&AccountAddress::ONE, ident_str!("transaction_validation"))
+                .map_err(|err| {
+                    PanicError::CodeInvariantError(format!("Unable to fetch Aptos framework: {:?}", err))
+                })?;
         } else {
             let maybe_loaded = code_storage
-                .fetch_verified_module(&AccountAddress::ONE, ident_str!("transaction_validation"))
+                .unmetered_get_eagerly_verified_module(&AccountAddress::ONE, ident_str!("transaction_validation"))
                 .map_err(|err| {
                     PanicError::CodeInvariantError(format!("Unable to fetch Aptos framework: {:?}", err))
                 })?;
@@ -364,15 +428,17 @@ mod test {
         V: Deref<Target = Arc<D>>,
         E: WithSize,
     {
-        assert_ok!(manager
-            .environment
-            .as_mut()
-            .unwrap()
-            .runtime_environment()
-            .struct_name_to_idx_for_test(StructIdentifier {
-                module: ModuleId::new(AccountAddress::ZERO, Identifier::new("m").unwrap()),
-                name: Identifier::new(name).unwrap()
-            }));
+        let runtime_environment = manager.environment.as_mut().unwrap().runtime_environment();
+
+        let module_id = ModuleId::new(AccountAddress::ZERO, Identifier::new("m").unwrap());
+
+        assert_ok!(
+            runtime_environment.struct_name_to_idx_for_test(StructIdentifier::new(
+                runtime_environment.module_id_pool(),
+                module_id,
+                Identifier::new(name).unwrap()
+            ))
+        );
     }
 
     fn assert_struct_name_index_map_size_eq<K, D, V, E>(
@@ -422,6 +488,10 @@ mod test {
             prefetch_framework_code: false,
             max_module_cache_size_in_bytes: 32,
             max_struct_name_index_map_num_entries: 2,
+            max_interned_tys: 100,
+            max_interned_ty_vecs: 100,
+            max_layout_cache_size: 10,
+            max_interned_module_ids: 100,
         };
 
         // Populate the cache for testing.
@@ -601,5 +671,49 @@ mod test {
         }
         let sum = handles.into_iter().map(|h| h.join().unwrap()).sum::<i32>();
         assert_eq!(sum, 1);
+    }
+
+    #[cfg(fuzzing)]
+    #[test]
+    fn test_snapshot_and_rollback_hot_cache() {
+        use std::sync::Arc;
+        // Use a real state with framework so we can populate the hot cache with verified modules
+        let state_view = InMemoryStateStore::from_head_genesis();
+        let mut guard = AptosModuleCacheManagerGuard::none_for_state_view(&state_view);
+
+        // Prefetch Aptos framework into the hot cache
+        assert!(prefetch_aptos_framework(&state_view, &mut guard).is_ok());
+        assert!(guard.module_cache().num_modules() > 0);
+
+        let snapshot = guard.snapshot_hot_cache();
+        let size_before = guard.module_cache().size_in_bytes();
+        let count_before = guard.module_cache().num_modules();
+
+        // Mutate: mark a known framework module as overridden
+        let tx_val_id = ModuleId::new(
+            AccountAddress::ONE,
+            Identifier::new("transaction_validation").unwrap(),
+        );
+        // Ensure it's present before mutation
+        let module = guard
+            .module_cache()
+            .get(&tx_val_id)
+            .expect("module present");
+        guard.module_cache_mut().flush();
+        assert!(guard.module_cache().get(&tx_val_id).is_none());
+
+        assert_ne!(guard.module_cache().size_in_bytes(), size_before);
+        assert_ne!(guard.module_cache().num_modules(), count_before);
+
+        // Rollback and verify restored state
+        guard.rollback_hot_cache(snapshot);
+
+        assert_eq!(guard.module_cache().size_in_bytes(), size_before);
+        assert_eq!(guard.module_cache().num_modules(), count_before);
+        let got = guard
+            .module_cache()
+            .get(&tx_val_id)
+            .expect("module present");
+        assert!(Arc::ptr_eq(&got, &module));
     }
 }

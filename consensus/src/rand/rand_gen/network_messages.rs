@@ -161,7 +161,7 @@ mod tests {
     use aptos_consensus_types::common::Author;
     use aptos_crypto::{bls12381, Uniform};
     use aptos_dkg::{
-        pvss::{traits::Transcript, Player, WeightedConfig},
+        pvss::{traits::Transcript, Player, WeightedConfigBlstrs},
         weighted_vuf::traits::WeightedVUF,
     };
     use aptos_types::{
@@ -253,6 +253,7 @@ mod tests {
             &input,
             0,
             &bundles[0].bls_sk,
+            &bundles[0].bls_pk,
         );
 
         // Pull this validator's secret WVUF share, then augment it.
@@ -281,10 +282,10 @@ mod tests {
         }
     }
 
-    fn weighted_threshold_config(weights: &[u64]) -> WeightedConfig {
+    fn weighted_threshold_config(weights: &[u64]) -> WeightedConfigBlstrs {
         let usize_weights: Vec<usize> = weights.iter().map(|w| *w as usize).collect();
         let total: usize = usize_weights.iter().sum();
-        WeightedConfig::new(total / 2, usize_weights).unwrap()
+        WeightedConfigBlstrs::new(total / 2, usize_weights).unwrap()
     }
 
     /// Minimal fixture for exercising `RandMessage::verify`. The cryptographic

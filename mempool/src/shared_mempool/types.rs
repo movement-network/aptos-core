@@ -10,7 +10,7 @@ use crate::{
 };
 use anyhow::Result;
 use aptos_config::{
-    config::{MempoolConfig, NodeType},
+    config::{MempoolConfig, NodeType, TransactionFilterConfig},
     network_id::PeerNetworkId,
 };
 use aptos_consensus_types::common::{
@@ -56,6 +56,7 @@ pub(crate) struct SharedMempool<NetworkClient, TransactionValidator> {
     pub subscribers: Vec<UnboundedSender<SharedMempoolNotification>>,
     pub broadcast_within_validator_network: Arc<RwLock<bool>>,
     pub use_case_history: Arc<Mutex<UseCaseHistory>>,
+    pub transaction_filter_config: TransactionFilterConfig,
 }
 
 impl<
@@ -66,6 +67,7 @@ impl<
     pub fn new(
         mempool: Arc<Mutex<CoreMempool>>,
         config: MempoolConfig,
+        transaction_filter_config: TransactionFilterConfig,
         network_client: NetworkClient,
         db: Arc<dyn DbReader>,
         validator: Arc<RwLock<TransactionValidator>>,
@@ -87,6 +89,7 @@ impl<
             subscribers,
             broadcast_within_validator_network: Arc::new(RwLock::new(true)),
             use_case_history: Arc::new(Mutex::new(use_case_history)),
+            transaction_filter_config,
         }
     }
 
@@ -280,24 +283,6 @@ impl PeerSyncState {
                 timeline.update(batch_id);
             }
         }
-    }
-}
-
-/// Identifier for a broadcasted batch of txns.
-/// For BatchId(`start_id`, `end_id`), (`start_id`, `end_id`) is the range of timeline IDs read from
-/// the core mempool timeline index that produced the txns in this batch.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
-struct BatchId(pub u64, pub u64);
-
-impl PartialOrd for BatchId {
-    fn partial_cmp(&self, other: &BatchId) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for BatchId {
-    fn cmp(&self, other: &BatchId) -> std::cmp::Ordering {
-        (other.0, other.1).cmp(&(self.0, self.1))
     }
 }
 

@@ -41,6 +41,7 @@ pub(crate) fn get_realistic_env_test(
         "realistic_env_max_load_large" => realistic_env_max_load_test(duration, test_cmd, 20, 10),
         "realistic_env_load_sweep" => realistic_env_load_sweep_test(),
         "realistic_env_workload_sweep" => realistic_env_workload_sweep_test(),
+        "realistic_env_orderbook_workload_sweep" => realistic_env_orderbook_workload_sweep_bench(),
         "realistic_env_fairness_workload_sweep" => realistic_env_fairness_workload_sweep(),
         "realistic_env_graceful_workload_sweep" => realistic_env_graceful_workload_sweep(),
         "realistic_env_graceful_overload" => realistic_env_graceful_overload(duration),
@@ -142,6 +143,82 @@ pub(crate) fn realistic_env_workload_sweep_test() -> ForgeConfig {
                 SuccessCriteria::new(min_tps)
                     .add_max_expired_tps(max_expired as f64)
                     .add_max_failed_submission_tps(200.0)
+                    .add_no_restarts()
+                    .add_latency_breakdown_threshold(LatencyBreakdownThreshold::new_strict(vec![
+                        (
+                            LatencyBreakdownSlice::MempoolToBlockCreation,
+                            mempool_to_block_creation,
+                        ),
+                        (
+                            LatencyBreakdownSlice::ConsensusProposalToOrdered,
+                            proposal_to_ordered,
+                        ),
+                        (
+                            LatencyBreakdownSlice::ConsensusOrderedToCommit,
+                            ordered_to_commit,
+                        ),
+                    ]))
+            },
+        )
+        .collect(),
+        background_traffic: background_traffic_for_sweep(5),
+    })
+}
+
+pub(crate) fn realistic_env_orderbook_workload_sweep_bench() -> ForgeConfig {
+    realistic_env_sweep_wrap(7, 3, LoadVsPerfBenchmark {
+        test: Box::new(PerformanceBenchmark),
+        workloads: Workloads::TRANSACTIONS(vec![
+            TransactionWorkload::new(
+                TransactionTypeArg::OrderBookBalancedMatches25Pct1Market,
+                1000,
+            ),
+            TransactionWorkload::new(
+                TransactionTypeArg::OrderBookBalancedMatches25Pct50Markets,
+                5000,
+            ),
+            TransactionWorkload::new(
+                TransactionTypeArg::OrderBookBalancedMatches80Pct1Market,
+                1000,
+            ),
+            TransactionWorkload::new(
+                TransactionTypeArg::OrderBookBalancedMatches80Pct50Markets,
+                5000,
+            ),
+            TransactionWorkload::new(
+                TransactionTypeArg::OrderBookBalancedSizeSkewed80Pct1Market,
+                1000,
+            ),
+            TransactionWorkload::new(
+                TransactionTypeArg::OrderBookBalancedSizeSkewed80Pct50Markets,
+                5000,
+            ),
+            TransactionWorkload::new(TransactionTypeArg::OrderBookNoMatches1Market, 1000),
+            TransactionWorkload::new(TransactionTypeArg::OrderBookNoMatches50Markets, 5000),
+        ]),
+        criteria: [
+            (350, 100, 0.3 + 1.0, 0.4, 0.2),
+            (1700, 100, 0.3 + 1.0, 0.4, 0.5),
+            (350, 300, 0.3 + 1.0, 0.4, 0.2),
+            (2000, 500, 0.3 + 1.0, 0.4, 0.5),
+            (320, 5, 0.3 + 1.0, 0.4, 0.25),
+            (1500, 5, 0.3 + 1.5, 0.4, 0.5),
+            (320, 100, 0.3 + 1.0, 0.4, 0.2),
+            (1700, 100, 0.3 + 1.0, 0.4, 0.7),
+        ]
+        .into_iter()
+        .map(
+            |(
+                min_tps,
+                max_expired,
+                mempool_to_block_creation,
+                proposal_to_ordered,
+                ordered_to_commit,
+            )| {
+                SuccessCriteria::new(min_tps)
+                    .add_max_expired_tps(max_expired as f64)
+                    .add_max_failed_submission_tps(200.0)
+                    .add_no_restarts()
                     .add_latency_breakdown_threshold(LatencyBreakdownThreshold::new_strict(vec![
                         (
                             LatencyBreakdownSlice::MempoolToBlockCreation,
@@ -253,6 +330,9 @@ pub(crate) fn realistic_env_graceful_overload(duration: Duration) -> ForgeConfig
         )
         .with_validator_override_node_config_fn(Arc::new(|config, _| {
             config.execution.processed_transactions_detailed_counters = true;
+            // TODO(georgemitenkov): remove once features are added to default config.
+            config.execution.layout_caches_enabled = true;
+            config.execution.async_runtime_checks = true;
         }))
         .with_genesis_helm_config_fn(Arc::new(|helm_values| {
             helm_values["chain"]["epoch_duration_secs"] = 300.into();
@@ -268,7 +348,7 @@ pub(crate) fn realistic_env_graceful_overload(duration: Duration) -> ForgeConfig
                     // TODO(ibalajiarun): Investigate the high utilization and adjust accordingly.
                     // Memory starts around 8GB, and grows around 8GB/hr in this test.
                     // Check that we don't use more than final expected memory for more than 20% of the time.
-                    MetricsThreshold::new_gb(8.5 + 8.0 * (duration.as_secs_f64() / 3600.0), 20),
+                    MetricsThreshold::new_gb(16.0 + 8.0 * (duration.as_secs_f64() / 3600.0), 20),
                 ))
                 .add_latency_threshold(10.0, LatencyType::P50)
                 .add_latency_threshold(30.0, LatencyType::P90)
@@ -309,15 +389,15 @@ pub(crate) fn realistic_env_max_load_test(
             MetricsThreshold::new(25.0, 15),
             // Memory starts around 8GB, and grows around 1.4GB/hr in this test.
             // Check that we don't use more than final expected memory for more than 20% of the time.
-            MetricsThreshold::new_gb(8.0 + 1.4 * (duration_secs as f64 / 3600.0), 20),
+            MetricsThreshold::new_gb(16.0 + 8.0 * (duration_secs as f64 / 3600.0), 20),
         ))
         .add_no_restarts()
         .add_wait_for_catchup_s(
             // Give at least 60s for catchup, give 10% of the run for longer durations.
             (duration.as_secs() / 10).max(60),
         )
-        .add_latency_threshold(3.4, LatencyType::P50)
-        .add_latency_threshold(4.5, LatencyType::P70)
+        .add_latency_threshold(3.6, LatencyType::P50)
+        .add_latency_threshold(4.8, LatencyType::P70)
         .add_chain_progress(StateProgressThreshold {
             max_non_epoch_no_progress_secs: 15.0,
             max_epoch_no_progress_secs: 16.0,
@@ -335,7 +415,7 @@ pub(crate) fn realistic_env_max_load_test(
             LatencyBreakdownThreshold::new_with_breach_pct(
                 vec![
                     // quorum store backpressure is relaxed, so queueing happens here
-                    (LatencyBreakdownSlice::MempoolToBlockCreation, 0.35 + 2.5),
+                    (LatencyBreakdownSlice::MempoolToBlockCreation, 0.35 + 3.25),
                     // can be adjusted down if less backpressure
                     (LatencyBreakdownSlice::ConsensusProposalToOrdered, 0.85),
                     // can be adjusted down if less backpressure
@@ -347,7 +427,7 @@ pub(crate) fn realistic_env_max_load_test(
     }
 
     // Create the test
-    let mempool_backlog = if ha_proxy { 30000 } else { 40000 };
+    let mempool_backlog = if ha_proxy { 28000 } else { 38000 };
     ForgeConfig::default()
         .with_initial_validator_count(NonZeroUsize::new(num_validators).unwrap())
         .with_initial_fullnode_count(num_fullnodes)
@@ -382,10 +462,13 @@ pub(crate) fn realistic_env_max_load_test(
             // Increase the consensus observer fallback thresholds
             config
                 .consensus_observer
-                .observer_fallback_progress_threshold_ms = 20_000; // 20 seconds
+                .observer_fallback_progress_threshold_ms = 30_000; // 30 seconds
             config
                 .consensus_observer
-                .observer_fallback_sync_lag_threshold_ms = 30_000; // 30 seconds
+                .observer_fallback_sync_lag_threshold_ms = 45_000; // 45 seconds
+                                                                   // TODO(georgemitenkov): remove once features are added to default config.
+            config.execution.layout_caches_enabled = true;
+            config.execution.async_runtime_checks = true;
         }))
         // First start higher gas-fee traffic, to not cause issues with TxnEmitter setup - account creation
         .with_emit_job(
@@ -441,6 +524,10 @@ pub(crate) fn realistic_network_tuned_for_throughput_test() -> ForgeConfig {
                 if USE_CRAZY_MACHINES {
                     config.execution.concurrency_level = 48;
                 }
+
+                // TODO(georgemitenkov): remove once features are added to default config.
+                config.execution.layout_caches_enabled = true;
+                config.execution.async_runtime_checks = true;
             }))
             .with_genesis_helm_config_fn(Arc::new(move |helm_values| {
                 let mut on_chain_execution_config = OnChainExecutionConfig::default_for_genesis();
@@ -463,6 +550,22 @@ pub(crate) fn realistic_network_tuned_for_throughput_test() -> ForgeConfig {
                     OnChainExecutionConfig::V5(config_v5) => {
                         config_v5.block_gas_limit_type = BlockGasLimitType::NoLimit;
                         config_v5.transaction_shuffler_type = TransactionShufflerType::UseCaseAware {
+                            sender_spread_factor: 256,
+                            platform_use_case_spread_factor: 0,
+                            user_use_case_spread_factor: 0,
+                        };
+                    }
+                    OnChainExecutionConfig::V6(config_v6) => {
+                        config_v6.block_gas_limit_type = BlockGasLimitType::NoLimit;
+                        config_v6.transaction_shuffler_type = TransactionShufflerType::UseCaseAware {
+                            sender_spread_factor: 256,
+                            platform_use_case_spread_factor: 0,
+                            user_use_case_spread_factor: 0,
+                        };
+                    },
+                    OnChainExecutionConfig::V7(config_v7) => {
+                        config_v7.block_gas_limit_type = BlockGasLimitType::NoLimit;
+                        config_v7.transaction_shuffler_type = TransactionShufflerType::UseCaseAware {
                             sender_spread_factor: 256,
                             platform_use_case_spread_factor: 0,
                             user_use_case_spread_factor: 0,

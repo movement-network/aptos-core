@@ -5,12 +5,11 @@ use crate::{assert_success, AptosPackageHooks};
 use aptos_cached_packages::aptos_stdlib;
 use aptos_framework::{natives::code::PackageMetadata, BuildOptions, BuiltPackage};
 use aptos_gas_profiling::TransactionGasLog;
-use aptos_gas_schedule::{
-    AptosGasParameters, FromOnChainGasSchedule, InitialGasSchedule, ToOnChainGasSchedule,
-};
+use aptos_gas_schedule::{AptosGasParameters, FromOnChainGasSchedule, ToOnChainGasSchedule};
 use aptos_language_e2e_tests::{
     account::{Account, TransactionBuilder},
-    executor::FakeExecutor,
+    executor::FakeExecutorImpl,
+    golden_outputs::{GoldenOutputs, NoOutputLogger, OutputLogger},
 };
 use aptos_rest_client::AptosBaseUrl;
 use aptos_transaction_simulation::SimulationStateStore;
@@ -30,9 +29,9 @@ use aptos_types::{
         state_value::{StateValue, StateValueMetadata},
     },
     transaction::{
-        EntryFunction, Multisig, MultisigTransactionPayload, Script, SignedTransaction,
-        TransactionArgument, TransactionOutput, TransactionPayload, TransactionStatus,
-        ViewFunctionOutput,
+        AuxiliaryInfo, EntryFunction, Multisig, MultisigTransactionPayload, Script,
+        SignedTransaction, TransactionArgument, TransactionOutput, TransactionPayload,
+        TransactionStatus, ViewFunctionOutput,
     },
     AptosCoinType,
 };
@@ -40,7 +39,6 @@ use claims::assert_ok;
 use move_core_types::{
     language_storage::{StructTag, TypeTag},
     move_resource::MoveStructType,
-    value::MoveValue,
 };
 use move_package::package_hooks::register_package_hooks;
 use once_cell::sync::Lazy;
@@ -76,15 +74,21 @@ static CACHED_BUILT_PACKAGES: Lazy<Mutex<HashMap<PathBuf, Arc<anyhow::Result<Bui
 /// NOTE: This harness currently is a wrapper around existing legacy e2e testing infra. We
 /// eventually plan to retire the legacy code, and are rather keen to know what of the legacy
 /// test infra we want to maintain and also which existing tests to preserve.
-pub struct MoveHarness {
+pub struct MoveHarnessImpl<O: OutputLogger> {
     /// The executor being used.
-    pub executor: FakeExecutor,
+    pub executor: FakeExecutorImpl<O>,
     /// The last counted transaction sequence number, by account address.
     txn_seq_no: BTreeMap<AccountAddress, u64>,
 
     pub default_gas_unit_price: u64,
     pub max_gas_per_txn: u64,
 }
+
+pub type MoveHarness = MoveHarnessImpl<GoldenOutputs>;
+
+// MoveHarness variant that is Send: can be used in async context/across threads,
+// without GoldenFiles (which are not Send)
+pub type MoveHarnessSend = MoveHarnessImpl<NoOutputLogger>;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum BlockSplit {
@@ -93,21 +97,21 @@ pub enum BlockSplit {
     SplitIntoThree { first_len: usize, second_len: usize },
 }
 
-impl MoveHarness {
+impl<O: OutputLogger> MoveHarnessImpl<O> {
     const DEFAULT_MAX_GAS_PER_TXN: u64 = 2_000_000;
 
     /// Creates a new harness.
     pub fn new() -> Self {
         register_package_hooks(Box::new(AptosPackageHooks {}));
         Self {
-            executor: FakeExecutor::from_head_genesis(),
+            executor: FakeExecutorImpl::from_head_genesis(),
             txn_seq_no: BTreeMap::default(),
             default_gas_unit_price: DEFAULT_GAS_UNIT_PRICE,
             max_gas_per_txn: Self::DEFAULT_MAX_GAS_PER_TXN,
         }
     }
 
-    pub fn new_with_executor(executor: FakeExecutor) -> Self {
+    pub fn new_with_executor(executor: FakeExecutorImpl<O>) -> Self {
         register_package_hooks(Box::new(AptosPackageHooks {}));
         Self {
             executor,
@@ -120,7 +124,7 @@ impl MoveHarness {
     pub fn new_with_validators(count: u64) -> Self {
         register_package_hooks(Box::new(AptosPackageHooks {}));
         Self {
-            executor: FakeExecutor::from_head_genesis_with_count(count),
+            executor: FakeExecutorImpl::from_head_genesis_with_count(count),
             txn_seq_no: BTreeMap::default(),
             default_gas_unit_price: DEFAULT_GAS_UNIT_PRICE,
             max_gas_per_txn: Self::DEFAULT_MAX_GAS_PER_TXN,
@@ -130,7 +134,7 @@ impl MoveHarness {
     pub fn new_testnet() -> Self {
         register_package_hooks(Box::new(AptosPackageHooks {}));
         Self {
-            executor: FakeExecutor::from_testnet_genesis(),
+            executor: FakeExecutorImpl::from_testnet_genesis(),
             txn_seq_no: BTreeMap::default(),
             default_gas_unit_price: DEFAULT_GAS_UNIT_PRICE,
             max_gas_per_txn: Self::DEFAULT_MAX_GAS_PER_TXN,
@@ -155,9 +159,9 @@ impl MoveHarness {
 
         let executor = match api_key {
             Some(api_key) => {
-                FakeExecutor::from_remote_state_with_api_key(network_url, txn_id, api_key)
+                FakeExecutorImpl::from_remote_state_with_api_key(network_url, txn_id, api_key)
             },
-            None => FakeExecutor::from_remote_state(network_url, txn_id),
+            None => FakeExecutorImpl::from_remote_state(network_url, txn_id),
         };
 
         let gas_schedule: GasScheduleV2 = executor.state_store().get_on_chain_config().unwrap();
@@ -199,10 +203,20 @@ impl MoveHarness {
         h
     }
 
+    pub fn new_with_lazy_loading(enable_lazy_loading: bool) -> Self {
+        let mut h = Self::new();
+        if enable_lazy_loading {
+            h.enable_features(vec![FeatureFlag::ENABLE_LAZY_LOADING], vec![]);
+        } else {
+            h.enable_features(vec![], vec![FeatureFlag::ENABLE_LAZY_LOADING]);
+        }
+        h
+    }
+
     pub fn new_mainnet() -> Self {
         register_package_hooks(Box::new(AptosPackageHooks {}));
         Self {
-            executor: FakeExecutor::from_mainnet_genesis(),
+            executor: FakeExecutorImpl::from_mainnet_genesis(),
             txn_seq_no: BTreeMap::default(),
             default_gas_unit_price: DEFAULT_GAS_UNIT_PRICE,
             max_gas_per_txn: Self::DEFAULT_MAX_GAS_PER_TXN,
@@ -280,6 +294,24 @@ impl MoveHarness {
     pub fn run_block(&mut self, txn_block: Vec<SignedTransaction>) -> Vec<TransactionStatus> {
         let mut result = vec![];
         for output in self.executor.execute_block(txn_block).unwrap() {
+            if matches!(output.status(), TransactionStatus::Keep(_)) {
+                self.executor.apply_write_set(output.write_set());
+            }
+            result.push(output.status().to_owned())
+        }
+        result
+    }
+
+    pub fn run_block_with_current_metadata(
+        &mut self,
+        txn_block: Vec<SignedTransaction>,
+    ) -> Vec<TransactionStatus> {
+        let mut result = vec![];
+        for output in self
+            .executor
+            .execute_block_with_current_metadata(txn_block)
+            .unwrap()
+        {
             if matches!(output.status(), TransactionStatus::Keep(_)) {
                 self.executor.apply_write_set(output.write_set());
             }
@@ -371,6 +403,11 @@ impl MoveHarness {
     /// Runs a transaction and return gas used.
     pub fn evaluate_gas(&mut self, account: &Account, payload: TransactionPayload) -> u64 {
         let txn = self.create_transaction_payload(account, payload);
+        self.evaluate_gas_signed(txn)
+    }
+
+    /// Runs a transaction and return gas used.
+    pub fn evaluate_gas_signed(&mut self, txn: SignedTransaction) -> u64 {
         let output = self.run_raw(txn);
         assert_success!(output.status().to_owned());
         output.gas_used()
@@ -383,9 +420,18 @@ impl MoveHarness {
         payload: TransactionPayload,
     ) -> (TransactionGasLog, u64, Option<FeeStatement>) {
         let txn = self.create_transaction_payload(account, payload);
+        self.evaluate_gas_with_profiler_signed(txn, &AuxiliaryInfo::default())
+    }
+
+    /// Runs a transaction with the gas profiler.
+    pub fn evaluate_gas_with_profiler_signed(
+        &mut self,
+        txn: SignedTransaction,
+        auxiliary_info: &AuxiliaryInfo,
+    ) -> (TransactionGasLog, u64, Option<FeeStatement>) {
         let (output, gas_log) = self
             .executor
-            .execute_transaction_with_gas_profiler(txn)
+            .execute_transaction_with_gas_profiler(txn, auxiliary_info)
             .unwrap();
         if matches!(output.status(), TransactionStatus::Keep(_)) {
             self.executor.apply_write_set(output.write_set());
@@ -701,7 +747,7 @@ impl MoveHarness {
         let txn = self.create_publish_package(account, path, None, |_| {});
         let (output, gas_log) = self
             .executor
-            .execute_transaction_with_gas_profiler(txn)
+            .execute_transaction_with_gas_profiler(txn, &AuxiliaryInfo::default())
             .unwrap();
         if matches!(output.status(), TransactionStatus::Keep(_)) {
             self.executor.apply_write_set(output.write_set());
@@ -884,62 +930,18 @@ impl MoveHarness {
     /// Enables features
     pub fn enable_features(&mut self, enabled: Vec<FeatureFlag>, disabled: Vec<FeatureFlag>) {
         let acc = self.aptos_framework_account();
-        let enabled = enabled.into_iter().map(|f| f as u64).collect::<Vec<_>>();
-        let disabled = disabled.into_iter().map(|f| f as u64).collect::<Vec<_>>();
         self.executor
-            .exec("features", "change_feature_flags_internal", vec![], vec![
-                MoveValue::Signer(*acc.address())
-                    .simple_serialize()
-                    .unwrap(),
-                bcs::to_bytes(&enabled).unwrap(),
-                bcs::to_bytes(&disabled).unwrap(),
-            ]);
-    }
-
-    fn override_one_gas_param(&mut self, param: &str, param_value: u64) {
-        // TODO: The AptosGasParameters::zeros() schedule doesn't do what we want, so
-        // explicitly manipulating gas entries. Wasn't obvious from the gas code how to
-        // do this differently then below, so perhaps improve this...
-        let entries = AptosGasParameters::initial()
-            .to_on_chain_gas_schedule(aptos_gas_schedule::LATEST_GAS_FEATURE_VERSION);
-        let entries = entries
-            .into_iter()
-            .map(|(name, val)| {
-                if name == param {
-                    (name, param_value)
-                } else {
-                    (name, val)
-                }
-            })
-            .collect::<Vec<_>>();
-        let gas_schedule = GasScheduleV2 {
-            feature_version: aptos_gas_schedule::LATEST_GAS_FEATURE_VERSION,
-            entries,
-        };
-        let schedule_bytes = bcs::to_bytes(&gas_schedule).expect("bcs");
-        let core_signer_arg = MoveValue::Signer(AccountAddress::ONE)
-            .simple_serialize()
-            .unwrap();
-        self.executor
-            .exec("gas_schedule", "set_for_next_epoch", vec![], vec![
-                core_signer_arg.clone(),
-                MoveValue::vector_u8(schedule_bytes)
-                    .simple_serialize()
-                    .unwrap(),
-            ]);
-        self.executor
-            .exec("aptos_governance", "force_end_epoch", vec![], vec![
-                core_signer_arg,
-            ]);
+            .enable_features(acc.address(), enabled, disabled);
     }
 
     pub fn modify_gas_scaling(&mut self, gas_scaling_factor: u64) {
-        self.override_one_gas_param("txn.gas_unit_scaling_factor", gas_scaling_factor);
+        self.executor.modify_gas_scaling(gas_scaling_factor);
     }
 
     /// Increase maximal transaction size.
     pub fn increase_transaction_size(&mut self) {
-        self.override_one_gas_param("txn.max_transaction_size_in_bytes", 1000 * 1024);
+        self.executor
+            .override_one_gas_param("txn.max_transaction_size_in_bytes", 1000 * 1024);
     }
 
     pub fn sequence_number_opt(&self, addr: &AccountAddress) -> Option<u64> {
@@ -1023,8 +1025,8 @@ impl MoveHarness {
         block_split: BlockSplit,
         txn_block: Vec<(u64, SignedTransaction)>,
     ) -> Vec<TransactionOutput> {
-        fn run_and_check_block(
-            harness: &mut MoveHarness,
+        fn run_and_check_block<O: OutputLogger>(
+            harness: &mut MoveHarnessImpl<O>,
             txn_block: Vec<(u64, SignedTransaction)>,
             offset: usize,
         ) -> Vec<TransactionOutput> {
@@ -1144,7 +1146,7 @@ macro_rules! enable_golden {
     };
 }
 
-impl MoveHarness {
+impl MoveHarnessImpl<GoldenOutputs> {
     /// Internal function to support the `enable_golden` macro.
     pub fn internal_set_golden(&mut self, file_macro_value: &str, function_macro_value: &str) {
         // The result of `std::file!` gives us a name relative to the project root,

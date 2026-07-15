@@ -178,7 +178,9 @@ pub fn make_proposal_with_parent_and_overrides(
     let qc = QuorumCert::new(
         vote_data,
         ledger_info_with_signatures
-            .aggregate_signatures(&generate_validator_verifier(&[validator_signer.clone()]))
+            .aggregate_signatures(&generate_validator_verifier(std::slice::from_ref(
+                validator_signer,
+            )))
             .unwrap(),
     );
 
@@ -213,7 +215,7 @@ pub fn make_timeout_cert(
     let signature = timeout.sign(signer).unwrap();
     tc_partial.add(signer.author(), timeout, signature);
     tc_partial
-        .aggregate_signatures(&generate_validator_verifier(&[signer.clone()]))
+        .aggregate_signatures(&generate_validator_verifier(std::slice::from_ref(signer)))
         .unwrap()
 }
 
@@ -248,7 +250,7 @@ pub fn test_safety_rules() -> SafetyRules {
     let storage = test_storage(&signer);
     let (epoch_change_proof, _) = make_genesis(&signer);
 
-    let mut safety_rules = SafetyRules::new(storage);
+    let mut safety_rules = SafetyRules::new(storage, false);
     safety_rules.initialize(&epoch_change_proof).unwrap();
     safety_rules
 }
@@ -257,7 +259,7 @@ pub fn test_safety_rules() -> SafetyRules {
 pub fn test_safety_rules_uninitialized() -> SafetyRules {
     let signer = ValidatorSigner::from_int(0);
     let storage = test_storage(&signer);
-    SafetyRules::new(storage)
+    SafetyRules::new(storage, false)
 }
 
 /// Returns a simple serializer for testing purposes.

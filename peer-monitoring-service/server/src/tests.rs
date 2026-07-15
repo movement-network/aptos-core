@@ -55,8 +55,8 @@ use aptos_types::{
         state_value::{StateValue, StateValueChunkWithProof},
     },
     transaction::{
-        AccountOrderedTransactionsWithProof, TransactionListWithProof,
-        TransactionOutputListWithProof, TransactionWithProof, Version,
+        AccountOrderedTransactionsWithProof, TransactionListWithProofV2,
+        TransactionOutputListWithProofV2, TransactionWithProof, Version,
     },
     PeerId,
 };
@@ -597,7 +597,7 @@ pub fn initialize_logger() {
 /// Returns a random network ID
 fn get_random_network_id() -> NetworkId {
     let mut rng = OsRng;
-    let random_number: u8 = rng.gen();
+    let random_number: u8 = rng.r#gen();
     match random_number % 3 {
         0 => NetworkId::Validator,
         1 => NetworkId::Vfn,
@@ -633,7 +633,7 @@ mod database_mock {
                 batch_size: u64,
                 ledger_version: Version,
                 fetch_events: bool,
-            ) -> Result<TransactionListWithProof>;
+            ) -> Result<TransactionListWithProofV2>;
 
             fn get_transaction_by_hash(
                 &self,
@@ -658,7 +658,7 @@ mod database_mock {
                 start_version: Version,
                 limit: u64,
                 ledger_version: Version,
-            ) -> Result<TransactionOutputListWithProof>;
+            ) -> Result<TransactionOutputListWithProofV2>;
 
             fn get_events(
                 &self,

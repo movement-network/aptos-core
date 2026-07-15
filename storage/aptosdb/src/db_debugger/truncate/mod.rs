@@ -68,9 +68,13 @@ impl Cmd {
             enable_storage_sharding: self.sharding_config.enable_storage_sharding,
             ..Default::default()
         };
+        let env = None;
+        let block_cache = None;
         let (ledger_db, state_merkle_db, state_kv_db) = AptosDB::open_dbs(
             &StorageDirPaths::from_path(&self.db_dir),
             rocksdb_config,
+            env,
+            block_cache,
             /*readonly=*/ false,
             /*max_num_nodes_per_lru_cache_shard=*/ 0,
         )?;
@@ -174,8 +178,9 @@ mod test {
         },
         utils::truncation_helper::num_frozen_nodes_in_accumulator,
     };
-    use aptos_storage_interface::{state_store::NUM_STATE_SHARDS, DbReader};
+    use aptos_storage_interface::DbReader;
     use aptos_temppath::TempPath;
+    use aptos_types::state_store::NUM_STATE_SHARDS;
     use proptest::prelude::*;
 
     proptest! {
@@ -226,10 +231,10 @@ mod test {
             prop_assert!(db_version <= target_version);
             target_version = db_version;
 
-            let txn_list_with_proof = db.get_transactions(0, db_version + 1, db_version, true).unwrap();
+            let txn_list_with_proof = db.get_transactions(0, db_version + 1, db_version, true).unwrap().into_parts().0;
             prop_assert_eq!(txn_list_with_proof.transactions.len() as u64, db_version + 1);
-            prop_assert_eq!(txn_list_with_proof.events.unwrap().len() as u64, db_version + 1);
-            prop_assert_eq!(txn_list_with_proof.first_transaction_version, Some(0));
+            prop_assert_eq!(txn_list_with_proof.clone().events.unwrap().len() as u64, db_version + 1);
+            prop_assert_eq!(txn_list_with_proof.get_first_transaction_version(), Some(0));
 
             let state_checkpoint_version = db.get_latest_state_checkpoint_version().unwrap().unwrap();
             let state_leaf_count = db.get_state_item_count(state_checkpoint_version).unwrap();
@@ -241,12 +246,16 @@ mod test {
 
             drop(db);
 
+            let env = None;
+            let block_cache = None;
             let (ledger_db, state_merkle_db, state_kv_db) = AptosDB::open_dbs(
                 &StorageDirPaths::from_path(tmp_dir.path()),
                 RocksdbConfigs {
                     enable_storage_sharding: input.1,
                     ..Default::default()
                 },
+                env,
+                block_cache,
                 /*readonly=*/ false,
                 /*max_num_nodes_per_lru_cache_shard=*/ 0,
             ).unwrap();
@@ -338,7 +347,7 @@ mod test {
 
             if sharding_config.enable_storage_sharding {
                 let state_merkle_db = Arc::new(state_merkle_db);
-                for i in 0..NUM_STATE_SHARDS as u8 {
+                for i in 0..NUM_STATE_SHARDS {
                     let mut kv_shard_iter = state_kv_db.db_shard(i).iter::<StateValueByKeyHashSchema>().unwrap();
                     kv_shard_iter.seek_to_first();
                     for item in kv_shard_iter {

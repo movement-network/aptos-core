@@ -4,6 +4,8 @@
 use crate::on_chain_config::BlockGasLimitType;
 use serde::{Deserialize, Serialize};
 
+const DEFAULT_GAS_PRICE_TO_BURN: u64 = 90;
+
 /// Local, per-node configurations for module cache. While caches can be persisted across multiple
 /// block executions, these configurations allow to specify cache sizes, etc.
 #[derive(Clone, Debug)]
@@ -16,6 +18,14 @@ pub struct BlockExecutorModuleCacheLocalConfig {
     /// The maximum size (in terms of entries) of struct name re-indexing map stored in the runtime
     /// environment.
     pub max_struct_name_index_map_num_entries: usize,
+    /// The maximum number of types to intern.
+    pub max_interned_tys: usize,
+    /// The maximum number of type vectors to intern.
+    pub max_interned_ty_vecs: usize,
+    /// The maximum number of layout entries.
+    pub max_layout_cache_size: usize,
+    /// The maximum number of module IDs to intern.
+    pub max_interned_module_ids: usize,
 }
 
 impl Default for BlockExecutorModuleCacheLocalConfig {
@@ -26,6 +36,14 @@ impl Default for BlockExecutorModuleCacheLocalConfig {
             // of writing this comment, 13.11.24).
             max_module_cache_size_in_bytes: 1024 * 1024 * 1024,
             max_struct_name_index_map_num_entries: 1_000_000,
+            // Each entry is 4 + 2 * 8 = 20 bytes. This allows ~200 Mb of distinct types.
+            max_interned_tys: 10 * 1024 * 1024,
+            // Use slightly less for vectors of types.
+            max_interned_ty_vecs: 4 * 1024 * 1024,
+            // Maximum number of cached layouts.
+            max_layout_cache_size: 4_000_000,
+            // Maximum number of module IDs to intern.
+            max_interned_module_ids: 100_000,
         }
     }
 }
@@ -33,6 +51,8 @@ impl Default for BlockExecutorModuleCacheLocalConfig {
 /// Local, per-node configuration.
 #[derive(Clone, Debug)]
 pub struct BlockExecutorLocalConfig {
+    // If enabled, uses BlockSTMv2 algorithm / scheduler for parallel execution.
+    pub blockstm_v2: bool,
     pub concurrency_level: usize,
     // If specified, parallel execution fallbacks to sequential, if issue occurs.
     // Otherwise, if there is an error in either of the execution, we will panic.
@@ -50,6 +70,7 @@ impl BlockExecutorLocalConfig {
     ///   - Default module cache configs.
     pub fn default_with_concurrency_level(concurrency_level: usize) -> Self {
         Self {
+            blockstm_v2: false,
             concurrency_level,
             allow_fallback: true,
             discard_failed_blocks: false,
@@ -65,14 +86,20 @@ pub struct BlockExecutorConfigFromOnchain {
     pub block_gas_limit_type: BlockGasLimitType,
     enable_per_block_gas_limit: bool,
     per_block_gas_limit: Option<u64>,
+    gas_price_to_burn: Option<u64>,
 }
 
 impl BlockExecutorConfigFromOnchain {
-    pub fn new(block_gas_limit_type: BlockGasLimitType, enable_per_block_gas_limit: bool) -> Self {
+    pub fn new(
+        block_gas_limit_type: BlockGasLimitType,
+        enable_per_block_gas_limit: bool,
+        gas_price_to_burn: Option<u64>,
+    ) -> Self {
         Self {
             block_gas_limit_type,
             enable_per_block_gas_limit,
             per_block_gas_limit: None,
+            gas_price_to_burn,
         }
     }
 
@@ -81,6 +108,7 @@ impl BlockExecutorConfigFromOnchain {
             block_gas_limit_type: BlockGasLimitType::NoLimit,
             enable_per_block_gas_limit: false,
             per_block_gas_limit: None,
+            gas_price_to_burn: None,
         }
     }
 
@@ -90,6 +118,7 @@ impl BlockExecutorConfigFromOnchain {
                 .map_or(BlockGasLimitType::NoLimit, BlockGasLimitType::Limit),
             enable_per_block_gas_limit: false,
             per_block_gas_limit: None,
+            gas_price_to_burn: None,
         }
     }
 
@@ -110,6 +139,7 @@ impl BlockExecutorConfigFromOnchain {
                 },
             enable_per_block_gas_limit: false,
             per_block_gas_limit: None,
+            gas_price_to_burn: None,
         }
     }
 
@@ -118,6 +148,7 @@ impl BlockExecutorConfigFromOnchain {
             block_gas_limit_type: self.block_gas_limit_type,
             enable_per_block_gas_limit: self.enable_per_block_gas_limit,
             per_block_gas_limit: block_gas_limit_override,
+            gas_price_to_burn: self.gas_price_to_burn,
         }
     }
 
@@ -127,6 +158,10 @@ impl BlockExecutorConfigFromOnchain {
         } else {
             None
         }
+    }
+
+    pub fn gas_price_to_burn(&self) -> u64 {
+        self.gas_price_to_burn.unwrap_or(DEFAULT_GAS_PRICE_TO_BURN)
     }
 }
 

@@ -1,19 +1,25 @@
 ---
 AbilitySet:
   NEWTYPESTRUCT: U8
-AbstractionAuthData:
+AbstractAuthenticationData:
   ENUM:
     0:
       V1:
         STRUCT:
           - signing_message_digest: BYTES
-          - authenticator: BYTES
+          - abstract_signature: BYTES
     1:
       DerivableV1:
         STRUCT:
           - signing_message_digest: BYTES
           - abstract_signature: BYTES
           - abstract_public_key: BYTES
+AbstractAuthenticator:
+  STRUCT:
+    - function_info:
+        TYPENAME: FunctionInfo
+    - auth_data:
+        TYPENAME: AbstractAuthenticationData
 AccessPath:
   STRUCT:
     - address:
@@ -53,12 +59,10 @@ AccountAuthenticator:
     4:
       NoAccountAuthenticator: UNIT
     5:
-      Abstraction:
+      Abstract:
         STRUCT:
-          - function_info:
-              TYPENAME: FunctionInfo
-          - auth_data:
-              TYPENAME: AbstractionAuthData
+          - authenticator:
+              TYPENAME: AbstractAuthenticator
 AggregateSignature:
   STRUCT:
     - validator_bitmask:
@@ -226,6 +230,15 @@ BlockEpiloguePayload:
               TYPENAME: HashValue
           - block_end_info:
               TYPENAME: BlockEndInfo
+    1:
+      V1:
+        STRUCT:
+          - block_id:
+              TYPENAME: HashValue
+          - block_end_info:
+              TYPENAME: BlockEndInfo
+          - fee_distribution:
+              TYPENAME: FeeDistribution
 BlockInfo:
   STRUCT:
     - epoch: U64
@@ -345,6 +358,10 @@ BlockType:
       ProposalExt:
         NEWTYPE:
           TYPENAME: ProposalExt
+    4:
+      OptimisticProposal:
+        NEWTYPE:
+          TYPENAME: OptBlockBody
 ChainId:
   NEWTYPESTRUCT: U8
 ChangeSet:
@@ -467,6 +484,10 @@ ConsensusMsg:
       BlockRetrievalRequest:
         NEWTYPE:
           TYPENAME: BlockRetrievalRequest
+    21:
+      OptProposalMsg:
+        NEWTYPE:
+          TYPENAME: OptProposalMsg
 ContractEvent:
   ENUM:
     0:
@@ -511,6 +532,37 @@ Ed25519PublicKey:
   NEWTYPESTRUCT: BYTES
 Ed25519Signature:
   NEWTYPESTRUCT: BYTES
+EncryptedPayload:
+  ENUM:
+    0:
+      Encrypted:
+        STRUCT:
+          - ciphertext: BYTES
+          - extra_config:
+              TYPENAME: TransactionExtraConfig
+          - payload_hash:
+              TYPENAME: HashValue
+    1:
+      FailedDecryption:
+        STRUCT:
+          - ciphertext: BYTES
+          - extra_config:
+              TYPENAME: TransactionExtraConfig
+          - payload_hash:
+              TYPENAME: HashValue
+          - eval_proof: BYTES
+    2:
+      Decrypted:
+        STRUCT:
+          - ciphertext: BYTES
+          - extra_config:
+              TYPENAME: TransactionExtraConfig
+          - payload_hash:
+              TYPENAME: HashValue
+          - eval_proof: BYTES
+          - executable:
+              TYPENAME: TransactionExecutable
+          - decryption_nonce: U64
 EntryFunction:
   STRUCT:
     - module:
@@ -582,20 +634,43 @@ FederatedKeylessPublicKey:
         TYPENAME: AccountAddress
     - pk:
         TYPENAME: KeylessPublicKey
+FeeDistribution:
+  ENUM:
+    0:
+      V0:
+        STRUCT:
+          - amount:
+              MAP:
+                KEY: U64
+                VALUE: U64
 FunctionInfo:
   STRUCT:
     - module_address:
         TYPENAME: AccountAddress
     - module_name: STR
     - function_name: STR
+FunctionParamOrReturnTag:
+  ENUM:
+    0:
+      Reference:
+        NEWTYPE:
+          TYPENAME: TypeTag
+    1:
+      MutableReference:
+        NEWTYPE:
+          TYPENAME: TypeTag
+    2:
+      Value:
+        NEWTYPE:
+          TYPENAME: TypeTag
 FunctionTag:
   STRUCT:
     - args:
         SEQ:
-          TYPENAME: TypeTag
+          TYPENAME: FunctionParamOrReturnTag
     - results:
         SEQ:
-          TYPENAME: TypeTag
+          TYPENAME: FunctionParamOrReturnTag
     - abilities:
         TYPENAME: AbilitySet
 G1Bytes:
@@ -722,6 +797,35 @@ OpenIdSig:
         TYPENAME: Pepper
     - idc_aud_val:
         OPTION: STR
+OptBlockBody:
+  ENUM:
+    0:
+      V0:
+        STRUCT:
+          - validator_txns:
+              SEQ:
+                TYPENAME: ValidatorTransaction
+          - payload:
+              TYPENAME: Payload
+          - author:
+              TYPENAME: AccountAddress
+          - grandparent_qc:
+              TYPENAME: QuorumCert
+OptBlockData:
+  STRUCT:
+    - epoch: U64
+    - round: U64
+    - timestamp_usecs: U64
+    - parent:
+        TYPENAME: BlockInfo
+    - block_body:
+        TYPENAME: OptBlockBody
+OptProposalMsg:
+  STRUCT:
+    - block_data:
+        TYPENAME: OptBlockData
+    - sync_info:
+        TYPENAME: SyncInfo
 OptQuorumStorePayload:
   ENUM:
     0:
@@ -1101,6 +1205,27 @@ TransactionArgument:
     9:
       Serialized:
         NEWTYPE: BYTES
+    10:
+      I8:
+        NEWTYPE: I8
+    11:
+      I16:
+        NEWTYPE: I16
+    12:
+      I32:
+        NEWTYPE: I32
+    13:
+      I64:
+        NEWTYPE: I64
+    14:
+      I128:
+        NEWTYPE: I128
+    15:
+      I256:
+        NEWTYPE:
+          TUPLEARRAY:
+            CONTENT: U8
+            SIZE: 32
 TransactionAuthenticator:
   ENUM:
     0:
@@ -1192,6 +1317,10 @@ TransactionPayload:
       Payload:
         NEWTYPE:
           TYPENAME: TransactionPayloadInner
+    5:
+      EncryptedPayload:
+        NEWTYPE:
+          TYPENAME: EncryptedPayload
 TransactionPayloadInner:
   ENUM:
     0:
@@ -1251,6 +1380,18 @@ TypeTag:
       Function:
         NEWTYPE:
           TYPENAME: FunctionTag
+    12:
+      i8: UNIT
+    13:
+      i16: UNIT
+    14:
+      i32: UNIT
+    15:
+      i64: UNIT
+    16:
+      i128: UNIT
+    17:
+      i256: UNIT
 ValidatorConsensusInfo:
   STRUCT:
     - address:

@@ -9,31 +9,26 @@ use aptos_types::{
     chain_id::ChainId,
     on_chain_config::Features,
     transaction::{
-        EntryFunction, ExecutionStatus, Script, TransactionArgument, TransactionPayload,
-        TransactionStatus,
+        EntryFunction, ExecutionStatus, Script, TransactionArgument, TransactionOutput,
+        TransactionPayload, TransactionStatus,
     },
     write_set::WriteSet,
 };
 use aptos_vm::AptosVM;
-use aptos_vm_environment::prod_configs;
+use aptos_vm_environment::{prod_configs, prod_configs::LATEST_GAS_FEATURE_VERSION};
 use libfuzzer_sys::{fuzz_target, Corpus};
 use move_binary_format::{
-    access::ModuleAccess,
-    deserializer::DeserializerConfig,
-    errors::VMError,
-    file_format::{CompiledModule, CompiledScript, SignatureToken},
+    access::ModuleAccess, deserializer::DeserializerConfig, file_format::SignatureToken,
 };
 use move_core_types::vm_status::{StatusCode, StatusType};
 use once_cell::sync::Lazy;
-use std::{
-    collections::{BTreeMap, HashSet},
-    sync::Arc,
-    time::Instant,
-};
+use std::{collections::HashSet, sync::Arc, time::Instant};
 mod utils;
+use fuzzer::{Authenticator, ExecVariant, RunnableState};
+use move_vm_runtime::RuntimeEnvironment;
 use utils::vm::{
-    check_for_invariant_violation, publish_group, sort_by_deps, ExecVariant,
-    FuzzerRunnableAuthenticator, RunnableState,
+    group_modules_by_address_topo, publish_group, resolve_function_name, verify_module_fast,
+    verify_script_fast, BYTECODE_VERSION,
 };
 
 // genesis write set generated once for each fuzzing session
@@ -53,40 +48,19 @@ const MAX_TYPE_PARAMETER_VALUE: u16 = 64 / 4 * 16; // third_party/move/move-byte
 
 const EXECUTION_TIME_GAS_RATIO: u8 = 100;
 
-// List of known false positive messages for invariant violations
-// If some invariant violation do not come with a message, we need to attach a message to it at throwing site.
-const KNOWN_FALSE_POSITIVES: &[&str] = &["too many type parameters/arguments in the program"];
-
 #[inline(always)]
 fn is_coverage_enabled() -> bool {
     cfg!(coverage_enabled) || std::env::var("LLVM_PROFILE_FILE").is_ok()
 }
 
-fn check_for_invariant_violation_vmerror(e: VMError) {
-    if e.status_type() == StatusType::InvariantViolation {
-        let is_known_false_positive = e.message().map_or(false, |msg| {
-            KNOWN_FALSE_POSITIVES
-                .iter()
-                .any(|known| msg.starts_with(known))
-        });
-
-        if !is_known_false_positive && e.status_type() == StatusType::InvariantViolation {
-            panic!(
-                "invariant violation {:?}\n{}{:?} {}",
-                e,
-                "RUST_BACKTRACE=1 DEBUG_VM_STATUS=",
-                e.major_status(),
-                "./fuzz.sh run move_aptosvm_publish_and_run <ARTIFACT>"
-            );
-        }
-    }
-}
+// moved to utils::vm::check_for_invariant_violation_vmerror
 
 // filter modules
+#[inline(always)]
 fn filter_modules(input: &RunnableState) -> Result<(), Corpus> {
     // reject any TypeParameter exceeds the maximum allowed value (Avoid known Ivariant Violation)
-    if let ExecVariant::Script { script, .. } = input.exec_variant.clone() {
-        for signature in script.signatures {
+    if let ExecVariant::Script { _script, .. } = input.exec_variant.clone() {
+        for signature in _script.signatures {
             for sign_token in signature.0.iter() {
                 if let SignatureToken::TypeParameter(idx) = sign_token {
                     if *idx > MAX_TYPE_PARAMETER_VALUE {
@@ -112,39 +86,16 @@ fn run_case(mut input: RunnableState) -> Result<(), Corpus> {
     // filter modules
     filter_modules(&input)?;
 
-    let verifier_config = prod_configs::aptos_prod_verifier_config(&Features::default());
-    let deserializer_config = DeserializerConfig::new(8, 255);
+    let verifier_config =
+        prod_configs::aptos_prod_verifier_config(LATEST_GAS_FEATURE_VERSION, &Features::default());
+    let deserializer_config = DeserializerConfig::new(BYTECODE_VERSION, 255);
 
     for m in input.dep_modules.iter_mut() {
-        // m.metadata = vec![]; // we could optimize metadata to only contain aptos metadata
-        // m.version = VERSION_MAX;
-
-        // reject bad modules fast
-        let mut module_code: Vec<u8> = vec![];
-        m.serialize(&mut module_code).map_err(|_| Corpus::Keep)?;
-        let m_de = CompiledModule::deserialize_with_config(&module_code, &deserializer_config)
-            .map_err(|_| Corpus::Reject)?;
-        move_bytecode_verifier::verify_module_with_config(&verifier_config, &m_de).map_err(|e| {
-            check_for_invariant_violation_vmerror(e);
-            Corpus::Reject
-        })?
+        verify_module_fast(m, &verifier_config, &deserializer_config)?;
     }
 
-    if let ExecVariant::Script {
-        script: s,
-        type_args: _,
-        args: _,
-    } = &input.exec_variant
-    {
-        // reject bad scripts fast
-        let mut script_code: Vec<u8> = vec![];
-        s.serialize(&mut script_code).map_err(|_| Corpus::Keep)?;
-        let s_de = CompiledScript::deserialize_with_config(&script_code, &deserializer_config)
-            .map_err(|_| Corpus::Reject)?;
-        move_bytecode_verifier::verify_script_with_config(&verifier_config, &s_de).map_err(|e| {
-            check_for_invariant_violation_vmerror(e);
-            Corpus::Reject
-        })?
+    if let ExecVariant::Script { _script: s, .. } = &input.exec_variant {
+        verify_script_fast(s, &verifier_config, &deserializer_config)?
     }
 
     // check no duplicates
@@ -153,43 +104,16 @@ fn run_case(mut input: RunnableState) -> Result<(), Corpus> {
         return Err(Corpus::Reject);
     }
 
-    // topologically order modules {
-    let all_modules = input.dep_modules.clone();
-    let mut map = all_modules
-        .into_iter()
-        .map(|m| (m.self_id(), m))
-        .collect::<BTreeMap<_, _>>();
-    let mut order = vec![];
-    for id in map.keys() {
-        let mut visited = HashSet::new();
-        sort_by_deps(&map, &mut order, id.clone(), &mut visited)?;
-    }
-    // }
-
-    // group same address modules in packages. keep local ordering.
-    let mut packages = vec![];
-    for cur_package_id in order.iter() {
-        let mut cur = vec![];
-        if !map.contains_key(cur_package_id) {
-            continue;
-        }
-        // this makes sure we keep the order in packages
-        for id in order.iter() {
-            // check if part of current package
-            if id.address() == cur_package_id.address() {
-                if let Some(module) = map.remove(cur_package_id) {
-                    cur.push(module);
-                }
-            }
-        }
-        packages.push(cur)
-    }
+    let packages = group_modules_by_address_topo(input.dep_modules.clone())?;
 
     AptosVM::set_concurrency_level_once(FUZZER_CONCURRENCY_LEVEL);
+    // Enable runtime reference-safety checks for the Move VM
+    // prod_configs::set_paranoid_ref_checks(true);
     let mut vm = FakeExecutor::from_genesis_with_existing_thread_pool(
         &VM_WRITE_SET,
         ChainId::mainnet(),
         Arc::clone(&TP),
+        None,
     )
     .set_not_parallel();
 
@@ -212,13 +136,13 @@ fn run_case(mut input: RunnableState) -> Result<(), Corpus> {
     // build tx
     let tx = match input.exec_variant.clone() {
         ExecVariant::Script {
-            script,
-            type_args,
-            args,
+            _script: script,
+            _type_args: type_args,
+            _args: args,
         } => {
             let mut script_bytes = vec![];
             script
-                .serialize(&mut script_bytes)
+                .serialize_for_version(Some(BYTECODE_VERSION), &mut script_bytes)
                 .map_err(|_| Corpus::Reject)?;
             sender_acc
                 .transaction()
@@ -235,33 +159,18 @@ fn run_case(mut input: RunnableState) -> Result<(), Corpus> {
                 )))
         },
         ExecVariant::CallFunction {
-            module,
-            function,
-            type_args,
-            args,
+            _module: module,
+            _function: function,
+            _type_args: type_args,
+            _args: args,
         } => {
-            // convert FunctionDefinitionIndex to function name... {
+            // convert FunctionDefinitionIndex to function name
             let cm = input
                 .dep_modules
                 .iter()
                 .find(|m| m.self_id() == module)
                 .ok_or(Corpus::Reject)?;
-            let fhi = cm
-                .function_defs
-                .get(function.0 as usize)
-                .ok_or(Corpus::Reject)?
-                .function;
-            let function_identifier_index = cm
-                .function_handles
-                .get(fhi.0 as usize)
-                .ok_or(Corpus::Reject)?
-                .name;
-            let function_name = cm
-                .identifiers
-                .get(function_identifier_index.0 as usize)
-                .ok_or(Corpus::Reject)?
-                .clone();
-            // }
+            let function_name = resolve_function_name(cm, function)?;
             sender_acc
                 .transaction()
                 .gas_unit_price(100)
@@ -277,13 +186,13 @@ fn run_case(mut input: RunnableState) -> Result<(), Corpus> {
     };
     let raw_tx = tx.raw();
     let tx = match input.tx_auth_type {
-        FuzzerRunnableAuthenticator::Ed25519 { sender: _ } => raw_tx
+        Authenticator::Ed25519 { _sender: _ } => raw_tx
             .sign(&sender_acc.privkey, sender_acc.pubkey.as_ed25519().unwrap())
             .map_err(|_| Corpus::Reject)?
             .into_inner(),
-        FuzzerRunnableAuthenticator::MultiAgent {
-            sender: _,
-            secondary_signers,
+        Authenticator::MultiAgent {
+            _sender: _,
+            _secondary_signers: secondary_signers,
         } => {
             // higher number here slows down fuzzer significatly due to slow signing process.
             if secondary_signers.len() > 10 {
@@ -304,10 +213,10 @@ fn run_case(mut input: RunnableState) -> Result<(), Corpus> {
                 .map_err(|_| Corpus::Reject)?
                 .into_inner()
         },
-        FuzzerRunnableAuthenticator::FeePayer {
-            sender: _,
-            secondary_signers,
-            fee_payer,
+        Authenticator::FeePayer {
+            _sender: _,
+            _secondary_signers: secondary_signers,
+            _fee_payer: fee_payer,
         } => {
             // higher number here slows down fuzzer significatly due to slow signing process.
             if secondary_signers.len() > 10 {
@@ -336,39 +245,36 @@ fn run_case(mut input: RunnableState) -> Result<(), Corpus> {
 
     // exec tx
     tdbg!("exec start");
-    let mut old_res = None;
+    let mut old_outputs: Option<Vec<TransactionOutput>> = None;
     const N_EXTRA_RERUNS: usize = 0;
     #[allow(clippy::reversed_empty_ranges)]
     for _ in 0..N_EXTRA_RERUNS {
-        let res = vm.execute_block(vec![tx.clone()]);
-        if let Some(old_res) = old_res {
-            assert!(old_res == res);
+        let outputs = utils::vm::execute_block_or_keep(&vm, vec![tx.clone()])?;
+        if let Some(old) = &old_outputs {
+            assert_eq!(old, &outputs);
         }
-        old_res = Some(res);
+        old_outputs = Some(outputs);
     }
 
     let now = Instant::now();
-    let res = vm.execute_block(vec![tx.clone()]);
+    let mut outputs = utils::vm::execute_block_or_keep(&vm, vec![tx.clone()])?;
     let elapsed = now.elapsed();
 
     // check main execution as well
-    if let Some(old_res) = old_res {
-        assert!(old_res == res);
+    if let Some(old) = &old_outputs {
+        assert_eq!(old, &outputs);
     }
-    let res = res
-        .map_err(|e| {
-            check_for_invariant_violation(e);
-            Corpus::Keep
-        })?
-        .pop()
-        .expect("expect 1 output");
+    assert_eq!(outputs.len(), 1, "expect 1 output");
+    let res = outputs.pop().expect("expect 1 output");
     tdbg!("exec end");
 
     // if error exit gracefully
     let status = match tdbg!(res.status()) {
         TransactionStatus::Keep(status) => status,
         TransactionStatus::Discard(e) => {
-            if e.status_type() == StatusType::InvariantViolation {
+            if e.status_type() == StatusType::InvariantViolation
+                || e.status_type() == StatusType::Unknown
+            {
                 panic!("invariant violation {:?}", e);
             }
             return Err(Corpus::Keep);
@@ -379,7 +285,8 @@ fn run_case(mut input: RunnableState) -> Result<(), Corpus> {
         ExecutionStatus::Success => (),
         ExecutionStatus::MiscellaneousError(e) => {
             if let Some(e) = e {
-                if e.status_type() == StatusType::InvariantViolation
+                if (e.status_type() == StatusType::InvariantViolation
+                    || e.status_type() == StatusType::Unknown)
                     && *e != StatusCode::TYPE_RESOLUTION_FAILURE
                     && *e != StatusCode::STORAGE_ERROR
                 {
@@ -415,7 +322,8 @@ fn run_case(mut input: RunnableState) -> Result<(), Corpus> {
             );
         }
     }
-
+    drop(vm);
+    RuntimeEnvironment::flush_verified_module_cache();
     Ok(())
 }
 

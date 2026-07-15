@@ -1,13 +1,25 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use super::new_test_context;
+use super::new_test_context_with_orderless_flags;
 use aptos_api_test_context::{current_function_name, TestContext};
+use rstest::rstest;
 use std::path::PathBuf;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn test_abi() {
-    let mut context = new_test_context(current_function_name!());
+#[rstest(
+    use_txn_payload_v2_format,
+    use_orderless_transactions,
+    case(false, false),
+    case(true, false),
+    case(true, true)
+)]
+async fn test_abi(use_txn_payload_v2_format: bool, use_orderless_transactions: bool) {
+    let mut context = new_test_context_with_orderless_flags(
+        current_function_name!(),
+        use_txn_payload_v2_format,
+        use_orderless_transactions,
+    );
     let mut account = context.create_account().await;
 
     // Publish packages
@@ -83,4 +95,30 @@ async fn test_abi() {
         .unwrap();
 
     assert_eq!(my_struct["is_event"], false);
+
+    // Confirm that MyEnum is considered an enum.
+    let my_enum = structs
+        .iter()
+        .find(|s| s["name"].as_str().unwrap() == "MyEnum")
+        .unwrap();
+
+    assert_eq!(my_enum["is_enum"], true);
+
+    // Confirm that State is not considered an enum.
+    assert_eq!(my_struct["is_enum"], false);
+
+    let test_option = structs
+        .iter()
+        .find(|s| s["name"].as_str().unwrap() == "TestOption")
+        .unwrap();
+    assert_eq!(test_option["fields"][0]["name"], "o");
+
+    let option_module = context.get("/accounts/0x1/module/option").await;
+
+    let option_structs = option_module["abi"]["structs"].as_array().unwrap();
+
+    assert_eq!(option_structs[0]["name"], "Option");
+    assert_eq!(option_structs[0]["fields"][0]["name"], "vec");
+    assert_eq!(option_structs[0]["is_enum"], false);
+    assert_eq!(option_structs[0]["fields"][0]["type"], "vector<T0>");
 }

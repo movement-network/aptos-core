@@ -7,7 +7,6 @@ use crate::{
     common::{Payload, Round},
     order_vote_proposal::OrderVoteProposal,
     pipeline::commit_vote::CommitVote,
-    pipeline_execution_result::PipelineExecutionResult,
     quorum_cert::QuorumCert,
     vote_proposal::VoteProposal,
     wrapped_ledger_info::WrappedLedgerInfo,
@@ -70,6 +69,9 @@ pub type TaskResult<T> = Result<T, TaskError>;
 pub type TaskFuture<T> = Shared<BoxFuture<'static, TaskResult<T>>>;
 
 pub type PrepareResult = (Arc<Vec<SignatureVerifiedTransaction>>, Option<u64>);
+// First Option is whether randomness is enabled
+// Second Option is whether randomness is skipped
+pub type RandResult = (Option<Option<Randomness>>, bool);
 pub type ExecuteResult = Duration;
 pub type LedgerUpdateResult = (StateComputeResult, Duration, Option<u64>);
 pub type PostLedgerUpdateResult = ();
@@ -82,6 +84,7 @@ pub type PostCommitResult = ();
 #[derive(Clone)]
 pub struct PipelineFutures {
     pub prepare_fut: TaskFuture<PrepareResult>,
+    pub rand_check_fut: TaskFuture<RandResult>,
     pub execute_fut: TaskFuture<ExecuteResult>,
     pub ledger_update_fut: TaskFuture<LedgerUpdateResult>,
     pub post_ledger_update_fut: TaskFuture<PostLedgerUpdateResult>,
@@ -200,7 +203,6 @@ pub struct PipelinedBlock {
     randomness: OnceCell<Randomness>,
     pipeline_insertion_time: OnceCell<Instant>,
     execution_summary: OnceCell<ExecutionSummary>,
-    pre_commit_fut: Mutex<Option<BoxFuture<'static, ExecutorResult<()>>>>,
     /// pipeline related fields
     pipeline_futs: Mutex<Option<PipelineFutures>>,
     pipeline_tx: Mutex<Option<PipelineInputTx>>,
@@ -321,24 +323,6 @@ impl PipelinedBlock {
         }
     }
 
-    pub fn set_execution_result(&self, pipeline_execution_result: PipelineExecutionResult) {
-        let PipelineExecutionResult {
-            input_txns: _,
-            result,
-            execution_time,
-            pre_commit_fut,
-        } = pipeline_execution_result;
-
-        *self.pre_commit_fut.lock() = Some(pre_commit_fut);
-
-        self.set_compute_result(result, execution_time);
-    }
-
-    #[cfg(any(test, feature = "fuzzing"))]
-    pub fn mark_successful_pre_commit_for_test(&self) {
-        *self.pre_commit_fut.lock() = Some(Box::pin(async { Ok(()) }));
-    }
-
     // GUARD: keep this function a pure write to `self.randomness`.
     // `ShareAggregator` runs synchronously in `consensus/src/rand/rand_gen/rand_store.rs`
     // and its result reaches `set_randomness` through a channel, with no
@@ -361,13 +345,6 @@ impl PipelinedBlock {
 
     pub fn set_insertion_time(&self) {
         assert!(self.pipeline_insertion_time.set(Instant::now()).is_ok());
-    }
-
-    pub fn take_pre_commit_fut(&self) -> BoxFuture<'static, ExecutorResult<()>> {
-        self.pre_commit_fut
-            .lock()
-            .take()
-            .expect("pre_commit_result_rx missing.")
     }
 
     pub fn set_qc(&self, qc: Arc<QuorumCert>) {
@@ -411,7 +388,6 @@ impl PipelinedBlock {
             randomness: OnceCell::new(),
             pipeline_insertion_time: OnceCell::new(),
             execution_summary: OnceCell::new(),
-            pre_commit_fut: Mutex::new(None),
             pipeline_futs: Mutex::new(None),
             pipeline_tx: Mutex::new(None),
             pipeline_abort_handle: Mutex::new(None),
@@ -539,12 +515,6 @@ impl PipelinedBlock {
 
 /// Pipeline related functions
 impl PipelinedBlock {
-    pub fn pipeline_enabled(&self) -> bool {
-        // if the pipeline_tx is set, the pipeline is enabled,
-        // we don't use pipeline fut here because it can't be taken when abort
-        self.pipeline_tx.lock().is_some()
-    }
-
     pub fn pipeline_futs(&self) -> Option<PipelineFutures> {
         self.pipeline_futs.lock().clone()
     }

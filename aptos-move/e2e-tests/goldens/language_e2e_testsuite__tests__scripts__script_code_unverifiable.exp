@@ -1,8 +1,8 @@
 Ok(
     [
         TransactionOutput {
-            write_set: Value(
-                V0(
+            write_set: WriteSet {
+                value: V0(
                     WriteSetV0(
                         WriteSetMut {
                             write_set: {
@@ -13,7 +13,8 @@ Ok(
                         },
                     ),
                 ),
-            ),
+                hotness: {},
+            },
             events: [
                 ModuleEvent { type: Struct(StructTag { address: 0000000000000000000000000000000000000000000000000000000000000001, module: Identifier("fungible_asset"), name: Identifier("Withdraw"), type_args: [] }), event_data: "3f4fc7462763e539d6c50356f9c1d14ffc32b567d038da6bdfa454b8618910670300000000000000" },
                 ModuleEvent { type: Struct(StructTag { address: 0000000000000000000000000000000000000000000000000000000000000001, module: Identifier("fungible_asset"), name: Identifier("Deposit"), type_args: [] }), event_data: "0975b461453e8c36ba66937eaf7f874f7d6a9b26d65e89389304bd1bfee948090300000000000000" },

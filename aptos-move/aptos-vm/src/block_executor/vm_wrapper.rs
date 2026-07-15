@@ -9,7 +9,8 @@ use aptos_mvhashmap::types::TxnIndex;
 use aptos_types::{
     state_store::{StateView, StateViewId},
     transaction::{
-        signature_verified_transaction::SignatureVerifiedTransaction, Transaction, WriteSetPayload,
+        signature_verified_transaction::SignatureVerifiedTransaction, AuxiliaryInfo, Transaction,
+        WriteSetPayload,
     },
 };
 use aptos_vm_environment::environment::AptosEnvironment;
@@ -27,12 +28,18 @@ pub struct AptosExecutorTask {
 }
 
 impl ExecutorTask for AptosExecutorTask {
+    type AuxiliaryInfo = AuxiliaryInfo;
     type Error = VMStatus;
     type Output = AptosTransactionOutput;
     type Txn = SignatureVerifiedTransaction;
 
-    fn init(environment: &AptosEnvironment, state_view: &impl StateView) -> Self {
-        let vm = AptosVM::new(environment, state_view);
+    fn init(
+        environment: &AptosEnvironment,
+        state_view: &impl StateView,
+        async_runtime_checks_enabled: bool,
+    ) -> Self {
+        let vm =
+            AptosVM::new_for_block_executor(environment, state_view, async_runtime_checks_enabled);
         let id = state_view.id();
         Self { vm, id }
     }
@@ -47,6 +54,7 @@ impl ExecutorTask for AptosExecutorTask {
               + AptosCodeStorage
               + BlockSynchronizationKillSwitch),
         txn: &SignatureVerifiedTransaction,
+        auxiliary_info: &Self::AuxiliaryInfo,
         txn_idx: TxnIndex,
     ) -> ExecutionStatus<AptosTransactionOutput, VMStatus> {
         fail_point!("aptos_vm::vm_wrapper::execute_transaction", |_| {
@@ -57,7 +65,7 @@ impl ExecutorTask for AptosExecutorTask {
         let resolver = self.vm.as_move_resolver_with_group_view(view);
         match self
             .vm
-            .execute_single_transaction(txn, &resolver, view, &log_context)
+            .execute_single_transaction(txn, &resolver, view, &log_context, auxiliary_info)
         {
             Ok((vm_status, vm_output)) => {
                 if vm_output.status().is_discarded() {

@@ -3,67 +3,32 @@
 
 use crate::{payload::TDataInfo, utils::PayloadTxnsSize};
 use anyhow::{bail, ensure, Context};
-use aptos_crypto::{bls12381, CryptoMaterialError, HashValue};
+use aptos_crypto::{bls12381, hash::CryptoHash, CryptoMaterialError, HashValue};
 use aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
 use aptos_types::{
     aggregate_signature::AggregateSignature, ledger_info::SignatureWithStatus,
-    validator_signer::ValidatorSigner, validator_verifier::ValidatorVerifier, PeerId,
+    quorum_store::BatchId, validator_signer::ValidatorSigner,
+    validator_verifier::ValidatorVerifier, PeerId,
 };
 use mini_moka::sync::Cache;
 use rand::{seq::SliceRandom, thread_rng};
 use serde::{Deserialize, Serialize};
 use std::{
-    cmp::Ordering,
-    fmt::{Display, Formatter},
+    fmt::{Debug, Display, Formatter},
     hash::Hash,
     ops::Deref,
 };
 
-#[derive(
-    Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Hash, CryptoHasher, BCSCryptoHash,
-)]
-pub struct BatchId {
-    pub id: u64,
-    /// A number that is stored in the DB and updated only if the value does not exist in
-    /// the DB: (a) at the start of an epoch, or (b) the DB was wiped. When the nonce is updated,
-    /// id starts again at 0. Using the current system time allows the nonce to be ordering.
-    pub nonce: u64,
-}
+pub trait TBatchInfo: Serialize + CryptoHash + Debug + Clone + Hash + Eq {
+    fn epoch(&self) -> u64;
 
-impl BatchId {
-    pub fn new(nonce: u64) -> Self {
-        Self { id: 0, nonce }
-    }
+    fn expiration(&self) -> u64;
 
-    pub fn new_for_test(id: u64) -> Self {
-        Self { id, nonce: 0 }
-    }
+    fn num_txns(&self) -> u64;
 
-    pub fn increment(&mut self) {
-        self.id += 1;
-    }
-}
+    fn num_bytes(&self) -> u64;
 
-impl PartialOrd<Self> for BatchId {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for BatchId {
-    fn cmp(&self, other: &Self) -> Ordering {
-        match self.nonce.cmp(&other.nonce) {
-            Ordering::Equal => {},
-            ordering => return ordering,
-        }
-        self.id.cmp(&other.id)
-    }
-}
-
-impl Display for BatchId {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        write!(f, "({}, {})", self.id, self.nonce)
-    }
+    fn as_batch_info(&self) -> &BatchInfo;
 }
 
 #[derive(
@@ -140,6 +105,28 @@ impl BatchInfo {
     }
 }
 
+impl TBatchInfo for BatchInfo {
+    fn epoch(&self) -> u64 {
+        self.epoch
+    }
+
+    fn expiration(&self) -> u64 {
+        self.expiration
+    }
+
+    fn num_txns(&self) -> u64 {
+        self.num_txns
+    }
+
+    fn num_bytes(&self) -> u64 {
+        self.num_bytes
+    }
+
+    fn as_batch_info(&self) -> &BatchInfo {
+        self
+    }
+}
+
 impl Display for BatchInfo {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(f, "({}:{}:{})", self.author, self.batch_id, self.digest)
@@ -165,12 +152,15 @@ impl TDataInfo for BatchInfo {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct SignedBatchInfoMsg {
-    signed_infos: Vec<SignedBatchInfo>,
+pub struct SignedBatchInfoMsg<T> {
+    signed_infos: Vec<SignedBatchInfo<T>>,
 }
 
-impl SignedBatchInfoMsg {
-    pub fn new(signed_infos: Vec<SignedBatchInfo>) -> Self {
+impl<T> SignedBatchInfoMsg<T>
+where
+    T: TBatchInfo,
+{
+    pub fn new(signed_infos: Vec<SignedBatchInfo<T>>) -> Self {
         Self { signed_infos }
     }
 
@@ -208,21 +198,24 @@ impl SignedBatchInfoMsg {
         Ok(epoch)
     }
 
-    pub fn take(self) -> Vec<SignedBatchInfo> {
+    pub fn take(self) -> Vec<SignedBatchInfo<T>> {
         self.signed_infos
     }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct SignedBatchInfo {
-    info: BatchInfo,
+pub struct SignedBatchInfo<T> {
+    info: T,
     signer: PeerId,
     signature: SignatureWithStatus,
 }
 
-impl SignedBatchInfo {
+impl<T> SignedBatchInfo<T>
+where
+    T: TBatchInfo,
+{
     pub fn new(
-        batch_info: BatchInfo,
+        batch_info: T,
         validator_signer: &ValidatorSigner,
     ) -> Result<Self, CryptoMaterialError> {
         let signature = validator_signer.sign(&batch_info)?;
@@ -235,7 +228,7 @@ impl SignedBatchInfo {
     }
 
     pub fn new_with_signature(
-        batch_info: BatchInfo,
+        batch_info: T,
         signer: PeerId,
         signature: bls12381::Signature,
     ) -> Self {
@@ -247,7 +240,7 @@ impl SignedBatchInfo {
     }
 
     #[cfg(any(test, feature = "fuzzing"))]
-    pub fn dummy(batch_info: BatchInfo, signer: PeerId) -> Self {
+    pub fn dummy(batch_info: T, signer: PeerId) -> Self {
         Self::new_with_signature(batch_info, signer, bls12381::Signature::dummy_signature())
     }
 
@@ -288,13 +281,13 @@ impl SignedBatchInfo {
         &self.signature
     }
 
-    pub fn batch_info(&self) -> &BatchInfo {
+    pub fn batch_info(&self) -> &T {
         &self.info
     }
 }
 
-impl Deref for SignedBatchInfo {
-    type Target = BatchInfo;
+impl<T> Deref for SignedBatchInfo<T> {
+    type Target = T;
 
     fn deref(&self) -> &Self::Target {
         &self.info
@@ -314,12 +307,15 @@ pub enum SignedBatchInfoError {
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]
-pub struct ProofOfStoreMsg {
-    proofs: Vec<ProofOfStore>,
+pub struct ProofOfStoreMsg<T> {
+    proofs: Vec<ProofOfStore<T>>,
 }
 
-impl ProofOfStoreMsg {
-    pub fn new(proofs: Vec<ProofOfStore>) -> Self {
+impl<T> ProofOfStoreMsg<T>
+where
+    T: TBatchInfo + Send + Sync + 'static,
+{
+    pub fn new(proofs: Vec<ProofOfStore<T>>) -> Self {
         Self { proofs }
     }
 
@@ -327,7 +323,7 @@ impl ProofOfStoreMsg {
         &self,
         max_num_proofs: usize,
         validator: &ValidatorVerifier,
-        cache: &ProofCache,
+        cache: &ProofCache<T>,
     ) -> anyhow::Result<()> {
         ensure!(!self.proofs.is_empty(), "Empty message");
         ensure!(
@@ -356,28 +352,35 @@ impl ProofOfStoreMsg {
         Ok(epoch)
     }
 
-    pub fn take(self) -> Vec<ProofOfStore> {
+    pub fn take(self) -> Vec<ProofOfStore<T>> {
         self.proofs
     }
 }
 
-pub type ProofCache = Cache<BatchInfo, AggregateSignature>;
+pub type ProofCache<T> = Cache<T, AggregateSignature>;
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]
-pub struct ProofOfStore {
-    info: BatchInfo,
+pub struct ProofOfStore<T> {
+    info: T,
     multi_signature: AggregateSignature,
 }
 
-impl ProofOfStore {
-    pub fn new(info: BatchInfo, multi_signature: AggregateSignature) -> Self {
+impl<T> ProofOfStore<T>
+where
+    T: TBatchInfo + Send + Sync + 'static,
+{
+    pub fn new(info: T, multi_signature: AggregateSignature) -> Self {
         Self {
             info,
             multi_signature,
         }
     }
 
-    pub fn verify(&self, validator: &ValidatorVerifier, cache: &ProofCache) -> anyhow::Result<()> {
+    pub fn verify(
+        &self,
+        validator: &ValidatorVerifier,
+        cache: &ProofCache<T>,
+    ) -> anyhow::Result<()> {
         if let Some(signature) = cache.get(&self.info) {
             if signature == self.multi_signature {
                 return Ok(());
@@ -401,7 +404,7 @@ impl ProofOfStore {
         ret
     }
 
-    pub fn info(&self) -> &BatchInfo {
+    pub fn info(&self) -> &T {
         &self.info
     }
 
@@ -410,25 +413,28 @@ impl ProofOfStore {
     }
 }
 
-impl Deref for ProofOfStore {
-    type Target = BatchInfo;
+impl<T> Deref for ProofOfStore<T> {
+    type Target = T;
 
     fn deref(&self) -> &Self::Target {
         &self.info
     }
 }
 
-impl TDataInfo for ProofOfStore {
+impl<T> TDataInfo for ProofOfStore<T>
+where
+    T: TBatchInfo + Send + Sync + 'static,
+{
     fn num_txns(&self) -> u64 {
-        self.num_txns
+        self.info.num_txns()
     }
 
     fn num_bytes(&self) -> u64 {
-        self.num_bytes
+        self.info.num_bytes()
     }
 
     fn info(&self) -> &BatchInfo {
-        self.info()
+        self.info.as_batch_info()
     }
 
     fn signers(&self, ordered_authors: &[PeerId]) -> Vec<PeerId> {

@@ -6,10 +6,12 @@
 
 use crate::{
     account::{Account, AccountData},
-    golden_outputs::GoldenOutputs,
+    golden_outputs::{GoldenOutputs, OutputLogger},
 };
 use aptos_abstract_gas_usage::CalibrationAlgebra;
 use aptos_bitvec::BitVec;
+#[cfg(fuzzing)]
+use aptos_block_executor::code_cache_global_manager::ModuleHotCacheSnapshot;
 use aptos_block_executor::{
     code_cache_global_manager::AptosModuleCacheManager, txn_commit_hook::NoOpTransactionCommitHook,
     txn_provider::default::DefaultTxnProvider,
@@ -19,6 +21,9 @@ use aptos_framework::ReleaseBundle;
 use aptos_gas_algebra::DynamicExpression;
 use aptos_gas_meter::{AptosGasMeter, GasAlgebra, StandardGasAlgebra, StandardGasMeter};
 use aptos_gas_profiling::{GasProfiler, TransactionGasLog};
+use aptos_gas_schedule::{
+    AptosGasParameters, InitialGasSchedule, ToOnChainGasSchedule, LATEST_GAS_FEATURE_VERSION,
+};
 use aptos_keygen::KeyGen;
 use aptos_rest_client::AptosBaseUrl;
 use aptos_transaction_simulation::{
@@ -43,15 +48,17 @@ use aptos_types::{
     contract_event::ContractEvent,
     move_utils::MemberId,
     on_chain_config::{
-        AptosVersion, CurrentTimeMicroseconds, FeatureFlag, Features, OnChainConfig, ValidatorSet,
+        AptosVersion, CurrentTimeMicroseconds, FeatureFlag, Features, GasScheduleV2, OnChainConfig,
+        ValidatorSet,
     },
     state_store::{state_key::StateKey, state_value::StateValue, StateView, TStateView},
     transaction::{
         signature_verified_transaction::{
             into_signature_verified_block, SignatureVerifiedTransaction,
         },
-        BlockOutput, ExecutionStatus, SignedTransaction, Transaction, TransactionExecutableRef,
-        TransactionOutput, TransactionStatus, VMValidatorResult, ViewFunctionOutput,
+        AuxiliaryInfo, BlockOutput, ExecutionStatus, PersistedAuxiliaryInfo, SignedTransaction,
+        Transaction, TransactionExecutableRef, TransactionOutput, TransactionStatus,
+        VMValidatorResult, ViewFunctionOutput,
     },
     vm_status::VMStatus,
     write_set::{WriteOp, WriteSet, WriteSetMut},
@@ -59,7 +66,7 @@ use aptos_types::{
 };
 use aptos_validator_interface::{DebuggerStateView, RestDebuggerInterface};
 use aptos_vm::{
-    block_executor::{AptosTransactionOutput, AptosVMBlockExecutorWrapper},
+    block_executor::AptosVMBlockExecutorWrapper,
     data_cache::AsMoveResolver,
     gas::make_prod_gas_meter,
     move_vm_ext::{AptosMoveResolver, MoveVmExt, SessionExt, SessionId},
@@ -75,7 +82,6 @@ use aptos_vm_types::{
     storage::change_set_configs::ChangeSetConfigs,
 };
 use bytes::Bytes;
-use claims::assert_ok;
 use move_core_types::{
     account_address::AccountAddress,
     identifier::Identifier,
@@ -83,13 +89,11 @@ use move_core_types::{
     move_resource::{MoveResource, MoveStructType},
     value::MoveValue,
 };
-use move_vm_runtime::{
-    module_traversal::{TraversalContext, TraversalStorage},
-    ModuleStorage,
-};
+use move_vm_runtime::module_traversal::{TraversalContext, TraversalStorage};
 use move_vm_types::gas::UnmeteredGasMeter;
 use serde::Serialize;
 use std::{
+    cell::Cell,
     collections::{BTreeMap, BTreeSet},
     env,
     fs::{self, OpenOptions},
@@ -135,15 +139,29 @@ fn empty_in_memory_state_store() -> FakeExecutorStateStore {
     DeltaStateStore::new_with_base(EitherStateView::Left(EmptyStateView))
 }
 
+/// Represents per-block execution state used to control special modes (e.g., fuzzing/shared cache).
+/// In normal runs, this remains `None` and the executor behaves as before.
+enum BlockState {
+    None,
+    Fuzzing(SharedCacheState),
+}
+
+/// Shared cache state used only in fuzzing/test flows to enable hot module cache persistence and
+/// deterministic block metadata increments across transaction blocks.
+struct SharedCacheState {
+    manager: AptosModuleCacheManager,
+    next_block_id: Cell<u64>,
+}
+
 /// Provides an environment to run a VM instance.
 ///
 /// This struct is a mock in-memory implementation of the Aptos executor.
-pub struct FakeExecutor {
+pub struct FakeExecutorImpl<O: OutputLogger> {
     state_store: FakeExecutorStateStore,
     event_store: Vec<ContractEvent>,
     executor_thread_pool: Arc<rayon::ThreadPool>,
     block_time: u64,
-    executed_output: Option<GoldenOutputs>,
+    executed_output: Option<O>,
     trace_dir: Option<PathBuf>,
     rng: KeyGen,
     /// If set, determines whether to execute a comparison test with the parallel block executor.
@@ -151,7 +169,12 @@ pub struct FakeExecutor {
     /// s.t. the comparison test is executed (BothComparison).
     executor_mode: Option<ExecutorMode>,
     allow_block_executor_fallback: bool,
+    /// Encapsulated execution state. When set to `Fuzzing`, it enables hot cache persistence and
+    /// TxnSlice metadata generation for linearized blocks.
+    block_state: BlockState,
 }
+
+pub type FakeExecutor = FakeExecutorImpl<GoldenOutputs>;
 
 pub enum GasMeterType {
     RegularGasMeter,
@@ -165,6 +188,8 @@ pub struct Measurement {
     execution_gas: u64,
     /// In internal gas units
     io_gas: u64,
+
+    had_error: bool,
 }
 
 const GAS_SCALING_FACTOR: f64 = 1_000_000.0;
@@ -189,6 +214,10 @@ impl Measurement {
     pub fn io_gas_units(&self) -> f64 {
         self.io_gas as f64 / GAS_SCALING_FACTOR
     }
+
+    pub fn had_error(&self) -> bool {
+        self.had_error
+    }
 }
 
 pub enum ExecFuncTimerDynamicArgs {
@@ -197,7 +226,7 @@ pub enum ExecFuncTimerDynamicArgs {
     DistinctSignersAndFixed(Vec<AccountAddress>),
 }
 
-impl FakeExecutor {
+impl<O: OutputLogger> FakeExecutorImpl<O> {
     /// Creates an executor from a genesis [`WriteSet`].
     pub fn from_genesis(write_set: &WriteSet, chain_id: ChainId) -> Self {
         let executor_thread_pool = Arc::new(
@@ -210,7 +239,7 @@ impl FakeExecutor {
         let state_store = empty_in_memory_state_store();
         state_store.set_chain_id(chain_id).unwrap();
 
-        let mut executor = FakeExecutor {
+        let mut executor = Self {
             state_store,
             event_store: Vec::new(),
             executor_thread_pool,
@@ -220,6 +249,7 @@ impl FakeExecutor {
             rng: KeyGen::from_seed(RNG_SEED),
             executor_mode: None,
             allow_block_executor_fallback: true,
+            block_state: BlockState::None,
         };
         executor.apply_write_set(write_set);
         executor
@@ -230,11 +260,12 @@ impl FakeExecutor {
         write_set: &WriteSet,
         chain_id: ChainId,
         executor_thread_pool: Arc<rayon::ThreadPool>,
+        module_cache_manager: Option<AptosModuleCacheManager>,
     ) -> Self {
         let state_store = empty_in_memory_state_store();
         state_store.set_chain_id(chain_id).unwrap();
 
-        let mut executor = FakeExecutor {
+        let mut executor = Self {
             state_store,
             event_store: Vec::new(),
             executor_thread_pool,
@@ -244,6 +275,14 @@ impl FakeExecutor {
             rng: KeyGen::from_seed(RNG_SEED),
             executor_mode: None,
             allow_block_executor_fallback: true,
+            // Enable a shared module cache for fuzzing/test usage with external thread pool.
+            block_state: match module_cache_manager {
+                Some(manager) => BlockState::Fuzzing(SharedCacheState {
+                    manager,
+                    next_block_id: Cell::new(1),
+                }),
+                None => BlockState::None,
+            },
         };
         executor.apply_write_set(write_set);
         executor
@@ -288,6 +327,7 @@ impl FakeExecutor {
             rng: KeyGen::from_seed(RNG_SEED),
             executor_mode: None,
             allow_block_executor_fallback: true,
+            block_state: BlockState::None,
         }
     }
 
@@ -331,6 +371,56 @@ impl FakeExecutor {
         self.set_executor_mode(ExecutorMode::BothComparison)
     }
 
+    /// Sets the gas unit scaling factor by publishing a modified GasScheduleV2 and
+    /// forcing an epoch end. Chainable for convenient creation-time configuration.
+    pub fn with_gas_scaling(mut self, gas_scaling_factor: u64) -> Self {
+        self.modify_gas_scaling(gas_scaling_factor);
+        self
+    }
+
+    /// Mutably sets the gas unit scaling factor by updating on-chain gas schedule state
+    /// in this executor's simulated store.
+    pub fn override_one_gas_param(&mut self, param: &str, param_value: u64) {
+        let entries = AptosGasParameters::initial()
+            .to_on_chain_gas_schedule(LATEST_GAS_FEATURE_VERSION)
+            .into_iter()
+            .map(|(name, val)| {
+                if name == param {
+                    (name, param_value)
+                } else {
+                    (name, val)
+                }
+            })
+            .collect::<Vec<_>>();
+        let gas_schedule = GasScheduleV2 {
+            feature_version: LATEST_GAS_FEATURE_VERSION,
+            entries,
+        };
+        let schedule_bytes = bcs::to_bytes(&gas_schedule).expect("bcs");
+
+        // Core framework signer.
+        let core_signer_arg = MoveValue::Signer(AccountAddress::ONE)
+            .simple_serialize()
+            .unwrap();
+
+        // Publish schedule for next epoch, then force end epoch to apply immediately.
+        self.exec("gas_schedule", "set_for_next_epoch", vec![], vec![
+            core_signer_arg.clone(),
+            MoveValue::vector_u8(schedule_bytes)
+                .simple_serialize()
+                .unwrap(),
+        ]);
+        self.exec("aptos_governance", "force_end_epoch", vec![], vec![
+            core_signer_arg,
+        ]);
+    }
+
+    /// Mutably sets the gas unit scaling factor by updating on-chain gas schedule state
+    /// in this executor's simulated store.
+    pub fn modify_gas_scaling(&mut self, gas_scaling_factor: u64) {
+        self.override_one_gas_param("txn.gas_unit_scaling_factor", gas_scaling_factor);
+    }
+
     pub fn disable_block_executor_fallback(&mut self) {
         self.allow_block_executor_fallback = false;
     }
@@ -365,7 +455,7 @@ impl FakeExecutor {
         )
     }
 
-    pub fn state_store(&self) -> &impl SimulationStateStore {
+    pub fn state_store(&self) -> &(impl SimulationStateStore + use<O>) {
         &self.state_store
     }
 
@@ -377,7 +467,7 @@ impl FakeExecutor {
                 .build()
                 .unwrap(),
         );
-        FakeExecutor {
+        Self {
             state_store: empty_in_memory_state_store(),
             event_store: Vec::new(),
             executor_thread_pool,
@@ -387,23 +477,8 @@ impl FakeExecutor {
             rng: KeyGen::from_seed(RNG_SEED),
             executor_mode: None,
             allow_block_executor_fallback: true,
+            block_state: BlockState::None,
         }
-    }
-
-    pub fn set_golden_file(&mut self, test_name: &str) {
-        // 'test_name' includes ':' in the names, lets re-write these to be '_'s so that these
-        // files can persist on windows machines.
-        let file_name = test_name.replace(':', "_");
-        self.executed_output = Some(GoldenOutputs::new(&file_name));
-        self.set_tracing(test_name, file_name)
-    }
-
-    pub fn set_golden_file_at(&mut self, path: &str, test_name: &str) {
-        // 'test_name' includes ':' in the names, lets re-write these to be '_'s so that these
-        // files can persist on windows machines.
-        let file_name = test_name.replace(':', "_");
-        self.executed_output = Some(GoldenOutputs::new_at_path(PathBuf::from(path), &file_name));
-        self.set_tracing(test_name, file_name)
     }
 
     fn set_tracing(&mut self, test_name: &str, file_name: String) {
@@ -705,6 +780,29 @@ impl FakeExecutor {
         )
     }
 
+    /// Executes the given block of transactions, with block metadata
+    ///
+    /// Typical tests will call this method and check that the output matches what was expected.
+    /// However, this doesn't apply the results of successful transactions to the data store.
+    pub fn execute_block_with_current_metadata(
+        &self,
+        txn_block: Vec<SignedTransaction>,
+    ) -> Result<Vec<TransactionOutput>, VMStatus> {
+        // Get current real time to keep blockchain time close to real time for orderless transactions
+        let current_time_usecs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_micros() as u64;
+
+        self.execute_transaction_block_with_timestamp(
+            current_time_usecs,
+            txn_block
+                .into_iter()
+                .map(Transaction::UserTransaction)
+                .collect(),
+        )
+    }
+
     /// Executes the transaction as a singleton block and applies the resulting write set to the
     /// data store. Panics if execution fails
     pub fn execute_and_apply(&mut self, transaction: SignedTransaction) -> TransactionOutput {
@@ -730,39 +828,103 @@ impl FakeExecutor {
     fn execute_transaction_block_impl_with_state_view(
         &self,
         txn_block: Vec<SignatureVerifiedTransaction>,
-        onchain_config: BlockExecutorConfigFromOnchain,
-        sequential: bool,
         state_view: &(impl StateView + Sync),
+        config: BlockExecutorConfig,
     ) -> Result<Vec<TransactionOutput>, VMStatus> {
-        let config = BlockExecutorConfig {
-            local: BlockExecutorLocalConfig {
-                concurrency_level: if sequential {
-                    1
-                } else {
-                    usize::min(4, num_cpus::get())
-                },
-                allow_fallback: self.allow_block_executor_fallback,
-                discard_failed_blocks: false,
-                module_cache_config: BlockExecutorModuleCacheLocalConfig::default(),
-            },
-            onchain: onchain_config,
+        let auxiliary_info = (0..txn_block.len() as u32)
+            .map(|i| {
+                AuxiliaryInfo::new(
+                    PersistedAuxiliaryInfo::V1 {
+                        transaction_index: i,
+                    },
+                    None,
+                )
+            })
+            .collect::<Vec<_>>();
+        let txn_provider = DefaultTxnProvider::new(txn_block, auxiliary_info);
+        let metadata = self.get_txn_slice_metadata();
+        let result = {
+            AptosVMBlockExecutorWrapper::execute_block_on_thread_pool::<
+                _,
+                NoOpTransactionCommitHook<VMStatus>,
+                _,
+            >(
+                self.executor_thread_pool.clone(),
+                &txn_provider,
+                &state_view,
+                self.module_cache_manager_opt()
+                    .unwrap_or(&AptosModuleCacheManager::new()),
+                config,
+                metadata,
+                None,
+            )
+            .map(BlockOutput::into_transaction_outputs_forced)
         };
-        let txn_provider = DefaultTxnProvider::new(txn_block);
-        AptosVMBlockExecutorWrapper::execute_block_on_thread_pool::<
-            _,
-            NoOpTransactionCommitHook<AptosTransactionOutput, VMStatus>,
-            _,
-        >(
-            self.executor_thread_pool.clone(),
-            &txn_provider,
-            &state_view,
-            // Do not use shared module caches in tests.
-            &AptosModuleCacheManager::new(),
-            config,
-            TransactionSliceMetadata::unknown(),
-            None,
-        )
-        .map(BlockOutput::into_transaction_outputs_forced)
+        let outputs = result?;
+        Ok(outputs)
+    }
+
+    /// Returns a reference to the shared module cache manager if enabled (fuzzing/test). Otherwise
+    /// returns [None].
+    fn module_cache_manager_opt(&self) -> Option<&AptosModuleCacheManager> {
+        match &self.block_state {
+            BlockState::Fuzzing(shared) => Some(&shared.manager),
+            BlockState::None => None,
+        }
+    }
+
+    /// Generates a [TransactionSliceMetadata::Block] when running with a shared cache (fuzzing/test)
+    /// to enable cache reuse across calls. For normal runs, returns [None].
+    fn get_txn_slice_metadata(&self) -> TransactionSliceMetadata {
+        match &self.block_state {
+            BlockState::Fuzzing(shared) => {
+                let child = shared.next_block_id.get();
+                shared.next_block_id.set(child + 1);
+                TransactionSliceMetadata::block(
+                    HashValue::from_u64(child - 1),
+                    HashValue::from_u64(child),
+                )
+            },
+            BlockState::None => TransactionSliceMetadata::unknown(),
+        }
+    }
+
+    #[cfg(fuzzing)]
+    fn maybe_snapshot_hot_cache(
+        &self,
+        state_view: &(impl StateView + Sync),
+        local_cfg: &BlockExecutorModuleCacheLocalConfig,
+        metadata: TransactionSliceMetadata,
+    ) -> Option<ModuleHotCacheSnapshot> {
+        match &self.block_state {
+            BlockState::Fuzzing(shared) => {
+                let mut guard = shared
+                    .manager
+                    .try_lock(state_view, local_cfg, metadata)
+                    .unwrap();
+                Some(guard.snapshot_hot_cache())
+            },
+            BlockState::None => None,
+        }
+    }
+
+    #[cfg(fuzzing)]
+    fn maybe_rollback_hot_cache(
+        &self,
+        state_view: &(impl StateView + Sync),
+        local_cfg: &BlockExecutorModuleCacheLocalConfig,
+        metadata: TransactionSliceMetadata,
+        snapshot: Option<ModuleHotCacheSnapshot>,
+    ) {
+        if let Some(s) = snapshot {
+            if let BlockState::Fuzzing(shared) = &self.block_state {
+                let mut guard = shared
+                    .manager
+                    .try_lock(state_view, local_cfg, metadata)
+                    .unwrap();
+                guard.rollback_hot_cache(s);
+            }
+        }
     }
 
     pub fn execute_transaction_block_with_state_view(
@@ -770,8 +932,12 @@ impl FakeExecutor {
         txn_block: Vec<Transaction>,
         state_view: &(impl StateView + Sync),
     ) -> Result<Vec<TransactionOutput>, VMStatus> {
+        // Note: When executing with TransactionSliceMetadata::Block (e.g., in fuzzing/shared-cache
+        // modes), the block executor may append a synthetic BlockEpilogue at the end of the block.
+        // Callers that require outputs.len() == txns.len() must trim this themselves.
         let mut trace_map: (usize, Vec<usize>, Vec<usize>) = TraceSeqMapping::default();
-
+        #[cfg(fuzzing)]
+        let mut snapshot: Option<ModuleHotCacheSnapshot> = None;
         // dump serialized transaction details before execution, if tracing
         /*
         if let Some(trace_dir) = &self.trace_dir {
@@ -798,23 +964,67 @@ impl FakeExecutor {
         // TODO fetch values from state?
         let onchain_config = BlockExecutorConfigFromOnchain::on_but_large_for_test();
 
+        #[cfg(fuzzing)]
+        // Generate consecutive block metadata when using a shared cache (fuzzing/test).
+        // The same metadata is reused across sequential and parallel runs in comparison mode.
+        let metadata = self.get_txn_slice_metadata();
+
+        #[allow(unused_mut)]
+        let mut config: BlockExecutorConfig = BlockExecutorConfig {
+            local: BlockExecutorLocalConfig {
+                blockstm_v2: false,
+                concurrency_level: 1,
+                allow_fallback: self.allow_block_executor_fallback,
+                discard_failed_blocks: false,
+                module_cache_config: BlockExecutorModuleCacheLocalConfig::default(),
+            },
+            onchain: onchain_config.clone(),
+        };
+
+        #[cfg(fuzzing)]
+        {
+            if mode == ExecutorMode::BothComparison {
+                snapshot = self.maybe_snapshot_hot_cache(
+                    state_view,
+                    &config.local.module_cache_config,
+                    metadata,
+                );
+                assert!(
+                    snapshot.is_some(),
+                    "snapshot should be Some if mode is BothComparison"
+                );
+            }
+        }
+
         let sequential_output = if mode != ExecutorMode::ParallelOnly {
             Some(self.execute_transaction_block_impl_with_state_view(
                 sig_verified_block.clone(),
-                onchain_config.clone(),
-                true,
                 state_view,
+                config.clone(),
             ))
         } else {
             None
         };
 
+        #[cfg(fuzzing)]
+        {
+            if mode == ExecutorMode::BothComparison {
+                self.maybe_rollback_hot_cache(
+                    state_view,
+                    &config.local.module_cache_config,
+                    metadata,
+                    snapshot.take(),
+                );
+            }
+        }
+
         let parallel_output = if mode != ExecutorMode::SequentialOnly {
+            // use the number of threads specified in the executor thread pool as specified at construction time
+            config.local.concurrency_level = self.executor_thread_pool.current_num_threads();
             Some(self.execute_transaction_block_impl_with_state_view(
                 sig_verified_block,
-                onchain_config,
-                false,
                 state_view,
+                config.clone(),
             ))
         } else {
             None
@@ -885,6 +1095,7 @@ impl FakeExecutor {
     pub fn execute_transaction_with_gas_profiler(
         &self,
         txn: SignedTransaction,
+        auxiliary_info: &AuxiliaryInfo,
     ) -> anyhow::Result<(TransactionOutput, TransactionGasLog)> {
         let txn = txn
             .check_signature()
@@ -904,24 +1115,22 @@ impl FakeExecutor {
             &code_storage,
             &txn,
             &log_context,
-            |gas_meter| {
-                let gas_profiler = match txn.payload().executable_ref() {
-                    Ok(TransactionExecutableRef::Script(_)) => GasProfiler::new_script(gas_meter),
-                    Ok(TransactionExecutableRef::EntryFunction(entry_func))
-                        if !txn.payload().is_multisig() =>
-                    {
-                        GasProfiler::new_function(
-                            gas_meter,
-                            entry_func.module().clone(),
-                            entry_func.function().to_owned(),
-                            entry_func.ty_args().to_vec(),
-                        )
-                    },
-                    Ok(_) => unimplemented!("multisig or empty payload not supported yet"),
-                    Err(_) => unimplemented!("payload type is deprecated"),
-                };
-                gas_profiler
+            |gas_meter| match txn.payload().executable_ref() {
+                Ok(TransactionExecutableRef::Script(_)) => GasProfiler::new_script(gas_meter),
+                Ok(TransactionExecutableRef::EntryFunction(entry_func))
+                    if !txn.payload().is_multisig() =>
+                {
+                    GasProfiler::new_function(
+                        gas_meter,
+                        entry_func.module().clone(),
+                        entry_func.function().to_owned(),
+                        entry_func.ty_args().to_vec(),
+                    )
+                },
+                Ok(_) => unimplemented!("multisig or empty payload not supported yet"),
+                Err(_) => unimplemented!("payload type is deprecated"),
             },
+            auxiliary_info,
         )?;
 
         Ok((
@@ -976,8 +1185,78 @@ impl FakeExecutor {
         )
     }
 
-    pub fn get_state_view(&self) -> &impl StateView {
+    pub fn get_state_view(&self) -> &(impl StateView + use<O>) {
         &self.state_store
+    }
+
+    pub fn execute_transaction_block_with_timestamp(
+        &self,
+        time_microseconds: u64,
+        txn_block: Vec<Transaction>,
+    ) -> Result<Vec<TransactionOutput>, VMStatus> {
+        let validator_set = ValidatorSet::fetch_config(&self.state_store)
+            .expect("Unable to retrieve the validator set from storage");
+        let proposer = *validator_set.payload().next().unwrap().account_address();
+        // when updating time, proposer cannot be ZERO.
+        self.execute_transaction_block_with_metadata(time_microseconds, proposer, vec![], txn_block)
+    }
+
+    pub fn execute_transaction_block_with_metadata(
+        &self,
+        time_microseconds: u64,
+        proposer: AccountAddress,
+        failed_proposer_indices: Vec<u32>,
+        mut txn_block: Vec<Transaction>,
+    ) -> Result<Vec<TransactionOutput>, VMStatus> {
+        let validator_set = ValidatorSet::fetch_config(&self.state_store)
+            .expect("Unable to retrieve the validator set from storage");
+        let new_block_metadata = BlockMetadata::new(
+            HashValue::zero(),
+            0,
+            0,
+            proposer,
+            BitVec::with_num_bits(validator_set.num_validators() as u16).into(),
+            failed_proposer_indices,
+            time_microseconds,
+        );
+        txn_block.insert(0, Transaction::BlockMetadata(new_block_metadata));
+        self.execute_transaction_block(txn_block).map(|outputs| {
+            // Check if we emit the expected event for block metadata, there might be more events for transaction fees.
+            let event = outputs[0].events()[0]
+                .v1()
+                .expect("The first event must be a block metadata v0 event")
+                .clone();
+            assert_eq!(event.key(), &new_block_event_key());
+            assert!(bcs::from_bytes::<NewBlockEvent>(event.event_data()).is_ok());
+            outputs
+        })
+    }
+
+    pub fn run_block_with_metadata(
+        &mut self,
+        proposer: AccountAddress,
+        failed_proposer_indices: Vec<u32>,
+        txns: Vec<SignedTransaction>,
+    ) -> Vec<(TransactionStatus, u64)> {
+        let txn_block: Vec<Transaction> =
+            txns.into_iter().map(Transaction::UserTransaction).collect();
+        let outputs = self
+            .execute_transaction_block_with_metadata(
+                self.block_time,
+                proposer,
+                failed_proposer_indices,
+                txn_block,
+            )
+            .expect("Must execute transactions");
+
+        let mut results = vec![];
+        for output in outputs {
+            if !output.status().is_discarded() {
+                self.apply_write_set(output.write_set());
+            }
+            results.push((output.status().clone(), output.gas_used()));
+        }
+        results
     }
 
     pub fn new_block(&mut self) {
@@ -992,49 +1271,6 @@ impl FakeExecutor {
         let proposer = *validator_set.payload().next().unwrap().account_address();
         // when updating time, proposer cannot be ZERO.
         self.new_block_with_metadata(proposer, vec![])
-    }
-
-    pub fn run_block_with_metadata(
-        &mut self,
-        proposer: AccountAddress,
-        failed_proposer_indices: Vec<u32>,
-        txns: Vec<SignedTransaction>,
-    ) -> Vec<(TransactionStatus, u64)> {
-        let mut txn_block: Vec<Transaction> =
-            txns.into_iter().map(Transaction::UserTransaction).collect();
-        let validator_set = ValidatorSet::fetch_config(&self.state_store)
-            .expect("Unable to retrieve the validator set from storage");
-        let new_block_metadata = BlockMetadata::new(
-            HashValue::zero(),
-            0,
-            0,
-            proposer,
-            BitVec::with_num_bits(validator_set.num_validators() as u16).into(),
-            failed_proposer_indices,
-            self.block_time,
-        );
-        txn_block.insert(0, Transaction::BlockMetadata(new_block_metadata));
-
-        let outputs = self
-            .execute_transaction_block(txn_block)
-            .expect("Must execute transactions");
-
-        // Check if we emit the expected event for block metadata, there might be more events for transaction fees.
-        let event = outputs[0].events()[0]
-            .v1()
-            .expect("The first event must be a block metadata v0 event")
-            .clone();
-        assert_eq!(event.key(), &new_block_event_key());
-        assert!(bcs::from_bytes::<NewBlockEvent>(event.event_data()).is_ok());
-
-        let mut results = vec![];
-        for output in outputs {
-            if !output.status().is_discarded() {
-                self.apply_write_set(output.write_set());
-            }
-            results.push((output.status().clone(), output.gas_used()));
-        }
-        results
     }
 
     pub fn new_block_with_metadata(
@@ -1078,13 +1314,17 @@ impl FakeExecutor {
         function_name: &str,
         type_params: Vec<TypeTag>,
         args: Vec<Vec<u8>>,
-        iterations: u64,
+        num_measured_iterations: u64,
         dynamic_args: ExecFuncTimerDynamicArgs,
         gas_meter_type: GasMeterType,
     ) -> Measurement {
+        // First few runs will not be recorded: this ensures modules used for execution are cached.
+        const NUM_WARM_UP_RUNS: u64 = 1;
+
         let mut extra_accounts = match &dynamic_args {
             ExecFuncTimerDynamicArgs::DistinctSigners
-            | ExecFuncTimerDynamicArgs::DistinctSignersAndFixed(_) => (0..iterations)
+            | ExecFuncTimerDynamicArgs::DistinctSignersAndFixed(_) => (0..num_measured_iterations
+                + NUM_WARM_UP_RUNS)
                 .map(|_| *self.new_account_at(AccountAddress::random()).address())
                 .collect::<Vec<_>>(),
             _ => vec![],
@@ -1093,28 +1333,16 @@ impl FakeExecutor {
         let env = AptosEnvironment::new(&self.state_store);
         let resolver = self.state_store.as_move_resolver();
         let vm = MoveVmExt::new(&env);
-
-        // Create module storage, and ensure the module for the function we want to execute is
-        // cached.
         let module_storage = self.state_store.as_aptos_code_storage(&env);
-        assert_ok!(module_storage.fetch_verified_module(module.address(), module.name()));
 
-        // start measuring here to reduce measurement errors (i.e., the time taken to load vm, module, etc.)
         let mut i = 0;
         let mut measurements = Vec::new();
-        while i < iterations {
-            let mut session = vm.new_session(&resolver, SessionId::void(), None);
 
-            // load function name into cache to ensure cache is hot
-            let _ = module_storage.load_function(
-                module,
-                &Self::name(function_name),
-                &type_params.clone(),
-            );
+        while i < num_measured_iterations + NUM_WARM_UP_RUNS {
+            let mut session = vm.new_session(&resolver, SessionId::void(), None);
 
             let fun_name = Self::name(function_name);
             let should_error = fun_name.clone().into_string().ends_with(POSTFIX);
-            let ty = type_params.clone();
             let mut arg = args.clone();
             match &dynamic_args {
                 ExecFuncTimerDynamicArgs::DistinctSigners => {
@@ -1155,30 +1383,31 @@ impl FakeExecutor {
             };
 
             let start = Instant::now();
-            let storage = TraversalStorage::new();
+
+            let traversal_storage = TraversalStorage::new();
             // Not sure how to create a common type for both. Box<dyn GasMeter> doesn't work for some reason.
             let result = match gas_meter_type {
                 GasMeterType::RegularGasMeter => session.execute_function_bypass_visibility(
                     module,
                     &fun_name,
-                    ty,
+                    type_params.clone(),
                     arg,
                     regular.as_mut().unwrap(),
-                    &mut TraversalContext::new(&storage),
+                    &mut TraversalContext::new(&traversal_storage),
                     &module_storage,
                 ),
                 GasMeterType::UnmeteredGasMeter => session.execute_function_bypass_visibility(
                     module,
                     &fun_name,
-                    ty,
+                    type_params.clone(),
                     arg,
                     unmetered.as_mut().unwrap(),
-                    &mut TraversalContext::new(&storage),
+                    &mut TraversalContext::new(&traversal_storage),
                     &module_storage,
                 ),
             };
             let elapsed = start.elapsed();
-            if let Err(err) = result {
+            if let Err(err) = &result {
                 if !should_error {
                     println!(
                         "Entry function under measurement failed with an error. Continuing, but measurements are probably not what is expected. Error: {}",
@@ -1186,15 +1415,19 @@ impl FakeExecutor {
                     );
                 }
             }
-            measurements.push(Measurement {
-                elapsed,
-                execution_gas: regular
-                    .as_ref()
-                    .map_or(0, |gas| gas.algebra().execution_gas_used().into()),
-                io_gas: regular
-                    .as_ref()
-                    .map_or(0, |gas| gas.algebra().io_gas_used().into()),
-            });
+
+            if i > NUM_WARM_UP_RUNS {
+                measurements.push(Measurement {
+                    elapsed,
+                    execution_gas: regular
+                        .as_ref()
+                        .map_or(0, |gas| gas.algebra().execution_gas_used().into()),
+                    io_gas: regular
+                        .as_ref()
+                        .map_or(0, |gas| gas.algebra().io_gas_used().into()),
+                    had_error: result.is_err(),
+                });
+            }
             i += 1;
         }
 
@@ -1211,6 +1444,7 @@ impl FakeExecutor {
                     + measurements[mid].execution_gas)
                     / 2,
                 io_gas: (measurements[mid - 1].io_gas + measurements[mid].io_gas) / 2,
+                had_error: measurements[mid - 1].had_error || measurements[mid].had_error,
             };
         }
 
@@ -1245,7 +1479,9 @@ impl FakeExecutor {
             let fun_name = Self::name(function_name);
             let should_error = fun_name.clone().into_string().ends_with(POSTFIX);
 
-            let storage = TraversalStorage::new();
+            let traversal_storage = TraversalStorage::new();
+            let mut traversal_context = TraversalContext::new(&traversal_storage);
+
             let result = session.execute_function_bypass_visibility(
                 module,
                 &fun_name,
@@ -1262,7 +1498,7 @@ impl FakeExecutor {
                     ),
                     shared_buffer: Arc::clone(&a1),
                 }),
-                &mut TraversalContext::new(&storage),
+                &mut traversal_context,
                 &module_storage,
             );
             if let Err(err) = result {
@@ -1302,7 +1538,10 @@ impl FakeExecutor {
 
             let module_storage = self.state_store.as_aptos_code_storage(&env);
             let mut session = vm.new_session(&resolver, SessionId::void(), None);
-            let storage = TraversalStorage::new();
+
+            let traversal_storage = TraversalStorage::new();
+            let mut traversal_context = TraversalContext::new(&traversal_storage);
+
             session
                 .execute_function_bypass_visibility(
                     &module_id,
@@ -1311,7 +1550,7 @@ impl FakeExecutor {
                     args,
                     // TODO(Gas): we probably want to switch to metered execution in the future
                     &mut UnmeteredGasMeter,
-                    &mut TraversalContext::new(&storage),
+                    &mut traversal_context,
                     &module_storage,
                 )
                 .unwrap_or_else(|e| {
@@ -1401,6 +1640,40 @@ impl FakeExecutor {
 
         account
     }
+
+    /// Enables and disables specified features, committing the result to the state.
+    pub fn enable_features(
+        &mut self,
+        signer: &AccountAddress,
+        enabled: Vec<FeatureFlag>,
+        disabled: Vec<FeatureFlag>,
+    ) {
+        let enabled = enabled.into_iter().map(|f| f as u64).collect::<Vec<_>>();
+        let disabled = disabled.into_iter().map(|f| f as u64).collect::<Vec<_>>();
+        self.exec("features", "change_feature_flags_internal", vec![], vec![
+            MoveValue::Signer(*signer).simple_serialize().unwrap(),
+            bcs::to_bytes(&enabled).unwrap(),
+            bcs::to_bytes(&disabled).unwrap(),
+        ]);
+    }
+}
+
+impl FakeExecutorImpl<GoldenOutputs> {
+    pub fn set_golden_file(&mut self, test_name: &str) {
+        // 'test_name' includes ':' in the names, lets re-write these to be '_'s so that these
+        // files can persist on windows machines.
+        let file_name = test_name.replace(':', "_");
+        self.executed_output = Some(GoldenOutputs::new(&file_name));
+        self.set_tracing(test_name, file_name)
+    }
+
+    pub fn set_golden_file_at(&mut self, path: &str, test_name: &str) {
+        // 'test_name' includes ':' in the names, lets re-write these to be '_'s so that these
+        // files can persist on windows machines.
+        let file_name = test_name.replace(':', "_");
+        self.executed_output = Some(GoldenOutputs::new_at_path(PathBuf::from(path), &file_name));
+        self.set_tracing(test_name, file_name)
+    }
 }
 
 /// Finishes the session, and asserts there has been no modules published (publishing is the
@@ -1437,6 +1710,15 @@ pub fn assert_outputs_equal(
     for (idx, (txn_output_1, txn_output_2)) in
         txns_output_1.iter().zip(txns_output_2.iter()).enumerate()
     {
+        assert_eq!(
+            txn_output_1.status(),
+            txn_output_2.status(),
+            "Different statuses for {:?} and {:?} for transaction outputs at index {}",
+            name1,
+            name2,
+            idx,
+        );
+
         // Gas is usually the problem, so check it separately to
         // have a concise error message.
         assert_eq!(

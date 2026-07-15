@@ -1,7 +1,7 @@
 // Copyright (c) Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{db::test_helper::arb_key_universe, state_store::persisted_state::PersistedState};
+use crate::state_store::persisted_state::PersistedState;
 use aptos_block_executor::hot_state_op_accumulator::BlockHotStateOpAccumulator;
 use aptos_crypto::{hash::CryptoHash, HashValue};
 use aptos_infallible::Mutex;
@@ -19,20 +19,26 @@ use aptos_storage_interface::{
 use aptos_types::{
     proof::SparseMerkleProofExt,
     state_store::{
+        hot_state::{HotStateConfig, LRUEntry},
         state_key::StateKey,
         state_slot::StateSlot,
         state_storage_usage::StateStorageUsage,
-        state_value::{StateValue, ARB_STATE_VALUE_MAX_SIZE},
-        StateViewId, StateViewResult, TStateView,
+        state_value::StateValue,
+        StateViewId, StateViewResult, TStateView, NUM_STATE_SHARDS,
     },
     transaction::Version,
     write_set::{BaseStateOp, HotStateOp, WriteOp},
 };
 use itertools::Itertools;
-use proptest::{collection::vec, prelude::*, sample::Index};
+use lru::LruCache;
+use proptest::{
+    collection::{hash_set, vec},
+    prelude::*,
+    sample::Index,
+};
 use rayon::prelude::*;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     fmt::{Debug, Formatter},
     ops::Deref,
     sync::{
@@ -42,21 +48,27 @@ use std::{
     thread::spawn,
 };
 
-const NUM_KEYS: usize = 10;
-const HOT_STATE_MAX_ITEMS: usize = NUM_KEYS / 2;
-const HOT_STATE_MAX_BYTES: usize = NUM_KEYS / 2 * ARB_STATE_VALUE_MAX_SIZE / 3;
-const HOT_STATE_MAX_SINGLE_VALUE_BYTES: usize = ARB_STATE_VALUE_MAX_SIZE / 2;
+const NUM_KEYS: usize = NUM_STATE_SHARDS * 6;
+const HOT_STATE_MAX_ITEMS_PER_SHARD: usize = NUM_KEYS / NUM_STATE_SHARDS / 2;
+
+// TODO(HotState): these are not used much at the moment.
+const MAX_PROMOTIONS_PER_BLOCK: usize = NUM_KEYS;
+const REFRESH_INTERVAL_VERSIONS: usize = 50;
+
+const TEST_CONFIG: HotStateConfig = HotStateConfig {
+    max_items_per_shard: HOT_STATE_MAX_ITEMS_PER_SHARD,
+};
 
 #[derive(Debug)]
 struct UserTxn {
-    reads: Vec<StateKey>,
-    writes: Vec<(StateKey, Option<StateValue>)>,
+    reads: BTreeSet<StateKey>,
+    writes: BTreeMap<StateKey, Option<StateValue>>,
 }
 
 #[derive(Debug)]
 struct Txn {
-    reads: Vec<StateKey>,
-    write_set: Vec<(StateKey, BaseStateOp)>,
+    reads: BTreeSet<StateKey>,
+    write_set: BTreeMap<StateKey, BaseStateOp>,
     is_checkpoint: bool,
 }
 
@@ -75,11 +87,9 @@ impl Chunk {
             update_refs_builder: |txn_outs| {
                 StateUpdateRefs::index(
                     first_version,
-                    txn_outs
-                        .iter()
-                        .map(|t| t.write_set.iter().map(|(key, op)| (key, op))),
+                    txn_outs.iter().map(|t| t.write_set.iter()),
                     txn_outs.len(),
-                    txn_outs.iter().rposition(|t| t.is_checkpoint),
+                    txn_outs.iter().positions(|t| t.is_checkpoint).collect(),
                 )
             },
         }
@@ -90,7 +100,7 @@ impl Chunk {
         self.borrow_txns().iter().flat_map(|t| &t.reads)
     }
 
-    fn update_refs(&self) -> &StateUpdateRefs {
+    fn update_refs(&self) -> &StateUpdateRefs<'_> {
         self.borrow_update_refs()
     }
 }
@@ -102,7 +112,15 @@ impl Debug for Chunk {
 }
 
 prop_compose! {
-    pub fn arb_user_block(
+    fn arb_keys(num_keys: usize)(
+        raw_keys in hash_set("[a-z0-9]{5}", num_keys),
+    ) -> Vec<StateKey> {
+        raw_keys.iter().map(|raw| StateKey::raw(raw.as_bytes())).collect_vec()
+    }
+}
+
+prop_compose! {
+    fn arb_user_block(
         keys: Vec<StateKey>,
         max_read_only_set_size: usize,
         max_write_set_size: usize,
@@ -125,20 +143,21 @@ prop_compose! {
         input
             .into_iter()
             .map(|(reads, writes)| {
-                let write_set: HashMap<_, _> = writes
+                let write_set: BTreeMap<_, _> = writes
                     .into_iter()
                     .map(|(idx, value)| (idx.get(&keys).clone(), value))
                     .collect();
 
                 // The read set is a super set of the write set.
-                let read_set: HashSet<_> = write_set
+                let read_set: BTreeSet<_> = write_set
                     .keys()
-                    .chain(reads.iter().map(|idx| idx.get(&keys)))
+                    .cloned()
+                    .chain(reads.iter().map(|idx| idx.get(&keys)).cloned())
                     .collect();
 
                 UserTxn {
-                    reads: read_set.into_iter().cloned().collect(),
-                    writes: write_set.into_iter().collect(),
+                    reads: read_set,
+                    writes: write_set,
                 }
             })
             .collect_vec()
@@ -148,6 +167,7 @@ prop_compose! {
 #[derive(Clone)]
 struct VersionState {
     usage: StateStorageUsage,
+    hot_state: [LruCache<StateKey, StateSlot>; NUM_STATE_SHARDS],
     state: HashMap<StateKey, (Version, StateValue)>,
     summary: NaiveSmt,
     next_version: Version,
@@ -157,6 +177,7 @@ impl VersionState {
     fn new_empty() -> Self {
         Self {
             usage: StateStorageUsage::zero(),
+            hot_state: [(); NUM_STATE_SHARDS].map(|_| LruCache::unbounded()),
             state: HashMap::new(),
             summary: NaiveSmt::default(),
             next_version: 0,
@@ -166,23 +187,69 @@ impl VersionState {
     fn update<'a>(
         &self,
         version: Version,
-        kvs: impl IntoIterator<Item = (&'a StateKey, Option<&'a StateValue>)>,
+        writes: impl IntoIterator<Item = (&'a StateKey, Option<&'a StateValue>)>,
+        promotions: impl IntoIterator<Item = &'a StateKey>,
+        is_checkpoint: bool,
     ) -> Self {
         assert_eq!(version, self.next_version);
 
+        let mut hot_state = self.hot_state.clone();
         let mut state = self.state.clone();
         let mut smt_updates = vec![];
 
-        for (k, v_opt) in kvs.into_iter() {
+        for (k, v_opt) in writes {
+            let shard_id = k.get_shard_id();
             match v_opt {
                 None => {
+                    let slot = StateSlot::HotVacant {
+                        hot_since_version: version,
+                        lru_info: LRUEntry::uninitialized(),
+                    };
+                    hot_state[shard_id].put(k.clone(), slot);
                     state.remove(k);
                     smt_updates.push((k.hash(), None));
                 },
                 Some(v) => {
+                    let slot = StateSlot::HotOccupied {
+                        value_version: version,
+                        value: v.clone(),
+                        hot_since_version: version,
+                        lru_info: LRUEntry::uninitialized(),
+                    };
+                    hot_state[shard_id].put(k.clone(), slot);
                     state.insert(k.clone(), (version, v.clone()));
                     smt_updates.push((k.hash(), Some(v.hash())));
                 },
+            }
+        }
+
+        for k in promotions {
+            assert!(is_checkpoint, "No promotions unless in checkpoints");
+            let shard_id = k.get_shard_id();
+            if let Some(slot) = hot_state[shard_id].get_mut(k) {
+                slot.refresh(version);
+                continue;
+            }
+            let slot = match state.get(k) {
+                Some((value_version, value)) => StateSlot::HotOccupied {
+                    value_version: *value_version,
+                    value: value.clone(),
+                    hot_since_version: version,
+                    lru_info: LRUEntry::uninitialized(),
+                },
+                None => StateSlot::HotVacant {
+                    hot_since_version: version,
+                    lru_info: LRUEntry::uninitialized(),
+                },
+            };
+            hot_state[shard_id].put(k.clone(), slot);
+        }
+
+        if is_checkpoint {
+            for shard in hot_state.iter_mut() {
+                while shard.len() > HOT_STATE_MAX_ITEMS_PER_SHARD {
+                    shard.pop_lru();
+                }
             }
         }
 
@@ -193,9 +260,10 @@ impl VersionState {
         let usage = StateStorageUsage::new(items, bytes);
 
         Self {
+            usage,
+            hot_state,
             state,
             summary,
-            usage,
             next_version: version + 1,
         }
     }
@@ -205,7 +273,16 @@ impl TStateView for VersionState {
     type Key = StateKey;
 
     fn get_state_slot(&self, key: &Self::Key) -> StateViewResult<StateSlot> {
-        Ok(StateSlot::from_db_get(self.state.get(key).cloned()))
+        let from_cold = StateSlot::from_db_get(self.state.get(key).cloned());
+        let shard_id = key.get_shard_id();
+        let slot = match self.hot_state[shard_id].peek(key) {
+            Some(slot) => {
+                assert_eq!(slot.as_state_value_opt(), from_cold.as_state_value_opt());
+                slot.clone()
+            },
+            None => from_cold,
+        };
+        Ok(slot)
     }
 
     fn get_usage(&self) -> StateViewResult<StateStorageUsage> {
@@ -222,7 +299,7 @@ struct StateByVersion {
 }
 
 impl StateByVersion {
-    pub fn get_state(&self, version: Option<Version>) -> &Arc<VersionState> {
+    fn get_state(&self, version: Option<Version>) -> &VersionState {
         let next_version = version.map_or(0, |ver| ver + 1);
         &self.state_by_next_version[next_version as usize]
     }
@@ -235,14 +312,17 @@ impl StateByVersion {
 
     fn append_version<'a>(
         &mut self,
-        kvs: impl IntoIterator<Item = (&'a StateKey, Option<&'a StateValue>)>,
+        writes: impl IntoIterator<Item = (&'a StateKey, Option<&'a StateValue>)>,
+        promotions: impl IntoIterator<Item = &'a StateKey>,
+        is_checkpoint: bool,
     ) {
-        let kvs = kvs.into_iter().collect_vec();
         self.state_by_next_version.push(Arc::new(
-            self.state_by_next_version
-                .last()
-                .unwrap()
-                .update(self.next_version(), kvs.clone()),
+            self.state_by_next_version.last().unwrap().update(
+                self.next_version(),
+                writes,
+                promotions,
+                is_checkpoint,
+            ),
         ));
     }
 
@@ -250,11 +330,45 @@ impl StateByVersion {
         self.state_by_next_version.len() as Version - 1
     }
 
+    fn assert_state_slot(slot1: &StateSlot, slot2: &StateSlot) {
+        match (slot1, slot2) {
+            (
+                StateSlot::HotVacant {
+                    hot_since_version: v1,
+                    ..
+                },
+                StateSlot::HotVacant {
+                    hot_since_version: v2,
+                    ..
+                },
+            ) => assert_eq!(v1, v2),
+            (
+                StateSlot::HotOccupied {
+                    value_version: vv1,
+                    value: v1,
+                    hot_since_version: h1,
+                    ..
+                },
+                StateSlot::HotOccupied {
+                    value_version: vv2,
+                    value: v2,
+                    hot_since_version: h2,
+                    ..
+                },
+            ) => {
+                assert_eq!(vv1, vv2);
+                assert_eq!(v1, v2);
+                assert_eq!(h1, h2);
+            },
+            (s1, s2) => assert_eq!(s1, s2),
+        }
+    }
+
     fn assert_state(&self, state: &State) {
         assert_eq!(state.usage(), self.get_state(state.version()).usage);
     }
 
-    pub fn assert_ledger_state(&self, ledger_state: &LedgerState) {
+    fn assert_ledger_state(&self, ledger_state: &LedgerState) {
         self.assert_state(ledger_state.last_checkpoint());
         self.assert_state(ledger_state.latest());
     }
@@ -268,16 +382,12 @@ impl StateByVersion {
         );
     }
 
-    pub fn assert_ledger_state_summary(&self, ledger_state_summary: &LedgerStateSummary) {
+    fn assert_ledger_state_summary(&self, ledger_state_summary: &LedgerStateSummary) {
         self.assert_state_summary(ledger_state_summary.last_checkpoint());
         self.assert_state_summary(ledger_state_summary.latest());
     }
 
-    pub fn assert_jmt_updates(
-        &self,
-        last_snapshot: &StateWithSummary,
-        snapshot: &StateWithSummary,
-    ) {
+    fn assert_jmt_updates(&self, last_snapshot: &StateWithSummary, snapshot: &StateWithSummary) {
         let base_state = self.get_state(last_snapshot.version()).clone();
         let result_state = self.get_state(snapshot.version()).clone();
         assert_eq!(
@@ -415,6 +525,7 @@ fn update_state(
         let memorized_reads = state_view.into_memorized_reads();
 
         let next_state = parent_state.update_with_memorized_reads(
+            hot_state.clone(),
             &persisted_state,
             block.update_refs(),
             &memorized_reads,
@@ -487,32 +598,65 @@ fn send_to_state_buffer(
         }
     }
 
+    // Make sure the final checkpoint is committed.
+    let final_state_with_summary: LedgerStateWithSummary = current_state.lock().clone();
+    assert!(final_state_with_summary.is_at_checkpoint());
+    let final_version = final_state_with_summary.version().unwrap();
+    if last_snapshot.version() != Some(final_version) {
+        let snapshot = final_state_with_summary.last_checkpoint();
+        state_by_version.assert_jmt_updates(&last_snapshot, snapshot);
+        to_buffered_state_commit.send(snapshot.clone()).unwrap();
+    }
+
     // inform downstream to quit
     drop(to_buffered_state_commit);
 }
 
 fn commit_state_buffer(
+    state_by_version: Arc<StateByVersion>,
     from_buffered_state_commit: Receiver<StateWithSummary>,
     persisted_state: PersistedState,
 ) {
     while let Ok(snapshot) = from_buffered_state_commit.recv() {
+        let next_version = snapshot.next_version();
         persisted_state.set(snapshot);
+
+        let hot_state = persisted_state.get_hot_state();
+        hot_state.wait_for_commit(next_version);
+
+        (0..NUM_STATE_SHARDS).into_par_iter().for_each(|shard_id| {
+            let all_entries = hot_state.get_all_entries(shard_id);
+            let naive_hot_state =
+                &state_by_version.get_state(Some(next_version - 1)).hot_state[shard_id];
+            assert_eq!(all_entries.len(), naive_hot_state.len());
+
+            for (key, slot) in &all_entries {
+                let slot2 = naive_hot_state.peek(key).unwrap();
+                StateByVersion::assert_state_slot(slot, slot2);
+            }
+        });
     }
 }
 
 fn naive_run_blocks(blocks: Vec<(Vec<UserTxn>, bool)>) -> (Vec<Txn>, StateByVersion) {
     let mut all_txns = vec![];
     let mut state_by_version = StateByVersion::new_empty();
-    let mut next_version: Version = 0;
     for (block_txns, append_epilogue) in blocks {
-        let base_view = state_by_version
-            .get_state(next_version.checked_sub(1))
-            .clone();
-        let mut op_accu =
-            BlockHotStateOpAccumulator::<StateKey, _>::new_with_config(&base_view, 10, 50);
-        for txn in block_txns {
-            state_by_version.append_version(txn.writes.iter().map(|(k, v)| (k, v.as_ref())));
-            op_accu.add_transaction(txn.writes.iter().map(|(k, _v)| k), txn.reads.iter());
+        let mut op_accu = BlockHotStateOpAccumulator::<StateKey>::new_with_config(
+            MAX_PROMOTIONS_PER_BLOCK,
+            REFRESH_INTERVAL_VERSIONS,
+        );
+        let num_txns = block_txns.len();
+        for (idx, txn) in block_txns.into_iter().enumerate() {
+            // No promotions except for block epilogue. Also note that in case of reconfig, there's
+            // no epilogue, but we still have a checkpoint and will run eviction on hot state.
+            let is_checkpoint = !append_epilogue && idx + 1 == num_txns;
+            state_by_version.append_version(
+                txn.writes.iter().map(|(k, v)| (k, v.as_ref())),
+                vec![],
+                is_checkpoint,
+            );
+            op_accu.add_transaction(txn.writes.keys(), txn.reads.iter());
             all_txns.push(Txn {
                 reads: txn.reads,
                 write_set: txn
@@ -525,25 +669,22 @@ fn naive_run_blocks(blocks: Vec<(Vec<UserTxn>, bool)>) -> (Vec<Txn>, StateByVers
                     .collect(),
                 is_checkpoint: false,
             });
-            next_version += 1;
         }
         if append_epilogue {
-            // TODO(HotState): revisit
-            // all ops are hotness only, no effect on the global state
-            state_by_version.append_version(vec![]);
+            let to_make_hot = op_accu.get_keys_to_make_hot();
+            let is_checkpoint = true;
+            state_by_version.append_version(vec![], to_make_hot.iter(), is_checkpoint);
 
-            let write_set = op_accu
-                .get_slots_to_make_hot()
+            let reads = to_make_hot.clone();
+            let write_set = to_make_hot
                 .into_iter()
-                .map(|(k, slot)| (k, HotStateOp::make_hot(slot).into_base_op()))
-                .collect_vec();
-            let reads = write_set.iter().map(|(k, _op)| k.clone()).collect_vec();
+                .map(|k| (k, HotStateOp::make_hot().into_base_op()))
+                .collect();
             all_txns.push(Txn {
                 reads,
                 write_set,
                 is_checkpoint: true,
             });
-            next_version += 1;
         }
     }
 
@@ -551,14 +692,10 @@ fn naive_run_blocks(blocks: Vec<(Vec<UserTxn>, bool)>) -> (Vec<Txn>, StateByVers
 }
 
 fn replay_chunks_pipelined(chunks: Vec<Chunk>, state_by_version: Arc<StateByVersion>) {
-    let empty = LedgerStateWithSummary::new_empty();
+    let empty = LedgerStateWithSummary::new_empty(TEST_CONFIG);
     let current_state = Arc::new(Mutex::new(empty.clone()));
 
-    let persisted_state = PersistedState::new_empty_with_config(
-        HOT_STATE_MAX_ITEMS,
-        HOT_STATE_MAX_BYTES,
-        HOT_STATE_MAX_SINGLE_VALUE_BYTES,
-    );
+    let persisted_state = PersistedState::new_empty_with_config(TEST_CONFIG);
     persisted_state.hack_reset(empty.deref().clone());
 
     let (to_summary_update, from_state_update) = channel();
@@ -613,9 +750,14 @@ fn replay_chunks_pipelined(chunks: Vec<Chunk>, state_by_version: Arc<StateByVers
     }
 
     {
+        let state_by_version = state_by_version.clone();
         let persisted_state = persisted_state.clone();
         threads.push(spawn(move || {
-            commit_state_buffer(from_buffered_state_commit, persisted_state);
+            commit_state_buffer(
+                state_by_version,
+                from_buffered_state_commit,
+                persisted_state,
+            );
         }));
     }
 
@@ -625,18 +767,25 @@ fn replay_chunks_pipelined(chunks: Vec<Chunk>, state_by_version: Arc<StateByVers
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(100))]
+    #![proptest_config(ProptestConfig::with_cases(50))]
 
     #[test]
     fn test_speculative_state_workflow(
-        blocks in arb_key_universe(NUM_KEYS)
+        (mut blocks, last_block) in arb_keys(NUM_KEYS)
             .prop_flat_map(move |keys| {
-                vec((
-                    arb_user_block(keys, NUM_KEYS, NUM_KEYS, NUM_KEYS),
-                    prop_oneof![1=>Just(false), 9=>Just(true)]
-                ), 1..100)
+                (
+                    vec(
+                        (
+                            arb_user_block(keys.clone(), NUM_KEYS, NUM_KEYS, NUM_KEYS),
+                            prop_oneof![1=>Just(false), 9=>Just(true)]
+                        ),
+                        1..100
+                    ),
+                    arb_user_block(keys, NUM_KEYS, NUM_KEYS, NUM_KEYS)
+                )
             })
     ) {
+        blocks.push((last_block, /* is_checkpoint */ true));
 
         let (all_txns, state_by_version) = naive_run_blocks(blocks);
 

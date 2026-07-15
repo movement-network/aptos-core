@@ -20,6 +20,7 @@ use aptos_block_executor::{
     code_cache_global_manager::AptosModuleCacheManager, txn_provider::default::DefaultTxnProvider,
 };
 use aptos_logger::{info, trace};
+use aptos_metrics_core::TimerHelper;
 use aptos_types::{
     block_executor::{
         config::{BlockExecutorConfig, BlockExecutorLocalConfig},
@@ -139,7 +140,8 @@ impl<S: StateView + Sync + Send + 'static> ShardedExecutorService<S> {
                 );
             });
             s.spawn(move |_| {
-                let txn_provider = DefaultTxnProvider::new(signature_verified_transactions);
+                let txn_provider =
+                    DefaultTxnProvider::new_without_info(signature_verified_transactions);
                 let ret = AptosVMBlockExecutorWrapper::execute_block_on_thread_pool(
                     executor_thread_pool,
                     &txn_provider,
@@ -189,11 +191,11 @@ impl<S: StateView + Sync + Send + 'static> ShardedExecutorService<S> {
         let mut result = vec![];
         for (round, sub_block) in transactions.into_sub_blocks().into_iter().enumerate() {
             let _timer = SHARDED_BLOCK_EXECUTION_BY_ROUNDS_SECONDS
-                .with_label_values(&[&self.shard_id.to_string(), &round.to_string()])
-                .start_timer();
-            SHARDED_BLOCK_EXECUTOR_TXN_COUNT
-                .with_label_values(&[&self.shard_id.to_string(), &round.to_string()])
-                .observe(sub_block.transactions.len() as f64);
+                .timer_with(&[&self.shard_id.to_string(), &round.to_string()]);
+            SHARDED_BLOCK_EXECUTOR_TXN_COUNT.observe_with(
+                &[&self.shard_id.to_string(), &round.to_string()],
+                sub_block.transactions.len() as f64,
+            );
             info!(
                 "executing sub block for shard {} and round {}, number of txns {}",
                 self.shard_id,
@@ -233,8 +235,7 @@ impl<S: StateView + Sync + Send + 'static> ShardedExecutorService<S> {
                         num_txns
                     );
                     let exe_timer = SHARDED_EXECUTOR_SERVICE_SECONDS
-                        .with_label_values(&[&self.shard_id.to_string(), "execute_block"])
-                        .start_timer();
+                        .timer_with(&[&self.shard_id.to_string(), "execute_block"]);
                     let ret = self.execute_block(
                         transactions,
                         state_view.as_ref(),
@@ -249,8 +250,7 @@ impl<S: StateView + Sync + Send + 'static> ShardedExecutorService<S> {
                     drop(exe_timer);
 
                     let _result_tx_timer = SHARDED_EXECUTOR_SERVICE_SECONDS
-                        .with_label_values(&[&self.shard_id.to_string(), "result_tx"])
-                        .start_timer();
+                        .timer_with(&[&self.shard_id.to_string(), "result_tx"]);
                     self.coordinator_client.send_execution_result(ret);
                 },
                 ExecutorShardCommand::Stop => {

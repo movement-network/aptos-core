@@ -12,15 +12,14 @@ use crate::{
 };
 use aptos_gas_schedule::gas_params::natives::aptos_framework::*;
 use aptos_native_interface::{SafeNativeContext, SafeNativeError, SafeNativeResult};
-use ark_ec::Group;
-use ark_ff::Field;
+use ark_ff::{AdditiveGroup, Field};
 use move_vm_types::{loaded_data::runtime_types::Type, values::Value};
 use smallvec::{smallvec, SmallVec};
 use std::{collections::VecDeque, rc::Rc};
 
 pub fn double_internal(
     context: &mut SafeNativeContext,
-    ty_args: Vec<Type>,
+    ty_args: &[Type],
     mut args: VecDeque<Value>,
 ) -> SafeNativeResult<SmallVec<[Value; 1]>> {
     assert_eq!(1, ty_args.len());

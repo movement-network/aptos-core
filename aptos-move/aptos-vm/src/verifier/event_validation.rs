@@ -36,11 +36,9 @@ fn metadata_validation_error(msg: &str) -> VMError {
 /// * Extract the event metadata
 /// * Verify all changes are compatible upgrades (existing event attributes cannot be removed)
 pub(crate) fn validate_module_events(
-    _features: &Features,
-    _gas_feature_version: u64,
+    features: &Features,
     module_storage: &impl ModuleStorage,
-    // TODO(lazy-loading): add a check that the old module has been visited.
-    _traversal_context: &TraversalContext,
+    traversal_context: &TraversalContext,
     new_modules: &[CompiledModule],
 ) -> VMResult<()> {
     for new_module in new_modules {
@@ -52,8 +50,18 @@ pub(crate) fn validate_module_events(
         // Check all the emit calls have the correct struct with event attribute.
         validate_emit_calls(&new_event_structs, new_module)?;
 
+        // INVARIANT:
+        //   No need to charge gas for module access: this function fetches the old version of the
+        //   module which has been already charged when publish request was processed first (if
+        //   such old version exists).
+        if features.is_lazy_loading_enabled() {
+            traversal_context
+                .check_is_special_or_visited(new_module.address(), new_module.name())
+                .map_err(|err| err.finish(Location::Undefined))?;
+        }
+
         let old_module_metadata_if_exists = module_storage
-            .fetch_deserialized_module(new_module.address(), new_module.name())?
+            .unmetered_get_deserialized_module(new_module.address(), new_module.name())?
             .and_then(|module| {
                 // TODO(loader_v2): We can optimize this to fetch metadata directly.
                 get_metadata_from_compiled_code(module.as_ref())
@@ -158,12 +166,24 @@ pub(crate) fn validate_emit_calls(
                     | LdU64(_)
                     | LdU128(_)
                     | LdU256(_)
+                    | LdI8(_)
+                    | LdI16(_)
+                    | LdI32(_)
+                    | LdI64(_)
+                    | LdI128(_)
+                    | LdI256(_)
                     | CastU8
                     | CastU16
                     | CastU32
                     | CastU64
                     | CastU128
                     | CastU256
+                    | CastI8
+                    | CastI16
+                    | CastI32
+                    | CastI64
+                    | CastI128
+                    | CastI256
                     | LdConst(_)
                     | LdTrue
                     | LdFalse
@@ -199,6 +219,7 @@ pub(crate) fn validate_emit_calls(
                     | Mul
                     | Mod
                     | Div
+                    | Negate
                     | BitOr
                     | BitAnd
                     | Xor

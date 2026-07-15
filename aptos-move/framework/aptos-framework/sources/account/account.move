@@ -202,9 +202,9 @@ module aptos_framework::account {
     const EOFFERER_ADDRESS_DOES_NOT_EXIST: u64 = 17;
     /// The specified rotation capability offer does not exist at the specified offerer address
     const ENO_SUCH_ROTATION_CAPABILITY_OFFER: u64 = 18;
-    // The signer capability is not offered to any address
+    /// The signer capability is not offered to any address
     const ENO_SIGNER_CAPABILITY_OFFERED: u64 = 19;
-    // This account has exceeded the allocated GUIDs it can create. It should be impossible to reach this number for real applications.
+    /// This account has exceeded the allocated GUIDs it can create. It should be impossible to reach this number for real applications.
     const EEXCEEDED_MAX_GUID_CREATION_NUM: u64 = 20;
     /// The new authentication key already has an entry in the `OriginatingAddress` table
     const ENEW_AUTH_KEY_ALREADY_MAPPED: u64 = 21;
@@ -401,7 +401,7 @@ module aptos_framework::account {
         }
     }
 
-    inline fun ensure_resource_exists(addr: address) acquires Account{
+    inline fun ensure_resource_exists(addr: address) {
         if (features::is_default_account_resource_enabled()) {
             create_account_if_does_not_exist(addr);
         } else {
@@ -829,10 +829,10 @@ module aptos_framework::account {
     /// Kept as a private entry function to ensure that after an unproven rotation via
     /// `rotate_authentication_key_call()`, the `OriginatingAddress` table is only updated under the
     /// authority of the new authentication key.
-    entry fun set_originating_address(account: &signer) acquires Account, OriginatingAddress {
+    entry fun set_originating_address(_account: &signer) acquires Account, OriginatingAddress {
         abort error::invalid_state(ESET_ORIGINATING_ADDRESS_DISABLED);
 
-        let account_addr = signer::address_of(account);
+        let account_addr = signer::address_of(_account);
         assert!(exists<Account>(account_addr), error::not_found(EACCOUNT_DOES_NOT_EXIST));
         let auth_key_as_address =
             from_bcs::to_address(Account[account_addr].authentication_key);

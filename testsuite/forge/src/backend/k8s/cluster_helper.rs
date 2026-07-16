@@ -2,14 +2,15 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use super::GENESIS_HELM_RELEASE_NAME;
+use super::{APTOS_NODE_HELM_CHART_PATH, GENESIS_HELM_CHART_PATH, GENESIS_HELM_RELEASE_NAME};
 use crate::{
-    get_validator_fullnodes, get_validators, k8s_wait_nodes_strategy, nodes_healthcheck,
-    wait_stateful_set, ForgeDeployerManager, ForgeRunnerMode, GenesisConfigFn, K8sApi, K8sNode,
+    get_validator_fullnodes, get_validators, k8s_wait_genesis_strategy, k8s_wait_nodes_strategy,
+    nodes_healthcheck,
+    wait_stateful_set, ForgeRunnerMode, GenesisConfigFn, K8sApi, K8sNode,
     NodeConfigFn, ReadWrite, Result, APTOS_NODE_HELM_RELEASE_NAME, DEFAULT_ROOT_KEY,
     DEFAULT_TEST_SUITE_NAME, DEFAULT_USERNAME, FORGE_KEY_SEED,
-    FORGE_TESTNET_DEPLOYER_DOCKER_IMAGE_REPO, FULLNODE_HAPROXY_SERVICE_SUFFIX,
-    FULLNODE_SERVICE_SUFFIX, HELM_BIN, KUBECTL_BIN, MANAGEMENT_CONFIGMAP_PREFIX,
+    FULLNODE_HAPROXY_SERVICE_SUFFIX, FULLNODE_SERVICE_SUFFIX, HELM_BIN, KUBECTL_BIN,
+    MANAGEMENT_CONFIGMAP_PREFIX,
     NAMESPACE_CLEANUP_THRESHOLD_SECS, ORPHAN_POD_CLEANUP_THRESHOLD_SECS,
     VALIDATOR_HAPROXY_SERVICE_SUFFIX, VALIDATOR_SERVICE_SUFFIX,
 };
@@ -38,6 +39,7 @@ use std::{
     fs::{self, File},
     io::Write,
     net::TcpListener,
+    path::Path,
     process::{Command, Stdio},
     str,
     sync::Arc,
@@ -329,10 +331,14 @@ pub(crate) fn delete_all_chaos(kube_namespace: &str) -> Result<()> {
         .output()
         .expect("failed to delete all NetworkChaos");
     if !delete_networkchaos_output.status.success() {
-        bail!(
-            "{}",
-            String::from_utf8(delete_networkchaos_output.stderr).unwrap()
-        );
+        let stderr = String::from_utf8(delete_networkchaos_output.stderr).unwrap();
+        // A cluster without Chaos Mesh installed has no networkchaos CRD, so there
+        // is nothing to delete. Treat that as success rather than failing setup.
+        if stderr.contains("the server doesn't have a resource type") {
+            info!("networkchaos CRD not present; skipping chaos cleanup");
+            return Ok(());
+        }
+        bail!("{}", stderr);
     }
     Ok(())
 }
@@ -638,23 +644,30 @@ pub async fn install_testnet_resources(
         genesis_helm_values["genesis"]["genesis_blob_upload_url"] = "".into();
     }
 
-    let config: serde_json::Value = serde_json::from_value(serde_json::json!({
-        "profile": deployer_profile,
-        "era": new_era,
-        "namespace": kube_namespace.clone(),
-        "testnet-values": aptos_node_helm_values,
-        "genesis-values": genesis_helm_values,
-    }))?;
+    // Install the genesis and aptos-node charts directly via helm, rather than
+    // delegating to the forge-testnet-deployer image (an Aptos-internal artifact
+    // this fork cannot pull or build). The charts and framework come from the
+    // local checkout, so the devnet reflects the branch under test.
+    let _ = deployer_profile;
+    let tmp_dir = TempDir::new().expect("Could not create temp dir");
+    let genesis_values_file = dump_string_to_file(
+        "genesis-values.yaml".to_string(),
+        serde_yaml::to_string(&genesis_helm_values)?,
+        &tmp_dir,
+    )?;
+    let node_values_file = dump_string_to_file(
+        "aptos-node-values.yaml".to_string(),
+        serde_yaml::to_string(&aptos_node_helm_values)?,
+        &tmp_dir,
+    )?;
 
-    let testnet_deployer = ForgeDeployerManager::new(
-        kube_client.clone(),
+    // Run genesis, wait for the job to complete, then bring up the nodes.
+    upgrade_genesis_helm(
+        &["-f".to_string(), genesis_values_file],
         kube_namespace.clone(),
-        FORGE_TESTNET_DEPLOYER_DOCKER_IMAGE_REPO.to_string(),
-        None,
-    );
-
-    testnet_deployer.start(config).await?;
-    testnet_deployer.wait_completed().await?;
+    )?;
+    wait_genesis_job(&kube_client, &new_era, &kube_namespace).await?;
+    upgrade_aptos_node_helm(&["-f".to_string(), node_values_file], kube_namespace.clone())?;
 
     if skip_collecting_running_nodes {
         Ok((HashMap::new(), HashMap::new()))
@@ -668,6 +681,120 @@ pub async fn install_testnet_resources(
         .await?;
         Ok((validators, fullnodes))
     }
+}
+
+/// Run `helm upgrade --install` for a release from a local chart path.
+fn upgrade_helm_release(
+    release_name: String,
+    helm_chart: String,
+    options: &[String],
+    kube_namespace: String,
+) -> Result<()> {
+    // Check to make sure helm_chart exists
+    let helm_chart_path = Path::new(&helm_chart);
+    if !helm_chart_path.exists() {
+        bail!(
+            "Helm chart {} does not exist, try running from the repo root",
+            helm_chart
+        );
+    }
+
+    // only create cluster-level resources once
+    let psp_values = match kube_namespace.as_str() {
+        "default" => "podSecurityPolicy=true",
+        _ => "podSecurityPolicy=false",
+    };
+    let upgrade_base_args = [
+        "upgrade".to_string(),
+        "--install".to_string(),
+        "--create-namespace".to_string(),
+        "--namespace".to_string(),
+        kube_namespace,
+        release_name.clone(),
+        helm_chart.clone(),
+        "--history-max".to_string(),
+        "2".to_string(),
+    ];
+    let upgrade_override_args = ["--set".to_string(), psp_values.to_string()];
+    let upgrade_args = [&upgrade_base_args, options, &upgrade_override_args].concat();
+    info!("{:?}", upgrade_args);
+    let upgrade_output = Command::new(HELM_BIN)
+        .stdout(Stdio::inherit())
+        .args(&upgrade_args)
+        .output()
+        .unwrap_or_else(|_| {
+            panic!(
+                "failed to helm upgrade release {} with chart {}",
+                release_name, helm_chart
+            )
+        });
+    if !upgrade_output.status.success() {
+        bail!(format!(
+            "Upgrade not completed: {}",
+            String::from_utf8(upgrade_output.stderr).unwrap()
+        ));
+    }
+
+    Ok(())
+}
+
+fn upgrade_genesis_helm(options: &[String], kube_namespace: String) -> Result<()> {
+    upgrade_helm_release(
+        GENESIS_HELM_RELEASE_NAME.to_string(),
+        GENESIS_HELM_CHART_PATH.to_string(),
+        options,
+        kube_namespace,
+    )
+}
+
+fn upgrade_aptos_node_helm(options: &[String], kube_namespace: String) -> Result<()> {
+    upgrade_helm_release(
+        APTOS_NODE_HELM_RELEASE_NAME.to_string(),
+        APTOS_NODE_HELM_CHART_PATH.to_string(),
+        options,
+        kube_namespace,
+    )
+}
+
+/// Wait for the genesis Job of the given era to complete, tailing its logs.
+async fn wait_genesis_job(kube_client: &K8sClient, era: &str, kube_namespace: &str) -> Result<()> {
+    aptos_retrier::retry_async(k8s_wait_genesis_strategy(), || {
+        let jobs: Api<Job> = Api::namespaced(kube_client.clone(), kube_namespace);
+        Box::pin(async move {
+            let job_name = format!("{}-aptos-genesis-e{}", GENESIS_HELM_RELEASE_NAME, era);
+
+            let genesis_job = jobs.get_status(&job_name).await.unwrap();
+
+            let status = genesis_job.status.unwrap();
+            info!("Genesis status: {:?}", status);
+            match status.active {
+                Some(_) => {
+                    // try tailing the logs of the genesis job
+                    // by the time this is done, we can re-evalulate its status
+                    Command::new(KUBECTL_BIN)
+                        .args([
+                            "-n",
+                            kube_namespace,
+                            "logs",
+                            "-f",
+                            format!("job/{}", &job_name).as_str(),
+                        ])
+                        .status()
+                        .expect("Failed to tail genesis logs");
+                },
+                None => info!("Genesis completed running"),
+            }
+            info!("Genesis status: {:?}", status);
+            match status.succeeded {
+                Some(_) => {
+                    info!("Genesis done");
+                    Ok(())
+                },
+                None => bail!("Genesis did not succeed"),
+            }
+        })
+    })
+    .await
 }
 
 pub fn construct_node_helm_values_from_input(
@@ -686,6 +813,10 @@ pub fn construct_node_helm_values_from_input(
     value["imageTag"] = image_tag.clone().into();
     value["chain"]["era"] = era.into();
     value["haproxy"]["enabled"] = enable_haproxy.into();
+    // S3 bucket validators download the genesis blob from, when set.
+    if let Ok(bucket) = env::var("FORGE_GENESIS_BLOB_S3_BUCKET") {
+        value["genesis_blob_s3_bucket"] = bucket.into();
+    }
     value["labels"]["forge-namespace"] = make_k8s_label(kube_namespace).into();
     value["labels"]["forge-image-tag"] = make_k8s_label(image_tag).into();
 
@@ -723,6 +854,10 @@ pub fn construct_genesis_helm_values_from_input(
     value["imageTag"] = genesis_image_tag.clone().into();
     value["chain"]["era"] = era.into();
     value["chain"]["root_key"] = DEFAULT_ROOT_KEY.into();
+    // S3 bucket the genesis job uploads the genesis blob to, when set.
+    if let Ok(bucket) = env::var("FORGE_GENESIS_BLOB_S3_BUCKET") {
+        value["genesis"]["genesis_blob_s3_bucket"] = bucket.into();
+    }
     value["genesis"]["numValidators"] = num_validators.into();
     value["genesis"]["validator"]["internal_host_suffix"] = validator_internal_host_suffix.into();
     value["genesis"]["validator"]["key_seed"] = FORGE_KEY_SEED.into();

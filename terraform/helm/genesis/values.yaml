@@ -44,7 +44,7 @@ imageTag: testnet
 genesis:
   image:
     # -- Image repo to use for tools image for running genesis
-    repo: aptoslabs/tools
+    repo: ghcr.io/movementlabsxyz/tools
     # -- Image tag to use for tools image. If set, overrides `imageTag`
     tag:
     # -- Image pull policy to use for tools image
@@ -80,7 +80,9 @@ genesis:
     enabled: false
     # comma separated list of cluster names
     domain_suffixes: ""
-  genesis_blob_upload_url: "https://us-west1-aptos-forge-gcp-0.cloudfunctions.net/signed-url"
+  genesis_blob_upload_url: ""
+  # -- S3 bucket to upload the genesis blob to (preferred over a k8s Secret, which caps at 1 MB). Uploaded under s3://<bucket>/<namespace>/genesis.blob using the node instance role.
+  genesis_blob_s3_bucket: ""
   cluster_name: "unknown"
 
 serviceAccount:

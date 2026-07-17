@@ -21,9 +21,14 @@ use aptos_types::{
     },
     chain_id::ChainId,
     contract_event::ContractEvent,
-    on_chain_config::{ConfigurationResource, OnChainConfig, ValidatorSet},
-    state_store::{state_key::StateKey, TStateView},
+    event::EventHandle,
+    on_chain_config::{
+        CommitHistoryResource, ConfigurationResource, CurrentTimeMicroseconds, OnChainConfig,
+        ValidatorSet,
+    },
+    state_store::{state_key::StateKey, table::TableHandle, TStateView},
     transaction::{ChangeSet, Transaction, WriteSetPayload},
+    validator_config::ValidatorConfig,
     waypoint::Waypoint,
     write_set::{WriteOp, WriteSetMut},
 };
@@ -31,8 +36,10 @@ use aptos_vm::aptos_vm::AptosVMBlockExecutor;
 use clap::Parser;
 use move_core_types::{language_storage::TypeTag, move_resource::MoveStructType};
 use rand::rngs::OsRng;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{
+    collections::HashSet,
     fs::{self, File},
     io::Write,
     num::NonZeroUsize,
@@ -186,6 +193,31 @@ struct DbInfo {
     epoch: u64,
     next_epoch: Option<u64>,
     new_block_event_count: u64,
+    block_height: u64,
+    current_time_microseconds: u64,
+    commit_history_length: Option<u64>,
+    commit_history_next_idx: Option<u32>,
+}
+
+#[derive(Deserialize, Serialize)]
+struct BlockResourceWrite {
+    height: u64,
+    epoch_interval: u64,
+    new_block_events: EventHandle,
+    update_epoch_interval_events: EventHandle,
+}
+
+#[derive(Deserialize, Serialize)]
+struct TableWithLengthWrite {
+    handle: TableHandle,
+    length: u64,
+}
+
+#[derive(Deserialize, Serialize)]
+struct CommitHistoryResourceWrite {
+    max_capacity: u32,
+    next_idx: u32,
+    table: TableWithLengthWrite,
 }
 
 fn validate_requested_chain_id(chain_id: u8) -> Result<ChainId> {
@@ -282,6 +314,9 @@ fn inspect_db(db_dir: &Path, sharding: bool, require_epoch_waypoint: bool) -> Re
         .get_state_value_bytes(&StateKey::resource_typed::<BlockResource>(&CORE_CODE_ADDRESS)?)?
         .ok_or_else(|| format_err!("BlockResource missing"))?;
     let block_resource = bcs::from_bytes::<BlockResource>(&block_resource)?;
+    let current_time = CurrentTimeMicroseconds::fetch_config(&view)
+        .ok_or_else(|| format_err!("CurrentTimeMicroseconds missing"))?;
+    let commit_history = CommitHistoryResource::fetch_config(&view);
     let ledger_info = db.reader.get_latest_ledger_info()?;
     let ledger_summary = db.reader.get_pre_committed_ledger_summary()?;
     let waypoint = if ledger_info.ledger_info().ends_epoch() {
@@ -310,6 +345,12 @@ fn inspect_db(db_dir: &Path, sharding: bool, require_epoch_waypoint: bool) -> Re
             .next_epoch_state()
             .map(|state| state.epoch),
         new_block_event_count: block_resource.new_block_events().count(),
+        block_height: block_resource.height(),
+        current_time_microseconds: current_time.microseconds,
+        commit_history_length: commit_history.as_ref().map(CommitHistoryResource::length),
+        commit_history_next_idx: commit_history
+            .as_ref()
+            .map(CommitHistoryResource::next_idx),
     })
 }
 
@@ -323,47 +364,63 @@ fn commit_fork_transaction(
     let view = db.reader.latest_state_checkpoint_view()?;
     let configuration = ConfigurationResource::fetch_config(&view)
         .ok_or_else(|| format_err!("ConfigurationResource missing"))?;
+    let source_validator_set =
+        ValidatorSet::fetch_config(&view).ok_or_else(|| format_err!("ValidatorSet missing"))?;
+    let current_time = CurrentTimeMicroseconds::fetch_config(&view)
+        .ok_or_else(|| format_err!("CurrentTimeMicroseconds missing"))?;
+    let block_resource_key = StateKey::resource_typed::<BlockResource>(&CORE_CODE_ADDRESS)?;
     let block_resource = view
-        .get_state_value_bytes(&StateKey::resource_typed::<BlockResource>(&CORE_CODE_ADDRESS)?)?
+        .get_state_value_bytes(&block_resource_key)?
         .ok_or_else(|| format_err!("BlockResource missing"))?;
-    let block_resource = bcs::from_bytes::<BlockResource>(&block_resource)?;
+    let mut block_resource = bcs::from_bytes::<BlockResourceWrite>(&block_resource)?;
+    let new_block_event_sequence = block_resource.new_block_events.count();
+    block_resource.height = new_block_event_sequence;
+    *block_resource.new_block_events.count_mut() = new_block_event_sequence + 1;
     let next_configuration = configuration.bump_epoch_for_reconfiguration();
     let new_block_event = NewBlockEvent::new(
         CORE_CODE_ADDRESS,
         configuration.epoch(),
-        0,
-        block_resource.height() + 1,
+        u64::MAX,
+        new_block_event_sequence,
         vec![],
-        CORE_CODE_ADDRESS,
+        AccountAddress::ZERO,
         vec![],
-        next_configuration.last_reconfiguration_time_micros(),
+        current_time.microseconds,
     );
+    let mut writes = vec![
+        (
+            StateKey::on_chain_config::<ChainIdResource>()?,
+            WriteOp::legacy_modification(
+                bcs::to_bytes(&ChainIdResource::new(fork_chain_id))?.into(),
+            ),
+        ),
+        (
+            StateKey::on_chain_config::<ValidatorSet>()?,
+            WriteOp::legacy_modification(bcs::to_bytes(validator_set)?.into()),
+        ),
+        (
+            StateKey::on_chain_config::<ConfigurationResource>()?,
+            WriteOp::legacy_modification(bcs::to_bytes(&next_configuration)?.into()),
+        ),
+        (
+            block_resource_key,
+            WriteOp::legacy_modification(bcs::to_bytes(&block_resource)?.into()),
+        ),
+    ];
+    writes.extend(commit_history_writes(&view, &new_block_event)?);
+    writes.extend(validator_config_writes(
+        &view,
+        &source_validator_set,
+        validator_set,
+    )?);
     let ledger_summary = db.reader.get_pre_committed_ledger_summary()?;
     let fork_txn = Transaction::GenesisTransaction(WriteSetPayload::Direct(ChangeSet::new(
-        WriteSetMut::new(vec![
-            (
-                StateKey::on_chain_config::<ChainIdResource>()?,
-                WriteOp::legacy_modification(
-                    bcs::to_bytes(&ChainIdResource::new(fork_chain_id))?.into(),
-                ),
-            ),
-            (
-                StateKey::on_chain_config::<ValidatorSet>()?,
-                WriteOp::legacy_modification(bcs::to_bytes(validator_set)?.into()),
-            ),
-            (
-                StateKey::on_chain_config::<ConfigurationResource>()?,
-                WriteOp::legacy_modification(
-                    bcs::to_bytes(&next_configuration)?.into(),
-                ),
-            ),
-        ])
-        .freeze()?,
+        WriteSetMut::new(writes).freeze()?,
         vec![
             ContractEvent::new_v2(NEW_EPOCH_EVENT_V2_MOVE_TYPE_TAG.clone(), vec![])?,
             ContractEvent::new_v1(
                 new_block_event_key(),
-                block_resource.new_block_events().count(),
+                new_block_event_sequence,
                 TypeTag::Struct(Box::new(NewBlockEvent::struct_tag())),
                 bcs::to_bytes(&new_block_event)?,
             )?,
@@ -377,6 +434,84 @@ fn commit_fork_transaction(
     );
     committer.commit()?;
     Ok((fork_txn, waypoint))
+}
+
+fn commit_history_writes(
+    view: &impl TStateView<Key = StateKey>,
+    new_block_event: &NewBlockEvent,
+) -> Result<Vec<(StateKey, WriteOp)>> {
+    let commit_history_key = StateKey::on_chain_config::<CommitHistoryResource>()?;
+    let Some(commit_history) = view.get_state_value_bytes(&commit_history_key)? else {
+        return Ok(vec![]);
+    };
+    let mut commit_history = bcs::from_bytes::<CommitHistoryResourceWrite>(&commit_history)?;
+    ensure!(
+        commit_history.max_capacity > 0,
+        "CommitHistory max_capacity must be non-zero",
+    );
+    let table_key = bcs::to_bytes(&commit_history.next_idx)?;
+    let table_state_key = StateKey::table_item(&commit_history.table.handle, &table_key);
+    let replacing_existing_slot = view.get_state_value_bytes(&table_state_key)?.is_some();
+    let table_write_op = if replacing_existing_slot {
+        WriteOp::legacy_modification(bcs::to_bytes(new_block_event)?.into())
+    } else {
+        commit_history.table.length += 1;
+        WriteOp::legacy_creation(bcs::to_bytes(new_block_event)?.into())
+    };
+    commit_history.next_idx = (commit_history.next_idx + 1) % commit_history.max_capacity;
+    Ok(vec![
+        (table_state_key, table_write_op),
+        (
+            commit_history_key,
+            WriteOp::legacy_modification(bcs::to_bytes(&commit_history)?.into()),
+        ),
+    ])
+}
+
+fn validator_config_writes(
+    view: &impl TStateView<Key = StateKey>,
+    source_validator_set: &ValidatorSet,
+    validator_set: &ValidatorSet,
+) -> Result<Vec<(StateKey, WriteOp)>> {
+    let new_addresses = validator_set
+        .active_validators
+        .iter()
+        .chain(validator_set.pending_inactive.iter())
+        .chain(validator_set.pending_active.iter())
+        .map(|validator| validator.account_address)
+        .collect::<HashSet<_>>();
+    let mut writes = vec![];
+    for validator in source_validator_set
+        .active_validators
+        .iter()
+        .chain(source_validator_set.pending_inactive.iter())
+        .chain(source_validator_set.pending_active.iter())
+    {
+        if new_addresses.contains(&validator.account_address) {
+            continue;
+        }
+        let key = StateKey::resource_typed::<ValidatorConfig>(&validator.account_address)?;
+        if view.get_state_value_bytes(&key)?.is_some() {
+            writes.push((key, WriteOp::legacy_deletion()));
+        }
+    }
+
+    for validator in validator_set
+        .active_validators
+        .iter()
+        .chain(validator_set.pending_inactive.iter())
+        .chain(validator_set.pending_active.iter())
+    {
+        let key = StateKey::resource_typed::<ValidatorConfig>(&validator.account_address)?;
+        let bytes = bcs::to_bytes(validator.config())?.into();
+        let write_op = if view.get_state_value_bytes(&key)?.is_some() {
+            WriteOp::legacy_modification(bytes)
+        } else {
+            WriteOp::legacy_creation(bytes)
+        };
+        writes.push((key, write_op));
+    }
+    Ok(writes)
 }
 
 fn open_db(db_dir: &Path, readonly: bool, sharding: bool) -> Result<DbReaderWriter> {
@@ -475,6 +610,10 @@ fn ledger_json(info: &DbInfo) -> serde_json::Value {
         "state_root": info.state_root,
         "chain_id": info.chain_id.id(),
         "new_block_event_count": info.new_block_event_count,
+        "block_height": info.block_height,
+        "current_time_microseconds": info.current_time_microseconds,
+        "commit_history_length": info.commit_history_length,
+        "commit_history_next_idx": info.commit_history_next_idx,
     })
 }
 
@@ -614,12 +753,33 @@ mod tests {
             .is_none());
     }
 
+    fn read_validator_config(db_dir: &Path, address: AccountAddress) -> Option<ValidatorConfig> {
+        let db = open_db(db_dir, true, false).unwrap();
+        let view = db.reader.latest_state_checkpoint_view().unwrap();
+        let bytes = view
+            .get_state_value_bytes(&StateKey::resource_typed::<ValidatorConfig>(&address).unwrap())
+            .unwrap()?;
+        Some(bcs::from_bytes(&bytes).unwrap())
+    }
+
     #[test]
     fn fork_commits_chain_id_validator_set_and_waypoint_to_output_db() {
         let (source_db_dir, _source_config_dir, root_key, _validators) = bootstrap_source_db();
         commit_non_reconfiguration_transaction(source_db_dir.path(), root_key);
 
         let source_info_before = inspect_db(source_db_dir.path(), false, false).unwrap();
+        let source_validator = source_info_before
+            .validator_set
+            .active_validators
+            .first()
+            .unwrap();
+        let source_validator_address = source_validator.account_address;
+        let source_validator_config = read_validator_config(
+            source_db_dir.path(),
+            source_validator_address,
+        )
+        .expect("source validator config must exist before fork");
+        assert_eq!(&source_validator_config, source_validator.config());
         let output_root = TempPath::new();
         output_root.create_as_dir().unwrap();
         let output_db_dir = output_root.path().join("fork-db");
@@ -644,6 +804,10 @@ mod tests {
             source_info_after.validator_set,
             source_info_before.validator_set
         );
+        assert_eq!(
+            read_validator_config(source_db_dir.path(), source_validator_address).unwrap(),
+            source_validator_config,
+        );
         assert_eq!(output_info.chain_id, fork_chain_id);
         assert_ne!(output_info.chain_id, source_info_before.chain_id);
         assert_ne!(output_info.validator_set, source_info_before.validator_set);
@@ -654,6 +818,58 @@ mod tests {
         );
         assert!(output_info.next_epoch.is_some());
         assert!(config_dir.join(MANIFEST).exists());
+        assert_eq!(
+            output_info.new_block_event_count,
+            source_info_before.new_block_event_count + 1
+        );
+        assert_eq!(
+            output_info.block_height,
+            source_info_before.new_block_event_count
+        );
+        assert_eq!(
+            output_info.current_time_microseconds,
+            source_info_before.current_time_microseconds
+        );
+        assert_eq!(
+            output_info.commit_history_length,
+            source_info_before
+                .commit_history_length
+                .map(|length| length + 1)
+        );
+        assert_eq!(
+            output_info.commit_history_next_idx,
+            source_info_before
+                .commit_history_next_idx
+                .map(|next_idx| next_idx + 1)
+        );
+
+        let output_validator = output_info
+            .validator_set
+            .active_validators
+            .first()
+            .unwrap();
+        let output_validator_address = output_validator.account_address;
+        assert_ne!(output_validator_address, source_validator_address);
+        assert!(
+            read_validator_config(&output_db_dir, source_validator_address).is_none(),
+            "old validator config must not remain in fork output",
+        );
+        let output_validator_config =
+            read_validator_config(&output_db_dir, output_validator_address)
+                .expect("generated validator config must exist in fork output");
+        assert_eq!(&output_validator_config, output_validator.config());
+        assert_ne!(
+            output_validator_config.validator_network_addresses,
+            source_validator_config.validator_network_addresses,
+        );
+        assert_ne!(
+            output_validator_config.fullnode_network_addresses,
+            source_validator_config.fullnode_network_addresses,
+        );
+        assert_ne!(
+            output_validator_config.consensus_public_key,
+            source_validator_config.consensus_public_key,
+        );
 
         let genesis_txn = {
             let bytes = fs::read(config_dir.join("0").join(GENESIS_BLOB)).unwrap();
@@ -671,6 +887,13 @@ mod tests {
             new_block_event.v1().unwrap().sequence_number(),
             source_info_before.new_block_event_count
         );
-        NewBlockEvent::try_from_bytes(new_block_event.event_data()).unwrap();
+        let new_block_event = NewBlockEvent::try_from_bytes(new_block_event.event_data()).unwrap();
+        assert_eq!(new_block_event.height(), source_info_before.new_block_event_count);
+        assert_eq!(new_block_event.round(), u64::MAX);
+        assert_eq!(new_block_event.proposer(), AccountAddress::ZERO);
+        assert_eq!(
+            new_block_event.proposed_time(),
+            source_info_before.current_time_microseconds,
+        );
     }
 }

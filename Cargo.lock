@@ -1216,6 +1216,7 @@ dependencies = [
  "move-core-types",
  "rand 0.7.3",
  "rayon",
+ "serde",
  "serde_json",
  "serial_test",
  "tokio",

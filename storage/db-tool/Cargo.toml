@@ -33,6 +33,7 @@ itertools = { workspace = true }
 move-core-types = { workspace = true }
 rand = { workspace = true }
 rayon = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 

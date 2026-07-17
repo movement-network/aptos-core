@@ -257,8 +257,7 @@ impl ConfigurationResource {
         &self.events
     }
 
-    #[cfg(feature = "fuzzing")]
-    pub fn bump_epoch_for_test(&self) -> Self {
+    pub fn bump_epoch_for_reconfiguration(&self) -> Self {
         let epoch = self.epoch + 1;
         let last_reconfiguration_time = self.last_reconfiguration_time + 1;
         let mut events = self.events.clone();
@@ -269,6 +268,11 @@ impl ConfigurationResource {
             last_reconfiguration_time,
             events,
         }
+    }
+
+    #[cfg(feature = "fuzzing")]
+    pub fn bump_epoch_for_test(&self) -> Self {
+        self.bump_epoch_for_reconfiguration()
     }
 
     #[cfg(feature = "fuzzing")]

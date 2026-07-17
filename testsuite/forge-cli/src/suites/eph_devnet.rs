@@ -15,18 +15,18 @@ pub(crate) fn get_eph_devnet_test(test_name: &str) -> Option<ForgeConfig> {
     Some(test)
 }
 
-/// A mainnet-aligned ephemeral devnet: four validators with mainnet chain
-/// parameters, deployed and kept alive (`--keep`) for a developer to test a
-/// branch build against, then torn down.
+/// A mainnet-aligned ephemeral devnet: four validators with Movement mainnet
+/// chain parameters, deployed and kept alive (`--keep`) for a developer to
+/// test a branch build against, then torn down.
 ///
 /// Chain parameters mirror the ephemeral-devnet prototype
 /// (movement-infra/cdktf-mvmt-networks#156): compressed timings and mainnet
-/// staking bounds. Chain id is the mainnet id (250) so `ChainId::is_mainnet`
-/// is true and the network enforces mainnet behavior (e.g. rejecting unstable
-/// bytecode at publish), matching what a branch would hit on mainnet. The
-/// residual post-genesis migration (governed gas pool extension, treasury
-/// reward feature) runs separately; genesis already initializes the base
-/// governed gas pool.
+/// staking bounds queried from Movement mainnet. Chain id is 126
+/// (`NamedChain::MOVEMAINNET`), so `ChainId::is_movement_mainnet` is true and a
+/// branch exercises under the same chain identity and staking config as
+/// Movement mainnet. The residual post-genesis migration (governed gas pool
+/// extension, treasury reward feature) runs separately. Genesis already
+/// initializes the base governed gas pool.
 pub(crate) fn eph_devnet() -> ForgeConfig {
     ForgeConfig::default()
         .with_initial_validator_count(NonZeroUsize::new(4).unwrap())
@@ -40,7 +40,7 @@ pub(crate) fn eph_devnet() -> ForgeConfig {
         })
         .with_genesis_helm_config_fn(Arc::new(|helm_values| {
             let chain = &mut helm_values["chain"];
-            chain["chain_id"] = 250.into();
+            chain["chain_id"] = 126.into();
             chain["allow_new_validators"] = true.into();
             chain["epoch_duration_secs"] = 600.into();
             chain["is_test"] = true.into();

@@ -16,12 +16,13 @@ use aptos_storage_interface::{
 use aptos_types::{
     account_address::AccountAddress,
     account_config::{
-        new_block_event_key, ChainIdResource, NewBlockEvent, NEW_EPOCH_EVENT_V2_MOVE_TYPE_TAG,
+        new_block_event_key, BlockResource, ChainIdResource, NewBlockEvent, CORE_CODE_ADDRESS,
+        NEW_EPOCH_EVENT_V2_MOVE_TYPE_TAG,
     },
     chain_id::ChainId,
     contract_event::ContractEvent,
     on_chain_config::{ConfigurationResource, OnChainConfig, ValidatorSet},
-    state_store::state_key::StateKey,
+    state_store::{state_key::StateKey, TStateView},
     transaction::{ChangeSet, Transaction, WriteSetPayload},
     waypoint::Waypoint,
     write_set::{WriteOp, WriteSetMut},
@@ -71,6 +72,10 @@ impl Command {
     pub fn run(self) -> Result<()> {
         let validators = NonZeroUsize::new(self.validators)
             .ok_or_else(|| format_err!("--validators must be greater than 0"))?;
+        ensure!(
+            validators.get() == 1,
+            "--validators > 1 is not supported until per-validator DB output is implemented",
+        );
         let fork_chain_id = validate_requested_chain_id(self.fork_chain_id)?;
         validate_output_paths(&self.source_db_dir, &self.output_db_dir)?;
         let config_dir = self
@@ -79,7 +84,7 @@ impl Command {
             .unwrap_or_else(|| default_config_dir(&self.output_db_dir));
         validate_config_path(&self.source_db_dir, &self.output_db_dir, &config_dir)?;
 
-        let source_info = inspect_db(&self.source_db_dir, self.enable_storage_sharding)
+        let source_info = inspect_db(&self.source_db_dir, self.enable_storage_sharding, false)
             .with_context(|| format!("failed to inspect source DB {:?}", self.source_db_dir))?;
         ensure!(
             fork_chain_id != source_info.chain_id,
@@ -119,7 +124,7 @@ impl Command {
             &validator_set,
         )?;
 
-        let output_info = inspect_db(&self.output_db_dir, self.enable_storage_sharding)
+        let output_info = inspect_db(&self.output_db_dir, self.enable_storage_sharding, true)
             .with_context(|| format!("failed to inspect output DB {:?}", self.output_db_dir))?;
         ensure!(
             output_info.chain_id == fork_chain_id,
@@ -132,10 +137,13 @@ impl Command {
             "output ValidatorSet readback mismatch",
         );
         ensure!(
-            output_info.waypoint == waypoint,
+            output_info.waypoint == Some(waypoint),
             "output waypoint readback mismatch: manifest {}, DB {}",
             waypoint,
-            output_info.waypoint,
+            output_info
+                .waypoint
+                .map(|waypoint| waypoint.to_string())
+                .unwrap_or_else(|| "<none>".to_string()),
         );
         ensure!(
             output_info.validator_set != source_info.validator_set,
@@ -172,11 +180,12 @@ struct DbInfo {
     version: u64,
     chain_id: ChainId,
     validator_set: ValidatorSet,
-    waypoint: Waypoint,
+    waypoint: Option<Waypoint>,
     accumulator_root: String,
     state_root: String,
     epoch: u64,
     next_epoch: Option<u64>,
+    new_block_event_count: u64,
 }
 
 fn validate_requested_chain_id(chain_id: u8) -> Result<ChainId> {
@@ -261,7 +270,7 @@ fn default_config_dir(output_db_dir: &Path) -> PathBuf {
         .join(name)
 }
 
-fn inspect_db(db_dir: &Path, sharding: bool) -> Result<DbInfo> {
+fn inspect_db(db_dir: &Path, sharding: bool, require_epoch_waypoint: bool) -> Result<DbInfo> {
     let db = open_db(db_dir, true, sharding)?;
     let view = db.reader.latest_state_checkpoint_view()?;
     let chain_id = ChainIdResource::fetch_config(&view)
@@ -269,9 +278,21 @@ fn inspect_db(db_dir: &Path, sharding: bool) -> Result<DbInfo> {
         .chain_id();
     let validator_set =
         ValidatorSet::fetch_config(&view).ok_or_else(|| format_err!("ValidatorSet missing"))?;
+    let block_resource = view
+        .get_state_value_bytes(&StateKey::resource_typed::<BlockResource>(&CORE_CODE_ADDRESS)?)?
+        .ok_or_else(|| format_err!("BlockResource missing"))?;
+    let block_resource = bcs::from_bytes::<BlockResource>(&block_resource)?;
     let ledger_info = db.reader.get_latest_ledger_info()?;
     let ledger_summary = db.reader.get_pre_committed_ledger_summary()?;
-    let waypoint = Waypoint::new_epoch_boundary(ledger_info.ledger_info())?;
+    let waypoint = if ledger_info.ledger_info().ends_epoch() {
+        Some(Waypoint::new_epoch_boundary(ledger_info.ledger_info())?)
+    } else {
+        ensure!(
+            !require_epoch_waypoint,
+            "latest ledger info is not an epoch boundary",
+        );
+        None
+    };
     Ok(DbInfo {
         version: ledger_info.ledger_info().version(),
         chain_id,
@@ -288,6 +309,7 @@ fn inspect_db(db_dir: &Path, sharding: bool) -> Result<DbInfo> {
             .ledger_info()
             .next_epoch_state()
             .map(|state| state.epoch),
+        new_block_event_count: block_resource.new_block_events().count(),
     })
 }
 
@@ -301,6 +323,21 @@ fn commit_fork_transaction(
     let view = db.reader.latest_state_checkpoint_view()?;
     let configuration = ConfigurationResource::fetch_config(&view)
         .ok_or_else(|| format_err!("ConfigurationResource missing"))?;
+    let block_resource = view
+        .get_state_value_bytes(&StateKey::resource_typed::<BlockResource>(&CORE_CODE_ADDRESS)?)?
+        .ok_or_else(|| format_err!("BlockResource missing"))?;
+    let block_resource = bcs::from_bytes::<BlockResource>(&block_resource)?;
+    let next_configuration = configuration.bump_epoch_for_reconfiguration();
+    let new_block_event = NewBlockEvent::new(
+        CORE_CODE_ADDRESS,
+        configuration.epoch(),
+        0,
+        block_resource.height() + 1,
+        vec![],
+        CORE_CODE_ADDRESS,
+        vec![],
+        next_configuration.last_reconfiguration_time_micros(),
+    );
     let ledger_summary = db.reader.get_pre_committed_ledger_summary()?;
     let fork_txn = Transaction::GenesisTransaction(WriteSetPayload::Direct(ChangeSet::new(
         WriteSetMut::new(vec![
@@ -317,7 +354,7 @@ fn commit_fork_transaction(
             (
                 StateKey::on_chain_config::<ConfigurationResource>()?,
                 WriteOp::legacy_modification(
-                    bcs::to_bytes(&configuration.bump_epoch_for_reconfiguration())?.into(),
+                    bcs::to_bytes(&next_configuration)?.into(),
                 ),
             ),
         ])
@@ -326,9 +363,9 @@ fn commit_fork_transaction(
             ContractEvent::new_v2(NEW_EPOCH_EVENT_V2_MOVE_TYPE_TAG.clone(), vec![])?,
             ContractEvent::new_v1(
                 new_block_event_key(),
-                0,
+                block_resource.new_block_events().count(),
                 TypeTag::Struct(Box::new(NewBlockEvent::struct_tag())),
-                vec![],
+                bcs::to_bytes(&new_block_event)?,
             )?,
         ],
     )));
@@ -421,7 +458,7 @@ fn write_manifest(
             "fork_validator_addresses": validator_addresses,
         },
         "generated_config_paths": node_config_paths,
-        "waypoint": output_info.waypoint.to_string(),
+        "waypoint": output_info.waypoint.map(|waypoint| waypoint.to_string()),
     });
     let manifest_path = config_dir.join(MANIFEST);
     fs::write(&manifest_path, serde_json::to_vec_pretty(&manifest)?)?;
@@ -433,18 +470,31 @@ fn ledger_json(info: &DbInfo) -> serde_json::Value {
         "version": info.version,
         "epoch": info.epoch,
         "next_epoch": info.next_epoch,
-        "waypoint": info.waypoint.to_string(),
+        "waypoint": info.waypoint.map(|waypoint| waypoint.to_string()),
         "accumulator_root": info.accumulator_root,
         "state_root": info.state_root,
         "chain_id": info.chain_id.id(),
+        "new_block_event_count": info.new_block_event_count,
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aptos_executor_test_helpers::bootstrap_genesis;
+    use aptos_cached_packages::aptos_stdlib;
+    use aptos_crypto::PrivateKey;
+    use aptos_executor::block_executor::BlockExecutor;
+    use aptos_executor_test_helpers::{bootstrap_genesis, gen_block_id};
+    use aptos_executor_types::BlockExecutorTrait;
     use aptos_temppath::TempPath;
+    use aptos_types::{
+        aggregate_signature::AggregateSignature,
+        block_info::BlockInfo,
+        ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
+        test_helpers::transaction_test_helpers::{
+            block, get_test_signed_transaction, TEST_BLOCK_EXECUTOR_ONCHAIN_CONFIG,
+        },
+    };
 
     #[test]
     fn rejects_reserved_chain_ids() {
@@ -465,12 +515,38 @@ mod tests {
     }
 
     #[test]
-    fn fork_commits_chain_id_validator_set_and_waypoint_to_output_db() {
+    fn rejects_multi_validator_single_db_output() {
+        let root = TempPath::new();
+        root.create_as_dir().unwrap();
+        let source = root.path().join("source");
+        let output = root.path().join("output");
+        fs::create_dir_all(&source).unwrap();
+        let error = Command {
+            source_db_dir: source,
+            output_db_dir: output,
+            config_dir: None,
+            fork_chain_id: 42,
+            validators: 2,
+            enable_storage_sharding: false,
+        }
+        .run()
+        .unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("--validators > 1 is not supported"));
+    }
+
+    fn bootstrap_source_db() -> (
+        TempPath,
+        TempPath,
+        aptos_crypto::ed25519::Ed25519PrivateKey,
+        Vec<ValidatorNodeConfig>,
+    ) {
         let source_db_dir = TempPath::new();
         source_db_dir.create_as_dir().unwrap();
         let source_config_dir = TempPath::new();
         source_config_dir.create_as_dir().unwrap();
-        let (_root_key, genesis, _waypoint, _validators) = Builder::new(
+        let (root_key, genesis, _waypoint, validators) = Builder::new(
             source_config_dir.path(),
             aptos_cached_packages::head_release_bundle().clone(),
         )
@@ -484,7 +560,66 @@ mod tests {
             bootstrap_genesis::<AptosVMBlockExecutor>(&source_db, &genesis).unwrap();
         }
 
-        let source_info_before = inspect_db(source_db_dir.path(), false).unwrap();
+        (source_db_dir, source_config_dir, root_key, validators)
+    }
+
+    fn commit_non_reconfiguration_transaction(
+        source_db_dir: &Path,
+        root_key: aptos_crypto::ed25519::Ed25519PrivateKey,
+    ) {
+        let db = open_db(source_db_dir, false, false).unwrap();
+        let block_id = gen_block_id(7);
+        let txn = Transaction::UserTransaction(get_test_signed_transaction(
+            aptos_types::account_config::aptos_test_root_address(),
+            0,
+            &root_key,
+            root_key.public_key(),
+            Some(aptos_stdlib::aptos_account_create_account(
+                AccountAddress::TWO,
+            )),
+            u64::MAX,
+            0,
+            None,
+        ));
+        let executor = BlockExecutor::<AptosVMBlockExecutor>::new(db.clone());
+        let output = executor
+            .execute_block(
+                (block_id, block(vec![txn])).into(),
+                executor.committed_block_id(),
+                TEST_BLOCK_EXECUTOR_ONCHAIN_CONFIG,
+            )
+            .unwrap();
+        let latest_li = db.reader.get_latest_ledger_info().unwrap();
+        let ledger_info_with_sigs = LedgerInfoWithSignatures::new(
+            LedgerInfo::new(
+                BlockInfo::new(
+                    latest_li.ledger_info().next_block_epoch(),
+                    0,
+                    block_id,
+                    output.root_hash(),
+                    output.expect_last_version(),
+                    0,
+                    None,
+                ),
+                gen_block_id(0),
+            ),
+            AggregateSignature::empty(),
+        );
+        executor
+            .commit_blocks(vec![block_id], ledger_info_with_sigs)
+            .unwrap();
+        assert!(inspect_db(source_db_dir, false, false)
+            .unwrap()
+            .waypoint
+            .is_none());
+    }
+
+    #[test]
+    fn fork_commits_chain_id_validator_set_and_waypoint_to_output_db() {
+        let (source_db_dir, _source_config_dir, root_key, _validators) = bootstrap_source_db();
+        commit_non_reconfiguration_transaction(source_db_dir.path(), root_key);
+
+        let source_info_before = inspect_db(source_db_dir.path(), false, false).unwrap();
         let output_root = TempPath::new();
         output_root.create_as_dir().unwrap();
         let output_db_dir = output_root.path().join("fork-db");
@@ -502,8 +637,8 @@ mod tests {
         .run()
         .unwrap();
 
-        let source_info_after = inspect_db(source_db_dir.path(), false).unwrap();
-        let output_info = inspect_db(&output_db_dir, false).unwrap();
+        let source_info_after = inspect_db(source_db_dir.path(), false, false).unwrap();
+        let output_info = inspect_db(&output_db_dir, false, true).unwrap();
         assert_eq!(source_info_after.chain_id, source_info_before.chain_id);
         assert_eq!(
             source_info_after.validator_set,
@@ -513,8 +648,29 @@ mod tests {
         assert_ne!(output_info.chain_id, source_info_before.chain_id);
         assert_ne!(output_info.validator_set, source_info_before.validator_set);
         assert_eq!(output_info.validator_set.num_validators(), 1);
-        assert_eq!(output_info.waypoint.version(), source_info_before.version + 1);
+        assert_eq!(
+            output_info.waypoint.unwrap().version(),
+            source_info_before.version + 1
+        );
         assert!(output_info.next_epoch.is_some());
         assert!(config_dir.join(MANIFEST).exists());
+
+        let genesis_txn = {
+            let bytes = fs::read(config_dir.join("0").join(GENESIS_BLOB)).unwrap();
+            bcs::from_bytes::<Transaction>(&bytes).unwrap()
+        };
+        let Transaction::GenesisTransaction(WriteSetPayload::Direct(change_set)) = genesis_txn else {
+            panic!("fork transaction must be a direct genesis write-set");
+        };
+        let new_block_event = change_set
+            .events()
+            .iter()
+            .find(|event| event.event_key() == Some(&new_block_event_key()))
+            .expect("fork transaction must emit NewBlockEvent");
+        assert_eq!(
+            new_block_event.v1().unwrap().sequence_number(),
+            source_info_before.new_block_event_count
+        );
+        NewBlockEvent::try_from_bytes(new_block_event.event_data()).unwrap();
     }
 }

@@ -1197,6 +1197,7 @@ dependencies = [
  "aptos-block-executor",
  "aptos-cached-packages",
  "aptos-config",
+ "aptos-crypto",
  "aptos-db",
  "aptos-db-indexer",
  "aptos-executor",

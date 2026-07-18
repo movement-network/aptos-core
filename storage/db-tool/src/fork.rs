@@ -629,6 +629,7 @@ mod tests {
     use aptos_types::{
         aggregate_signature::AggregateSignature,
         block_info::BlockInfo,
+        account_config::AccountResource,
         ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
         test_helpers::transaction_test_helpers::{
             block, get_test_signed_transaction, TEST_BLOCK_EXECUTOR_ONCHAIN_CONFIG,
@@ -762,12 +763,28 @@ mod tests {
         Some(bcs::from_bytes(&bytes).unwrap())
     }
 
+    fn read_account_resource(db_dir: &Path, address: AccountAddress) -> Option<AccountResource> {
+        let db = open_db(db_dir, true, false).unwrap();
+        let view = db.reader.latest_state_checkpoint_view().unwrap();
+        let bytes = view
+            .get_state_value_bytes(&StateKey::resource_typed::<AccountResource>(&address).unwrap())
+            .unwrap()?;
+        Some(bcs::from_bytes(&bytes).unwrap())
+    }
+
     #[test]
     fn fork_commits_chain_id_validator_set_and_waypoint_to_output_db() {
         let (source_db_dir, _source_config_dir, root_key, _validators) = bootstrap_source_db();
         commit_non_reconfiguration_transaction(source_db_dir.path(), root_key);
 
         let source_info_before = inspect_db(source_db_dir.path(), false, false).unwrap();
+        assert!(
+            source_info_before.version > 0,
+            "source DB must have committed post-genesis transactions before fork",
+        );
+        let source_account = read_account_resource(source_db_dir.path(), AccountAddress::TWO)
+            .expect("0x2::account::Account must exist before fork");
+        assert_eq!(source_account.sequence_number(), 0);
         let source_validator = source_info_before
             .validator_set
             .active_validators
@@ -808,6 +825,10 @@ mod tests {
             read_validator_config(source_db_dir.path(), source_validator_address).unwrap(),
             source_validator_config,
         );
+        assert_eq!(
+            read_account_resource(source_db_dir.path(), AccountAddress::TWO).unwrap(),
+            source_account,
+        );
         assert_eq!(output_info.chain_id, fork_chain_id);
         assert_ne!(output_info.chain_id, source_info_before.chain_id);
         assert_ne!(output_info.validator_set, source_info_before.validator_set);
@@ -841,6 +862,10 @@ mod tests {
             source_info_before
                 .commit_history_next_idx
                 .map(|next_idx| next_idx + 1)
+        );
+        assert_eq!(
+            read_account_resource(&output_db_dir, AccountAddress::TWO).unwrap(),
+            source_account,
         );
 
         let output_validator = output_info

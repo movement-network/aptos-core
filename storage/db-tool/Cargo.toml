@@ -43,4 +43,5 @@ aptos-backup-service = { workspace = true }
 aptos-crypto = { workspace = true }
 aptos-executor-test-helpers = { workspace = true }
 aptos-indexer-grpc-table-info = { workspace = true }
+reqwest = { workspace = true }
 serial_test = { workspace = true }

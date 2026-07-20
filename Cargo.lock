@@ -1216,6 +1216,7 @@ dependencies = [
  "move-core-types",
  "rand 0.7.3",
  "rayon",
+ "reqwest 0.11.23",
  "serde",
  "serde_json",
  "serial_test",

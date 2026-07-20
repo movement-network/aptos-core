@@ -29,12 +29,15 @@ use aptos_types::{
     state_store::{state_key::StateKey, table::TableHandle, TStateView},
     transaction::{ChangeSet, Transaction, WriteSetPayload},
     validator_config::ValidatorConfig,
+    validator_performances::{ValidatorPerformance, ValidatorPerformances},
     waypoint::Waypoint,
     write_set::{WriteOp, WriteSetMut},
 };
 use aptos_vm::aptos_vm::AptosVMBlockExecutor;
 use clap::Parser;
-use move_core_types::{language_storage::TypeTag, move_resource::MoveStructType};
+use move_core_types::{
+    language_storage::TypeTag, move_resource::MoveStructType, parser::parse_struct_tag,
+};
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -79,10 +82,6 @@ impl Command {
     pub fn run(self) -> Result<()> {
         let validators = NonZeroUsize::new(self.validators)
             .ok_or_else(|| format_err!("--validators must be greater than 0"))?;
-        ensure!(
-            validators.get() == 1,
-            "--validators > 1 is not supported until per-validator DB output is implemented",
-        );
         let fork_chain_id = validate_requested_chain_id(self.fork_chain_id)?;
         validate_output_paths(&self.source_db_dir, &self.output_db_dir)?;
         let config_dir = self
@@ -115,7 +114,7 @@ impl Command {
 
         fs::create_dir_all(&config_dir)
             .with_context(|| format!("failed to create config dir {:?}", config_dir))?;
-        let (_root_key, _generated_genesis, _generated_waypoint, validators) = Builder::new(
+        let (_root_key, generated_genesis, _generated_waypoint, validators) = Builder::new(
             &config_dir,
             aptos_cached_packages::head_release_bundle().clone(),
         )?
@@ -129,6 +128,7 @@ impl Command {
             self.enable_storage_sharding,
             fork_chain_id,
             &validator_set,
+            &generated_genesis,
         )?;
 
         let output_info = inspect_db(&self.output_db_dir, self.enable_storage_sharding, true)
@@ -163,6 +163,7 @@ impl Command {
             &fork_txn,
             waypoint,
             fork_chain_id,
+            self.enable_storage_sharding,
         )?;
         let manifest_path = write_manifest(
             &config_dir,
@@ -359,6 +360,7 @@ fn commit_fork_transaction(
     sharding: bool,
     fork_chain_id: ChainId,
     validator_set: &ValidatorSet,
+    generated_genesis: &Transaction,
 ) -> Result<(Transaction, Waypoint)> {
     let db = open_db(output_db_dir, false, sharding)?;
     let view = db.reader.latest_state_checkpoint_view()?;
@@ -413,6 +415,11 @@ fn commit_fork_transaction(
         &source_validator_set,
         validator_set,
     )?);
+    writes.extend(validator_stake_writes(
+        &view,
+        validator_set,
+        generated_genesis,
+    )?);
     let ledger_summary = db.reader.get_pre_committed_ledger_summary()?;
     let fork_txn = Transaction::GenesisTransaction(WriteSetPayload::Direct(ChangeSet::new(
         WriteSetMut::new(writes).freeze()?,
@@ -434,6 +441,60 @@ fn commit_fork_transaction(
     );
     committer.commit()?;
     Ok((fork_txn, waypoint))
+}
+
+fn validator_stake_writes(
+    view: &impl TStateView<Key = StateKey>,
+    validator_set: &ValidatorSet,
+    generated_genesis: &Transaction,
+) -> Result<Vec<(StateKey, WriteOp)>> {
+    let Transaction::GenesisTransaction(WriteSetPayload::Direct(generated_change_set)) =
+        generated_genesis
+    else {
+        return Err(format_err!(
+            "generated validator genesis must be a direct write-set"
+        ));
+    };
+    let stake_pool_tag = parse_struct_tag("0x1::stake::StakePool")?;
+    let mut writes = Vec::with_capacity(validator_set.num_validators() + 1);
+    for validator in validator_set.active_validators() {
+        let stake_pool_key = StateKey::resource(&validator, &stake_pool_tag)?;
+        ensure!(
+            view.get_state_value_bytes(&stake_pool_key)?.is_none(),
+            "generated validator address {} already has a StakePool in source state",
+            validator,
+        );
+        let stake_pool_write = generated_change_set
+            .write_set()
+            .get_write_op(&stake_pool_key)
+            .cloned()
+            .ok_or_else(|| {
+                format_err!(
+                    "generated genesis is missing StakePool for validator {}",
+                    validator
+                )
+            })?;
+        writes.push((stake_pool_key, stake_pool_write));
+    }
+
+    let validator_performance_key = StateKey::resource(
+        &CORE_CODE_ADDRESS,
+        &parse_struct_tag("0x1::stake::ValidatorPerformance")?,
+    )?;
+    let validator_performances = ValidatorPerformances {
+        validators: vec![
+            ValidatorPerformance {
+                successful_proposals: 0,
+                failed_proposals: 0,
+            };
+            validator_set.num_validators()
+        ],
+    };
+    writes.push((
+        validator_performance_key,
+        WriteOp::legacy_modification(bcs::to_bytes(&validator_performances)?.into()),
+    ));
+    Ok(writes)
 }
 
 fn commit_history_writes(
@@ -538,13 +599,32 @@ fn write_fork_configs(
     fork_txn: &Transaction,
     waypoint: Waypoint,
     fork_chain_id: ChainId,
+    enable_storage_sharding: bool,
 ) -> Result<Vec<PathBuf>> {
     validators
         .iter()
         .map(|validator| {
             let config_path = validator.validator_config_path();
             let mut config = NodeConfig::load_from_path(&config_path)?;
-            config.storage.dir = output_db_dir.to_path_buf();
+            let validator_db_dir = validator.dir.join("fork-db");
+            fs::create_dir_all(&validator_db_dir).with_context(|| {
+                format!(
+                    "failed to create validator {} DB directory at {:?}",
+                    validator.index, validator_db_dir
+                )
+            })?;
+            AptosDB::create_checkpoint(
+                output_db_dir,
+                &validator_db_dir,
+                enable_storage_sharding,
+            )
+            .with_context(|| {
+                format!(
+                    "failed to create validator {} DB checkpoint at {:?}",
+                    validator.index, validator_db_dir
+                )
+            })?;
+            config.storage.dir = validator_db_dir;
             config.base.waypoint = WaypointConfig::FromConfig(waypoint);
             config.execution.genesis = Some(fork_txn.clone());
             config.execution.genesis_waypoint = Some(WaypointConfig::FromConfig(waypoint));
@@ -635,6 +715,21 @@ mod tests {
             block, get_test_signed_transaction, TEST_BLOCK_EXECUTOR_ONCHAIN_CONFIG,
         },
     };
+    use std::{
+        process::{Child, Command as ProcessCommand, Stdio},
+        time::Duration,
+    };
+
+    struct NodeProcesses(Vec<Child>);
+
+    impl Drop for NodeProcesses {
+        fn drop(&mut self) {
+            for child in &mut self.0 {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+        }
+    }
 
     #[test]
     fn rejects_reserved_chain_ids() {
@@ -652,28 +747,6 @@ mod tests {
         assert!(validate_output_paths(&source, &source).is_err());
         assert!(validate_output_paths(&source, &source.join("child")).is_err());
         assert!(validate_output_paths(&source, &root.path().join("output")).is_ok());
-    }
-
-    #[test]
-    fn rejects_multi_validator_single_db_output() {
-        let root = TempPath::new();
-        root.create_as_dir().unwrap();
-        let source = root.path().join("source");
-        let output = root.path().join("output");
-        fs::create_dir_all(&source).unwrap();
-        let error = Command {
-            source_db_dir: source,
-            output_db_dir: output,
-            config_dir: None,
-            fork_chain_id: 42,
-            validators: 2,
-            enable_storage_sharding: false,
-        }
-        .run()
-        .unwrap_err();
-        assert!(error
-            .to_string()
-            .contains("--validators > 1 is not supported"));
     }
 
     fn bootstrap_source_db() -> (
@@ -772,6 +845,16 @@ mod tests {
         Some(bcs::from_bytes(&bytes).unwrap())
     }
 
+    fn resource_exists(db_dir: &Path, address: AccountAddress, type_name: &str) -> bool {
+        let db = open_db(db_dir, true, false).unwrap();
+        let view = db.reader.latest_state_checkpoint_view().unwrap();
+        view.get_state_value_bytes(
+            &StateKey::resource(&address, &parse_struct_tag(type_name).unwrap()).unwrap(),
+        )
+        .unwrap()
+        .is_some()
+    }
+
     #[test]
     fn fork_commits_chain_id_validator_set_and_waypoint_to_output_db() {
         let (source_db_dir, _source_config_dir, root_key, _validators) = bootstrap_source_db();
@@ -808,7 +891,7 @@ mod tests {
             output_db_dir: output_db_dir.clone(),
             config_dir: Some(config_dir.clone()),
             fork_chain_id: fork_chain_id.id(),
-            validators: 1,
+            validators: 2,
             enable_storage_sharding: false,
         }
         .run()
@@ -832,7 +915,13 @@ mod tests {
         assert_eq!(output_info.chain_id, fork_chain_id);
         assert_ne!(output_info.chain_id, source_info_before.chain_id);
         assert_ne!(output_info.validator_set, source_info_before.validator_set);
-        assert_eq!(output_info.validator_set.num_validators(), 1);
+        assert_eq!(output_info.validator_set.num_validators(), 2);
+        for validator in output_info.validator_set.active_validators() {
+            assert!(
+                resource_exists(&output_db_dir, validator, "0x1::stake::StakePool"),
+                "replacement validator must have a StakePool",
+            );
+        }
         assert_eq!(
             output_info.waypoint.unwrap().version(),
             source_info_before.version + 1
@@ -867,6 +956,28 @@ mod tests {
             read_account_resource(&output_db_dir, AccountAddress::TWO).unwrap(),
             source_account,
         );
+        for validator_index in 0..2 {
+            let validator_db_dir = config_dir
+                .join(validator_index.to_string())
+                .join("fork-db");
+            let validator_info = inspect_db(&validator_db_dir, false, true).unwrap();
+            assert_eq!(validator_info.chain_id, fork_chain_id);
+            assert_eq!(validator_info.validator_set, output_info.validator_set);
+            assert_eq!(
+                read_account_resource(&validator_db_dir, AccountAddress::TWO).unwrap(),
+                source_account,
+            );
+            let node_config = NodeConfig::load_from_path(
+                &config_dir
+                    .join(validator_index.to_string())
+                    .join("node.yaml"),
+            )
+            .unwrap();
+            assert_eq!(
+                node_config.storage.dir().canonicalize().unwrap(),
+                validator_db_dir.canonicalize().unwrap(),
+            );
+        }
 
         let output_validator = output_info
             .validator_set
@@ -920,5 +1031,125 @@ mod tests {
             new_block_event.proposed_time(),
             source_info_before.current_time_microseconds,
         );
+    }
+
+    #[tokio::test]
+    #[ignore = "requires APTOS_NODE_BINARY pointing to an aptos-node binary"]
+    async fn two_validator_fork_bootstraps_and_commits_blocks() {
+        let node_binary = PathBuf::from(
+            std::env::var_os("APTOS_NODE_BINARY")
+                .expect("APTOS_NODE_BINARY must point to an aptos-node binary"),
+        );
+        let node_binary = if node_binary.is_absolute() {
+            node_binary
+        } else {
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../..")
+                .join(node_binary)
+        }
+        .canonicalize()
+        .expect("APTOS_NODE_BINARY must resolve to an aptos-node binary");
+        let (source_db_dir, _source_config_dir, root_key, _validators) = bootstrap_source_db();
+        commit_non_reconfiguration_transaction(source_db_dir.path(), root_key);
+        let source_account = read_account_resource(source_db_dir.path(), AccountAddress::TWO)
+            .expect("post-genesis account must exist");
+
+        let output_root = TempPath::new();
+        output_root.create_as_dir().unwrap();
+        let output_db_dir = output_root.path().join("fork-db");
+        let config_dir = output_root.path().join("fork-configs");
+        Command {
+            source_db_dir: source_db_dir.path().to_path_buf(),
+            output_db_dir,
+            config_dir: Some(config_dir.clone()),
+            fork_chain_id: 42,
+            validators: 2,
+            enable_storage_sharding: false,
+        }
+        .run()
+        .unwrap();
+
+        let mut api_addresses = Vec::new();
+        let mut children = Vec::new();
+        for validator_index in 0..2 {
+            let validator_dir = config_dir.join(validator_index.to_string());
+            let config_path = validator_dir.join("node.yaml");
+            let config = NodeConfig::load_from_path(&config_path).unwrap();
+            api_addresses.push(config.api.address);
+            let log = File::create(validator_dir.join("live-smoke.log")).unwrap();
+            children.push(
+                ProcessCommand::new(&node_binary)
+                    .current_dir(&validator_dir)
+                    .arg("-f")
+                    .arg(config_path)
+                    .stdout(Stdio::from(log.try_clone().unwrap()))
+                    .stderr(Stdio::from(log))
+                    .spawn()
+                    .unwrap(),
+            );
+        }
+        let mut nodes = NodeProcesses(children);
+        let client = reqwest::Client::new();
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
+        let mut starting_versions = None;
+        while tokio::time::Instant::now() < deadline {
+            for child in &mut nodes.0 {
+                assert!(child.try_wait().unwrap().is_none(), "validator exited early");
+            }
+            let mut ledger_infos = Vec::new();
+            for address in &api_addresses {
+                if let Ok(response) = client
+                    .get(format!("http://{}/v1/", address))
+                    .send()
+                    .await
+                {
+                    if let Ok(info) = response.json::<serde_json::Value>().await {
+                        ledger_infos.push(info);
+                    }
+                }
+            }
+            if ledger_infos.len() == 2 {
+                assert!(ledger_infos.iter().all(|info| info["chain_id"] == 42));
+                let versions = ledger_infos
+                    .iter()
+                    .map(|info| {
+                        info["ledger_version"]
+                            .as_str()
+                            .unwrap()
+                            .parse::<u64>()
+                            .unwrap()
+                    })
+                    .collect::<Vec<_>>();
+                let initial_versions = starting_versions.get_or_insert_with(|| versions.clone());
+                if versions
+                    .iter()
+                    .zip(initial_versions.iter())
+                    .all(|(current, initial)| current > initial)
+                {
+                    for address in &api_addresses {
+                        let account = client
+                            .get(format!(
+                                "http://{}/v1/accounts/0x2/resource/0x1::account::Account",
+                                address
+                            ))
+                            .send()
+                            .await
+                            .unwrap()
+                            .error_for_status()
+                            .unwrap()
+                            .json::<serde_json::Value>()
+                            .await
+                            .unwrap();
+                        assert_eq!(
+                            account["data"]["sequence_number"],
+                            source_account.sequence_number().to_string(),
+                        );
+                    }
+                    return;
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+        panic!("two-validator fork did not commit a block before the deadline");
     }
 }

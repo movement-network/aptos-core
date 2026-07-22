@@ -26,6 +26,7 @@ use aptos_types::{
         CommitHistoryResource, ConfigurationResource, CurrentTimeMicroseconds, OnChainConfig,
         ValidatorSet,
     },
+    network_address::{NetworkAddress, Protocol},
     state_store::{state_key::StateKey, table::TableHandle, TStateView},
     transaction::{ChangeSet, Transaction, WriteSetPayload},
     validator_config::ValidatorConfig,
@@ -45,8 +46,10 @@ use std::{
     collections::HashSet,
     fs::{self, File},
     io::Write,
+    net::{IpAddr, Ipv4Addr},
     num::NonZeroUsize,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 const GENESIS_BLOB: &str = "genesis.blob";
@@ -114,11 +117,21 @@ impl Command {
 
         fs::create_dir_all(&config_dir)
             .with_context(|| format!("failed to create config dir {:?}", config_dir))?;
+        let replacement_stake = source_info
+            .validator_set
+            .active_validators
+            .iter()
+            .map(|validator| validator.consensus_voting_power())
+            .max()
+            .ok_or_else(|| format_err!("source ValidatorSet has no active validators"))?;
         let (_root_key, generated_genesis, _generated_waypoint, validators) = Builder::new(
             &config_dir,
             aptos_cached_packages::head_release_bundle().clone(),
         )?
         .with_num_validators(validators)
+        .with_init_genesis_stake(Some(Arc::new(move |_, stake| {
+            *stake = replacement_stake;
+        })))
         .build(OsRng)?;
         let validator_set = validator_set_from_local_validators(&validators)?;
         let generated_validator_addresses = validator_set.active_validators();
@@ -174,6 +187,7 @@ impl Command {
             &output_info,
             fork_chain_id,
             &generated_validator_addresses,
+            replacement_stake,
         )?;
 
         println!("Fork DB written to: {}", self.output_db_dir.display());
@@ -304,7 +318,10 @@ fn default_config_dir(output_db_dir: &Path) -> PathBuf {
 }
 
 fn inspect_db(db_dir: &Path, sharding: bool, require_epoch_waypoint: bool) -> Result<DbInfo> {
-    let db = open_db(db_dir, true, sharding)?;
+    // A read-only open can expose resource values from the last materialized state snapshot
+    // while ledger metadata is newer. The source is already required to be a disposable,
+    // writable checkpoint, so recover it before deriving fork parameters.
+    let db = open_db(db_dir, false, sharding)?;
     let view = db.reader.latest_state_checkpoint_view()?;
     let chain_id = ChainIdResource::fetch_config(&view)
         .ok_or_else(|| format_err!("ChainIdResource missing"))?
@@ -635,6 +652,7 @@ fn write_fork_configs(
                     vec![],
                     WaypointConfig::FromConfig(waypoint),
                 );
+            isolate_node_config(&mut config)?;
             File::create(&config.execution.genesis_file_location)?
                 .write_all(&bcs::to_bytes(fork_txn)?)?;
             config.save_to_path(&config_path)?;
@@ -647,6 +665,38 @@ fn write_fork_configs(
         .collect()
 }
 
+fn isolate_node_config(config: &mut NodeConfig) -> Result<()> {
+    let loopback = IpAddr::V4(Ipv4Addr::LOCALHOST);
+    config.api.address.set_ip(loopback);
+    config.indexer_grpc.address.set_ip(loopback);
+    config.admin_service.address = Ipv4Addr::LOCALHOST.to_string();
+    config.inspection_service.address = Ipv4Addr::LOCALHOST.to_string();
+    config.logger.enable_telemetry_remote_log = false;
+    config.logger.enable_telemetry_flush = false;
+
+    for network in config
+        .validator_network
+        .iter_mut()
+        .chain(config.full_node_networks.iter_mut())
+    {
+        let protocols = network
+            .listen_address
+            .as_slice()
+            .iter()
+            .map(|protocol| match protocol {
+                Protocol::Ip4(_) | Protocol::Ip6(_) | Protocol::Dns(_)
+                | Protocol::Dns4(_) | Protocol::Dns6(_) => {
+                    Protocol::Ip4(Ipv4Addr::LOCALHOST)
+                },
+                protocol => protocol.clone(),
+            })
+            .collect();
+        network.listen_address = NetworkAddress::from_protocols(protocols)
+            .context("failed to bind generated network config to loopback")?;
+    }
+    Ok(())
+}
+
 fn write_manifest(
     config_dir: &Path,
     source_db_dir: &Path,
@@ -656,6 +706,7 @@ fn write_manifest(
     output_info: &DbInfo,
     fork_chain_id: ChainId,
     validator_addresses: &[AccountAddress],
+    replacement_stake: u64,
 ) -> Result<PathBuf> {
     let manifest = json!({
         "source_db_dir": source_db_dir,
@@ -671,6 +722,7 @@ fn write_manifest(
             "fork_validator_count": output_info.validator_set.num_validators(),
             "source_validator_addresses": source_info.validator_set.active_validators(),
             "fork_validator_addresses": validator_addresses,
+            "replacement_stake": replacement_stake,
         },
         "generated_config_paths": node_config_paths,
         "waypoint": output_info.waypoint.map(|waypoint| waypoint.to_string()),
@@ -765,6 +817,11 @@ mod tests {
         )
         .unwrap()
         .with_num_validators(NonZeroUsize::new(1).unwrap())
+        .with_init_genesis_stake(Some(Arc::new(|_, stake| *stake = 1_000)))
+        .with_init_genesis_config(Some(Arc::new(|config| {
+            config.min_stake = 100;
+            config.max_stake = 10_000;
+        })))
         .build(OsRng)
         .unwrap();
 
@@ -821,6 +878,8 @@ mod tests {
         executor
             .commit_blocks(vec![block_id], ledger_info_with_sigs)
             .unwrap();
+        drop(executor);
+        drop(db);
         assert!(inspect_db(source_db_dir, false, false)
             .unwrap()
             .waypoint
@@ -922,6 +981,11 @@ mod tests {
                 "replacement validator must have a StakePool",
             );
         }
+        assert!(output_info
+            .validator_set
+            .active_validators
+            .iter()
+            .all(|validator| validator.consensus_voting_power() == 1_000));
         assert_eq!(
             output_info.waypoint.unwrap().version(),
             source_info_before.version + 1
@@ -977,6 +1041,18 @@ mod tests {
                 node_config.storage.dir().canonicalize().unwrap(),
                 validator_db_dir.canonicalize().unwrap(),
             );
+            assert!(node_config.api.address.ip().is_loopback());
+            assert!(node_config.indexer_grpc.address.ip().is_loopback());
+            assert!(!node_config.logger.enable_telemetry_remote_log);
+            assert!(!node_config.logger.enable_telemetry_flush);
+            assert!(node_config
+                .validator_network
+                .iter()
+                .chain(node_config.full_node_networks.iter())
+                .all(|network| matches!(
+                    network.listen_address.as_slice().first(),
+                    Some(Protocol::Ip4(address)) if address.is_loopback()
+                )));
         }
 
         let output_validator = output_info
@@ -1060,7 +1136,7 @@ mod tests {
         let config_dir = output_root.path().join("fork-configs");
         Command {
             source_db_dir: source_db_dir.path().to_path_buf(),
-            output_db_dir,
+            output_db_dir: output_db_dir.clone(),
             config_dir: Some(config_dir.clone()),
             fork_chain_id: 42,
             validators: 2,
@@ -1068,6 +1144,7 @@ mod tests {
         }
         .run()
         .unwrap();
+        let fork_version = inspect_db(&output_db_dir, false, true).unwrap().version;
 
         let mut api_addresses = Vec::new();
         let mut children = Vec::new();
@@ -1091,7 +1168,6 @@ mod tests {
         let mut nodes = NodeProcesses(children);
         let client = reqwest::Client::new();
         let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
-        let mut starting_versions = None;
         while tokio::time::Instant::now() < deadline {
             for child in &mut nodes.0 {
                 assert!(child.try_wait().unwrap().is_none(), "validator exited early");
@@ -1120,12 +1196,7 @@ mod tests {
                             .unwrap()
                     })
                     .collect::<Vec<_>>();
-                let initial_versions = starting_versions.get_or_insert_with(|| versions.clone());
-                if versions
-                    .iter()
-                    .zip(initial_versions.iter())
-                    .all(|(current, initial)| current > initial)
-                {
+                if versions.iter().all(|current| *current >= fork_version + 2) {
                     for address in &api_addresses {
                         let account = client
                             .get(format!(
@@ -1143,6 +1214,26 @@ mod tests {
                         assert_eq!(
                             account["data"]["sequence_number"],
                             source_account.sequence_number().to_string(),
+                        );
+                        let validator_set = client
+                            .get(format!(
+                                "http://{}/v1/accounts/0x1/resource/0x1::stake::ValidatorSet",
+                                address
+                            ))
+                            .send()
+                            .await
+                            .unwrap()
+                            .error_for_status()
+                            .unwrap()
+                            .json::<serde_json::Value>()
+                            .await
+                            .unwrap();
+                        assert_eq!(
+                            validator_set["data"]["active_validators"]
+                                .as_array()
+                                .unwrap()
+                                .len(),
+                            2,
                         );
                     }
                     return;

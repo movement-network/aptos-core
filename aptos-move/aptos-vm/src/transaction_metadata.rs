@@ -102,6 +102,10 @@ impl TransactionMetadata {
                         TransactionExtraConfig::V1 {
                             multisig_address: Some(multisig_address),
                             ..
+                        }
+                        | TransactionExtraConfig::V2 {
+                            multisig_address: Some(multisig_address),
+                            ..
                         },
                 }) => Some(Multisig {
                     multisig_address: *multisig_address,

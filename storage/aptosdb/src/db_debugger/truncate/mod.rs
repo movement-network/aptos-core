@@ -159,7 +159,7 @@ impl Cmd {
 mod test {
     use super::*;
     use crate::{
-        db::{test_helper::{arb_blocks_to_commit_with_block_nums, arb_blocks_to_commit_with_params}, AptosDB},
+        db::{test_helper::arb_blocks_to_commit_with_params, AptosDB},
         schema::{
             epoch_by_version::EpochByVersionSchema,
             jellyfish_merkle_node::JellyfishMerkleNodeSchema, ledger_info::LedgerInfoSchema,

@@ -23,15 +23,13 @@ use aptos_types::{
     chain_id::ChainId,
     contract_event::ContractEvent,
     event::EventHandle,
+    network_address::{NetworkAddress, Protocol},
     on_chain_config::{
         CommitHistoryResource, ConfigurationResource, CurrentTimeMicroseconds, OnChainConfig,
         ValidatorSet,
     },
-    network_address::{NetworkAddress, Protocol},
     state_store::{state_key::StateKey, table::TableHandle, TStateView},
-    transaction::{
-        authenticator::AuthenticationKey, ChangeSet, Transaction, WriteSetPayload,
-    },
+    transaction::{authenticator::AuthenticationKey, ChangeSet, Transaction, WriteSetPayload},
     validator_config::ValidatorConfig,
     validator_performances::{ValidatorPerformance, ValidatorPerformances},
     waypoint::Waypoint,
@@ -45,6 +43,8 @@ use move_core_types::{
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 use std::{
     collections::HashSet,
     fs::{self, File, OpenOptions},
@@ -54,14 +54,13 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
-#[cfg(unix)]
-use std::os::unix::fs::OpenOptionsExt;
 
 const GENESIS_BLOB: &str = "genesis.blob";
 const MANIFEST: &str = "fork-manifest.json";
 const VALIDATOR_IDENTITY: &str = "validator-identity.yaml";
 const TEST_ACCOUNT_ADDRESS: &str = "test-account-address";
 const TEST_ACCOUNT_PRIVATE_KEY: &str = "test-account-private-key";
+const DEFAULT_TEST_ACCOUNT_PRIVATE_KEY: &str = "0xabc";
 
 #[derive(Parser)]
 #[clap(
@@ -87,129 +86,79 @@ pub struct Command {
     #[clap(long)]
     enable_storage_sharding: bool,
 
-    #[clap(long, requires = "test_account_private_key")]
+    /// Existing account to re-key for fork-only testing.
+    #[clap(long)]
     test_account_address: Option<AccountAddress>,
 
+    /// Private key for the fork test account. Defaults to 0xabc when an address is provided.
     #[clap(long, requires = "test_account_address")]
     test_account_private_key: Option<String>,
 }
 
 impl Command {
     pub fn run(self) -> Result<()> {
-        let validators = NonZeroUsize::new(self.validators)
-            .ok_or_else(|| format_err!("--validators must be greater than 0"))?;
-        let fork_chain_id = validate_requested_chain_id(self.fork_chain_id)?;
-        let test_account_rekey = parse_test_account_rekey(
-            self.test_account_address,
-            self.test_account_private_key,
-        )?;
-        validate_output_paths(&self.source_db_dir, &self.output_db_dir)?;
-        let config_dir = self
-            .config_dir
-            .clone()
-            .unwrap_or_else(|| default_config_dir(&self.output_db_dir));
-        validate_config_path(&self.source_db_dir, &self.output_db_dir, &config_dir)?;
+        let request = self.validate()?;
 
         let source_info = inspect_db(&self.source_db_dir, self.enable_storage_sharding, false)
             .with_context(|| format!("failed to inspect source DB {:?}", self.source_db_dir))?;
         ensure!(
-            fork_chain_id != source_info.chain_id,
+            request.chain_id != source_info.chain_id,
             "fork chain ID must differ from source chain ID {}",
             source_info.chain_id.id(),
         );
 
-        fs::create_dir_all(&self.output_db_dir)
-            .with_context(|| format!("failed to create {:?}", self.output_db_dir))?;
-        AptosDB::create_checkpoint(
+        create_output_checkpoint(
             &self.source_db_dir,
             &self.output_db_dir,
             self.enable_storage_sharding,
-        )
-        .with_context(|| {
-            format!(
-                "failed to create checkpoint from {:?} to {:?}",
-                self.source_db_dir, self.output_db_dir
-            )
-        })?;
-
-        fs::create_dir_all(&config_dir)
-            .with_context(|| format!("failed to create config dir {:?}", config_dir))?;
-        let replacement_stake = source_info
-            .validator_set
-            .active_validators
-            .iter()
-            .map(|validator| validator.consensus_voting_power())
-            .max()
-            .ok_or_else(|| format_err!("source ValidatorSet has no active validators"))?;
-        let (_root_key, generated_genesis, _generated_waypoint, validators) = Builder::new(
-            &config_dir,
-            aptos_cached_packages::head_release_bundle().clone(),
-        )?
-        .with_num_validators(validators)
-        .with_init_genesis_stake(Some(Arc::new(move |_, stake| {
-            *stake = replacement_stake;
-        })))
-        .build(OsRng)?;
-        let validator_set = validator_set_from_local_validators(&validators)?;
-        let generated_validator_addresses = validator_set.active_validators();
+        )?;
+        let replacements = generate_replacement_validators(
+            &request.config_dir,
+            request.validator_count,
+            &source_info.validator_set,
+        )?;
 
         let (fork_txn, waypoint) = commit_fork_transaction(
             &self.output_db_dir,
             self.enable_storage_sharding,
-            fork_chain_id,
-            &validator_set,
-            &generated_genesis,
-            test_account_rekey.as_ref(),
+            request.chain_id,
+            &replacements.validator_set,
+            &replacements.genesis,
+            request.test_account_rekey.as_ref(),
         )?;
 
         let output_info = inspect_db(&self.output_db_dir, self.enable_storage_sharding, true)
             .with_context(|| format!("failed to inspect output DB {:?}", self.output_db_dir))?;
-        ensure!(
-            output_info.chain_id == fork_chain_id,
-            "output chain ID readback mismatch: expected {}, got {}",
-            fork_chain_id.id(),
-            output_info.chain_id.id(),
-        );
-        ensure!(
-            output_info.validator_set == validator_set,
-            "output ValidatorSet readback mismatch",
-        );
-        ensure!(
-            output_info.waypoint == Some(waypoint),
-            "output waypoint readback mismatch: manifest {}, DB {}",
+        verify_fork_output(
+            &source_info,
+            &output_info,
+            request.chain_id,
+            &replacements.validator_set,
             waypoint,
-            output_info
-                .waypoint
-                .map(|waypoint| waypoint.to_string())
-                .unwrap_or_else(|| "<none>".to_string()),
-        );
-        ensure!(
-            output_info.validator_set != source_info.validator_set,
-            "fork did not replace ValidatorSet",
-        );
+        )?;
 
         let node_config_paths = write_fork_configs(
-            &validators,
+            &replacements.configs,
             &self.output_db_dir,
             &fork_txn,
             waypoint,
-            fork_chain_id,
+            request.chain_id,
             self.enable_storage_sharding,
         )?;
-        if let Some(test_account_rekey) = &test_account_rekey {
-            write_test_account_key(&config_dir, test_account_rekey)?;
+        if let Some(test_account_rekey) = &request.test_account_rekey {
+            write_test_account_key(&request.config_dir, test_account_rekey)?;
         }
         let manifest_path = write_manifest(
-            &config_dir,
+            &request.config_dir,
             &self.source_db_dir,
             &self.output_db_dir,
             &node_config_paths,
             &source_info,
             &output_info,
-            fork_chain_id,
-            &generated_validator_addresses,
-            replacement_stake,
-            test_account_rekey.as_ref(),
+            request.chain_id,
+            &replacements.addresses,
+            replacements.stake,
+            request.test_account_rekey.as_ref(),
         )?;
 
         println!("Fork DB written to: {}", self.output_db_dir.display());
@@ -217,6 +166,43 @@ impl Command {
         println!("Fork manifest: {}", manifest_path.display());
         Ok(())
     }
+
+    fn validate(&self) -> Result<ForkRequest> {
+        let validator_count = NonZeroUsize::new(self.validators)
+            .ok_or_else(|| format_err!("--validators must be greater than 0"))?;
+        let chain_id = validate_requested_chain_id(self.fork_chain_id)?;
+        let test_account_rekey = parse_test_account_rekey(
+            self.test_account_address,
+            self.test_account_private_key.clone(),
+        )?;
+        validate_output_paths(&self.source_db_dir, &self.output_db_dir)?;
+        let config_dir = self
+            .config_dir
+            .clone()
+            .unwrap_or_else(|| default_config_dir(&self.output_db_dir));
+        validate_config_path(&self.source_db_dir, &self.output_db_dir, &config_dir)?;
+        Ok(ForkRequest {
+            chain_id,
+            validator_count,
+            config_dir,
+            test_account_rekey,
+        })
+    }
+}
+
+struct ForkRequest {
+    chain_id: ChainId,
+    validator_count: NonZeroUsize,
+    config_dir: PathBuf,
+    test_account_rekey: Option<TestAccountRekey>,
+}
+
+struct ReplacementValidators {
+    configs: Vec<ValidatorNodeConfig>,
+    genesis: Transaction,
+    validator_set: ValidatorSet,
+    addresses: Vec<AccountAddress>,
+    stake: u64,
 }
 
 #[derive(Clone)]
@@ -274,16 +260,102 @@ struct TestAccountRekey {
     authentication_key: Vec<u8>,
 }
 
+fn create_output_checkpoint(
+    source_db_dir: &Path,
+    output_db_dir: &Path,
+    enable_storage_sharding: bool,
+) -> Result<()> {
+    fs::create_dir_all(output_db_dir)
+        .with_context(|| format!("failed to create {:?}", output_db_dir))?;
+    AptosDB::create_checkpoint(source_db_dir, output_db_dir, enable_storage_sharding).with_context(
+        || {
+            format!(
+                "failed to create checkpoint from {:?} to {:?}",
+                source_db_dir, output_db_dir
+            )
+        },
+    )
+}
+
+fn generate_replacement_validators(
+    config_dir: &Path,
+    validator_count: NonZeroUsize,
+    source_validator_set: &ValidatorSet,
+) -> Result<ReplacementValidators> {
+    fs::create_dir_all(config_dir)
+        .with_context(|| format!("failed to create config dir {:?}", config_dir))?;
+    let stake = source_validator_set
+        .active_validators
+        .iter()
+        .map(|validator| validator.consensus_voting_power())
+        .max()
+        .ok_or_else(|| format_err!("source ValidatorSet has no active validators"))?;
+    let (_root_key, genesis, _generated_waypoint, configs) = Builder::new(
+        config_dir,
+        aptos_cached_packages::head_release_bundle().clone(),
+    )?
+    .with_num_validators(validator_count)
+    .with_init_genesis_stake(Some(Arc::new(move |_, generated_stake| {
+        *generated_stake = stake;
+    })))
+    .build(OsRng)?;
+    let validator_set = validator_set_from_local_validators(&configs)?;
+    let addresses = validator_set.active_validators();
+    Ok(ReplacementValidators {
+        configs,
+        genesis,
+        validator_set,
+        addresses,
+        stake,
+    })
+}
+
+fn verify_fork_output(
+    source_info: &DbInfo,
+    output_info: &DbInfo,
+    chain_id: ChainId,
+    validator_set: &ValidatorSet,
+    waypoint: Waypoint,
+) -> Result<()> {
+    ensure!(
+        output_info.chain_id == chain_id,
+        "output chain ID readback mismatch: expected {}, got {}",
+        chain_id.id(),
+        output_info.chain_id.id(),
+    );
+    ensure!(
+        &output_info.validator_set == validator_set,
+        "output ValidatorSet readback mismatch",
+    );
+    ensure!(
+        output_info.waypoint == Some(waypoint),
+        "output waypoint readback mismatch: manifest {}, DB {}",
+        waypoint,
+        output_info
+            .waypoint
+            .map(|waypoint| waypoint.to_string())
+            .unwrap_or_else(|| "<none>".to_string()),
+    );
+    ensure!(
+        output_info.validator_set != source_info.validator_set,
+        "fork did not replace ValidatorSet",
+    );
+    Ok(())
+}
+
 fn parse_test_account_rekey(
     address: Option<AccountAddress>,
     private_key: Option<String>,
 ) -> Result<Option<TestAccountRekey>> {
     let (address, private_key) = match (address, private_key) {
         (None, None) => return Ok(None),
-        (Some(address), Some(private_key)) => (address, private_key),
-        _ => {
+        (Some(address), private_key) => (
+            address,
+            private_key.unwrap_or_else(|| DEFAULT_TEST_ACCOUNT_PRIVATE_KEY.to_string()),
+        ),
+        (None, Some(_)) => {
             return Err(format_err!(
-                "--test-account-address and --test-account-private-key must be provided together"
+                "--test-account-private-key requires --test-account-address"
             ));
         },
     };
@@ -399,7 +471,9 @@ fn inspect_db(db_dir: &Path, sharding: bool, require_epoch_waypoint: bool) -> Re
     let validator_set =
         ValidatorSet::fetch_config(&view).ok_or_else(|| format_err!("ValidatorSet missing"))?;
     let block_resource = view
-        .get_state_value_bytes(&StateKey::resource_typed::<BlockResource>(&CORE_CODE_ADDRESS)?)?
+        .get_state_value_bytes(&StateKey::resource_typed::<BlockResource>(
+            &CORE_CODE_ADDRESS,
+        )?)?
         .ok_or_else(|| format_err!("BlockResource missing"))?;
     let block_resource = bcs::from_bytes::<BlockResource>(&block_resource)?;
     let current_time = CurrentTimeMicroseconds::fetch_config(&view)
@@ -436,9 +510,7 @@ fn inspect_db(db_dir: &Path, sharding: bool, require_epoch_waypoint: bool) -> Re
         block_height: block_resource.height(),
         current_time_microseconds: current_time.microseconds,
         commit_history_length: commit_history.as_ref().map(CommitHistoryResource::length),
-        commit_history_next_idx: commit_history
-            .as_ref()
-            .map(CommitHistoryResource::next_idx),
+        commit_history_next_idx: commit_history.as_ref().map(CommitHistoryResource::next_idx),
     })
 }
 
@@ -721,12 +793,8 @@ fn write_fork_configs(
                     validator.index, validator_db_dir
                 )
             })?;
-            AptosDB::create_checkpoint(
-                output_db_dir,
-                &validator_db_dir,
-                enable_storage_sharding,
-            )
-            .with_context(|| {
+            AptosDB::create_checkpoint(output_db_dir, &validator_db_dir, enable_storage_sharding)
+                .with_context(|| {
                 format!(
                     "failed to create validator {} DB checkpoint at {:?}",
                     validator.index, validator_db_dir
@@ -775,10 +843,11 @@ fn isolate_node_config(config: &mut NodeConfig) -> Result<()> {
             .as_slice()
             .iter()
             .map(|protocol| match protocol {
-                Protocol::Ip4(_) | Protocol::Ip6(_) | Protocol::Dns(_)
-                | Protocol::Dns4(_) | Protocol::Dns6(_) => {
-                    Protocol::Ip4(Ipv4Addr::LOCALHOST)
-                },
+                Protocol::Ip4(_)
+                | Protocol::Ip6(_)
+                | Protocol::Dns(_)
+                | Protocol::Dns4(_)
+                | Protocol::Dns6(_) => Protocol::Ip4(Ipv4Addr::LOCALHOST),
                 protocol => protocol.clone(),
             })
             .collect();
@@ -875,9 +944,9 @@ mod tests {
     use aptos_executor_types::BlockExecutorTrait;
     use aptos_temppath::TempPath;
     use aptos_types::{
+        account_config::AccountResource,
         aggregate_signature::AggregateSignature,
         block_info::BlockInfo,
-        account_config::AccountResource,
         ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
         test_helpers::transaction_test_helpers::{
             block, get_test_signed_transaction, TEST_BLOCK_EXECUTOR_ONCHAIN_CONFIG,
@@ -1049,11 +1118,9 @@ mod tests {
             .first()
             .unwrap();
         let source_validator_address = source_validator.account_address;
-        let source_validator_config = read_validator_config(
-            source_db_dir.path(),
-            source_validator_address,
-        )
-        .expect("source validator config must exist before fork");
+        let source_validator_config =
+            read_validator_config(source_db_dir.path(), source_validator_address)
+                .expect("source validator config must exist before fork");
         assert_eq!(&source_validator_config, source_validator.config());
         let output_root = TempPath::new();
         output_root.create_as_dir().unwrap();
@@ -1139,9 +1206,7 @@ mod tests {
             source_account,
         );
         for validator_index in 0..2 {
-            let validator_db_dir = config_dir
-                .join(validator_index.to_string())
-                .join("fork-db");
+            let validator_db_dir = config_dir.join(validator_index.to_string()).join("fork-db");
             let validator_info = inspect_db(&validator_db_dir, false, true).unwrap();
             assert_eq!(validator_info.chain_id, fork_chain_id);
             assert_eq!(validator_info.validator_set, output_info.validator_set);
@@ -1173,11 +1238,7 @@ mod tests {
                 )));
         }
 
-        let output_validator = output_info
-            .validator_set
-            .active_validators
-            .first()
-            .unwrap();
+        let output_validator = output_info.validator_set.active_validators.first().unwrap();
         let output_validator_address = output_validator.account_address;
         assert_ne!(output_validator_address, source_validator_address);
         assert!(
@@ -1205,7 +1266,8 @@ mod tests {
             let bytes = fs::read(config_dir.join("0").join(GENESIS_BLOB)).unwrap();
             bcs::from_bytes::<Transaction>(&bytes).unwrap()
         };
-        let Transaction::GenesisTransaction(WriteSetPayload::Direct(change_set)) = genesis_txn else {
+        let Transaction::GenesisTransaction(WriteSetPayload::Direct(change_set)) = genesis_txn
+        else {
             panic!("fork transaction must be a direct genesis write-set");
         };
         let new_block_event = change_set
@@ -1218,7 +1280,10 @@ mod tests {
             source_info_before.new_block_event_count
         );
         let new_block_event = NewBlockEvent::try_from_bytes(new_block_event.event_data()).unwrap();
-        assert_eq!(new_block_event.height(), source_info_before.new_block_event_count);
+        assert_eq!(
+            new_block_event.height(),
+            source_info_before.new_block_event_count
+        );
         assert_eq!(new_block_event.round(), u64::MAX);
         assert_eq!(new_block_event.proposer(), AccountAddress::ZERO);
         assert_eq!(
@@ -1246,19 +1311,17 @@ mod tests {
             validators: 1,
             enable_storage_sharding: false,
             test_account_address: Some(AccountAddress::TWO),
-            test_account_private_key: Some("0x1".to_string()),
+            test_account_private_key: None,
         }
         .run()
         .unwrap();
 
         let output_account = read_account_resource(&output_db_dir, AccountAddress::TWO)
             .expect("rekeyed account must exist");
-        let expected = parse_test_account_rekey(
-            Some(AccountAddress::TWO),
-            Some("0x1".to_string()),
-        )
-        .unwrap()
-        .unwrap();
+        let expected = parse_test_account_rekey(Some(AccountAddress::TWO), None)
+            .unwrap()
+            .unwrap();
+        assert!(expected.private_key_hex.ends_with("0abc"));
         assert_eq!(
             output_account.sequence_number(),
             source_account.sequence_number()
@@ -1287,6 +1350,33 @@ mod tests {
                 0o600,
             );
         }
+    }
+
+    #[test]
+    fn test_account_private_key_defaults_to_abc_and_allows_override() {
+        let default = parse_test_account_rekey(Some(AccountAddress::TWO), None)
+            .unwrap()
+            .unwrap();
+        let explicit_default = parse_test_account_rekey(
+            Some(AccountAddress::TWO),
+            Some(DEFAULT_TEST_ACCOUNT_PRIVATE_KEY.to_string()),
+        )
+        .unwrap()
+        .unwrap();
+        let override_key =
+            parse_test_account_rekey(Some(AccountAddress::TWO), Some("0xdef".to_string()))
+                .unwrap()
+                .unwrap();
+
+        assert_eq!(default.private_key_hex, explicit_default.private_key_hex);
+        assert_eq!(
+            default.authentication_key,
+            explicit_default.authentication_key
+        );
+        assert!(default.private_key_hex.ends_with("0abc"));
+        assert!(override_key.private_key_hex.ends_with("0def"));
+        assert_ne!(default.authentication_key, override_key.authentication_key);
+        assert!(parse_test_account_rekey(None, Some("0xabc".to_string())).is_err());
     }
 
     #[tokio::test]
@@ -1352,15 +1442,14 @@ mod tests {
         let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
         while tokio::time::Instant::now() < deadline {
             for child in &mut nodes.0 {
-                assert!(child.try_wait().unwrap().is_none(), "validator exited early");
+                assert!(
+                    child.try_wait().unwrap().is_none(),
+                    "validator exited early"
+                );
             }
             let mut ledger_infos = Vec::new();
             for address in &api_addresses {
-                if let Ok(response) = client
-                    .get(format!("http://{}/v1/", address))
-                    .send()
-                    .await
-                {
+                if let Ok(response) = client.get(format!("http://{}/v1/", address)).send().await {
                     if let Ok(info) = response.json::<serde_json::Value>().await {
                         ledger_infos.push(info);
                     }

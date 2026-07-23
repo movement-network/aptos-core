@@ -248,34 +248,11 @@ pub const NATIVE_MODIFIER: &str = "native";
 pub const ENTRY_MODIFIER: &str = "entry";
 pub const ENUM_MODIFIER: &str = "enum";
 
-/// An access specifier describes the resources being accessed by a function.
-/// In contrast to regular `NameAccessChain`, the identifiers inside of the
-/// chain can be wildcards (`*`).
+/// An access specifier describes a resource acquired by a function.
 #[derive(Debug, Clone, PartialEq)]
-pub enum AccessSpecifier_ {
-    Acquires(bool, NameAccessChain, Option<Vec<Type>>, AddressSpecifier),
-    Reads(bool, NameAccessChain, Option<Vec<Type>>, AddressSpecifier),
-    Writes(bool, NameAccessChain, Option<Vec<Type>>, AddressSpecifier),
-}
+pub struct AccessSpecifier_(pub NameAccessChain);
 
 pub type AccessSpecifier = Spanned<AccessSpecifier_>;
-
-/// An address specifier specifies the address at which a resource is accessed.
-#[derive(Debug, Clone, PartialEq)]
-pub enum AddressSpecifier_ {
-    /// Represents that no address was specified, as in `Resource`
-    Empty,
-    /// Represents that the specified address is a wildcard, as in `Resource(*)`.
-    Any,
-    /// Represents the precise address.
-    Literal(NumericalAddress),
-    /// Represents a parameter name.
-    Name(Name),
-    /// Represents a function applied to a parameter name.
-    Call(NameAccessChain, Option<Vec<Type>>, Name),
-}
-
-pub type AddressSpecifier = Spanned<AddressSpecifier_>;
 
 #[derive(PartialEq, Clone, Debug)]
 pub struct FunctionSignature {

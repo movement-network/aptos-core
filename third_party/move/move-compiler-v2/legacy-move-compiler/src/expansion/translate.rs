@@ -16,9 +16,9 @@ use crate::{
         byte_string, hex_string,
     },
     parser::ast::{
-        self as P, Ability, AccessSpecifier_, AddressSpecifier_, CallKind, ConstantName, Field,
-        FunctionName, LeadingNameAccess_, ModuleMember, ModuleName, NameAccessChain,
-        NameAccessChain_, StructName, Var,
+        self as P, Ability, AccessSpecifier_, CallKind, ConstantName, Field, FunctionName,
+        LeadingNameAccess_, ModuleMember, ModuleName, NameAccessChain, NameAccessChain_, StructName,
+        Var,
     },
     shared::{
         builtins,
@@ -1680,41 +1680,17 @@ fn invalid_variant_access(context: &mut Context, loc: Loc) {
 }
 
 fn access_specifier(context: &mut Context, specifier: P::AccessSpecifier) -> E::AccessSpecifier {
-    let (negated, kind, chain, type_args, address) = match specifier.value {
-        AccessSpecifier_::Acquires(negated, chain, type_args, address) => (
-            negated,
-            AccessSpecifierKind::LegacyAcquires,
-            chain,
-            type_args,
-            address,
-        ),
-        AccessSpecifier_::Reads(negated, chain, type_args, address) => (
-            negated,
-            AccessSpecifierKind::Reads,
-            chain,
-            type_args,
-            address,
-        ),
-        AccessSpecifier_::Writes(negated, chain, type_args, address) => (
-            negated,
-            AccessSpecifierKind::Writes,
-            chain,
-            type_args,
-            address,
-        ),
-    };
+    let AccessSpecifier_(chain) = specifier.value;
     let (module_address, module_name, resource_name) =
         access_specifier_name_access_chain(context, chain);
-    let type_args = optional_types(context, type_args);
-    let address = address_specifier(context, address);
     sp(specifier.loc, E::AccessSpecifier_ {
-        kind,
-        negated,
+        kind: AccessSpecifierKind::LegacyAcquires,
+        negated: false,
         module_address,
         module_name,
         resource_name,
-        type_args,
-        address,
+        type_args: None,
+        address: sp(specifier.loc, E::AddressSpecifier_::Empty),
     })
 }
 
@@ -1821,29 +1797,6 @@ fn access_specifier_name_access_chain(
             )
         },
     }
-}
-
-fn address_specifier(context: &mut Context, specifier: P::AddressSpecifier) -> E::AddressSpecifier {
-    let s = match specifier.value {
-        AddressSpecifier_::Empty => E::AddressSpecifier_::Empty,
-        AddressSpecifier_::Any => E::AddressSpecifier_::Any,
-        AddressSpecifier_::Literal(addr) => E::AddressSpecifier_::Literal(addr),
-        AddressSpecifier_::Name(name) => E::AddressSpecifier_::Name(name),
-        AddressSpecifier_::Call(chain, type_args, name) => {
-            if let Some(maccess) = name_access_chain(
-                context,
-                Access::ApplyPositional,
-                chain,
-                Some(DeprecatedItem::Function),
-            ) {
-                E::AddressSpecifier_::Call(maccess, optional_types(context, type_args), name)
-            } else {
-                debug_assert!(context.env.has_errors());
-                E::AddressSpecifier_::Any
-            }
-        },
-    };
-    sp(specifier.loc, s)
 }
 
 fn visibility(pvisibility: P::Visibility) -> E::Visibility {

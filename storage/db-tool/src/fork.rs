@@ -7,6 +7,7 @@ use aptos_config::config::{
     BUFFERED_STATE_TARGET_ITEMS, DEFAULT_MAX_NUM_NODES_PER_LRU_CACHE_SHARD,
     NO_OP_STORAGE_PRUNER_CONFIG,
 };
+use aptos_crypto::{ed25519::Ed25519PrivateKey, PrivateKey};
 use aptos_db::AptosDB;
 use aptos_executor::db_bootstrapper::{calculate_genesis, generate_waypoint};
 use aptos_genesis::builder::{validator_set_from_local_validators, Builder, ValidatorNodeConfig};
@@ -16,8 +17,8 @@ use aptos_storage_interface::{
 use aptos_types::{
     account_address::AccountAddress,
     account_config::{
-        new_block_event_key, BlockResource, ChainIdResource, NewBlockEvent, CORE_CODE_ADDRESS,
-        NEW_EPOCH_EVENT_V2_MOVE_TYPE_TAG,
+        new_block_event_key, AccountResource, BlockResource, ChainIdResource, NewBlockEvent,
+        CORE_CODE_ADDRESS, NEW_EPOCH_EVENT_V2_MOVE_TYPE_TAG,
     },
     chain_id::ChainId,
     contract_event::ContractEvent,
@@ -28,7 +29,9 @@ use aptos_types::{
     },
     network_address::{NetworkAddress, Protocol},
     state_store::{state_key::StateKey, table::TableHandle, TStateView},
-    transaction::{ChangeSet, Transaction, WriteSetPayload},
+    transaction::{
+        authenticator::AuthenticationKey, ChangeSet, Transaction, WriteSetPayload,
+    },
     validator_config::ValidatorConfig,
     validator_performances::{ValidatorPerformance, ValidatorPerformances},
     waypoint::Waypoint,
@@ -44,17 +47,21 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{
     collections::HashSet,
-    fs::{self, File},
+    fs::{self, File, OpenOptions},
     io::Write,
     net::{IpAddr, Ipv4Addr},
     num::NonZeroUsize,
     path::{Path, PathBuf},
     sync::Arc,
 };
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 
 const GENESIS_BLOB: &str = "genesis.blob";
 const MANIFEST: &str = "fork-manifest.json";
 const VALIDATOR_IDENTITY: &str = "validator-identity.yaml";
+const TEST_ACCOUNT_ADDRESS: &str = "test-account-address";
+const TEST_ACCOUNT_PRIVATE_KEY: &str = "test-account-private-key";
 
 #[derive(Parser)]
 #[clap(
@@ -79,6 +86,12 @@ pub struct Command {
 
     #[clap(long)]
     enable_storage_sharding: bool,
+
+    #[clap(long, requires = "test_account_private_key")]
+    test_account_address: Option<AccountAddress>,
+
+    #[clap(long, requires = "test_account_address")]
+    test_account_private_key: Option<String>,
 }
 
 impl Command {
@@ -86,6 +99,10 @@ impl Command {
         let validators = NonZeroUsize::new(self.validators)
             .ok_or_else(|| format_err!("--validators must be greater than 0"))?;
         let fork_chain_id = validate_requested_chain_id(self.fork_chain_id)?;
+        let test_account_rekey = parse_test_account_rekey(
+            self.test_account_address,
+            self.test_account_private_key,
+        )?;
         validate_output_paths(&self.source_db_dir, &self.output_db_dir)?;
         let config_dir = self
             .config_dir
@@ -142,6 +159,7 @@ impl Command {
             fork_chain_id,
             &validator_set,
             &generated_genesis,
+            test_account_rekey.as_ref(),
         )?;
 
         let output_info = inspect_db(&self.output_db_dir, self.enable_storage_sharding, true)
@@ -178,6 +196,9 @@ impl Command {
             fork_chain_id,
             self.enable_storage_sharding,
         )?;
+        if let Some(test_account_rekey) = &test_account_rekey {
+            write_test_account_key(&config_dir, test_account_rekey)?;
+        }
         let manifest_path = write_manifest(
             &config_dir,
             &self.source_db_dir,
@@ -188,6 +209,7 @@ impl Command {
             fork_chain_id,
             &generated_validator_addresses,
             replacement_stake,
+            test_account_rekey.as_ref(),
         )?;
 
         println!("Fork DB written to: {}", self.output_db_dir.display());
@@ -233,6 +255,54 @@ struct CommitHistoryResourceWrite {
     max_capacity: u32,
     next_idx: u32,
     table: TableWithLengthWrite,
+}
+
+#[derive(Deserialize, Serialize)]
+struct AccountResourceWrite {
+    authentication_key: Vec<u8>,
+    sequence_number: u64,
+    guid_creation_num: u64,
+    coin_register_events: EventHandle,
+    key_rotation_events: EventHandle,
+    rotation_capability_offer: Option<AccountAddress>,
+    signer_capability_offer: Option<AccountAddress>,
+}
+
+struct TestAccountRekey {
+    address: AccountAddress,
+    private_key_hex: String,
+    authentication_key: Vec<u8>,
+}
+
+fn parse_test_account_rekey(
+    address: Option<AccountAddress>,
+    private_key: Option<String>,
+) -> Result<Option<TestAccountRekey>> {
+    let (address, private_key) = match (address, private_key) {
+        (None, None) => return Ok(None),
+        (Some(address), Some(private_key)) => (address, private_key),
+        _ => {
+            return Err(format_err!(
+                "--test-account-address and --test-account-private-key must be provided together"
+            ));
+        },
+    };
+    let private_key = private_key.strip_prefix("0x").unwrap_or(&private_key);
+    ensure!(
+        !private_key.is_empty() && private_key.len() <= 64,
+        "test account private key must contain 1 to 64 hexadecimal digits",
+    );
+    let private_key_hex = format!("{:0>64}", private_key);
+    let private_key_bytes =
+        hex::decode(&private_key_hex).context("test account private key is not valid hex")?;
+    let private_key = Ed25519PrivateKey::try_from(private_key_bytes.as_slice())
+        .context("test account private key is not a valid Ed25519 private key")?;
+    let authentication_key = AuthenticationKey::ed25519(&private_key.public_key()).to_vec();
+    Ok(Some(TestAccountRekey {
+        address,
+        private_key_hex,
+        authentication_key,
+    }))
 }
 
 fn validate_requested_chain_id(chain_id: u8) -> Result<ChainId> {
@@ -378,6 +448,7 @@ fn commit_fork_transaction(
     fork_chain_id: ChainId,
     validator_set: &ValidatorSet,
     generated_genesis: &Transaction,
+    test_account_rekey: Option<&TestAccountRekey>,
 ) -> Result<(Transaction, Waypoint)> {
     let db = open_db(output_db_dir, false, sharding)?;
     let view = db.reader.latest_state_checkpoint_view()?;
@@ -437,6 +508,9 @@ fn commit_fork_transaction(
         validator_set,
         generated_genesis,
     )?);
+    if let Some(test_account_rekey) = test_account_rekey {
+        writes.push(test_account_rekey_write(&view, test_account_rekey)?);
+    }
     let ledger_summary = db.reader.get_pre_committed_ledger_summary()?;
     let fork_txn = Transaction::GenesisTransaction(WriteSetPayload::Direct(ChangeSet::new(
         WriteSetMut::new(writes).freeze()?,
@@ -458,6 +532,23 @@ fn commit_fork_transaction(
     );
     committer.commit()?;
     Ok((fork_txn, waypoint))
+}
+
+fn test_account_rekey_write(
+    view: &impl TStateView<Key = StateKey>,
+    rekey: &TestAccountRekey,
+) -> Result<(StateKey, WriteOp)> {
+    let account_key = StateKey::resource_typed::<AccountResource>(&rekey.address)?;
+    let account = view
+        .get_state_value_bytes(&account_key)?
+        .ok_or_else(|| format_err!("test account {} does not exist", rekey.address))?;
+    let mut account = bcs::from_bytes::<AccountResourceWrite>(&account)
+        .with_context(|| format!("failed to decode Account resource for {}", rekey.address))?;
+    account.authentication_key = rekey.authentication_key.clone();
+    Ok((
+        account_key,
+        WriteOp::legacy_modification(bcs::to_bytes(&account)?.into()),
+    ))
 }
 
 fn validator_stake_writes(
@@ -697,6 +788,22 @@ fn isolate_node_config(config: &mut NodeConfig) -> Result<()> {
     Ok(())
 }
 
+fn write_test_account_key(config_dir: &Path, rekey: &TestAccountRekey) -> Result<()> {
+    let private_key_path = config_dir.join(TEST_ACCOUNT_PRIVATE_KEY);
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    options.mode(0o600);
+    options
+        .open(&private_key_path)?
+        .write_all(format!("0x{}\n", rekey.private_key_hex).as_bytes())?;
+    fs::write(
+        config_dir.join(TEST_ACCOUNT_ADDRESS),
+        format!("{}\n", rekey.address),
+    )?;
+    Ok(())
+}
+
 fn write_manifest(
     config_dir: &Path,
     source_db_dir: &Path,
@@ -707,7 +814,15 @@ fn write_manifest(
     fork_chain_id: ChainId,
     validator_addresses: &[AccountAddress],
     replacement_stake: u64,
+    test_account_rekey: Option<&TestAccountRekey>,
 ) -> Result<PathBuf> {
+    let test_account_rekey = test_account_rekey.map(|rekey| {
+        json!({
+            "address": rekey.address,
+            "authentication_key": format!("0x{}", hex::encode(&rekey.authentication_key)),
+            "private_key_path": config_dir.join(TEST_ACCOUNT_PRIVATE_KEY),
+        })
+    });
     let manifest = json!({
         "source_db_dir": source_db_dir,
         "output_db_dir": output_db_dir,
@@ -726,6 +841,7 @@ fn write_manifest(
         },
         "generated_config_paths": node_config_paths,
         "waypoint": output_info.waypoint.map(|waypoint| waypoint.to_string()),
+        "test_account_rekey": test_account_rekey,
     });
     let manifest_path = config_dir.join(MANIFEST);
     fs::write(&manifest_path, serde_json::to_vec_pretty(&manifest)?)?;
@@ -952,6 +1068,8 @@ mod tests {
             fork_chain_id: fork_chain_id.id(),
             validators: 2,
             enable_storage_sharding: false,
+            test_account_address: None,
+            test_account_private_key: None,
         }
         .run()
         .unwrap();
@@ -1109,6 +1227,68 @@ mod tests {
         );
     }
 
+    #[test]
+    fn fork_rekeys_existing_test_account_without_replacing_account_state() {
+        let (source_db_dir, _source_config_dir, root_key, _validators) = bootstrap_source_db();
+        commit_non_reconfiguration_transaction(source_db_dir.path(), root_key);
+        let source_account = read_account_resource(source_db_dir.path(), AccountAddress::TWO)
+            .expect("test account must exist");
+        let output_root = TempPath::new();
+        output_root.create_as_dir().unwrap();
+        let output_db_dir = output_root.path().join("fork-db");
+        let config_dir = output_root.path().join("fork-configs");
+
+        Command {
+            source_db_dir: source_db_dir.path().to_path_buf(),
+            output_db_dir: output_db_dir.clone(),
+            config_dir: Some(config_dir.clone()),
+            fork_chain_id: 42,
+            validators: 1,
+            enable_storage_sharding: false,
+            test_account_address: Some(AccountAddress::TWO),
+            test_account_private_key: Some("0x1".to_string()),
+        }
+        .run()
+        .unwrap();
+
+        let output_account = read_account_resource(&output_db_dir, AccountAddress::TWO)
+            .expect("rekeyed account must exist");
+        let expected = parse_test_account_rekey(
+            Some(AccountAddress::TWO),
+            Some("0x1".to_string()),
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(
+            output_account.sequence_number(),
+            source_account.sequence_number()
+        );
+        assert_eq!(
+            output_account.authentication_key(),
+            expected.authentication_key
+        );
+        assert_ne!(
+            output_account.authentication_key(),
+            source_account.authentication_key()
+        );
+        assert_eq!(
+            fs::read_to_string(config_dir.join(TEST_ACCOUNT_PRIVATE_KEY)).unwrap(),
+            format!("0x{}\n", expected.private_key_hex),
+        );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                fs::metadata(config_dir.join(TEST_ACCOUNT_PRIVATE_KEY))
+                    .unwrap()
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                0o600,
+            );
+        }
+    }
+
     #[tokio::test]
     #[ignore = "requires APTOS_NODE_BINARY pointing to an aptos-node binary"]
     async fn two_validator_fork_bootstraps_and_commits_blocks() {
@@ -1141,6 +1321,8 @@ mod tests {
             fork_chain_id: 42,
             validators: 2,
             enable_storage_sharding: false,
+            test_account_address: None,
+            test_account_private_key: None,
         }
         .run()
         .unwrap();

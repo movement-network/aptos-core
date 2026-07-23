@@ -17,6 +17,7 @@ aptos-backup-cli = { workspace = true }
 aptos-block-executor = { workspace = true }
 aptos-cached-packages = { workspace = true }
 aptos-config = { workspace = true }
+aptos-crypto = { workspace = true }
 aptos-db = { workspace = true, features = ["db-debugger"] }
 aptos-db-indexer = { workspace = true }
 aptos-executor = { workspace = true }
@@ -29,6 +30,7 @@ aptos-types = { workspace = true }
 aptos-vm = { workspace = true }
 bcs = { workspace = true }
 clap = { workspace = true }
+hex = { workspace = true }
 itertools = { workspace = true }
 move-core-types = { workspace = true }
 rand = { workspace = true }
@@ -40,7 +42,6 @@ tokio = { workspace = true }
 [dev-dependencies]
 aptos-backup-cli = { workspace = true, features = ["testing"] }
 aptos-backup-service = { workspace = true }
-aptos-crypto = { workspace = true }
 aptos-executor-test-helpers = { workspace = true }
 aptos-indexer-grpc-table-info = { workspace = true }
 reqwest = { workspace = true }

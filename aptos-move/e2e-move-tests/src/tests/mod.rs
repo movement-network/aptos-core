@@ -26,6 +26,7 @@ mod function_value_depth;
 mod function_values;
 mod fungible_asset;
 mod gas;
+mod gas_fa_coin_feature_gating;
 mod generate_upgrade_script;
 mod governance_updates;
 mod infinite_loop;

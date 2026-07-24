@@ -554,8 +554,8 @@ async fn test_timelock_unknown_hash_is_rejected() {
         .expect_err("execute of a non-existent proposal should fail");
 }
 
-/// `create` rejects out-of-bounds delays (below the 3600s minimum, above the 604800s maximum)
-/// and duplicate creators.
+/// `create` rejects out-of-bounds delays (below the 3600s minimum, above the 7776000s / 90-day
+/// maximum) and duplicate creators.
 #[tokio::test]
 async fn test_timelock_create_validation_fails() {
     let (_swarm, cli, _faucet) = SwarmBuilder::new_local(1)
@@ -566,7 +566,7 @@ async fn test_timelock_create_validation_fails() {
     cli.create_timelock(0, vec![cli.account_id(0)], vec![], 100)
         .await
         .expect_err("delay below the minimum should fail");
-    cli.create_timelock(0, vec![cli.account_id(0)], vec![], 604_801)
+    cli.create_timelock(0, vec![cli.account_id(0)], vec![], 7_776_001)
         .await
         .expect_err("delay above the maximum should fail");
     cli.create_timelock(
@@ -607,7 +607,10 @@ async fn test_timelock_propose_num_seconds_below_min_fails() {
 }
 
 /// `approve-resolution` is authorized like execution (an executor, or a creator when no executors)
-/// and does not require the delay to have elapsed. A non-executor cannot approve.
+/// AND, like `resolve`, requires the delay to have elapsed. A non-executor cannot approve, and even
+/// an executor cannot approve before the delay elapses. The live swarm cannot fast-forward past the
+/// 1-hour delay, so the successful post-delay approval is covered by the e2e (VM) tests; here we pin
+/// the two pre-delay rejection paths.
 #[tokio::test]
 async fn test_timelock_approve_resolution_authorization() {
     let (_swarm, cli, _faucet) = SwarmBuilder::new_local(1)
@@ -641,13 +644,16 @@ async fn test_timelock_approve_resolution_authorization() {
         .proposal_hash
         .expect("proposal should emit a proposal hash");
 
-    // A non-executor cannot approve.
+    // A non-executor cannot approve (authorization is checked before the delay, so this is
+    // rejected even pre-delay).
     cli.approve_timelock_resolution(intruder, timelock, proposal_hash.clone())
         .await
         .expect_err("non-executor must not be able to approve resolution");
 
-    // The executor can approve, well before the delay elapses.
+    // Even the executor cannot approve before the delay elapses: approval mirrors `resolve` and
+    // aborts with ETIMELOCK_NOT_EXPIRED. (The post-delay success path is covered by e2e tests,
+    // since the live swarm cannot fast-forward the delay.)
     cli.approve_timelock_resolution(executor, timelock, proposal_hash)
         .await
-        .expect("executor approve-resolution should succeed");
+        .expect_err("executor approve-resolution before the delay must be rejected");
 }

@@ -12,7 +12,11 @@ propose and cancel transactions.
 - A list of executors who can execute transactions after the timelock period
 (if executors is empty, creators can also execute)
 - A list of cancelers who can cancel any pending transaction at any time (an emergency-response
-role). Cancelers can ONLY cancel — they cannot propose or execute. The list may be empty.
+role). The canceler role by itself grants only cancellation — being listed solely as a
+canceler does not authorize proposing or executing. The list may be empty. An address MAY,
+however, hold the canceler role in addition to being a creator or executor; this overlap is
+allowed on purpose, so an operator can be granted cancel authority first and have its
+creator/executor role removed afterward for a gap-free, safe role transition.
 - A configurable minimum delay (<code>min_num_seconds_execute</code>) that must elapse after a
 transaction is proposed before it can be executed
 
@@ -26,6 +30,18 @@ Delegated approval: an executor that cannot submit a <code>Script</code> (notabl
 dispatches entry functions) instead calls <code>approve_resolution</code>; any party may then submit the
 committed script, which <code>resolve</code> accepts on the strength of that approval. A direct executor
 needs no prior approval.
+
+Committing to bytecode, not arguments (IMPORTANT): the proposal commits to the SHA3-256 hash of
+the resolution script's *bytecode* only — exactly like <code><a href="aptos_governance.md#0x1_aptos_governance">aptos_governance</a></code>. It does NOT commit to
+the script's <code>Script</code> arguments, and it cannot: committing to a full payload would exclude Aptos
+multisigs (which dispatch entry functions, not <code>Script</code>s) from ever owning a timelock. As a
+consequence, whoever submits the transaction chooses the argument values, so a resolution script
+MUST bake every privileged value (an address to grant a role to, a new delay, a transfer
+recipient/amount, ...) into its body as a literal, where the hash covers it. A value passed as a
+<code>Script</code> argument is attacker-controllable by the submitter even though the bytecode hash
+matches. Runtime arguments should be limited to non-privileged routing values (the submitter
+signer, the timelock address, the proposal hash). See the resolution-script examples under
+<code>e2e-<b>move</b>-tests/.../<a href="timelock.md#0x1_timelock">timelock</a>.data</code> for the self-contained, no-privileged-arg pattern.
 
 Properties:
 - Transactions are indexed by <code>keccak256(execution_hash || salt)</code>; change the salt to resubmit.
@@ -818,7 +834,8 @@ the executor list is empty) nor resolving a transaction pre-approved via <code>a
 
 <a id="0x1_timelock_ENUMBER_SECONDS_TOO_LARGE"></a>
 
-The account's <code>min_num_seconds_execute</code> must not exceed <code><a href="timelock.md#0x1_timelock_MAX_NUM_SECONDS_EXECUTE">MAX_NUM_SECONDS_EXECUTE</a></code> (604800).
+The specified number of seconds exceeds <code><a href="timelock.md#0x1_timelock_MAX_NUM_SECONDS_EXECUTE">MAX_NUM_SECONDS_EXECUTE</a></code> (90 days). This bounds
+both the account's <code>min_num_seconds_execute</code> and each transaction's <code>num_seconds_execute</code>.
 
 
 <pre><code><b>const</b> <a href="timelock.md#0x1_timelock_ENUMBER_SECONDS_TOO_LARGE">ENUMBER_SECONDS_TOO_LARGE</a>: u64 = 15;
@@ -891,9 +908,13 @@ Removing these creators would leave the timelock account with zero creators.
 
 <a id="0x1_timelock_MAX_NUM_SECONDS_EXECUTE"></a>
 
+Upper bound (90 days in seconds) on every delay in this module: the account's
+<code>min_num_seconds_execute</code> and each proposal's <code>num_seconds_execute</code>. Bounding the
+per-proposal delay keeps <code>creation_time_secs + num_seconds_execute</code> from overflowing and
+prevents a creator from proposing a transaction that can never be executed.
 
 
-<pre><code><b>const</b> <a href="timelock.md#0x1_timelock_MAX_NUM_SECONDS_EXECUTE">MAX_NUM_SECONDS_EXECUTE</a>: u64 = 604800;
+<pre><code><b>const</b> <a href="timelock.md#0x1_timelock_MAX_NUM_SECONDS_EXECUTE">MAX_NUM_SECONDS_EXECUTE</a>: u64 = 7776000;
 </code></pre>
 
 
@@ -1653,7 +1674,8 @@ keccak256(execution_hash || salt).
 @param creator A creator's signer.
 @param timelock_account The timelock account address.
 @param execution_hash SHA3-256 hash (32 bytes) of the resolution script's bytecode.
-@param num_seconds_execute Delay in seconds before execution; must be >= the account minimum.
+@param num_seconds_execute Delay in seconds before execution; must be >= the account
+minimum and <= <code><a href="timelock.md#0x1_timelock_MAX_NUM_SECONDS_EXECUTE">MAX_NUM_SECONDS_EXECUTE</a></code> (90 days).
 @param salt 32 bytes disambiguating duplicate proposals of the same script.
 @param script_path Optional off-chain pointer to the script payload (e.g. an IPFS URI); empty to omit.
 
@@ -1696,6 +1718,14 @@ keccak256(execution_hash || salt).
     <b>assert</b>!(
         num_seconds_execute &gt;= <a href="timelock.md#0x1_timelock">timelock</a>.min_num_seconds_execute,
         <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="timelock.md#0x1_timelock_ENUMBER_SECONDS_TOO_SMALL">ENUMBER_SECONDS_TOO_SMALL</a>)
+    );
+    // Bound the per-proposal delay by the same maximum <b>as</b> the <a href="account.md#0x1_account">account</a> config. Without this a
+    // creator could pass an arbitrarily large `num_seconds_execute`, overflowing
+    // `creation_time_secs + num_seconds_execute` at resolve/approve time and stranding the
+    // transaction permanently.
+    <b>assert</b>!(
+        num_seconds_execute &lt;= <a href="timelock.md#0x1_timelock_MAX_NUM_SECONDS_EXECUTE">MAX_NUM_SECONDS_EXECUTE</a>,
+        <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="timelock.md#0x1_timelock_ENUMBER_SECONDS_TOO_LARGE">ENUMBER_SECONDS_TOO_LARGE</a>)
     );
     <b>assert</b>!(
         !<a href="timelock.md#0x1_timelock">timelock</a>.transactions.contains(proposal_hash),
@@ -2765,6 +2795,7 @@ transaction-mutating entry points (cancel/approve/resolve).
 <b>aborts_if</b> len(execution_hash) != 32;
 <b>aborts_if</b> len(salt) != 32;
 <b>aborts_if</b> num_seconds_execute &lt; <a href="timelock.md#0x1_timelock">timelock</a>.min_num_seconds_execute;
+<b>aborts_if</b> num_seconds_execute &gt; <a href="timelock.md#0x1_timelock_MAX_NUM_SECONDS_EXECUTE">MAX_NUM_SECONDS_EXECUTE</a>;
 <b>aborts_if</b> <a href="../../aptos-stdlib/doc/table.md#0x1_table_spec_contains">table::spec_contains</a>(
     <a href="timelock.md#0x1_timelock_TimelockAccount">TimelockAccount</a>[timelock_account].transactions,
     aptos_std::aptos_hash::spec_keccak256(concat(execution_hash, salt)),

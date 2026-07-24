@@ -1327,7 +1327,8 @@ pub enum EntryFunctionCall {
     /// @param creator A creator's signer.
     /// @param timelock_account The timelock account address.
     /// @param execution_hash SHA3-256 hash (32 bytes) of the resolution script's bytecode.
-    /// @param num_seconds_execute Delay in seconds before execution; must be >= the account minimum.
+    /// @param num_seconds_execute Delay in seconds before execution; must be >= the account
+    ///        minimum and <= `MAX_NUM_SECONDS_EXECUTE` (90 days).
     /// @param salt 32 bytes disambiguating duplicate proposals of the same script.
     /// @param script_path Optional off-chain pointer to the script payload (e.g. an IPFS URI); empty to omit.
     TimelockCreateTransaction {
@@ -5892,7 +5893,8 @@ pub fn timelock_create(
 /// @param creator A creator's signer.
 /// @param timelock_account The timelock account address.
 /// @param execution_hash SHA3-256 hash (32 bytes) of the resolution script's bytecode.
-/// @param num_seconds_execute Delay in seconds before execution; must be >= the account minimum.
+/// @param num_seconds_execute Delay in seconds before execution; must be >= the account
+///        minimum and <= `MAX_NUM_SECONDS_EXECUTE` (90 days).
 /// @param salt 32 bytes disambiguating duplicate proposals of the same script.
 /// @param script_path Optional off-chain pointer to the script payload (e.g. an IPFS URI); empty to omit.
 pub fn timelock_create_transaction(

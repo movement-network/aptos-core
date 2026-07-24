@@ -7,7 +7,11 @@
 /// - A list of executors who can execute transactions after the timelock period
 ///   (if executors is empty, creators can also execute)
 /// - A list of cancelers who can cancel any pending transaction at any time (an emergency-response
-///   role). Cancelers can ONLY cancel — they cannot propose or execute. The list may be empty.
+///   role). The canceler role by itself grants only cancellation — being listed solely as a
+///   canceler does not authorize proposing or executing. The list may be empty. An address MAY,
+///   however, hold the canceler role in addition to being a creator or executor; this overlap is
+///   allowed on purpose, so an operator can be granted cancel authority first and have its
+///   creator/executor role removed afterward for a gap-free, safe role transition.
 /// - A configurable minimum delay (`min_num_seconds_execute`) that must elapse after a
 ///   transaction is proposed before it can be executed
 ///
@@ -21,6 +25,18 @@
 /// dispatches entry functions) instead calls `approve_resolution`; any party may then submit the
 /// committed script, which `resolve` accepts on the strength of that approval. A direct executor
 /// needs no prior approval.
+///
+/// Committing to bytecode, not arguments (IMPORTANT): the proposal commits to the SHA3-256 hash of
+/// the resolution script's *bytecode* only — exactly like `aptos_governance`. It does NOT commit to
+/// the script's `Script` arguments, and it cannot: committing to a full payload would exclude Aptos
+/// multisigs (which dispatch entry functions, not `Script`s) from ever owning a timelock. As a
+/// consequence, whoever submits the transaction chooses the argument values, so a resolution script
+/// MUST bake every privileged value (an address to grant a role to, a new delay, a transfer
+/// recipient/amount, ...) into its body as a literal, where the hash covers it. A value passed as a
+/// `Script` argument is attacker-controllable by the submitter even though the bytecode hash
+/// matches. Runtime arguments should be limited to non-privileged routing values (the submitter
+/// signer, the timelock address, the proposal hash). See the resolution-script examples under
+/// `e2e-move-tests/.../timelock.data` for the self-contained, no-privileged-arg pattern.
 ///
 /// Properties:
 /// - Transactions are indexed by `keccak256(execution_hash || salt)`; change the salt to resubmit.
@@ -48,7 +64,11 @@ module aptos_framework::timelock {
     const PROPOSAL_HASH_LENGTH: u64 = 32;
     const SALT_LENGTH: u64 = 32;
     const MIN_NUM_SECONDS_EXECUTE: u64 = 3600;
-    const MAX_NUM_SECONDS_EXECUTE: u64 = 604800;
+    /// Upper bound (90 days in seconds) on every delay in this module: the account's
+    /// `min_num_seconds_execute` and each proposal's `num_seconds_execute`. Bounding the
+    /// per-proposal delay keeps `creation_time_secs + num_seconds_execute` from overflowing and
+    /// prevents a creator from proposing a transaction that can never be executed.
+    const MAX_NUM_SECONDS_EXECUTE: u64 = 7776000;
     /// Maximum byte length of the optional off-chain `script_path` pointer.
     const MAX_SCRIPT_PATH_LENGTH: u64 = 256;
 
@@ -84,7 +104,8 @@ module aptos_framework::timelock {
     /// and a transaction's `num_seconds_execute` must be at least the account's
     /// `min_num_seconds_execute`.
     const ENUMBER_SECONDS_TOO_SMALL: u64 = 14;
-    /// The account's `min_num_seconds_execute` must not exceed `MAX_NUM_SECONDS_EXECUTE` (604800).
+    /// The specified number of seconds exceeds `MAX_NUM_SECONDS_EXECUTE` (90 days). This bounds
+    /// both the account's `min_num_seconds_execute` and each transaction's `num_seconds_execute`.
     const ENUMBER_SECONDS_TOO_LARGE: u64 = 15;
     /// The provided hash or salt must be exactly 32 bytes.
     const EINVALID_BYTES_LENGTH: u64 = 16;
@@ -103,8 +124,9 @@ module aptos_framework::timelock {
         // Addresses allowed to execute transactions after the timelock period.
         // If empty, creators can also execute.
         executors: vector<address>,
-        // Addresses allowed only to cancel pending transactions (emergency response). May be empty.
-        // Cancelers cannot propose or execute.
+        // Addresses granted cancel authority (emergency response). May be empty. The canceler role
+        // alone does not grant propose/execute, but an address here may also appear in `creators`
+        // or `executors` — that overlap is allowed intentionally (see the module doc).
         cancelers: vector<address>,
         // Minimum seconds that must elapse after proposal before a transaction can be executed.
         min_num_seconds_execute: u64,
@@ -537,7 +559,8 @@ module aptos_framework::timelock {
     /// @param creator A creator's signer.
     /// @param timelock_account The timelock account address.
     /// @param execution_hash SHA3-256 hash (32 bytes) of the resolution script's bytecode.
-    /// @param num_seconds_execute Delay in seconds before execution; must be >= the account minimum.
+    /// @param num_seconds_execute Delay in seconds before execution; must be >= the account
+    ///        minimum and <= `MAX_NUM_SECONDS_EXECUTE` (90 days).
     /// @param salt 32 bytes disambiguating duplicate proposals of the same script.
     /// @param script_path Optional off-chain pointer to the script payload (e.g. an IPFS URI); empty to omit.
     public entry fun create_transaction(
@@ -569,6 +592,14 @@ module aptos_framework::timelock {
         assert!(
             num_seconds_execute >= timelock.min_num_seconds_execute,
             error::invalid_argument(ENUMBER_SECONDS_TOO_SMALL)
+        );
+        // Bound the per-proposal delay by the same maximum as the account config. Without this a
+        // creator could pass an arbitrarily large `num_seconds_execute`, overflowing
+        // `creation_time_secs + num_seconds_execute` at resolve/approve time and stranding the
+        // transaction permanently.
+        assert!(
+            num_seconds_execute <= MAX_NUM_SECONDS_EXECUTE,
+            error::invalid_argument(ENUMBER_SECONDS_TOO_LARGE)
         );
         assert!(
             !timelock.transactions.contains(proposal_hash),
@@ -1129,6 +1160,60 @@ module aptos_framework::timelock {
             INVALID_BYTES,
             b""
         );
+    }
+
+    #[test(framework = @0x1, creator = @0x123)]
+    #[expected_failure(abort_code = 0x1000F, location = Self)]
+    public entry fun test_create_transaction_num_seconds_too_large_fails(
+        framework: &signer, creator: &signer
+    ) acquires TimelockAccount {
+        setup(framework);
+        create_account(address_of(creator));
+        let timelock_addr = get_next_timelock_account_address(address_of(creator));
+        create(
+            creator,
+            vector[address_of(creator)],
+            vector[],
+            vector[],
+            TIMELOCK_SECS
+        );
+        // A per-proposal delay above the module maximum must be rejected, mirroring the
+        // account-level bound and preventing an unexecutable (overflowing) proposal.
+        create_transaction(
+            creator,
+            timelock_addr,
+            EXECUTION_HASH,
+            MAX_NUM_SECONDS_EXECUTE + 1,
+            SALT,
+            b""
+        );
+    }
+
+    #[test(framework = @0x1, creator = @0x123)]
+    public entry fun test_create_transaction_num_seconds_at_max_succeeds(
+        framework: &signer, creator: &signer
+    ) acquires TimelockAccount {
+        setup(framework);
+        create_account(address_of(creator));
+        let timelock_addr = get_next_timelock_account_address(address_of(creator));
+        create(
+            creator,
+            vector[address_of(creator)],
+            vector[],
+            vector[],
+            TIMELOCK_SECS
+        );
+        // The maximum itself is allowed (boundary is inclusive).
+        create_transaction(
+            creator,
+            timelock_addr,
+            EXECUTION_HASH,
+            MAX_NUM_SECONDS_EXECUTE,
+            SALT,
+            b""
+        );
+        let tx = get_transaction(timelock_addr, get_proposal_hash(EXECUTION_HASH, SALT));
+        assert!(tx.num_seconds_execute == MAX_NUM_SECONDS_EXECUTE, 0);
     }
 
     #[test(framework = @0x1, creator = @0x123, non_creator = @0x999)]

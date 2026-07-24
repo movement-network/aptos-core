@@ -509,11 +509,9 @@ fn test_resolve_fails_with_wrong_script() {
 
     fast_forward_block(&mut h, DELAY + 1);
 
-    // Submit script B with the proposal's proposal_hash. Note that update_delay needs an
-    // extra u64 arg; supply a dummy so the script can deserialize, even though resolve will
-    // abort first.
-    let extra = vec![TransactionArgument::U64(7200)];
-    let status = run_resolution_script(&mut h, &creator, code_b, extra, timelock_addr, &proposal_hash);
+    // Submit script B (self-contained, no privileged args) with script A's proposal_hash;
+    // resolve aborts on the hash mismatch before B's body runs.
+    let status = run_resolution_script(&mut h, &creator, code_b, vec![], timelock_addr, &proposal_hash);
     assert_aborts_with(&status, ABORT_EXECUTION_HASH_MISMATCH);
     });
 }
@@ -562,6 +560,7 @@ fn test_self_governance_update_delay() {
     let timelock_addr = timelock_account_address(*creator.address(), 10);
     assert_success!(create_timelock(&mut h, &creator, vec![], vec![], DELAY));
 
+    // Must match the value baked into the `update_delay` fixture script.
     const NEW_DELAY: u64 = 7200;
     let code = script("update_delay");
     let exec_hash = execution_hash_of(&code);
@@ -571,12 +570,12 @@ fn test_self_governance_update_delay() {
 
     fast_forward_block(&mut h, DELAY + 1);
 
-    let extra = vec![TransactionArgument::U64(NEW_DELAY)];
+    // The new delay is baked into the script bytecode, so no privileged arg is passed.
     assert_success!(run_resolution_script(
         &mut h,
         &creator,
         code,
-        extra,
+        vec![],
         timelock_addr,
         &proposal_hash
     ));
@@ -590,6 +589,7 @@ fn test_self_governance_add_creators() {
     run_in_big_stack(|| {
     let mut h = MoveHarness::new();
     let alice = h.new_account_at(AccountAddress::from_hex_literal("0xA200").unwrap());
+    // The `add_creator` fixture bakes @0xA201 as the creator it adds.
     let bob = h.new_account_at(AccountAddress::from_hex_literal("0xA201").unwrap());
     let timelock_addr = timelock_account_address(*alice.address(), 10);
     assert_success!(create_timelock(&mut h, &alice, vec![], vec![], DELAY));
@@ -603,9 +603,9 @@ fn test_self_governance_add_creators() {
 
     fast_forward_block(&mut h, DELAY + 1);
 
-    let extra = vec![TransactionArgument::Address(*bob.address())];
+    // The added creator is baked into the script bytecode, so no privileged arg is passed.
     assert_success!(run_resolution_script(
-        &mut h, &alice, code, extra, timelock_addr, &proposal_hash
+        &mut h, &alice, code, vec![], timelock_addr, &proposal_hash
     ));
 
     assert!(is_creator_view(&mut h, *bob.address(), timelock_addr));
@@ -617,6 +617,7 @@ fn test_self_governance_remove_creators() {
     run_in_big_stack(|| {
     let mut h = MoveHarness::new();
     let alice = h.new_account_at(AccountAddress::from_hex_literal("0xA300").unwrap());
+    // The `remove_creator` fixture bakes @0xA301 as the creator it removes.
     let bob = h.new_account_at(AccountAddress::from_hex_literal("0xA301").unwrap());
     let timelock_addr = timelock_account_address(*alice.address(), 10);
     assert_success!(create_timelock(
@@ -637,14 +638,13 @@ fn test_self_governance_remove_creators() {
 
     fast_forward_block(&mut h, DELAY + 1);
 
-    // Bob (also creator/executor since executor list is empty) submits the script removing Alice.
-    let extra = vec![TransactionArgument::Address(*alice.address())];
+    // Alice submits; the script removes the baked-in creator (Bob, @0xA301). No privileged arg.
     assert_success!(run_resolution_script(
-        &mut h, &bob, code, extra, timelock_addr, &proposal_hash
+        &mut h, &alice, code, vec![], timelock_addr, &proposal_hash
     ));
 
-    assert!(!is_creator_view(&mut h, *alice.address(), timelock_addr));
-    assert!(is_creator_view(&mut h, *bob.address(), timelock_addr));
+    assert!(is_creator_view(&mut h, *alice.address(), timelock_addr));
+    assert!(!is_creator_view(&mut h, *bob.address(), timelock_addr));
     });
 }
 
@@ -653,6 +653,7 @@ fn test_self_governance_add_executors() {
     run_in_big_stack(|| {
     let mut h = MoveHarness::new();
     let alice = h.new_account_at(AccountAddress::from_hex_literal("0xA400").unwrap());
+    // The `add_executor` fixture bakes @0xA401 as the executor it adds.
     let charlie = h.new_account_at(AccountAddress::from_hex_literal("0xA401").unwrap());
     let timelock_addr = timelock_account_address(*alice.address(), 10);
     assert_success!(create_timelock(&mut h, &alice, vec![], vec![], DELAY));
@@ -669,9 +670,9 @@ fn test_self_governance_add_executors() {
 
     fast_forward_block(&mut h, DELAY + 1);
 
-    let extra = vec![TransactionArgument::Address(*charlie.address())];
+    // The added executor is baked into the script bytecode, so no privileged arg is passed.
     assert_success!(run_resolution_script(
-        &mut h, &alice, code, extra, timelock_addr, &proposal_hash
+        &mut h, &alice, code, vec![], timelock_addr, &proposal_hash
     ));
 
     // Executor list now [charlie]; creator fallback no longer applies.
@@ -685,6 +686,7 @@ fn test_self_governance_remove_executors() {
     run_in_big_stack(|| {
     let mut h = MoveHarness::new();
     let alice = h.new_account_at(AccountAddress::from_hex_literal("0xA500").unwrap());
+    // The `remove_executor` fixture bakes @0xA501 as the executor it removes.
     let eve = h.new_account_at(AccountAddress::from_hex_literal("0xA501").unwrap());
     let timelock_addr = timelock_account_address(*alice.address(), 10);
     assert_success!(create_timelock(
@@ -705,10 +707,10 @@ fn test_self_governance_remove_executors() {
 
     fast_forward_block(&mut h, DELAY + 1);
 
-    let extra = vec![TransactionArgument::Address(*eve.address())];
-    // Eve (still the executor at this point) submits the governance script.
+    // Eve (still the executor at this point) submits the governance script; the removed executor
+    // is baked into the script bytecode, so no privileged arg is passed.
     assert_success!(run_resolution_script(
-        &mut h, &eve, code, extra, timelock_addr, &proposal_hash
+        &mut h, &eve, code, vec![], timelock_addr, &proposal_hash
     ));
 
     assert!(is_executor_view(&mut h, *alice.address(), timelock_addr));
@@ -1242,7 +1244,9 @@ fn test_resolve_remove_last_creator_aborts() {
     // Removing the sole remaining creator through the real resolve→remove_creators path must
     // abort (EWOULD_REMOVE_ALL_CREATORS); the whole script reverts atomically.
     let mut h = MoveHarness::new();
-    let creator = h.new_account_at(AccountAddress::from_hex_literal("0xD300").unwrap());
+    // The sole creator is @0xA301 — the address the `remove_creator` fixture bakes in — so the
+    // script targets the last remaining creator.
+    let creator = h.new_account_at(AccountAddress::from_hex_literal("0xA301").unwrap());
     let timelock_addr = timelock_account_address(*creator.address(), 10);
     assert_success!(create_timelock(&mut h, &creator, vec![], vec![], DELAY));
 
@@ -1253,8 +1257,7 @@ fn test_resolve_remove_last_creator_aborts() {
     assert_success!(propose(&mut h, &creator, timelock_addr, &exec_hash, DELAY, &salt));
     fast_forward_block(&mut h, DELAY + 1);
 
-    let extra = vec![TransactionArgument::Address(*creator.address())];
-    let status = run_resolution_script(&mut h, &creator, code, extra, timelock_addr, &proposal_hash);
+    let status = run_resolution_script(&mut h, &creator, code, vec![], timelock_addr, &proposal_hash);
     assert_aborts_with(&status, ABORT_WOULD_REMOVE_ALL_CREATORS);
 
     // Atomic revert: the creator is still present and the proposal is still pending.

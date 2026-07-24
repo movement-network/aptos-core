@@ -155,9 +155,10 @@ spec aptos_framework::timelock {
 
     spec can_be_executed(timelock_account: address, proposal_hash: vector<u8>): bool {
         pragma aborts_if_is_partial;
-        // Aborts if the resource is absent. May also overflow on `creation_time_secs +
-        // num_seconds_execute` for a pathologically large (proposer-chosen) delay; that case is
-        // left unspecified by `aborts_if_is_partial`.
+        // Aborts if the resource is absent. `num_seconds_execute` is bounded at proposal time by
+        // MAX_NUM_SECONDS_EXECUTE, so the only residual overflow of `creation_time_secs +
+        // num_seconds_execute` is from an unbounded `now_seconds()` in the prover's abstract model
+        // (not reachable on-chain); that case is left unspecified by `aborts_if_is_partial`.
         aborts_if !exists<TimelockAccount>(timelock_account);
         let timelock = TimelockAccount[timelock_account];
         ensures !table::spec_contains(timelock.transactions, proposal_hash) ==> !result;
@@ -353,6 +354,7 @@ spec aptos_framework::timelock {
         aborts_if len(execution_hash) != 32;
         aborts_if len(salt) != 32;
         aborts_if num_seconds_execute < timelock.min_num_seconds_execute;
+        aborts_if num_seconds_execute > MAX_NUM_SECONDS_EXECUTE;
         aborts_if table::spec_contains(
             TimelockAccount[timelock_account].transactions,
             aptos_std::aptos_hash::spec_keccak256(concat(execution_hash, salt)),
@@ -389,8 +391,9 @@ spec aptos_framework::timelock {
     }
 
     spec approve_resolution(executor: &signer, timelock_account: address, proposal_hash: vector<u8>) {
-        // Partial: the `creation_time_secs + num_seconds_execute` sum can overflow (see
-        // `create_transaction`, which does not bound `num_seconds_execute` from above).
+        // Partial: `num_seconds_execute` is bounded at proposal time (MAX_NUM_SECONDS_EXECUTE), so
+        // the `creation_time_secs + num_seconds_execute` sum can only overflow via an unbounded
+        // `now_seconds()` in the prover's abstract model, which is not reachable on-chain.
         pragma aborts_if_is_partial;
         let timelock = TimelockAccount[timelock_account];
         aborts_if !exists<TimelockAccount>(timelock_account);

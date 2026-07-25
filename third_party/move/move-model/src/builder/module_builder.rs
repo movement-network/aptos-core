@@ -1479,7 +1479,7 @@ impl ModuleBuilder<'_, '_> {
                     et.define_local(loc, *n, ty.clone(), None, Some(idx));
                 }
             }
-            let access_specifiers = et.translate_access_specifiers(&def.access_specifiers);
+            let access_specifiers = et.translate_acquires(&def.acquires);
             let result = et.translate_seq(&loc, seq, &result_type, &ErrorMessageContext::Return);
             // Run type inference finalization so post processing has all available type information,
             // but do not report errors yet because receiver functions can add more type bindings.

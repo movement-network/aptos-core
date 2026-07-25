@@ -224,42 +224,9 @@ pub struct Function {
     pub entry: Option<Loc>,
     pub signature: FunctionSignature,
     pub acquires: Vec<ModuleAccess>,
-    // Only v2 compiler
-    pub access_specifiers: Option<Vec<AccessSpecifier>>,
     pub body: FunctionBody,
     pub specs: BTreeMap<SpecId, SpecBlock>,
 }
-
-#[derive(PartialEq, Clone, Debug)]
-pub struct AccessSpecifier_ {
-    pub kind: AccessSpecifierKind,
-    pub negated: bool,
-    pub module_address: Option<Address>,
-    pub module_name: Option<ModuleName>,
-    pub resource_name: Option<Name>,
-    pub type_args: Option<Vec<Type>>,
-    pub address: AddressSpecifier,
-}
-
-#[derive(PartialEq, Clone, Debug)]
-pub enum AccessSpecifierKind {
-    Reads,
-    Writes,
-    LegacyAcquires,
-}
-
-pub type AccessSpecifier = Spanned<AccessSpecifier_>;
-
-#[derive(PartialEq, Clone, Debug)]
-pub enum AddressSpecifier_ {
-    Any,
-    Empty,
-    Literal(NumericalAddress),
-    Name(Name),
-    Call(ModuleAccess, Option<Vec<Type>>, Name),
-}
-
-pub type AddressSpecifier = Spanned<AddressSpecifier_>;
 
 //**************************************************************************************************
 // Constants
@@ -1384,7 +1351,6 @@ impl AstDebug for (FunctionName, &Function) {
                 entry,
                 signature,
                 acquires,
-                access_specifiers: _,
                 body,
                 specs: _specs,
             },

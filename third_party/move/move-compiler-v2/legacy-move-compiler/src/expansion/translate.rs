@@ -10,15 +10,14 @@ use crate::{
     expansion::{
         aliases::{AliasMap, AliasSet},
         ast::{
-            self as E, AccessSpecifierKind, Address, Fields, LValueOrDotDot_, LValue_,
-            ModuleAccess_, ModuleIdent, ModuleIdent_, SequenceItem_, SpecId,
+            self as E, Address, Fields, LValueOrDotDot_, LValue_, ModuleAccess_, ModuleIdent,
+            ModuleIdent_, SequenceItem_, SpecId,
         },
         byte_string, hex_string,
     },
     parser::ast::{
         self as P, Ability, AccessSpecifier_, CallKind, ConstantName, Field, FunctionName,
-        LeadingNameAccess_, ModuleMember, ModuleName, NameAccessChain, NameAccessChain_, StructName,
-        Var,
+        LeadingNameAccess_, ModuleMember, ModuleName, StructName, Var,
     },
     shared::{
         builtins,
@@ -1640,7 +1639,14 @@ fn function_(context: &mut Context, pfunction: P::Function) -> (FunctionName, E:
     let attributes = flatten_attributes(context, AttributePosition::Function, pattributes);
     let visibility = visibility(pvisibility);
     let (old_aliases, signature) = function_signature(context, psignature);
-    let (acquires, access_specifiers) = (vec![], access_specifier_list(context, access_specifiers));
+    let acquires = access_specifiers
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|specifier| {
+            let AccessSpecifier_(chain) = specifier.value;
+            name_access_chain(context, Access::Type, chain, Some(DeprecatedItem::Struct))
+        })
+        .collect();
     let body = function_body(context, pbody);
     let specs = context.extract_exp_specs();
     let fdef = E::Function {
@@ -1651,7 +1657,6 @@ fn function_(context: &mut Context, pfunction: P::Function) -> (FunctionName, E:
         entry,
         signature,
         acquires,
-        access_specifiers,
         body,
         specs,
     };
@@ -1660,143 +1665,11 @@ fn function_(context: &mut Context, pfunction: P::Function) -> (FunctionName, E:
     (name, fdef)
 }
 
-fn access_specifier_list(
-    context: &mut Context,
-    access_specifiers: Option<Vec<P::AccessSpecifier>>,
-) -> Option<Vec<E::AccessSpecifier>> {
-    access_specifiers.map(|specs| {
-        specs
-            .into_iter()
-            .map(|s| access_specifier(context, s))
-            .collect::<Vec<_>>()
-    })
-}
-
 fn invalid_variant_access(context: &mut Context, loc: Loc) {
     context.env.add_diag(diag!(
         Syntax::InvalidVariantAccess,
         (loc, "variant name not expected in this context".to_owned())
     ));
-}
-
-fn access_specifier(context: &mut Context, specifier: P::AccessSpecifier) -> E::AccessSpecifier {
-    let AccessSpecifier_(chain) = specifier.value;
-    let (module_address, module_name, resource_name) =
-        access_specifier_name_access_chain(context, chain);
-    sp(specifier.loc, E::AccessSpecifier_ {
-        kind: AccessSpecifierKind::LegacyAcquires,
-        negated: false,
-        module_address,
-        module_name,
-        resource_name,
-        type_args: None,
-        address: sp(specifier.loc, E::AddressSpecifier_::Empty),
-    })
-}
-
-fn access_specifier_name_access_chain(
-    context: &mut Context,
-    chain: NameAccessChain,
-) -> (Option<Address>, Option<ModuleName>, Option<Name>) {
-    match chain.value {
-        NameAccessChain_::Four(..) => {
-            invalid_variant_access(context, chain.loc);
-            (None, None, None)
-        },
-        NameAccessChain_::One(name) if name.value.as_str() == "*" => {
-            // A single wildcard means any resource at the specified address, e.g. `*(0x2)`
-            (None, None, None)
-        },
-        NameAccessChain_::One(name) => {
-            // A single name is resolved as a member
-            match context.aliases.member_alias_get(&name) {
-                Some((mident, mem)) => (
-                    Some(mident.value.address),
-                    Some(mident.value.module),
-                    Some(mem),
-                ),
-                None => (None, None, Some(name)),
-            }
-        },
-        NameAccessChain_::Two(leading, second) => {
-            match leading.value {
-                LeadingNameAccess_::AnonymousAddress(_) => {
-                    // An address with just one following name cannot be a resource,
-                    // so we reject it
-                    context.env.add_diag(diag!(
-                        Syntax::InvalidAccessSpecifier,
-                        (
-                            chain.loc,
-                            "address followed by single name is not a valid access specifier"
-                                .to_owned()
-                        )
-                    ));
-                    (None, None, None)
-                },
-                LeadingNameAccess_::Name(name) => {
-                    if context
-                        .named_address_mapping
-                        .as_ref()
-                        .unwrap()
-                        .get(&name.value)
-                        .is_some()
-                    {
-                        // This resolves as an address, so the second name must be a module,
-                        // which we reject.
-                        context.env.add_diag(diag!(
-                            Syntax::InvalidAccessSpecifier,
-                            (
-                                chain.loc,
-                                format!(
-                                    "`{}` is an address alias which followed by a name is \
-                                not a valid access specifier",
-                                    name.value
-                                )
-                            )
-                        ));
-                        (None, None, None)
-                    } else if let Some(ident) = context.aliases.module_alias_get(&name) {
-                        // Resolves as a module alias
-                        let ModuleIdent_ { address, module } = ident.value;
-                        (Some(address), Some(module), Some(second))
-                    } else {
-                        context.env.add_diag(diag!(
-                            NameResolution::UnboundModule,
-                            (name.loc, format!("Unbound module alias '{}'", name))
-                        ));
-                        (None, None, None)
-                    }
-                },
-            }
-        },
-        NameAccessChain_::Three(prefix, third) => {
-            // This case is determined to be an address followed by module followed by resource
-            let (leading, second) = prefix.value;
-            let addr = match leading.value {
-                LeadingNameAccess_::AnonymousAddress(addr) => addr,
-                LeadingNameAccess_::Name(name) => {
-                    if let Some(addr) = context
-                        .named_address_mapping
-                        .as_ref()
-                        .unwrap()
-                        .get(&name.value)
-                    {
-                        *addr
-                    } else {
-                        context
-                            .env
-                            .add_diag(address_without_value_error(false, name.loc, &name));
-                        NumericalAddress::DEFAULT_ERROR_ADDRESS
-                    }
-                },
-            };
-            (
-                Some(Address::Numerical(None, sp(leading.loc, addr))),
-                Some(ModuleName(second)),
-                Some(third),
-            )
-        },
-    }
 }
 
 fn visibility(pvisibility: P::Visibility) -> E::Visibility {

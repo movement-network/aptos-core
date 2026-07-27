@@ -22,6 +22,9 @@ Build and start an ephemeral mainnet fork on the configured remote host.
 Usage:
   $PROGRAM GITHUB_SHA [OPTIONS]
 
+GITHUB_SHA is the only required argument. The options below override the
+preconfigured test host when needed.
+
 Options:
   --host USER@HOST       SSH destination. Default: $DEFAULT_HOST
   --identity PATH        SSH private key. Default: $DEFAULT_IDENTITY

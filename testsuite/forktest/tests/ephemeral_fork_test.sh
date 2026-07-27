@@ -5,8 +5,8 @@
 
 set -euo pipefail
 
-ROOT=$(cd "$(dirname "$0")/../.." && pwd -P)
-LAUNCHER="$ROOT/scripts/ephemeral_fork.sh"
+ROOT=$(cd "$(dirname "$0")/../../.." && pwd -P)
+LAUNCHER="$ROOT/testsuite/forktest/ephemeral_fork.sh"
 TEST_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/ephemeral-fork-test.XXXXXX")
 SOURCE_DB="$TEST_ROOT/source-db"
 WORK_DIR="$TEST_ROOT/work"

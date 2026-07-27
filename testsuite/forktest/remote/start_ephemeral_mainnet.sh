@@ -35,7 +35,8 @@ Usage:
   $PROGRAM expose-api [PUBLIC_PORT]
   $PROGRAM stop-api
 
-This command is intended to be invoked by scripts/start_remote_ephemeral_mainnet.sh.
+This command is intended to be invoked by
+testsuite/forktest/start_remote_ephemeral_mainnet.sh.
 It refuses to build or start while any aptos-node process is already running.
 EOF
 }

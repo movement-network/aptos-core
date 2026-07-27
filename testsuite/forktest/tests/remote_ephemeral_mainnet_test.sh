@@ -5,8 +5,8 @@
 
 set -euo pipefail
 
-ROOT=$(cd "$(dirname "$0")/../.." && pwd -P)
-LAUNCHER="$ROOT/scripts/remote/start_ephemeral_mainnet.sh"
+ROOT=$(cd "$(dirname "$0")/../../.." && pwd -P)
+LAUNCHER="$ROOT/testsuite/forktest/remote/start_ephemeral_mainnet.sh"
 TEST_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/remote-ephemeral-mainnet-test.XXXXXX")
 
 cleanup() {

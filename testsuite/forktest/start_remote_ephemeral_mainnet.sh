@@ -6,7 +6,7 @@
 set -euo pipefail
 
 PROGRAM=$(basename "$0")
-REPO_ROOT=$(cd "$(dirname "$0")/.." && pwd -P)
+REPO_ROOT=$(cd "$(dirname "$0")/../.." && pwd -P)
 DEFAULT_HOST="ubuntu@34.231.241.232"
 DEFAULT_IDENTITY="$HOME/movement/mainnet-fork.pem"
 DEFAULT_REMOTE_SCRIPT="/mnt/mainnet-volume/fork-run-20260722/bin/start_ephemeral_mainnet.sh"

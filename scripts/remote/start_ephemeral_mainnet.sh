@@ -1,0 +1,267 @@
+#!/usr/bin/env bash
+
+# Copyright © Aptos Foundation
+# SPDX-License-Identifier: Apache-2.0
+
+set -euo pipefail
+
+PROGRAM=$(basename "$0")
+RUN_ROOT=${EPHEMERAL_RUN_ROOT:-/mnt/mainnet-volume/fork-run-20260722}
+SERVICE_ROOT=${EPHEMERAL_SERVICE_ROOT:-/mnt/mainnet-volume/ephemeral-mainnet}
+SOURCE_DB=${EPHEMERAL_SOURCE_DB:-$RUN_ROOT/staging-db-v5}
+FORK_TOOL=${EPHEMERAL_FORK_TOOL:-$RUN_ROOT/target/release/aptos-debugger}
+FORK_LAUNCHER=${EPHEMERAL_FORK_LAUNCHER:-$RUN_ROOT/bin/ephemeral_fork.sh}
+CARGO_HOME=${CARGO_HOME:-$RUN_ROOT/cargo}
+RUSTUP_HOME=${RUSTUP_HOME:-$RUN_ROOT/rustup}
+TEST_ACCOUNT=${EPHEMERAL_TEST_ACCOUNT:-0x573537299646e0dfab6ca81086edccf73f77b841f30dde6bfbd730ed428479bf}
+VALIDATORS=${EPHEMERAL_VALIDATORS:-2}
+CHAIN_ID=${EPHEMERAL_CHAIN_ID:-42}
+HEALTH_TIMEOUT=${EPHEMERAL_HEALTH_TIMEOUT:-180}
+ALREADY_RUNNING_EXIT=3
+export PATH="$CARGO_HOME/bin:$PATH"
+
+usage() {
+  cat <<EOF
+Host-side launcher for an ephemeral mainnet fork.
+
+Usage:
+  $PROGRAM preflight
+  $PROGRAM start FULL_GITHUB_SHA SOURCE_ARCHIVE.tar.gz
+  $PROGRAM endpoint
+  $PROGRAM test-key
+
+This command is intended to be invoked by scripts/start_remote_ephemeral_mainnet.sh.
+It refuses to build or start while any aptos-node process is already running.
+EOF
+}
+
+die() {
+  echo "error: $*" >&2
+  exit 1
+}
+
+require_command() {
+  command -v "$1" >/dev/null 2>&1 || die "required command not found: $1"
+}
+
+api_address_from_config() {
+  local config=$1
+  awk '
+    /^api:$/ { in_api = 1; next }
+    in_api && /^[^ ]/ { in_api = 0 }
+    in_api && $1 == "address:" {
+      value = $2
+      gsub(/^"/, "", value)
+      gsub(/"$/, "", value)
+      print value
+      exit
+    }
+  ' "$config"
+}
+
+config_from_command() {
+  local command=$1
+  sed -n 's/.*[[:space:]]-f[[:space:]]\([^[:space:]]*\).*/\1/p' <<<"$command"
+}
+
+report_running_network() {
+  local pids
+  pids=$(pgrep -x aptos-node || true)
+  [[ -n "$pids" ]] || return 1
+
+  local active_sha="unknown"
+  if [[ -f "$SERVICE_ROOT/active/sha" ]]; then
+    active_sha=$(cat "$SERVICE_ROOT/active/sha")
+  fi
+  echo "An ephemeral network is already running; refusing to replace it."
+  echo "  Recorded SHA: $active_sha"
+
+  local pid command config api response
+  while IFS= read -r pid; do
+    command=$(ps -p "$pid" -o command=)
+    config=$(config_from_command "$command")
+    echo "  PID $pid: $command"
+    if [[ -n "$config" && -f "$config" ]]; then
+      api=$(api_address_from_config "$config")
+      if [[ -n "$api" ]]; then
+        response=$(curl --fail --silent --max-time 2 "http://$api/v1/" 2>/dev/null || true)
+        if [[ -n "$response" ]]; then
+          python3 -c '
+import json
+import sys
+
+info = json.load(sys.stdin)
+print(
+    "    REST=http://{api} chain_id={chain_id} epoch={epoch} ledger_version={version}".format(
+        api=sys.argv[1],
+        chain_id=info["chain_id"],
+        epoch=info["epoch"],
+        version=info["ledger_version"],
+    )
+)
+' "$api" <<<"$response"
+        else
+          echo "    REST=http://$api status=unhealthy"
+        fi
+      fi
+    fi
+  done <<<"$pids"
+  return 0
+}
+
+active_api_endpoint() {
+  local pids pid command config api
+  pids=$(pgrep -x aptos-node || true)
+  [[ -n "$pids" ]] || die "no aptos-node process is running"
+  while IFS= read -r pid; do
+    command=$(ps -p "$pid" -o command=)
+    config=$(config_from_command "$command")
+    if [[ -n "$config" && -f "$config" ]]; then
+      api=$(api_address_from_config "$config")
+      if [[ "$api" == 127.0.0.1:* ]]; then
+        printf '%s\n' "$api"
+        return
+      fi
+    fi
+  done <<<"$pids"
+  die "running validators do not expose a loopback REST endpoint"
+}
+
+active_test_key() {
+  local work_dir
+  [[ -f "$SERVICE_ROOT/active/work-dir" ]] ||
+    die "active network metadata does not contain a work directory"
+  work_dir=$(cat "$SERVICE_ROOT/active/work-dir")
+  local key_file="$work_dir/configs/test-account-private-key"
+  [[ -f "$key_file" ]] || die "active network test key is missing: $key_file"
+  cat "$key_file"
+}
+
+preflight() {
+  mkdir -p "$SERVICE_ROOT"
+  exec 9>"$SERVICE_ROOT/launcher.lock"
+  flock 9
+  if report_running_network; then
+    return "$ALREADY_RUNNING_EXIT"
+  fi
+  echo "No aptos-node process is running; remote host is ready."
+}
+
+verify_archive() {
+  local expected_sha=$1
+  local archive=$2
+  [[ -f "$archive" ]] || die "source archive does not exist: $archive"
+
+  local archive_sha
+  archive_sha=$(
+    gzip -cd "$archive" |
+      {
+        git get-tar-commit-id
+        cat >/dev/null
+      }
+  ) ||
+    die "source archive does not contain a Git commit ID"
+  [[ "$archive_sha" == "$expected_sha" ]] ||
+    die "archive commit $archive_sha does not match requested SHA $expected_sha"
+}
+
+build_node() {
+  local sha=$1
+  local archive=$2
+  local build_root="$SERVICE_ROOT/builds/$sha"
+  local source_dir="$build_root/source"
+  local target_dir="$build_root/target"
+  local node_binary="$target_dir/release/aptos-node"
+
+  if [[ -x "$node_binary" ]]; then
+    echo "Reusing aptos-node already built for $sha." >&2
+    printf '%s\n' "$node_binary"
+    return
+  fi
+
+  if [[ -e "$source_dir" ]]; then
+    mv "$source_dir" "$source_dir.incomplete.$(date +%s)"
+  fi
+  mkdir -p "$source_dir" "$target_dir"
+  tar -xzf "$archive" -C "$source_dir"
+
+  echo "Building aptos-node for m1 commit $sha..." >&2
+  (
+    export CARGO_HOME RUSTUP_HOME
+    export CARGO_TARGET_DIR="$target_dir"
+    export CXXFLAGS="${CXXFLAGS:--include cstdint}"
+    cd "$source_dir"
+    cargo build --release -p aptos-node
+  )
+  [[ -x "$node_binary" ]] || die "build did not produce $node_binary"
+  printf '%s\n' "$node_binary"
+}
+
+start_network() {
+  local sha=${1:-}
+  local archive=${2:-}
+  [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || die "start requires a full lowercase GitHub SHA"
+  [[ -n "$archive" ]] || die "start requires a source archive path"
+
+  require_command cargo
+  require_command curl
+  require_command flock
+  require_command git
+  require_command gzip
+  require_command pgrep
+  require_command ps
+  require_command python3
+  require_command tar
+  [[ -d "$SOURCE_DB" ]] || die "disposable source DB is missing: $SOURCE_DB"
+  [[ -w "$SOURCE_DB" ]] || die "disposable source DB is not writable: $SOURCE_DB"
+  [[ -x "$FORK_TOOL" ]] || die "fork tool is missing or not executable: $FORK_TOOL"
+  [[ -x "$FORK_LAUNCHER" ]] || die "fork launcher is missing or not executable: $FORK_LAUNCHER"
+
+  mkdir -p "$SERVICE_ROOT"
+  exec 9>"$SERVICE_ROOT/launcher.lock"
+  flock 9
+  if report_running_network; then
+    return "$ALREADY_RUNNING_EXIT"
+  fi
+
+  verify_archive "$sha" "$archive"
+  local node_binary
+  node_binary=$(build_node "$sha" "$archive")
+  local work_dir
+  work_dir="$SERVICE_ROOT/runs/$sha-$(date -u +%Y%m%dT%H%M%SZ)"
+  mkdir -p "$(dirname "$work_dir")"
+
+  "$FORK_LAUNCHER" start \
+    --source-db "$SOURCE_DB" \
+    --source-is-disposable \
+    --fork-tool "$FORK_TOOL" \
+    --node-binary "$node_binary" \
+    --test-account-address "$TEST_ACCOUNT" \
+    --validators "$VALIDATORS" \
+    --chain-id "$CHAIN_ID" \
+    --health-timeout "$HEALTH_TIMEOUT" \
+    --work-dir "$work_dir"
+
+  mkdir -p "$SERVICE_ROOT/active"
+  printf '%s\n' "$sha" >"$SERVICE_ROOT/active/sha"
+  printf '%s\n' "$work_dir" >"$SERVICE_ROOT/active/work-dir"
+  echo "Remote ephemeral mainnet started from m1 commit $sha."
+}
+
+main() {
+  local action=${1:-}
+  shift || true
+  case "$action" in
+    preflight) preflight "$@" ;;
+    start) start_network "$@" ;;
+    endpoint) active_api_endpoint "$@" ;;
+    test-key) active_test_key "$@" ;;
+    -h | --help | help) usage ;;
+    *)
+      usage
+      exit 1
+      ;;
+  esac
+}
+
+main "$@"

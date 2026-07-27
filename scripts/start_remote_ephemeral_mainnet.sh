@@ -11,7 +11,7 @@ DEFAULT_HOST="ubuntu@34.231.241.232"
 DEFAULT_IDENTITY="$HOME/movement/mainnet-fork.pem"
 DEFAULT_REMOTE_SCRIPT="/mnt/mainnet-volume/fork-run-20260722/bin/start_ephemeral_mainnet.sh"
 DEFAULT_REMOTE_INCOMING="/mnt/mainnet-volume/ephemeral-mainnet/incoming"
-DEFAULT_LOCAL_API_PORT=8080
+DEFAULT_PUBLIC_API_PORT=8080
 ALREADY_RUNNING_EXIT=3
 ARCHIVE_TO_CLEAN=""
 
@@ -27,15 +27,15 @@ Options:
   --identity PATH        SSH private key. Default: $DEFAULT_IDENTITY
   --remote-script PATH   Installed host launcher. Default: $DEFAULT_REMOTE_SCRIPT
   --remote-incoming PATH Archive upload directory. Default: $DEFAULT_REMOTE_INCOMING
-  --local-api-port PORT  Local submission endpoint port. Default: $DEFAULT_LOCAL_API_PORT
+  --public-api-port PORT Public submission endpoint port. Default: $DEFAULT_PUBLIC_API_PORT
 
 The SHA must resolve to a commit contained in origin/m1. If an aptos-node
 process is already running on the host, the command reports it and exits
 without uploading source, building, stopping, or replacing anything.
 
 After a successful start, one remote loopback REST endpoint is forwarded to
-http://127.0.0.1:<local-api-port> through SSH. Validator P2P and REST listeners
-are never bound to the host's public interface.
+http://34.231.241.232:<public-api-port>. Validator P2P and native REST listeners
+remain loopback-only; only the managed submission proxy binds publicly.
 EOF
 }
 
@@ -86,7 +86,7 @@ main() {
   local identity=$DEFAULT_IDENTITY
   local remote_script=$DEFAULT_REMOTE_SCRIPT
   local remote_incoming=$DEFAULT_REMOTE_INCOMING
-  local local_api_port=$DEFAULT_LOCAL_API_PORT
+  local public_api_port=$DEFAULT_PUBLIC_API_PORT
   while (($#)); do
     case "$1" in
       --host)
@@ -109,9 +109,9 @@ main() {
         remote_incoming=$2
         shift 2
         ;;
-      --local-api-port)
-        [[ $# -ge 2 ]] || die "--local-api-port requires a value"
-        local_api_port=$2
+      --public-api-port)
+        [[ $# -ge 2 ]] || die "--public-api-port requires a value"
+        public_api_port=$2
         shift 2
         ;;
       -h | --help)
@@ -126,9 +126,9 @@ main() {
 
   [[ "$requested_sha" =~ ^[0-9a-fA-F]{7,40}$ ]] ||
     die "GITHUB_SHA must contain 7 to 40 hexadecimal characters"
-  if ! [[ "$local_api_port" =~ ^[1-9][0-9]*$ ]] ||
-    ((local_api_port > 65535)); then
-    die "--local-api-port must be between 1 and 65535"
+  if ! [[ "$public_api_port" =~ ^[1-9][0-9]*$ ]] ||
+    ((public_api_port > 65535)); then
+    die "--public-api-port must be between 1 and 65535"
   fi
   [[ -f "$identity" ]] || die "SSH identity file does not exist: $identity"
   require_command git
@@ -163,18 +163,13 @@ main() {
   echo "Starting remote build and fork..."
   set +e
   ssh -i "$identity" "$destination" \
-    "$remote_script" start "$full_sha" "$remote_archive"
+    "$remote_script" start "$full_sha" "$remote_archive" "$public_api_port"
   local status=$?
   set -e
   if ((status == ALREADY_RUNNING_EXIT)); then
     exit "$ALREADY_RUNNING_EXIT"
   fi
   ((status == 0)) || die "remote launcher failed with exit code $status"
-
-  local remote_api
-  remote_api=$(ssh -i "$identity" "$destination" "$remote_script" endpoint)
-  [[ "$remote_api" =~ ^127\.0\.0\.1:[1-9][0-9]*$ ]] ||
-    die "remote launcher returned an invalid loopback API endpoint: $remote_api"
 
   local key_dir="${XDG_CACHE_HOME:-$HOME/.cache}/aptos-ephemeral-mainnet"
   local key_file="$key_dir/$full_sha.key"
@@ -185,32 +180,17 @@ main() {
   )
   [[ -s "$key_file" ]] || die "remote launcher returned an empty test key"
 
-  local control_socket="/tmp/aptos-mainnet-${USER:-user}-${full_sha:0:12}.sock"
-  if [[ -S "$control_socket" ]]; then
-    if ssh -S "$control_socket" -O check "$destination" >/dev/null 2>&1; then
-      die "an SSH tunnel already uses control socket $control_socket"
-    fi
-    rm -f "$control_socket"
-  fi
-  ssh -i "$identity" \
-    -M -S "$control_socket" -fN \
-    -o ExitOnForwardFailure=yes \
-    -L "127.0.0.1:$local_api_port:$remote_api" \
-    "$destination"
-
+  local public_host=${destination#*@}
   echo
-  echo "Submission endpoint: http://127.0.0.1:$local_api_port"
+  echo "Submission endpoint: http://$public_host:$public_api_port"
   echo "Local test key:      $key_file"
-  echo "Validator P2P and REST remain loopback-only on 34.231.241.232."
+  echo "Validator P2P and native REST remain loopback-only."
   echo
   echo "Contract publishing pattern:"
   echo "  movement move publish --package-dir <MOVE_PACKAGE> \\"
   echo "    --sender-account 0x573537299646e0dfab6ca81086edccf73f77b841f30dde6bfbd730ed428479bf \\"
   echo "    --private-key-file $key_file \\"
-  echo "    --url http://127.0.0.1:$local_api_port --assume-yes"
-  echo
-  echo "Close API tunnel:"
-  echo "  ssh -S $control_socket -O exit $destination"
+  echo "    --url http://$public_host:$public_api_port --assume-yes"
 }
 
 main "$@"

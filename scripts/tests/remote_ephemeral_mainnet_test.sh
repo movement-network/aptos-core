@@ -45,6 +45,7 @@ launcher_env=(
   "EPHEMERAL_SOURCE_DB=$TEST_ROOT/source-db"
   "EPHEMERAL_FORK_TOOL=/usr/bin/true"
   "EPHEMERAL_FORK_LAUNCHER=/usr/bin/true"
+  "EPHEMERAL_PUBLIC_API_ENABLED=false"
   "CARGO_HOME=$TEST_ROOT/run/cargo"
   "RUSTUP_HOME=$TEST_ROOT/run/rustup"
 )

@@ -41,7 +41,6 @@ pub static APTOS_TRANSACTION_VALIDATION: Lazy<TransactionValidation> =
     Lazy::new(|| TransactionValidation {
         module_addr: CORE_CODE_ADDRESS,
         module_name: Identifier::new("transaction_validation").unwrap(),
-        user_epilogue_name: Identifier::new("epilogue").unwrap(),
         fee_payer_prologue_extended_name: Identifier::new("fee_payer_script_prologue_extended")
             .unwrap(),
         script_prologue_extended_name: Identifier::new("script_prologue_extended").unwrap(),
@@ -65,7 +64,6 @@ pub static APTOS_TRANSACTION_VALIDATION: Lazy<TransactionValidation> =
 pub struct TransactionValidation {
     pub module_addr: AccountAddress,
     pub module_name: Identifier,
-    pub user_epilogue_name: Identifier,
     pub fee_payer_prologue_extended_name: Identifier,
     pub script_prologue_extended_name: Identifier,
     pub multi_agent_prologue_extended_name: Identifier,
@@ -594,7 +592,7 @@ pub(crate) fn run_failure_epilogue(
     .or_else(|err| {
         expect_only_successful_execution(
             err,
-            APTOS_TRANSACTION_VALIDATION.user_epilogue_name.as_str(),
+            APTOS_TRANSACTION_VALIDATION.user_epilogue_extended_name.as_str(),
             log_context,
         )
     })

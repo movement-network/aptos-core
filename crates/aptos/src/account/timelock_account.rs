@@ -3,8 +3,8 @@
 
 use crate::{
     common::types::{
-        CliCommand, CliError, CliTypedResult, TimelockAccount,
-        TimelockAccountWithProposalHash, TransactionOptions, TransactionSummary,
+        CliCommand, CliError, CliTypedResult, TimelockAccount, TimelockAccountWithProposalHash,
+        TransactionOptions, TransactionSummary,
     },
     governance::CompileScriptFunction,
 };
@@ -349,9 +349,7 @@ impl CliCommand<serde_json::Value> for VerifyTransaction {
 
     async fn execute(self) -> CliTypedResult<serde_json::Value> {
         let proposal_hash = parse_hex_32(
-            &self
-                .timelock_account_with_proposal_hash
-                .proposal_hash,
+            &self.timelock_account_with_proposal_hash.proposal_hash,
             "proposal-hash",
         )?;
         let timelock_address = self
@@ -479,9 +477,7 @@ impl CliCommand<TransactionSummary> for Execute {
             .timelock_account
             .timelock_address;
         let proposal_hash = parse_hex_32(
-            &self
-                .timelock_account_with_proposal_hash
-                .proposal_hash,
+            &self.timelock_account_with_proposal_hash.proposal_hash,
             "proposal-hash",
         )?;
 
@@ -508,19 +504,22 @@ impl CliCommand<TransactionSummary> for Execute {
             .unwrap_or(false);
         if !can_be_executed {
             let executed = timelock_transaction["executed"].as_bool().unwrap_or(false);
-            return Err(CliError::UnexpectedError(if executed {
-                "Transaction has already been executed or canceled".to_string()
-            } else {
-                let parse_u64 = |field| timelock_transaction[field].as_str()?.parse::<u64>().ok();
-                match parse_u64("creation_time_secs").zip(parse_u64("num_seconds_execute")) {
-                    Some((creation_time_secs, num_seconds_execute)) => format!(
-                        "The timelock period has not elapsed yet: the transaction becomes \
+            return Err(CliError::UnexpectedError(
+                if executed {
+                    "Transaction has already been executed or canceled".to_string()
+                } else {
+                    let parse_u64 =
+                        |field| timelock_transaction[field].as_str()?.parse::<u64>().ok();
+                    match parse_u64("creation_time_secs").zip(parse_u64("num_seconds_execute")) {
+                        Some((creation_time_secs, num_seconds_execute)) => format!(
+                            "The timelock period has not elapsed yet: the transaction becomes \
                         executable at unix timestamp {}",
-                        creation_time_secs + num_seconds_execute
-                    ),
-                    None => "The timelock period has not elapsed yet".to_string(),
-                }
-            }));
+                            creation_time_secs + num_seconds_execute
+                        ),
+                        None => "The timelock period has not elapsed yet".to_string(),
+                    }
+                },
+            ));
         }
 
         // No type or value arguments: passing any would let the executor supply values the
@@ -566,9 +565,7 @@ mod tests {
     #[test]
     fn parse_hex_32_rejects_non_hex() {
         let bad = "zz".repeat(TIMELOCK_BYTES_LENGTH);
-        let err = parse_hex_32(&bad, "proposal-hash")
-            .unwrap_err()
-            .to_string();
+        let err = parse_hex_32(&bad, "proposal-hash").unwrap_err().to_string();
         assert!(err.contains("Invalid hex value"), "{err}");
     }
 }

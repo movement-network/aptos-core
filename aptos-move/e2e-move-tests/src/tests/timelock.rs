@@ -230,22 +230,26 @@ fn member_view(
     addr: AccountAddress,
     timelock_addr: AccountAddress,
 ) -> bool {
-    let result = h.execute_view_function(
-        str::parse(function).unwrap(),
-        vec![],
-        vec![
-            bcs::to_bytes(&addr).unwrap(),
-            bcs::to_bytes(&timelock_addr).unwrap(),
-        ],
-    );
+    let result = h.execute_view_function(str::parse(function).unwrap(), vec![], vec![
+        bcs::to_bytes(&addr).unwrap(),
+        bcs::to_bytes(&timelock_addr).unwrap(),
+    ]);
     bcs::from_bytes::<bool>(&result.values.unwrap()[0]).unwrap()
 }
 
-fn is_creator_view(h: &mut MoveHarness, addr: AccountAddress, timelock_addr: AccountAddress) -> bool {
+fn is_creator_view(
+    h: &mut MoveHarness,
+    addr: AccountAddress,
+    timelock_addr: AccountAddress,
+) -> bool {
     member_view(h, "0x1::timelock::is_creator", addr, timelock_addr)
 }
 
-fn is_executor_view(h: &mut MoveHarness, addr: AccountAddress, timelock_addr: AccountAddress) -> bool {
+fn is_executor_view(
+    h: &mut MoveHarness,
+    addr: AccountAddress,
+    timelock_addr: AccountAddress,
+) -> bool {
     member_view(h, "0x1::timelock::is_executor", addr, timelock_addr)
 }
 
@@ -272,7 +276,6 @@ fn assert_aborts_with(status: &TransactionStatus, expected_code: u64) {
         other => panic!("expected MoveAbort({:#x}), got {:?}", expected_code, other),
     }
 }
-
 
 // Abort codes (from timelock.move):
 //   ETIMELOCK_NOT_EXPIRED = 8        → error::invalid_state         → 0x30008
@@ -321,64 +324,97 @@ fn run_in_big_stack(f: impl FnOnce() + Send + 'static) {
 #[test]
 fn test_resolve_executes() {
     run_in_big_stack(|| {
-    let mut h = MoveHarness::new();
-    let creator = h.new_account_at(AccountAddress::from_hex_literal("0xCAFE").unwrap());
-    let timelock_addr = timelock_account_address(*creator.address(), 10);
+        let mut h = MoveHarness::new();
+        let creator = h.new_account_at(AccountAddress::from_hex_literal("0xCAFE").unwrap());
+        let timelock_addr = timelock_account_address(*creator.address(), 10);
 
-    assert_success!(create_timelock(&mut h, &creator, vec![], vec![], DELAY));
+        assert_success!(create_timelock(&mut h, &creator, vec![], vec![], DELAY));
 
-    let code = script("noop");
-    let exec_hash = execution_hash_of(&code);
-    let salt = salt32(b"noop_salt");
-    let proposal_hash = proposal_hash_of(&exec_hash, &salt);
+        let code = script("noop");
+        let exec_hash = execution_hash_of(&code);
+        let salt = salt32(b"noop_salt");
+        let proposal_hash = proposal_hash_of(&exec_hash, &salt);
 
-    assert_success!(propose(&mut h, &creator, timelock_addr, &exec_hash, DELAY, &salt));
+        assert_success!(propose(
+            &mut h,
+            &creator,
+            timelock_addr,
+            &exec_hash,
+            DELAY,
+            &salt
+        ));
 
-    assert!(!can_be_executed(&mut h, timelock_addr, &proposal_hash));
-    fast_forward_block(&mut h, DELAY + 1);
-    assert!(can_be_executed(&mut h, timelock_addr, &proposal_hash));
+        assert!(!can_be_executed(&mut h, timelock_addr, &proposal_hash));
+        fast_forward_block(&mut h, DELAY + 1);
+        assert!(can_be_executed(&mut h, timelock_addr, &proposal_hash));
 
-    let status = run_resolution_script(&mut h, &creator, code, vec![], timelock_addr, &proposal_hash);
-    assert_success!(status);
+        let status = run_resolution_script(
+            &mut h,
+            &creator,
+            code,
+            vec![],
+            timelock_addr,
+            &proposal_hash,
+        );
+        assert_success!(status);
 
-    // After execution, the entry is marked executed → can_be_executed returns false.
-    assert!(!can_be_executed(&mut h, timelock_addr, &proposal_hash));
+        // After execution, the entry is marked executed → can_be_executed returns false.
+        assert!(!can_be_executed(&mut h, timelock_addr, &proposal_hash));
     });
 }
 
 #[test]
 fn test_delegated_resolution_via_approval() {
     run_in_big_stack(|| {
-    let mut h = MoveHarness::new();
-    let creator = h.new_account_at(AccountAddress::from_hex_literal("0xCA5E").unwrap());
-    let executor = h.new_account_at(AccountAddress::from_hex_literal("0xCA5F").unwrap());
-    // `relayer` is neither a creator nor an executor — it only submits the script.
-    let relayer = h.new_account_at(AccountAddress::from_hex_literal("0xCA60").unwrap());
-    let timelock_addr = timelock_account_address(*creator.address(), 10);
-    assert_success!(create_timelock(
-        &mut h,
-        &creator,
-        vec![],
-        vec![*executor.address()],
-        DELAY
-    ));
+        let mut h = MoveHarness::new();
+        let creator = h.new_account_at(AccountAddress::from_hex_literal("0xCA5E").unwrap());
+        let executor = h.new_account_at(AccountAddress::from_hex_literal("0xCA5F").unwrap());
+        // `relayer` is neither a creator nor an executor — it only submits the script.
+        let relayer = h.new_account_at(AccountAddress::from_hex_literal("0xCA60").unwrap());
+        let timelock_addr = timelock_account_address(*creator.address(), 10);
+        assert_success!(create_timelock(
+            &mut h,
+            &creator,
+            vec![],
+            vec![*executor.address()],
+            DELAY
+        ));
 
-    let code = script("noop");
-    let exec_hash = execution_hash_of(&code);
-    let salt = salt32(b"delegated_salt");
-    let proposal_hash = proposal_hash_of(&exec_hash, &salt);
-    assert_success!(propose(&mut h, &creator, timelock_addr, &exec_hash, DELAY, &salt));
+        let code = script("noop");
+        let exec_hash = execution_hash_of(&code);
+        let salt = salt32(b"delegated_salt");
+        let proposal_hash = proposal_hash_of(&exec_hash, &salt);
+        assert_success!(propose(
+            &mut h,
+            &creator,
+            timelock_addr,
+            &exec_hash,
+            DELAY,
+            &salt
+        ));
 
-    fast_forward_block(&mut h, DELAY + 1);
+        fast_forward_block(&mut h, DELAY + 1);
 
-    // The executor pre-authorizes resolution via the entry function (the multisig-style path),
-    // once the delay has elapsed.
-    assert_success!(approve_resolution(&mut h, &executor, timelock_addr, &proposal_hash));
+        // The executor pre-authorizes resolution via the entry function (the multisig-style path),
+        // once the delay has elapsed.
+        assert_success!(approve_resolution(
+            &mut h,
+            &executor,
+            timelock_addr,
+            &proposal_hash
+        ));
 
-    // The relayer — not an executor — can now submit the committed script, because it was approved.
-    let status = run_resolution_script(&mut h, &relayer, code, vec![], timelock_addr, &proposal_hash);
-    assert_success!(status);
-    assert!(!can_be_executed(&mut h, timelock_addr, &proposal_hash));
+        // The relayer — not an executor — can now submit the committed script, because it was approved.
+        let status = run_resolution_script(
+            &mut h,
+            &relayer,
+            code,
+            vec![],
+            timelock_addr,
+            &proposal_hash,
+        );
+        assert_success!(status);
+        assert!(!can_be_executed(&mut h, timelock_addr, &proposal_hash));
     });
 }
 
@@ -387,166 +423,250 @@ fn test_delegated_resolution_via_approval() {
 #[test]
 fn test_resolve_fails_before_delay() {
     run_in_big_stack(|| {
-    let mut h = MoveHarness::new();
-    let creator = h.new_account_at(AccountAddress::from_hex_literal("0xBEEF").unwrap());
-    let timelock_addr = timelock_account_address(*creator.address(), 10);
-    assert_success!(create_timelock(&mut h, &creator, vec![], vec![], DELAY));
+        let mut h = MoveHarness::new();
+        let creator = h.new_account_at(AccountAddress::from_hex_literal("0xBEEF").unwrap());
+        let timelock_addr = timelock_account_address(*creator.address(), 10);
+        assert_success!(create_timelock(&mut h, &creator, vec![], vec![], DELAY));
 
-    let code = script("noop");
-    let exec_hash = execution_hash_of(&code);
-    let salt = salt32(b"early_salt");
-    let proposal_hash = proposal_hash_of(&exec_hash, &salt);
-    assert_success!(propose(&mut h, &creator, timelock_addr, &exec_hash, DELAY, &salt));
+        let code = script("noop");
+        let exec_hash = execution_hash_of(&code);
+        let salt = salt32(b"early_salt");
+        let proposal_hash = proposal_hash_of(&exec_hash, &salt);
+        assert_success!(propose(
+            &mut h,
+            &creator,
+            timelock_addr,
+            &exec_hash,
+            DELAY,
+            &salt
+        ));
 
-    // No time advance — resolve must abort with ETIMELOCK_NOT_EXPIRED.
-    let status = run_resolution_script(&mut h, &creator, code, vec![], timelock_addr, &proposal_hash);
-    assert_aborts_with(&status, ABORT_TIMELOCK_NOT_EXPIRED);
+        // No time advance — resolve must abort with ETIMELOCK_NOT_EXPIRED.
+        let status = run_resolution_script(
+            &mut h,
+            &creator,
+            code,
+            vec![],
+            timelock_addr,
+            &proposal_hash,
+        );
+        assert_aborts_with(&status, ABORT_TIMELOCK_NOT_EXPIRED);
 
-    // The proposal must still be pending: failed script rolled back the executed-flag flip.
-    fast_forward_block(&mut h, DELAY + 1);
-    assert!(can_be_executed(&mut h, timelock_addr, &proposal_hash));
+        // The proposal must still be pending: failed script rolled back the executed-flag flip.
+        fast_forward_block(&mut h, DELAY + 1);
+        assert!(can_be_executed(&mut h, timelock_addr, &proposal_hash));
     });
 }
 
 #[test]
 fn test_resolve_fails_unauthorized_executor() {
     run_in_big_stack(|| {
-    let mut h = MoveHarness::new();
-    let creator = h.new_account_at(AccountAddress::from_hex_literal("0xC0DE").unwrap());
-    let executor = h.new_account_at(AccountAddress::from_hex_literal("0xC0DF").unwrap());
-    let intruder = h.new_account_at(AccountAddress::from_hex_literal("0xDEAD").unwrap());
-    let timelock_addr = timelock_account_address(*creator.address(), 10);
+        let mut h = MoveHarness::new();
+        let creator = h.new_account_at(AccountAddress::from_hex_literal("0xC0DE").unwrap());
+        let executor = h.new_account_at(AccountAddress::from_hex_literal("0xC0DF").unwrap());
+        let intruder = h.new_account_at(AccountAddress::from_hex_literal("0xDEAD").unwrap());
+        let timelock_addr = timelock_account_address(*creator.address(), 10);
 
-    assert_success!(create_timelock(
-        &mut h,
-        &creator,
-        vec![],
-        vec![*executor.address()],
-        DELAY
-    ));
+        assert_success!(create_timelock(
+            &mut h,
+            &creator,
+            vec![],
+            vec![*executor.address()],
+            DELAY
+        ));
 
-    let code = script("noop");
-    let exec_hash = execution_hash_of(&code);
-    let salt = salt32(b"auth_salt");
-    let proposal_hash = proposal_hash_of(&exec_hash, &salt);
-    assert_success!(propose(&mut h, &creator, timelock_addr, &exec_hash, DELAY, &salt));
+        let code = script("noop");
+        let exec_hash = execution_hash_of(&code);
+        let salt = salt32(b"auth_salt");
+        let proposal_hash = proposal_hash_of(&exec_hash, &salt);
+        assert_success!(propose(
+            &mut h,
+            &creator,
+            timelock_addr,
+            &exec_hash,
+            DELAY,
+            &salt
+        ));
 
-    fast_forward_block(&mut h, DELAY + 1);
+        fast_forward_block(&mut h, DELAY + 1);
 
-    let status = run_resolution_script(&mut h, &intruder, code, vec![], timelock_addr, &proposal_hash);
-    assert_aborts_with(&status, ABORT_NOT_EXECUTOR);
+        let status = run_resolution_script(
+            &mut h,
+            &intruder,
+            code,
+            vec![],
+            timelock_addr,
+            &proposal_hash,
+        );
+        assert_aborts_with(&status, ABORT_NOT_EXECUTOR);
     });
 }
 
 #[test]
 fn test_resolve_fails_already_executed() {
     run_in_big_stack(|| {
-    let mut h = MoveHarness::new();
-    let creator = h.new_account_at(AccountAddress::from_hex_literal("0xF001").unwrap());
-    let timelock_addr = timelock_account_address(*creator.address(), 10);
-    assert_success!(create_timelock(&mut h, &creator, vec![], vec![], DELAY));
+        let mut h = MoveHarness::new();
+        let creator = h.new_account_at(AccountAddress::from_hex_literal("0xF001").unwrap());
+        let timelock_addr = timelock_account_address(*creator.address(), 10);
+        assert_success!(create_timelock(&mut h, &creator, vec![], vec![], DELAY));
 
-    let code = script("noop");
-    let exec_hash = execution_hash_of(&code);
-    let salt = salt32(b"replay_salt");
-    let proposal_hash = proposal_hash_of(&exec_hash, &salt);
-    assert_success!(propose(&mut h, &creator, timelock_addr, &exec_hash, DELAY, &salt));
+        let code = script("noop");
+        let exec_hash = execution_hash_of(&code);
+        let salt = salt32(b"replay_salt");
+        let proposal_hash = proposal_hash_of(&exec_hash, &salt);
+        assert_success!(propose(
+            &mut h,
+            &creator,
+            timelock_addr,
+            &exec_hash,
+            DELAY,
+            &salt
+        ));
 
-    fast_forward_block(&mut h, DELAY + 1);
+        fast_forward_block(&mut h, DELAY + 1);
 
-    assert_success!(run_resolution_script(
-        &mut h,
-        &creator,
-        code.clone(),
-        vec![],
-        timelock_addr,
-        &proposal_hash
-    ));
+        assert_success!(run_resolution_script(
+            &mut h,
+            &creator,
+            code.clone(),
+            vec![],
+            timelock_addr,
+            &proposal_hash
+        ));
 
-    // Replay: must abort with ETRANSACTION_ALREADY_EXECUTED.
-    let status = run_resolution_script(&mut h, &creator, code, vec![], timelock_addr, &proposal_hash);
-    assert_aborts_with(&status, ABORT_ALREADY_EXECUTED);
+        // Replay: must abort with ETRANSACTION_ALREADY_EXECUTED.
+        let status = run_resolution_script(
+            &mut h,
+            &creator,
+            code,
+            vec![],
+            timelock_addr,
+            &proposal_hash,
+        );
+        assert_aborts_with(&status, ABORT_ALREADY_EXECUTED);
     });
 }
 
 #[test]
 fn test_resolve_fails_canceled() {
     run_in_big_stack(|| {
-    let mut h = MoveHarness::new();
-    let creator = h.new_account_at(AccountAddress::from_hex_literal("0xF002").unwrap());
-    let timelock_addr = timelock_account_address(*creator.address(), 10);
-    assert_success!(create_timelock(&mut h, &creator, vec![], vec![], DELAY));
+        let mut h = MoveHarness::new();
+        let creator = h.new_account_at(AccountAddress::from_hex_literal("0xF002").unwrap());
+        let timelock_addr = timelock_account_address(*creator.address(), 10);
+        assert_success!(create_timelock(&mut h, &creator, vec![], vec![], DELAY));
 
-    let code = script("noop");
-    let exec_hash = execution_hash_of(&code);
-    let salt = salt32(b"canceled_salt");
-    let proposal_hash = proposal_hash_of(&exec_hash, &salt);
-    assert_success!(propose(&mut h, &creator, timelock_addr, &exec_hash, DELAY, &salt));
-    assert_success!(cancel(&mut h, &creator, timelock_addr, &proposal_hash));
+        let code = script("noop");
+        let exec_hash = execution_hash_of(&code);
+        let salt = salt32(b"canceled_salt");
+        let proposal_hash = proposal_hash_of(&exec_hash, &salt);
+        assert_success!(propose(
+            &mut h,
+            &creator,
+            timelock_addr,
+            &exec_hash,
+            DELAY,
+            &salt
+        ));
+        assert_success!(cancel(&mut h, &creator, timelock_addr, &proposal_hash));
 
-    fast_forward_block(&mut h, DELAY + 1);
+        fast_forward_block(&mut h, DELAY + 1);
 
-    let status = run_resolution_script(&mut h, &creator, code, vec![], timelock_addr, &proposal_hash);
-    assert_aborts_with(&status, ABORT_ALREADY_EXECUTED);
+        let status = run_resolution_script(
+            &mut h,
+            &creator,
+            code,
+            vec![],
+            timelock_addr,
+            &proposal_hash,
+        );
+        assert_aborts_with(&status, ABORT_ALREADY_EXECUTED);
     });
 }
 
 #[test]
 fn test_resolve_fails_with_wrong_script() {
     run_in_big_stack(|| {
-    // Propose execution_hash from script A but submit script B → EEXECUTION_HASH_NOT_MATCHING.
-    let mut h = MoveHarness::new();
-    let creator = h.new_account_at(AccountAddress::from_hex_literal("0xF003").unwrap());
-    let timelock_addr = timelock_account_address(*creator.address(), 10);
-    assert_success!(create_timelock(&mut h, &creator, vec![], vec![], DELAY));
+        // Propose execution_hash from script A but submit script B → EEXECUTION_HASH_NOT_MATCHING.
+        let mut h = MoveHarness::new();
+        let creator = h.new_account_at(AccountAddress::from_hex_literal("0xF003").unwrap());
+        let timelock_addr = timelock_account_address(*creator.address(), 10);
+        assert_success!(create_timelock(&mut h, &creator, vec![], vec![], DELAY));
 
-    let code_a = script("noop");
-    let code_b = script("update_delay");
-    let exec_hash_a = execution_hash_of(&code_a);
-    let salt = salt32(b"wrong_script");
-    let proposal_hash = proposal_hash_of(&exec_hash_a, &salt);
-    assert_success!(propose(&mut h, &creator, timelock_addr, &exec_hash_a, DELAY, &salt));
+        let code_a = script("noop");
+        let code_b = script("update_delay");
+        let exec_hash_a = execution_hash_of(&code_a);
+        let salt = salt32(b"wrong_script");
+        let proposal_hash = proposal_hash_of(&exec_hash_a, &salt);
+        assert_success!(propose(
+            &mut h,
+            &creator,
+            timelock_addr,
+            &exec_hash_a,
+            DELAY,
+            &salt
+        ));
 
-    fast_forward_block(&mut h, DELAY + 1);
+        fast_forward_block(&mut h, DELAY + 1);
 
-    // Submit script B (self-contained, no privileged args) with script A's proposal_hash;
-    // resolve aborts on the hash mismatch before B's body runs.
-    let status = run_resolution_script(&mut h, &creator, code_b, vec![], timelock_addr, &proposal_hash);
-    assert_aborts_with(&status, ABORT_EXECUTION_HASH_MISMATCH);
+        // Submit script B (self-contained, no privileged args) with script A's proposal_hash;
+        // resolve aborts on the hash mismatch before B's body runs.
+        let status = run_resolution_script(
+            &mut h,
+            &creator,
+            code_b,
+            vec![],
+            timelock_addr,
+            &proposal_hash,
+        );
+        assert_aborts_with(&status, ABORT_EXECUTION_HASH_MISMATCH);
     });
 }
 
 #[test]
 fn test_resolve_fails_no_proposal() {
     run_in_big_stack(|| {
-    let mut h = MoveHarness::new();
-    let creator = h.new_account_at(AccountAddress::from_hex_literal("0xF030").unwrap());
-    let timelock_addr = timelock_account_address(*creator.address(), 10);
-    assert_success!(create_timelock(&mut h, &creator, vec![], vec![], DELAY));
+        let mut h = MoveHarness::new();
+        let creator = h.new_account_at(AccountAddress::from_hex_literal("0xF030").unwrap());
+        let timelock_addr = timelock_account_address(*creator.address(), 10);
+        assert_success!(create_timelock(&mut h, &creator, vec![], vec![], DELAY));
 
-    fast_forward_block(&mut h, DELAY + 1);
+        fast_forward_block(&mut h, DELAY + 1);
 
-    let code = script("noop");
-    let exec_hash = execution_hash_of(&code);
-    let salt = salt32(b"ghost_salt");
-    let proposal_hash = proposal_hash_of(&exec_hash, &salt);
-    let status = run_resolution_script(&mut h, &creator, code, vec![], timelock_addr, &proposal_hash);
-    assert_aborts_with(&status, ABORT_TRANSACTION_NOT_FOUND);
+        let code = script("noop");
+        let exec_hash = execution_hash_of(&code);
+        let salt = salt32(b"ghost_salt");
+        let proposal_hash = proposal_hash_of(&exec_hash, &salt);
+        let status = run_resolution_script(
+            &mut h,
+            &creator,
+            code,
+            vec![],
+            timelock_addr,
+            &proposal_hash,
+        );
+        assert_aborts_with(&status, ABORT_TRANSACTION_NOT_FOUND);
     });
 }
 
 #[test]
 fn test_resolve_fails_non_timelock_account() {
     run_in_big_stack(|| {
-    let mut h = MoveHarness::new();
-    let executor = h.new_account_at(AccountAddress::from_hex_literal("0xF020").unwrap());
+        let mut h = MoveHarness::new();
+        let executor = h.new_account_at(AccountAddress::from_hex_literal("0xF020").unwrap());
 
-    // Use the executor's own (non-timelock) address.
-    let code = script("noop");
-    let exec_hash = execution_hash_of(&code);
-    let proposal_hash = proposal_hash_of(&exec_hash, &salt32(b"no_timelock"));
-    let status = run_resolution_script(&mut h, &executor, code, vec![], *executor.address(), &proposal_hash);
-    assert_aborts_with(&status, ABORT_ACCOUNT_NOT_TIMELOCK);
+        // Use the executor's own (non-timelock) address.
+        let code = script("noop");
+        let exec_hash = execution_hash_of(&code);
+        let proposal_hash = proposal_hash_of(&exec_hash, &salt32(b"no_timelock"));
+        let status = run_resolution_script(
+            &mut h,
+            &executor,
+            code,
+            vec![],
+            *executor.address(),
+            &proposal_hash,
+        );
+        assert_aborts_with(&status, ABORT_ACCOUNT_NOT_TIMELOCK);
     });
 }
 
@@ -555,166 +675,221 @@ fn test_resolve_fails_non_timelock_account() {
 #[test]
 fn test_self_governance_update_delay() {
     run_in_big_stack(|| {
-    let mut h = MoveHarness::new();
-    let creator = h.new_account_at(AccountAddress::from_hex_literal("0xE001").unwrap());
-    let timelock_addr = timelock_account_address(*creator.address(), 10);
-    assert_success!(create_timelock(&mut h, &creator, vec![], vec![], DELAY));
+        let mut h = MoveHarness::new();
+        let creator = h.new_account_at(AccountAddress::from_hex_literal("0xE001").unwrap());
+        let timelock_addr = timelock_account_address(*creator.address(), 10);
+        assert_success!(create_timelock(&mut h, &creator, vec![], vec![], DELAY));
 
-    // Must match the value baked into the `update_delay` fixture script.
-    const NEW_DELAY: u64 = 7200;
-    let code = script("update_delay");
-    let exec_hash = execution_hash_of(&code);
-    let salt = salt32(b"update_delay_salt");
-    let proposal_hash = proposal_hash_of(&exec_hash, &salt);
-    assert_success!(propose(&mut h, &creator, timelock_addr, &exec_hash, DELAY, &salt));
+        // Must match the value baked into the `update_delay` fixture script.
+        const NEW_DELAY: u64 = 7200;
+        let code = script("update_delay");
+        let exec_hash = execution_hash_of(&code);
+        let salt = salt32(b"update_delay_salt");
+        let proposal_hash = proposal_hash_of(&exec_hash, &salt);
+        assert_success!(propose(
+            &mut h,
+            &creator,
+            timelock_addr,
+            &exec_hash,
+            DELAY,
+            &salt
+        ));
 
-    fast_forward_block(&mut h, DELAY + 1);
+        fast_forward_block(&mut h, DELAY + 1);
 
-    // The new delay is baked into the script bytecode, so no privileged arg is passed.
-    assert_success!(run_resolution_script(
-        &mut h,
-        &creator,
-        code,
-        vec![],
-        timelock_addr,
-        &proposal_hash
-    ));
+        // The new delay is baked into the script bytecode, so no privileged arg is passed.
+        assert_success!(run_resolution_script(
+            &mut h,
+            &creator,
+            code,
+            vec![],
+            timelock_addr,
+            &proposal_hash
+        ));
 
-    assert_eq!(min_num_seconds_execute(&mut h, timelock_addr), NEW_DELAY);
+        assert_eq!(min_num_seconds_execute(&mut h, timelock_addr), NEW_DELAY);
     });
 }
 
 #[test]
 fn test_self_governance_add_creators() {
     run_in_big_stack(|| {
-    let mut h = MoveHarness::new();
-    let alice = h.new_account_at(AccountAddress::from_hex_literal("0xA200").unwrap());
-    // The `add_creator` fixture bakes @0xA201 as the creator it adds.
-    let bob = h.new_account_at(AccountAddress::from_hex_literal("0xA201").unwrap());
-    let timelock_addr = timelock_account_address(*alice.address(), 10);
-    assert_success!(create_timelock(&mut h, &alice, vec![], vec![], DELAY));
-    assert!(!is_creator_view(&mut h, *bob.address(), timelock_addr));
+        let mut h = MoveHarness::new();
+        let alice = h.new_account_at(AccountAddress::from_hex_literal("0xA200").unwrap());
+        // The `add_creator` fixture bakes @0xA201 as the creator it adds.
+        let bob = h.new_account_at(AccountAddress::from_hex_literal("0xA201").unwrap());
+        let timelock_addr = timelock_account_address(*alice.address(), 10);
+        assert_success!(create_timelock(&mut h, &alice, vec![], vec![], DELAY));
+        assert!(!is_creator_view(&mut h, *bob.address(), timelock_addr));
 
-    let code = script("add_creator");
-    let exec_hash = execution_hash_of(&code);
-    let salt = salt32(b"add_creator_salt");
-    let proposal_hash = proposal_hash_of(&exec_hash, &salt);
-    assert_success!(propose(&mut h, &alice, timelock_addr, &exec_hash, DELAY, &salt));
+        let code = script("add_creator");
+        let exec_hash = execution_hash_of(&code);
+        let salt = salt32(b"add_creator_salt");
+        let proposal_hash = proposal_hash_of(&exec_hash, &salt);
+        assert_success!(propose(
+            &mut h,
+            &alice,
+            timelock_addr,
+            &exec_hash,
+            DELAY,
+            &salt
+        ));
 
-    fast_forward_block(&mut h, DELAY + 1);
+        fast_forward_block(&mut h, DELAY + 1);
 
-    // The added creator is baked into the script bytecode, so no privileged arg is passed.
-    assert_success!(run_resolution_script(
-        &mut h, &alice, code, vec![], timelock_addr, &proposal_hash
-    ));
+        // The added creator is baked into the script bytecode, so no privileged arg is passed.
+        assert_success!(run_resolution_script(
+            &mut h,
+            &alice,
+            code,
+            vec![],
+            timelock_addr,
+            &proposal_hash
+        ));
 
-    assert!(is_creator_view(&mut h, *bob.address(), timelock_addr));
+        assert!(is_creator_view(&mut h, *bob.address(), timelock_addr));
     });
 }
 
 #[test]
 fn test_self_governance_remove_creators() {
     run_in_big_stack(|| {
-    let mut h = MoveHarness::new();
-    let alice = h.new_account_at(AccountAddress::from_hex_literal("0xA300").unwrap());
-    // The `remove_creator` fixture bakes @0xA301 as the creator it removes.
-    let bob = h.new_account_at(AccountAddress::from_hex_literal("0xA301").unwrap());
-    let timelock_addr = timelock_account_address(*alice.address(), 10);
-    assert_success!(create_timelock(
-        &mut h,
-        &alice,
-        vec![*bob.address()],
-        vec![],
-        DELAY
-    ));
-    assert!(is_creator_view(&mut h, *alice.address(), timelock_addr));
-    assert!(is_creator_view(&mut h, *bob.address(), timelock_addr));
+        let mut h = MoveHarness::new();
+        let alice = h.new_account_at(AccountAddress::from_hex_literal("0xA300").unwrap());
+        // The `remove_creator` fixture bakes @0xA301 as the creator it removes.
+        let bob = h.new_account_at(AccountAddress::from_hex_literal("0xA301").unwrap());
+        let timelock_addr = timelock_account_address(*alice.address(), 10);
+        assert_success!(create_timelock(
+            &mut h,
+            &alice,
+            vec![*bob.address()],
+            vec![],
+            DELAY
+        ));
+        assert!(is_creator_view(&mut h, *alice.address(), timelock_addr));
+        assert!(is_creator_view(&mut h, *bob.address(), timelock_addr));
 
-    let code = script("remove_creator");
-    let exec_hash = execution_hash_of(&code);
-    let salt = salt32(b"remove_creator_salt");
-    let proposal_hash = proposal_hash_of(&exec_hash, &salt);
-    assert_success!(propose(&mut h, &alice, timelock_addr, &exec_hash, DELAY, &salt));
+        let code = script("remove_creator");
+        let exec_hash = execution_hash_of(&code);
+        let salt = salt32(b"remove_creator_salt");
+        let proposal_hash = proposal_hash_of(&exec_hash, &salt);
+        assert_success!(propose(
+            &mut h,
+            &alice,
+            timelock_addr,
+            &exec_hash,
+            DELAY,
+            &salt
+        ));
 
-    fast_forward_block(&mut h, DELAY + 1);
+        fast_forward_block(&mut h, DELAY + 1);
 
-    // Alice submits; the script removes the baked-in creator (Bob, @0xA301). No privileged arg.
-    assert_success!(run_resolution_script(
-        &mut h, &alice, code, vec![], timelock_addr, &proposal_hash
-    ));
+        // Alice submits; the script removes the baked-in creator (Bob, @0xA301). No privileged arg.
+        assert_success!(run_resolution_script(
+            &mut h,
+            &alice,
+            code,
+            vec![],
+            timelock_addr,
+            &proposal_hash
+        ));
 
-    assert!(is_creator_view(&mut h, *alice.address(), timelock_addr));
-    assert!(!is_creator_view(&mut h, *bob.address(), timelock_addr));
+        assert!(is_creator_view(&mut h, *alice.address(), timelock_addr));
+        assert!(!is_creator_view(&mut h, *bob.address(), timelock_addr));
     });
 }
 
 #[test]
 fn test_self_governance_add_executors() {
     run_in_big_stack(|| {
-    let mut h = MoveHarness::new();
-    let alice = h.new_account_at(AccountAddress::from_hex_literal("0xA400").unwrap());
-    // The `add_executor` fixture bakes @0xA401 as the executor it adds.
-    let charlie = h.new_account_at(AccountAddress::from_hex_literal("0xA401").unwrap());
-    let timelock_addr = timelock_account_address(*alice.address(), 10);
-    assert_success!(create_timelock(&mut h, &alice, vec![], vec![], DELAY));
+        let mut h = MoveHarness::new();
+        let alice = h.new_account_at(AccountAddress::from_hex_literal("0xA400").unwrap());
+        // The `add_executor` fixture bakes @0xA401 as the executor it adds.
+        let charlie = h.new_account_at(AccountAddress::from_hex_literal("0xA401").unwrap());
+        let timelock_addr = timelock_account_address(*alice.address(), 10);
+        assert_success!(create_timelock(&mut h, &alice, vec![], vec![], DELAY));
 
-    // Initially: empty executor list → Alice (creator) is executor.
-    assert!(is_executor_view(&mut h, *alice.address(), timelock_addr));
-    assert!(!is_executor_view(&mut h, *charlie.address(), timelock_addr));
+        // Initially: empty executor list → Alice (creator) is executor.
+        assert!(is_executor_view(&mut h, *alice.address(), timelock_addr));
+        assert!(!is_executor_view(&mut h, *charlie.address(), timelock_addr));
 
-    let code = script("add_executor");
-    let exec_hash = execution_hash_of(&code);
-    let salt = salt32(b"add_executor_salt");
-    let proposal_hash = proposal_hash_of(&exec_hash, &salt);
-    assert_success!(propose(&mut h, &alice, timelock_addr, &exec_hash, DELAY, &salt));
+        let code = script("add_executor");
+        let exec_hash = execution_hash_of(&code);
+        let salt = salt32(b"add_executor_salt");
+        let proposal_hash = proposal_hash_of(&exec_hash, &salt);
+        assert_success!(propose(
+            &mut h,
+            &alice,
+            timelock_addr,
+            &exec_hash,
+            DELAY,
+            &salt
+        ));
 
-    fast_forward_block(&mut h, DELAY + 1);
+        fast_forward_block(&mut h, DELAY + 1);
 
-    // The added executor is baked into the script bytecode, so no privileged arg is passed.
-    assert_success!(run_resolution_script(
-        &mut h, &alice, code, vec![], timelock_addr, &proposal_hash
-    ));
+        // The added executor is baked into the script bytecode, so no privileged arg is passed.
+        assert_success!(run_resolution_script(
+            &mut h,
+            &alice,
+            code,
+            vec![],
+            timelock_addr,
+            &proposal_hash
+        ));
 
-    // Executor list now [charlie]; creator fallback no longer applies.
-    assert!(is_executor_view(&mut h, *charlie.address(), timelock_addr));
-    assert!(!is_executor_view(&mut h, *alice.address(), timelock_addr));
+        // Executor list now [charlie]; creator fallback no longer applies.
+        assert!(is_executor_view(&mut h, *charlie.address(), timelock_addr));
+        assert!(!is_executor_view(&mut h, *alice.address(), timelock_addr));
     });
 }
 
 #[test]
 fn test_self_governance_remove_executors() {
     run_in_big_stack(|| {
-    let mut h = MoveHarness::new();
-    let alice = h.new_account_at(AccountAddress::from_hex_literal("0xA500").unwrap());
-    // The `remove_executor` fixture bakes @0xA501 as the executor it removes.
-    let eve = h.new_account_at(AccountAddress::from_hex_literal("0xA501").unwrap());
-    let timelock_addr = timelock_account_address(*alice.address(), 10);
-    assert_success!(create_timelock(
-        &mut h,
-        &alice,
-        vec![],
-        vec![*eve.address()],
-        DELAY
-    ));
-    assert!(is_executor_view(&mut h, *eve.address(), timelock_addr));
-    assert!(!is_executor_view(&mut h, *alice.address(), timelock_addr));
+        let mut h = MoveHarness::new();
+        let alice = h.new_account_at(AccountAddress::from_hex_literal("0xA500").unwrap());
+        // The `remove_executor` fixture bakes @0xA501 as the executor it removes.
+        let eve = h.new_account_at(AccountAddress::from_hex_literal("0xA501").unwrap());
+        let timelock_addr = timelock_account_address(*alice.address(), 10);
+        assert_success!(create_timelock(
+            &mut h,
+            &alice,
+            vec![],
+            vec![*eve.address()],
+            DELAY
+        ));
+        assert!(is_executor_view(&mut h, *eve.address(), timelock_addr));
+        assert!(!is_executor_view(&mut h, *alice.address(), timelock_addr));
 
-    let code = script("remove_executor");
-    let exec_hash = execution_hash_of(&code);
-    let salt = salt32(b"remove_executor_salt");
-    let proposal_hash = proposal_hash_of(&exec_hash, &salt);
-    assert_success!(propose(&mut h, &alice, timelock_addr, &exec_hash, DELAY, &salt));
+        let code = script("remove_executor");
+        let exec_hash = execution_hash_of(&code);
+        let salt = salt32(b"remove_executor_salt");
+        let proposal_hash = proposal_hash_of(&exec_hash, &salt);
+        assert_success!(propose(
+            &mut h,
+            &alice,
+            timelock_addr,
+            &exec_hash,
+            DELAY,
+            &salt
+        ));
 
-    fast_forward_block(&mut h, DELAY + 1);
+        fast_forward_block(&mut h, DELAY + 1);
 
-    // Eve (still the executor at this point) submits the governance script; the removed executor
-    // is baked into the script bytecode, so no privileged arg is passed.
-    assert_success!(run_resolution_script(
-        &mut h, &eve, code, vec![], timelock_addr, &proposal_hash
-    ));
+        // Eve (still the executor at this point) submits the governance script; the removed executor
+        // is baked into the script bytecode, so no privileged arg is passed.
+        assert_success!(run_resolution_script(
+            &mut h,
+            &eve,
+            code,
+            vec![],
+            timelock_addr,
+            &proposal_hash
+        ));
 
-    assert!(is_executor_view(&mut h, *alice.address(), timelock_addr));
-    assert!(!is_executor_view(&mut h, *eve.address(), timelock_addr));
+        assert!(is_executor_view(&mut h, *alice.address(), timelock_addr));
+        assert!(!is_executor_view(&mut h, *eve.address(), timelock_addr));
     });
 }
 
@@ -723,127 +898,181 @@ fn test_self_governance_remove_executors() {
 #[test]
 fn test_dedicated_executor_runs_resolution() {
     run_in_big_stack(|| {
-    let mut h = MoveHarness::new();
-    let creator = h.new_account_at(AccountAddress::from_hex_literal("0xA100").unwrap());
-    let executor = h.new_account_at(AccountAddress::from_hex_literal("0xA101").unwrap());
-    let timelock_addr = timelock_account_address(*creator.address(), 10);
-    assert_success!(create_timelock(
-        &mut h,
-        &creator,
-        vec![],
-        vec![*executor.address()],
-        DELAY
-    ));
+        let mut h = MoveHarness::new();
+        let creator = h.new_account_at(AccountAddress::from_hex_literal("0xA100").unwrap());
+        let executor = h.new_account_at(AccountAddress::from_hex_literal("0xA101").unwrap());
+        let timelock_addr = timelock_account_address(*creator.address(), 10);
+        assert_success!(create_timelock(
+            &mut h,
+            &creator,
+            vec![],
+            vec![*executor.address()],
+            DELAY
+        ));
 
-    assert!(!is_executor_view(&mut h, *creator.address(), timelock_addr));
-    assert!(is_executor_view(&mut h, *executor.address(), timelock_addr));
+        assert!(!is_executor_view(&mut h, *creator.address(), timelock_addr));
+        assert!(is_executor_view(&mut h, *executor.address(), timelock_addr));
 
-    let code = script("noop");
-    let exec_hash = execution_hash_of(&code);
-    let salt = salt32(b"dedicated_executor");
-    let proposal_hash = proposal_hash_of(&exec_hash, &salt);
-    assert_success!(propose(&mut h, &creator, timelock_addr, &exec_hash, DELAY, &salt));
+        let code = script("noop");
+        let exec_hash = execution_hash_of(&code);
+        let salt = salt32(b"dedicated_executor");
+        let proposal_hash = proposal_hash_of(&exec_hash, &salt);
+        assert_success!(propose(
+            &mut h,
+            &creator,
+            timelock_addr,
+            &exec_hash,
+            DELAY,
+            &salt
+        ));
 
-    fast_forward_block(&mut h, DELAY + 1);
+        fast_forward_block(&mut h, DELAY + 1);
 
-    assert_success!(run_resolution_script(
-        &mut h, &executor, code.clone(), vec![], timelock_addr, &proposal_hash
-    ));
+        assert_success!(run_resolution_script(
+            &mut h,
+            &executor,
+            code.clone(),
+            vec![],
+            timelock_addr,
+            &proposal_hash
+        ));
 
-    // Executor replays the same proposal → already-executed abort. (Creator would abort with
-    // NOT_EXECUTOR first since executor list is non-empty, masking the executed-flag check.)
-    let status = run_resolution_script(&mut h, &executor, code, vec![], timelock_addr, &proposal_hash);
-    assert_aborts_with(&status, ABORT_ALREADY_EXECUTED);
+        // Executor replays the same proposal → already-executed abort. (Creator would abort with
+        // NOT_EXECUTOR first since executor list is non-empty, masking the executed-flag check.)
+        let status = run_resolution_script(
+            &mut h,
+            &executor,
+            code,
+            vec![],
+            timelock_addr,
+            &proposal_hash,
+        );
+        assert_aborts_with(&status, ABORT_ALREADY_EXECUTED);
     });
 }
 
 #[test]
 fn test_creator_cancels_when_executor_list_nonempty() {
     run_in_big_stack(|| {
-    let mut h = MoveHarness::new();
-    let creator = h.new_account_at(AccountAddress::from_hex_literal("0xE003").unwrap());
-    let executor = h.new_account_at(AccountAddress::from_hex_literal("0xE004").unwrap());
-    let timelock_addr = timelock_account_address(*creator.address(), 10);
-    assert_success!(create_timelock(
-        &mut h,
-        &creator,
-        vec![],
-        vec![*executor.address()],
-        DELAY
-    ));
+        let mut h = MoveHarness::new();
+        let creator = h.new_account_at(AccountAddress::from_hex_literal("0xE003").unwrap());
+        let executor = h.new_account_at(AccountAddress::from_hex_literal("0xE004").unwrap());
+        let timelock_addr = timelock_account_address(*creator.address(), 10);
+        assert_success!(create_timelock(
+            &mut h,
+            &creator,
+            vec![],
+            vec![*executor.address()],
+            DELAY
+        ));
 
-    let code = script("noop");
-    let exec_hash = execution_hash_of(&code);
-    let salt = salt32(b"creator_cancels");
-    let proposal_hash = proposal_hash_of(&exec_hash, &salt);
-    assert_success!(propose(&mut h, &creator, timelock_addr, &exec_hash, DELAY, &salt));
+        let code = script("noop");
+        let exec_hash = execution_hash_of(&code);
+        let salt = salt32(b"creator_cancels");
+        let proposal_hash = proposal_hash_of(&exec_hash, &salt);
+        assert_success!(propose(
+            &mut h,
+            &creator,
+            timelock_addr,
+            &exec_hash,
+            DELAY,
+            &salt
+        ));
 
-    assert_success!(cancel(&mut h, &creator, timelock_addr, &proposal_hash));
+        assert_success!(cancel(&mut h, &creator, timelock_addr, &proposal_hash));
 
-    fast_forward_block(&mut h, DELAY + 1);
-    assert!(!can_be_executed(&mut h, timelock_addr, &proposal_hash));
+        fast_forward_block(&mut h, DELAY + 1);
+        assert!(!can_be_executed(&mut h, timelock_addr, &proposal_hash));
 
-    let status = run_resolution_script(&mut h, &executor, code, vec![], timelock_addr, &proposal_hash);
-    assert_aborts_with(&status, ABORT_ALREADY_EXECUTED);
+        let status = run_resolution_script(
+            &mut h,
+            &executor,
+            code,
+            vec![],
+            timelock_addr,
+            &proposal_hash,
+        );
+        assert_aborts_with(&status, ABORT_ALREADY_EXECUTED);
     });
 }
 
 #[test]
 fn test_canceler_cancels_transaction() {
     run_in_big_stack(|| {
-    let mut h = MoveHarness::new();
-    let creator = h.new_account_at(AccountAddress::from_hex_literal("0xA600").unwrap());
-    let canceler = h.new_account_at(AccountAddress::from_hex_literal("0xA601").unwrap());
-    let timelock_addr = timelock_account_address(*creator.address(), 10);
-    // A dedicated canceler (emergency-response role) can cancel even though it is not a creator.
-    assert_success!(create_timelock_with_cancelers(
-        &mut h,
-        &creator,
-        vec![],
-        vec![],
-        vec![*canceler.address()],
-        DELAY
-    ));
+        let mut h = MoveHarness::new();
+        let creator = h.new_account_at(AccountAddress::from_hex_literal("0xA600").unwrap());
+        let canceler = h.new_account_at(AccountAddress::from_hex_literal("0xA601").unwrap());
+        let timelock_addr = timelock_account_address(*creator.address(), 10);
+        // A dedicated canceler (emergency-response role) can cancel even though it is not a creator.
+        assert_success!(create_timelock_with_cancelers(
+            &mut h,
+            &creator,
+            vec![],
+            vec![],
+            vec![*canceler.address()],
+            DELAY
+        ));
 
-    let code = script("noop");
-    let exec_hash = execution_hash_of(&code);
-    let salt = salt32(b"canceler_cancels");
-    let proposal_hash = proposal_hash_of(&exec_hash, &salt);
-    assert_success!(propose(&mut h, &creator, timelock_addr, &exec_hash, DELAY, &salt));
+        let code = script("noop");
+        let exec_hash = execution_hash_of(&code);
+        let salt = salt32(b"canceler_cancels");
+        let proposal_hash = proposal_hash_of(&exec_hash, &salt);
+        assert_success!(propose(
+            &mut h,
+            &creator,
+            timelock_addr,
+            &exec_hash,
+            DELAY,
+            &salt
+        ));
 
-    assert_success!(cancel(&mut h, &canceler, timelock_addr, &proposal_hash));
-    assert!(!can_be_executed(&mut h, timelock_addr, &proposal_hash));
+        assert_success!(cancel(&mut h, &canceler, timelock_addr, &proposal_hash));
+        assert!(!can_be_executed(&mut h, timelock_addr, &proposal_hash));
 
-    fast_forward_block(&mut h, DELAY + 1);
-    let status = run_resolution_script(&mut h, &creator, code, vec![], timelock_addr, &proposal_hash);
-    assert_aborts_with(&status, ABORT_ALREADY_EXECUTED);
+        fast_forward_block(&mut h, DELAY + 1);
+        let status = run_resolution_script(
+            &mut h,
+            &creator,
+            code,
+            vec![],
+            timelock_addr,
+            &proposal_hash,
+        );
+        assert_aborts_with(&status, ABORT_ALREADY_EXECUTED);
     });
 }
 
 #[test]
 fn test_executor_cannot_cancel_transaction() {
     run_in_big_stack(|| {
-    let mut h = MoveHarness::new();
-    let creator = h.new_account_at(AccountAddress::from_hex_literal("0xA610").unwrap());
-    let executor = h.new_account_at(AccountAddress::from_hex_literal("0xA611").unwrap());
-    let timelock_addr = timelock_account_address(*creator.address(), 10);
-    assert_success!(create_timelock(
-        &mut h,
-        &creator,
-        vec![],
-        vec![*executor.address()],
-        DELAY
-    ));
+        let mut h = MoveHarness::new();
+        let creator = h.new_account_at(AccountAddress::from_hex_literal("0xA610").unwrap());
+        let executor = h.new_account_at(AccountAddress::from_hex_literal("0xA611").unwrap());
+        let timelock_addr = timelock_account_address(*creator.address(), 10);
+        assert_success!(create_timelock(
+            &mut h,
+            &creator,
+            vec![],
+            vec![*executor.address()],
+            DELAY
+        ));
 
-    let code = script("noop");
-    let exec_hash = execution_hash_of(&code);
-    let salt = salt32(b"executor_cannot_cancel");
-    let proposal_hash = proposal_hash_of(&exec_hash, &salt);
-    assert_success!(propose(&mut h, &creator, timelock_addr, &exec_hash, DELAY, &salt));
+        let code = script("noop");
+        let exec_hash = execution_hash_of(&code);
+        let salt = salt32(b"executor_cannot_cancel");
+        let proposal_hash = proposal_hash_of(&exec_hash, &salt);
+        assert_success!(propose(
+            &mut h,
+            &creator,
+            timelock_addr,
+            &exec_hash,
+            DELAY,
+            &salt
+        ));
 
-    // Executors can execute but must NOT be able to cancel.
-    let status = cancel(&mut h, &executor, timelock_addr, &proposal_hash);
-    assert_aborts_with(&status, ABORT_NOT_CREATOR_OR_CANCELER);
+        // Executors can execute but must NOT be able to cancel.
+        let status = cancel(&mut h, &executor, timelock_addr, &proposal_hash);
+        assert_aborts_with(&status, ABORT_NOT_CREATOR_OR_CANCELER);
     });
 }
 
@@ -852,56 +1081,94 @@ fn test_executor_cannot_cancel_transaction() {
 #[test]
 fn test_non_sequential_salt_execution() {
     run_in_big_stack(|| {
-    let mut h = MoveHarness::new();
-    let creator = h.new_account_at(AccountAddress::from_hex_literal("0xE002").unwrap());
-    let timelock_addr = timelock_account_address(*creator.address(), 10);
-    assert_success!(create_timelock(&mut h, &creator, vec![], vec![], DELAY));
+        let mut h = MoveHarness::new();
+        let creator = h.new_account_at(AccountAddress::from_hex_literal("0xE002").unwrap());
+        let timelock_addr = timelock_account_address(*creator.address(), 10);
+        assert_success!(create_timelock(&mut h, &creator, vec![], vec![], DELAY));
 
-    let code = script("noop");
-    let exec_hash = execution_hash_of(&code);
-    let salt_a = salt32(b"alpha");
-    let salt_b = salt32(b"beta");
-    let hash_a = proposal_hash_of(&exec_hash, &salt_a);
-    let hash_b = proposal_hash_of(&exec_hash, &salt_b);
+        let code = script("noop");
+        let exec_hash = execution_hash_of(&code);
+        let salt_a = salt32(b"alpha");
+        let salt_b = salt32(b"beta");
+        let hash_a = proposal_hash_of(&exec_hash, &salt_a);
+        let hash_b = proposal_hash_of(&exec_hash, &salt_b);
 
-    assert_success!(propose(&mut h, &creator, timelock_addr, &exec_hash, DELAY, &salt_a));
-    assert_success!(propose(&mut h, &creator, timelock_addr, &exec_hash, DELAY, &salt_b));
+        assert_success!(propose(
+            &mut h,
+            &creator,
+            timelock_addr,
+            &exec_hash,
+            DELAY,
+            &salt_a
+        ));
+        assert_success!(propose(
+            &mut h,
+            &creator,
+            timelock_addr,
+            &exec_hash,
+            DELAY,
+            &salt_b
+        ));
 
-    fast_forward_block(&mut h, DELAY + 1);
+        fast_forward_block(&mut h, DELAY + 1);
 
-    // Execute B before A.
-    assert_success!(run_resolution_script(
-        &mut h, &creator, code.clone(), vec![], timelock_addr, &hash_b
-    ));
-    assert_success!(run_resolution_script(
-        &mut h, &creator, code, vec![], timelock_addr, &hash_a
-    ));
+        // Execute B before A.
+        assert_success!(run_resolution_script(
+            &mut h,
+            &creator,
+            code.clone(),
+            vec![],
+            timelock_addr,
+            &hash_b
+        ));
+        assert_success!(run_resolution_script(
+            &mut h,
+            &creator,
+            code,
+            vec![],
+            timelock_addr,
+            &hash_a
+        ));
 
-    assert!(!can_be_executed(&mut h, timelock_addr, &hash_a));
-    assert!(!can_be_executed(&mut h, timelock_addr, &hash_b));
+        assert!(!can_be_executed(&mut h, timelock_addr, &hash_a));
+        assert!(!can_be_executed(&mut h, timelock_addr, &hash_b));
     });
 }
 
 #[test]
 fn test_duplicate_transaction_rejected() {
     run_in_big_stack(|| {
-    let mut h = MoveHarness::new();
-    let creator = h.new_account_at(AccountAddress::from_hex_literal("0xE005").unwrap());
-    let timelock_addr = timelock_account_address(*creator.address(), 10);
-    assert_success!(create_timelock(&mut h, &creator, vec![], vec![], DELAY));
+        let mut h = MoveHarness::new();
+        let creator = h.new_account_at(AccountAddress::from_hex_literal("0xE005").unwrap());
+        let timelock_addr = timelock_account_address(*creator.address(), 10);
+        assert_success!(create_timelock(&mut h, &creator, vec![], vec![], DELAY));
 
-    let code = script("noop");
-    let exec_hash = execution_hash_of(&code);
-    let salt = salt32(b"dup");
-    assert_success!(propose(&mut h, &creator, timelock_addr, &exec_hash, DELAY, &salt));
+        let code = script("noop");
+        let exec_hash = execution_hash_of(&code);
+        let salt = salt32(b"dup");
+        assert_success!(propose(
+            &mut h,
+            &creator,
+            timelock_addr,
+            &exec_hash,
+            DELAY,
+            &salt
+        ));
 
-    // Same execution_hash + salt → must fail (EDUPLICATE_TRANSACTION).
-    let status = propose(&mut h, &creator, timelock_addr, &exec_hash, DELAY, &salt);
-    assert_aborts_with(&status, ABORT_DUPLICATE_TRANSACTION);
+        // Same execution_hash + salt → must fail (EDUPLICATE_TRANSACTION).
+        let status = propose(&mut h, &creator, timelock_addr, &exec_hash, DELAY, &salt);
+        assert_aborts_with(&status, ABORT_DUPLICATE_TRANSACTION);
 
-    // Different salt → must succeed.
-    let salt2 = salt32(b"dup_2");
-    assert_success!(propose(&mut h, &creator, timelock_addr, &exec_hash, DELAY, &salt2));
+        // Different salt → must succeed.
+        let salt2 = salt32(b"dup_2");
+        assert_success!(propose(
+            &mut h,
+            &creator,
+            timelock_addr,
+            &exec_hash,
+            DELAY,
+            &salt2
+        ));
     });
 }
 
@@ -910,118 +1177,131 @@ fn test_duplicate_transaction_rejected() {
 #[test]
 fn test_non_creator_cannot_propose() {
     run_in_big_stack(|| {
-    let mut h = MoveHarness::new();
-    let creator = h.new_account_at(AccountAddress::from_hex_literal("0xE006").unwrap());
-    let outsider = h.new_account_at(AccountAddress::from_hex_literal("0xE007").unwrap());
-    let timelock_addr = timelock_account_address(*creator.address(), 10);
-    assert_success!(create_timelock(&mut h, &creator, vec![], vec![], DELAY));
+        let mut h = MoveHarness::new();
+        let creator = h.new_account_at(AccountAddress::from_hex_literal("0xE006").unwrap());
+        let outsider = h.new_account_at(AccountAddress::from_hex_literal("0xE007").unwrap());
+        let timelock_addr = timelock_account_address(*creator.address(), 10);
+        assert_success!(create_timelock(&mut h, &creator, vec![], vec![], DELAY));
 
-    let code = script("noop");
-    let exec_hash = execution_hash_of(&code);
-    let salt = salt32(b"non_creator");
-    let proposal_hash = proposal_hash_of(&exec_hash, &salt);
-    let status = propose(&mut h, &outsider, timelock_addr, &exec_hash, DELAY, &salt);
-    assert_aborts_with(&status, ABORT_NOT_CREATOR);
+        let code = script("noop");
+        let exec_hash = execution_hash_of(&code);
+        let salt = salt32(b"non_creator");
+        let proposal_hash = proposal_hash_of(&exec_hash, &salt);
+        let status = propose(&mut h, &outsider, timelock_addr, &exec_hash, DELAY, &salt);
+        assert_aborts_with(&status, ABORT_NOT_CREATOR);
 
-    // Nothing was stored, so the table key is absent.
-    assert!(!can_be_executed(&mut h, timelock_addr, &proposal_hash));
+        // Nothing was stored, so the table key is absent.
+        assert!(!can_be_executed(&mut h, timelock_addr, &proposal_hash));
     });
 }
 
 #[test]
 fn test_create_timelock_below_min_delay_fails() {
     run_in_big_stack(|| {
-    let mut h = MoveHarness::new();
-    let creator = h.new_account_at(AccountAddress::from_hex_literal("0xA700").unwrap());
+        let mut h = MoveHarness::new();
+        let creator = h.new_account_at(AccountAddress::from_hex_literal("0xA700").unwrap());
 
-    // One below the minimum → must fail (must be >= MIN_NUM_SECONDS_EXECUTE).
-    assert_aborts_with(
-        &create_timelock(&mut h, &creator, vec![], vec![], MIN_DELAY_SECS - 1),
-        ABORT_NUMBER_SECONDS_TOO_SMALL,
-    );
+        // One below the minimum → must fail (must be >= MIN_NUM_SECONDS_EXECUTE).
+        assert_aborts_with(
+            &create_timelock(&mut h, &creator, vec![], vec![], MIN_DELAY_SECS - 1),
+            ABORT_NUMBER_SECONDS_TOO_SMALL,
+        );
 
-    // Exactly the minimum → must succeed.
-    let creator2 = h.new_account_at(AccountAddress::from_hex_literal("0xA702").unwrap());
-    assert_success!(create_timelock(&mut h, &creator2, vec![], vec![], MIN_DELAY_SECS));
+        // Exactly the minimum → must succeed.
+        let creator2 = h.new_account_at(AccountAddress::from_hex_literal("0xA702").unwrap());
+        assert_success!(create_timelock(
+            &mut h,
+            &creator2,
+            vec![],
+            vec![],
+            MIN_DELAY_SECS
+        ));
     });
 }
 
 #[test]
 fn test_propose_below_min_delay_fails() {
     run_in_big_stack(|| {
-    let mut h = MoveHarness::new();
-    let creator = h.new_account_at(AccountAddress::from_hex_literal("0xA800").unwrap());
-    let timelock_addr = timelock_account_address(*creator.address(), 10);
-    assert_success!(create_timelock(&mut h, &creator, vec![], vec![], DELAY));
+        let mut h = MoveHarness::new();
+        let creator = h.new_account_at(AccountAddress::from_hex_literal("0xA800").unwrap());
+        let timelock_addr = timelock_account_address(*creator.address(), 10);
+        assert_success!(create_timelock(&mut h, &creator, vec![], vec![], DELAY));
 
-    let code = script("noop");
-    let exec_hash = execution_hash_of(&code);
+        let code = script("noop");
+        let exec_hash = execution_hash_of(&code);
 
-    // num_seconds_execute < min_num_seconds_execute → fails.
-    let status = propose(
-        &mut h,
-        &creator,
-        timelock_addr,
-        &exec_hash,
-        DELAY - 1,
-        &salt32(b"below_min"),
-    );
-    assert_aborts_with(&status, ABORT_NUMBER_SECONDS_TOO_SMALL);
+        // num_seconds_execute < min_num_seconds_execute → fails.
+        let status = propose(
+            &mut h,
+            &creator,
+            timelock_addr,
+            &exec_hash,
+            DELAY - 1,
+            &salt32(b"below_min"),
+        );
+        assert_aborts_with(&status, ABORT_NUMBER_SECONDS_TOO_SMALL);
 
-    // Exactly min_num_seconds_execute → succeeds.
-    assert_success!(propose(
-        &mut h,
-        &creator,
-        timelock_addr,
-        &exec_hash,
-        DELAY,
-        &salt32(b"exact_min"),
-    ));
+        // Exactly min_num_seconds_execute → succeeds.
+        assert_success!(propose(
+            &mut h,
+            &creator,
+            timelock_addr,
+            &exec_hash,
+            DELAY,
+            &salt32(b"exact_min"),
+        ));
     });
 }
 
 #[test]
 fn test_create_transaction_invalid_lengths_fail() {
     run_in_big_stack(|| {
-    let mut h = MoveHarness::new();
-    let creator = h.new_account_at(AccountAddress::from_hex_literal("0xA900").unwrap());
-    let timelock_addr = timelock_account_address(*creator.address(), 10);
-    assert_success!(create_timelock(&mut h, &creator, vec![], vec![], DELAY));
+        let mut h = MoveHarness::new();
+        let creator = h.new_account_at(AccountAddress::from_hex_literal("0xA900").unwrap());
+        let timelock_addr = timelock_account_address(*creator.address(), 10);
+        assert_success!(create_timelock(&mut h, &creator, vec![], vec![], DELAY));
 
-    let code = script("noop");
-    let exec_hash = execution_hash_of(&code);
-    let valid_salt = salt32(b"valid");
+        let code = script("noop");
+        let exec_hash = execution_hash_of(&code);
+        let valid_salt = salt32(b"valid");
 
-    // Salt too short.
-    let status = propose(
-        &mut h,
-        &creator,
-        timelock_addr,
-        &exec_hash,
-        DELAY,
-        b"short",
-    );
-    assert_aborts_with(&status, ABORT_INVALID_BYTES_LENGTH);
+        // Salt too short.
+        let status = propose(&mut h, &creator, timelock_addr, &exec_hash, DELAY, b"short");
+        assert_aborts_with(&status, ABORT_INVALID_BYTES_LENGTH);
 
-    // Salt too long.
-    let long_salt = vec![0u8; 33];
-    let status = propose(&mut h, &creator, timelock_addr, &exec_hash, DELAY, &long_salt);
-    assert_aborts_with(&status, ABORT_INVALID_BYTES_LENGTH);
+        // Salt too long.
+        let long_salt = vec![0u8; 33];
+        let status = propose(
+            &mut h,
+            &creator,
+            timelock_addr,
+            &exec_hash,
+            DELAY,
+            &long_salt,
+        );
+        assert_aborts_with(&status, ABORT_INVALID_BYTES_LENGTH);
 
-    // execution_hash wrong length.
-    let bad_hash = vec![0u8; 31];
-    let status = propose(&mut h, &creator, timelock_addr, &bad_hash, DELAY, &valid_salt);
-    assert_aborts_with(&status, ABORT_INVALID_BYTES_LENGTH);
+        // execution_hash wrong length.
+        let bad_hash = vec![0u8; 31];
+        let status = propose(
+            &mut h,
+            &creator,
+            timelock_addr,
+            &bad_hash,
+            DELAY,
+            &valid_salt,
+        );
+        assert_aborts_with(&status, ABORT_INVALID_BYTES_LENGTH);
 
-    // All correct → succeeds.
-    assert_success!(propose(
-        &mut h,
-        &creator,
-        timelock_addr,
-        &exec_hash,
-        DELAY,
-        &valid_salt,
-    ));
+        // All correct → succeeds.
+        assert_success!(propose(
+            &mut h,
+            &creator,
+            timelock_addr,
+            &exec_hash,
+            DELAY,
+            &valid_salt,
+        ));
     });
 }
 
@@ -1030,76 +1310,81 @@ fn test_create_transaction_invalid_lengths_fail() {
 #[test]
 fn test_multisig_proposes_timelock_transaction() {
     run_in_big_stack(|| {
-    // alice runs a 1-of-1 multisig that proposes timelock::create_transaction; the multisig
-    // is set as an additional creator on the timelock. Once the multisig executes, the
-    // timelock has the proposal and a noop resolution script can run.
-    let mut h = MoveHarness::new();
-    let alice = h.new_account_at(AccountAddress::from_hex_literal("0xA11CE").unwrap());
+        // alice runs a 1-of-1 multisig that proposes timelock::create_transaction; the multisig
+        // is set as an additional creator on the timelock. Once the multisig executes, the
+        // timelock has the proposal and a noop resolution script can run.
+        let mut h = MoveHarness::new();
+        let alice = h.new_account_at(AccountAddress::from_hex_literal("0xA11CE").unwrap());
 
-    // 1-of-1 multisig (alice's seq before this tx is 10).
-    let multisig_addr = multisig_account_address(*alice.address(), 10);
-    assert_success!(h.run_entry_function(
-        &alice,
-        str::parse("0x1::multisig_account::create").unwrap(),
-        vec![],
-        vec![
-            bcs::to_bytes(&1u64).unwrap(),
-            bcs::to_bytes::<Vec<Vec<u8>>>(&vec![]).unwrap(),
-            bcs::to_bytes::<Vec<Vec<u8>>>(&vec![]).unwrap(),
-        ],
-    ));
+        // 1-of-1 multisig (alice's seq before this tx is 10).
+        let multisig_addr = multisig_account_address(*alice.address(), 10);
+        assert_success!(h.run_entry_function(
+            &alice,
+            str::parse("0x1::multisig_account::create").unwrap(),
+            vec![],
+            vec![
+                bcs::to_bytes(&1u64).unwrap(),
+                bcs::to_bytes::<Vec<Vec<u8>>>(&vec![]).unwrap(),
+                bcs::to_bytes::<Vec<Vec<u8>>>(&vec![]).unwrap(),
+            ],
+        ));
 
-    // Timelock with the multisig as an additional creator (alice's seq = 11 now).
-    let timelock_addr = timelock_account_address(*alice.address(), 11);
-    assert_success!(create_timelock(
-        &mut h,
-        &alice,
-        vec![multisig_addr],
-        vec![],
-        DELAY
-    ));
+        // Timelock with the multisig as an additional creator (alice's seq = 11 now).
+        let timelock_addr = timelock_account_address(*alice.address(), 11);
+        assert_success!(create_timelock(
+            &mut h,
+            &alice,
+            vec![multisig_addr],
+            vec![],
+            DELAY
+        ));
 
-    let code = script("noop");
-    let exec_hash = execution_hash_of(&code);
-    let salt = salt32(b"multisig_proposes");
-    let proposal_hash = proposal_hash_of(&exec_hash, &salt);
+        let code = script("noop");
+        let exec_hash = execution_hash_of(&code);
+        let salt = salt32(b"multisig_proposes");
+        let proposal_hash = proposal_hash_of(&exec_hash, &salt);
 
-    // The multisig's inner entry function: timelock::create_transaction(...).
-    let inner_fn = EntryFunction::new(
-        ModuleId::new(CORE_CODE_ADDRESS, ident_str!("timelock").to_owned()),
-        ident_str!("create_transaction").to_owned(),
-        vec![],
-        vec![
-            bcs::to_bytes(&timelock_addr).unwrap(),
-            bcs::to_bytes(&exec_hash).unwrap(),
-            bcs::to_bytes(&DELAY).unwrap(),
-            bcs::to_bytes(&salt).unwrap(),
-            // Optional off-chain script_path pointer; empty here.
-            bcs::to_bytes(&Vec::<u8>::new()).unwrap(),
-        ],
-    );
-    let multisig_payload = MultisigTransactionPayload::EntryFunction(inner_fn);
+        // The multisig's inner entry function: timelock::create_transaction(...).
+        let inner_fn = EntryFunction::new(
+            ModuleId::new(CORE_CODE_ADDRESS, ident_str!("timelock").to_owned()),
+            ident_str!("create_transaction").to_owned(),
+            vec![],
+            vec![
+                bcs::to_bytes(&timelock_addr).unwrap(),
+                bcs::to_bytes(&exec_hash).unwrap(),
+                bcs::to_bytes(&DELAY).unwrap(),
+                bcs::to_bytes(&salt).unwrap(),
+                // Optional off-chain script_path pointer; empty here.
+                bcs::to_bytes(&Vec::<u8>::new()).unwrap(),
+            ],
+        );
+        let multisig_payload = MultisigTransactionPayload::EntryFunction(inner_fn);
 
-    // Alice proposes the multisig transaction.
-    assert_success!(h.run_entry_function(
-        &alice,
-        str::parse("0x1::multisig_account::create_transaction").unwrap(),
-        vec![],
-        vec![
-            bcs::to_bytes(&multisig_addr).unwrap(),
-            bcs::to_bytes(&bcs::to_bytes(&multisig_payload).unwrap()).unwrap(),
-        ],
-    ));
+        // Alice proposes the multisig transaction.
+        assert_success!(h.run_entry_function(
+            &alice,
+            str::parse("0x1::multisig_account::create_transaction").unwrap(),
+            vec![],
+            vec![
+                bcs::to_bytes(&multisig_addr).unwrap(),
+                bcs::to_bytes(&bcs::to_bytes(&multisig_payload).unwrap()).unwrap(),
+            ],
+        ));
 
-    // Alice executes the multisig (auto-approved since 1-of-1).
-    assert_success!(h.run_multisig(&alice, multisig_addr, Some(multisig_payload)));
+        // Alice executes the multisig (auto-approved since 1-of-1).
+        assert_success!(h.run_multisig(&alice, multisig_addr, Some(multisig_payload)));
 
-    // Now the timelock has the proposal. Run the resolution script.
-    fast_forward_block(&mut h, DELAY + 1);
-    assert!(can_be_executed(&mut h, timelock_addr, &proposal_hash));
-    assert_success!(run_resolution_script(
-        &mut h, &alice, code, vec![], timelock_addr, &proposal_hash
-    ));
+        // Now the timelock has the proposal. Run the resolution script.
+        fast_forward_block(&mut h, DELAY + 1);
+        assert!(can_be_executed(&mut h, timelock_addr, &proposal_hash));
+        assert_success!(run_resolution_script(
+            &mut h,
+            &alice,
+            code,
+            vec![],
+            timelock_addr,
+            &proposal_hash
+        ));
     });
 }
 
@@ -1108,62 +1393,74 @@ fn test_multisig_proposes_timelock_transaction() {
 #[test]
 fn test_timelock_proposes_multisig_transaction() {
     run_in_big_stack(|| {
-    // Reverse direction: alice runs a timelock and a 1-of-N multisig where the timelock is an
-    // additional owner. Alice proposes a script (multisig_propose) that, on resolve, calls
-    // multisig_account::create_transaction with the timelock signer — making the timelock the
-    // proposer of a multisig transaction.
-    let mut h = MoveHarness::new();
-    let alice = h.new_account_at(AccountAddress::from_hex_literal("0xB0B").unwrap());
+        // Reverse direction: alice runs a timelock and a 1-of-N multisig where the timelock is an
+        // additional owner. Alice proposes a script (multisig_propose) that, on resolve, calls
+        // multisig_account::create_transaction with the timelock signer — making the timelock the
+        // proposer of a multisig transaction.
+        let mut h = MoveHarness::new();
+        let alice = h.new_account_at(AccountAddress::from_hex_literal("0xB0B").unwrap());
 
-    // Timelock first (alice's seq = 10).
-    let timelock_addr = timelock_account_address(*alice.address(), 10);
-    assert_success!(create_timelock(&mut h, &alice, vec![], vec![], DELAY));
+        // Timelock first (alice's seq = 10).
+        let timelock_addr = timelock_account_address(*alice.address(), 10);
+        assert_success!(create_timelock(&mut h, &alice, vec![], vec![], DELAY));
 
-    // Multisig with timelock as additional owner (alice's seq = 11).
-    let multisig_addr = multisig_account_address(*alice.address(), 11);
-    assert_success!(h.run_entry_function(
-        &alice,
-        str::parse("0x1::multisig_account::create_with_owners").unwrap(),
-        vec![],
-        vec![
-            bcs::to_bytes::<Vec<AccountAddress>>(&vec![timelock_addr]).unwrap(),
-            bcs::to_bytes(&1u64).unwrap(),
-            bcs::to_bytes::<Vec<Vec<u8>>>(&vec![]).unwrap(),
-            bcs::to_bytes::<Vec<Vec<u8>>>(&vec![]).unwrap(),
-        ],
-    ));
+        // Multisig with timelock as additional owner (alice's seq = 11).
+        let multisig_addr = multisig_account_address(*alice.address(), 11);
+        assert_success!(h.run_entry_function(
+            &alice,
+            str::parse("0x1::multisig_account::create_with_owners").unwrap(),
+            vec![],
+            vec![
+                bcs::to_bytes::<Vec<AccountAddress>>(&vec![timelock_addr]).unwrap(),
+                bcs::to_bytes(&1u64).unwrap(),
+                bcs::to_bytes::<Vec<Vec<u8>>>(&vec![]).unwrap(),
+                bcs::to_bytes::<Vec<Vec<u8>>>(&vec![]).unwrap(),
+            ],
+        ));
 
-    // Inner multisig payload: an entry-function noop (account::create_account_if_does_not_exist).
-    let multisig_inner_fn = EntryFunction::new(
-        ModuleId::new(CORE_CODE_ADDRESS, ident_str!("account").to_owned()),
-        ident_str!("create_account_if_does_not_exist").to_owned(),
-        vec![],
-        vec![bcs::to_bytes(&AccountAddress::new([0xAB; 32])).unwrap()],
-    );
-    let multisig_payload = MultisigTransactionPayload::EntryFunction(multisig_inner_fn);
-    let multisig_payload_bytes = bcs::to_bytes(&multisig_payload).unwrap();
+        // Inner multisig payload: an entry-function noop (account::create_account_if_does_not_exist).
+        let multisig_inner_fn = EntryFunction::new(
+            ModuleId::new(CORE_CODE_ADDRESS, ident_str!("account").to_owned()),
+            ident_str!("create_account_if_does_not_exist").to_owned(),
+            vec![],
+            vec![bcs::to_bytes(&AccountAddress::new([0xAB; 32])).unwrap()],
+        );
+        let multisig_payload = MultisigTransactionPayload::EntryFunction(multisig_inner_fn);
+        let multisig_payload_bytes = bcs::to_bytes(&multisig_payload).unwrap();
 
-    let code = script("multisig_propose");
-    let exec_hash = execution_hash_of(&code);
-    let salt = salt32(b"timelock_to_multisig");
-    let proposal_hash = proposal_hash_of(&exec_hash, &salt);
-    assert_success!(propose(&mut h, &alice, timelock_addr, &exec_hash, DELAY, &salt));
+        let code = script("multisig_propose");
+        let exec_hash = execution_hash_of(&code);
+        let salt = salt32(b"timelock_to_multisig");
+        let proposal_hash = proposal_hash_of(&exec_hash, &salt);
+        assert_success!(propose(
+            &mut h,
+            &alice,
+            timelock_addr,
+            &exec_hash,
+            DELAY,
+            &salt
+        ));
 
-    fast_forward_block(&mut h, DELAY + 1);
+        fast_forward_block(&mut h, DELAY + 1);
 
-    // Run the resolution script: the timelock signer (returned by resolve) calls
-    // multisig::create_transaction, making the timelock the multisig proposer.
-    let extra = vec![
-        TransactionArgument::Address(multisig_addr),
-        TransactionArgument::U8Vector(multisig_payload_bytes),
-    ];
-    assert_success!(run_resolution_script(
-        &mut h, &alice, code, extra, timelock_addr, &proposal_hash
-    ));
+        // Run the resolution script: the timelock signer (returned by resolve) calls
+        // multisig::create_transaction, making the timelock the multisig proposer.
+        let extra = vec![
+            TransactionArgument::Address(multisig_addr),
+            TransactionArgument::U8Vector(multisig_payload_bytes),
+        ];
+        assert_success!(run_resolution_script(
+            &mut h,
+            &alice,
+            code,
+            extra,
+            timelock_addr,
+            &proposal_hash
+        ));
 
-    // Alice (also a multisig owner) executes the multisig transaction. With 1-of-N approval and
-    // the proposer (timelock) auto-approving, the proposal is at quorum.
-    assert_success!(h.run_multisig(&alice, multisig_addr, Some(multisig_payload)));
+        // Alice (also a multisig owner) executes the multisig transaction. With 1-of-N approval and
+        // the proposer (timelock) auto-approving, the proposal is at quorum.
+        assert_success!(h.run_multisig(&alice, multisig_addr, Some(multisig_payload)));
     });
 }
 
@@ -1172,182 +1469,269 @@ fn test_timelock_proposes_multisig_transaction() {
 #[test]
 fn test_resolve_uses_per_transaction_delay_not_min() {
     run_in_big_stack(|| {
-    // The resolve gate must use the transaction's own `num_seconds_execute`, not the account's
-    // `min_num_seconds_execute`. Propose with a delay LARGER than the account min and verify the
-    // proposal is not executable until the larger per-transaction delay elapses.
-    let mut h = MoveHarness::new();
-    let creator = h.new_account_at(AccountAddress::from_hex_literal("0xD100").unwrap());
-    let timelock_addr = timelock_account_address(*creator.address(), 10);
-    assert_success!(create_timelock(&mut h, &creator, vec![], vec![], DELAY));
+        // The resolve gate must use the transaction's own `num_seconds_execute`, not the account's
+        // `min_num_seconds_execute`. Propose with a delay LARGER than the account min and verify the
+        // proposal is not executable until the larger per-transaction delay elapses.
+        let mut h = MoveHarness::new();
+        let creator = h.new_account_at(AccountAddress::from_hex_literal("0xD100").unwrap());
+        let timelock_addr = timelock_account_address(*creator.address(), 10);
+        assert_success!(create_timelock(&mut h, &creator, vec![], vec![], DELAY));
 
-    let tx_delay = DELAY * 2; // >= account min, so accepted by create_transaction.
-    let code = script("noop");
-    let exec_hash = execution_hash_of(&code);
-    let salt = salt32(b"longer_delay_salt");
-    let proposal_hash = proposal_hash_of(&exec_hash, &salt);
-    assert_success!(propose(&mut h, &creator, timelock_addr, &exec_hash, tx_delay, &salt));
+        let tx_delay = DELAY * 2; // >= account min, so accepted by create_transaction.
+        let code = script("noop");
+        let exec_hash = execution_hash_of(&code);
+        let salt = salt32(b"longer_delay_salt");
+        let proposal_hash = proposal_hash_of(&exec_hash, &salt);
+        assert_success!(propose(
+            &mut h,
+            &creator,
+            timelock_addr,
+            &exec_hash,
+            tx_delay,
+            &salt
+        ));
 
-    // Past the account min (DELAY) but before the per-transaction delay (2*DELAY): not executable.
-    fast_forward_block(&mut h, DELAY + 1);
-    assert!(!can_be_executed(&mut h, timelock_addr, &proposal_hash));
-    let status =
-        run_resolution_script(&mut h, &creator, code.clone(), vec![], timelock_addr, &proposal_hash);
-    assert_aborts_with(&status, ABORT_TIMELOCK_NOT_EXPIRED);
+        // Past the account min (DELAY) but before the per-transaction delay (2*DELAY): not executable.
+        fast_forward_block(&mut h, DELAY + 1);
+        assert!(!can_be_executed(&mut h, timelock_addr, &proposal_hash));
+        let status = run_resolution_script(
+            &mut h,
+            &creator,
+            code.clone(),
+            vec![],
+            timelock_addr,
+            &proposal_hash,
+        );
+        assert_aborts_with(&status, ABORT_TIMELOCK_NOT_EXPIRED);
 
-    // Past the per-transaction delay: now executable.
-    fast_forward_block(&mut h, DELAY + 1);
-    assert!(can_be_executed(&mut h, timelock_addr, &proposal_hash));
-    assert_success!(run_resolution_script(
-        &mut h, &creator, code, vec![], timelock_addr, &proposal_hash
-    ));
+        // Past the per-transaction delay: now executable.
+        fast_forward_block(&mut h, DELAY + 1);
+        assert!(can_be_executed(&mut h, timelock_addr, &proposal_hash));
+        assert_success!(run_resolution_script(
+            &mut h,
+            &creator,
+            code,
+            vec![],
+            timelock_addr,
+            &proposal_hash
+        ));
     });
 }
 
 #[test]
 fn test_creator_cannot_resolve_when_executors_set() {
     run_in_big_stack(|| {
-    // With a non-empty executor set, a creator may propose but must NOT be able to resolve.
-    let mut h = MoveHarness::new();
-    let creator = h.new_account_at(AccountAddress::from_hex_literal("0xD200").unwrap());
-    let executor = h.new_account_at(AccountAddress::from_hex_literal("0xD201").unwrap());
-    let timelock_addr = timelock_account_address(*creator.address(), 10);
-    assert_success!(create_timelock(
-        &mut h,
-        &creator,
-        vec![],
-        vec![*executor.address()],
-        DELAY
-    ));
+        // With a non-empty executor set, a creator may propose but must NOT be able to resolve.
+        let mut h = MoveHarness::new();
+        let creator = h.new_account_at(AccountAddress::from_hex_literal("0xD200").unwrap());
+        let executor = h.new_account_at(AccountAddress::from_hex_literal("0xD201").unwrap());
+        let timelock_addr = timelock_account_address(*creator.address(), 10);
+        assert_success!(create_timelock(
+            &mut h,
+            &creator,
+            vec![],
+            vec![*executor.address()],
+            DELAY
+        ));
 
-    let code = script("noop");
-    let exec_hash = execution_hash_of(&code);
-    let salt = salt32(b"creator_no_resolve");
-    let proposal_hash = proposal_hash_of(&exec_hash, &salt);
-    assert_success!(propose(&mut h, &creator, timelock_addr, &exec_hash, DELAY, &salt));
-    fast_forward_block(&mut h, DELAY + 1);
+        let code = script("noop");
+        let exec_hash = execution_hash_of(&code);
+        let salt = salt32(b"creator_no_resolve");
+        let proposal_hash = proposal_hash_of(&exec_hash, &salt);
+        assert_success!(propose(
+            &mut h,
+            &creator,
+            timelock_addr,
+            &exec_hash,
+            DELAY,
+            &salt
+        ));
+        fast_forward_block(&mut h, DELAY + 1);
 
-    // Creator is a valid proposer but not in the executor set → denied.
-    let status =
-        run_resolution_script(&mut h, &creator, code.clone(), vec![], timelock_addr, &proposal_hash);
-    assert_aborts_with(&status, ABORT_NOT_EXECUTOR);
+        // Creator is a valid proposer but not in the executor set → denied.
+        let status = run_resolution_script(
+            &mut h,
+            &creator,
+            code.clone(),
+            vec![],
+            timelock_addr,
+            &proposal_hash,
+        );
+        assert_aborts_with(&status, ABORT_NOT_EXECUTOR);
 
-    // The designated executor can resolve the same (still-pending) proposal.
-    assert_success!(run_resolution_script(
-        &mut h, &executor, code, vec![], timelock_addr, &proposal_hash
-    ));
+        // The designated executor can resolve the same (still-pending) proposal.
+        assert_success!(run_resolution_script(
+            &mut h,
+            &executor,
+            code,
+            vec![],
+            timelock_addr,
+            &proposal_hash
+        ));
     });
 }
 
 #[test]
 fn test_resolve_remove_last_creator_aborts() {
     run_in_big_stack(|| {
-    // Removing the sole remaining creator through the real resolve→remove_creators path must
-    // abort (EWOULD_REMOVE_ALL_CREATORS); the whole script reverts atomically.
-    let mut h = MoveHarness::new();
-    // The sole creator is @0xA301 — the address the `remove_creator` fixture bakes in — so the
-    // script targets the last remaining creator.
-    let creator = h.new_account_at(AccountAddress::from_hex_literal("0xA301").unwrap());
-    let timelock_addr = timelock_account_address(*creator.address(), 10);
-    assert_success!(create_timelock(&mut h, &creator, vec![], vec![], DELAY));
+        // Removing the sole remaining creator through the real resolve→remove_creators path must
+        // abort (EWOULD_REMOVE_ALL_CREATORS); the whole script reverts atomically.
+        let mut h = MoveHarness::new();
+        // The sole creator is @0xA301 — the address the `remove_creator` fixture bakes in — so the
+        // script targets the last remaining creator.
+        let creator = h.new_account_at(AccountAddress::from_hex_literal("0xA301").unwrap());
+        let timelock_addr = timelock_account_address(*creator.address(), 10);
+        assert_success!(create_timelock(&mut h, &creator, vec![], vec![], DELAY));
 
-    let code = script("remove_creator");
-    let exec_hash = execution_hash_of(&code);
-    let salt = salt32(b"remove_last_creator");
-    let proposal_hash = proposal_hash_of(&exec_hash, &salt);
-    assert_success!(propose(&mut h, &creator, timelock_addr, &exec_hash, DELAY, &salt));
-    fast_forward_block(&mut h, DELAY + 1);
+        let code = script("remove_creator");
+        let exec_hash = execution_hash_of(&code);
+        let salt = salt32(b"remove_last_creator");
+        let proposal_hash = proposal_hash_of(&exec_hash, &salt);
+        assert_success!(propose(
+            &mut h,
+            &creator,
+            timelock_addr,
+            &exec_hash,
+            DELAY,
+            &salt
+        ));
+        fast_forward_block(&mut h, DELAY + 1);
 
-    let status = run_resolution_script(&mut h, &creator, code, vec![], timelock_addr, &proposal_hash);
-    assert_aborts_with(&status, ABORT_WOULD_REMOVE_ALL_CREATORS);
+        let status = run_resolution_script(
+            &mut h,
+            &creator,
+            code,
+            vec![],
+            timelock_addr,
+            &proposal_hash,
+        );
+        assert_aborts_with(&status, ABORT_WOULD_REMOVE_ALL_CREATORS);
 
-    // Atomic revert: the creator is still present and the proposal is still pending.
-    assert!(is_creator_view(&mut h, *creator.address(), timelock_addr));
-    assert!(can_be_executed(&mut h, timelock_addr, &proposal_hash));
+        // Atomic revert: the creator is still present and the proposal is still pending.
+        assert!(is_creator_view(&mut h, *creator.address(), timelock_addr));
+        assert!(can_be_executed(&mut h, timelock_addr, &proposal_hash));
     });
 }
 
 #[test]
 fn test_cancel_edge_cases() {
     run_in_big_stack(|| {
-    // Covers cancel_transaction's three guard paths: bad hash length, not-found, and an
-    // unauthorized actor.
-    let mut h = MoveHarness::new();
-    let creator = h.new_account_at(AccountAddress::from_hex_literal("0xD400").unwrap());
-    let intruder = h.new_account_at(AccountAddress::from_hex_literal("0xD4FF").unwrap());
-    let timelock_addr = timelock_account_address(*creator.address(), 10);
-    assert_success!(create_timelock(&mut h, &creator, vec![], vec![], DELAY));
+        // Covers cancel_transaction's three guard paths: bad hash length, not-found, and an
+        // unauthorized actor.
+        let mut h = MoveHarness::new();
+        let creator = h.new_account_at(AccountAddress::from_hex_literal("0xD400").unwrap());
+        let intruder = h.new_account_at(AccountAddress::from_hex_literal("0xD4FF").unwrap());
+        let timelock_addr = timelock_account_address(*creator.address(), 10);
+        assert_success!(create_timelock(&mut h, &creator, vec![], vec![], DELAY));
 
-    let code = script("noop");
-    let exec_hash = execution_hash_of(&code);
-    let salt = salt32(b"cancel_edge");
-    let proposal_hash = proposal_hash_of(&exec_hash, &salt);
-    assert_success!(propose(&mut h, &creator, timelock_addr, &exec_hash, DELAY, &salt));
+        let code = script("noop");
+        let exec_hash = execution_hash_of(&code);
+        let salt = salt32(b"cancel_edge");
+        let proposal_hash = proposal_hash_of(&exec_hash, &salt);
+        assert_success!(propose(
+            &mut h,
+            &creator,
+            timelock_addr,
+            &exec_hash,
+            DELAY,
+            &salt
+        ));
 
-    // (1) Wrong length: a 31-byte hash is rejected before the existence/auth checks.
-    let short_hash = vec![0u8; 31];
-    assert_aborts_with(
-        &cancel(&mut h, &creator, timelock_addr, &short_hash),
-        ABORT_INVALID_BYTES_LENGTH,
-    );
+        // (1) Wrong length: a 31-byte hash is rejected before the existence/auth checks.
+        let short_hash = vec![0u8; 31];
+        assert_aborts_with(
+            &cancel(&mut h, &creator, timelock_addr, &short_hash),
+            ABORT_INVALID_BYTES_LENGTH,
+        );
 
-    // (2) Well-formed 32-byte hash that was never proposed → not found (actor is authorized).
-    let ghost_hash = proposal_hash_of(&exec_hash, &salt32(b"never_proposed"));
-    assert_aborts_with(
-        &cancel(&mut h, &creator, timelock_addr, &ghost_hash),
-        ABORT_TRANSACTION_NOT_FOUND,
-    );
+        // (2) Well-formed 32-byte hash that was never proposed → not found (actor is authorized).
+        let ghost_hash = proposal_hash_of(&exec_hash, &salt32(b"never_proposed"));
+        assert_aborts_with(
+            &cancel(&mut h, &creator, timelock_addr, &ghost_hash),
+            ABORT_TRANSACTION_NOT_FOUND,
+        );
 
-    // (3) An actor who is neither creator nor canceler cannot cancel an existing proposal.
-    assert_aborts_with(
-        &cancel(&mut h, &intruder, timelock_addr, &proposal_hash),
-        ABORT_NOT_CREATOR_OR_CANCELER,
-    );
+        // (3) An actor who is neither creator nor canceler cannot cancel an existing proposal.
+        assert_aborts_with(
+            &cancel(&mut h, &intruder, timelock_addr, &proposal_hash),
+            ABORT_NOT_CREATOR_OR_CANCELER,
+        );
 
-    // The proposal survived all three rejected attempts.
-    fast_forward_block(&mut h, DELAY + 1);
-    assert!(can_be_executed(&mut h, timelock_addr, &proposal_hash));
+        // The proposal survived all three rejected attempts.
+        fast_forward_block(&mut h, DELAY + 1);
+        assert!(can_be_executed(&mut h, timelock_addr, &proposal_hash));
     });
 }
 
 #[test]
 fn test_same_execution_hash_different_salt_independent() {
     run_in_big_stack(|| {
-    // Two proposals of the SAME script, disambiguated only by salt, are independent: each is
-    // resolved by its own `proposal_hash` (= keccak256(execution_hash || salt)), and resolving
-    // one does not consume the other. This pins the salt-binding behavior of the resolve path.
-    let mut h = MoveHarness::new();
-    let creator = h.new_account_at(AccountAddress::from_hex_literal("0xD500").unwrap());
-    let timelock_addr = timelock_account_address(*creator.address(), 10);
-    assert_success!(create_timelock(&mut h, &creator, vec![], vec![], DELAY));
+        // Two proposals of the SAME script, disambiguated only by salt, are independent: each is
+        // resolved by its own `proposal_hash` (= keccak256(execution_hash || salt)), and resolving
+        // one does not consume the other. This pins the salt-binding behavior of the resolve path.
+        let mut h = MoveHarness::new();
+        let creator = h.new_account_at(AccountAddress::from_hex_literal("0xD500").unwrap());
+        let timelock_addr = timelock_account_address(*creator.address(), 10);
+        assert_success!(create_timelock(&mut h, &creator, vec![], vec![], DELAY));
 
-    let code = script("noop");
-    let exec_hash = execution_hash_of(&code);
-    let salt_a = salt32(b"salt_a");
-    let salt_b = salt32(b"salt_b");
-    let tx_hash_a = proposal_hash_of(&exec_hash, &salt_a);
-    let tx_hash_b = proposal_hash_of(&exec_hash, &salt_b);
-    assert_success!(propose(&mut h, &creator, timelock_addr, &exec_hash, DELAY, &salt_a));
-    assert_success!(propose(&mut h, &creator, timelock_addr, &exec_hash, DELAY, &salt_b));
+        let code = script("noop");
+        let exec_hash = execution_hash_of(&code);
+        let salt_a = salt32(b"salt_a");
+        let salt_b = salt32(b"salt_b");
+        let tx_hash_a = proposal_hash_of(&exec_hash, &salt_a);
+        let tx_hash_b = proposal_hash_of(&exec_hash, &salt_b);
+        assert_success!(propose(
+            &mut h,
+            &creator,
+            timelock_addr,
+            &exec_hash,
+            DELAY,
+            &salt_a
+        ));
+        assert_success!(propose(
+            &mut h,
+            &creator,
+            timelock_addr,
+            &exec_hash,
+            DELAY,
+            &salt_b
+        ));
 
-    fast_forward_block(&mut h, DELAY + 1);
+        fast_forward_block(&mut h, DELAY + 1);
 
-    // Resolve A by its own hash.
-    assert_success!(run_resolution_script(
-        &mut h, &creator, code.clone(), vec![], timelock_addr, &tx_hash_a
-    ));
+        // Resolve A by its own hash.
+        assert_success!(run_resolution_script(
+            &mut h,
+            &creator,
+            code.clone(),
+            vec![],
+            timelock_addr,
+            &tx_hash_a
+        ));
 
-    // A is consumed; B is untouched and still executable.
-    assert!(!can_be_executed(&mut h, timelock_addr, &tx_hash_a));
-    assert!(can_be_executed(&mut h, timelock_addr, &tx_hash_b));
+        // A is consumed; B is untouched and still executable.
+        assert!(!can_be_executed(&mut h, timelock_addr, &tx_hash_a));
+        assert!(can_be_executed(&mut h, timelock_addr, &tx_hash_b));
 
-    // Re-resolving A fails; B still resolves with its own hash.
-    assert_aborts_with(
-        &run_resolution_script(&mut h, &creator, code.clone(), vec![], timelock_addr, &tx_hash_a),
-        ABORT_ALREADY_EXECUTED,
-    );
-    assert_success!(run_resolution_script(
-        &mut h, &creator, code, vec![], timelock_addr, &tx_hash_b
-    ));
+        // Re-resolving A fails; B still resolves with its own hash.
+        assert_aborts_with(
+            &run_resolution_script(
+                &mut h,
+                &creator,
+                code.clone(),
+                vec![],
+                timelock_addr,
+                &tx_hash_a,
+            ),
+            ABORT_ALREADY_EXECUTED,
+        );
+        assert_success!(run_resolution_script(
+            &mut h,
+            &creator,
+            code,
+            vec![],
+            timelock_addr,
+            &tx_hash_b
+        ));
     });
 }
-

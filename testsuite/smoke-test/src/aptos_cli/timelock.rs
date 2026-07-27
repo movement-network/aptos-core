@@ -83,13 +83,28 @@ async fn test_timelock_create_membership() {
         .expect("create should succeed");
 
     // Provided members hold their roles.
-    assert!(cli.timelock_is_creator(0, cli.account_id(creator), timelock).await);
-    assert!(cli.timelock_is_executor(0, cli.account_id(executor), timelock).await);
+    assert!(
+        cli.timelock_is_creator(0, cli.account_id(creator), timelock)
+            .await
+    );
+    assert!(
+        cli.timelock_is_executor(0, cli.account_id(executor), timelock)
+            .await
+    );
     // The deployer gains nothing.
-    assert!(!cli.timelock_is_creator(0, cli.account_id(deployer), timelock).await);
-    assert!(!cli.timelock_is_executor(0, cli.account_id(deployer), timelock).await);
+    assert!(
+        !cli.timelock_is_creator(0, cli.account_id(deployer), timelock)
+            .await
+    );
+    assert!(
+        !cli.timelock_is_executor(0, cli.account_id(deployer), timelock)
+            .await
+    );
     // With a non-empty executor list, a creator is not implicitly an executor.
-    assert!(!cli.timelock_is_executor(0, cli.account_id(creator), timelock).await);
+    assert!(
+        !cli.timelock_is_executor(0, cli.account_id(creator), timelock)
+            .await
+    );
 }
 
 /// With an empty executor list, creators are reported as executors (the "creator acts as
@@ -106,8 +121,14 @@ async fn test_timelock_create_empty_executors_creator_is_executor() {
         .await
         .expect("create should succeed");
 
-    assert!(cli.timelock_is_creator(0, cli.account_id(0), timelock).await);
-    assert!(cli.timelock_is_executor(0, cli.account_id(0), timelock).await);
+    assert!(
+        cli.timelock_is_creator(0, cli.account_id(0), timelock)
+            .await
+    );
+    assert!(
+        cli.timelock_is_executor(0, cli.account_id(0), timelock)
+            .await
+    );
 }
 
 // ----------------------------------------------------------------------------
@@ -354,9 +375,18 @@ async fn test_timelock_canceler_cancels_executor_cannot() {
         .await
         .expect("create should succeed");
     // The canceler holds only the canceler role.
-    assert!(cli.timelock_is_canceler(0, cli.account_id(canceler), timelock).await);
-    assert!(!cli.timelock_is_creator(0, cli.account_id(canceler), timelock).await);
-    assert!(!cli.timelock_is_executor(0, cli.account_id(canceler), timelock).await);
+    assert!(
+        cli.timelock_is_canceler(0, cli.account_id(canceler), timelock)
+            .await
+    );
+    assert!(
+        !cli.timelock_is_creator(0, cli.account_id(canceler), timelock)
+            .await
+    );
+    assert!(
+        !cli.timelock_is_executor(0, cli.account_id(canceler), timelock)
+            .await
+    );
 
     // Propose one transaction; the executor's cancel must be rejected, then the canceler cancels
     // that same still-pending proposal.

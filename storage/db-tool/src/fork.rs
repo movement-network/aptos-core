@@ -379,8 +379,8 @@ fn parse_test_account_rekey(
 
 fn validate_requested_chain_id(chain_id: u8) -> Result<ChainId> {
     ensure!(
-        chain_id != 0 && chain_id != 1,
-        "fork chain ID must not be 0 or mainnet (1)",
+        chain_id != 0 && chain_id != 126,
+        "fork chain ID must not be 0 or mainnet (126)",
     );
     Ok(ChainId::new(chain_id))
 }

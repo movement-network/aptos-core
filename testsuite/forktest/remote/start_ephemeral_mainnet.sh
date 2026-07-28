@@ -82,7 +82,7 @@ report_running_network() {
   echo "An ephemeral network is already running; refusing to replace it."
   echo "  Recorded SHA: $active_sha"
   if public_api_running; then
-    echo "  Public submission endpoint: http://34.231.241.232:$(cat "$SERVICE_ROOT/public-api/port")"
+    echo "  Public submission port: $(cat "$SERVICE_ROOT/public-api/port")"
   fi
 
   local pid command config api response
@@ -173,7 +173,7 @@ expose_public_api_locked() {
     existing_port=$(cat "$SERVICE_ROOT/public-api/port")
     existing_target=$(cat "$SERVICE_ROOT/public-api/target")
     if [[ "$existing_port" == "$public_port" && "$existing_target" == "$target" ]]; then
-      echo "Public submission endpoint is already running at http://34.231.241.232:$public_port"
+      echo "Public submission proxy is already running on port $public_port"
       return
     fi
     die "a managed public API proxy is already running for $existing_target on port $existing_port"
@@ -204,7 +204,7 @@ expose_public_api_locked() {
       die "public API proxy exited during startup"
     fi
     if curl --fail --silent --max-time 2 "http://127.0.0.1:$public_port/v1/" >/dev/null 2>&1; then
-      echo "Public submission endpoint: http://34.231.241.232:$public_port"
+      echo "Public submission proxy is healthy on port $public_port"
       return
     fi
     sleep 1

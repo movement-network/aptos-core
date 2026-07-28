@@ -12,6 +12,7 @@ DEFAULT_IDENTITY="$HOME/movement/mainnet-fork.pem"
 DEFAULT_REMOTE_SCRIPT="/mnt/mainnet-volume/fork-run-20260722/bin/start_ephemeral_mainnet.sh"
 DEFAULT_REMOTE_INCOMING="/mnt/mainnet-volume/ephemeral-mainnet/incoming"
 DEFAULT_PUBLIC_API_PORT=8080
+DEFAULT_PUBLIC_HOST=${DEFAULT_HOST#*@}
 ALREADY_RUNNING_EXIT=3
 ARCHIVE_TO_CLEAN=""
 
@@ -37,7 +38,7 @@ process is already running on the host, the command reports it and exits
 without uploading source, building, stopping, or replacing anything.
 
 After a successful start, one remote loopback REST endpoint is forwarded to
-http://34.231.241.232:<public-api-port>. Validator P2P and native REST listeners
+http://$DEFAULT_PUBLIC_HOST:<public-api-port>. Validator P2P and native REST listeners
 remain loopback-only; only the managed submission proxy binds publicly.
 EOF
 }

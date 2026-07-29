@@ -194,9 +194,9 @@ if "$LAUNCHER" start \
   --fork-tool "$MOCK_FORK_TOOL" \
   --node-binary "$MOCK_NODE" \
   --test-account-address 0x1234 \
-  --chain-id 1 \
+  --chain-id 126 \
   --work-dir "$TEST_ROOT/mainnet-chain-id" >/dev/null 2>&1; then
-  echo "start unexpectedly accepted mainnet chain ID 1" >&2
+  echo "start unexpectedly accepted Movement mainnet chain ID 126" >&2
   exit 1
 fi
 

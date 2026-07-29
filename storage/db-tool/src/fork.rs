@@ -971,8 +971,9 @@ mod tests {
     #[test]
     fn rejects_reserved_chain_ids() {
         assert!(validate_requested_chain_id(0).is_err());
-        assert!(validate_requested_chain_id(1).is_err());
+        assert_eq!(validate_requested_chain_id(1).unwrap().id(), 1);
         assert_eq!(validate_requested_chain_id(42).unwrap().id(), 42);
+        assert!(validate_requested_chain_id(126).is_err());
     }
 
     #[test]

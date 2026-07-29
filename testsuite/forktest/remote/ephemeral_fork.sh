@@ -69,8 +69,8 @@ validate_positive_integer() {
 validate_chain_id() {
   local chain_id=$1
   validate_positive_integer "--chain-id" "$chain_id"
-  ((chain_id > 1 && chain_id <= 255)) ||
-    die "--chain-id must be between 2 and 255; 1 is reserved for mainnet"
+  ((chain_id <= 255 && chain_id != 126)) ||
+    die "--chain-id must be between 1 and 255 and must not be Movement mainnet (126)"
 }
 
 validate_account_address() {

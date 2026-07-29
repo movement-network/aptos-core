@@ -33,9 +33,9 @@ Options:
   --remote-incoming PATH Archive upload directory. Default: $DEFAULT_REMOTE_INCOMING
   --public-api-port PORT Public submission endpoint port. Default: $DEFAULT_PUBLIC_API_PORT
 
-The SHA must resolve to a commit contained in origin/m1. If an aptos-node
-process is already running on the host, the command reports it and exits
-without uploading source, building, stopping, or replacing anything.
+The SHA must resolve to a commit reachable from any branch in origin. If an
+aptos-node process is already running on the host, the command reports it and
+exits without uploading source, building, stopping, or replacing anything.
 
 After a successful start, one remote loopback REST endpoint is forwarded to
 http://$DEFAULT_PUBLIC_HOST:<public-api-port>. Validator P2P and native REST listeners
@@ -141,12 +141,19 @@ main() {
   require_command scp
   require_command ssh
 
-  git -C "$REPO_ROOT" fetch origin m1
+  git -C "$REPO_ROOT" fetch --prune origin --no-tags
   local full_sha
   full_sha=$(git -C "$REPO_ROOT" rev-parse --verify "${requested_sha}^{commit}") ||
-    die "commit does not exist after fetching origin/m1: $requested_sha"
-  git -C "$REPO_ROOT" merge-base --is-ancestor "$full_sha" origin/m1 ||
-    die "commit $full_sha is not contained in origin/m1"
+    die "commit does not exist after fetching origin branches: $requested_sha"
+  local containing_refs
+  containing_refs=$(
+    git -C "$REPO_ROOT" for-each-ref \
+      --contains "$full_sha" \
+      --format='%(refname:short)' \
+      refs/remotes/origin
+  )
+  [[ -n "$containing_refs" ]] ||
+    die "commit $full_sha is not reachable from any branch in origin"
 
   run_preflight "$destination" "$identity" "$remote_script"
 
@@ -154,7 +161,7 @@ main() {
   archive=$(mktemp "${TMPDIR:-/tmp}/ephemeral-mainnet.${full_sha}.XXXXXX.tar.gz")
   ARCHIVE_TO_CLEAN=$archive
   trap cleanup EXIT
-  echo "Archiving m1 commit $full_sha..."
+  echo "Archiving origin commit $full_sha..."
   git -C "$REPO_ROOT" archive --format=tar "$full_sha" | gzip -1 >"$archive"
 
   local remote_archive="$remote_incoming/$full_sha.tar.gz"

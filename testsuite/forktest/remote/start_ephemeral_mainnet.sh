@@ -309,7 +309,7 @@ build_node() {
   mkdir -p "$source_dir" "$target_dir"
   tar -xzf "$archive" -C "$source_dir"
 
-  echo "Building aptos-node for m1 commit $sha..." >&2
+  echo "Building aptos-node for origin commit $sha..." >&2
   (
     export CARGO_HOME RUSTUP_HOME
     export CARGO_TARGET_DIR="$target_dir"
@@ -374,7 +374,7 @@ start_network() {
   if [[ "$PUBLIC_API_ENABLED" == true ]]; then
     expose_public_api_locked "$public_api_port"
   fi
-  echo "Remote ephemeral mainnet started from m1 commit $sha."
+  echo "Remote ephemeral mainnet started from origin commit $sha."
 }
 
 main() {

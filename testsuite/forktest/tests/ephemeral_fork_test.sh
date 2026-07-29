@@ -89,6 +89,8 @@ for ((index = 0; index < validators; index++)); do
 api:
   enabled: true
   address: "127.0.0.1:$port"
+  simulation_filter:
+    rules: []
 base:
   role: "validator"
 EOF
@@ -171,6 +173,7 @@ grep -q "ledger_version=11" <<<"$status_output"
 
 expected_key="0x0000000000000000000000000000000000000000000000000000000000000abc"
 [[ $(cat "$WORK_DIR/configs/test-account-private-key") == "$expected_key" ]]
+! grep -q simulation_filter "$WORK_DIR/configs/0/node.yaml"
 
 "$LAUNCHER" stop --work-dir "$WORK_DIR" >/dev/null
 if "$LAUNCHER" status --work-dir "$WORK_DIR" >/dev/null 2>&1; then

@@ -117,6 +117,21 @@ ensure_loopback_address() {
   esac
 }
 
+normalize_candidate_config() {
+  local config=$1
+  local normalized="$config.normalized"
+
+  awk '
+    /^api:$/ { in_api = 1 }
+    in_api && /^  simulation_filter:$/ { skip = 1; next }
+    skip && /^    / { next }
+    skip { skip = 0 }
+    in_api && /^[^ ]/ { in_api = 0 }
+    { print }
+  ' "$config" >"$normalized"
+  mv "$normalized" "$config"
+}
+
 ledger_summary() {
   python3 -c '
 import json
@@ -384,13 +399,14 @@ start_fork() {
   : >"$rest_urls_file"
 
   local start_complete=false
-  trap 'if [[ "$start_complete" != true ]]; then stop_nodes "$config_dir" true || true; fi' EXIT
+  trap 'if [[ "${start_complete:-false}" != true ]]; then stop_nodes "$config_dir" true || true; fi' EXIT
   trap 'exit 130' INT TERM
 
   local index config api_address rest_url
   for ((index = 0; index < validators; index++)); do
     config="$config_dir/$index/node.yaml"
     [[ -f "$config" ]] || die "missing generated node config: $config"
+    normalize_candidate_config "$config"
     api_address=$(api_address_from_config "$config")
     [[ -n "$api_address" ]] || die "could not read REST address from $config"
     ensure_loopback_address "$api_address"

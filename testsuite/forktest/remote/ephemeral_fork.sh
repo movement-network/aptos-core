@@ -122,7 +122,7 @@ normalize_candidate_config() {
   local normalized="$config.normalized"
 
   awk '
-    /^api:$/ { in_api = 1 }
+    /^api:$/ { in_api = 1; print; next }
     in_api && /^  simulation_filter:$/ { skip = 1; next }
     skip && /^    / { next }
     skip { skip = 0 }
@@ -399,7 +399,7 @@ start_fork() {
   : >"$rest_urls_file"
 
   local start_complete=false
-  trap 'if [[ "${start_complete:-false}" != true ]]; then stop_nodes "$config_dir" true || true; fi' EXIT
+  trap 'if [[ "${start_complete:-false}" != true && -n "${config_dir:-}" ]]; then stop_nodes "$config_dir" true || true; fi' EXIT
   trap 'exit 130' INT TERM
 
   local index config api_address rest_url

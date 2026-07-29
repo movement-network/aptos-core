@@ -122,11 +122,32 @@ normalize_candidate_config() {
   local normalized="$config.normalized"
 
   awk '
-    /^api:$/ { in_api = 1; print; next }
-    in_api && /^  simulation_filter:$/ { skip = 1; next }
-    skip && /^    / { next }
-    skip { skip = 0 }
-    in_api && /^[^ ]/ { in_api = 0 }
+    function incompatible(section, key) {
+      return \
+        (section == "api" && key == "simulation_filter") || \
+        (section == "consensus" && (key == "channel_size" || key == "enable_pipeline")) || \
+        (section == "consensus_observer" && key == "enable_pipeline") || \
+        (section == "execution" && key == "transaction_filter")
+    }
+
+    skip {
+      if (/^    / || /^[[:space:]]*$/) {
+        next
+      }
+      skip = 0
+    }
+    /^[^ ]/ {
+      section = $1
+      sub(/:$/, "", section)
+    }
+    /^  [^ ]/ {
+      key = $1
+      sub(/:$/, "", key)
+      if (incompatible(section, key)) {
+        skip = 1
+        next
+      }
+    }
     { print }
   ' "$config" >"$normalized"
   mv "$normalized" "$config"

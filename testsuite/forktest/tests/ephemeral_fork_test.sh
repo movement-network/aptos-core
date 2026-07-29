@@ -91,6 +91,14 @@ api:
   address: "127.0.0.1:$port"
   simulation_filter:
     rules: []
+consensus:
+  channel_size: 30
+  enable_pipeline: true
+consensus_observer:
+  enable_pipeline: true
+execution:
+  transaction_filter:
+    rules: []
 base:
   role: "validator"
 EOF
@@ -173,7 +181,8 @@ grep -q "ledger_version=11" <<<"$status_output"
 
 expected_key="0x0000000000000000000000000000000000000000000000000000000000000abc"
 [[ $(cat "$WORK_DIR/configs/test-account-private-key") == "$expected_key" ]]
-! grep -q simulation_filter "$WORK_DIR/configs/0/node.yaml"
+! grep -Eq "simulation_filter|channel_size|enable_pipeline|transaction_filter" \
+  "$WORK_DIR/configs/0/node.yaml"
 
 "$LAUNCHER" stop --work-dir "$WORK_DIR" >/dev/null
 if "$LAUNCHER" status --work-dir "$WORK_DIR" >/dev/null 2>&1; then

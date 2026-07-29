@@ -801,6 +801,7 @@ fn write_fork_configs(
                 )
             })?;
             config.storage.dir = validator_db_dir;
+            config.storage.storage_pruner_config = NO_OP_STORAGE_PRUNER_CONFIG;
             config.base.waypoint = WaypointConfig::FromConfig(waypoint);
             config.execution.genesis = Some(fork_txn.clone());
             config.execution.genesis_waypoint = Some(WaypointConfig::FromConfig(waypoint));
@@ -1224,6 +1225,10 @@ mod tests {
             assert_eq!(
                 node_config.storage.dir().canonicalize().unwrap(),
                 validator_db_dir.canonicalize().unwrap(),
+            );
+            assert_eq!(
+                node_config.storage.storage_pruner_config,
+                NO_OP_STORAGE_PRUNER_CONFIG,
             );
             assert!(node_config.api.address.ip().is_loopback());
             assert!(node_config.indexer_grpc.address.ip().is_loopback());

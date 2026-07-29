@@ -26,7 +26,7 @@ on:
 
 permissions:
   contents: read
-  packages: write
+  actions: write
 
 env:
   REGISTRY: ghcr.io
@@ -36,7 +36,6 @@ env:
   FEATURES: ""
   CARGO_TARGET_DIR: /aptos/target
   BUILT_VIA_BUILDKIT: "true"
-  GIT_CREDENTIALS: ${{ secrets.GIT_CREDENTIALS }}
 
 jobs:
   publish:
@@ -47,6 +46,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
 
       - name: Derive image metadata
         id: metadata
@@ -88,7 +88,6 @@ jobs:
             --file docker/builder/builder.Dockerfile \
             --target aptos-node-builder \
             --build-context "rust=$RUST_CONTEXT" \
-            --secret id=GIT_CREDENTIALS,env=GIT_CREDENTIALS \
             --build-arg "PROFILE=$PROFILE" \
             --build-arg "FEATURES=$FEATURES" \
             --build-arg "CARGO_TARGET_DIR=$CARGO_TARGET_DIR" \

@@ -76,88 +76,37 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ vars.INFRA_GH_USER || github.actor }}
-          password: ${{ secrets.INFRA_GH_PAT || secrets.GITHUB_TOKEN }}
-
-      - name: Build and publish images
+      - name: Build aptos-node binary
         shell: bash
         env:
           GIT_SHA: ${{ steps.metadata.outputs.git_sha }}
-          SHORT_SHA: ${{ steps.metadata.outputs.short_sha }}
-          REF_TAG: ${{ steps.metadata.outputs.ref_tag }}
           RUST_CONTEXT: ${{ steps.metadata.outputs.rust_context }}
-          BUILD_DATE: ${{ steps.metadata.outputs.build_date }}
-          PUBLISH_LATEST: ${{ github.event_name == 'push' && github.ref_name == 'm1' || inputs.publish_latest }}
         run: |
           set -euo pipefail
-
-          add_tags() {
-            local -n tags_ref="$1"
-            local image="$2"
-
-            tags_ref+=(--tag "$image:$SHORT_SHA")
-            tags_ref+=(--tag "$image:$REF_TAG")
-            if [ "$PUBLISH_LATEST" = "true" ]; then
-              tags_ref+=(--tag "$image:latest")
-            fi
-          }
-
-          common_build_args=(
-            --build-arg "PROFILE=$PROFILE"
-            --build-arg "FEATURES=$FEATURES"
-            --build-arg "CARGO_TARGET_DIR=$CARGO_TARGET_DIR"
-            --build-arg "BUILT_VIA_BUILDKIT=$BUILT_VIA_BUILDKIT"
-          )
-
-          common_metadata_args=(
-            --build-arg "GIT_SHA=$GIT_SHA"
-            --build-arg "GIT_BRANCH=$REF_TAG"
-            --build-arg "GIT_TAG=$REF_TAG"
-            --build-arg "BUILD_DATE=$BUILD_DATE"
-          )
-
-          rust_tags=()
-          add_tags rust_tags "$IMAGE_NAMESPACE/rust"
-          add_tags rust_tags "$IMAGE_NAMESPACE/builder-base"
-
           docker buildx build \
-            --push \
+            --load \
             --file docker/builder/builder.Dockerfile \
-            --target builder-base \
+            --target aptos-node-builder \
             --build-context "rust=$RUST_CONTEXT" \
             --secret id=GIT_CREDENTIALS,env=GIT_CREDENTIALS \
-            "${common_build_args[@]}" \
-            "${rust_tags[@]}" \
+            --build-arg "PROFILE=$PROFILE" \
+            --build-arg "FEATURES=$FEATURES" \
+            --build-arg "CARGO_TARGET_DIR=$CARGO_TARGET_DIR" \
+            --build-arg "BUILT_VIA_BUILDKIT=$BUILT_VIA_BUILDKIT" \
+            --tag "aptos-node-e2e:$GIT_SHA" \
             .
 
-          for target in aptos-node-builder tools-builder indexer-builder; do
-            builder_tags=()
-            add_tags builder_tags "$IMAGE_NAMESPACE/$target"
+          container_id="$(docker create "aptos-node-e2e:$GIT_SHA")"
+          mkdir -p artifact
+          docker cp "$container_id:/aptos/dist/aptos-node" artifact/aptos-node
+          docker rm "$container_id"
+          chmod 755 artifact/aptos-node
+          sha256sum artifact/aptos-node > artifact/aptos-node.sha256
 
-            docker buildx build \
-              --push \
-              --file docker/builder/builder.Dockerfile \
-              --target "$target" \
-              --build-context "builder-base=docker-image://$IMAGE_NAMESPACE/rust:$SHORT_SHA" \
-              --secret id=GIT_CREDENTIALS,env=GIT_CREDENTIALS \
-              "${common_build_args[@]}" \
-              "${builder_tags[@]}" \
-              .
-          done
-
-          tools_tags=()
-          add_tags tools_tags "$IMAGE_NAMESPACE/tools"
-
-          docker buildx build \
-            --push \
-            --file docker/builder/tools.Dockerfile \
-            --target tools \
-            --build-context "debian-base=$DEBIAN_CONTEXT" \
-            --build-context "tools-builder=docker-image://$IMAGE_NAMESPACE/tools-builder:$SHORT_SHA" \
-            "${common_metadata_args[@]}" \
-            "${tools_tags[@]}" \
-            .
+      - name: Upload aptos-node binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: aptos-node-${{ steps.metadata.outputs.git_sha }}
+          path: artifact/
+          compression-level: 9
+          retention-days: 1

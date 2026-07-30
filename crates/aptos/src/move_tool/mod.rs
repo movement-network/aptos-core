@@ -207,7 +207,7 @@ impl FrameworkPackageArgs {
         prompt_options: PromptOptions,
     ) -> CliTypedResult<()> {
         const APTOS_FRAMEWORK: &str = "AptosFramework";
-        const APTOS_GIT_PATH: &str = "https://github.com/movementlabsxyz/aptos-core.git";
+        const APTOS_GIT_PATH: &str = "https://github.com/movement-network/aptos-core.git";
         const SUBDIR_PATH: &str = "aptos-move/framework/aptos-framework";
         const DEFAULT_BRANCH: &str = "m1";
 

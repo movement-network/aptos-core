@@ -86,6 +86,17 @@ module admin::transaction_context_test {
         store.chain_id = transaction_context::chain_id();
     }
 
+    /// Aborts unless the current transaction elected to pay gas in the fungible asset whose metadata
+    /// object lives at `expected`.
+    public entry fun assert_gas_payment_fungible_asset(_s: &signer, expected: address) {
+        assert!(transaction_context::gas_payment_fungible_asset() == option::some(expected), 1000);
+    }
+
+    /// Aborts unless the current transaction did not elect to pay gas in a fungible asset.
+    public entry fun assert_no_gas_payment_fungible_asset(_s: &signer) {
+        assert!(option::is_none(&transaction_context::gas_payment_fungible_asset()), 1001);
+    }
+
     entry fun store_entry_function_payload_from_native_txn_context<T1, T2, T3>(
         _s: &signer,
         arg0: u64,

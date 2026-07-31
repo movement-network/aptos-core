@@ -36,6 +36,7 @@ pub struct TransactionMetadata {
     pub is_keyless: bool,
     pub entry_function_payload: Option<EntryFunction>,
     pub multisig_payload: Option<Multisig>,
+    pub gas_fa_coin: Option<AccountAddress>,
 }
 
 impl TransactionMetadata {
@@ -119,6 +120,7 @@ impl TransactionMetadata {
                 }),
                 _ => None,
             },
+            gas_fa_coin: txn.payload().extra_config().gas_fa_coin(),
         }
     }
 
@@ -213,6 +215,7 @@ impl TransactionMetadata {
                 .map(|entry_func| entry_func.as_entry_function_payload()),
             self.multisig_payload()
                 .map(|multisig| multisig.as_multisig_payload()),
+            self.gas_fa_coin,
         )
     }
 }

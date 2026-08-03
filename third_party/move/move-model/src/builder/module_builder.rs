@@ -4,10 +4,9 @@
 
 use crate::{
     ast::{
-        AccessSpecifier, Address, Attribute, AttributeValue, Condition, ConditionKind, Exp,
-        ExpData, FriendDecl, ModuleName, Operation, Pattern, PropertyBag, PropertyValue,
-        QualifiedSymbol, Spec, SpecBlockInfo, SpecBlockTarget, SpecFunDecl, SpecVarDecl, TempIndex,
-        UseDecl, Value,
+        Address, Attribute, AttributeValue, Condition, ConditionKind, Exp, ExpData, FriendDecl,
+        ModuleName, Operation, Pattern, PropertyBag, PropertyValue, QualifiedSymbol, Spec,
+        SpecBlockInfo, SpecBlockTarget, SpecFunDecl, SpecVarDecl, TempIndex, UseDecl, Value,
     },
     builder::{
         exp_builder::ExpTranslator,
@@ -22,8 +21,9 @@ use crate::{
     metadata::lang_feature_versions::LANGUAGE_VERSION_FOR_PUBLIC_STRUCT,
     model::{
         self, EqIgnoringLoc, FieldData, FieldId, FunId, FunctionData, FunctionKind, FunctionLoc,
-        Loc, ModuleId, MoveIrLoc, NamedConstantData, NamedConstantId, NodeId, Parameter, SchemaId,
-        SpecFunId, SpecVarId, StructData, StructId, TypeParameter, TypeParameterKind,
+        Loc, ModuleId, MoveIrLoc, NamedConstantData, NamedConstantId, NodeId, Parameter,
+        QualifiedId, SchemaId, SpecFunId, SpecVarId, StructData, StructId, TypeParameter,
+        TypeParameterKind,
     },
     options::ModelBuilderOptions,
     pragmas::{
@@ -89,8 +89,8 @@ pub(crate) struct ModuleBuilder<'env, 'translator> {
     pub inline_spec_builder: Spec,
     /// Translated function definitions, if we are compiling Move code
     pub fun_defs: BTreeMap<Symbol, Exp>,
-    /// Translated access specifiers, if we are compiling Move code
-    pub fun_access_specifiers: BTreeMap<Symbol, Vec<AccessSpecifier>>,
+    /// Translated legacy `acquires` annotations, if we are compiling Move code.
+    pub fun_declared_acquires: BTreeMap<Symbol, Vec<(Loc, QualifiedId<StructId>)>>,
     /// Translated struct specifications.
     pub struct_specs: BTreeMap<Symbol, Spec>,
     /// Translated module spec
@@ -170,7 +170,7 @@ impl<'env, 'translator> ModuleBuilder<'env, 'translator> {
             spec_vars: vec![],
             fun_specs: BTreeMap::new(),
             fun_defs: BTreeMap::new(),
-            fun_access_specifiers: BTreeMap::new(),
+            fun_declared_acquires: BTreeMap::new(),
             struct_specs: BTreeMap::new(),
             module_spec: Spec::default(),
             spec_block_infos: Default::default(),
@@ -1479,7 +1479,7 @@ impl ModuleBuilder<'_, '_> {
                     et.define_local(loc, *n, ty.clone(), None, Some(idx));
                 }
             }
-            let access_specifiers = et.translate_acquires(&def.acquires);
+            let declared_acquires = et.translate_acquires(&def.acquires);
             let result = et.translate_seq(&loc, seq, &result_type, &ErrorMessageContext::Return);
             // Run type inference finalization so post processing has all available type information,
             // but do not report errors yet because receiver functions can add more type bindings.
@@ -1490,10 +1490,10 @@ impl ModuleBuilder<'_, '_> {
             et.check_mutable_borrow_field(&translated);
             et.check_lambda_types(&translated);
             assert!(self.fun_defs.insert(full_name.symbol, translated).is_none());
-            if let Some(specifiers) = access_specifiers {
+            if !declared_acquires.is_empty() {
                 assert!(self
-                    .fun_access_specifiers
-                    .insert(full_name.symbol, specifiers)
+                    .fun_declared_acquires
+                    .insert(full_name.symbol, declared_acquires)
                     .is_none());
             }
         }
@@ -3651,7 +3651,10 @@ impl ModuleBuilder<'_, '_> {
             let def = self.fun_defs.remove(&name.symbol);
             let called_funs = Some(def.as_ref().map(|e| e.called_funs()).unwrap_or_default());
             let used_funs = Some(def.as_ref().map(|e| e.used_funs()).unwrap_or_default());
-            let access_specifiers = self.fun_access_specifiers.remove(&name.symbol);
+            let declared_acquires = self
+                .fun_declared_acquires
+                .remove(&name.symbol)
+                .unwrap_or_default();
             let fun_id = FunId::new(name.symbol);
             let data = FunctionData {
                 name: name.symbol,
@@ -3670,7 +3673,7 @@ impl ModuleBuilder<'_, '_> {
                 type_params: entry.type_params.clone(),
                 params: entry.params.clone(),
                 result_type: entry.result_type.clone(),
-                access_specifiers,
+                declared_acquires,
                 acquired_structs: None,
                 spec: spec.into(),
                 def,

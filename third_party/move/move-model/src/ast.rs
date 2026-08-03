@@ -513,60 +513,6 @@ pub struct FriendDecl {
     pub module_id: Option<ModuleId>,
 }
 
-// =================================================================================================
-/// # Access Specifiers
-
-/// Access specifier
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct AccessSpecifier {
-    pub loc: Loc,
-    pub kind: AccessSpecifierKind,
-    pub negated: bool,
-    pub resource: (Loc, ResourceSpecifier),
-    pub address: (Loc, AddressSpecifier),
-}
-
-impl AccessSpecifier {
-    pub fn used_vars(&self) -> Vec<Symbol> {
-        match &self.address.1 {
-            AddressSpecifier::Call(_, var) | AddressSpecifier::Parameter(var) => {
-                vec![*var]
-            },
-            _ => vec![],
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum AccessSpecifierKind {
-    Reads,
-    Writes,
-    LegacyAcquires,
-}
-
-impl AccessSpecifierKind {
-    pub fn subsumes(&self, other: &Self) -> bool {
-        use AccessSpecifierKind::*;
-        matches!((self, other), (_, Reads) | (Writes, Writes))
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum ResourceSpecifier {
-    Any,
-    DeclaredAtAddress(Address),
-    DeclaredInModule(ModuleId),
-    Resource(QualifiedInstId<StructId>),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum AddressSpecifier {
-    Any,
-    Address(Address),
-    Parameter(Symbol),
-    Call(QualifiedInstId<FunId>, Symbol),
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Copy, Hash, Default)]
 pub enum LambdaCaptureKind {
     /// No modifier (e.g., inlining)
@@ -588,54 +534,6 @@ impl fmt::Display for LambdaCaptureKind {
                 write!(f, "copy")
             },
             LambdaCaptureKind::Move => write!(f, "move"),
-        }
-    }
-}
-
-impl ResourceSpecifier {
-    /// Checks whether this resource specifier matches the given struct. A function
-    /// instantiation is passed to instantiate the specifier in the calling context
-    /// of the function where it is declared for.
-    pub fn matches(
-        &self,
-        env: &GlobalEnv,
-        fun_inst: &[Type],
-        struct_id: &QualifiedInstId<StructId>,
-    ) -> bool {
-        use ResourceSpecifier::*;
-        let struct_env = env.get_struct(struct_id.to_qualified_id());
-        match self {
-            Any => true,
-            DeclaredAtAddress(addr) => struct_env.module_env.get_name().addr() == addr,
-            DeclaredInModule(mod_id) => struct_env.module_env.get_id() == *mod_id,
-            Resource(spec_struct_id) => {
-                // Since this resource specifier is declared for a specific function,
-                // need to instantiate it with the function instantiation.
-                let spec_struct_id = spec_struct_id.clone().instantiate(fun_inst);
-                struct_id.to_qualified_id() == spec_struct_id.to_qualified_id()
-                    // If the specified instance has no parameters, every type instance is
-                    // allowed, otherwise only the given one.
-                    && (spec_struct_id.inst.is_empty() || spec_struct_id.inst == struct_id.inst)
-            },
-        }
-    }
-
-    /// Matches an unqualified struct name. This matches any resource pattern with that name,
-    /// regardless of type instantiation.
-    pub fn matches_modulo_type_instantiation(
-        &self,
-        env: &GlobalEnv,
-        struct_id: &QualifiedId<StructId>,
-    ) -> bool {
-        use ResourceSpecifier::*;
-        let struct_id = struct_id.instantiate(vec![]);
-        match self {
-            Resource(spec_struct_id) => Resource(
-                // Downgrade to a pattern without instantiation
-                spec_struct_id.to_qualified_id().instantiate(vec![]),
-            )
-            .matches(env, &[], &struct_id),
-            _ => self.matches(env, &[], &struct_id),
         }
     }
 }
@@ -3888,16 +3786,6 @@ fn optional_variant_suffix(pool: &SymbolPool, variant: &Option<Symbol>) -> Strin
         format!("::{}", v.display(pool))
     } else {
         String::new()
-    }
-}
-
-impl fmt::Display for AccessSpecifierKind {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            AccessSpecifierKind::Reads => f.write_str("reads"),
-            AccessSpecifierKind::Writes => f.write_str("writes"),
-            AccessSpecifierKind::LegacyAcquires => f.write_str("acquires"),
-        }
     }
 }
 

@@ -20,7 +20,7 @@
 use crate::Options;
 use codespan_reporting::diagnostic::Severity;
 use move_model::{
-    ast::{AccessSpecifierKind, ExpData, Operation, ResourceSpecifier, VisitorPosition},
+    ast::{ExpData, Operation, VisitorPosition},
     metadata::LanguageVersion,
     model::{FunId, FunctionEnv, GlobalEnv, Loc, ModuleEnv, StructId},
     ty::Type,
@@ -111,29 +111,19 @@ pub fn acquires_checker(env: &mut GlobalEnv) {
 
 /// Gets the acquired resources declared by `acquires R`
 fn get_acquired_resources(fun_env: &FunctionEnv) -> BTreeMap<StructId, Loc> {
-    if let Some(access_specifiers) = fun_env.get_access_specifiers() {
-        access_specifiers
-            .iter()
-            .filter_map(|access_specifier| {
-                if access_specifier.kind != AccessSpecifierKind::LegacyAcquires {
-                    return None;
-                }
-                if let ResourceSpecifier::Resource(inst_qid) = &access_specifier.resource.1 {
-                    if inst_qid.module_id != fun_env.module_env.get_id() {
-                        fun_env.module_env.env.error(
-                            &access_specifier.resource.0,
-                            "acquires a resource from another module",
-                        )
-                    }
-                    Some((inst_qid.id, access_specifier.resource.0.clone()))
-                } else {
-                    None
-                }
-            })
-            .collect()
-    } else {
-        BTreeMap::new()
-    }
+    fun_env
+        .get_declared_acquires()
+        .iter()
+        .map(|(loc, acquired)| {
+            if acquired.module_id != fun_env.module_env.get_id() {
+                fun_env
+                    .module_env
+                    .env
+                    .error(loc, "acquires a resource from another module")
+            }
+            (acquired.id, loc.clone())
+        })
+        .collect()
 }
 
 #[derive(Debug)]

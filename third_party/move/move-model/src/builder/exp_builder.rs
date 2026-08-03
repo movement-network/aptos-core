@@ -4,9 +4,8 @@
 
 use crate::{
     ast::{
-        AccessSpecifier, AccessSpecifierKind, Address, AddressSpecifier, Exp, ExpData,
-        LambdaCaptureKind, MatchArm, ModuleName, Operation, Pattern, QualifiedSymbol, QuantKind,
-        ResourceSpecifier, RewriteResult, Spec, TempIndex, Value,
+        Address, Exp, ExpData, LambdaCaptureKind, MatchArm, ModuleName, Operation, Pattern,
+        QualifiedSymbol, QuantKind, RewriteResult, Spec, TempIndex, Value,
     },
     builder::{
         model_builder::{
@@ -1201,34 +1200,19 @@ impl ExpTranslator<'_, '_, '_> {
     pub(crate) fn translate_acquires(
         &mut self,
         acquires: &[EA::ModuleAccess],
-    ) -> Option<Vec<AccessSpecifier>> {
-        if acquires.is_empty() {
-            return None;
-        }
-        Some(
-            acquires
-                .iter()
-                .map(|acquire| {
-                    let loc = self.to_loc(&acquire.loc);
-                    let sym = self.parent.module_access_to_qualified(acquire);
-                    let resource =
-                        if let Type::Struct(mid, sid, _) =
-                            self.parent.parent.lookup_type(&loc, &sym)
-                        {
-                            ResourceSpecifier::Resource(mid.qualified_inst(sid, vec![]))
-                        } else {
-                            ResourceSpecifier::Any
-                        };
-                    AccessSpecifier {
-                        loc: loc.clone(),
-                        kind: AccessSpecifierKind::LegacyAcquires,
-                        negated: false,
-                        resource: (loc.clone(), resource),
-                        address: (loc, AddressSpecifier::Any),
-                    }
-                })
-                .collect(),
-        )
+    ) -> Vec<(Loc, QualifiedId<StructId>)> {
+        acquires
+            .iter()
+            .filter_map(|acquire| {
+                let loc = self.to_loc(&acquire.loc);
+                let sym = self.parent.module_access_to_qualified(acquire);
+                if let Type::Struct(mid, sid, _) = self.parent.parent.lookup_type(&loc, &sym) {
+                    Some((loc, mid.qualified(sid)))
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 }
 

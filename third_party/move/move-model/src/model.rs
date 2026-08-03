@@ -17,10 +17,9 @@
 
 use crate::{
     ast::{
-        AccessSpecifier, AccessSpecifierKind, Address, AddressSpecifier, Attribute, ConditionKind,
-        Exp, ExpData, FriendDecl, GlobalInvariant, ModuleName, PropertyBag, PropertyValue,
-        ResourceSpecifier, Spec, SpecBlockInfo, SpecBlockTarget, SpecFunDecl, SpecVarDecl, UseDecl,
-        Value,
+        Address, Attribute, ConditionKind, Exp, ExpData, FriendDecl, GlobalInvariant, ModuleName,
+        PropertyBag, PropertyValue, Spec, SpecBlockInfo, SpecBlockTarget, SpecFunDecl, SpecVarDecl,
+        UseDecl, Value,
     },
     code_writer::CodeWriter,
     emit, emitln,
@@ -2127,7 +2126,7 @@ impl GlobalEnv {
             type_params,
             params,
             result_type,
-            access_specifiers: None,
+            declared_acquires: vec![],
             acquired_structs: None,
             spec: RefCell::new(spec_opt.unwrap_or_default()),
             def: Some(def),
@@ -2194,7 +2193,7 @@ impl GlobalEnv {
             type_params,
             params,
             result_type,
-            access_specifiers: None,
+            declared_acquires: vec![],
             acquired_structs: None,
             spec: RefCell::new(spec_opt.unwrap_or_default()),
             def: Some(def),
@@ -2867,51 +2866,15 @@ impl GlobalEnv {
 
     fn dump_fun_internal(&self, writer: &CodeWriter, tctx: &TypeDisplayContext, fun: &FunctionEnv) {
         emit!(writer, "{}", fun.get_header_string());
-        if let Some(specs) = fun.get_access_specifiers() {
+        if !fun.get_declared_acquires().is_empty() {
             emitln!(writer);
             writer.indent();
-            for spec in specs {
-                if spec.negated {
-                    emit!(writer, "!")
-                }
-                match &spec.kind {
-                    AccessSpecifierKind::Reads => emit!(writer, "reads "),
-                    AccessSpecifierKind::Writes => emit!(writer, "writes "),
-                    AccessSpecifierKind::LegacyAcquires => emit!(writer, "acquires "),
-                }
-                match &spec.resource.1 {
-                    ResourceSpecifier::Any => emit!(writer, "*"),
-                    ResourceSpecifier::DeclaredAtAddress(addr) => {
-                        emit!(
-                            writer,
-                            "0x{}::*",
-                            addr.expect_numerical().short_str_lossless()
-                        )
-                    },
-                    ResourceSpecifier::DeclaredInModule(mid) => {
-                        emit!(writer, "{}::*", self.get_module(*mid).get_full_name_str())
-                    },
-                    ResourceSpecifier::Resource(sid) => {
-                        emit!(writer, "{}", sid.to_type().display(tctx))
-                    },
-                }
-                emit!(writer, "(");
-                match &spec.address.1 {
-                    AddressSpecifier::Any => emit!(writer, "*"),
-                    AddressSpecifier::Address(addr) => {
-                        emit!(writer, "0x{}", addr.expect_numerical().short_str_lossless())
-                    },
-                    AddressSpecifier::Parameter(sym) => {
-                        emit!(writer, "{}", sym.display(self.symbol_pool()))
-                    },
-                    AddressSpecifier::Call(fun, sym) => emit!(
-                        writer,
-                        "{}({})",
-                        self.get_function(fun.to_qualified_id()).get_full_name_str(),
-                        sym.display(self.symbol_pool())
-                    ),
-                }
-                emitln!(writer, ")")
+            for (_, acquired) in fun.get_declared_acquires() {
+                emitln!(
+                    writer,
+                    "acquires {}",
+                    acquired.instantiate(vec![]).to_type().display(tctx)
+                )
             }
             writer.unindent()
         }
@@ -4522,8 +4485,8 @@ pub struct FunctionData {
     /// Result type of the function, uses `Type::Tuple` for multiple values.
     pub(crate) result_type: Type,
 
-    /// Access specifiers.
-    pub(crate) access_specifiers: Option<Vec<AccessSpecifier>>,
+    /// Resources declared in legacy `acquires` annotations, paired with their locations.
+    pub(crate) declared_acquires: Vec<(Loc, QualifiedId<StructId>)>,
 
     /// Acquires information, if available. This is either inferred or annotated by the
     /// user via a legacy acquires declaration.
@@ -4575,7 +4538,7 @@ impl FunctionData {
             type_params: vec![],
             params: vec![],
             result_type: Type::unit(),
-            access_specifiers: None,
+            declared_acquires: vec![],
             acquired_structs: None,
             spec: RefCell::new(Default::default()),
             def: None,
@@ -5046,18 +5009,13 @@ impl<'env> FunctionEnv<'env> {
         }
     }
 
-    /// Returns the access specifiers of this function.
-    /// If this is `None`, all accesses are allowed. If the list is empty,
-    /// no accesses are allowed. Otherwise the list is divided into _inclusions_ and _exclusions_,
-    /// the later being negated specifiers. Access is allowed if (a) any of the inclusion
-    /// specifiers allows it (union of inclusion specifiers) (b) none of the exclusions
-    /// specifiers disallows it (intersection of exclusion specifiers).
-    pub fn get_access_specifiers(&self) -> Option<&[AccessSpecifier]> {
-        self.data.access_specifiers.as_deref()
+    /// Returns resources declared in legacy `acquires` annotations and their locations.
+    pub fn get_declared_acquires(&self) -> &[(Loc, QualifiedId<StructId>)] {
+        &self.data.declared_acquires
     }
 
-    /// Returns the inferred acquired structs of this function. This is checked
-    /// against declared acquires from `get_access_specifiers`.
+    /// Returns the inferred acquired structs of this function. This is checked against
+    /// the annotations returned by `get_declared_acquires`.
     pub fn get_acquired_structs(&self) -> Option<&BTreeSet<StructId>> {
         self.data.acquired_structs.as_ref()
     }

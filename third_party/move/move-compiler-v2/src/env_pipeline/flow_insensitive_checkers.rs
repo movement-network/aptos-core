@@ -127,16 +127,10 @@ impl<'env, 'params> SymbolVisitor<'env, 'params> {
         params: &'params [Parameter],
         inline: bool,
     ) -> SymbolVisitor<'env, 'params> {
-        let mut seen_uses = ScopedVisibleSet::new();
-        for spec in func.get_access_specifiers().unwrap_or_default() {
-            for var in spec.used_vars() {
-                seen_uses.insert(var)
-            }
-        }
         SymbolVisitor {
             env: func.module_env.env,
             params,
-            seen_uses,
+            seen_uses: ScopedVisibleSet::new(),
             inline,
         }
     }

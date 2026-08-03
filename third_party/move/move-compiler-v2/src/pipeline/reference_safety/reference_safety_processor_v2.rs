@@ -123,7 +123,7 @@ use itertools::Itertools;
 use log::{debug, log_enabled, Level};
 use move_binary_format::file_format::CodeOffset;
 use move_model::{
-    ast::{AccessSpecifierKind, TempIndex},
+    ast::TempIndex,
     model::{FieldId, FunId, FunctionEnv, GlobalEnv, Loc, Parameter, QualifiedInstId, StructId},
     symbol::Symbol,
     ty::{ReferenceKind, Type},
@@ -1699,40 +1699,42 @@ impl LifetimeAnalysisStep<'_, '_> {
     /// currently borrowed.
     fn check_global_access(&mut self, fun_id: QualifiedInstId<FunId>) {
         let fun = self.global_env().get_function(fun_id.to_qualified_id());
-        let specifiers = fun.get_access_specifiers().unwrap_or(&[]);
+        let empty_acquires = BTreeSet::new();
+        let acquires = fun.get_acquired_structs().unwrap_or(&empty_acquires);
 
         for (global, label) in &self.state.global_to_label_map {
             let is_mut = self.state.children(label).any(|e| e.kind.is_mut());
-            // We are only checking positive specifiers, as negatives say nothing
-            // about what is accessed.
-            for spec in specifiers.iter().filter(|s| !s.negated) {
-                if spec
-                    .resource
-                    .1
-                    .matches(self.global_env(), &fun_id.inst, global)
-                    // For mut global borrows, no access is allowed at all. For
-                    // non-mut, write access is not allowed.
-                    // TODO: needs to be updated to use acquired resources instead
-                    //   access specifiers (see v3 code).
-                    && (is_mut || spec.kind.subsumes(&AccessSpecifierKind::Writes))
-                {
-                    self.error_with_hints(
-                        self.cur_loc(),
-                        format!(
-                            "function {} global `{}` which is currently {}borrowed",
-                            spec.kind,
-                            self.global_env().display(global),
-                            if is_mut { "mutably " } else { "" }
-                        ),
-                        "function called here",
-                        self.borrow_info(label, |_| true)
-                            .into_iter()
-                            .chain(iter::once((
-                                spec.loc.clone(),
-                                "access declared here".to_owned(),
-                            ))),
-                    )
-                }
+            if is_mut
+                && global.module_id == fun.module_env.get_id()
+                && acquires.contains(&global.id)
+            {
+                let access_origin_hint = fun
+                    .get_declared_acquires()
+                    .iter()
+                    .find_map(|(loc, acquired)| {
+                        if *acquired == global.to_qualified_id() {
+                            Some((loc.clone(), "`acquires` declared here".to_owned()))
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or_else(|| {
+                        (
+                            fun.get_id_loc(),
+                            "`acquires` of this function was inferred".to_owned(),
+                        )
+                    });
+                self.error_with_hints(
+                    self.cur_loc(),
+                    format!(
+                        "function acquires global `{}` which is currently mutably borrowed",
+                        self.global_env().display(global),
+                    ),
+                    "function called here",
+                    self.borrow_info(label, |_| true)
+                        .into_iter()
+                        .chain(iter::once(access_origin_hint)),
+                )
             }
         }
     }

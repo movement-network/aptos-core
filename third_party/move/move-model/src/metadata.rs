@@ -30,7 +30,6 @@ pub mod lang_feature_versions {
     pub const COMPILE_FOR_TESTING_VALUE: LanguageVersion = LanguageVersion::V2_2;
     pub const SINT_LANGUAGE_VERSION_VALUE: LanguageVersion = LanguageVersion::V2_3;
     pub const LANGUAGE_VERSION_FOR_PUBLIC_STRUCT: LanguageVersion = LanguageVersion::V2_4;
-    pub const LANGUAGE_VERSION_FOR_RAC: LanguageVersion = LanguageVersion::V2_5;
 }
 
 // ================================================================================'

@@ -368,6 +368,15 @@ const TEST_CONFIGS: Lazy<BTreeMap<&str, TestConfig>> = Lazy::new(|| {
                 .exp_off(Experiment::OPTIMIZE)
                 .exp_off(Experiment::OPTIMIZE_WAITING_FOR_COMPARE_TESTS)
         },
+        // Focused regression tests for the legacy v2 reference safety processor.
+        TestConfig {
+            name: "reference-safety-v2",
+            runner: |p| run_test(p, get_config_by_name("reference-safety-v2")),
+            include: vec!["/reference-safety-v2/"],
+            ..config()
+                .lang(LanguageVersion::V2_1)
+                .exp_off(Experiment::REFERENCE_SAFETY_V3)
+        },
         // Abort analysis tests
         TestConfig {
             name: "abort-analysis",

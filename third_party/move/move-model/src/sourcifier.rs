@@ -213,15 +213,18 @@ impl<'a> Sourcifier<'a> {
     /// since they are exact and also available for functions loaded from bytecode; the declared
     /// list is used for models where acquires analysis has not run (e.g. prover tools).
     fn acquires_for_display(fun: &FunctionEnv) -> Vec<QualifiedId<StructId>> {
-        if let Some(acquired) = fun.get_acquired_structs() {
-            let mid = fun.module_env.get_id();
-            acquired.iter().map(|sid| mid.qualified(*sid)).collect()
-        } else {
-            fun.get_declared_acquires()
-                .iter()
-                .map(|(_, acquired)| *acquired)
-                .collect()
+        // Inline functions cannot carry `acquires` annotations, so never print
+        // inferred ones for them.
+        if !fun.is_inline() {
+            if let Some(acquired) = fun.get_acquired_structs() {
+                let mid = fun.module_env.get_id();
+                return acquired.iter().map(|sid| mid.qualified(*sid)).collect();
+            }
         }
+        fun.get_declared_acquires()
+            .iter()
+            .map(|(_, acquired)| *acquired)
+            .collect()
     }
 
     fn print_acquires(&self, tctx: &TypeDisplayContext, acquires: &[QualifiedId<StructId>]) {

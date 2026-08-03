@@ -16,7 +16,7 @@ module 0x42::token {
         val: u64,
     }
     public fun get_value(ref: &obj::ReaderRef<Token>): u64
-        acquires Token(*)
+        acquires Token
      {
         select token::Token.val<&Token>({
           let (ref: &obj::ReaderRef<Token>): (&obj::ReaderRef<Token>) = Tuple(ref);
@@ -70,7 +70,7 @@ module 0x42::token {
         val: u64,
     }
     public fun get_value(ref: &obj::ReaderRef<Token>): u64
-        acquires Token(*)
+        acquires Token
      {
         select token::Token.val<&Token>({
           let (ref: &obj::ReaderRef<Token>): (&obj::ReaderRef<Token>) = Tuple(ref);

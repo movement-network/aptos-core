@@ -4,7 +4,7 @@ module 0x42::mod2 {
         func: F,
     }
     public fun get_item<F>(addr: address): F
-        acquires Registry(*)
+        acquires Registry
      {
         select mod2::Registry.func<&Registry<F>>(BorrowGlobal(Immutable)<Registry<F>>(addr))
     }

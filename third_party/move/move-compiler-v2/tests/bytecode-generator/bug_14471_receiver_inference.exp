@@ -17,7 +17,7 @@ module 0x815::m {
         Tuple()
     }
     public fun add_when_missing(key: address,val: u64)
-        acquires MyMap(*)
+        acquires MyMap
      {
         {
           let my_map: &mut MyMap = BorrowGlobal(Mutable)<MyMap>(0x815);
@@ -124,7 +124,7 @@ module 0x815::m {
         Tuple()
     }
     public fun add_when_missing(key: address,val: u64)
-        acquires MyMap(*)
+        acquires MyMap
      {
         {
           let my_map: &mut MyMap = BorrowGlobal(Mutable)<MyMap>(0x815);

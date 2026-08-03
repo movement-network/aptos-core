@@ -1,12 +1,12 @@
 
 Diagnostics:
-error: invalid access specifier
+error: undeclared `0x2::M::T`
    ┌─ tests/more-v1/typing/invalid_type_acquire.move:18:9
    │
 18 │         T,
    │         ^
 
-error: invalid access specifier
+error: undeclared `0x2::M::u64`
    ┌─ tests/more-v1/typing/invalid_type_acquire.move:19:9
    │
 19 │         u64,

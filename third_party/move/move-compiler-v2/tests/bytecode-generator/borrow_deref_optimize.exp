@@ -4,7 +4,7 @@ module 0x42::test {
         value: bool,
     }
     private fun no_optimize_resource(): bool
-        acquires X(*)
+        acquires X
      {
         {
           let x: &mut X = Borrow(Mutable)(Deref(BorrowGlobal(Immutable)<X>(0x1)));
@@ -21,7 +21,7 @@ module 0x42::test {
         }
     }
     private fun optimize_resource(): bool
-        acquires X(*)
+        acquires X
      {
         {
           let x: &X = Borrow(Immutable)(Deref(BorrowGlobal(Immutable)<X>(0x1)));
@@ -161,7 +161,7 @@ module 0x42::test {
         value: bool,
     }
     private fun no_optimize_resource(): bool
-        acquires X(*)
+        acquires X
      {
         {
           let x: &mut X = Borrow(Mutable)(Deref(BorrowGlobal(Immutable)<X>(0x1)));
@@ -175,7 +175,7 @@ module 0x42::test {
         }
     }
     private fun optimize_resource(): bool
-        acquires X(*)
+        acquires X
      {
         {
           let x: &X = Borrow(Immutable)(Deref(BorrowGlobal(Immutable)<X>(0x1)));

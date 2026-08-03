@@ -31,42 +31,42 @@ module 0x42::m {
         m::greater(vector::borrow<W>(Borrow(Immutable)(v), 0), w)
     }
     private fun dispatch<T>(account: address): T
-        acquires Wrapper(*)
+        acquires Wrapper
      {
         m::unwrap<T>(BorrowGlobal(Immutable)<Wrapper<T>>(account))
     }
     private fun foo(account: address,w: W)
-        acquires S(*)
+        acquires S
      {
         m::merge(Borrow(Mutable)(select m::T.w<T>(select m::S.t<S>(BorrowGlobal(Mutable)<S>(account)))), w)
     }
     private fun foo_(account: address,w: W)
-        acquires S(*)
+        acquires S
      {
         m::merge(Borrow(Mutable)(select m::T.w<T>(select m::S.t<S>(BorrowGlobal(Mutable)<S>(account)))), w)
     }
     private fun foo_2(account: address,w: W)
-        acquires W(*)
+        acquires W
      {
         m::merge(BorrowGlobal(Mutable)<W>(account), w)
     }
     private fun foo_3(account: address,w: W)
-        acquires W(*)
+        acquires W
      {
         m::merge(BorrowGlobal(Mutable)<W>(account), w)
     }
     private fun foo_greater(account: address,w: W): bool
-        acquires S(*)
+        acquires S
      {
         m::greater(Borrow(Immutable)(select m::T.w<T>(select m::S.t<S>(BorrowGlobal(Immutable)<S>(account)))), w)
     }
     private fun foo_greater_(account: address,w: W): bool
-        acquires S(*)
+        acquires S
      {
         m::greater(Freeze(false)(Borrow(Mutable)(select m::T.w<T>(select m::S.t<S>(BorrowGlobal(Mutable)<S>(account))))), w)
     }
     private fun foo_greater_2(account: address,w: W): bool
-        acquires W(*)
+        acquires W
      {
         m::greater(BorrowGlobal(Immutable)<W>(account), w)
     }

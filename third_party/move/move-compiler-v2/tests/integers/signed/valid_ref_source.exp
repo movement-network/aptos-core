@@ -80,19 +80,25 @@ module 0x42::valid_ref_resource {
     fun test_deref2(a: &i128): i128 {
         *a
     }
-    fun test_exist1(addr: address): i64 {
+    fun test_exist1(addr: address): i64
+        acquires S1
+    {
         if (exists<S1>(addr)) {
             let s = borrow_global<S1>(addr);
             s.y
         } else 1i64
     }
-    fun test_exist2(addr: address): i128 {
+    fun test_exist2(addr: address): i128
+        acquires S1
+    {
         if (exists<S1>(addr)) {
             let s = borrow_global<S1>(addr);
             s.z
         } else 1i128
     }
-    fun test_move_from(account: &signer, addr: address): i64 {
+    fun test_move_from(account: &signer, addr: address): i64
+        acquires S1
+    {
         let s1 = S1{x: 1, y: -1i64, z: -2i128};
         if (exists<S1>(addr)) move_from<S1>(0x1::signer::address_of(account)).y else s1.y
     }

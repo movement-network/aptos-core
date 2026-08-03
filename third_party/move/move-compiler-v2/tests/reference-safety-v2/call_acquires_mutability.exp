@@ -10,3 +10,14 @@ error: function acquires global `m::R` which is currently mutably borrowed
    │                         -------------------------- previous mutable global borrow
 10 │         let R { value } = take(addr);
    │                           ^^^^^^^^^^ function called here
+
+error: function acquires global `m::R` which is currently borrowed
+   ┌─ tests/reference-safety-v2/call_acquires_mutability.move:16:27
+   │
+ 4 │     fun take(addr: address): R acquires R {
+   │                                         - `acquires` declared here
+   ·
+15 │         let reference = borrow_global<R>(addr);
+   │                         ---------------------- previous global borrow
+16 │         let R { value } = take(addr);
+   │                           ^^^^^^^^^^ function called here

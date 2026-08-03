@@ -1704,10 +1704,7 @@ impl LifetimeAnalysisStep<'_, '_> {
 
         for (global, label) in &self.state.global_to_label_map {
             let is_mut = self.state.children(label).any(|e| e.kind.is_mut());
-            if is_mut
-                && global.module_id == fun.module_env.get_id()
-                && acquires.contains(&global.id)
-            {
+            if global.module_id == fun.module_env.get_id() && acquires.contains(&global.id) {
                 let access_origin_hint = fun
                     .get_declared_acquires()
                     .iter()
@@ -1727,8 +1724,9 @@ impl LifetimeAnalysisStep<'_, '_> {
                 self.error_with_hints(
                     self.cur_loc(),
                     format!(
-                        "function acquires global `{}` which is currently mutably borrowed",
+                        "function acquires global `{}` which is currently {}borrowed",
                         self.global_env().display(global),
+                        if is_mut { "mutably " } else { "" }
                     ),
                     "function called here",
                     self.borrow_info(label, |_| true)

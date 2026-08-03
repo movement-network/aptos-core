@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    loader::{access_specifier_loader::load_access_specifier, Module, Script},
+    loader::{Module, Script},
     module_traversal::TraversalContext,
     native_functions::{NativeFunction, NativeFunctions, UnboxedNativeFunction},
     storage::{loader::traits::Loader, ty_layout_converter::LayoutConverter},
@@ -12,7 +12,6 @@ use better_any::{Tid, TidAble, TidExt};
 use lazy_static::lazy_static;
 use move_binary_format::{
     access::ModuleAccess,
-    binary_views::BinaryIndexedView,
     errors::{Location, PartialVMError, PartialVMResult, VMResult},
     file_format::{CompiledModule, FunctionAttribute, FunctionDefinitionIndex, Visibility},
 };
@@ -29,10 +28,7 @@ use move_vm_profiler::ProfilerFunction;
 use move_vm_types::{
     gas::DependencyGasMeter,
     instr::Instruction,
-    loaded_data::{
-        runtime_access_specifier::AccessSpecifier,
-        runtime_types::{StructIdentifier, Type},
-    },
+    loaded_data::runtime_types::Type,
     module_id_interner::InternedModuleId,
     ty_interner::TypeVecId,
     values::{AbstractFunction, SerializedFunctionData},
@@ -84,7 +80,6 @@ pub struct Function {
     // compatible).
     pub(crate) local_tys: Vec<Type>,
     pub(crate) param_tys: Vec<Type>,
-    pub(crate) access_specifier: AccessSpecifier,
     pub(crate) is_persistent: bool,
     pub(crate) has_module_reentrancy_lock: bool,
     pub(crate) is_trusted: bool,
@@ -583,10 +578,6 @@ impl LoadedFunction {
         self.function.code.len()
     }
 
-    pub(crate) fn access_specifier(&self) -> &AccessSpecifier {
-        &self.function.access_specifier
-    }
-
     pub(crate) fn name_as_pretty_string(&self) -> String {
         match &self.owner {
             LoadedFunctionOwner::Script(_) => "script::main".into(),
@@ -614,7 +605,6 @@ impl Function {
         index: FunctionDefinitionIndex,
         module: &CompiledModule,
         signature_table: &[Vec<Type>],
-        struct_names: &[StructIdentifier],
     ) -> PartialVMResult<Self> {
         let def = module.function_def_at(index);
         let handle = module.function_handle_at(def.function);
@@ -654,13 +644,6 @@ impl Function {
         };
         let param_tys = signature_table[handle.parameters.0 as usize].clone();
 
-        let access_specifier = load_access_specifier(
-            BinaryIndexedView::Module(module),
-            signature_table,
-            struct_names,
-            &handle.access_specifiers,
-        )?;
-
         Ok(Self {
             file_format_version: module.version(),
             index,
@@ -675,7 +658,6 @@ impl Function {
             local_tys,
             return_tys,
             param_tys,
-            access_specifier,
             is_persistent: handle.attributes.contains(&FunctionAttribute::Persistent),
             has_module_reentrancy_lock: handle.attributes.contains(&FunctionAttribute::ModuleLock),
             is_trusted,

@@ -55,7 +55,10 @@ pub struct VerifierConfig {
     pub _use_signature_checker_v2: bool,
     pub sig_checker_v2_fix_script_ty_param_count: bool,
     pub enable_enum_types: bool,
-    pub enable_resource_access_control: bool,
+    // Deprecated: resource access control has been removed. Access specifiers are always
+    // rejected, regardless of this field, which is kept only to preserve the serialized
+    // layout of this config.
+    pub _enable_resource_access_control: bool,
     pub enable_function_values: bool,
     /// Maximum number of function return values.
     pub max_function_return_values: Option<usize>,
@@ -263,7 +266,7 @@ impl Default for VerifierConfig {
             sig_checker_v2_fix_function_signatures: true,
 
             enable_enum_types: true,
-            enable_resource_access_control: true,
+            _enable_resource_access_control: false,
             enable_function_values: true,
 
             max_function_return_values: None,
@@ -312,7 +315,7 @@ impl VerifierConfig {
             sig_checker_v2_fix_function_signatures: true,
 
             enable_enum_types: true,
-            enable_resource_access_control: true,
+            _enable_resource_access_control: false,
             enable_function_values: true,
 
             max_function_return_values: Some(128),

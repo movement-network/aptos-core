@@ -125,7 +125,7 @@ pub fn aptos_prod_verifier_config(gas_feature_version: u64, features: &Features)
     let enable_enum_types = features.is_enabled(FeatureFlag::ENABLE_ENUM_TYPES);
     // Resource access control has been removed from the VM, so the on-chain flag no longer has
     // any effect: access specifiers are rejected at verification and never enforced at runtime.
-    if features.is_enabled(FeatureFlag::ENABLE_RESOURCE_ACCESS_CONTROL) {
+    if features.is_enabled(FeatureFlag::_DEPRECATED_ENABLE_RESOURCE_ACCESS_CONTROL) {
         warn!(
             "On-chain feature ENABLE_RESOURCE_ACCESS_CONTROL is enabled but has been \
              removed; ignoring it."

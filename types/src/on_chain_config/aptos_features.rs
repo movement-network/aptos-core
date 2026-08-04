@@ -97,7 +97,7 @@ pub enum FeatureFlag {
     /// Enabled on mainnet, cannot be disabled.
     _USE_COMPATIBILITY_CHECKER_V2 = 73,
     ENABLE_ENUM_TYPES = 74,
-    ENABLE_RESOURCE_ACCESS_CONTROL = 75,
+    _DEPRECATED_ENABLE_RESOURCE_ACCESS_CONTROL = 75,
     /// Enabled on mainnet, can never be disabled.
     _REJECT_UNSTABLE_BYTECODE_FOR_SCRIPT = 76,
     FEDERATED_KEYLESS = 77,

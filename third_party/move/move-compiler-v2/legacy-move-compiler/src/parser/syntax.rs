@@ -2860,71 +2860,12 @@ fn parse_function_decl(
         sp(name.loc(), Type_::Unit)
     };
 
-    // "pure" | ( ( "!" )? ("acquires" | "reads" | "writes" ) <AccessSpecifierList> )*
-    let mut access_specifiers = vec![];
-    let mut pure_loc = None;
-    loop {
-        let negated = if context.tokens.peek() == Tok::Exclaim {
-            require_move_2_and_advance(context, "access specifiers")?;
-            true
-        } else {
-            false
-        };
-        match context.tokens.peek() {
-            Tok::Acquires => {
-                context.tokens.advance()?;
-                access_specifiers.extend(parse_access_specifier_list(
-                    context,
-                    negated,
-                    &AccessSpecifier_::Acquires,
-                )?)
-            },
-            Tok::Identifier if context.tokens.content() == "reads" => {
-                require_move_2_and_advance(context, "access specifiers")?;
-                access_specifiers.extend(parse_access_specifier_list(
-                    context,
-                    negated,
-                    &AccessSpecifier_::Reads,
-                )?)
-            },
-            Tok::Identifier if context.tokens.content() == "writes" => {
-                require_move_2_and_advance(context, "access specifiers")?;
-                access_specifiers.extend(parse_access_specifier_list(
-                    context,
-                    negated,
-                    &AccessSpecifier_::Writes,
-                )?)
-            },
-            Tok::Identifier if context.tokens.content() == "pure" => {
-                pure_loc = Some(current_token_loc(context.tokens));
-                require_move_2_and_advance(context, "access specifiers")?;
-                if negated {
-                    return Err(Box::new(diag!(
-                        Syntax::InvalidAccessSpecifier,
-                        (pure_loc.unwrap(), "'pure' cannot be negated")
-                    )));
-                }
-            },
-            _ => break,
-        }
-    }
-    let access_specifiers = if let Some(loc) = pure_loc {
-        if !access_specifiers.is_empty() {
-            return Err(Box::new(diag!(
-                Syntax::InvalidAccessSpecifier,
-                (
-                    loc,
-                    "'pure' cannot be mixed with 'acquires'/`reads'/'writes'"
-                )
-            )));
-        }
-        // pure is represented by an empty access list
-        Some(vec![])
-    } else if access_specifiers.is_empty() {
-        // no specifiers is represented as None
-        None
+    // ("acquires" <NameAccessChain> ("," <NameAccessChain>)*)?
+    let access_specifiers = if context.tokens.peek() == Tok::Acquires {
+        context.tokens.advance()?;
+        Some(parse_acquires_list(context)?)
     } else {
-        Some(access_specifiers)
+        None
     };
 
     let body = match native {
@@ -2977,23 +2918,20 @@ fn parse_parameter(context: &mut Context) -> Result<(Var, Type), Box<Diagnostic>
     Ok((v, t))
 }
 
-// Parse an access specifier list:
-//      AccessSpecifierList = <AccessSpecifier> ( "," <AccessSpecifier> )* ","?
-fn parse_access_specifier_list(
-    context: &mut Context,
-    negated: bool,
-    ctor: &impl Fn(bool, NameAccessChain, Option<Vec<Type>>, AddressSpecifier) -> AccessSpecifier_,
-) -> Result<Vec<AccessSpecifier>, Box<Diagnostic>> {
-    let mut chain = vec![];
+// Parse an acquires list:
+//      AcquiresList = <NameAccessChain> ( "," <NameAccessChain> )* ","?
+fn parse_acquires_list(context: &mut Context) -> Result<Vec<AccessSpecifier>, Box<Diagnostic>> {
+    let mut acquires = vec![];
     loop {
-        chain.push(parse_access_specifier(context, negated, ctor)?);
+        let start_loc = context.tokens.start_loc();
+        let resource = parse_name_access_chain(context, false, || "an access specifier")?;
+        let end_loc = context.tokens.previous_end_loc();
+        let loc = make_loc(context.tokens.file_hash(), start_loc, end_loc);
+        acquires.push(sp(loc, AccessSpecifier_(resource)));
         if context.tokens.peek() == Tok::Comma {
             context.tokens.advance()?;
-            // Trailing comma allowed, check FIRST(<AccessSpecifier>)
-            if matches!(
-                context.tokens.peek(),
-                Tok::Identifier | Tok::Star | Tok::NumValue
-            ) {
+            // Trailing comma allowed, check FIRST(<NameAccessChain>).
+            if matches!(context.tokens.peek(), Tok::Identifier | Tok::NumValue) {
                 continue;
             } else {
                 break;
@@ -3002,72 +2940,7 @@ fn parse_access_specifier_list(
             break;
         }
     }
-    Ok(chain)
-}
-
-// Parse an access specifier:
-//   AccessSpecifier = <NameAccessChainWithWildcard> <OptionalTypeArgs> <AddressSpecifier>
-fn parse_access_specifier(
-    context: &mut Context,
-    negated: bool,
-    ctor: &impl Fn(bool, NameAccessChain, Option<Vec<Type>>, AddressSpecifier) -> AccessSpecifier_,
-) -> Result<AccessSpecifier, Box<Diagnostic>> {
-    let start = context.tokens.start_loc();
-    let name_chain = parse_name_access_chain(context, true, || "an access specifier")?;
-    let type_args = parse_optional_type_args(context)?;
-    let address = parse_address_specifier(context)?;
-    let loc = make_loc(
-        context.tokens.file_hash(),
-        start,
-        address.loc.end() as usize,
-    );
-    Ok(sp(loc, (*ctor)(negated, name_chain, type_args, address)))
-}
-
-// Parse an address specifier:
-//   AddressSpecifier = <empty> | "(" <AddressSpecifierArg> ")"
-//   AddressSpecifierArg = "*" | <AddressBytes> | <NameAccessChain> ( <TypeArgs>? "(" <Identifier> ")" )?
-fn parse_address_specifier(context: &mut Context) -> Result<AddressSpecifier, Box<Diagnostic>> {
-    let start = context.tokens.start_loc();
-    let (spec, end) = if match_token(context.tokens, Tok::LParen)? {
-        let spec = match context.tokens.peek() {
-            Tok::Star => {
-                context.tokens.advance()?;
-                AddressSpecifier_::Any
-            },
-            Tok::NumValue => AddressSpecifier_::Literal(parse_address_bytes(context)?.value),
-            _ => {
-                let chain = parse_name_access_chain(context, false, || "an address specifier")?;
-                let type_args = parse_optional_type_args(context)?;
-                if match_token(context.tokens, Tok::LParen)? {
-                    let name = parse_identifier(context)?;
-                    let call = AddressSpecifier_::Call(chain, type_args, name);
-                    consume_token(context.tokens, Tok::RParen)?;
-                    call
-                } else {
-                    if type_args.is_some() {
-                        return Err(Box::new(diag!(
-                            Syntax::InvalidAccessSpecifier,
-                            (chain.loc, "type arguments not allowed")
-                        )));
-                    }
-                    if let NameAccessChain_::One(name) = chain.value {
-                        AddressSpecifier_::Name(name)
-                    } else {
-                        return Err(Box::new(diag!(
-                            Syntax::InvalidAccessSpecifier,
-                            (chain.loc, "expected a simple name")
-                        )));
-                    }
-                }
-            },
-        };
-        consume_token(context.tokens, Tok::RParen)?;
-        (spec, context.tokens.previous_end_loc())
-    } else {
-        (AddressSpecifier_::Empty, context.tokens.start_loc())
-    };
-    Ok(sp(make_loc(context.tokens.file_hash(), start, end), spec))
+    Ok(acquires)
 }
 
 //**************************************************************************************************
@@ -4501,5 +4374,48 @@ pub fn parse_file_string(
     match parse_file(&mut Context::new(env, &mut tokens)) {
         Err(err) => Err(Diagnostics::from(vec![*err])),
         Ok(def) => Ok((def, tokens.check_and_get_doc_comments(env))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parses(source: &str) -> bool {
+        let flags = Flags::empty().set_language_version(LanguageVersion::V2_5);
+        let mut env = CompilationEnv::new(flags, Default::default());
+        parse_file_string(&mut env, FileHash::new(source), source).is_ok()
+    }
+
+    #[test]
+    fn parses_legacy_acquires_syntax() {
+        assert!(parses(
+            "module 0x1::M {
+                struct R has key {}
+                struct S has key {}
+                fun f() acquires R, 0x1::M::S, {}
+            }",
+        ));
+    }
+
+    #[test]
+    fn does_not_parse_resource_access_control_syntax() {
+        for access in [
+            "reads R",
+            "writes R",
+            "pure",
+            "!reads R",
+            "acquires R(*)",
+            "acquires *",
+        ] {
+            let source = format!(
+                "module 0x1::M {{
+                    struct R has key {{}}
+                    fun f() {} {{}}
+                }}",
+                access
+            );
+            assert!(!parses(&source), "unexpectedly parsed `{}`", access);
+        }
     }
 }

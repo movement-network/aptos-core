@@ -1,7 +1,10 @@
 
 Diagnostics:
-error: only simple resource names can be used with `acquires`
-  ┌─ tests/checking-lang-v1/acquires_list_generic.move:6:24
+error: unexpected token
+  ┌─ tests/checking-lang-v1/acquires_list_generic.move:6:25
   │
 6 │     fun foo() acquires B<CupC<R>> {
-  │                        ^^^^^^^^^^^
+  │                         ^
+  │                         │
+  │                         Unexpected '<'
+  │                         Expected '{'

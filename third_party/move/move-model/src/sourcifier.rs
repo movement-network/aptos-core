@@ -3,10 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    ast::{
-        AccessSpecifierKind, AddressSpecifier, Exp, ExpData, LambdaCaptureKind, Operation, Pattern,
-        ResourceSpecifier, TempIndex, Value,
-    },
+    ast::{Exp, ExpData, LambdaCaptureKind, Operation, Pattern, TempIndex, Value},
     code_writer::CodeWriter,
     emit, emitln,
     exp_builder::ExpBuilder,
@@ -157,11 +154,12 @@ impl<'a> Sourcifier<'a> {
                 fun_env.get_result_type().display(&tctx)
             )
         }
-        if fun_env.get_access_specifiers().is_none() && !fun_env.is_native() {
+        let acquires = Self::acquires_for_display(&fun_env);
+        if acquires.is_empty() && !fun_env.is_native() {
             // Add a space so we open the code block with " {" on the same line.
             emit!(self.writer, " ");
         } else {
-            self.print_access_specifiers(&tctx, &fun_env);
+            self.print_acquires(&tctx, &acquires);
         }
         if let Some(def) = def {
             // Set up aliases for all temporary variables in the function body
@@ -211,89 +209,37 @@ impl<'a> Sourcifier<'a> {
         }
     }
 
-    fn print_access_specifiers(&self, tctx: &TypeDisplayContext, fun: &FunctionEnv) {
-        let Some(specs) = fun.get_access_specifiers() else {
-            return;
-        };
-        self.writer.indent();
-        let mut acc_spec_map = BTreeMap::new();
-
-        // gather resources together under each spec kind
-        for spec_kind in [
-            "!reads",
-            "!writes",
-            "!acquires",
-            "reads",
-            "writes",
-            "acquires",
-        ] {
-            acc_spec_map.insert(spec_kind.to_string(), BTreeSet::new());
-        }
-
-        for spec in specs {
-            let resource = match &spec.resource.1 {
-                ResourceSpecifier::Any => "*".to_string(),
-                ResourceSpecifier::DeclaredAtAddress(addr) => {
-                    format!("0x{}::*::*", addr.expect_numerical().short_str_lossless())
-                },
-                ResourceSpecifier::DeclaredInModule(mid) => {
-                    format!("{}::*", self.env().get_module(*mid).get_full_name_str())
-                },
-                ResourceSpecifier::Resource(sid) => {
-                    format!("{}", sid.to_type().display(tctx))
-                },
-            };
-
-            let address = match &spec.address.1 {
-                AddressSpecifier::Any => "".to_string(),
-                AddressSpecifier::Address(addr) => {
-                    format!("(0x{})", addr.expect_numerical().short_str_lossless())
-                },
-                AddressSpecifier::Parameter(sym) => {
-                    format!("({})", self.sym(*sym))
-                },
-                AddressSpecifier::Call(fun, sym) => {
-                    let func_env = self.env().get_function(fun.to_qualified_id());
-                    format!(
-                        "({}{}({}))",
-                        self.module_qualifier(tctx, func_env.module_env.get_id()),
-                        func_env.get_name_str(),
-                        self.sym(*sym)
-                    )
-                },
-            };
-
-            let spec_kind = match spec.kind {
-                AccessSpecifierKind::Reads => "reads",
-                AccessSpecifierKind::Writes => "writes",
-                AccessSpecifierKind::LegacyAcquires => "acquires",
-            };
-
-            let spec_key = if spec.negated {
-                format!("!{}", spec_kind)
-            } else {
-                spec_kind.to_string()
-            };
-
-            acc_spec_map
-                .get_mut(&spec_key)
-                .expect("spec kind key expected")
-                .insert(format!("{}{}", resource, address));
-        }
-
-        // print the spec kind and associated resources one by one
-        for (spec_kind, resources) in &acc_spec_map {
-            if !resources.is_empty() {
-                emitln!(self.writer);
-                self.print_list(
-                    &format!("{} ", spec_kind),
-                    ", ",
-                    "",
-                    resources.iter(),
-                    |resource| emit!(self.writer, "{}", resource),
-                );
+    /// The acquires list to print for a function. The actually acquired structs are preferred
+    /// since they are exact and also available for functions loaded from bytecode; the declared
+    /// list is used for models where acquires analysis has not run (e.g. prover tools).
+    fn acquires_for_display(fun: &FunctionEnv) -> Vec<QualifiedId<StructId>> {
+        // Inline functions cannot carry `acquires` annotations, so never print
+        // inferred ones for them.
+        if !fun.is_inline() {
+            if let Some(acquired) = fun.get_acquired_structs() {
+                let mid = fun.module_env.get_id();
+                return acquired.iter().map(|sid| mid.qualified(*sid)).collect();
             }
         }
+        fun.get_declared_acquires()
+            .iter()
+            .map(|(_, acquired)| *acquired)
+            .collect()
+    }
+
+    fn print_acquires(&self, tctx: &TypeDisplayContext, acquires: &[QualifiedId<StructId>]) {
+        if acquires.is_empty() {
+            return;
+        }
+        self.writer.indent();
+        emitln!(self.writer);
+        self.print_list("acquires ", ", ", "", acquires.iter(), |acquired| {
+            emit!(
+                self.writer,
+                "{}",
+                acquired.instantiate(vec![]).to_type().display(tctx)
+            )
+        });
         self.writer.unindent();
         emitln!(self.writer)
     }

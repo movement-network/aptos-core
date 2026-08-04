@@ -48,11 +48,15 @@ module 0x8675309::M {
     struct R1<phantom T> has key {
         x: M1::R<T>,
     }
-    fun f<T>(a: address): M1::R<T> {
+    fun f<T>(a: address): M1::R<T>
+        acquires R1
+    {
         let r = borrow_global_mut<R1<T>>(a);
         M1::extract<T>(&mut r.x, 3)
     }
-    public fun t0<T>(a: address): M1::R<T> {
+    public fun t0<T>(a: address): M1::R<T>
+        acquires R1
+    {
         if (false) () else abort 0;
         f<T>(a)
     }

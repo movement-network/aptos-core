@@ -4,9 +4,8 @@
 
 use crate::{
     ast::{
-        AccessSpecifier, AccessSpecifierKind, Address, AddressSpecifier, Exp, ExpData,
-        LambdaCaptureKind, MatchArm, ModuleName, Operation, Pattern, QualifiedSymbol, QuantKind,
-        ResourceSpecifier, RewriteResult, Spec, TempIndex, Value,
+        Address, Exp, ExpData, LambdaCaptureKind, MatchArm, ModuleName, Operation, Pattern,
+        QualifiedSymbol, QuantKind, RewriteResult, Spec, TempIndex, Value,
     },
     builder::{
         model_builder::{
@@ -14,10 +13,7 @@ use crate::{
         },
         module_builder::{ModuleBuilder, SpecBlockContext},
     },
-    metadata::{
-        lang_feature_versions::{LANGUAGE_VERSION_FOR_RAC, SINT_LANGUAGE_VERSION_VALUE},
-        LanguageVersion,
-    },
+    metadata::{lang_feature_versions::SINT_LANGUAGE_VERSION_VALUE, LanguageVersion},
     model::{
         FieldData, FieldId, FunctionKind, GlobalEnv, Loc, ModuleId, NodeId, Parameter, QualifiedId,
         QualifiedInstId, SpecFunId, StructId, TypeParameter, TypeParameterKind,
@@ -1198,253 +1194,25 @@ impl ExpTranslator<'_, '_, '_> {
     }
 }
 
-/// # Access Specifier Translation
+/// # Acquires Translation
 
 impl ExpTranslator<'_, '_, '_> {
-    pub(crate) fn translate_access_specifiers(
+    pub(crate) fn translate_acquires(
         &mut self,
-        specifiers: &Option<Vec<EA::AccessSpecifier>>,
-    ) -> Option<Vec<AccessSpecifier>> {
-        specifiers.as_ref().map(|v| {
-            v.iter()
-                .filter_map(|s| self.translate_access_specifier(s))
-                .collect()
-        })
-    }
-
-    fn translate_access_specifier(
-        &mut self,
-        specifier: &EA::AccessSpecifier,
-    ) -> Option<AccessSpecifier> {
-        fn is_wildcard(name: &Name) -> bool {
-            name.value.as_str() == "*"
-        }
-
-        let loc = self.to_loc(&specifier.loc);
-        let EA::AccessSpecifier_ {
-            kind,
-            negated,
-            module_address,
-            module_name,
-            resource_name,
-            type_args,
-            address,
-        } = &specifier.value;
-        match kind {
-            EA::AccessSpecifierKind::LegacyAcquires => {
-                if *negated || type_args.is_some() || address.value != EA::AddressSpecifier_::Empty
-                {
-                    self.error(
-                        &loc,
-                        "only simple resource names can be used with `acquires`",
-                    )
-                }
-            },
-            EA::AccessSpecifierKind::Reads | EA::AccessSpecifierKind::Writes => {
-                self.check_language_version(
-                    &loc,
-                    "read/write access specifiers.",
-                    LANGUAGE_VERSION_FOR_RAC,
-                )?;
-            },
-        }
-        let resource = match (module_address, module_name, resource_name) {
-            (None, None, None) => {
-                // This stems from a  specifier of the form `acquires *(0x1)`
-                ResourceSpecifier::Any
-            },
-            (Some(address), None, None) => {
-                ResourceSpecifier::DeclaredAtAddress(self.translate_address(&loc, address))
-            },
-            (Some(address), Some(module), None) if is_wildcard(&module.0) => {
-                ResourceSpecifier::DeclaredAtAddress(self.translate_address(&loc, address))
-            },
-            (Some(address), Some(module), Some(resource))
-                if is_wildcard(&module.0) && is_wildcard(resource) =>
-            {
-                ResourceSpecifier::DeclaredAtAddress(self.translate_address(&loc, address))
-            },
-            (Some(address), Some(module), Some(resource)) if !is_wildcard(&module.0) => {
-                let module_name = ModuleName::new(
-                    self.translate_address(&loc, address),
-                    self.symbol_pool().make(module.0.value.as_str()),
-                );
-                let module_id = if self.parent.module_name == module_name {
-                    self.parent.module_id
-                } else if let Some(module_env) = self.env().find_module(&module_name) {
-                    module_env.get_id()
+        acquires: &[EA::ModuleAccess],
+    ) -> Vec<(Loc, QualifiedId<StructId>)> {
+        acquires
+            .iter()
+            .filter_map(|acquire| {
+                let loc = self.to_loc(&acquire.loc);
+                let sym = self.parent.module_access_to_qualified(acquire);
+                if let Type::Struct(mid, sid, _) = self.parent.parent.lookup_type(&loc, &sym) {
+                    Some((loc, mid.qualified(sid)))
                 } else {
-                    self.error(&loc, &format!("undeclared module `{}`", module));
-                    self.parent.module_id
-                };
-                if is_wildcard(resource) {
-                    ResourceSpecifier::DeclaredInModule(module_id)
-                } else {
-                    let mident = sp(specifier.loc, EA::ModuleIdent_ {
-                        address: *address,
-                        module: *module,
-                    });
-                    let maccess = sp(
-                        specifier.loc,
-                        EA::ModuleAccess_::ModuleAccess(mident, *resource, None),
-                    );
-                    let sym = self.parent.module_access_to_qualified(&maccess);
-                    if let Type::Struct(mid, sid, _) = self.parent.parent.lookup_type(&loc, &sym) {
-                        if type_args.is_none() {
-                            // If no type args are provided, we assume this is either a non-generic
-                            // or a generic type without instantiation, which is a valid wild card.
-                            ResourceSpecifier::Resource(mid.qualified_inst(sid, vec![]))
-                        } else {
-                            // Otherwise construct an expansion type so we can feed it through the standard translation
-                            // process.
-                            let ety = sp(
-                                specifier.loc,
-                                EA::Type_::Apply(
-                                    maccess,
-                                    type_args.as_ref().cloned().unwrap_or_default(),
-                                ),
-                            );
-                            let ty = self.translate_type(&ety);
-                            if let Type::Struct(mid, sid, inst) = ty {
-                                ResourceSpecifier::Resource(mid.qualified_inst(sid, inst))
-                            } else {
-                                // errors reported
-                                debug_assert!(self.env().has_errors());
-                                ResourceSpecifier::Any
-                            }
-                        }
-                    } else {
-                        // error reported
-                        ResourceSpecifier::Any
-                    }
+                    None
                 }
-            },
-            (Some(_), Some(module), Some(resource))
-                if is_wildcard(&module.0) && !is_wildcard(resource) =>
-            {
-                self.error(
-                    &loc,
-                    "invalid access specifier: a wildcard \
-                cannot be followed by a non-wildcard name component",
-                );
-                ResourceSpecifier::Any
-            },
-            _ => {
-                self.error(&loc, "invalid access specifier");
-                ResourceSpecifier::Any
-            },
-        };
-        if !matches!(resource, ResourceSpecifier::Resource(..)) {
-            self.check_language_version(
-                &loc,
-                "address and wildcard access specifiers. Only resource type names can be provided.",
-                LanguageVersion::V2_0,
-            )?;
-        };
-        let address = self.translate_address_specifier(address)?;
-        let kind = match kind {
-            EA::AccessSpecifierKind::Reads => AccessSpecifierKind::Reads,
-            EA::AccessSpecifierKind::Writes => AccessSpecifierKind::Writes,
-            EA::AccessSpecifierKind::LegacyAcquires => AccessSpecifierKind::LegacyAcquires,
-        };
-        Some(AccessSpecifier {
-            loc: loc.clone(),
-            kind,
-            negated: *negated,
-            resource: (loc, resource),
-            address,
-        })
-    }
-
-    fn translate_address_specifier(
-        &mut self,
-        specifier: &EA::AddressSpecifier,
-    ) -> Option<(Loc, AddressSpecifier)> {
-        let loc = self.to_loc(&specifier.loc);
-        let res = match &specifier.value {
-            EA::AddressSpecifier_::Empty => (loc, AddressSpecifier::Any),
-            EA::AddressSpecifier_::Any => {
-                self.check_language_version(
-                    &loc,
-                    "wildcard address specifiers",
-                    LanguageVersion::V2_0,
-                )?;
-                (loc, AddressSpecifier::Any)
-            },
-            EA::AddressSpecifier_::Literal(addr) => {
-                self.check_language_version(
-                    &loc,
-                    "literal address specifiers",
-                    LanguageVersion::V2_0,
-                )?;
-                (
-                    loc,
-                    AddressSpecifier::Address(Address::Numerical(addr.into_inner())),
-                )
-            },
-            EA::AddressSpecifier_::Name(name) => {
-                self.check_language_version(
-                    &loc,
-                    "named address specifiers",
-                    LanguageVersion::V2_0,
-                )?;
-                // Construct an expansion name exp for regular type check
-                let maccess = sp(name.loc, EA::ModuleAccess_::Name(*name));
-                self.translate_name(
-                    &self.to_loc(&maccess.loc),
-                    &maccess,
-                    &None,
-                    &Type::new_prim(PrimitiveType::Address),
-                    &ErrorMessageContext::General,
-                );
-                (
-                    loc,
-                    AddressSpecifier::Parameter(self.symbol_pool().make(name.value.as_str())),
-                )
-            },
-            EA::AddressSpecifier_::Call(maccess, type_args, name) => {
-                self.check_language_version(
-                    &loc,
-                    "derived address specifiers",
-                    LanguageVersion::V2_0,
-                )?;
-                // Construct an expansion function call for regular type check
-                let name_exp = sp(
-                    name.loc,
-                    EA::Exp_::Name(sp(name.loc, EA::ModuleAccess_::Name(*name)), None),
-                );
-                if let ExpData::Call(id, Operation::MoveFunction(mid, fid), _) = self
-                    .translate_fun_call(
-                        &Type::new_prim(PrimitiveType::Address),
-                        &loc,
-                        CallKind::Regular,
-                        maccess,
-                        type_args,
-                        &[&name_exp],
-                        &ErrorMessageContext::Argument,
-                    )
-                {
-                    let inst = self.env().get_node_instantiation(id);
-                    (
-                        loc,
-                        AddressSpecifier::Call(
-                            mid.qualified_inst(fid, inst),
-                            self.symbol_pool().make(name.value.as_str()),
-                        ),
-                    )
-                } else {
-                    // Error reported
-                    debug_assert!(self.env().has_errors());
-                    (loc, AddressSpecifier::Any)
-                }
-            },
-        };
-        Some(res)
-    }
-
-    fn translate_address(&mut self, loc: &Loc, addr: &EA::Address) -> Address {
-        let x = self.parent.parent.resolve_address(loc, addr);
-        Address::Numerical(x.into_inner())
+            })
+            .collect()
     }
 }
 

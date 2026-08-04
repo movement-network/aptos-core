@@ -1,0 +1,12 @@
+
+Diagnostics:
+error: function acquires global `m::R` which is currently borrowed
+   ┌─ tests/reference-safety-v2/call_acquires_immutable_borrow.move:14:27
+   │
+ 8 │     fun take(addr: address): R acquires R {
+   │                                         - `acquires` declared here
+   ·
+13 │         let reference = borrow_global<R>(addr);
+   │                         ---------------------- previous global borrow
+14 │         let R { value } = take(addr);
+   │                           ^^^^^^^^^^ function called here

@@ -2,8 +2,6 @@
 // Copyright (c) The Move Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-mod access_specifier_loader;
-
 mod function;
 pub use function::{Function, LoadedFunction, LoadedFunctionOwner};
 pub(crate) use function::{

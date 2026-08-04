@@ -11,7 +11,7 @@ module 0x42::globals {
         Tuple()
     }
     private fun read(a: address): u64
-        acquires R(*)
+        acquires R
      {
         {
           let r: &R = BorrowGlobal(Immutable)<R>(a);
@@ -19,7 +19,7 @@ module 0x42::globals {
         }
     }
     private fun write(a: address,x: u64): u64
-        acquires R(*)
+        acquires R
      {
         {
           let r: &mut R = BorrowGlobal(Mutable)<R>(a);
@@ -125,7 +125,7 @@ module 0x42::globals {
         Tuple()
     }
     private fun read(a: address): u64
-        acquires R(*)
+        acquires R
      {
         {
           let r: &R = BorrowGlobal(Immutable)<R>(a);
@@ -133,7 +133,7 @@ module 0x42::globals {
         }
     }
     private fun write(a: address,x: u64): u64
-        acquires R(*)
+        acquires R
      {
         {
           let r: &mut R = BorrowGlobal(Mutable)<R>(a);

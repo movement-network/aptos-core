@@ -157,7 +157,7 @@ pub fn run_inlining(
 }
 
 /// Check that inline functions are (1) not native, (2) have a body, (3) are not in a script,
-/// (4) do not have certain attributes, and (5) do not have access specifiers.
+/// (4) do not have certain attributes, and (5) do not have `acquires` annotations.
 /// Filter out inline functions from the targets if `Experiment::SKIP_INLINING_INLINE_FUNS` is on.
 fn check_and_maybe_filter_targets(env: &GlobalEnv, targets: &mut RewriteTargets) {
     let keep_inline_functions = !env
@@ -201,10 +201,10 @@ fn check_and_maybe_filter_targets(env: &GlobalEnv, targets: &mut RewriteTargets)
                     );
                 }
 
-                if func.get_access_specifiers().is_some() {
+                if !func.get_declared_acquires().is_empty() {
                     env.warning(
                         &func.get_id_loc(),
-                        "acquires and access specifiers are not applicable to inline functions and should be removed",
+                        "acquires annotations are not applicable to inline functions and should be removed",
                     );
                 }
 

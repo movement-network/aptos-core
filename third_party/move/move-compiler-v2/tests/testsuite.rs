@@ -211,16 +211,8 @@ const TEST_CONFIGS: Lazy<BTreeMap<&str, TestConfig>> = Lazy::new(|| {
             dump_ast: DumpLevel::EndStage,
             ..config().lang(LanguageVersion::V2_2)
         },
-        // Tests for checking v2 language features only supported if 2.3 or later
+        // Tests for checking v2 language features only supported if 2.4 or later
         // is selected
-        TestConfig {
-            name: "checking-lang-v2.5",
-            runner: |p| run_test(p, get_config_by_name("checking-lang-v2.5")),
-            include: vec!["/checking-lang-v2.5/"],
-            stop_after: StopAfter::FirstAstPipeline,
-            dump_ast: DumpLevel::EndStage,
-            ..config().lang(LanguageVersion::V2_5)
-        },
         TestConfig {
             name: "checking-lang-v2.4",
             runner: |p| run_test(p, get_config_by_name("checking-lang-v2.4")),
@@ -367,6 +359,15 @@ const TEST_CONFIGS: Lazy<BTreeMap<&str, TestConfig>> = Lazy::new(|| {
             ..config()
                 .exp_off(Experiment::OPTIMIZE)
                 .exp_off(Experiment::OPTIMIZE_WAITING_FOR_COMPARE_TESTS)
+        },
+        // Focused regression tests for the legacy v2 reference safety processor.
+        TestConfig {
+            name: "reference-safety-v2",
+            runner: |p| run_test(p, get_config_by_name("reference-safety-v2")),
+            include: vec!["/reference-safety-v2/"],
+            ..config()
+                .lang(LanguageVersion::V2_1)
+                .exp_off(Experiment::REFERENCE_SAFETY_V3)
         },
         // Abort analysis tests
         TestConfig {

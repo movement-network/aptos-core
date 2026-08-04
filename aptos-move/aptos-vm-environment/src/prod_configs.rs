@@ -6,6 +6,7 @@ use aptos_gas_schedule::{
     gas_feature_versions::{RELEASE_V1_15, RELEASE_V1_30, RELEASE_V1_34, RELEASE_V1_38},
     AptosGasParameters,
 };
+use aptos_logger::warn;
 use aptos_types::{
     on_chain_config::{
         randomness_api_v0_config::{AllowCustomMaxGasFlag, RequiredGasDeposit},
@@ -122,8 +123,14 @@ pub fn aptos_prod_verifier_config(gas_feature_version: u64, features: &Features)
         features.is_enabled(FeatureFlag::SIGNATURE_CHECKER_V2_SCRIPT_FIX);
     let sig_checker_v2_fix_function_signatures = gas_feature_version >= RELEASE_V1_34;
     let enable_enum_types = features.is_enabled(FeatureFlag::ENABLE_ENUM_TYPES);
-    let enable_resource_access_control =
-        features.is_enabled(FeatureFlag::ENABLE_RESOURCE_ACCESS_CONTROL);
+    // Resource access control has been removed from the VM, so the on-chain flag no longer has
+    // any effect: access specifiers are rejected at verification and never enforced at runtime.
+    if features.is_enabled(FeatureFlag::_DEPRECATED_ENABLE_RESOURCE_ACCESS_CONTROL) {
+        warn!(
+            "On-chain feature ENABLE_RESOURCE_ACCESS_CONTROL is enabled but has been \
+             removed; ignoring it."
+        );
+    }
     let enable_function_values = features.is_enabled(FeatureFlag::ENABLE_FUNCTION_VALUES);
     // Note: we reuse the `enable_function_values` flag to set various stricter limits on types.
 
@@ -153,7 +160,7 @@ pub fn aptos_prod_verifier_config(gas_feature_version: u64, features: &Features)
         sig_checker_v2_fix_script_ty_param_count,
         sig_checker_v2_fix_function_signatures,
         enable_enum_types,
-        enable_resource_access_control,
+        _enable_resource_access_control: false,
         enable_function_values,
         max_function_return_values: if enable_function_values {
             Some(128)

@@ -4778,6 +4778,7 @@ dependencies = [
  "aptos-framework",
  "aptos-gas-algebra",
  "aptos-gas-schedule",
+ "aptos-logger",
  "aptos-move-stdlib",
  "aptos-native-interface",
  "aptos-table-natives",

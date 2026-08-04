@@ -28,7 +28,7 @@ use itertools::Itertools;
 use move_binary_format::file_format::CodeOffset;
 use move_borrow_graph::{graph::BorrowGraph, references::RefID};
 use move_model::{
-    ast::{AccessSpecifierKind, ResourceSpecifier, TempIndex},
+    ast::TempIndex,
     model::{FunId, FunctionEnv, GlobalEnv, Loc, QualifiedId, QualifiedInstId, StructId},
     ty::{ReferenceKind, Type},
 };
@@ -708,18 +708,13 @@ impl LifetimeAnalysisStep<'_, '_> {
         for (_code_id, struct_id, target) in self.state.global_borrow_edges() {
             let is_mut = self.state.borrow_graph.is_mutable(target);
             if struct_id.module_id == fun.module_env.get_id() && acquires.contains(&struct_id.id) {
-                // Try to find the location of the access declaration via the access specifier
-                // list.
+                // Try to find the location of the explicit `acquires` declaration.
                 let access_origin_hint = fun
-                    .get_access_specifiers()
-                    .unwrap_or_default()
+                    .get_declared_acquires()
                     .iter()
-                    .find_map(|s| {
-                        if s.kind == AccessSpecifierKind::LegacyAcquires
-                            && matches!(&s.resource.1,
-                    ResourceSpecifier::Resource(s) if s.to_qualified_id() == struct_id)
-                        {
-                            Some(vec![(s.loc.clone(), "`acquires` declared here".to_owned())])
+                    .find_map(|(loc, acquired)| {
+                        if *acquired == struct_id {
+                            Some(vec![(loc.clone(), "`acquires` declared here".to_owned())])
                         } else {
                             None
                         }

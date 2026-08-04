@@ -14,4 +14,4 @@ error: unnecessary acquires annotation
    ┌─ tests/checking-lang-v2.2/acquires/acquires_error.move:14:40
    │
 14 │     fun read(a: address): u64 acquires S {
-   │                                        ^^
+   │                                        ^

@@ -46,7 +46,7 @@ module 0x42::test {
         }
     }
     private fun inc_coin_at(addr: address)
-        acquires Coin(*)
+        acquires Coin
      {
         {
           let coin: &mut Coin = BorrowGlobal(Mutable)<Coin>(addr);
@@ -1743,7 +1743,7 @@ module 0x42::test {
         }
     }
     private fun inc_coin_at(addr: address)
-        acquires Coin(*)
+        acquires Coin
      {
         {
           let coin: &mut Coin = BorrowGlobal(Mutable)<Coin>(addr);

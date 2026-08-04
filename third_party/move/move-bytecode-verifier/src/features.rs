@@ -55,9 +55,9 @@ impl<'a> FeatureVerifier<'a> {
         };
         verifier.verify_signatures()?;
         verifier.verify_function_handles()?;
-        if !config.enable_resource_access_control && script.access_specifiers.is_some() {
+        if script.access_specifiers.is_some() {
             return Err(PartialVMError::new(StatusCode::FEATURE_NOT_ENABLED)
-                .with_message("resource access control feature not enabled".to_string()));
+                .with_message("resource access control is not supported".to_string()));
         }
         verifier.verify_code(&script.code.code, None)
     }
@@ -106,20 +106,16 @@ impl<'a> FeatureVerifier<'a> {
     }
 
     fn verify_function_handles(&self) -> PartialVMResult<()> {
-        if !self.config.enable_resource_access_control || !self.config.enable_function_values {
-            for (idx, function_handle) in self.code.function_handles().iter().enumerate() {
-                if !self.config.enable_resource_access_control
-                    && function_handle.access_specifiers.is_some()
-                {
-                    return Err(PartialVMError::new(StatusCode::FEATURE_NOT_ENABLED)
-                        .at_index(IndexKind::FunctionHandle, idx as u16)
-                        .with_message("resource access control feature not enabled".to_string()));
-                }
-                if !self.config.enable_function_values && !function_handle.attributes.is_empty() {
-                    return Err(PartialVMError::new(StatusCode::FEATURE_NOT_ENABLED)
-                        .at_index(IndexKind::FunctionDefinition, idx as u16)
-                        .with_message("function value feature not enabled".to_string()));
-                }
+        for (idx, function_handle) in self.code.function_handles().iter().enumerate() {
+            if function_handle.access_specifiers.is_some() {
+                return Err(PartialVMError::new(StatusCode::FEATURE_NOT_ENABLED)
+                    .at_index(IndexKind::FunctionHandle, idx as u16)
+                    .with_message("resource access control is not supported".to_string()));
+            }
+            if !self.config.enable_function_values && !function_handle.attributes.is_empty() {
+                return Err(PartialVMError::new(StatusCode::FEATURE_NOT_ENABLED)
+                    .at_index(IndexKind::FunctionDefinition, idx as u16)
+                    .with_message("function value feature not enabled".to_string()));
             }
         }
         Ok(())

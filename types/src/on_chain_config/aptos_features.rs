@@ -237,7 +237,6 @@ impl FeatureFlag {
             FeatureFlag::ALLOW_SERIALIZED_SCRIPT_ARGS,
             FeatureFlag::_USE_COMPATIBILITY_CHECKER_V2,
             FeatureFlag::ENABLE_ENUM_TYPES,
-            FeatureFlag::ENABLE_RESOURCE_ACCESS_CONTROL,
             FeatureFlag::_REJECT_UNSTABLE_BYTECODE_FOR_SCRIPT,
             FeatureFlag::TRANSACTION_SIMULATION_ENHANCEMENT,
             FeatureFlag::NATIVE_MEMORY_OPERATIONS,

@@ -4,7 +4,7 @@
 
 use crate::{
     file_format::{
-        AccessSpecifier, Bytecode, CodeOffset, CodeUnit, ConstantPoolIndex, FieldHandle,
+        Bytecode, CodeOffset, CodeUnit, ConstantPoolIndex, FieldHandle,
         FieldHandleIndex, FieldInstantiation, FieldInstantiationIndex, FunctionDefinition,
         FunctionHandle, FunctionHandleIndex, FunctionInstantiation, FunctionInstantiationIndex,
         IdentifierIndex, LocalIndex, ModuleHandleIndex, Signature, SignatureIndex, SignatureToken,
@@ -24,7 +24,6 @@ use crate::{
 use move_core_types::{ability::AbilitySet, int256::U256};
 use proptest::{
     collection::{vec, SizeRange},
-    option::of,
     prelude::*,
     sample::{select, Index as PropIndex},
 };
@@ -168,7 +167,6 @@ pub struct FunctionHandleGen {
     parameters: SignatureGen,
     return_: SignatureGen,
     type_parameters: Vec<AbilitySetGen>,
-    access_specifiers: Option<Vec<AccessSpecifier>>,
 }
 
 impl FunctionHandleGen {
@@ -176,7 +174,6 @@ impl FunctionHandleGen {
         param_count: impl Into<SizeRange>,
         return_count: impl Into<SizeRange>,
         type_parameter_count: impl Into<SizeRange>,
-        access_specifiers_count: impl Into<SizeRange>,
     ) -> impl Strategy<Value = Self> {
         let return_count = return_count.into();
         let param_count = param_count.into();
@@ -186,18 +183,14 @@ impl FunctionHandleGen {
             SignatureGen::strategy(param_count),
             SignatureGen::strategy(return_count),
             vec(AbilitySetGen::strategy(), type_parameter_count),
-            of(vec(any::<AccessSpecifier>(), access_specifiers_count)),
         )
-            .prop_map(
-                |(module, name, parameters, return_, type_parameters, access_specifiers)| Self {
-                    module,
-                    name,
-                    parameters,
-                    return_,
-                    type_parameters,
-                    access_specifiers,
-                },
-            )
+            .prop_map(|(module, name, parameters, return_, type_parameters)| Self {
+                module,
+                name,
+                parameters,
+                return_,
+                type_parameters,
+            })
     }
 
     pub fn materialize(self, state: &mut FnHandleMaterializeState) -> Option<FunctionHandle> {
@@ -227,7 +220,8 @@ impl FunctionHandleGen {
             parameters: params_idx,
             return_: return_idx,
             type_parameters,
-            access_specifiers: self.access_specifiers,
+            // Resource access control has been removed; the verifier rejects any specifiers.
+            access_specifiers: None,
             attributes: vec![],
         })
     }

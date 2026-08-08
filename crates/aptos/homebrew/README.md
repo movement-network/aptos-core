@@ -3,7 +3,7 @@
 Homebrew is a package manager that works for MacOS Silicon and Intel chips as well as Linux distributions like Debian
 and Ubuntu.
 
-The [Movement command line interface (CLI)](https://github.com/movementlabsxyz/aptos-core/) may be installed
+The [Movement command line interface (CLI)](https://github.com/movement-network/aptos-core/) may be installed
 via [Homebrew](https://brew.sh/) for simplicity. This is an in-depth overview of Homebrew and the Movement formula. In this
 guide, we go over each section of the Homebrew formula and steps to implement changes in the future.
 

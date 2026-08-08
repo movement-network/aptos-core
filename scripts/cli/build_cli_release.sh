@@ -44,7 +44,7 @@ if [[ "$SKIP_CHECKS" != "true" ]]; then
   fi
 
   # Check that the release doesn't already exist
-  if curl -s --stderr /dev/null --output /dev/null --head -f "https://github.com/movementlabsxyz/aptos-core/releases/download/movement-cli-v$EXPECTED_VERSION/movement-cli-$EXPECTED_VERSION-Linux-x86_64.zip"; then
+  if curl -s --stderr /dev/null --output /dev/null --head -f "https://github.com/movement-network/aptos-core/releases/download/movement-cli-v$EXPECTED_VERSION/movement-cli-$EXPECTED_VERSION-Linux-x86_64.zip"; then
     echo "$EXPECTED_VERSION already released"
     exit 3
   fi

@@ -225,9 +225,9 @@ module aptos_framework::governed_gas_pool {
        deposit(asset);
     }
 
-    /// Deposits APT from the fungible store into the governed gas pool.
-    /// @param account The account from which the APT FA is to be deposited.
-    /// @param amount The amount of APT FA to be deposited.
+    /// Deposits FA from the fungible store into the governed gas pool.
+    /// @param account The account from which the FA is to be deposited.
+    /// @param amount The amount of FA to be deposited.
     fun deposit_from_fungible_store(account: address, amount: u64) acquires GovernedGasPool {
         deposit_from_fungible_store_for(account, @aptos_fungible_asset, amount);
     }
@@ -766,11 +766,11 @@ module aptos_framework::governed_gas_pool {
         assert!(get_gas_fungible_asset_price(metadata_address) == 3, 13);
         assert!(gas_fee_in_fa(metadata_address, 5) == 15, 14);
 
-        // Pay gas in the FA -> goes into that FA's pool, separate from the APT pool.
+        // Pay gas in the FA -> goes into that FA's pool, separate from the MOVE pool.
         deposit_gas_fee_fa(payer_address, metadata_address, 30);
         assert!(primary_fungible_store::balance(payer_address, metadata) == 70, 4);
         assert!(get_fa_balance(metadata_address) == 30, 5);
-        // The APT pool is untouched.
+        // The MOVE pool is untouched.
         assert!(coin::balance<AptosCoin>(governed_gas_pool_address()) == 0, 6);
 
         // Governance withdraws from the FA pool back to an account.

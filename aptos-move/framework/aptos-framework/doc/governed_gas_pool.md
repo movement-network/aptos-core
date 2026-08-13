@@ -204,6 +204,10 @@ Registry of fungible assets accepted for gas payment. Each accepted FA is held i
 governed gas pool account's own primary store for that metadata object (a separate per-FA
 pool that shares the single pool resource account), and stores its gas price alongside.
 
+Note that vector does mean we have to iterate the list, but if we replace it with Table
+or SmartTable then we have access storage a lot more which is much more expensive than
+iterating a few items. Therefore if we only a few entries, vector<> is much faster.
+
 
 <pre><code><b>struct</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_AcceptedGasFungibleAssets">AcceptedGasFungibleAssets</a> <b>has</b> key
 </code></pre>
@@ -753,9 +757,9 @@ Deposits some coin from an account to the governed gas pool.
 
 ## Function `deposit_from_fungible_store`
 
-Deposits APT from the fungible store into the governed gas pool.
-@param account The account from which the APT FA is to be deposited.
-@param amount The amount of APT FA to be deposited.
+Deposits FA from the fungible store into the governed gas pool.
+@param account The account from which the FA is to be deposited.
+@param amount The amount of FA to be deposited.
 
 
 <pre><code><b>fun</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool_deposit_from_fungible_store">deposit_from_fungible_store</a>(<a href="account.md#0x1_account">account</a>: <b>address</b>, amount: u64)

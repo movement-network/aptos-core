@@ -2455,6 +2455,7 @@ impl Frame {
                             )?;
                         }
                         let captured = interpreter.operand_stack.popn(mask.captured_count())?;
+                        check_captured_value_depths(interpreter.vm_config, &captured)?;
                         let lazy_function = LazyLoadedFunction::new_resolved(
                             interpreter.layout_converter,
                             gas_meter,
@@ -2499,6 +2500,7 @@ impl Frame {
                             )?;
                         }
                         let captured = interpreter.operand_stack.popn(mask.captured_count())?;
+                        check_captured_value_depths(interpreter.vm_config, &captured)?;
                         let lazy_function = LazyLoadedFunction::new_resolved(
                             interpreter.layout_converter,
                             gas_meter,
@@ -2970,4 +2972,22 @@ impl Frame {
         ));
         err.with_sub_status(EPARANOID_FAILURE)
     }
+}
+
+/// Checks that the values captured by a newly packed closure do not exceed the configured
+/// maximum value depth. Each captured value is counted from depth 1 (the closure wrapper does
+/// not add a level), so the boundary matches the copy checks that run when captures are copied.
+/// As a consequence, a closure packed at the limit is one level deeper than the maximum when
+/// counted from its own root, and copying, comparing, or storing it fails; this transient
+/// overshoot is inherent (struct packing over a max-depth closure field creates it too, since
+/// `Pack` only checks type depth) and matches upstream behavior.
+fn check_captured_value_depths(vm_config: &VMConfig, captured: &[Value]) -> PartialVMResult<()> {
+    if vm_config.enable_depth_checks {
+        if let Some(max_depth) = vm_config.max_value_nest_depth {
+            for value in captured {
+                value.check_max_depth(max_depth)?;
+            }
+        }
+    }
+    Ok(())
 }

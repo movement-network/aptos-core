@@ -497,7 +497,7 @@ module aptos_framework::governed_gas_pool {
                 amount,
             },
         );
-        
+
         // Withdraw reward coin.
         coin::withdraw<CoinType>(&governed_gas_signer(), amount)
     }
@@ -709,10 +709,10 @@ module aptos_framework::governed_gas_pool {
     ///
     /// @param aptos_framework is the signer of the aptos_framework module.
     fun test_deposite_treasury_and_counter(aptos_framework: &signer, treasury: &signer) acquires GovernedGasPool, GovernedGasPoolExtension, AptosCoinMintCapability {
-       
+
         // initialize the modules
         initialize_for_test(aptos_framework);
-    
+
         // create the depositor account and fund it
         aptos_account::create_account(signer::address_of(treasury));
         mint_for_test(signer::address_of(treasury), 1000);

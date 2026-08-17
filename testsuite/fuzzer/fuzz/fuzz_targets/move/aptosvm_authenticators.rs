@@ -98,7 +98,7 @@ fn run_case(input: TransactionState) -> Result<(), Corpus> {
         .payload(aptos_stdlib::aptos_coin_transfer(*receiver.address(), 1))
         .sequence_number(0)
         .gas_unit_price(100)
-        .max_gas_amount(1000);
+        .max_gas_amount(100_000);
 
     let tx_auth_type = input.tx_auth_type.clone();
 

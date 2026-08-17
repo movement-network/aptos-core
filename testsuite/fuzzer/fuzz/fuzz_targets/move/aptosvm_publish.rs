@@ -6,8 +6,9 @@
 mod utils;
 use aptos_language_e2e_tests::executor::FakeExecutor;
 use aptos_transaction_simulation::GENESIS_CHANGE_SET_HEAD;
-use aptos_types::{chain_id::ChainId, write_set::WriteSet};
+use aptos_types::{chain_id::ChainId, on_chain_config::Features, write_set::WriteSet};
 use aptos_vm::AptosVM;
+use aptos_vm_environment::prod_configs;
 use libfuzzer_sys::{fuzz_target, Corpus};
 use move_binary_format::{
     access::ModuleAccess,
@@ -47,17 +48,20 @@ static TP: Lazy<Arc<rayon::ThreadPool>> = Lazy::new(|| {
 fn run_case(mut input: RunnableState) -> Result<(), Corpus> {
     tdbg!(&input);
 
-    let deserializer_config = DeserializerConfig::default();
+    let verifier_config = prod_configs::aptos_prod_verifier_config(&Features::default());
+    let deserializer_config = DeserializerConfig::new(8, 255);
 
     for m in input.dep_modules.iter_mut() {
         // m.metadata = vec![]; // we could optimize metadata to only contain aptos metadata
         // m.version = VERSION_MAX;
 
-        // reject bad modules fast lite
+        // reject bad modules fast
         let mut module_code: Vec<u8> = vec![];
         m.serialize(&mut module_code).map_err(|_| Corpus::Keep)?;
-        CompiledModule::deserialize_with_config(&module_code, &deserializer_config)
-            .map_err(|_| Corpus::Keep)?;
+        let m_de = CompiledModule::deserialize_with_config(&module_code, &deserializer_config)
+            .map_err(|_| Corpus::Reject)?;
+        move_bytecode_verifier::verify_module_with_config(&verifier_config, &m_de)
+            .map_err(|_| Corpus::Reject)?;
     }
 
     if let ExecVariant::Script {
@@ -66,17 +70,19 @@ fn run_case(mut input: RunnableState) -> Result<(), Corpus> {
         args: _,
     } = &input.exec_variant
     {
-        // reject bad scripts fast lite
+        // reject bad scripts fast
         let mut script_code: Vec<u8> = vec![];
         s.serialize(&mut script_code).map_err(|_| Corpus::Keep)?;
-        CompiledScript::deserialize_with_config(&script_code, &deserializer_config)
-            .map_err(|_| Corpus::Keep)?;
+        let s_de = CompiledScript::deserialize_with_config(&script_code, &deserializer_config)
+            .map_err(|_| Corpus::Reject)?;
+        move_bytecode_verifier::verify_script_with_config(&verifier_config, &s_de)
+            .map_err(|_| Corpus::Reject)?;
     }
 
     // check no duplicates
     let mset: HashSet<_> = input.dep_modules.iter().map(|m| m.self_id()).collect();
     if mset.len() != input.dep_modules.len() {
-        return Err(Corpus::Keep);
+        return Err(Corpus::Reject);
     }
 
     // topologically order modules {

@@ -1,0 +1,16 @@
+[package]
+name = "poc-constant-dos"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[[bin]]
+name = "poc-constant-dos"
+path = "src/main.rs"
+
+[dependencies]
+move-binary-format = { path = "../../third_party/move/move-binary-format" }
+move-bytecode-verifier = { path = "../../third_party/move/move-bytecode-verifier" }
+move-core-types = { path = "../../third_party/move/move-core/types" }

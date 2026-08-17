@@ -235,7 +235,7 @@ fn run_case(mut input: RunnableState) -> Result<(), Corpus> {
             sender_acc
                 .transaction()
                 .gas_unit_price(100)
-                .max_gas_amount(1000)
+                .max_gas_amount(100_000)
                 .sequence_number(0)
                 .payload(TransactionPayload::Script(Script::new(
                     script_bytes,
@@ -277,7 +277,7 @@ fn run_case(mut input: RunnableState) -> Result<(), Corpus> {
             sender_acc
                 .transaction()
                 .gas_unit_price(100)
-                .max_gas_amount(1000)
+                .max_gas_amount(100_000)
                 .sequence_number(0)
                 .payload(TransactionPayload::EntryFunction(EntryFunction::new(
                     module,

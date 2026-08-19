@@ -129,6 +129,55 @@ mod tests {
         );
     }
 
+    #[test]
+    fn enum_out_of_range_variant_tag_is_not_serializable() {
+        // Layout has variants 0, 1, 2. `enum_round_trip_vm_value` already covers
+        // an out-of-range tag whose payload is non-empty — that is rejected by
+        // the field-count check. The dangerous case is an out-of-range tag with
+        // *zero* fields: it matches the (empty) fallback field list and would
+        // otherwise serialize into a unit variant that strict deserialization
+        // rejects, creating a serialize/deserialize asymmetry.
+        let layout = enum_layout();
+
+        // A valid unit variant (tag 1 genuinely has zero fields) must still
+        // serialize and round-trip — the fix must not over-reject.
+        let good_unit_variant = Value::struct_(Struct::pack_variant(1, iter::empty()));
+        let blob = ValueSerDeContext::new(None)
+            .serialize(&good_unit_variant, &layout)
+            .unwrap()
+            .expect("valid unit variant serializes");
+        let de_value = ValueSerDeContext::new(None)
+            .deserialize(&blob, &layout)
+            .expect("valid unit variant deserializes");
+        assert!(
+            good_unit_variant.equals(&de_value).unwrap(),
+            "valid unit variant round-trips"
+        );
+
+        // Zero-field out-of-range tags (just past the end, and far past it) must
+        // fail to serialize rather than emit bytes deserialization would reject.
+        for bad_tag in [3u16, 4, 100, u16::MAX] {
+            let bad_value = Value::struct_(Struct::pack_variant(bad_tag, iter::empty()));
+
+            assert!(
+                ValueSerDeContext::new(None)
+                    .serialize(&bad_value, &layout)
+                    .unwrap()
+                    .is_none(),
+                "zero-field out-of-range tag {} must not serialize",
+                bad_tag
+            );
+
+            // `serialized_size` must agree with `serialize`: it must not report a
+            // size for a value that cannot be serialized.
+            assert_err!(
+                ValueSerDeContext::new(None).serialized_size(&bad_value, &layout),
+                "serialized_size must fail for out-of-range tag {}",
+                bad_tag
+            );
+        }
+    }
+
     // ---------------------------------------------------------------------------
     // Rust cross-serialization tests
 

@@ -4006,6 +4006,20 @@ impl serde::Serialize for SerializationReadyValue<'_, '_, '_, MoveStructLayout, 
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let mut values = self.value.as_slice();
         if let Some((tag, variant_layouts)) = try_get_variant_field_layouts(self.layout, values) {
+            // Reject a value whose variant tag is out of range for the layout.
+            // Serializing it would emit valid bytes for a variant that strict
+            // deserialization rejects, opening a serialize/deserialize asymmetry
+            // (e.g. after an enum upgrade adds a variant that a stale layout does
+            // not know about).
+            let variant_layouts = match variant_layouts {
+                Some(variant_layouts) => variant_layouts,
+                None => {
+                    return Err(invariant_violation::<S>(format!(
+                        "cannot serialize value {:?} as {:?} -- variant tag {} is out of range",
+                        self.value, self.layout, tag
+                    )));
+                },
+            };
             let tag_idx = tag as usize;
             let variant_tag = tag_idx as u32;
             let variant_names = value::variant_name_placeholder((tag + 1) as usize)
@@ -4882,6 +4896,12 @@ impl ValueImpl {
                 if let Some((tag, variant_layouts)) =
                     try_get_variant_field_layouts(struct_layout, values)
                 {
+                    // This conversion is infallible and only feeds best-effort
+                    // consumers such as `debug::print`. An out-of-range tag
+                    // cannot occur for a well-formed value; if one somehow does,
+                    // fall back to no field layouts rather than panicking. The
+                    // enforced check lives on the BCS serialization path above.
+                    let variant_layouts = variant_layouts.unwrap_or(&[]);
                     MoveValue::Struct(MoveStruct::new_variant(
                         tag,
                         values
@@ -4945,13 +4965,24 @@ impl Value {
     }
 }
 
+/// If `layout` is an enum (variant) layout and `values` begins with a variant
+/// tag, returns that tag together with the field layouts of the selected
+/// variant.
+///
+/// The inner `Option` is `None` precisely when the tag is out of range for the
+/// layout — a case that is otherwise indistinguishable from a valid zero-field
+/// variant. Callers MUST treat an out-of-range tag as an error and must not
+/// fall back to an empty variant: doing so would let a value serialize against
+/// a layout that does not describe it (e.g. a layout cached from before an enum
+/// upgrade introduced the variant), producing bytes that strict deserialization
+/// rejects.
 fn try_get_variant_field_layouts<'a>(
     layout: &'a MoveStructLayout,
     values: &[ValueImpl],
-) -> Option<(u16, &'a [MoveTypeLayout])> {
-    if matches!(layout, MoveStructLayout::RuntimeVariants(..)) {
+) -> Option<(u16, Option<&'a [MoveTypeLayout]>)> {
+    if let MoveStructLayout::RuntimeVariants(variants) = layout {
         if let Some(ValueImpl::U16(tag)) = values.first() {
-            return Some((*tag, layout.fields(Some(*tag as usize))));
+            return Some((*tag, variants.get(*tag as usize).map(Vec::as_slice)));
         }
     }
     None

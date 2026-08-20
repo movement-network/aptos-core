@@ -355,33 +355,23 @@ impl InterpreterImpl<'_> {
                     let (function, frame_cache) = if RTCaches::caches_enabled() {
                         let current_frame_cache = &mut *current_frame.frame_cache.borrow_mut();
 
-                        let cached = match current_frame_cache
-                            .per_instruction_cache
-                            .get(&current_frame.pc)
+                        if let Some(PerInstructionCache::Call(function, frame_cache)) =
+                            current_frame_cache.per_instruction_cache.get(&current_frame.pc)
                         {
-                            Some(PerInstructionCache::Call(function, frame_cache)) => {
-                                Some((Rc::clone(function), Rc::clone(frame_cache)))
-                            },
-                            _ => None,
-                        };
-
-                        if let Some(hit) = cached {
-                            hit
+                            (Rc::clone(function), Rc::clone(frame_cache))
                         } else {
                             match current_frame_cache.sub_frame_cache.entry(fh_idx) {
                                 btree_map::Entry::Occupied(entry) => {
                                     let (function, frame_cache) = entry.get();
-                                    let (function, frame_cache) =
-                                        (Rc::clone(function), Rc::clone(frame_cache));
                                     current_frame_cache.per_instruction_cache.insert(
                                         current_frame.pc,
                                         PerInstructionCache::Call(
-                                            Rc::clone(&function),
-                                            Rc::clone(&frame_cache),
+                                            Rc::clone(function),
+                                            Rc::clone(frame_cache),
                                         ),
                                     );
 
-                                    (function, frame_cache)
+                                    (Rc::clone(function), Rc::clone(frame_cache))
                                 },
                                 btree_map::Entry::Vacant(entry) => {
                                     let function = Rc::new(self.load_function(
@@ -463,33 +453,23 @@ impl InterpreterImpl<'_> {
                     let (function, frame_cache) = if RTCaches::caches_enabled() {
                         let current_frame_cache = &mut *current_frame.frame_cache.borrow_mut();
 
-                        let cached = match current_frame_cache
-                            .per_instruction_cache
-                            .get(&current_frame.pc)
+                        if let Some(PerInstructionCache::CallGeneric(function, frame_cache)) =
+                            current_frame_cache.per_instruction_cache.get(&current_frame.pc)
                         {
-                            Some(PerInstructionCache::CallGeneric(function, frame_cache)) => {
-                                Some((Rc::clone(function), Rc::clone(frame_cache)))
-                            },
-                            _ => None,
-                        };
-
-                        if let Some(hit) = cached {
-                            hit
+                            (Rc::clone(function), Rc::clone(frame_cache))
                         } else {
                             match current_frame_cache.generic_sub_frame_cache.entry(idx) {
                                 btree_map::Entry::Occupied(entry) => {
                                     let (function, frame_cache) = entry.get();
-                                    let (function, frame_cache) =
-                                        (Rc::clone(function), Rc::clone(frame_cache));
                                     current_frame_cache.per_instruction_cache.insert(
                                         current_frame.pc,
                                         PerInstructionCache::CallGeneric(
-                                            Rc::clone(&function),
-                                            Rc::clone(&frame_cache),
+                                            Rc::clone(function),
+                                            Rc::clone(frame_cache),
                                         ),
                                     );
 
-                                    (function, frame_cache)
+                                    (Rc::clone(function), Rc::clone(frame_cache))
                                 },
                                 btree_map::Entry::Vacant(entry) => {
                                     let function =

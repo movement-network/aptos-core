@@ -6,6 +6,7 @@ extern crate core;
 mod backup;
 mod backup_maintenance;
 mod bootstrap;
+mod fork;
 mod gen_replay_verify_jobs;
 mod replay_on_archive;
 mod replay_verify;
@@ -30,6 +31,8 @@ pub enum DBTool {
 
     Bootstrap(bootstrap::Command),
 
+    Fork(fork::Command),
+
     #[clap(subcommand)]
     Debug(db_debugger::Cmd),
 
@@ -49,6 +52,7 @@ impl DBTool {
             DBTool::Backup(cmd) => cmd.run().await,
             DBTool::BackupMaintenance(cmd) => cmd.run().await,
             DBTool::Bootstrap(cmd) => cmd.run(),
+            DBTool::Fork(cmd) => cmd.run(),
             DBTool::Debug(cmd) => Ok(cmd.run()?),
             DBTool::ReplayVerify(cmd) => {
                 let ret = cmd.run().await;

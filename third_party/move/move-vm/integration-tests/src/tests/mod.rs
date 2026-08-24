@@ -24,6 +24,7 @@ mod binary_format_version;
 mod exec_func_effects_tests;
 mod function_arg_tests;
 mod instantiation_tests;
+mod instruction_cache_bench;
 mod invariant_violation_tests;
 mod leak_tests;
 mod loader_tests;

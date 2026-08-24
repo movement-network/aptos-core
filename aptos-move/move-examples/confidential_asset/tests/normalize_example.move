@@ -4,11 +4,11 @@ module confidential_asset_example::normalize_example {
     use aptos_framework::fungible_asset::Metadata;
     use aptos_framework::object::Object;
 
-    use aptos_experimental::confidential_asset;
-    use aptos_experimental::confidential_asset_tests;
-    use aptos_experimental::confidential_balance;
-    use aptos_experimental::confidential_proof;
-    use aptos_experimental::ristretto255_twisted_elgamal as twisted_elgamal;
+    use aptos_framework::confidential_asset;
+    use aptos_framework::confidential_asset_tests;
+    use aptos_framework::confidential_balance;
+    use aptos_framework::confidential_proof;
+    use aptos_framework::ristretto255_twisted_elgamal as twisted_elgamal;
 
     fun normalize(bob: &signer, token: Object<Metadata>) {
         let bob_addr = signer::address_of(bob);
@@ -43,6 +43,9 @@ module confidential_asset_example::normalize_example {
             proof,
             new_balance
         ) = confidential_proof::prove_normalization(
+            4u8,
+            bob_addr,
+            @aptos_framework,
             &bob_dk,
             &bob_ek,
             bob_amount,
@@ -70,7 +73,7 @@ module confidential_asset_example::normalize_example {
     }
 
     #[test(
-        confidential_asset = @aptos_experimental,
+        confidential_asset = @aptos_framework,
         aptos_fx = @aptos_framework,
         fa = @0xfa,
         bob = @0xb0

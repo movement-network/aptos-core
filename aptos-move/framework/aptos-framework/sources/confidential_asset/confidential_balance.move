@@ -12,13 +12,13 @@
 ///
 /// This implementation leverages the homomorphic properties of Twisted ElGamal encryption to allow arithmetic operations
 /// directly on encrypted data.
-module aptos_experimental::confidential_balance {
+module aptos_framework::confidential_balance {
     use std::error;
     use std::option::{Self, Option};
     use std::vector;
     use aptos_std::ristretto255::{Self, RistrettoPoint, Scalar};
 
-    use aptos_experimental::ristretto255_twisted_elgamal as twisted_elgamal;
+    use aptos_framework::ristretto255_twisted_elgamal as twisted_elgamal;
 
     //
     // Errors
@@ -187,18 +187,6 @@ module aptos_experimental::confidential_balance {
     /// Adds two confidential balances homomorphically, mutating the first balance in place.
     /// The second balance must have fewer or equal chunks compared to the first.
     public fun add_balances_mut(lhs: &mut ConfidentialBalance, rhs: &ConfidentialBalance) {
-        assert!(lhs.chunks.length() >= rhs.chunks.length(), error::internal(EINTERNAL_ERROR));
-
-        lhs.chunks.enumerate_mut(|i, chunk| {
-            if (i < rhs.chunks.length()) {
-                twisted_elgamal::ciphertext_add_assign(chunk, &rhs.chunks[i])
-            }
-        })
-    }
-
-    /// Subtracts one confidential balance from another homomorphically, mutating the first balance in place.
-    /// The second balance must have fewer or equal chunks compared to the first.
-    public fun sub_balances_mut(lhs: &mut ConfidentialBalance, rhs: &ConfidentialBalance) {
         assert!(lhs.chunks.length() >= rhs.chunks.length(), error::internal(EINTERNAL_ERROR));
 
         lhs.chunks.enumerate_mut(|i, chunk| {

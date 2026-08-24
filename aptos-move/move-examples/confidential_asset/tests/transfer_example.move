@@ -6,11 +6,11 @@ module confidential_asset_example::transfer_example {
     use aptos_framework::fungible_asset::Metadata;
     use aptos_framework::object::Object;
 
-    use aptos_experimental::confidential_asset;
-    use aptos_experimental::confidential_asset_tests;
-    use aptos_experimental::confidential_balance;
-    use aptos_experimental::confidential_proof;
-    use aptos_experimental::ristretto255_twisted_elgamal as twisted_elgamal;
+    use aptos_framework::confidential_asset;
+    use aptos_framework::confidential_asset_tests;
+    use aptos_framework::confidential_balance;
+    use aptos_framework::confidential_proof;
+    use aptos_framework::ristretto255_twisted_elgamal as twisted_elgamal;
 
     fun transfer(bob: &signer, alice: &signer, token: Object<Metadata>) {
         let bob_addr = signer::address_of(bob);
@@ -69,6 +69,9 @@ module confidential_asset_example::transfer_example {
             // It won't be stored on-chain, but an auditor can decrypt the transfer amount with its dk.
             auditor_amounts
         ) = confidential_proof::prove_transfer(
+            4u8,
+            bob_addr,
+            @aptos_framework,
             &bob_dk,
             &bob_ek,
             &alice_ek,
@@ -76,6 +79,7 @@ module confidential_asset_example::transfer_example {
             bob_new_amount,
             &current_balance,
             &auditor_eks,
+            vector[],
         );
 
         let (
@@ -94,7 +98,8 @@ module confidential_asset_example::transfer_example {
             confidential_asset::serialize_auditor_amounts(&auditor_amounts),
             zkrp_new_balance,
             zkrp_transfer_amount,
-            sigma_proof
+            sigma_proof,
+            vector[]
         );
 
         print(&utf8(b"Bob's actual balance is 250"));
@@ -105,7 +110,7 @@ module confidential_asset_example::transfer_example {
     }
 
     #[test(
-        confidential_asset = @aptos_experimental,
+        confidential_asset = @aptos_framework,
         aptos_fx = @aptos_framework,
         fa = @0xfa,
         bob = @0xb0,

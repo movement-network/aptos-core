@@ -4,7 +4,6 @@ version = "1.0.0"
 
 [dependencies]
 AptosFramework = { local = "../../framework/aptos-framework" }
-AptosExperimental = { local = "../../framework/aptos-experimental" }
 
 [addresses]
 confidential_asset_example = "_"

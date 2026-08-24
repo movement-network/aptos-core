@@ -7,7 +7,8 @@ module aptos_framework::confidential_proof_tests {
     // Test constants for domain separation
     const TEST_CHAIN_ID: u8 = 4;
     const TEST_SENDER: address = @0xa1;
-    /// Published package account for `confidential_asset` / `confidential_proof` (matches `[addresses]` in experimental `Move.toml`).
+    /// Address the on-chain Fiat-Shamir transcript binds as `contract_address`. `confidential_asset`
+    /// ships in the framework, so this is `@aptos_framework` at every verify callsite.
     const TEST_CONTRACT_ADDRESS: address = @aptos_framework;
     // `TEST_TOKEN_ADDRESS` is declared further down in the registration-tests block (`@0xbeef`); reused here for
     // every transfer/withdraw/rotation/normalization callsite so all FS transcripts are domain-separated by the same

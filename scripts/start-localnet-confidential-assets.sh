@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
 # Start Movement localnet (validator REST + faucet, no Docker indexer), enable confidential-assets
-# feature flag 87 (BULLETPROOFS_BATCH_NATIVES) via mint.key, then publish AptosExperimental using the
-# account in .movement/config.yaml (see MOVEMENT_PROFILE / --named-addresses).
+# feature flag 87 (BULLETPROOFS_BATCH_NATIVES) via mint.key, then bootstrap the chain and asset
+# auditors using the account in .movement/config.yaml (see MOVEMENT_PROFILE).
+#
+# confidential_asset ships in the Aptos framework, so it is already on-chain at 0x1 after genesis.
+# Nothing needs publishing for it; this script only flips the feature flag and sets the auditors.
 #
 # From repo root:
 #   ./scripts/start-localnet-confidential-assets.sh
 #
 # If $REPO_ROOT/.movement/config.yaml is missing (no `movement init` yet), this script creates one
 # automatically after the localnet REST API is up: generates an Ed25519 key and runs
-# `movement init --network custom --rest-url $NODE_URL` so `move publish` can run without a prior
-# manual init. Existing configs are left unchanged if `movement config show-profiles` succeeds for
-# MOVEMENT_PROFILE. Set SKIP_MOVEMENT_CONFIG_INIT=1 to disable auto-init (publish will fail if no config).
+# `movement init --network custom --rest-url $NODE_URL` so the auditor bootstrap has a signer without
+# a prior manual init. Existing configs are left unchanged if `movement config show-profiles` succeeds
+# for MOVEMENT_PROFILE. Set SKIP_MOVEMENT_CONFIG_INIT=1 to disable auto-init (the auditor bootstrap
+# fails if no config).
 #
 # Ports (not the same service):
 #   • 8080 — fullnode REST API (ledger), what `move run-script --url` uses. Your log line
@@ -60,14 +64,13 @@
 #   MOVE_RUN_SCRIPT_MAX_GAS — --max-gas for move run-script (default: 2000000). On-chain
 #          maximum_number_of_gas_units is capped (e.g. 2_000_000 in config/global-constants for
 #          production genesis); higher values fail with MAX_GAS_UNITS_EXCEEDS_MAX_GAS_UNITS_BOUND.
-#   MOVEMENT_PROFILE — profile in $REPO_ROOT/.movement/config.yaml used to sign move publish
-#          (default: default). The package is published with --named-addresses
-#          aptos_experimental=<that profile's account>, not Move.toml's 0x7.
+#   MOVEMENT_PROFILE — profile in $REPO_ROOT/.movement/config.yaml whose account is designated
+#          chain_auditor_admin and signs set_chain_auditor (default: default).
 #   SKIP_MOVEMENT_CONFIG_INIT=1 — do not auto-create .movement/config.yaml when missing (requires
-#          an existing usable profile for move publish when SKIP_EXPERIMENTAL_PUBLISH=0).
-#   EXPERIMENTAL_PACKAGE_DIR — AptosExperimental package (default: $REPO_ROOT/aptos-move/framework/aptos-experimental)
-#   SKIP_EXPERIMENTAL_PUBLISH=1 — skip aptos-experimental move publish after the feature-flag script
-#   MOVE_PUBLISH_MAX_GAS — --max-gas for move publish (default: same as MOVE_RUN_SCRIPT_MAX_GAS)
+#          an existing usable profile when SKIP_AUDITOR_BOOTSTRAP=0).
+#   SKIP_AUDITOR_BOOTSTRAP=1 — skip the chain-auditor bootstrap (admin designation +
+#          set_chain_auditor) after the feature-flag script
+#   SKIP_ASSET_AUDITOR=1 — skip setting the MOVE (FA @0xa) asset auditor key
 
 set -euo pipefail
 
@@ -112,10 +115,8 @@ FAUCET_AMOUNT="${FAUCET_AMOUNT:-10000000000}"
 SKIP_FAUCET="${SKIP_FAUCET:-0}"
 FAUCET_FUND_CONN_TIMEOUT_SECS="${FAUCET_FUND_CONN_TIMEOUT_SECS:-45}"
 MOVE_RUN_SCRIPT_MAX_GAS="${MOVE_RUN_SCRIPT_MAX_GAS:-2000000}"
-MOVE_PUBLISH_MAX_GAS="${MOVE_PUBLISH_MAX_GAS:-$MOVE_RUN_SCRIPT_MAX_GAS}"
 MOVEMENT_PROFILE="${MOVEMENT_PROFILE:-default}"
-EXPERIMENTAL_PACKAGE_DIR="${EXPERIMENTAL_PACKAGE_DIR:-$REPO_ROOT/aptos-move/framework/aptos-experimental}"
-SKIP_EXPERIMENTAL_PUBLISH="${SKIP_EXPERIMENTAL_PUBLISH:-0}"
+SKIP_AUDITOR_BOOTSTRAP="${SKIP_AUDITOR_BOOTSTRAP:-0}"
 SKIP_MOVEMENT_CONFIG_INIT="${SKIP_MOVEMENT_CONFIG_INIT:-0}"
 # Set to 1 only after we nohup localnet in this shell (EXIT trap uses this).
 STARTED_LOCALNET_BG=0
@@ -127,11 +128,6 @@ fi
 
 if [[ ! -d "$FRAMEWORK_DIR" ]]; then
   echo "error: framework not found at $FRAMEWORK_DIR" >&2
-  exit 1
-fi
-
-if [[ "$SKIP_EXPERIMENTAL_PUBLISH" != "1" ]] && [[ ! -d "$EXPERIMENTAL_PACKAGE_DIR" ]]; then
-  echo "error: experimental package not found at $EXPERIMENTAL_PACKAGE_DIR" >&2
   exit 1
 fi
 
@@ -271,10 +267,10 @@ wait_for_localnet_ready() {
   exit 1
 }
 
-# Creates $REPO_ROOT/.movement/config.yaml when missing so move publish can sign. movement init
-# contacts NODE_URL; only call after localnet REST is accepting connections.
-ensure_movement_cli_config_for_publish() {
-  if [[ "$SKIP_EXPERIMENTAL_PUBLISH" == "1" ]]; then
+# Creates $REPO_ROOT/.movement/config.yaml when missing so the auditor bootstrap can sign. movement
+# init contacts NODE_URL; only call after localnet REST is accepting connections.
+ensure_movement_cli_config_for_signing() {
+  if [[ "$SKIP_AUDITOR_BOOTSTRAP" == "1" ]]; then
     return 0
   fi
   if [[ "$SKIP_MOVEMENT_CONFIG_INIT" == "1" ]]; then
@@ -322,7 +318,7 @@ sys.exit(0)" "$MOVEMENT_PROFILE" 2>/dev/null
     exit 1
   fi
   rm -f "$tmpk" "${tmpk}.pub"
-  echo "Wrote $cfg — publish signer is profile \"$MOVEMENT_PROFILE\" (re-use this file for stable module addresses)."
+  echo "Wrote $cfg — auditor-bootstrap signer is profile \"$MOVEMENT_PROFILE\"."
 }
 
 # Address move run-script uses if you only pass --private-key-file (auth key preimage of pubkey).
@@ -478,10 +474,10 @@ fund_mint_related_accounts() {
     --connection-timeout-secs "$FAUCET_FUND_CONN_TIMEOUT_SECS" \
     --account "$derived" \
     --amount "$FAUCET_AMOUNT"
-  if [[ "$SKIP_EXPERIMENTAL_PUBLISH" != "1" ]]; then
+  if [[ "$SKIP_AUDITOR_BOOTSTRAP" != "1" ]]; then
     local prof_acct
     prof_acct=$(profile_account_hex) || exit 1
-    echo "Funding move publish signer ($MOVEMENT_PROFILE profile) $prof_acct via faucet ($FAUCET_URL) ..."
+    echo "Funding auditor-bootstrap signer ($MOVEMENT_PROFILE profile) $prof_acct via faucet ($FAUCET_URL) ..."
     "$MOVEMENT" account fund-with-faucet \
       --url "$NODE_URL" \
       --faucet-url "$FAUCET_URL" \
@@ -489,32 +485,6 @@ fund_mint_related_accounts() {
       --account "$prof_acct" \
       --amount "$FAUCET_AMOUNT"
   fi
-}
-
-publish_experimental_from_profile() {
-  if [[ "$SKIP_EXPERIMENTAL_PUBLISH" == "1" ]]; then
-    echo "SKIP_EXPERIMENTAL_PUBLISH=1: skipping AptosExperimental move publish."
-    return 0
-  fi
-  local cfg="$REPO_ROOT/.movement/config.yaml"
-  if [[ ! -f "$cfg" ]]; then
-    echo "error: $cfg not found after init step; move publish needs a CLI profile (or set SKIP_EXPERIMENTAL_PUBLISH=1)." >&2
-    exit 1
-  fi
-  local named_addr
-  named_addr=$(profile_account_hex) || exit 1
-  echo "Publishing AptosExperimental from profile \"$MOVEMENT_PROFILE\" with aptos_experimental=$named_addr ..."
-  cd "$REPO_ROOT"
-  "$MOVEMENT" move publish \
-    --assume-yes \
-    --url "$NODE_URL" \
-    --profile "$MOVEMENT_PROFILE" \
-    --package-dir "$EXPERIMENTAL_PACKAGE_DIR" \
-    --named-addresses "aptos_experimental=${named_addr}" \
-    --max-gas "$MOVE_PUBLISH_MAX_GAS" \
-    --skip-fetch-latest-git-deps \
-    --included-artifacts none \
-    --override-size-check
 }
 
 wait_for_mint_key() {
@@ -603,7 +573,7 @@ fi
 
 cd "$REPO_ROOT"
 
-ensure_movement_cli_config_for_publish
+ensure_movement_cli_config_for_signing
 
 fund_mint_related_accounts
 
@@ -641,13 +611,11 @@ EOF
   --script-path "$FEATURE_SCRIPT"
 rm -rf "$FEATURE_SCRIPT_DIR"
 
-publish_experimental_from_profile
-
-# Bootstrap the chain-auditor: governance (mint.key) designates the publish-profile
+# Bootstrap the chain-auditor: governance (mint.key) designates the CLI-profile
 # account as `chain_auditor_admin`, then that admin sets a known TwistedElGamal
 # pubkey as the chain auditor. Without this, every `confidential_transfer` aborts
-# with ECHAIN_AUDITOR_NOT_SET because the GlobalConfig.chain_auditor_ek defaults
-# to None at publish.
+# with ECHAIN_AUDITOR_NOT_SET because the GlobalConfig.chain_auditor_ek starts as
+# None.
 #
 # CHAIN_AUDITOR_EK is a fixed test-only key. Re-running the script bumps the
 # on-chain `chain_auditor_epoch` (harmless for tests; localnet state is wiped on
@@ -657,7 +625,7 @@ publish_experimental_from_profile
 CHAIN_AUDITOR_BOOTSTRAP_DIR="$SCRIPT_DIR/chain-auditor-bootstrap"
 CHAIN_AUDITOR_EK="${CHAIN_AUDITOR_EK:-0x5e7cbfdf6b100216d7541b0439704748225a90005cd4908a1ee3c90d1ab1ea00}"
 
-if [[ "${SKIP_EXPERIMENTAL_PUBLISH:-0}" != "1" ]]; then
+if [[ "${SKIP_AUDITOR_BOOTSTRAP:-0}" != "1" ]]; then
   if [[ ! -d "$CHAIN_AUDITOR_BOOTSTRAP_DIR" ]]; then
     echo "error: missing $CHAIN_AUDITOR_BOOTSTRAP_DIR" >&2
     exit 1
@@ -667,10 +635,9 @@ if [[ "${SKIP_EXPERIMENTAL_PUBLISH:-0}" != "1" ]]; then
   # `move run-script` does not accept --named-addresses, so compile the bootstrap
   # script package separately and feed the resulting bytecode in via
   # --compiled-script-path.
-  echo "Compiling chain-auditor bootstrap script (aptos_experimental=$admin_addr) ..."
+  echo "Compiling chain-auditor bootstrap script ..."
   "$MOVEMENT" move compile-script \
     --package-dir "$CHAIN_AUDITOR_BOOTSTRAP_DIR" \
-    --named-addresses "aptos_experimental=$admin_addr" \
     --output-file "$CHAIN_AUDITOR_BOOTSTRAP_DIR/build/set_chain_auditor_admin.mv"
 
   echo "Designating $admin_addr (profile \"$MOVEMENT_PROFILE\") as chain_auditor_admin ..."
@@ -742,7 +709,7 @@ EOF
   rm -rf "$ASSET_AUDITOR_SCRIPT_DIR"
 fi
 
-echo "Done — feature flag and (if enabled) publish finished."
+echo "Done — feature flag and (if enabled) auditor bootstrap finished."
 echo "REST: $NODE_URL/v1  (ready probe: $READY_URL — set WAIT_STRATEGY=node to wait only on REST)"
 
 # Hold this shell so localnet is not an invisible background process (default). Ctrl+C stops localnet.

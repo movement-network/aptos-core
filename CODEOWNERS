@@ -10,3 +10,5 @@
 /network/ @areshand
 /storage/ @areshand
 /types/src/keyless/ @areshand
+/aptos-move/ @seanyoung @0xicarus @fEst1ck
+/third_party/move @seanyoung @0xicarus @fEst1ck

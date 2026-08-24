@@ -197,8 +197,8 @@ impl SafetyRules {
         let block1 = proposed_block.round();
         let block0 = proposed_block.quorum_cert().certified_block().round();
 
-        // verify 2-chain rule
-        let commit = next_round(block0)? == block1;
+        // verify 2-chain rule, no commit on genesis block (round 0)
+        let commit = next_round(block0)? == block1 && block0 > 0;
 
         // create a ledger info
         let commit_info = if commit {

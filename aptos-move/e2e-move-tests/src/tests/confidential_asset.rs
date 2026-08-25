@@ -21,6 +21,10 @@
 // injected `confidential_asset` module.
 
 use crate::{tests::common::framework_dir_path, MoveHarness};
+use aptos_gas_schedule::{
+    gas_feature_versions, AptosGasParameters, InitialGasSchedule, ToOnChainGasSchedule,
+    LATEST_GAS_FEATURE_VERSION,
+};
 use aptos_language_e2e_tests::account::Account;
 use aptos_types::{
     account_address::AccountAddress,
@@ -607,14 +611,12 @@ fn pack_transfer_audited(
     std::array::from_fn(|i| ret.return_values[i].0.clone())
 }
 
-fn run_confidential_transfer(
-    h: &mut MoveHarness,
-    sender: &Account,
+fn confidential_transfer_payload(
     recipient: AccountAddress,
     parts: &[Vec<u8>; 8],
     sender_auditor_hint: Vec<u8>,
-) -> TransactionStatus {
-    let payload = TransactionPayload::EntryFunction(EntryFunction::new(
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
         ca_module_id(),
         Identifier::new("confidential_transfer").unwrap(),
         vec![],
@@ -631,7 +633,17 @@ fn run_confidential_transfer(
             parts[7].clone(),
             bcs::to_bytes(&sender_auditor_hint).unwrap(),
         ],
-    ));
+    ))
+}
+
+fn run_confidential_transfer(
+    h: &mut MoveHarness,
+    sender: &Account,
+    recipient: AccountAddress,
+    parts: &[Vec<u8>; 8],
+    sender_auditor_hint: Vec<u8>,
+) -> TransactionStatus {
+    let payload = confidential_transfer_payload(recipient, parts, sender_auditor_hint);
     let txn = h.create_transaction_payload(sender, payload);
     h.run(txn)
 }
@@ -1311,5 +1323,182 @@ fn deposit_normalize_and_rollover_succeeds_when_not_normalized() {
     assert_kept_success(
         &run_deposit_normalize_and_rollover(&mut h, &alice, 50, &new_bal, &zkrp, &sigma),
         "deposit_normalize_and_rollover when not normalized",
+    );
+}
+
+// --- Gas accounting ---
+
+/// The gas feature version immediately below `RELEASE_V1_28`, where the
+/// `bulletproofs.verify.base_batch_*` parameters are introduced. Below that version those
+/// parameters are absent from the schedule, and parameter resolution leaves absent entries at
+/// zero rather than failing, so batched range-proof verification is charged nothing.
+const PRE_BATCH_RANGEPROOF_GAS_VERSION: u64 = gas_feature_versions::RELEASE_V1_27;
+
+fn pin_gas_feature_version(h: &mut MoveHarness, feature_version: u64) {
+    h.modify_gas_schedule_raw(|gas_schedule| {
+        gas_schedule.feature_version = feature_version;
+        gas_schedule.entries =
+            AptosGasParameters::initial().to_on_chain_gas_schedule(feature_version);
+    });
+}
+
+/// Runs one `confidential_transfer` end to end and returns the gas charged for it. The gas
+/// schedule is pinned only after setup, so both feature versions measure the same transfer
+/// against identical state.
+fn confidential_transfer_gas_used(pinned_gas_feature_version: Option<u64>, idx: u8) -> u64 {
+    let mut h = fresh_harness();
+    let chain = h.executor.get_chain_id().id();
+    let alice_addr = confidential_e2e_addr(0xA1, idx);
+    let bob_addr = confidential_e2e_addr(0xA2, idx);
+    let alice = h.new_account_with_balance_at(alice_addr, 50_000_000_000_000);
+    let bob = h.new_account_with_balance_at(bob_addr, 1_000_000_000);
+
+    let (alice_dk, alice_ek) = generate_elgamal_keypair(&mut h);
+    let (bob_dk, bob_ek) = generate_elgamal_keypair(&mut h);
+    for (acct, addr, dk, ek) in [
+        (&alice, alice_addr, &alice_dk, &alice_ek),
+        (&bob, bob_addr, &bob_dk, &bob_ek),
+    ] {
+        let pk = twisted_pubkey_bytes(&mut h, ek);
+        let (c, r) = prove_registration_parts(&mut h, chain, addr, dk, ek, MOVE_METADATA);
+        assert_kept_success(&run_register(&mut h, acct, &pk, &c, &r), "register");
+    }
+
+    assert_kept_success(&run_deposit(&mut h, &alice, 8_000), "deposit");
+    assert_kept_success(&run_rollover(&mut h, &alice), "rollover");
+
+    let parts = pack_transfer_simple(
+        &mut h,
+        chain,
+        alice_addr,
+        bob_addr,
+        &alice_dk,
+        200,
+        7_800,
+        vec![],
+    );
+
+    if let Some(feature_version) = pinned_gas_feature_version {
+        pin_gas_feature_version(&mut h, feature_version);
+    }
+
+    let payload = confidential_transfer_payload(bob_addr, &parts, vec![]);
+    let txn = h.create_transaction_payload(&alice, payload);
+    let output = h.run_raw(txn);
+    assert_kept_success(output.status(), "transfer");
+    output.gas_used()
+}
+
+/// External-gas cost of the two batched range proofs a transfer verifies, over the 8 chunks
+/// of the new balance and the 4 chunks of the transfer amount.
+fn batch_rangeproof_gas_cost() -> u64 {
+    let params = AptosGasParameters::initial();
+    let internal = u64::from(
+        params
+            .natives
+            .aptos_framework
+            .bulletproofs_verify_base_batch_8_bits_16,
+    ) + u64::from(
+        params
+            .natives
+            .aptos_framework
+            .bulletproofs_verify_base_batch_4_bits_16,
+    );
+    internal / u64::from(params.vm.txn.scaling_factor())
+}
+
+/// A confidential transfer verifies two batched range proofs, over the 8 chunks of the new
+/// balance and the 4 chunks of the transfer amount. Below `RELEASE_V1_28` their gas
+/// parameters resolve to zero, so the transfer still succeeds but pays nothing for that
+/// verification. This pins both halves of that behaviour: the transfer is accepted either
+/// way, and the gap it leaves is exactly the two parameters.
+#[test]
+fn confidential_transfer_batch_rangeproof_gas_is_version_gated() {
+    let priced = confidential_transfer_gas_used(None, 1);
+    let unpriced = confidential_transfer_gas_used(Some(PRE_BATCH_RANGEPROOF_GAS_VERSION), 2);
+    let expected = batch_rangeproof_gas_cost();
+
+    assert_eq!(
+        priced - unpriced,
+        expected,
+        "a transfer costs {priced} at gas feature version {LATEST_GAS_FEATURE_VERSION} and \
+         {unpriced} at {PRE_BATCH_RANGEPROOF_GAS_VERSION}; the gap should be exactly the two \
+         batch range-proof parameters ({expected})"
+    );
+
+    println!(
+        "confidential_transfer gas: {priced} at gas feature version {}, {unpriced} at {}; \
+         batch range-proof verification accounts for {expected}",
+        LATEST_GAS_FEATURE_VERSION, PRE_BATCH_RANGEPROOF_GAS_VERSION,
+    );
+}
+
+/// Breaks a confidential transfer's gas down by operation. Asserts the two batched range
+/// proofs are charged exactly what their parameters say and remain the single largest line
+/// item, and prints the rest so the composition is visible when it shifts.
+#[test]
+fn confidential_transfer_gas_profile() {
+    let mut h = fresh_harness();
+    let chain = h.executor.get_chain_id().id();
+    let alice_addr = confidential_e2e_addr(0xA3, 1);
+    let bob_addr = confidential_e2e_addr(0xA4, 1);
+    let alice = h.new_account_with_balance_at(alice_addr, 50_000_000_000_000);
+    let bob = h.new_account_with_balance_at(bob_addr, 1_000_000_000);
+
+    let (alice_dk, alice_ek) = generate_elgamal_keypair(&mut h);
+    let (bob_dk, bob_ek) = generate_elgamal_keypair(&mut h);
+    for (acct, addr, dk, ek) in [
+        (&alice, alice_addr, &alice_dk, &alice_ek),
+        (&bob, bob_addr, &bob_dk, &bob_ek),
+    ] {
+        let pk = twisted_pubkey_bytes(&mut h, ek);
+        let (c, r) = prove_registration_parts(&mut h, chain, addr, dk, ek, MOVE_METADATA);
+        assert_kept_success(&run_register(&mut h, acct, &pk, &c, &r), "register");
+    }
+    assert_kept_success(&run_deposit(&mut h, &alice, 8_000), "deposit");
+    assert_kept_success(&run_rollover(&mut h, &alice), "rollover");
+
+    let parts = pack_transfer_simple(
+        &mut h,
+        chain,
+        alice_addr,
+        bob_addr,
+        &alice_dk,
+        200,
+        7_800,
+        vec![],
+    );
+    let payload = confidential_transfer_payload(bob_addr, &parts, vec![]);
+
+    let (log, gas_used, _fee) = h.evaluate_gas_with_profiler(&alice, payload);
+    let io = &log.exec_io;
+    let scale = u64::from(io.gas_scaling_factor);
+    let aggregated = io.aggregate_gas_events();
+
+    println!("confidential_transfer: {gas_used} gas, intrinsic {}", u64::from(io.intrinsic_cost) / scale);
+    for (name, count, cost) in &aggregated.ops {
+        let cost = u64::from(*cost) / scale;
+        if cost > 0 {
+            println!("  {cost:>5}  x{count:<6} {name}");
+        }
+    }
+
+    let (_, count, cost) = aggregated
+        .ops
+        .iter()
+        .find(|(name, _, _)| name.contains("verify_batch_range_proof"))
+        .expect("a transfer must verify batched range proofs");
+    assert_eq!(*count, 2, "a transfer verifies two batched range proofs");
+    assert_eq!(
+        u64::from(*cost) / scale,
+        batch_rangeproof_gas_cost(),
+        "range-proof verification should be charged exactly its two parameters"
+    );
+
+    let largest = u64::from(aggregated.ops[0].2) / scale;
+    assert_eq!(
+        largest,
+        batch_rangeproof_gas_cost(),
+        "range-proof verification should be the largest single cost in a transfer"
     );
 }

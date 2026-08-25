@@ -1432,3 +1432,73 @@ fn confidential_transfer_batch_rangeproof_gas_is_version_gated() {
         LATEST_GAS_FEATURE_VERSION, PRE_BATCH_RANGEPROOF_GAS_VERSION,
     );
 }
+
+/// Breaks a confidential transfer's gas down by operation. Asserts the two batched range
+/// proofs are charged exactly what their parameters say and remain the single largest line
+/// item, and prints the rest so the composition is visible when it shifts.
+#[test]
+fn confidential_transfer_gas_profile() {
+    let mut h = fresh_harness();
+    let chain = h.executor.get_chain_id().id();
+    let alice_addr = confidential_e2e_addr(0xA3, 1);
+    let bob_addr = confidential_e2e_addr(0xA4, 1);
+    let alice = h.new_account_with_balance_at(alice_addr, 50_000_000_000_000);
+    let bob = h.new_account_with_balance_at(bob_addr, 1_000_000_000);
+
+    let (alice_dk, alice_ek) = generate_elgamal_keypair(&mut h);
+    let (bob_dk, bob_ek) = generate_elgamal_keypair(&mut h);
+    for (acct, addr, dk, ek) in [
+        (&alice, alice_addr, &alice_dk, &alice_ek),
+        (&bob, bob_addr, &bob_dk, &bob_ek),
+    ] {
+        let pk = twisted_pubkey_bytes(&mut h, ek);
+        let (c, r) = prove_registration_parts(&mut h, chain, addr, dk, ek, MOVE_METADATA);
+        assert_kept_success(&run_register(&mut h, acct, &pk, &c, &r), "register");
+    }
+    assert_kept_success(&run_deposit(&mut h, &alice, 8_000), "deposit");
+    assert_kept_success(&run_rollover(&mut h, &alice), "rollover");
+
+    let parts = pack_transfer_simple(
+        &mut h,
+        chain,
+        alice_addr,
+        bob_addr,
+        &alice_dk,
+        200,
+        7_800,
+        vec![],
+    );
+    let payload = confidential_transfer_payload(bob_addr, &parts, vec![]);
+
+    let (log, gas_used, _fee) = h.evaluate_gas_with_profiler(&alice, payload);
+    let io = &log.exec_io;
+    let scale = u64::from(io.gas_scaling_factor);
+    let aggregated = io.aggregate_gas_events();
+
+    println!("confidential_transfer: {gas_used} gas, intrinsic {}", u64::from(io.intrinsic_cost) / scale);
+    for (name, count, cost) in &aggregated.ops {
+        let cost = u64::from(*cost) / scale;
+        if cost > 0 {
+            println!("  {cost:>5}  x{count:<6} {name}");
+        }
+    }
+
+    let (_, count, cost) = aggregated
+        .ops
+        .iter()
+        .find(|(name, _, _)| name.contains("verify_batch_range_proof"))
+        .expect("a transfer must verify batched range proofs");
+    assert_eq!(*count, 2, "a transfer verifies two batched range proofs");
+    assert_eq!(
+        u64::from(*cost) / scale,
+        batch_rangeproof_gas_cost(),
+        "range-proof verification should be charged exactly its two parameters"
+    );
+
+    let largest = u64::from(aggregated.ops[0].2) / scale;
+    assert_eq!(
+        largest,
+        batch_rangeproof_gas_cost(),
+        "range-proof verification should be the largest single cost in a transfer"
+    );
+}

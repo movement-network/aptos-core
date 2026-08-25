@@ -1,0 +1,14 @@
+# Local patch of slug 0.1.5 — removes cdylib crate-type to fix cargo-fuzz builds.
+# The cdylib causes linker errors because sanitizer coverage symbols are undefined
+# when linking a standalone shared library.
+
+[package]
+name = "slug"
+version = "0.1.5"
+edition = "2021"
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+deunicode = "1.4.1"

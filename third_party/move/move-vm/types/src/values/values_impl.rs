@@ -3985,10 +3985,9 @@ impl serde::Serialize for SerializationReadyValue<'_, '_, '_, MoveTypeLayout, Va
                     None => {
                         // If no delayed field extension, it is not known how the delayed value
                         // should be serialized. So, just return an error.
-                        Err(invariant_violation::<S>(format!(
-                            "no custom serializer for delayed value ({:?}) with layout {}",
-                            kind, layout
-                        )))
+                        Err(invariant_violation::<S>(
+                            "no custom serializer for delayed value".to_string(),
+                        ))
                     },
                 }
             },
@@ -4193,10 +4192,9 @@ impl<'d> serde::de::DeserializeSeed<'d> for DeserializationSeed<'_, &MoveTypeLay
                                 let (id, _) =
                                     DelayedFieldID::try_from_move_value(layout, value, &())
                                         .map_err(|_| {
-                                            D::Error::custom(format!(
-                                        "Custom deserialization failed for {:?} with layout {}",
-                                        kind, layout
-                                    ))
+                                            D::Error::custom(
+                                                "custom deserialization failed for native value",
+                                            )
                                         })?;
                                 id
                             },
@@ -4209,10 +4207,9 @@ impl<'d> serde::de::DeserializeSeed<'d> for DeserializationSeed<'_, &MoveTypeLay
                         // serialization, we return an error.
                         Err(D::Error::custom(
                             PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR)
-                                .with_message(format!(
-                                    "no custom deserializer for native value ({:?}) with layout {}",
-                                    kind, layout
-                                )),
+                                .with_message(
+                                    "no custom deserializer for native value".to_string()
+                                ),
                         ))
                     },
                 }

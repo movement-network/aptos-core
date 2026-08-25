@@ -44,7 +44,6 @@ where
             format!("{}-{}", thread_name_clone, id)
         })
         .on_thread_start(on_thread_start)
-        .disable_lifo_slot()
         // Limit concurrent blocking tasks from spawn_blocking(), in case, for example, too many
         // Rest API calls overwhelm the node.
         .max_blocking_threads(MAX_BLOCKING_THREADS)

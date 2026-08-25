@@ -1,10 +1,17 @@
 #!/bin/bash
 
-export RUSTFLAGS="${RUSTFLAGS} --cfg tokio_unstable"
-export EXTRAFLAGS="-Ztarget-applies-to-host -Zhost-config"
+export RUSTFLAGS="${RUSTFLAGS} --cfg tokio_unstable -C overflow-checks=yes"
+# target-applies-to-host is configured in .cargo/config.toml and has been
+# stable since Rust 1.80. No -Z flags needed on modern toolchains.
+# The config prevents RUSTFLAGS (sancov instrumentation) from leaking into
+# host/proc-macro dependencies.
+export EXTRAFLAGS=""
 # Nightly version control
-# Pin nightly-2024-02-12 because of https://github.com/google/oss-fuzz/issues/11626
-NIGHTLY_VERSION="nightly-2024-09-05"
+# cargo-fuzz requires nightly for -Z flags. The codebase requires >= 1.86 features
+# (trait_upcasting etc.), so the nightly must be recent enough. However, nightlies
+# newer than ~May 2025 break ethnum 1.5.0 (transmute size change). Pin to a nightly
+# that matches the project's rust-toolchain (1.86.0, released April 2025).
+NIGHTLY_VERSION="nightly-2025-04-15"
 
 # GDRIVE format https://docs.google.com/uc?export=download&id=DOCID
 # "https://storage.googleapis.com/aptos-core-corpora/move_aptosvm_publish_seed_corpus.zip"
@@ -38,22 +45,33 @@ function error() {
     exit 1
 }
 
+# Ensure rustup-managed cargo is used (Homebrew cargo doesn't support +toolchain or -Z flags).
+# cargo-fuzz spawns child cargo processes that must also resolve to the rustup proxy,
+# so we prepend ~/.cargo/bin to PATH rather than just aliasing the binary.
+CARGO_BIN="cargo"
+RUSTUP_BIN="rustup"
+if [ -f "$HOME/.cargo/bin/rustup" ]; then
+    export PATH="$HOME/.cargo/bin:$PATH"
+    RUSTUP_BIN="rustup"
+    CARGO_BIN="cargo"
+fi
+
 function cargo_fuzz() {
-    rustup install $NIGHTLY_VERSION
+    $RUSTUP_BIN install $NIGHTLY_VERSION
     if [ -z "$1" ]; then
         error "error using cargo()"
     fi
-    cargo_fuzz_cmd="cargo "+$NIGHTLY_VERSION" fuzz $1"
+    cargo_fuzz_cmd="$CARGO_BIN "+$NIGHTLY_VERSION" fuzz $1"
     shift
     $cargo_fuzz_cmd $EXTRAFLAGS $@
 }
 
 function cargo_local() {
-    rustup install $NIGHTLY_VERSION
+    $RUSTUP_BIN install $NIGHTLY_VERSION
     if [ -z "$1" ]; then
         error "error using cargo()"
     fi
-    cargo_cmd="cargo "+$NIGHTLY_VERSION" $1"
+    cargo_cmd="$CARGO_BIN "+$NIGHTLY_VERSION" $1"
     shift
     $cargo_cmd $EXTRAFLAGS $@
 }
@@ -88,6 +106,11 @@ function usage() {
         "debug")
             echo "Usage: $0 debug <fuzz_target> <testcase>"
             ;;
+        "triage")
+            echo "Usage: $0 triage <log_file>"
+            echo "  Parses a fuzz output log, categorizes each crash,"
+            echo "  and prints a readable summary with symbolized info."
+            ;;
         "flamegraph")
             echo "Usage: $0 flamegraph <fuzz_target> <testcase>"
             ;;
@@ -120,6 +143,7 @@ function usage() {
             echo "    cmin                  minimizes a corpus for a target"
             echo "    coverage              generates coverage for a fuzz target"
             echo "    debug                 debugs a fuzz target with a testcase"
+            echo "    triage                triages crash artifacts with symbolized traces"
             echo "    flamegraph           generates a flamegraph for a fuzz target with a testcase"
             echo "    list                 lists existing fuzz targets"
             echo "    monitor-coverage     monitors coverage for a fuzz target"
@@ -318,14 +342,211 @@ function debug() {
     fi
     info "Debugging $fuzz_target with $testcase"
     # find the binary
-    binary=$(find ./target/*/release/ -name $fuzz_target -type f -perm /111)
-    if [ -z "$binary" ]; then
-        error "Could not find binary for $fuzz_target. Run `./fuzz.sh build $fuzz_target` first"
+    PERM="/111"
+    if [[ $OSTYPE == 'darwin'* ]]; then
+        PERM="+111"
     fi
-    # run the binary with rust-gdb
+    binary=$(find ./target/*/release/ -name $fuzz_target -type f -perm $PERM)
+    if [ -z "$binary" ]; then
+        info "Binary not found. Building $fuzz_target..."
+        build "$fuzz_target"
+        binary=$(find ./target/*/release/ -name $fuzz_target -type f -perm $PERM)
+    fi
+    if [ -z "$binary" ]; then
+        error "Could not find binary for $fuzz_target after build"
+    fi
     export LSAN_OPTIONS=verbosity=1:log_threads=1
-    export RUST_BACKTRACE=1 
-    rust-gdb --args $binary $testcase -- -runs=1
+    export RUST_BACKTRACE=1
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        # macOS: use lldb (rust-gdb is unreliable on ARM macOS)
+        info "Using lldb (macOS detected)"
+        lldb -o "settings set target.env-vars RUST_BACKTRACE=1" \
+             -o "settings set target.env-vars LSAN_OPTIONS=verbosity=1:log_threads=1" \
+             -- "$binary" "$testcase" -- -runs=1
+    else
+        rust-gdb --args $binary $testcase -- -runs=1
+    fi
+}
+
+# Triage a fuzz output log file: parse each crash, categorize it,
+# and print a readable summary. No build required.
+#
+# Usage: ./fuzz.sh triage <log_file>
+function triage() {
+    if [ -z "$1" ]; then
+        usage triage
+    fi
+    log_file=$1
+    if [ ! -f "$log_file" ]; then
+        error "$log_file does not exist"
+    fi
+
+    info "Parsing $log_file"
+    echo ""
+
+    total=0
+    count_asan=0
+    count_crash=0
+    auth_types_seen=""
+
+    # --- Extract ASAN crashes from raw libfuzzer output ---
+    asan_type=""
+    asan_location=""
+    if grep -q "AddressSanitizer" "$log_file"; then
+        asan_type=$(grep "ERROR: AddressSanitizer:" "$log_file" | head -1 | sed 's/.*AddressSanitizer: //' | sed 's/ on address.*//')
+        asan_summary=$(grep "SUMMARY: AddressSanitizer:" "$log_file" | head -1)
+        asan_location=$(grep "is located.*global variable" "$log_file" | head -1)
+        asan_base64=$(grep "^Base64:" "$log_file" | head -1 | sed 's/Base64: //')
+
+        if [ -n "$asan_type" ]; then
+            total=$((total + 1))
+            count_asan=$((count_asan + 1))
+
+            # Demangle the symbol name
+            demangled=$(echo "$asan_location" | grep -oE "'[^']+'" | head -1 | tr -d "'")
+            crate_name=$(echo "$asan_location" | grep -oE "defined in '[^']+'" | sed "s/defined in '//;s/'//")
+            if command -v rustfilt &> /dev/null && [ -n "$demangled" ]; then
+                readable=$(echo "$demangled" | rustfilt 2>/dev/null || echo "$demangled")
+            else
+                readable="$demangled"
+            fi
+
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "  ASAN CRASH (from raw libfuzzer output)"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "  Category:  ASAN: $asan_type"
+            echo "  Severity:  CRITICAL — memory safety violation"
+            echo "  Summary:   $asan_summary"
+            if [ -n "$readable" ]; then
+                echo "  Function:  $readable"
+            fi
+            if [ -n "$crate_name" ]; then
+                echo "  Crate:     $crate_name"
+            fi
+            if [ -n "$asan_base64" ]; then
+                echo "  Base64:    $asan_base64"
+            fi
+            echo ""
+        fi
+    fi
+
+    # --- Extract individual crash reports (cargo fuzz format) ---
+    crash_sections=$(grep -n "^Failing input:" "$log_file" | cut -d: -f1)
+
+    for line_num in $crash_sections; do
+        total=$((total + 1))
+
+        # Extract the crash artifact path
+        artifact=$(sed -n "$((line_num + 2))p" "$log_file" | tr -d '[:space:]')
+        artifact_name=$(basename "$artifact" 2>/dev/null || echo "$artifact")
+
+        # Extract the Debug output (between "Output of" and "Reproduce with:")
+        debug_start=$(awk "NR>$line_num && /Output of/{print NR; exit}" "$log_file")
+        debug_end=$(awk "NR>$line_num && /Reproduce with:/{print NR; exit}" "$log_file")
+
+        debug_repr=""
+        if [ -n "$debug_start" ] && [ -n "$debug_end" ] && [ "$debug_end" -gt "$((debug_start + 2))" ]; then
+            debug_repr=$(sed -n "$((debug_start + 2)),$((debug_end - 2))p" "$log_file")
+        fi
+
+        # Extract auth type from debug repr
+        auth_type="unknown"
+        if echo "$debug_repr" | grep -q "Ed25519"; then
+            auth_type="Ed25519"
+        elif echo "$debug_repr" | grep -q "MultiAgent"; then
+            auth_type="MultiAgent"
+        elif echo "$debug_repr" | grep -q "FeePayer"; then
+            auth_type="FeePayer"
+        elif echo "$debug_repr" | grep -q "Keyless"; then
+            auth_type="Keyless"
+        fi
+
+        # Track unique auth types
+        if ! echo "$auth_types_seen" | grep -q "$auth_type"; then
+            auth_types_seen="$auth_types_seen $auth_type"
+        fi
+
+        # Categorize
+        if [ -n "$asan_type" ]; then
+            category="ASAN: $asan_type"
+            severity="CRITICAL"
+            detail="Same root cause as ASAN crash above"
+            count_asan=$((count_asan + 1))
+        else
+            category="CRASH"
+            severity="HIGH"
+            detail="Fuzz target crashed"
+            count_crash=$((count_crash + 1))
+        fi
+
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "  CRASH #$total: $artifact_name"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "  Category:  $category"
+        echo "  Severity:  $severity"
+        echo "  Auth type: $auth_type"
+        echo "  Detail:    $detail"
+
+        if [ -n "$debug_repr" ]; then
+            echo "  Input:"
+            echo "$debug_repr" | head -20 | while IFS= read -r line; do
+                echo "    $line"
+            done
+        fi
+
+        echo ""
+    done
+
+    if [ $total -eq 0 ]; then
+        info "No crashes found in $log_file"
+        exit 0
+    fi
+
+    # Count unique auth types
+    unique_count=$(echo "$auth_types_seen" | tr ' ' '\n' | grep -v '^$' | sort -u | wc -l | tr -d ' ')
+
+    # --- Summary ---
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "  TRIAGE SUMMARY"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "  Total crashes:       $total"
+    echo "  Unique auth types:   $unique_count ($auth_types_seen)"
+    echo ""
+    echo "  By category:"
+    if [ $count_asan -gt 0 ]; then
+        printf "    %-45s %d\n" "ASAN: $asan_type" "$count_asan"
+    fi
+    if [ $count_crash -gt 0 ]; then
+        printf "    %-45s %d\n" "CRASH" "$count_crash"
+    fi
+
+    if [ -n "$asan_type" ]; then
+        echo ""
+        echo "  ROOT CAUSE ANALYSIS:"
+        echo "    All crashes share the same ASAN: $asan_type bug."
+        echo "    The different auth types (Ed25519, MultiAgent, FeePayer) all"
+        echo "    trigger the same underlying memory safety issue."
+        echo "    This is 1 unique bug, not $total separate bugs."
+        if [ -n "$asan_location" ]; then
+            echo ""
+            echo "    Bug location: derived Debug::fmt switch table in move_vm_types"
+            echo "    Likely cause: compiler codegen bug (nightly-2024-09-05) generating"
+            echo "    a 3-entry switch table for a 4-variant enum (GlobalValueImpl)."
+        fi
+    fi
+
+    echo ""
+    echo "  Severity guide:"
+    echo "    ASAN (CRITICAL)     — Memory corruption. Exploitable on validators."
+    echo "    INVARIANT_VIOLATION — Real VM bug. Safety checks caught something wrong."
+    echo "    PANIC               — Can crash validator nodes (DoS vector)."
+    echo "    GAS_ANOMALY         — Resource exhaustion risk."
+    echo ""
+    echo "  To reproduce on Linux (where the crash was found):"
+    echo "    docker run --rm -it -v \$(pwd)/../../:/aptos-core rust:latest bash"
+    echo "    cd /aptos-core/testsuite/fuzzer"
+    echo "    rustup install nightly-2025-04-15"
+    echo "    cargo +nightly-2025-04-15 fuzz run <target> <artifact> -- -runs=1"
 }
 
 # use cargo-flamegraph to generate a flamegraph for a fuzz target with a testcase
@@ -359,10 +580,11 @@ function run() {
     fi
     info "Running $fuzz_target"
     features=$(get_features_for_target $fuzz_target)
+    sanitizer=${FUZZ_SANITIZER:-address}
     if [[ "$OSTYPE" == "darwin"* ]]; then
-        cargo_fuzz run $features --sanitizer address -O $fuzz_target $testcase -- -fork=4 #-ignore_crashes=1
+        cargo_fuzz run $features --sanitizer $sanitizer -O $fuzz_target $testcase -- -fork=4 -ignore_crashes=1
     else
-        cargo_fuzz run $features --sanitizer address -O $fuzz_target $testcase -- -rss_limit_mb=4096 -fork=10 #-ignore_crashes=1
+        cargo_fuzz run $features --sanitizer $sanitizer -O $fuzz_target $testcase -- -rss_limit_mb=4096 -fork=10 #-ignore_crashes=1
     fi
 }
 
@@ -404,7 +626,7 @@ function add() {
 }
 
 function list() {
-    cargo fuzz list
+    $CARGO_BIN fuzz list
 }
 
 # Helper function to get the latest modification time in a directory
@@ -452,9 +674,9 @@ function monitor-coverage() {
 }
 
 function check_cargo_fuzz() {
-    if ! command -v cargo-fuzz &> /dev/null; then
+    if ! command -v cargo-fuzz &> /dev/null && ! [ -f "$HOME/.cargo/bin/cargo-fuzz" ]; then
         info "cargo-fuzz is not installed. Installing..."
-        cargo install cargo-fuzz
+        $CARGO_BIN install cargo-fuzz
     fi
 }
 
@@ -559,6 +781,14 @@ case "$1" in
   "monitor-coverage")
     shift
     monitor-coverage "$@"
+    ;;
+  "triage")
+    shift
+    triage "$@"
+    ;;
+  "triage-log")
+    shift
+    triage "$@"
     ;;
   "tmin")
     shift

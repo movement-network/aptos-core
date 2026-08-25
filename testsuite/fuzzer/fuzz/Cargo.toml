@@ -101,3 +101,21 @@ name = "type_tag_to_string"
 path = "fuzz_targets/move/type_tag_to_string.rs"
 test = false
 doc = false
+
+[[bin]]
+name = "vm_security"
+path = "fuzz_targets/move/vm_security.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "deser_then_verify"
+path = "fuzz_targets/move/deser_then_verify.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "crash_replay"
+path = "fuzz_targets/move/crash_replay.rs"
+test = false
+doc = false

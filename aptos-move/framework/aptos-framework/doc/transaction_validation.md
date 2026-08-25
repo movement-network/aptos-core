@@ -13,6 +13,7 @@
 -  [Function `revoke_gas_permission`](#0x1_transaction_validation_revoke_gas_permission)
 -  [Function `initialize`](#0x1_transaction_validation_initialize)
 -  [Function `allow_missing_txn_authentication_key`](#0x1_transaction_validation_allow_missing_txn_authentication_key)
+-  [Function `gas_fa_metadata`](#0x1_transaction_validation_gas_fa_metadata)
 -  [Function `prologue_common`](#0x1_transaction_validation_prologue_common)
 -  [Function `check_for_replay_protection_regular_txn`](#0x1_transaction_validation_check_for_replay_protection_regular_txn)
 -  [Function `check_for_replay_protection_orderless_txn`](#0x1_transaction_validation_check_for_replay_protection_orderless_txn)
@@ -62,13 +63,17 @@
 <b>use</b> <a href="create_signer.md#0x1_create_signer">0x1::create_signer</a>;
 <b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error">0x1::error</a>;
 <b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features">0x1::features</a>;
+<b>use</b> <a href="fungible_asset.md#0x1_fungible_asset">0x1::fungible_asset</a>;
 <b>use</b> <a href="governed_gas_pool.md#0x1_governed_gas_pool">0x1::governed_gas_pool</a>;
 <b>use</b> <a href="nonce_validation.md#0x1_nonce_validation">0x1::nonce_validation</a>;
+<b>use</b> <a href="object.md#0x1_object">0x1::object</a>;
 <b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option">0x1::option</a>;
 <b>use</b> <a href="permissioned_signer.md#0x1_permissioned_signer">0x1::permissioned_signer</a>;
+<b>use</b> <a href="primary_fungible_store.md#0x1_primary_fungible_store">0x1::primary_fungible_store</a>;
 <b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">0x1::signer</a>;
 <b>use</b> <a href="system_addresses.md#0x1_system_addresses">0x1::system_addresses</a>;
 <b>use</b> <a href="timestamp.md#0x1_timestamp">0x1::timestamp</a>;
+<b>use</b> <a href="transaction_context.md#0x1_transaction_context">0x1::transaction_context</a>;
 <b>use</b> <a href="transaction_fee.md#0x1_transaction_fee">0x1::transaction_fee</a>;
 <b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">0x1::vector</a>;
 </code></pre>
@@ -505,6 +510,37 @@ Only called during genesis to initialize system resources for this module.
 
 </details>
 
+<a id="0x1_transaction_validation_gas_fa_metadata"></a>
+
+## Function `gas_fa_metadata`
+
+The fungible asset metadata address this transaction elected to pay gas in, or <code>None</code> if it
+pays in the default currency (APT). Returns <code>None</code> when the <code>GAS_PAYABLE_FA</code> feature is off,
+so the accessor (which is gated on that feature) is only called when it is enabled.
+
+
+<pre><code><b>fun</b> <a href="transaction_validation.md#0x1_transaction_validation_gas_fa_metadata">gas_fa_metadata</a>(): <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_Option">option::Option</a>&lt;<b>address</b>&gt;
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code>inline <b>fun</b> <a href="transaction_validation.md#0x1_transaction_validation_gas_fa_metadata">gas_fa_metadata</a>(): Option&lt;<b>address</b>&gt; {
+    <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_is_gas_payable_fa_enabled">features::is_gas_payable_fa_enabled</a>()) {
+        <a href="transaction_context.md#0x1_transaction_context_gas_payment_fungible_asset">transaction_context::gas_payment_fungible_asset</a>()
+    } <b>else</b> {
+        <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_none">option::none</a>&lt;<b>address</b>&gt;()
+    }
+}
+</code></pre>
+
+
+
+</details>
+
 <a id="0x1_transaction_validation_prologue_common"></a>
 
 ## Function `prologue_common`
@@ -595,7 +631,27 @@ Only called during genesis to initialize system resources for this module.
             ),
             <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_permission_denied">error::permission_denied</a>(<a href="transaction_validation.md#0x1_transaction_validation_PROLOGUE_PERMISSIONED_GAS_LIMIT_INSUFFICIENT">PROLOGUE_PERMISSIONED_GAS_LIMIT_INSUFFICIENT</a>)
         );
-        <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_operations_default_to_fa_apt_store_enabled">features::operations_default_to_fa_apt_store_enabled</a>()) {
+        <b>let</b> gas_fa_metadata = <a href="transaction_validation.md#0x1_transaction_validation_gas_fa_metadata">gas_fa_metadata</a>();
+        <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_is_some">option::is_some</a>(&gas_fa_metadata)) {
+            // Gas is paid in a selected fungible asset: it must be accepted by the governed gas
+            // pool and the payer must hold enough of it.
+            <b>let</b> metadata = *<a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_borrow">option::borrow</a>(&gas_fa_metadata);
+            <b>assert</b>!(
+                <a href="governed_gas_pool.md#0x1_governed_gas_pool_is_accepted_gas_fungible_asset">governed_gas_pool::is_accepted_gas_fungible_asset</a>(metadata),
+                <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="transaction_validation.md#0x1_transaction_validation_PROLOGUE_ECANT_PAY_GAS_DEPOSIT">PROLOGUE_ECANT_PAY_GAS_DEPOSIT</a>)
+            );
+            // The FA gas fee is charged <b>as</b> gas_used * per-FA gas price; check the payer can
+            // cover the maximum (all of txn_max_gas_units).
+            <b>let</b> max_fa_fee = <a href="governed_gas_pool.md#0x1_governed_gas_pool_gas_fee_in_fa">governed_gas_pool::gas_fee_in_fa</a>(metadata, txn_max_gas_units);
+            <b>assert</b>!(
+                <a href="primary_fungible_store.md#0x1_primary_fungible_store_is_balance_at_least">primary_fungible_store::is_balance_at_least</a>(
+                    gas_payer_address,
+                    <a href="object.md#0x1_object_address_to_object">object::address_to_object</a>&lt;Metadata&gt;(metadata),
+                    max_fa_fee
+                ),
+                <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="transaction_validation.md#0x1_transaction_validation_PROLOGUE_ECANT_PAY_GAS_DEPOSIT">PROLOGUE_ECANT_PAY_GAS_DEPOSIT</a>)
+            );
+        } <b>else</b> <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_operations_default_to_fa_apt_store_enabled">features::operations_default_to_fa_apt_store_enabled</a>()) {
             <b>assert</b>!(
                 <a href="aptos_account.md#0x1_aptos_account_is_fungible_balance_at_least">aptos_account::is_fungible_balance_at_least</a>(gas_payer_address, max_transaction_fee),
                 <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="transaction_validation.md#0x1_transaction_validation_PROLOGUE_ECANT_PAY_GAS_DEPOSIT">PROLOGUE_ECANT_PAY_GAS_DEPOSIT</a>)
@@ -1017,38 +1073,56 @@ Called by the Adapter
     // it's important <b>to</b> maintain the <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error">error</a> <a href="code.md#0x1_code">code</a> consistent <b>with</b> vm
     // <b>to</b> do failed transaction cleanup.
     <b>if</b> (!<a href="transaction_validation.md#0x1_transaction_validation_skip_gas_payment">skip_gas_payment</a>(is_simulation, gas_payer)) {
-        <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_operations_default_to_fa_apt_store_enabled">features::operations_default_to_fa_apt_store_enabled</a>()) {
+        <b>let</b> gas_fa_metadata = <a href="transaction_validation.md#0x1_transaction_validation_gas_fa_metadata">gas_fa_metadata</a>();
+        <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_is_some">option::is_some</a>(&gas_fa_metadata)) {
+            // Gas paid in a selected fungible asset is charged <b>as</b> gas_used * the FA's gas price
+            // and collected into that FA's governed gas pool. NOTE: the storage-fee refund is
+            // not netted for FA payers; that is a follow-up.
+            <b>let</b> metadata = *<a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_borrow">option::borrow</a>(&gas_fa_metadata);
+            <b>let</b> fa_fee = <a href="governed_gas_pool.md#0x1_governed_gas_pool_gas_fee_in_fa">governed_gas_pool::gas_fee_in_fa</a>(metadata, gas_used);
             <b>assert</b>!(
-                <a href="aptos_account.md#0x1_aptos_account_is_fungible_balance_at_least">aptos_account::is_fungible_balance_at_least</a>(gas_payer, transaction_fee_amount),
+                <a href="primary_fungible_store.md#0x1_primary_fungible_store_is_balance_at_least">primary_fungible_store::is_balance_at_least</a>(
+                    gas_payer,
+                    <a href="object.md#0x1_object_address_to_object">object::address_to_object</a>&lt;Metadata&gt;(metadata),
+                    fa_fee
+                ),
                 <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_out_of_range">error::out_of_range</a>(<a href="transaction_validation.md#0x1_transaction_validation_PROLOGUE_ECANT_PAY_GAS_DEPOSIT">PROLOGUE_ECANT_PAY_GAS_DEPOSIT</a>),
             );
+            <a href="governed_gas_pool.md#0x1_governed_gas_pool_deposit_gas_fee_fa">governed_gas_pool::deposit_gas_fee_fa</a>(gas_payer, metadata, fa_fee);
         } <b>else</b> {
-            <b>assert</b>!(
-                <a href="coin.md#0x1_coin_is_balance_at_least">coin::is_balance_at_least</a>&lt;AptosCoin&gt;(gas_payer, transaction_fee_amount),
-                <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_out_of_range">error::out_of_range</a>(<a href="transaction_validation.md#0x1_transaction_validation_PROLOGUE_ECANT_PAY_GAS_DEPOSIT">PROLOGUE_ECANT_PAY_GAS_DEPOSIT</a>),
-            );
-        };
-
-        <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_storage_deletion_refund_enabled">features::storage_deletion_refund_enabled</a>()){
-            <b>if</b> (transaction_fee_amount &gt; storage_fee_refunded) {
-                <b>let</b> burn_amount = transaction_fee_amount - storage_fee_refunded;
-                <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_governed_gas_pool_enabled">features::governed_gas_pool_enabled</a>()){
-                    <a href="governed_gas_pool.md#0x1_governed_gas_pool_deposit_gas_fee_v2">governed_gas_pool::deposit_gas_fee_v2</a>(gas_payer, burn_amount);
-                } <b>else</b> {
-                    <a href="transaction_fee.md#0x1_transaction_fee_burn_fee">transaction_fee::burn_fee</a>(gas_payer, burn_amount);
-                }
-            } <b>else</b> <b>if</b> (transaction_fee_amount &lt; storage_fee_refunded) {
-                <b>let</b> mint_amount = storage_fee_refunded - transaction_fee_amount;
-                // TODO: we cannot mint <b>to</b> do storage refund. We need <b>to</b> have a storage refund pool
-                <b>if</b> (!<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_governed_gas_pool_enabled">features::governed_gas_pool_enabled</a>()){
-                    <a href="transaction_fee.md#0x1_transaction_fee_mint_and_refund">transaction_fee::mint_and_refund</a>(gas_payer, mint_amount);
-                }
-            };
-        } <b>else</b> {
-            <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_governed_gas_pool_enabled">features::governed_gas_pool_enabled</a>()){
-                <a href="governed_gas_pool.md#0x1_governed_gas_pool_deposit_gas_fee_v2">governed_gas_pool::deposit_gas_fee_v2</a>(gas_payer, transaction_fee_amount);
+            <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_operations_default_to_fa_apt_store_enabled">features::operations_default_to_fa_apt_store_enabled</a>()) {
+                <b>assert</b>!(
+                    <a href="aptos_account.md#0x1_aptos_account_is_fungible_balance_at_least">aptos_account::is_fungible_balance_at_least</a>(gas_payer, transaction_fee_amount),
+                    <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_out_of_range">error::out_of_range</a>(<a href="transaction_validation.md#0x1_transaction_validation_PROLOGUE_ECANT_PAY_GAS_DEPOSIT">PROLOGUE_ECANT_PAY_GAS_DEPOSIT</a>),
+                );
             } <b>else</b> {
-                <a href="transaction_fee.md#0x1_transaction_fee_burn_fee">transaction_fee::burn_fee</a>(gas_payer, transaction_fee_amount);
+                <b>assert</b>!(
+                    <a href="coin.md#0x1_coin_is_balance_at_least">coin::is_balance_at_least</a>&lt;AptosCoin&gt;(gas_payer, transaction_fee_amount),
+                    <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_out_of_range">error::out_of_range</a>(<a href="transaction_validation.md#0x1_transaction_validation_PROLOGUE_ECANT_PAY_GAS_DEPOSIT">PROLOGUE_ECANT_PAY_GAS_DEPOSIT</a>),
+                );
+            };
+
+            <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_storage_deletion_refund_enabled">features::storage_deletion_refund_enabled</a>()){
+                <b>if</b> (transaction_fee_amount &gt; storage_fee_refunded) {
+                    <b>let</b> burn_amount = transaction_fee_amount - storage_fee_refunded;
+                    <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_governed_gas_pool_enabled">features::governed_gas_pool_enabled</a>()){
+                        <a href="governed_gas_pool.md#0x1_governed_gas_pool_deposit_gas_fee_v2">governed_gas_pool::deposit_gas_fee_v2</a>(gas_payer, burn_amount);
+                    } <b>else</b> {
+                        <a href="transaction_fee.md#0x1_transaction_fee_burn_fee">transaction_fee::burn_fee</a>(gas_payer, burn_amount);
+                    }
+                } <b>else</b> <b>if</b> (transaction_fee_amount &lt; storage_fee_refunded) {
+                    <b>let</b> mint_amount = storage_fee_refunded - transaction_fee_amount;
+                    // TODO: we cannot mint <b>to</b> do storage refund. We need <b>to</b> have a storage refund pool
+                    <b>if</b> (!<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_governed_gas_pool_enabled">features::governed_gas_pool_enabled</a>()){
+                        <a href="transaction_fee.md#0x1_transaction_fee_mint_and_refund">transaction_fee::mint_and_refund</a>(gas_payer, mint_amount);
+                    }
+                };
+            } <b>else</b> {
+                <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_governed_gas_pool_enabled">features::governed_gas_pool_enabled</a>()){
+                    <a href="governed_gas_pool.md#0x1_governed_gas_pool_deposit_gas_fee_v2">governed_gas_pool::deposit_gas_fee_v2</a>(gas_payer, transaction_fee_amount);
+                } <b>else</b> {
+                    <a href="transaction_fee.md#0x1_transaction_fee_burn_fee">transaction_fee::burn_fee</a>(gas_payer, transaction_fee_amount);
+                }
             }
         }
     };
@@ -1405,41 +1479,64 @@ If there is no fee_payer, fee_payer = sender
         is_simulation,
         gas_payer_address
     )) {
-        <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_operations_default_to_fa_apt_store_enabled">features::operations_default_to_fa_apt_store_enabled</a>()) {
+        <b>let</b> gas_fa_metadata = <a href="transaction_validation.md#0x1_transaction_validation_gas_fa_metadata">gas_fa_metadata</a>();
+        <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_is_some">option::is_some</a>(&gas_fa_metadata)) {
+            // Gas paid in a selected fungible asset is charged <b>as</b> gas_used * the FA's gas price
+            // and collected into that FA's governed gas pool. NOTE: the storage-fee refund is
+            // not netted for FA payers; that is a follow-up.
+            <b>let</b> metadata = *<a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_borrow">option::borrow</a>(&gas_fa_metadata);
+            <b>let</b> fa_fee = <a href="governed_gas_pool.md#0x1_governed_gas_pool_gas_fee_in_fa">governed_gas_pool::gas_fee_in_fa</a>(metadata, gas_used);
             <b>assert</b>!(
-                <a href="aptos_account.md#0x1_aptos_account_is_fungible_balance_at_least">aptos_account::is_fungible_balance_at_least</a>(gas_payer_address, transaction_fee_amount),
+                <a href="primary_fungible_store.md#0x1_primary_fungible_store_is_balance_at_least">primary_fungible_store::is_balance_at_least</a>(
+                    gas_payer_address,
+                    <a href="object.md#0x1_object_address_to_object">object::address_to_object</a>&lt;Metadata&gt;(metadata),
+                    fa_fee
+                ),
                 <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_out_of_range">error::out_of_range</a>(<a href="transaction_validation.md#0x1_transaction_validation_PROLOGUE_ECANT_PAY_GAS_DEPOSIT">PROLOGUE_ECANT_PAY_GAS_DEPOSIT</a>),
             );
-        } <b>else</b> {
-            <b>assert</b>!(
-                <a href="coin.md#0x1_coin_is_balance_at_least">coin::is_balance_at_least</a>&lt;AptosCoin&gt;(gas_payer_address, transaction_fee_amount),
-                <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_out_of_range">error::out_of_range</a>(<a href="transaction_validation.md#0x1_transaction_validation_PROLOGUE_ECANT_PAY_GAS_DEPOSIT">PROLOGUE_ECANT_PAY_GAS_DEPOSIT</a>),
-            );
-        };
-
-        <b>if</b> (transaction_fee_amount &gt; storage_fee_refunded) {
-            <b>let</b> burn_amount = transaction_fee_amount - storage_fee_refunded;
-            <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_governed_gas_pool_enabled">features::governed_gas_pool_enabled</a>()){
-                <a href="governed_gas_pool.md#0x1_governed_gas_pool_deposit_gas_fee_v2">governed_gas_pool::deposit_gas_fee_v2</a>(gas_payer_address, burn_amount);
-            } <b>else</b> {
-                <a href="transaction_fee.md#0x1_transaction_fee_burn_fee">transaction_fee::burn_fee</a>(gas_payer_address, burn_amount);
-            };
+            <a href="governed_gas_pool.md#0x1_governed_gas_pool_deposit_gas_fee_fa">governed_gas_pool::deposit_gas_fee_fa</a>(gas_payer_address, metadata, fa_fee);
             <a href="permissioned_signer.md#0x1_permissioned_signer_check_permission_consume">permissioned_signer::check_permission_consume</a>(
                 &gas_payer,
-                (burn_amount <b>as</b> u256),
+                (transaction_fee_amount <b>as</b> u256),
                 <a href="transaction_validation.md#0x1_transaction_validation_GasPermission">GasPermission</a> {}
             );
         } <b>else</b> {
-            <b>let</b> mint_amount = storage_fee_refunded - transaction_fee_amount;
-            // TODO: we cannot mint <b>to</b> do storage refund. We need <b>to</b> have a storage refund pool
-            <b>if</b> (!<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_governed_gas_pool_enabled">features::governed_gas_pool_enabled</a>()){
-                <a href="transaction_fee.md#0x1_transaction_fee_mint_and_refund">transaction_fee::mint_and_refund</a>(gas_payer_address, mint_amount);
+            <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_operations_default_to_fa_apt_store_enabled">features::operations_default_to_fa_apt_store_enabled</a>()) {
+                <b>assert</b>!(
+                    <a href="aptos_account.md#0x1_aptos_account_is_fungible_balance_at_least">aptos_account::is_fungible_balance_at_least</a>(gas_payer_address, transaction_fee_amount),
+                    <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_out_of_range">error::out_of_range</a>(<a href="transaction_validation.md#0x1_transaction_validation_PROLOGUE_ECANT_PAY_GAS_DEPOSIT">PROLOGUE_ECANT_PAY_GAS_DEPOSIT</a>),
+                );
+            } <b>else</b> {
+                <b>assert</b>!(
+                    <a href="coin.md#0x1_coin_is_balance_at_least">coin::is_balance_at_least</a>&lt;AptosCoin&gt;(gas_payer_address, transaction_fee_amount),
+                    <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_out_of_range">error::out_of_range</a>(<a href="transaction_validation.md#0x1_transaction_validation_PROLOGUE_ECANT_PAY_GAS_DEPOSIT">PROLOGUE_ECANT_PAY_GAS_DEPOSIT</a>),
+                );
             };
-            <a href="permissioned_signer.md#0x1_permissioned_signer_increase_limit">permissioned_signer::increase_limit</a>(
-                &gas_payer,
-                (mint_amount <b>as</b> u256),
-                <a href="transaction_validation.md#0x1_transaction_validation_GasPermission">GasPermission</a> {}
-            );
+
+            <b>if</b> (transaction_fee_amount &gt; storage_fee_refunded) {
+                <b>let</b> burn_amount = transaction_fee_amount - storage_fee_refunded;
+                <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_governed_gas_pool_enabled">features::governed_gas_pool_enabled</a>()){
+                    <a href="governed_gas_pool.md#0x1_governed_gas_pool_deposit_gas_fee_v2">governed_gas_pool::deposit_gas_fee_v2</a>(gas_payer_address, burn_amount);
+                } <b>else</b> {
+                    <a href="transaction_fee.md#0x1_transaction_fee_burn_fee">transaction_fee::burn_fee</a>(gas_payer_address, burn_amount);
+                };
+                <a href="permissioned_signer.md#0x1_permissioned_signer_check_permission_consume">permissioned_signer::check_permission_consume</a>(
+                    &gas_payer,
+                    (burn_amount <b>as</b> u256),
+                    <a href="transaction_validation.md#0x1_transaction_validation_GasPermission">GasPermission</a> {}
+                );
+            } <b>else</b> {
+                <b>let</b> mint_amount = storage_fee_refunded - transaction_fee_amount;
+                // TODO: we cannot mint <b>to</b> do storage refund. We need <b>to</b> have a storage refund pool
+                <b>if</b> (!<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_governed_gas_pool_enabled">features::governed_gas_pool_enabled</a>()){
+                    <a href="transaction_fee.md#0x1_transaction_fee_mint_and_refund">transaction_fee::mint_and_refund</a>(gas_payer_address, mint_amount);
+                };
+                <a href="permissioned_signer.md#0x1_permissioned_signer_increase_limit">permissioned_signer::increase_limit</a>(
+                    &gas_payer,
+                    (mint_amount <b>as</b> u256),
+                    <a href="transaction_validation.md#0x1_transaction_validation_GasPermission">GasPermission</a> {}
+                );
+            };
         };
     };
 

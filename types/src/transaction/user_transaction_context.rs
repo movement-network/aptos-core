@@ -13,6 +13,7 @@ pub struct UserTransactionContext {
     chain_id: u8,
     entry_function_payload: Option<EntryFunctionPayload>,
     multisig_payload: Option<MultisigPayload>,
+    gas_fa_coin: Option<AccountAddress>,
 }
 
 impl UserTransactionContext {
@@ -25,6 +26,7 @@ impl UserTransactionContext {
         chain_id: u8,
         entry_function_payload: Option<EntryFunctionPayload>,
         multisig_payload: Option<MultisigPayload>,
+        gas_fa_coin: Option<AccountAddress>,
     ) -> Self {
         Self {
             sender,
@@ -35,6 +37,7 @@ impl UserTransactionContext {
             chain_id,
             entry_function_payload,
             multisig_payload,
+            gas_fa_coin,
         }
     }
 
@@ -68,6 +71,12 @@ impl UserTransactionContext {
 
     pub fn multisig_payload(&self) -> Option<MultisigPayload> {
         self.multisig_payload.clone()
+    }
+
+    /// The fungible asset metadata address the transaction elected to pay gas in, if any.
+    /// `None` means gas is paid in the default currency (APT).
+    pub fn gas_fa_coin(&self) -> Option<AccountAddress> {
+        self.gas_fa_coin
     }
 }
 

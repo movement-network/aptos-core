@@ -16943,6 +16943,7 @@ dependencies = [
  "itertools 0.13.0",
  "move-binary-format",
  "move-core-types",
+ "move-package",
  "movement",
  "num_cpus",
  "once_cell",

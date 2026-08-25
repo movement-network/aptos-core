@@ -251,10 +251,20 @@ impl MoveHarness {
 
     /// Runs a signed transaction. On success, applies the write set.
     pub fn run_raw(&mut self, txn: SignedTransaction) -> TransactionOutput {
+        let sender = txn.sender();
         let output = self.executor.execute_transaction(txn);
         if matches!(output.status(), TransactionStatus::Keep(_)) {
             self.executor.apply_write_set(output.write_set());
             self.executor.append_events(output.events().to_vec());
+        } else if matches!(output.status(), TransactionStatus::Discard(_)) {
+            // A Discarded transaction does not increment the on-chain sequence number.
+            // Sync the local counter back to the on-chain value so that any subsequent
+            // transaction for the same sender uses the correct nonce.
+            if let Some(on_chain_seq) = self.sequence_number_opt(&sender) {
+                if let Some(seq_no_ref) = self.txn_seq_no.get_mut(&sender) {
+                    *seq_no_ref = on_chain_seq;
+                }
+            }
         }
         output
     }

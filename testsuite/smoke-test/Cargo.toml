@@ -12,6 +12,11 @@ publish = { workspace = true }
 repository = { workspace = true }
 rust-version = { workspace = true }
 
+[features]
+# Gates the CLI smoke tests that compile Move scripts (aptos_cli::r#move, aptos_cli::timelock).
+# Forwards to the movement crate's feature of the same name.
+cli-framework-test-move = ["movement/cli-framework-test-move"]
+
 [dependencies]
 anyhow = { workspace = true }
 movement = { workspace = true, features = ["fuzzing"] }
@@ -56,6 +61,7 @@ hex = { workspace = true }
 hyper = { workspace = true }
 move-binary-format = { workspace = true }
 move-core-types = { workspace = true }
+move-package = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

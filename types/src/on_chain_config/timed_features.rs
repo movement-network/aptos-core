@@ -89,61 +89,9 @@ impl TimedFeatureFlag {
                 .with_ymd_and_hms(2025, 8, 11, 17, 0, 0)
                 .unwrap()
                 .with_timezone(&Utc),
-            // Enabled from the beginning of time.
-            (DisableInvariantViolationCheckInSwapLoc, TESTNET) => BEGINNING_OF_TIME,
-            (DisableInvariantViolationCheckInSwapLoc, MAINNET) => BEGINNING_OF_TIME,
-
-            // Note: These have been enabled since the start due to a bug.
-            (_LimitTypeTagSize, TESTNET) => BEGINNING_OF_TIME,
-            (_LimitTypeTagSize, MAINNET) => BEGINNING_OF_TIME,
-
-            (_ModuleComplexityCheck, TESTNET) => Los_Angeles
-                .with_ymd_and_hms(2024, 6, 25, 16, 0, 0)
-                .unwrap()
-                .with_timezone(&Utc),
-            (_ModuleComplexityCheck, MAINNET) => Los_Angeles
-                .with_ymd_and_hms(2024, 7, 3, 12, 0, 0)
-                .unwrap()
-                .with_timezone(&Utc),
-
-            (EntryCompatibility, TESTNET) => Los_Angeles
-                .with_ymd_and_hms(2024, 11, 6, 12, 0, 0)
-                .unwrap()
-                .with_timezone(&Utc),
-            (EntryCompatibility, MAINNET) => Los_Angeles
-                .with_ymd_and_hms(2024, 11, 12, 12, 0, 0)
-                .unwrap()
-                .with_timezone(&Utc),
-
             // Note: Activation time set to 1 hour after the beginning of time
             //       so we can test the old and new behaviors in tests.
             (FixMemoryUsageTracking, TESTING) => Utc.with_ymd_and_hms(1970, 1, 1, 1, 0, 0).unwrap(),
-            (FixMemoryUsageTracking, TESTNET) => Los_Angeles
-                .with_ymd_and_hms(2025, 3, 7, 12, 0, 0)
-                .unwrap()
-                .with_timezone(&Utc),
-            (FixMemoryUsageTracking, MAINNET) => Los_Angeles
-                .with_ymd_and_hms(2025, 3, 11, 17, 0, 0)
-                .unwrap()
-                .with_timezone(&Utc),
-
-            (ChargeBytesForPrints, TESTNET) => Los_Angeles
-                .with_ymd_and_hms(2025, 3, 7, 12, 0, 0)
-                .unwrap()
-                .with_timezone(&Utc),
-            (ChargeBytesForPrints, MAINNET) => Los_Angeles
-                .with_ymd_and_hms(2025, 3, 11, 17, 0, 0)
-                .unwrap()
-                .with_timezone(&Utc),
-
-            (FixTableNativesMemoryDoubleCounting, TESTNET) => Los_Angeles
-                .with_ymd_and_hms(2025, 10, 16, 17, 0, 0)
-                .unwrap()
-                .with_timezone(&Utc),
-            (FixTableNativesMemoryDoubleCounting, MAINNET) => Los_Angeles
-                .with_ymd_and_hms(2025, 10, 21, 10, 0, 0)
-                .unwrap()
-                .with_timezone(&Utc),
 
             // 1 hour after the beginning of time
             (FixCryptoAlgebraNativesTypeTagConversion, _) => {
@@ -153,8 +101,8 @@ impl TimedFeatureFlag {
             // Irrelevant for us except for testing
             (UseFullTransactionSizeForTransactionMetadata, _) => BEGINNING_OF_TIME,
 
-            // For chains other than testnet and mainnet, a timed feature is considered enabled from
-            // the very beginning, if left unspecified.
+            // For chains other than Movement mainnet and testnet, a timed feature is considered
+            // enabled from the very beginning, if left unspecified.
             (_, TESTING | DEVNET | PREMAINNET) => BEGINNING_OF_TIME,
         }
     }
@@ -250,8 +198,6 @@ mod test {
 
     #[test]
     fn test_micros_conversion() {
-        use NamedChain::*;
-
         assert_eq!(
             Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0)
                 .unwrap()
@@ -265,117 +211,49 @@ mod test {
                 .timestamp_micros(),
             1_731_628_800_000_000
         );
-
-        assert_eq!(
-            TimedFeatureFlag::_ModuleComplexityCheck
-                .activation_time_on(&TESTNET)
-                .timestamp_micros(),
-            1_719_356_400_000_000
-        );
-        assert_eq!(
-            TimedFeatureFlag::_ModuleComplexityCheck
-                .activation_time_on(&MAINNET)
-                .timestamp_micros(),
-            1_720_033_200_000_000
-        );
-
-        assert_eq!(
-            TimedFeatureFlag::EntryCompatibility
-                .activation_time_on(&TESTNET)
-                .timestamp_micros(),
-            1_730_923_200_000_000
-        );
-        assert_eq!(
-            TimedFeatureFlag::EntryCompatibility
-                .activation_time_on(&MAINNET)
-                .timestamp_micros(),
-            1_731_441_600_000_000
-        );
     }
 
     #[test]
     fn test_timed_features_activation() {
         use TimedFeatureFlag::*;
-        let jan_1_2024_micros = Utc
-            .with_ymd_and_hms(2024, 1, 1, 0, 0, 0)
+
+        // On Movement's chains (mainnet 126 / testnet 250) every timed feature
+        // activates on 2025-08-11 (America/Los_Angeles), except
+        // UseFullTransactionSizeForTransactionMetadata, which activates 2026-05-04.
+        let before_micros = Utc
+            .with_ymd_and_hms(2025, 8, 1, 0, 0, 0)
             .unwrap()
             .timestamp_micros() as u64;
-        let nov_15_2024_micros = Utc
-            .with_ymd_and_hms(2024, 11, 15, 0, 0, 0)
+        let after_micros = Utc
+            .with_ymd_and_hms(2025, 9, 1, 0, 0, 0)
+            .unwrap()
+            .timestamp_micros() as u64;
+        let after_full_txn_size_micros = Utc
+            .with_ymd_and_hms(2026, 6, 1, 0, 0, 0)
             .unwrap()
             .timestamp_micros() as u64;
 
-        // Check testnet on Jan 1, 2024.
-        let testnet_jan_1_2024 = TimedFeaturesBuilder::new(ChainId::testnet(), jan_1_2024_micros);
-        assert!(
-            testnet_jan_1_2024.is_enabled(DisableInvariantViolationCheckInSwapLoc),
-            "DisableInvariantViolationCheckInSwapLoc should always be enabled"
-        );
-        assert!(
-            testnet_jan_1_2024.is_enabled(_LimitTypeTagSize),
-            "LimitTypeTagSize should always be enabled"
-        );
-        assert!(
-            !testnet_jan_1_2024.is_enabled(_ModuleComplexityCheck),
-            "ModuleComplexityCheck should be disabled on Jan 1, 2024 on testnet"
-        );
-        assert!(
-            !testnet_jan_1_2024.is_enabled(EntryCompatibility),
-            "EntryCompatibility should be disabled on Jan 1, 2024 on testnet"
-        );
-        // Check testnet on Nov 15, 2024.
-        let testnet_nov_15_2024 = TimedFeaturesBuilder::new(ChainId::testnet(), nov_15_2024_micros);
-        assert!(
-            testnet_nov_15_2024.is_enabled(DisableInvariantViolationCheckInSwapLoc),
-            "DisableInvariantViolationCheckInSwapLoc should always be enabled"
-        );
-        assert!(
-            testnet_nov_15_2024.is_enabled(_LimitTypeTagSize),
-            "LimitTypeTagSize should always be enabled"
-        );
-        assert!(
-            testnet_nov_15_2024.is_enabled(_ModuleComplexityCheck),
-            "ModuleComplexityCheck should be enabled on Nov 15, 2024 on testnet"
-        );
-        assert!(
-            testnet_nov_15_2024.is_enabled(EntryCompatibility),
-            "EntryCompatibility should be enabled on Nov 15, 2024 on testnet"
-        );
-        // Check mainnet on Jan 1, 2024.
-        let mainnet_jan_1_2024 = TimedFeaturesBuilder::new(ChainId::mainnet(), jan_1_2024_micros);
-        assert!(
-            mainnet_jan_1_2024.is_enabled(DisableInvariantViolationCheckInSwapLoc),
-            "DisableInvariantViolationCheckInSwapLoc should always be enabled"
-        );
-        assert!(
-            mainnet_jan_1_2024.is_enabled(_LimitTypeTagSize),
-            "LimitTypeTagSize should always be enabled"
-        );
-        assert!(
-            !mainnet_jan_1_2024.is_enabled(_ModuleComplexityCheck),
-            "ModuleComplexityCheck should be disabled on Jan 1, 2024 on mainnet"
-        );
-        assert!(
-            !mainnet_jan_1_2024.is_enabled(EntryCompatibility),
-            "EntryCompatibility should be disabled on Jan 1, 2024 on mainnet"
-        );
-        // Check mainnet on Nov 15, 2024.
-        let mainnet_nov_15_2024 = TimedFeaturesBuilder::new(ChainId::mainnet(), nov_15_2024_micros);
-        assert!(
-            mainnet_nov_15_2024.is_enabled(DisableInvariantViolationCheckInSwapLoc),
-            "DisableInvariantViolationCheckInSwapLoc should always be enabled"
-        );
-        assert!(
-            mainnet_nov_15_2024.is_enabled(_LimitTypeTagSize),
-            "LimitTypeTagSize should always be enabled"
-        );
-        assert!(
-            mainnet_nov_15_2024.is_enabled(_ModuleComplexityCheck),
-            "ModuleComplexityCheck should be enabled on Nov 15, 2024 on mainnet"
-        );
-        assert!(
-            mainnet_nov_15_2024.is_enabled(EntryCompatibility),
-            "EntryCompatibility should be enabled on Nov 15, 2024 on mainnet"
-        );
+        // Both our mainnet and testnet follow the same Movement schedule.
+        for chain_id in [ChainId::mainnet(), ChainId::testnet()] {
+            // Before the activation date, timed features are not yet enabled.
+            let before = TimedFeaturesBuilder::new(chain_id, before_micros);
+            assert!(!before.is_enabled(DisableInvariantViolationCheckInSwapLoc));
+            assert!(!before.is_enabled(_LimitTypeTagSize));
+            assert!(!before.is_enabled(_ModuleComplexityCheck));
+            assert!(!before.is_enabled(EntryCompatibility));
+
+            // After the activation date, they are enabled, except the later
+            // UseFullTransactionSizeForTransactionMetadata.
+            let after = TimedFeaturesBuilder::new(chain_id, after_micros);
+            assert!(after.is_enabled(DisableInvariantViolationCheckInSwapLoc));
+            assert!(after.is_enabled(_LimitTypeTagSize));
+            assert!(after.is_enabled(_ModuleComplexityCheck));
+            assert!(after.is_enabled(EntryCompatibility));
+            assert!(!after.is_enabled(UseFullTransactionSizeForTransactionMetadata));
+
+            // After its own later activation date, it is enabled too.
+            let after_full = TimedFeaturesBuilder::new(chain_id, after_full_txn_size_micros);
+            assert!(after_full.is_enabled(UseFullTransactionSizeForTransactionMetadata));
+        }
     }
 }

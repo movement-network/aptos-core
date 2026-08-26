@@ -228,4 +228,50 @@ mod tests {
         assert_eq!(node_config.admin_service.enabled, Some(false));
         assert!(modified_config);
     }
+
+    // Mainnet must reject an admin service with empty auth. Passes for Aptos
+    // mainnet (1); fails for Movement mainnet (126) until is_mainnet() matches 126.
+    fn admin_service_enabled_without_auth() -> NodeConfig {
+        NodeConfig {
+            admin_service: AdminServiceConfig {
+                enabled: Some(true),
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    }
+
+    // Chain 1 (Aptos mainnet) is not this network's mainnet, so the mainnet
+    // hardening gate does not fire and the empty auth list is accepted.
+    #[test]
+    fn admin_service_treats_aptos_mainnet_as_non_production() {
+        AdminServiceConfig::sanitize(
+            &admin_service_enabled_without_auth(),
+            NodeType::Validator,
+            Some(ChainId::new(1)), // Aptos mainnet — not this network's mainnet
+        )
+        .expect("chain 1 is not this network's mainnet; gate does not fire");
+    }
+
+    #[test]
+    fn admin_service_requires_auth_on_movement_mainnet() {
+        AdminServiceConfig::sanitize(
+            &admin_service_enabled_without_auth(),
+            NodeType::Validator,
+            Some(ChainId::new(126)),
+        )
+        .expect_err("mainnet must reject admin service with empty auth");
+    }
+
+    // Same as the new(1) case but via the ChainId::mainnet() helper — cross-checks
+    // that the number behind the `mainnet` name still resolves to a production chain.
+    #[test]
+    fn admin_service_requires_auth_on_aptos_mainnet_via_helper() {
+        AdminServiceConfig::sanitize(
+            &admin_service_enabled_without_auth(),
+            NodeType::Validator,
+            Some(ChainId::mainnet()),
+        )
+        .expect_err("mainnet must reject admin service with empty auth");
+    }
 }

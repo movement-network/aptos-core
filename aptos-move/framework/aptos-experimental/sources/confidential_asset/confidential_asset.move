@@ -89,8 +89,8 @@ module aptos_experimental::confidential_asset {
     /// The maximum number of transactions can be aggregated on the pending balance before rollover is required.
     const MAX_TRANSFERS_BEFORE_ROLLOVER: u64 = 65534;
 
-    /// The mainnet chain ID. If the chain ID is 1, the allow list is enabled.
-    const MAINNET_CHAIN_ID: u8 = 1;
+    /// The Movement mainnet chain ID. On mainnet the allow list is enabled.
+    const MAINNET_CHAIN_ID: u8 = 126;
 
     //
     // Structs

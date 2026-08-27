@@ -105,6 +105,10 @@ pub struct ValueSerDeContext<'a> {
     pub(crate) legacy_signer: bool,
     /// Maximum allowed depth of a VM value. Enforced by serializer.
     pub(crate) max_value_nested_depth: Option<u64>,
+    /// If false, serialization of any value containing a function value fails. Only paths whose
+    /// bytes are observable by Move code need to set this, see
+    /// [ValueSerDeContext::with_function_value_serialization_enabled].
+    pub(crate) function_value_serialization_enabled: bool,
 }
 
 impl<'a> ValueSerDeContext<'a> {
@@ -115,12 +119,22 @@ impl<'a> ValueSerDeContext<'a> {
             delayed_fields_extension: None,
             legacy_signer: false,
             max_value_nested_depth,
+            function_value_serialization_enabled: true,
         }
     }
 
     /// Serialize signer with legacy format to maintain backwards compatibility.
     pub fn with_legacy_signer(mut self) -> Self {
         self.legacy_signer = true;
+        self
+    }
+
+    /// If `enabled` is false, serialization of values containing function values fails. Used to
+    /// gate the paths where the serialized bytes are observable by Move code (`bcs` natives,
+    /// table keys), so that no on-chain state can be derived from a function value format that is
+    /// not yet stable. Enabled by default, i.e. write paths are never restricted.
+    pub fn with_function_value_serialization_enabled(mut self, enabled: bool) -> Self {
+        self.function_value_serialization_enabled = enabled;
         self
     }
 
@@ -154,6 +168,7 @@ impl<'a> ValueSerDeContext<'a> {
             delayed_fields_extension: None,
             legacy_signer: self.legacy_signer,
             max_value_nested_depth: self.max_value_nested_depth,
+            function_value_serialization_enabled: self.function_value_serialization_enabled,
         }
     }
 

@@ -5,7 +5,9 @@ use crate::{assert_success, assert_vm_status, tests::common, MoveHarness};
 use aptos_framework::BuildOptions;
 use aptos_language_e2e_tests::executor::FakeExecutor;
 use aptos_transaction_simulation::Account;
-use aptos_types::{move_utils::MemberId, transaction::ExecutionStatus};
+use aptos_types::{
+    move_utils::MemberId, on_chain_config::FeatureFlag, transaction::ExecutionStatus,
+};
 use claims::assert_ok;
 use move_core_types::{
     account_address::AccountAddress, parser::parse_struct_tag, vm_status::StatusCode,
@@ -138,6 +140,9 @@ fn test_function_value_uses_aggregator_is_storable() {
 #[test]
 fn test_function_value_captures_aggregator() {
     let mut h = MoveHarness::new_with_executor(FakeExecutor::from_head_genesis().set_parallel());
+    // This test is about capturing an aggregator, so allow function values to be serialized:
+    // otherwise serialization fails before the captured aggregator is even reached.
+    h.enable_features(vec![FeatureFlag::ENABLE_FUNCTION_VALUE_BCS_SERIALIZATION], vec![]);
     let acc = h.new_account_at(AccountAddress::from_hex_literal("0x123").unwrap());
     initialize(&mut h);
 

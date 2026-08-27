@@ -149,6 +149,16 @@ pub enum FeatureFlag {
     /// compiler-generated abort codes (e.g. `UNSPECIFIED_ABORT_CODE`) against
     /// user-defined error constants whose lower bits happen to coincide.
     EXTRACT_ABORT_INFO_EXACT_MATCH = 225,
+    /// Whether BCS serialization of values containing function values is allowed to be
+    /// observed by Move code. While disabled, `bcs::to_bytes` and `bcs::serialized_size`
+    /// abort on such values, and table operations whose key contains a function value
+    /// fail. Storage writes, events and table values are unaffected.
+    ///
+    /// The V1 function value format embeds a `MoveTypeLayout` per captured argument, so
+    /// the bytes of every function value change once the format is migrated. Keeping this
+    /// disabled prevents on-chain state (hashes, table keys) from being derived from the
+    /// current bytes until the format is settled.
+    ENABLE_FUNCTION_VALUE_BCS_SERIALIZATION = 226,
 }
 
 impl FeatureFlag {
@@ -431,6 +441,10 @@ impl Features {
 
     pub fn is_distribute_transaction_fee_enabled(&self) -> bool {
         self.is_enabled(FeatureFlag::DISTRIBUTE_TRANSACTION_FEE)
+    }
+
+    pub fn is_function_value_bcs_serialization_enabled(&self) -> bool {
+        self.is_enabled(FeatureFlag::ENABLE_FUNCTION_VALUE_BCS_SERIALIZATION)
     }
 
     pub fn get_max_identifier_size(&self) -> u64 {

@@ -75,6 +75,13 @@ impl VerifiedEpochStates {
         self.fetched_epoch_ending_ledger_infos
     }
 
+    /// Returns the latest trusted epoch state. Pre-waypoint (pre-migration)
+    /// ledger infos never update this — see `update_verified_epoch_states`.
+    #[cfg(test)]
+    pub fn latest_epoch_state(&self) -> &EpochState {
+        &self.latest_epoch_state
+    }
+
     /// Sets `fetched_epoch_ending_ledger_infos` to true
     pub fn set_fetched_epoch_ending_ledger_infos(&mut self) {
         self.fetched_epoch_ending_ledger_infos = true;
@@ -140,7 +147,18 @@ impl VerifiedEpochStates {
             return Ok(());
         }
 
-        // For non-waypoint epochs: verify the ledger info against the latest epoch state
+        // Ledger infos before the waypoint predate the L1 migration and are
+        // not signature-verifiable (different historical format). Accept them
+        // as unverified archive data: retain them for chunk-commit lookups,
+        // but never install their next_epoch_state as trusted, and never let
+        // them reach signature verification or the waypoint ratchet below.
+        if ledger_info.version() < waypoint.version() {
+            self.highest_fetched_epoch_ending_version = ledger_info.version();
+            self.insert_new_epoch_ending_ledger_info(epoch_ending_ledger_info.clone())?;
+            return Ok(());
+        }
+
+        // For post-waypoint epochs: verify the ledger info against the latest epoch state
         self.latest_epoch_state
             .verify(epoch_ending_ledger_info)
             .map_err(|error| {

@@ -17,7 +17,6 @@ use aptos_types::{
     account_config::NEW_EPOCH_EVENT_V2_MOVE_TYPE_TAG,
     contract_event::ContractEvent,
     event::EventKey,
-    ledger_info::set_waypoint_version,
     on_chain_config,
     on_chain_config::OnChainConfig,
     transaction::{Transaction, Version, WriteSetPayload},
@@ -569,9 +568,7 @@ fn create_database() -> Arc<RwLock<DbReaderWriter>> {
         &db_rw,
         &genesis_txn
     ));
-
-    // Initialize the global waypoint version
-    set_waypoint_version(waypoint.version());
+    let _ = waypoint;
 
     Arc::new(RwLock::new(db_rw))
 }

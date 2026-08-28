@@ -31,7 +31,6 @@ use aptos_storage_service_notifications::StorageServiceNotificationListener;
 use aptos_time_service::TimeService;
 use aptos_types::{
     event::EventKey,
-    ledger_info::set_waypoint_version,
     transaction::{Transaction, WriteSetPayload},
     waypoint::Waypoint,
 };
@@ -345,9 +344,6 @@ async fn create_driver_for_tests_with_waypoint(
     // Get the actual waypoint from the bootstrapped database
     let genesis_ledger_info = db_rw.reader.get_latest_ledger_info().unwrap();
     let waypoint = Waypoint::new_any(genesis_ledger_info.ledger_info());
-
-    // Set the global waypoint version for event notifications
-    set_waypoint_version(waypoint.version());
 
     create_driver_for_tests(node_config, waypoint, event_key_subscriptions).await
 }

@@ -1,0 +1,17 @@
+
+Diagnostics:
+error: unable to generate test
+  ┌─ tests/unit_test/test/fuzz_out_of_range.move:6:16
+  │
+5 │     #[test(_a != 300)]
+  │       --------------- fuzz: value 300 is out of range for this integer parameter (max 255)
+6 │     public fun exclude_out_of_range(_a: u8) { }
+  │                ^^^^^^^^^^^^^^^^^^^^ -- Corresponding to this parameter
+
+error: unable to generate test
+  ┌─ tests/unit_test/test/fuzz_out_of_range.move:9:16
+  │
+8 │     #[test(_a in 250..300)]
+  │       -------------------- fuzz: range bound 300 is out of range for this integer parameter (max 255)
+9 │     public fun range_out_of_range(_a: u8) { }
+  │                ^^^^^^^^^^^^^^^^^^ -- Corresponding to this parameter

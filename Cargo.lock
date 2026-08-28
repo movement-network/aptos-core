@@ -11906,6 +11906,7 @@ dependencies = [
  "num 0.4.1",
  "once_cell",
  "petgraph 0.6.5",
+ "serde",
  "serde_json",
  "walkdir",
 ]

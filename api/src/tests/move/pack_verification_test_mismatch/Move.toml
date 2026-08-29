@@ -1,0 +1,10 @@
+[package]
+name = "pack_verification_test_mismatch"
+version = "0.0.0"
+
+[dependencies]
+AptosFramework = { local = "../../../../../aptos-move/framework/aptos-framework" }
+
+[addresses]
+test_module = "_"
+

@@ -9,6 +9,7 @@ Aptos Node API v1 provides a RESTful interface for interacting with Aptos blockc
 - Block and event information retrieval
 - Validator data access
 - Smart contract interaction
+- Bytecode verification for deployed modules
 
 ## Getting Started
 1. Ensure you have an Aptos node running
@@ -27,6 +28,14 @@ The API does not require authentication for public endpoints. Some administrativ
 - Rate limiting: 100 requests per minute by default
 - Maximum request size: 2MB
 - Connection timeout: 30 seconds
+
+## Bytecode Verification
+
+On-demand verification that source code in `PackageRegistry` compiles to matching on-chain bytecode.
+
+- **Endpoint:** `GET /v1/accounts/{address}/modules/{module_name}/verification_status`
+- **Enable:** Set `api.bytecode_verification_enabled: true` in node config
+- **Returns:** `{"verified": true/false}`, 404 if no source, 503 if disabled
 
 ## Versioning
 The API follows semantic versioning. Current v1 version ensures backward compatibility within the major version.

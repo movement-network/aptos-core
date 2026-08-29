@@ -21,6 +21,7 @@ mod state_test;
 mod string_resource_test;
 mod transaction_vector_test;
 mod transactions_test;
+mod verification_test;
 mod view_function;
 mod webauthn_secp256r1_ecdsa;
 

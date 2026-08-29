@@ -1,0 +1,21 @@
+{
+  "version": "0.2",
+  "language": "en,en-US",
+  "enabledLanguageIds": [
+    "markdown",
+    "plaintext",
+    "text",
+    "typescript",
+    "typescriptreact",
+    "javascript",
+    "javascriptreact",
+    "json",
+    "jsonc",
+    "rust",
+    "python"
+  ],
+  "words": [
+    "data"
+  ]
+}
+

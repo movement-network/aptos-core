@@ -110,6 +110,8 @@ pub enum AptosErrorCode {
     BcsNotSupported = 602,
     /// API Disabled
     ApiDisabled = 603,
+    /// Bytecode verification failed due to compilation error (e.g., unsupported dependencies)
+    CompilationError = 604,
 }
 
 impl AptosErrorCode {

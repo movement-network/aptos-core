@@ -1,0 +1,13 @@
+# Lake / Mathlib cache (regenerate with `lake build` or `lake exe cache get` in this directory)
+.lake/
+
+# Local compile / REPL logs
+*.log
+
+# Scratch & one-off experiments (not part of the shipped formal tree)
+_scratch*.lean
+*_ATTEMPT*.lean
+test_bytearray*.lean
+test_all_operations.sh
+fix_refinement_confidential.py
+CONCRETEHELPERS_USAGE_GUIDE.md

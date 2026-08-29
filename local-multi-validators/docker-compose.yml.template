@@ -1,0 +1,21 @@
+services:
+  validator-0:
+    build:
+      context: ../
+      dockerfile: local-multi-validators/Dockerfile
+    container_name: aptos-validator-0
+    ports:
+      - "8080:8080"    # REST API
+      - "9102:9101"    # Admin service
+      - "6180:6180"    # Validator network
+      - "6182:6182"    # VFN network
+    volumes:
+      - ./docker-data/validator-0:/opt/aptos/etc:ro
+      - ./docker-data/genesis.blob:/opt/aptos/genesis/genesis.blob:ro
+      - ./docker-data/waypoint.txt:/opt/aptos/genesis/waypoint.txt:ro
+    networks:
+      - aptos-network
+
+networks:
+  aptos-network:
+    driver: bridge

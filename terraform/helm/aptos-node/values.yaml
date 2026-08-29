@@ -61,7 +61,7 @@ validator:
   name:
   image:
     # -- Image repo to use for validator images
-    repo: aptoslabs/validator
+    repo: ghcr.io/movementlabsxyz/validator
     # -- Image tag to use for validator images. If set, overrides `imageTag`
     tag:
     # -- Image pull policy to use for validator images
@@ -193,7 +193,9 @@ loadTestGenesis: false
 # -- TEST ONLY: Enable running as root for profiling
 enablePrivilegedMode: false
 
-genesis_blob_upload_url: https://us-west1-aptos-forge-gcp-0.cloudfunctions.net/signed-url?cluster_name=unknown&era=1
+genesis_blob_upload_url: ""
+# -- S3 bucket to download the genesis blob from (s3://<bucket>/<namespace>/genesis.blob), using the node instance role. Set when genesis is distributed via S3 rather than a k8s Secret.
+genesis_blob_s3_bucket: ""
 cluster_name: unknown
 
 # Additional labels

@@ -196,8 +196,22 @@ create_secrets() {
   done
 }
 
-# Include the genesis blob in the secrets if we can't upload it
-if upload_genesis_blob; then
+# Upload the genesis blob to S3 using the node instance role. Preferred: the
+# blob is too large (~1 MB+) for a k8s Secret, so it is stored under the run's
+# namespace key and validators download it at startup.
+upload_genesis_blob_s3() {
+  if [ -z "${GENESIS_BLOB_S3_BUCKET}" ]; then
+    echo "Skipping S3 genesis blob upload, GENESIS_BLOB_S3_BUCKET is not set"
+    return 1
+  fi
+  aws s3 cp "${WORKSPACE}/genesis.blob" "s3://${GENESIS_BLOB_S3_BUCKET}/${NAMESPACE}/genesis.blob"
+}
+
+# Prefer S3, then the signed-url service, then embedding in the secret.
+if upload_genesis_blob_s3; then
+  echo "Genesis blob uploaded to S3"
+  create_secrets false
+elif upload_genesis_blob; then
   echo "Genesis blob uploaded successfully"
   create_secrets false
 else

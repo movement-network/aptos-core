@@ -6,6 +6,7 @@ use crate::{
     pipeline::buffer_manager::OrderedBlocks,
 };
 use aptos_consensus_types::{common::Round, pipelined_block::PipelinedBlock};
+use aptos_logger::warn;
 use aptos_reliable_broadcast::DropGuard;
 use aptos_types::randomness::{FullRandMetadata, Randomness};
 use std::{
@@ -118,6 +119,7 @@ impl BlockQueue {
     pub fn dequeue_rand_ready_prefix(&mut self) -> Vec<OrderedBlocks> {
         let mut rand_ready_prefix = vec![];
         while let Some((_starting_round, item)) = self.queue.first_key_value() {
+            warn!("bowu_rand_gen_dequeue: {}, {:?} ", _starting_round, item.num_undecided());
             if item.num_undecided() == 0 {
                 let (_, item) = self.queue.pop_first().unwrap();
                 for block in item.blocks() {
@@ -133,6 +135,7 @@ impl BlockQueue {
                 break;
             }
         }
+
         rand_ready_prefix
     }
 

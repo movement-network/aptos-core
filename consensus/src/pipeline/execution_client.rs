@@ -53,7 +53,9 @@ use futures::{
 };
 use futures_channel::mpsc::unbounded;
 use move_core_types::account_address::AccountAddress;
-use std::{sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration, sync::atomic::{AtomicU64, Ordering}};
+
+static CHANNEL_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[async_trait::async_trait]
 pub trait TExecutionClient: Send + Sync {
@@ -115,6 +117,7 @@ pub trait TExecutionClient: Send + Sync {
 
 struct BufferManagerHandle {
     pub execute_tx: Option<UnboundedSender<OrderedBlocks>>,
+    pub channel_id: Option<u64>,
     pub commit_tx:
         Option<aptos_channel::Sender<AccountAddress, (AccountAddress, IncomingCommitRequest)>>,
     pub reset_tx_to_buffer_manager: Option<UnboundedSender<ResetRequest>>,
@@ -125,6 +128,7 @@ impl BufferManagerHandle {
     pub fn new() -> Self {
         Self {
             execute_tx: None,
+            channel_id: None,
             commit_tx: None,
             reset_tx_to_buffer_manager: None,
             reset_tx_to_rand_manager: None,
@@ -138,7 +142,9 @@ impl BufferManagerHandle {
         reset_tx_to_buffer_manager: UnboundedSender<ResetRequest>,
         reset_tx_to_rand_manager: Option<UnboundedSender<ResetRequest>>,
     ) {
+        let channel_id = CHANNEL_ID_COUNTER.fetch_add(1, Ordering::SeqCst);
         self.execute_tx = Some(execute_tx);
+        self.channel_id = Some(channel_id);
         self.commit_tx = Some(commit_tx);
         self.reset_tx_to_buffer_manager = Some(reset_tx_to_buffer_manager);
         self.reset_tx_to_rand_manager = reset_tx_to_rand_manager;
@@ -153,6 +159,7 @@ impl BufferManagerHandle {
         let reset_tx_to_rand_manager = self.reset_tx_to_rand_manager.take();
         let reset_tx_to_buffer_manager = self.reset_tx_to_buffer_manager.take();
         self.execute_tx = None;
+        self.channel_id = None;
         self.commit_tx = None;
         (reset_tx_to_rand_manager, reset_tx_to_buffer_manager)
     }
@@ -231,6 +238,7 @@ impl ExecutionProxyClient {
 
         let (execution_ready_block_tx, execution_ready_block_rx, maybe_reset_tx_to_rand_manager) =
             if let Some(rand_config) = rand_config {
+                 warn!("bowu_rand_config: {:?}", rand_config);
                 let (ordered_block_tx, ordered_block_rx) = unbounded::<OrderedBlocks>();
                 let (rand_ready_block_tx, rand_ready_block_rx) = unbounded::<OrderedBlocks>();
 
@@ -264,16 +272,18 @@ impl ExecutionProxyClient {
                     Some(reset_tx_to_rand_manager),
                 )
             } else {
+                warn!("bowu_randomness disabled");
                 let (ordered_block_tx, ordered_block_rx) = unbounded();
                 (ordered_block_tx, ordered_block_rx, None)
             };
-
         self.handle.write().init(
             execution_ready_block_tx,
             commit_msg_tx,
             reset_buffer_manager_tx,
             maybe_reset_tx_to_rand_manager,
         );
+        let channel_id = self.handle.read().channel_id.unwrap();
+        warn!("bowu_epoch state {:?}, setting the channel with ID {}", epoch_state, channel_id);
 
         let (
             execution_schedule_phase,
@@ -300,6 +310,7 @@ impl ExecutionProxyClient {
             self.consensus_config
                 .max_pending_rounds_in_commit_vote_cache,
             new_pipeline_enabled,
+            channel_id,
         );
 
         tokio::spawn(execution_schedule_phase.start());
@@ -374,12 +385,15 @@ impl TExecutionClient for ExecutionProxyClient {
         callback: StateComputerCommitCallBackType,
     ) -> ExecutorResult<()> {
         assert!(!blocks.is_empty());
-        let mut execute_tx = match self.handle.read().execute_tx.clone() {
-            Some(tx) => tx,
-            None => {
-                debug!("Failed to send to buffer manager, maybe epoch ends");
-                return Ok(());
-            },
+        let (mut execute_tx, channel_id) = {
+            let handle = self.handle.read();
+            match (handle.execute_tx.clone(), handle.channel_id) {
+                (Some(tx), Some(id)) => (tx, id),
+                _ => {
+                    debug!("Failed to send to buffer manager, maybe epoch ends");
+                    return Ok(());
+                },
+            }
         };
 
         for block in &blocks {
@@ -390,17 +404,21 @@ impl TExecutionClient for ExecutionProxyClient {
                     .map(|tx| tx.send(ordered_proof.clone()));
             }
         }
-
-        if execute_tx
+        let result = execute_tx
             .send(OrderedBlocks {
-                ordered_blocks: blocks,
+                ordered_blocks: blocks.clone(),
                 ordered_proof: ordered_proof.ledger_info().clone(),
                 callback,
             })
-            .await
-            .is_err()
-        {
-            debug!("Failed to send to buffer manager, maybe epoch ends");
+            .await;
+
+        match result {
+            Ok(_) => {
+                warn!("bowu_finalize_order channel_id {}, SUCCESSFULLY sent {} blocks", channel_id, blocks.len());
+            }
+            Err(e) => {
+                warn!("bowu_finalize_order channel_id {}, FAILED to send: {:?}", channel_id, e);
+            }
         }
         Ok(())
     }

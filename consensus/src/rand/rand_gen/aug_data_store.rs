@@ -10,7 +10,7 @@ use crate::rand::rand_gen::{
 };
 use anyhow::ensure;
 use aptos_consensus_types::common::Author;
-use aptos_logger::error;
+use aptos_logger::{error, warn};
 use aptos_types::validator_signer::ValidatorSigner;
 use std::{collections::HashMap, sync::Arc};
 
@@ -96,7 +96,9 @@ impl<D: TAugmentedData> AugDataStore<D> {
     }
 
     pub fn my_certified_aug_data_exists(&self) -> bool {
-        self.certified_data.contains_key(&self.config.author())
+        let res = self.certified_data.contains_key(&self.config.author());
+        warn!("bowu_rand_gen: {}", res);
+        res
     }
 
     pub fn add_aug_data(&mut self, data: AugData<D>) -> anyhow::Result<AugDataSignature> {

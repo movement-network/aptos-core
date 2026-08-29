@@ -163,6 +163,7 @@ pub fn prepare_buffer_manager(
         None,
         100,
         true,
+        0, // channel_id for testing
     );
 
     (

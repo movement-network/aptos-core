@@ -44,6 +44,7 @@ impl<S: TShare> ShareAggregator<S> {
         rand_metadata: FullRandMetadata,
         decision_tx: Sender<Randomness>,
     ) -> Either<Self, RandShare<S>> {
+        warn!("bowu_rand_store: {}, {}", self.total_weight, rand_config.threshold());
         if self.total_weight < rand_config.threshold() {
             return Either::Left(self);
         }

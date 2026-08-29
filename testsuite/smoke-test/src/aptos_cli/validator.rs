@@ -1745,15 +1745,18 @@ async fn test_multivalidator_staking_reward_impl() {
         tokio::time::sleep(Duration::from_secs(5)).await;
 
         // Trigger epoch change
-        let epoch_result = reconfig(
+        let epoch_state = reconfig(
             &rest_client,
             &transaction_factory,
             swarm.chain_info().root_account(),
         )
         .await;
 
-        // Get state after epoch
-        let (epoch_state, epoch_validator_set) = get_validator_set_and_state(&rest_client).await;
+        // Read the validator set at the exact version the reconfig produced — not
+        // "latest", which can drift forward due to background (timer-based) epoch
+        // changes and make the per-epoch reward deltas race intermittently.
+        let epoch_validator_set =
+            get_validator_set_at_version(&rest_client, epoch_state.version).await;
         println!(
             "\n=== After Round {} (Blockchain Epoch: {}, Version: {}) ===",
             epoch_num, epoch_state.epoch, epoch_state.version
@@ -1804,15 +1807,15 @@ async fn test_multivalidator_staking_reward_impl() {
 
         // Store final epoch info
         if epoch_num == 2 {
-            final_epoch_info = Some((epoch_result, epoch_state, epoch_validator_set));
+            final_epoch_info = Some((epoch_state, epoch_validator_set));
         }
     }
 
     // Extract final epoch data
-    let (final_epoch_result, final_state, final_validator_set) = final_epoch_info.unwrap();
+    let (final_state, final_validator_set) = final_epoch_info.unwrap();
 
     // Calculate actual epoch count and expected rate
-    let actual_epochs = final_epoch_result.epoch - initial_state.epoch;
+    let actual_epochs = final_state.epoch - initial_state.epoch;
     let expected_rate = per_epoch_rate * (actual_epochs as f64);
 
     println!(
@@ -1880,16 +1883,16 @@ async fn test_multivalidator_staking_reward_impl() {
     // Use the CLI to analyze validator performance
     cli.analyze_validator_performance(
         Some(initial_state.epoch as i64),
-        Some(final_epoch_result.epoch as i64),
+        Some(final_state.epoch as i64),
     )
     .await
     .unwrap();
 
     // Verify we ran through at least 2 epochs (may be more due to initialization)
     assert!(
-        final_epoch_result.epoch - initial_state.epoch >= 2,
+        final_state.epoch - initial_state.epoch >= 2,
         "Should have progressed through at least 2 epochs, actual: {}",
-        final_epoch_result.epoch - initial_state.epoch
+        final_state.epoch - initial_state.epoch
     );
 
     // Fetch and verify WithdrawStakingRewardEvent amounts match the stake rewards
@@ -1975,6 +1978,30 @@ async fn get_validator_set_and_state(rest_client: &Client) -> (State, HashMap<Pe
         .collect::<HashMap<_, _>>();
 
     (state, validator_to_voting_power)
+}
+
+// Read the validator set's per-validator voting power at a specific ledger version.
+// Pinning to a version yields a consistent snapshot that can't drift due to
+// background (timer-based) epoch changes, unlike a read at "latest".
+async fn get_validator_set_at_version(
+    rest_client: &Client,
+    version: u64,
+) -> HashMap<PeerId, u64> {
+    let validator_set: ValidatorSet = rest_client
+        .get_account_resource_at_version_bcs(
+            CORE_CODE_ADDRESS,
+            "0x1::stake::ValidatorSet",
+            version,
+        )
+        .await
+        .unwrap()
+        .into_inner();
+
+    validator_set
+        .active_validators
+        .iter()
+        .map(|v| (v.account_address, v.consensus_voting_power()))
+        .collect::<HashMap<_, _>>()
 }
 
 /// Creates a Features object with specific features disabled for testing
@@ -2163,7 +2190,7 @@ async fn test_governed_gas_pool_depletion_failsafe_impl() {
         // Before the failsafe fix, this would ABORT if pool balance < required rewards
         // After the fix, this should SUCCEED with partial or zero rewards
         println!("\nTriggering epoch change #{}...", epoch_num);
-        let _epoch_result = reconfig(
+        let epoch_state = reconfig(
             &rest_client,
             &transaction_factory,
             swarm.chain_info().root_account(),
@@ -2171,7 +2198,10 @@ async fn test_governed_gas_pool_depletion_failsafe_impl() {
         .await;
 
         // Get state after epoch - if we get here, epoch change succeeded!
-        let (epoch_state, epoch_validator_set) = get_validator_set_and_state(&rest_client).await;
+        // Read the validator set at the exact version the reconfig produced, so it
+        // can't drift due to background (timer-based) epoch changes.
+        let epoch_validator_set =
+            get_validator_set_at_version(&rest_client, epoch_state.version).await;
         println!(
             "Epoch change #{} SUCCEEDED! (Blockchain Epoch: {}, Version: {})",
             epoch_num, epoch_state.epoch, epoch_state.version

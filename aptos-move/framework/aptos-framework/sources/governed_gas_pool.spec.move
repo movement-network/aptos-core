@@ -1,5 +1,4 @@
 spec aptos_framework::governed_gas_pool {
-    use aptos_framework::coin::EINSUFFICIENT_BALANCE;
     use aptos_framework::error;
 
     /// <high-level-req>
@@ -34,7 +33,13 @@ spec aptos_framework::governed_gas_pool {
         invariant exists<GovernedGasPool>(@aptos_framework);
     }
 
+    spec init_module(aptos_framework: &signer) {
+       requires system_addresses::is_aptos_framework_address(signer::address_of(aptos_framework));
+    }
+
     spec initialize(aptos_framework: &signer, delegation_pool_creation_seed: vector<u8>) {
+        pragma aborts_if_is_partial = true;
+
         requires system_addresses::is_aptos_framework_address(signer::address_of(aptos_framework));
         /// [high-level-req-1]
         ensures exists<GovernedGasPool>(@aptos_framework);
@@ -46,34 +51,54 @@ spec aptos_framework::governed_gas_pool {
         /// [high-level-req-4]
         // Abort if the caller is not the Aptos framework
         aborts_if !system_addresses::is_aptos_framework_address(signer::address_of(aptos_framework));
-
-        /// Abort if the governed gas pool has insufficient funds
-        aborts_with coin::EINSUFFICIENT_BALANCE, error::invalid_argument(EINSUFFICIENT_BALANCE), 0x1, 0x5, 0x7;
     }
 
     spec deposit<CoinType>(coin: Coin<CoinType>) {
         pragma aborts_if_is_partial = true;
 
-        /*
+        let pool = global<GovernedGasPool>(@aptos_framework).signer_capability.account;
+
         /// [high-level-req-3]
-        /// Ensure the deposit increases the value in the CoinStore
+        /// The pool always has a registered CoinStore (register_coin at init),
+        /// so coin::deposit takes the merge branch and the balance increases by coin.value.
+        requires exists<coin::CoinStore<CoinType>>(pool);
 
-        //@TODO: Calling governed_gas_pool_adddress() doesn't work as the boogie gen cant check the signer
-        // created for the resource account created at runtime
-
-        /// Ensure the governed gas pool resource account exists
-        //aborts_if !exists<CoinStore<CoinType>>(governed_gas_pool_address());
-
-        //ensures global<CoinStore<CoinType>>(aptos_framework_address).coin.value ==
-        //old(global<CoinStore<CoinType>>(aptos_framework_address).coin.value) + coin.value;
-        */
+        ensures global<coin::CoinStore<CoinType>>(pool).coin.value
+            == old(global<coin::CoinStore<CoinType>>(pool).coin.value) + coin.value;
     }
 
-    spec deposit_gas_fee(_gas_payer: address, _gas_fee: u64) {
-        /*
-        /// [high-level-req-5]
-        //   ensures governed_gas_pool_balance<AptosCoin> == old(governed_gas_pool_balance<AptosCoin>) + gas_fee;
-        //   ensures gas_payer_balance<AptosCoin> == old(gas_payer_balance<AptosCoin>) - gas_fee;
-        */
+    spec deposit_from<CoinType>(account: address, amount: u64) {
+        pragma aborts_if_is_partial = true;
+        let pool = global<GovernedGasPool>(@aptos_framework).signer_capability.account;
+        requires exists<coin::CoinStore<CoinType>>(pool);
+    }
+
+    spec deposit_treasury(treasury_account: &signer, amount: u64) {
+        pragma aborts_if_is_partial = true;
+        let pool = global<GovernedGasPool>(@aptos_framework).signer_capability.account;
+        requires exists<coin::CoinStore<AptosCoin>>(pool);
+        requires exists<GovernedGasPoolExtension>(@aptos_framework);
+    }
+
+    spec deposit_gas_fee_v2(gas_payer: address, gas_fee: u64) {
+        pragma aborts_if_is_partial = true;
+
+        let pool = global<GovernedGasPool>(@aptos_framework).signer_capability.account;
+
+        /// [high-level-req-3]
+        /// Characterizes the legacy coin path. The FA-store path
+        /// (operations_default_to_fa_apt_store_enabled) routes the fee through the
+        /// payer's primary fungible store instead and is not covered here.
+        requires gas_payer != pool;
+        requires exists<coin::CoinStore<AptosCoin>>(pool);
+        requires exists<coin::CoinStore<AptosCoin>>(gas_payer);
+        requires !features::spec_is_enabled(features::OPERATIONS_DEFAULT_TO_FA_APT_STORE);
+        requires global<coin::CoinStore<AptosCoin>>(gas_payer).coin.value >= gas_fee;
+
+        /// The gas fee moves from the payer's store into the pool's store.
+        ensures global<coin::CoinStore<AptosCoin>>(pool).coin.value
+            == old(global<coin::CoinStore<AptosCoin>>(pool).coin.value) + gas_fee;
+        ensures global<coin::CoinStore<AptosCoin>>(gas_payer).coin.value
+            == old(global<coin::CoinStore<AptosCoin>>(gas_payer).coin.value) - gas_fee;
     }
 }

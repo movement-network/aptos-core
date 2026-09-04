@@ -6030,3 +6030,184 @@ fn check_depth(depth: u64, max_depth: Option<u64>) -> PartialVMResult<()> {
     }
     Ok(())
 }
+
+/// Checks the depth of values
+struct ValueDepthChecker {
+    max_depth: u64,
+}
+
+impl ValueDepthChecker {
+    // Visitor depths are 0-based, while the serializer and `copy_value` count
+    // the root value as depth 1, so error when `depth + 1 > max_depth`.
+    fn check(&self, depth: u64) -> PartialVMResult<()> {
+        if depth >= self.max_depth {
+            return Err(PartialVMError::new(StatusCode::VM_MAX_VALUE_DEPTH_REACHED));
+        }
+        Ok(())
+    }
+
+    fn check_and_descend(&self, depth: u64) -> PartialVMResult<bool> {
+        self.check(depth)?;
+        Ok(true)
+    }
+}
+
+impl ValueVisitor for ValueDepthChecker {
+    fn visit_delayed(&mut self, depth: u64, _id: DelayedFieldID) -> PartialVMResult<()> {
+        self.check(depth)
+    }
+
+    fn visit_u8(&mut self, depth: u64, _val: u8) -> PartialVMResult<()> {
+        self.check(depth)
+    }
+
+    fn visit_u16(&mut self, depth: u64, _val: u16) -> PartialVMResult<()> {
+        self.check(depth)
+    }
+
+    fn visit_u32(&mut self, depth: u64, _val: u32) -> PartialVMResult<()> {
+        self.check(depth)
+    }
+
+    fn visit_u64(&mut self, depth: u64, _val: u64) -> PartialVMResult<()> {
+        self.check(depth)
+    }
+
+    fn visit_u128(&mut self, depth: u64, _val: u128) -> PartialVMResult<()> {
+        self.check(depth)
+    }
+
+    fn visit_u256(
+        &mut self,
+        depth: u64,
+        _val: &move_core_types::int256::U256,
+    ) -> PartialVMResult<()> {
+        self.check(depth)
+    }
+
+    fn visit_i8(&mut self, depth: u64, _val: i8) -> PartialVMResult<()> {
+        self.check(depth)
+    }
+
+    fn visit_i16(&mut self, depth: u64, _val: i16) -> PartialVMResult<()> {
+        self.check(depth)
+    }
+
+    fn visit_i32(&mut self, depth: u64, _val: i32) -> PartialVMResult<()> {
+        self.check(depth)
+    }
+
+    fn visit_i64(&mut self, depth: u64, _val: i64) -> PartialVMResult<()> {
+        self.check(depth)
+    }
+
+    fn visit_i128(&mut self, depth: u64, _val: i128) -> PartialVMResult<()> {
+        self.check(depth)
+    }
+
+    fn visit_i256(
+        &mut self,
+        depth: u64,
+        _val: &move_core_types::int256::I256,
+    ) -> PartialVMResult<()> {
+        self.check(depth)
+    }
+
+    fn visit_bool(&mut self, depth: u64, _val: bool) -> PartialVMResult<()> {
+        self.check(depth)
+    }
+
+    fn visit_address(&mut self, depth: u64, _val: &AccountAddress) -> PartialVMResult<()> {
+        self.check(depth)
+    }
+
+    fn visit_struct(&mut self, depth: u64, _len: usize) -> PartialVMResult<bool> {
+        self.check_and_descend(depth)
+    }
+
+    fn visit_closure(&mut self, depth: u64, _len: usize) -> PartialVMResult<bool> {
+        self.check_and_descend(depth)
+    }
+
+    fn visit_vec(&mut self, depth: u64, _len: usize) -> PartialVMResult<bool> {
+        self.check_and_descend(depth)
+    }
+
+    fn visit_ref(&mut self, depth: u64, _is_global: bool) -> PartialVMResult<bool> {
+        self.check_and_descend(depth)
+    }
+
+    // Vectors of primitives count as a single nesting level: their elements do
+    // not add depth, matching the serializer and `copy_value`.
+
+    fn visit_vec_u8(&mut self, depth: u64, _vals: &[u8]) -> PartialVMResult<()> {
+        self.check(depth)
+    }
+
+    fn visit_vec_u16(&mut self, depth: u64, _vals: &[u16]) -> PartialVMResult<()> {
+        self.check(depth)
+    }
+
+    fn visit_vec_u32(&mut self, depth: u64, _vals: &[u32]) -> PartialVMResult<()> {
+        self.check(depth)
+    }
+
+    fn visit_vec_u64(&mut self, depth: u64, _vals: &[u64]) -> PartialVMResult<()> {
+        self.check(depth)
+    }
+
+    fn visit_vec_u128(&mut self, depth: u64, _vals: &[u128]) -> PartialVMResult<()> {
+        self.check(depth)
+    }
+
+    fn visit_vec_u256(
+        &mut self,
+        depth: u64,
+        _vals: &[move_core_types::int256::U256],
+    ) -> PartialVMResult<()> {
+        self.check(depth)
+    }
+
+    fn visit_vec_i8(&mut self, depth: u64, _vals: &[i8]) -> PartialVMResult<()> {
+        self.check(depth)
+    }
+
+    fn visit_vec_i16(&mut self, depth: u64, _vals: &[i16]) -> PartialVMResult<()> {
+        self.check(depth)
+    }
+
+    fn visit_vec_i32(&mut self, depth: u64, _vals: &[i32]) -> PartialVMResult<()> {
+        self.check(depth)
+    }
+
+    fn visit_vec_i64(&mut self, depth: u64, _vals: &[i64]) -> PartialVMResult<()> {
+        self.check(depth)
+    }
+
+    fn visit_vec_i128(&mut self, depth: u64, _vals: &[i128]) -> PartialVMResult<()> {
+        self.check(depth)
+    }
+
+    fn visit_vec_i256(
+        &mut self,
+        depth: u64,
+        _vals: &[move_core_types::int256::I256],
+    ) -> PartialVMResult<()> {
+        self.check(depth)
+    }
+
+    fn visit_vec_bool(&mut self, depth: u64, _vals: &[bool]) -> PartialVMResult<()> {
+        self.check(depth)
+    }
+
+    fn visit_vec_address(&mut self, depth: u64, _vals: &[AccountAddress]) -> PartialVMResult<()> {
+        self.check(depth)
+    }
+}
+
+impl Value {
+    /// Returns an error if the nesting depth of the value exceeds `max_depth`.
+    pub fn check_max_depth(&self, max_depth: u64) -> PartialVMResult<()> {
+        self.visit(&mut ValueDepthChecker { max_depth })
+    }
+}

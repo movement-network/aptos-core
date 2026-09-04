@@ -68,15 +68,12 @@ use move_core_types::{language_storage::ModuleId, value::MoveTypeLayout, vm_stat
 use move_vm_runtime::{Module, RuntimeEnvironment, TypeChecker, WithRuntimeEnvironment};
 use move_vm_types::delayed_values::delayed_field_id::DelayedFieldID;
 use num_cpus;
-use rayon::ThreadPool;
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     marker::{PhantomData, Sync},
-    sync::{
-        atomic::{AtomicBool, AtomicU32, Ordering},
-        Arc,
-    },
+    sync::atomic::{AtomicBool, AtomicU32, Ordering},
+    thread,
 };
 use triomphe::Arc as TriompheArc;
 
@@ -99,11 +96,40 @@ where
     maybe_block_epilogue_txn_idx: &'a ExplicitSyncWrapper<Option<TxnIndex>>,
 }
 
+/// Spawns one Block-STM worker as a plain OS thread bound to `scope`.
+///
+/// Block-STM workers deliberately do **not** run on a rayon pool. A rayon worker
+/// that blocks is not idle: rayon's `wait_until` loop keeps it busy by stealing
+/// other jobs from its own pool onto that thread. So a worker that blocks inside a
+/// Move native's nested `par_iter()` can pick up a sibling worker task, and that
+/// stolen task can then block on state the original task still holds -- a
+/// writer-preferring `RwLock` over per-txn status, or a dependency condvar for the
+/// very transaction this thread had been executing. Neither side can make progress
+/// and the scheduler still believes the transaction is being executed.
+///
+/// Plain `std` threads are not registered with rayon, so a nested `par_iter()`
+/// runs on rayon's global pool while this thread parks on OS primitives, owing
+/// rayon nothing. That removes the cycle structurally, for every native, rather
+/// than requiring each rayon-using native to remember to isolate itself.
+fn spawn_block_stm_worker<'scope, F>(
+    scope: &'scope thread::Scope<'scope, '_>,
+    worker_id: u32,
+    worker: F,
+) where
+    F: FnOnce() + Send + 'scope,
+{
+    thread::Builder::new()
+        // Keep this short: Linux truncates thread names to 15 bytes, and the name is
+        // the fastest signal in a thread dump that these are not rayon workers.
+        .name(format!("blockstm-{}", worker_id))
+        .spawn_scoped(scope, worker)
+        .expect("failed to spawn Block-STM worker thread");
+}
+
 pub struct BlockExecutor<T, E, S, L, TP, A> {
-    // Number of active concurrent tasks, corresponding to the maximum number of rayon
-    // threads that may be concurrently participating in parallel execution.
+    // Number of active concurrent tasks, corresponding to the maximum number of
+    // worker threads that may be concurrently participating in parallel execution.
     config: BlockExecutorConfig,
-    executor_thread_pool: Arc<rayon::ThreadPool>,
     transaction_commit_hook: Option<L>,
     phantom: PhantomData<fn() -> (T, E, S, L, TP, A)>,
 }
@@ -119,11 +145,7 @@ where
 {
     /// The caller needs to ensure that concurrency_level > 1 (0 is illegal and 1 should
     /// be handled by sequential execution) and that concurrency_level <= num_cpus.
-    pub fn new(
-        config: BlockExecutorConfig,
-        executor_thread_pool: Arc<ThreadPool>,
-        transaction_commit_hook: Option<L>,
-    ) -> Self {
+    pub fn new(config: BlockExecutorConfig, transaction_commit_hook: Option<L>) -> Self {
         let num_cpus = num_cpus::get();
         assert!(
             config.local.concurrency_level > 0 && config.local.concurrency_level <= num_cpus,
@@ -133,7 +155,6 @@ where
         );
         Self {
             config,
-            executor_thread_pool,
             transaction_commit_hook,
             phantom: PhantomData,
         }
@@ -1763,9 +1784,9 @@ where
         let timer = RAYON_EXECUTION_SECONDS.start_timer();
         let worker_ids: Vec<u32> = (0..num_workers).collect();
         let maybe_executor = ExplicitSyncWrapper::new(None);
-        self.executor_thread_pool.scope(|s| {
+        thread::scope(|s| {
             for worker_id in &worker_ids {
-                s.spawn(|_| {
+                spawn_block_stm_worker(s, *worker_id, || {
                     let environment = module_cache_manager_guard.environment();
                     let executor = {
                         let _init_timer = VM_INIT_SECONDS.start_timer();
@@ -1920,9 +1941,9 @@ where
             worker_ids.len() as u32,
         );
 
-        self.executor_thread_pool.scope(|s| {
+        thread::scope(|s| {
             for worker_id in &worker_ids {
-                s.spawn(|_| {
+                spawn_block_stm_worker(s, *worker_id, || {
                     let environment = module_cache_manager_guard.environment();
                     let executor = {
                         let _init_timer = VM_INIT_SECONDS.start_timer();
@@ -2712,4 +2733,61 @@ fn should_perform_async_runtime_checks_for_block(
     _num_workers: u32,
 ) -> bool {
     environment.async_runtime_checks_enabled() && num_txns > 3
+}
+
+#[cfg(test)]
+mod worker_thread_tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    /// Pins the invariant the Block-STM worker threading exists to guarantee: workers
+    /// must not be rayon workers, even when block execution is driven from inside a
+    /// rayon pool (as the sharded executor does). If a worker were rayon-registered,
+    /// blocking inside a Move native's nested `par_iter()` would let rayon steal
+    /// sibling worker tasks onto it, which is the deadlock this design rules out.
+    #[test]
+    fn workers_are_not_rayon_registered() {
+        let driver = rayon::ThreadPoolBuilder::new()
+            .num_threads(2)
+            .build()
+            .unwrap();
+        let observed: Mutex<Vec<(Option<usize>, Option<String>)>> = Mutex::new(Vec::new());
+
+        // Drive from a rayon worker: the worst case, and the one that used to deadlock.
+        driver.install(|| {
+            // Guards against the assertion below going vacuous: the driving thread really
+            // is rayon-registered, so `None` in a worker is a meaningful difference.
+            assert!(
+                rayon::current_thread_index().is_some(),
+                "test setup: driver should be a rayon worker"
+            );
+            thread::scope(|s| {
+                for worker_id in 0..4u32 {
+                    spawn_block_stm_worker(s, worker_id, || {
+                        observed.lock().unwrap().push((
+                            rayon::current_thread_index(),
+                            thread::current().name().map(str::to_string),
+                        ));
+                    });
+                }
+            });
+        });
+
+        let observed = observed.into_inner().unwrap();
+        assert_eq!(observed.len(), 4, "every worker should have run");
+        for (rayon_index, name) in &observed {
+            assert_eq!(
+                *rayon_index, None,
+                "Block-STM worker is registered with rayon as index {:?}; nested par_iter \
+                 in a native could steal sibling worker tasks onto it",
+                rayon_index
+            );
+            let name = name.as_deref().unwrap_or("");
+            assert!(
+                name.starts_with("blockstm-"),
+                "worker thread should be identifiable in a thread dump, got {:?}",
+                name
+            );
+        }
+    }
 }

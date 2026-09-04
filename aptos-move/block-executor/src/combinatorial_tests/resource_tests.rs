@@ -50,15 +50,6 @@ pub(crate) fn get_gas_limit_variants(
     }
 }
 
-pub(crate) fn create_executor_thread_pool() -> Arc<rayon::ThreadPool> {
-    Arc::new(
-        rayon::ThreadPoolBuilder::new()
-            .num_threads(num_cpus::get())
-            .build()
-            .unwrap(),
-    )
-}
-
 /// Populates a module cache manager guard with empty modules for testing.
 /// This function creates empty modules for each ModuleId in the provided list and adds them to the guard's module cache.
 ///
@@ -99,7 +90,6 @@ pub(crate) fn populate_guard_with_modules(
 }
 
 pub(crate) fn execute_block_parallel<TxnType, ViewType, Provider>(
-    executor_thread_pool: Arc<rayon::ThreadPool>,
     block_gas_limit: Option<u64>,
     txn_provider: &Provider,
     data_view: &ViewType,
@@ -127,7 +117,7 @@ where
         NoOpTransactionCommitHook<usize>,
         Provider,
         AuxiliaryInfo,
-    >::new(config, executor_thread_pool, None);
+    >::new(config, None);
 
     if block_stm_v2 {
         block_executor.execute_transactions_parallel_v2(
@@ -184,7 +174,6 @@ pub(crate) fn run_transactions_resources(
     num_executions: usize,
     num_random_generations: usize,
 ) {
-    let executor_thread_pool = create_executor_thread_pool();
     let mut runner = TestRunner::default();
 
     let gas_limits = get_gas_limit_variants(use_gas_limit, transaction_count);
@@ -247,7 +236,6 @@ pub(crate) fn run_transactions_resources(
                             AuxiliaryInfo,
                         >,
                     >(
-                        executor_thread_pool.clone(),
                         *maybe_block_gas_limit,
                         &txn_provider,
                         &state_view,

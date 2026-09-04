@@ -65,13 +65,6 @@ fn run_transactions<K, V, E>(
 
     let state_view = MockStateView::empty();
 
-    let executor_thread_pool = Arc::new(
-        rayon::ThreadPoolBuilder::new()
-            .num_threads(num_cpus::get())
-            .build()
-            .unwrap(),
-    );
-
     let txn_provider = DefaultTxnProvider::new_without_info(transactions);
     for _ in 0..num_repeat {
         let mut guard = AptosModuleCacheManagerGuard::none();
@@ -84,7 +77,6 @@ fn run_transactions<K, V, E>(
             DefaultTxnProvider<MockTransaction<KeyType<K>, E>>,
         >::new(
             BlockExecutorConfig::new_maybe_block_limit(num_cpus::get(), maybe_block_gas_limit),
-            executor_thread_pool.clone(),
             None,
         )
         .execute_transactions_parallel(
@@ -209,13 +201,6 @@ fn deltas_writes_mixed_with_block_gas_limit(num_txns: usize, maybe_block_gas_lim
         phantom: PhantomData,
     };
 
-    let executor_thread_pool = Arc::new(
-        rayon::ThreadPoolBuilder::new()
-            .num_threads(num_cpus::get())
-            .build()
-            .unwrap(),
-    );
-
     for _ in 0..20 {
         let mut guard = AptosModuleCacheManagerGuard::none();
 
@@ -227,7 +212,6 @@ fn deltas_writes_mixed_with_block_gas_limit(num_txns: usize, maybe_block_gas_lim
             DefaultTxnProvider<MockTransaction<KeyType<[u8; 32]>, MockEvent>>,
         >::new(
             BlockExecutorConfig::new_maybe_block_limit(num_cpus::get(), maybe_block_gas_limit),
-            executor_thread_pool.clone(),
             None,
         )
         .execute_transactions_parallel(
@@ -268,13 +252,6 @@ fn deltas_resolver_with_block_gas_limit(num_txns: usize, maybe_block_gas_limit: 
         .collect();
     let txn_provider = DefaultTxnProvider::new_without_info(transactions);
 
-    let executor_thread_pool = Arc::new(
-        rayon::ThreadPoolBuilder::new()
-            .num_threads(num_cpus::get())
-            .build()
-            .unwrap(),
-    );
-
     for _ in 0..20 {
         let mut guard = AptosModuleCacheManagerGuard::none();
 
@@ -286,7 +263,6 @@ fn deltas_resolver_with_block_gas_limit(num_txns: usize, maybe_block_gas_limit: 
             DefaultTxnProvider<MockTransaction<KeyType<[u8; 32]>, MockEvent>>,
         >::new(
             BlockExecutorConfig::new_maybe_block_limit(num_cpus::get(), maybe_block_gas_limit),
-            executor_thread_pool.clone(),
             None,
         )
         .execute_transactions_parallel(
@@ -384,13 +360,6 @@ fn publishing_fixed_params_with_block_gas_limit(
         phantom: PhantomData,
     };
 
-    let executor_thread_pool = Arc::new(
-        rayon::ThreadPoolBuilder::new()
-            .num_threads(num_cpus::get())
-            .build()
-            .unwrap(),
-    );
-
     let txn_provider = DefaultTxnProvider::new_without_info(transactions.clone());
     // Confirm still no intersection
     let mut guard = AptosModuleCacheManagerGuard::none();
@@ -402,7 +371,6 @@ fn publishing_fixed_params_with_block_gas_limit(
         DefaultTxnProvider<MockTransaction<KeyType<[u8; 32]>, MockEvent>>,
     >::new(
         BlockExecutorConfig::new_maybe_block_limit(num_cpus::get(), maybe_block_gas_limit),
-        executor_thread_pool,
         None,
     )
     .execute_transactions_parallel(
@@ -433,13 +401,6 @@ fn publishing_fixed_params_with_block_gas_limit(
         },
     };
 
-    let executor_thread_pool = Arc::new(
-        rayon::ThreadPoolBuilder::new()
-            .num_threads(num_cpus::get())
-            .build()
-            .unwrap(),
-    );
-
     let txn_provider = DefaultTxnProvider::new_without_info(transactions);
     for _ in 0..200 {
         let mut guard = AptosModuleCacheManagerGuard::none();
@@ -455,7 +416,6 @@ fn publishing_fixed_params_with_block_gas_limit(
                 num_cpus::get(),
                 Some(max(w_index, r_index) as u64 * MAX_GAS_PER_TXN + 1),
             ),
-            executor_thread_pool.clone(),
             None,
         ) // Ensure enough gas limit to commit the module txns (4 is maximum gas per txn)
         .execute_transactions_parallel(
@@ -524,13 +484,6 @@ fn non_empty_group(
             .collect(),
     };
 
-    let executor_thread_pool = Arc::new(
-        rayon::ThreadPoolBuilder::new()
-            .num_threads(num_cpus::get())
-            .build()
-            .unwrap(),
-    );
-
     for _ in 0..num_repeat_parallel {
         let mut guard = AptosModuleCacheManagerGuard::none();
 
@@ -542,7 +495,6 @@ fn non_empty_group(
             DefaultTxnProvider<MockTransaction<KeyType<[u8; 32]>, MockEvent>>,
         >::new(
             BlockExecutorConfig::new_no_block_limit(num_cpus::get()),
-            executor_thread_pool.clone(),
             None,
         )
         .execute_transactions_parallel(
@@ -566,7 +518,6 @@ fn non_empty_group(
             DefaultTxnProvider<MockTransaction<KeyType<[u8; 32]>, MockEvent>>,
         >::new(
             BlockExecutorConfig::new_no_block_limit(num_cpus::get()),
-            executor_thread_pool.clone(),
             None,
         )
         .execute_transactions_sequential(

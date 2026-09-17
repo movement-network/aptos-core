@@ -280,8 +280,8 @@ impl SignedBatchInfo {
         Ok(validator.optimistic_verify(self.signer, &self.info, &self.signature)?)
     }
 
-    pub fn signature(&self) -> &bls12381::Signature {
-        self.signature.signature()
+    pub fn signature(&self) -> Result<bls12381::Signature, CryptoMaterialError> {
+        self.signature.recover_group_element()
     }
 
     pub fn signature_with_status(&self) -> &SignatureWithStatus {

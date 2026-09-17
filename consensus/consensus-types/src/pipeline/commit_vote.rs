@@ -79,9 +79,10 @@ impl CommitVote {
         &self.ledger_info
     }
 
-    /// Return the signature of the vote
-    pub fn signature(&self) -> &bls12381::Signature {
-        self.signature.signature()
+    /// Recover the group element of the commit-vote signature.
+    /// LedgerInfo matching must use [`Self::ledger_info`] / [`Self::signature_with_status`].
+    pub fn signature(&self) -> Result<bls12381::Signature, CryptoMaterialError> {
+        self.signature.recover_group_element()
     }
 
     /// Returns the signature along with the verification status of the signature.

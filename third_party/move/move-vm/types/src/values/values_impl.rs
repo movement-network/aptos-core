@@ -33,7 +33,7 @@ use serde::{
     Deserialize,
 };
 use std::{
-    cell::RefCell,
+    cell::{RefCell, RefMut},
     cmp::Ordering,
     fmt::{self, Debug, Display, Formatter},
     iter, mem,
@@ -334,6 +334,33 @@ fn take_unique_ownership<T: Debug>(r: Rc<RefCell<T>>) -> PartialVMResult<T> {
                 .with_sub_status(move_core_types::vm_status::sub_status::unknown_invariant_violation::EREFERENCE_COUNTING_FAILURE),
         ),
     }
+}
+
+/// Fail-closed exclusive access to two `RefCell`s that the bytecode verifier
+/// promises are distinct.
+///
+/// Invariant: a broken aliasing (or already-borrowed) pair must surface as
+/// `UNKNOWN_INVARIANT_VIOLATION_ERROR`. Never call stacked `borrow_mut` on
+/// the pair — that panics the interpreter thread instead of producing a
+/// catchable VM status.
+fn exclusive_cell_pair<'a, T>(
+    left: &'a Rc<RefCell<T>>,
+    right: &'a Rc<RefCell<T>>,
+) -> PartialVMResult<(RefMut<'a, T>, RefMut<'a, T>)> {
+    if Rc::ptr_eq(left, right) {
+        return Err(overlapping_mut_cells());
+    }
+    let left_mut = left.try_borrow_mut().map_err(|_| overlapping_mut_cells())?;
+    let right_mut = right
+        .try_borrow_mut()
+        .map_err(|_| overlapping_mut_cells())?;
+    Ok((left_mut, right_mut))
+}
+
+fn overlapping_mut_cells() -> PartialVMError {
+    PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR).with_message(
+        "cannot take exclusive RefCell access on overlapping or already-borrowed cells".to_string(),
+    )
 }
 
 impl ContainerRef {
@@ -1294,44 +1321,45 @@ impl_vm_value_from_primitive!(AccountAddress, Address);
  *
  *************************************************************************************/
 impl Container {
-    /// Swaps contents of two mutable references.
+    /// Exchange the inner buffers of two containers.
     ///
-    /// Precondition for this funciton is that `self` and `other` are required to be
-    /// distinct references.
-    /// Move will guarantee that invariant, because it prevents from having two
-    /// mutable references to the same value.
+    /// Move's reference safety requires `self` and `other` to name distinct
+    /// cells. If that invariant is broken, this method returns an invariant-
+    /// violation status instead of panicking on a stacked `borrow_mut`.
     fn swap_contents(&self, other: &Self) -> PartialVMResult<()> {
         use Container::*;
 
+        fn swap_cells<T>(left: &Rc<RefCell<T>>, right: &Rc<RefCell<T>>) -> PartialVMResult<()> {
+            let (mut a, mut b) = exclusive_cell_pair(left, right)?;
+            mem::swap(&mut *a, &mut *b);
+            Ok(())
+        }
+
         match (self, other) {
-            (Vec(l), Vec(r)) => mem::swap(&mut *l.borrow_mut(), &mut *r.borrow_mut()),
-            (Struct(l), Struct(r)) => mem::swap(&mut *l.borrow_mut(), &mut *r.borrow_mut()),
+            (Vec(l), Vec(r)) => swap_cells(l, r),
+            (Struct(l), Struct(r)) => swap_cells(l, r),
 
-            (VecBool(l), VecBool(r)) => mem::swap(&mut *l.borrow_mut(), &mut *r.borrow_mut()),
-            (VecAddress(l), VecAddress(r)) => mem::swap(&mut *l.borrow_mut(), &mut *r.borrow_mut()),
+            (VecBool(l), VecBool(r)) => swap_cells(l, r),
+            (VecAddress(l), VecAddress(r)) => swap_cells(l, r),
 
-            (VecU8(l), VecU8(r)) => mem::swap(&mut *l.borrow_mut(), &mut *r.borrow_mut()),
-            (VecU16(l), VecU16(r)) => mem::swap(&mut *l.borrow_mut(), &mut *r.borrow_mut()),
-            (VecU32(l), VecU32(r)) => mem::swap(&mut *l.borrow_mut(), &mut *r.borrow_mut()),
-            (VecU64(l), VecU64(r)) => mem::swap(&mut *l.borrow_mut(), &mut *r.borrow_mut()),
-            (VecU128(l), VecU128(r)) => mem::swap(&mut *l.borrow_mut(), &mut *r.borrow_mut()),
-            (VecU256(l), VecU256(r)) => mem::swap(&mut *l.borrow_mut(), &mut *r.borrow_mut()),
+            (VecU8(l), VecU8(r)) => swap_cells(l, r),
+            (VecU16(l), VecU16(r)) => swap_cells(l, r),
+            (VecU32(l), VecU32(r)) => swap_cells(l, r),
+            (VecU64(l), VecU64(r)) => swap_cells(l, r),
+            (VecU128(l), VecU128(r)) => swap_cells(l, r),
+            (VecU256(l), VecU256(r)) => swap_cells(l, r),
 
             (
                 Locals(_) | Vec(_) | Struct(_) | VecBool(_) | VecAddress(_) | VecU8(_) | VecU16(_)
                 | VecU32(_) | VecU64(_) | VecU128(_) | VecU256(_),
                 _,
-            ) => {
-                return Err(
-                    PartialVMError::new(StatusCode::INTERNAL_TYPE_ERROR).with_message(format!(
-                        "cannot swap container values: {:?}, {:?}",
-                        self, other
-                    )),
-                )
-            },
+            ) => Err(
+                PartialVMError::new(StatusCode::INTERNAL_TYPE_ERROR).with_message(format!(
+                    "cannot swap container values: {:?}, {:?}",
+                    self, other
+                )),
+            ),
         }
-
-        Ok(())
     }
 }
 
@@ -2891,8 +2919,9 @@ impl VectorRef {
     /// In the `to` vector, elements after the `insert_position` are moved to the right to make space for new elements
     /// (i.e. range is inserted, while the order of the rest of the elements is kept).
     ///
-    /// Precondition for this function is that `from` and `to` vectors are required to be distinct
-    /// Move will guaranteee that invariant, because it prevents from having two mutable references to the same value.
+    /// `from` and `to` must be distinct cells. The verifier enforces that; if
+    /// the pair aliases we fail closed with an invariant-violation status
+    /// rather than panicking on stacked `borrow_mut`.
     pub fn move_range(
         from_self: &Self,
         removal_position: usize,
@@ -2913,8 +2942,7 @@ impl VectorRef {
 
         macro_rules! move_range {
             ($from:expr, $to:expr) => {{
-                let mut from_v = $from.borrow_mut();
-                let mut to_v = $to.borrow_mut();
+                let (mut from_v, mut to_v) = exclusive_cell_pair($from, $to)?;
 
                 if removal_position.checked_add(length).map_or(true, |end| end > from_v.len())
                         || insert_position > to_v.len() {

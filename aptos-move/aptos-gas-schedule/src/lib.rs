@@ -28,8 +28,10 @@
 
 mod gas_schedule;
 mod traits;
+mod value_graph;
 mod ver;
 
 pub use gas_schedule::*;
 pub use traits::{FromOnChainGasSchedule, InitialGasSchedule, ToOnChainGasSchedule};
+pub use value_graph::value_graph_walk_cost;
 pub use ver::{gas_feature_versions, LATEST_GAS_FEATURE_VERSION};

@@ -64,5 +64,6 @@ mod token_objects;
 mod transaction_context;
 mod type_too_large;
 mod upgrade_compatibility;
+mod value_graph_gas;
 mod vector_numeric_address;
 mod vm;

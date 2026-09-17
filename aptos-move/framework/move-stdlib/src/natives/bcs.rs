@@ -10,6 +10,7 @@ use aptos_native_interface::{
     safely_pop_arg, RawSafeNative, SafeNativeBuilder, SafeNativeContext, SafeNativeError,
     SafeNativeResult,
 };
+use aptos_types::on_chain_config::TimedFeatureFlag;
 use move_core_types::{
     account_address::AccountAddress,
     gas_algebra::{NumBytes, NumTypeNodes},
@@ -69,6 +70,13 @@ fn native_to_bytes(
     //               implement it in a more efficient way.
     let val = ref_to_val.read_ref()?;
 
+    // Serialization walks the whole value. Output-byte gas alone lets a
+    // wide graph with a tiny BCS encoding run almost free.
+    if context.timed_feature_enabled(TimedFeatureFlag::MeterValueNodesOnDeserialize) {
+        let graph_size = context.abs_val_size_dereferenced(&val)?;
+        context.bill_value_graph_walk(graph_size)?;
+    }
+
     let function_value_extension = context.function_value_extension();
     let max_value_nest_depth = context.max_value_nest_depth();
     let serialized_value = match ValueSerDeContext::new(max_value_nest_depth)
@@ -111,8 +119,15 @@ fn native_serialized_size(
 
     let reference = safely_pop_arg!(args, Reference);
     let ty = ty_args.pop().unwrap();
+    // TODO(#14175): Reading the reference performs a deep copy, and we can
+    //               implement it in a more efficient way.
+    let value = reference.read_ref()?;
+    if context.timed_feature_enabled(TimedFeatureFlag::MeterValueNodesOnDeserialize) {
+        let graph_size = context.abs_val_size_dereferenced(&value)?;
+        context.bill_value_graph_walk(graph_size)?;
+    }
 
-    let serialized_size = match serialized_size_impl(context, reference, &ty) {
+    let serialized_size = match serialized_size_impl(context, &value, &ty) {
         Ok(serialized_size) => serialized_size as u64,
         Err(_) => {
             context.charge(BCS_SERIALIZED_SIZE_FAILURE)?;
@@ -130,12 +145,9 @@ fn native_serialized_size(
 
 fn serialized_size_impl(
     context: &mut SafeNativeContext,
-    reference: Reference,
+    value: &Value,
     ty: &Type,
 ) -> PartialVMResult<usize> {
-    // TODO(#14175): Reading the reference performs a deep copy, and we can
-    //               implement it in a more efficient way.
-    let value = reference.read_ref()?;
     let ty_layout = context.type_to_type_layout(ty)?;
 
     let function_value_extension = context.function_value_extension();
@@ -144,7 +156,7 @@ fn serialized_size_impl(
         .with_legacy_signer()
         .with_func_args_deserialization(&function_value_extension)
         .with_delayed_fields_serde()
-        .serialized_size(&value, &ty_layout)
+        .serialized_size(value, &ty_layout)
 }
 
 fn native_constant_serialized_size(

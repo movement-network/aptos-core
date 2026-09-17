@@ -6,13 +6,14 @@ use aptos_gas_algebra::{
     AbstractValueSize, DynamicExpression, GasExpression, GasQuantity, InternalGasUnit,
 };
 use aptos_gas_schedule::{
-    gas_feature_versions::RELEASE_V1_32, AbstractValueSizeGasParameters, MiscGasParameters,
-    NativeGasParameters,
+    gas_feature_versions::RELEASE_V1_32, value_graph_walk_cost, AbstractValueSizeGasParameters,
+    MiscGasParameters, NativeGasParameters,
 };
 use aptos_types::on_chain_config::{Features, TimedFeatureFlag, TimedFeatures};
 use move_binary_format::errors::{PartialVMResult, VMResult};
 use move_core_types::{
-    gas_algebra::InternalGas, identifier::Identifier, language_storage::ModuleId,
+    account_address::AccountAddress, gas_algebra::InternalGas, identifier::Identifier,
+    language_storage::ModuleId,
 };
 use move_vm_runtime::{native_functions::NativeContext, Function};
 use move_vm_types::values::Value;
@@ -126,6 +127,44 @@ impl SafeNativeContext<'_, '_, '_, '_> {
         self.misc_gas_params
             .abs_val
             .abstract_value_size(val, self.gas_feature_version)
+    }
+
+    /// Heap size and abstract graph size of a resource already in the
+    /// session cache. `None` if the slot is empty (deleted / never stored).
+    ///
+    /// Field borrows stay disjoint: layout parameters are immutable while
+    /// the session cache is read through `inner`.
+    pub fn session_cached_resource_graph_sizes(
+        &mut self,
+        address: AccountAddress,
+        ty: &move_vm_types::loaded_data::runtime_types::Type,
+    ) -> PartialVMResult<Option<(u64, AbstractValueSize)>> {
+        let version = self.gas_feature_version;
+        let params = &self.misc_gas_params.abs_val;
+        let gv = self.inner.session_cached_resource(address, ty)?;
+        gv.view()
+            .map(|val| {
+                let heap = params.abstract_heap_size(&val, version)?;
+                let graph = params.abstract_value_size(&val, version)?;
+                Ok((u64::from(heap), graph))
+            })
+            .transpose()
+    }
+
+    /// Bills execution gas for walking a materialized value graph, but only
+    /// when [`TimedFeatureFlag::MeterValueNodesOnDeserialize`] is on.
+    ///
+    /// Used after deserialize (and for serialize-side BCS walks). A caller
+    /// that already knows the flag is off should skip the size computation.
+    #[must_use = "must always propagate the error returned by this function to the native function that called it using the ? operator"]
+    pub fn bill_value_graph_walk(
+        &mut self,
+        abstract_units: AbstractValueSize,
+    ) -> SafeNativeResult<()> {
+        if !self.timed_feature_enabled(TimedFeatureFlag::MeterValueNodesOnDeserialize) {
+            return Ok(());
+        }
+        self.charge(value_graph_walk_cost(abstract_units))
     }
 
     /// Computes the abstract size of the input value.

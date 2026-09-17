@@ -1645,6 +1645,13 @@ as that would prohibit transactions to be executed in parallel.
 
 ## Function `royalty`
 
+The royalty published on the token, or, when the token has none of its own, the royalty of
+the collection it was minted into.
+
+The collection is read from the object reference recorded on the token at mint time. It must
+never be re-derived from <code>creator + collection_name</code>: <code><a href="collection.md#0x4_collection_set_name">collection::set_name</a></code> moves the name
+out from under that derivation, which then resolves to a different collection of the same
+creator - paying out its royalty instead - or to no object at all.
 
 
 <pre><code>#[view]
@@ -1658,15 +1665,11 @@ as that would prohibit transactions to be executed in parallel.
 
 
 <pre><code><b>public</b> <b>fun</b> <a href="royalty.md#0x4_royalty">royalty</a>&lt;T: key&gt;(<a href="token.md#0x4_token">token</a>: Object&lt;T&gt;): Option&lt;Royalty&gt; <b>acquires</b> <a href="token.md#0x4_token_Token">Token</a> {
-    <a href="token.md#0x4_token_borrow">borrow</a>(&<a href="token.md#0x4_token">token</a>);
+    <b>let</b> <a href="collection.md#0x4_collection">collection</a> = <a href="token.md#0x4_token_borrow">borrow</a>(&<a href="token.md#0x4_token">token</a>).<a href="collection.md#0x4_collection">collection</a>;
     <b>let</b> <a href="royalty.md#0x4_royalty">royalty</a> = <a href="royalty.md#0x4_royalty_get">royalty::get</a>(<a href="token.md#0x4_token">token</a>);
     <b>if</b> (<a href="royalty.md#0x4_royalty">royalty</a>.is_some()) {
         <a href="royalty.md#0x4_royalty">royalty</a>
     } <b>else</b> {
-        <b>let</b> creator = <a href="token.md#0x4_token_creator">creator</a>(<a href="token.md#0x4_token">token</a>);
-        <b>let</b> collection_name = <a href="token.md#0x4_token_collection_name">collection_name</a>(<a href="token.md#0x4_token">token</a>);
-        <b>let</b> collection_address = <a href="collection.md#0x4_collection_create_collection_address">collection::create_collection_address</a>(&creator, &collection_name);
-        <b>let</b> <a href="collection.md#0x4_collection">collection</a> = <a href="../../aptos-framework/doc/object.md#0x1_object_address_to_object">object::address_to_object</a>&lt;<a href="collection.md#0x4_collection_Collection">collection::Collection</a>&gt;(collection_address);
         <a href="royalty.md#0x4_royalty_get">royalty::get</a>(<a href="collection.md#0x4_collection">collection</a>)
     }
 }

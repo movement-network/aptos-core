@@ -682,16 +682,14 @@ module aptos_token_objects::token {
     }
 
     #[view]
+    /// The royalty published on the token, or, when the token has none of its own, the royalty of
+    /// the collection it was minted into.
     public fun royalty<T: key>(token: Object<T>): Option<Royalty> acquires Token {
-        borrow(&token);
+        let collection = borrow(&token).collection;
         let royalty = royalty::get(token);
         if (royalty.is_some()) {
             royalty
         } else {
-            let creator = creator(token);
-            let collection_name = collection_name(token);
-            let collection_address = collection::create_collection_address(&creator, &collection_name);
-            let collection = object::address_to_object<collection::Collection>(collection_address);
             royalty::get(collection)
         }
     }
@@ -1294,6 +1292,145 @@ module aptos_token_objects::token {
         create_token_with_collection_helper(creator, collection, token_name);
 
         assert!(collection::count(collection) == option::some(2), 0);
+    }
+
+    #[test(creator = @0x123)]
+    /// A token without its own royalty reads the royalty of the collection it was minted into, and
+    /// keeps reading it after the collection is renamed. Resolving the collection by re-deriving
+    /// `creator + collection_name` breaks here: nothing is published at the address derived from
+    /// the new name.
+    fun test_collection_royalty_fallback_survives_rename(creator: &signer) acquires Token {
+        let creator_address = signer::address_of(creator);
+        let expected_royalty = royalty::create(5, 100, creator_address);
+
+        let collection_ref = create_collection_with_royalty_helper(
+            creator,
+            string::utf8(b"collection name"),
+            expected_royalty,
+        );
+        let collection = object::object_from_constructor_ref<Collection>(&collection_ref);
+        let mutator_ref = collection::generate_mutator_ref(&collection_ref);
+
+        let token_ref = create_token_without_royalty_helper(creator, collection, string::utf8(b"token name"));
+        let token = object::object_from_constructor_ref<Token>(&token_ref);
+        assert!(royalty(token) == option::some(expected_royalty), 0);
+
+        collection::set_name(&mutator_ref, string::utf8(b"renamed collection name"));
+        assert!(royalty(token) == option::some(expected_royalty), 1);
+    }
+
+    #[test(creator = @0x123)]
+    /// Renaming a collection onto the name of another collection by the same creator must not
+    /// repoint the renamed collection's tokens at the other collection's royalty. After the rename,
+    /// `create_collection_address(creator, collection_name(token))` is exactly the other
+    /// collection's address, so resolving the collection by name pays out the wrong royalty - and
+    /// does so even when the original collection's royalty was published as immutable.
+    fun test_collection_royalty_not_repointed_by_name_collision(creator: &signer) acquires Token {
+        let creator_address = signer::address_of(creator);
+        let original_name = string::utf8(b"collection name");
+        let other_collection_name = string::utf8(b"other collection name");
+
+        let expected_royalty = royalty::create(5, 100, creator_address);
+        let collection_ref = create_collection_with_royalty_helper(creator, original_name, expected_royalty);
+        let collection = object::object_from_constructor_ref<Collection>(&collection_ref);
+        let mutator_ref = collection::generate_mutator_ref(&collection_ref);
+
+        // A second collection by the same creator, paying a different royalty to a different payee.
+        let other_royalty = royalty::create(99, 100, @0xbad);
+        create_collection_with_royalty_helper(creator, other_collection_name, other_royalty);
+
+        let token_ref = create_token_without_royalty_helper(creator, collection, string::utf8(b"token name"));
+        let token = object::object_from_constructor_ref<Token>(&token_ref);
+
+        collection::set_name(&mutator_ref, other_collection_name);
+
+        // The name-derived address now points at the other collection rather than at this token's.
+        let derived_address = collection::create_collection_address(&creator_address, &collection_name(token));
+        assert!(derived_address != object::object_address(&collection), 0);
+        assert!(royalty::get(object::address_to_object<Collection>(derived_address)) == option::some(other_royalty), 1);
+
+        let actual_royalty = royalty(token).destroy_some();
+        assert!(actual_royalty == expected_royalty, 2);
+        assert!(royalty::payee_address(&actual_royalty) == creator_address, 3);
+        assert!(royalty::numerator(&actual_royalty) == 5, 4);
+    }
+
+    #[test(creator = @0x123)]
+    /// A royalty published on the token itself wins over the collection's, before and after a rename.
+    fun test_token_royalty_takes_precedence_over_collection(creator: &signer) acquires Token {
+        let creator_address = signer::address_of(creator);
+        let collection_royalty = royalty::create(5, 100, creator_address);
+        let token_royalty = royalty::create(10, 100, @0xa11ce);
+
+        let collection_ref = create_collection_with_royalty_helper(
+            creator,
+            string::utf8(b"collection name"),
+            collection_royalty,
+        );
+        let collection = object::object_from_constructor_ref<Collection>(&collection_ref);
+        let mutator_ref = collection::generate_mutator_ref(&collection_ref);
+
+        let token_ref = create_named_token_object(
+            creator,
+            collection,
+            string::utf8(b"token description"),
+            string::utf8(b"token name"),
+            option::some(token_royalty),
+            string::utf8(b"uri"),
+        );
+        let token = object::object_from_constructor_ref<Token>(&token_ref);
+        assert!(royalty(token) == option::some(token_royalty), 0);
+
+        collection::set_name(&mutator_ref, string::utf8(b"renamed collection name"));
+        assert!(royalty(token) == option::some(token_royalty), 1);
+    }
+
+    #[test(creator = @0x123)]
+    /// Neither the token nor its collection carries a royalty: the lookup reports none rather than
+    /// aborting, both before and after a rename.
+    fun test_royalty_absent_survives_rename(creator: &signer) acquires Token {
+        let collection_ref = create_fixed_collection(creator, string::utf8(b"collection name"), 5);
+        let collection = object::object_from_constructor_ref<Collection>(&collection_ref);
+        let mutator_ref = collection::generate_mutator_ref(&collection_ref);
+
+        let token_ref = create_token_without_royalty_helper(creator, collection, string::utf8(b"token name"));
+        let token = object::object_from_constructor_ref<Token>(&token_ref);
+        assert!(royalty(token).is_none(), 0);
+
+        collection::set_name(&mutator_ref, string::utf8(b"renamed collection name"));
+        assert!(royalty(token).is_none(), 1);
+    }
+
+    #[test_only]
+    fun create_collection_with_royalty_helper(
+        creator: &signer,
+        collection_name: String,
+        royalty: Royalty,
+    ): ConstructorRef {
+        collection::create_fixed_collection(
+            creator,
+            string::utf8(b"collection description"),
+            5,
+            collection_name,
+            option::some(royalty),
+            string::utf8(b"collection uri"),
+        )
+    }
+
+    #[test_only]
+    fun create_token_without_royalty_helper(
+        creator: &signer,
+        collection: Object<Collection>,
+        token_name: String,
+    ): ConstructorRef {
+        create_named_token_object(
+            creator,
+            collection,
+            string::utf8(b"token description"),
+            token_name,
+            option::none(),
+            string::utf8(b"uri"),
+        )
     }
 
     #[test_only]

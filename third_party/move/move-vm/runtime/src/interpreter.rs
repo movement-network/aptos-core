@@ -355,21 +355,23 @@ impl InterpreterImpl<'_> {
                     let (function, frame_cache) = if RTCaches::caches_enabled() {
                         let current_frame_cache = &mut *current_frame.frame_cache.borrow_mut();
 
-                        if let PerInstructionCache::Call(ref function, ref frame_cache) =
-                            current_frame_cache.per_instruction_cache[current_frame.pc as usize]
+                        if let Some(PerInstructionCache::Call(function, frame_cache)) =
+                            current_frame_cache.per_instruction_cache.get(&current_frame.pc)
                         {
                             (Rc::clone(function), Rc::clone(frame_cache))
                         } else {
                             match current_frame_cache.sub_frame_cache.entry(fh_idx) {
                                 btree_map::Entry::Occupied(entry) => {
-                                    let entry = entry.get();
-                                    current_frame_cache.per_instruction_cache
-                                        [current_frame.pc as usize] = PerInstructionCache::Call(
-                                        Rc::clone(&entry.0),
-                                        Rc::clone(&entry.1),
+                                    let (function, frame_cache) = entry.get();
+                                    current_frame_cache.per_instruction_cache.insert(
+                                        current_frame.pc,
+                                        PerInstructionCache::Call(
+                                            Rc::clone(function),
+                                            Rc::clone(frame_cache),
+                                        ),
                                     );
 
-                                    (Rc::clone(&entry.0), Rc::clone(&entry.1))
+                                    (Rc::clone(function), Rc::clone(frame_cache))
                                 },
                                 btree_map::Entry::Vacant(entry) => {
                                     let function = Rc::new(self.load_function(
@@ -381,10 +383,12 @@ impl InterpreterImpl<'_> {
                                         FrameTypeCache::make_rc_for_function(&function);
 
                                     entry.insert((Rc::clone(&function), Rc::clone(&frame_cache)));
-                                    current_frame_cache.per_instruction_cache
-                                        [current_frame.pc as usize] = PerInstructionCache::Call(
-                                        Rc::clone(&function),
-                                        Rc::clone(&frame_cache),
+                                    current_frame_cache.per_instruction_cache.insert(
+                                        current_frame.pc,
+                                        PerInstructionCache::Call(
+                                            Rc::clone(&function),
+                                            Rc::clone(&frame_cache),
+                                        ),
                                     );
 
                                     (function, frame_cache)
@@ -449,22 +453,23 @@ impl InterpreterImpl<'_> {
                     let (function, frame_cache) = if RTCaches::caches_enabled() {
                         let current_frame_cache = &mut *current_frame.frame_cache.borrow_mut();
 
-                        if let PerInstructionCache::CallGeneric(ref function, ref frame_cache) =
-                            current_frame_cache.per_instruction_cache[current_frame.pc as usize]
+                        if let Some(PerInstructionCache::CallGeneric(function, frame_cache)) =
+                            current_frame_cache.per_instruction_cache.get(&current_frame.pc)
                         {
                             (Rc::clone(function), Rc::clone(frame_cache))
                         } else {
                             match current_frame_cache.generic_sub_frame_cache.entry(idx) {
                                 btree_map::Entry::Occupied(entry) => {
-                                    let entry = entry.get();
-                                    current_frame_cache.per_instruction_cache
-                                        [current_frame.pc as usize] =
+                                    let (function, frame_cache) = entry.get();
+                                    current_frame_cache.per_instruction_cache.insert(
+                                        current_frame.pc,
                                         PerInstructionCache::CallGeneric(
-                                            Rc::clone(&entry.0),
-                                            Rc::clone(&entry.1),
-                                        );
+                                            Rc::clone(function),
+                                            Rc::clone(frame_cache),
+                                        ),
+                                    );
 
-                                    (Rc::clone(&entry.0), Rc::clone(&entry.1))
+                                    (Rc::clone(function), Rc::clone(frame_cache))
                                 },
                                 btree_map::Entry::Vacant(entry) => {
                                     let function =
@@ -478,12 +483,13 @@ impl InterpreterImpl<'_> {
                                         FrameTypeCache::make_rc_for_function(&function);
 
                                     entry.insert((Rc::clone(&function), Rc::clone(&frame_cache)));
-                                    current_frame_cache.per_instruction_cache
-                                        [current_frame.pc as usize] =
+                                    current_frame_cache.per_instruction_cache.insert(
+                                        current_frame.pc,
                                         PerInstructionCache::CallGeneric(
                                             Rc::clone(&function),
                                             Rc::clone(&frame_cache),
-                                        );
+                                        ),
+                                    );
                                     (function, frame_cache)
                                 },
                             }
@@ -2128,14 +2134,15 @@ impl Frame {
                             };
 
                         let field_count = if RTCaches::caches_enabled() {
-                            let cached_field_count =
-                                &frame_cache.per_instruction_cache[self.pc as usize];
-                            if let PerInstructionCache::Pack(ref field_count) = cached_field_count {
+                            if let Some(PerInstructionCache::Pack(field_count)) =
+                                frame_cache.per_instruction_cache.get(&self.pc)
+                            {
                                 *field_count
                             } else {
                                 let field_count = get_field_count_charge_gas_and_check_depth()?;
-                                frame_cache.per_instruction_cache[self.pc as usize] =
-                                    PerInstructionCache::Pack(field_count);
+                                frame_cache
+                                    .per_instruction_cache
+                                    .insert(self.pc, PerInstructionCache::Pack(field_count));
                                 field_count
                             }
                         } else {
@@ -2189,18 +2196,16 @@ impl Frame {
                             };
 
                         let field_count = if RTCaches::caches_enabled() {
-                            let cached_field_count =
-                                &frame_cache.per_instruction_cache[self.pc as usize];
-
-                            if let PerInstructionCache::PackGeneric(ref field_count) =
-                                cached_field_count
+                            if let Some(PerInstructionCache::PackGeneric(field_count)) =
+                                frame_cache.per_instruction_cache.get(&self.pc)
                             {
                                 *field_count
                             } else {
                                 let field_count =
                                     get_field_count_charge_gas_and_check_depth(frame_cache)?;
-                                frame_cache.per_instruction_cache[self.pc as usize] =
-                                    PerInstructionCache::PackGeneric(field_count);
+                                frame_cache
+                                    .per_instruction_cache
+                                    .insert(self.pc, PerInstructionCache::PackGeneric(field_count));
                                 field_count
                             }
                         } else {

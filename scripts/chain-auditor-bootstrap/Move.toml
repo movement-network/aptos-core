@@ -1,0 +1,6 @@
+[package]
+name = "ChainAuditorBootstrap"
+version = "1.0.0"
+
+[dependencies]
+AptosFramework = { local = "../../aptos-move/framework/aptos-framework" }

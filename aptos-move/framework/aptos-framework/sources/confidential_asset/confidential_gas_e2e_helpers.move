@@ -1,0 +1,303 @@
+//! Helpers for Rust `e2e-move-tests`: bundle `confidential_proof::prove_*` output into BCS/byte vectors for
+//! framework entry payloads. Callers must pass the same `sender_auditor_hint` bytes into packing helpers and into
+//! `confidential_asset::confidential_transfer` so the Fiat–Shamir transcript matches. On-chain `Transferred`
+//! emission (ciphertexts, `ek_volun_auds`, hint, balances) is asserted in Move unit tests (`confidential_asset_tests`),
+//! not in these helpers.
+#[test_only]
+module aptos_framework::confidential_gas_e2e_helpers {
+    use std::vector;
+    use aptos_std::ristretto255::Scalar;
+    use aptos_framework::fungible_asset::Metadata;
+    use aptos_framework::object::{Self, Object};
+
+    use aptos_framework::confidential_asset;
+    use aptos_framework::confidential_balance;
+    use aptos_framework::confidential_proof;
+    use aptos_framework::ristretto255_twisted_elgamal::{Self as twisted_elgamal, CompressedPubkey};
+
+    /// `(new_balance_bytes, zkrp_new_balance, sigma_proof)` for `withdraw_to`.
+    public fun pack_withdraw_to_proof(
+        chain_id: u8,
+        sender: address,
+        dk: &Scalar,
+        ek: &CompressedPubkey,
+        withdraw_amount: u64,
+        new_balance_amount: u128,
+        token: Object<Metadata>,
+    ): (vector<u8>, vector<u8>, vector<u8>) {
+        let compressed = confidential_asset::actual_balance(sender, token);
+        let current = confidential_balance::decompress_balance(&compressed);
+        let (proof, new_balance) = confidential_proof::prove_withdrawal(
+            chain_id,
+            sender,
+            @aptos_framework,
+            object::object_address(&token),
+            dk,
+            ek,
+            withdraw_amount,
+            new_balance_amount,
+            &current,
+        );
+        let new_balance_bytes = confidential_balance::balance_to_bytes(&new_balance);
+        let (sigma_proof, zkrp_new_balance) = confidential_proof::serialize_withdrawal_proof(&proof);
+        (new_balance_bytes, zkrp_new_balance, sigma_proof)
+    }
+
+    /// Builds a transfer proof with no extra auditors. The chain-level auditor is fetched
+    /// from on-chain state and automatically placed at `auditor_eks[0]`, so the resulting
+    /// proof satisfies `validate_auditors` for any token without an asset auditor.
+    public fun pack_confidential_transfer_proof_simple(
+        chain_id: u8,
+        sender: address,
+        recipient: address,
+        sender_dk: &Scalar,
+        transfer_amount: u64,
+        new_balance_amount: u128,
+        token: Object<Metadata>,
+        sender_auditor_hint: vector<u8>,
+    ): (
+        vector<u8>,
+        vector<u8>,
+        vector<u8>,
+        vector<u8>,
+        vector<u8>,
+        vector<u8>,
+        vector<u8>,
+        vector<u8>,
+    ) {
+        let auditors = build_auditor_list_with_chain_prefix(vector::empty<vector<u8>>());
+        pack_confidential_transfer_proof_inner(
+            chain_id,
+            sender,
+            recipient,
+            sender_dk,
+            transfer_amount,
+            new_balance_amount,
+            token,
+            &auditors,
+            sender_auditor_hint,
+        )
+    }
+
+    /// Builds a transfer proof and automatically prepends the on-chain chain-level auditor
+    /// at `auditor_eks[0]`. `extra_auditor_eks` (each 32-byte compressed pubkey) becomes
+    /// `auditor_eks[1..]` in order — i.e. the asset auditor (when set) followed by any
+    /// voluntary auditors.
+    public fun pack_confidential_transfer_proof_with_auditors(
+        chain_id: u8,
+        sender: address,
+        recipient: address,
+        sender_dk: &Scalar,
+        transfer_amount: u64,
+        new_balance_amount: u128,
+        token: Object<Metadata>,
+        extra_auditor_eks: vector<vector<u8>>,
+        sender_auditor_hint: vector<u8>,
+    ): (
+        vector<u8>,
+        vector<u8>,
+        vector<u8>,
+        vector<u8>,
+        vector<u8>,
+        vector<u8>,
+        vector<u8>,
+        vector<u8>,
+    ) {
+        let auditors = build_auditor_list_with_chain_prefix(extra_auditor_eks);
+        pack_confidential_transfer_proof_inner(
+            chain_id,
+            sender,
+            recipient,
+            sender_dk,
+            transfer_amount,
+            new_balance_amount,
+            token,
+            &auditors,
+            sender_auditor_hint,
+        )
+    }
+
+    fun build_auditor_list_with_chain_prefix(
+        extra_auditor_eks: vector<vector<u8>>): vector<CompressedPubkey>
+    {
+        let chain_ek = confidential_asset::get_chain_auditor().extract();
+        let acc = vector[chain_ek];
+        let len = extra_auditor_eks.length();
+        let i = 0;
+        while (i < len) {
+            vector::push_back(
+                &mut acc,
+                twisted_elgamal::new_pubkey_from_bytes(extra_auditor_eks[i]).extract(),
+            );
+            i = i + 1;
+        };
+        acc
+    }
+
+    /// Like [`pack_confidential_transfer_proof_with_auditors`] but uses `auditor_eks` *verbatim*
+    /// without prepending the chain-level auditor. Used by rejection-path e2e tests that need
+    /// to construct intentionally invalid auditor prefixes (wrong slot 0, missing prefix,
+    /// post-rotation old key).
+    public fun pack_confidential_transfer_proof_verbatim(
+        chain_id: u8,
+        sender: address,
+        recipient: address,
+        sender_dk: &Scalar,
+        transfer_amount: u64,
+        new_balance_amount: u128,
+        token: Object<Metadata>,
+        auditor_eks: vector<vector<u8>>,
+        sender_auditor_hint: vector<u8>,
+    ): (
+        vector<u8>,
+        vector<u8>,
+        vector<u8>,
+        vector<u8>,
+        vector<u8>,
+        vector<u8>,
+        vector<u8>,
+        vector<u8>,
+    ) {
+        let parsed = vector::empty<CompressedPubkey>();
+        let len = auditor_eks.length();
+        let i = 0;
+        while (i < len) {
+            vector::push_back(
+                &mut parsed,
+                twisted_elgamal::new_pubkey_from_bytes(auditor_eks[i]).extract(),
+            );
+            i = i + 1;
+        };
+        pack_confidential_transfer_proof_inner(
+            chain_id,
+            sender,
+            recipient,
+            sender_dk,
+            transfer_amount,
+            new_balance_amount,
+            token,
+            &parsed,
+            sender_auditor_hint,
+        )
+    }
+
+    fun pack_confidential_transfer_proof_inner(
+        chain_id: u8,
+        sender: address,
+        recipient: address,
+        sender_dk: &Scalar,
+        transfer_amount: u64,
+        new_balance_amount: u128,
+        token: Object<Metadata>,
+        auditor_eks: &vector<CompressedPubkey>,
+        sender_auditor_hint: vector<u8>,
+    ): (
+        vector<u8>,
+        vector<u8>,
+        vector<u8>,
+        vector<u8>,
+        vector<u8>,
+        vector<u8>,
+        vector<u8>,
+        vector<u8>,
+    ) {
+        let sender_ek = confidential_asset::encryption_key(sender, token);
+        let recipient_ek = confidential_asset::encryption_key(recipient, token);
+        let compressed = confidential_asset::actual_balance(sender, token);
+        let current = confidential_balance::decompress_balance(&compressed);
+        let (
+            proof,
+            new_balance,
+            sender_amount,
+            recipient_amount,
+            auditor_amounts,
+        ) = confidential_proof::prove_transfer(
+            chain_id,
+            sender,
+            @aptos_framework,
+            object::object_address(&token),
+            sender_dk,
+            &sender_ek,
+            &recipient_ek,
+            transfer_amount,
+            new_balance_amount,
+            &current,
+            auditor_eks,
+            sender_auditor_hint,
+        );
+        let (sigma_proof, zkrp_new_balance, zkrp_transfer_amount) =
+            confidential_proof::serialize_transfer_proof(&proof);
+        (
+            confidential_balance::balance_to_bytes(&new_balance),
+            confidential_balance::balance_to_bytes(&sender_amount),
+            confidential_balance::balance_to_bytes(&recipient_amount),
+            confidential_asset::serialize_auditor_eks(auditor_eks),
+            confidential_asset::serialize_auditor_amounts(&auditor_amounts),
+            zkrp_new_balance,
+            zkrp_transfer_amount,
+            sigma_proof,
+        )
+    }
+
+    /// `(new_ek_bytes, new_balance_bytes, zkrp_new_balance, sigma_proof)` for `rotate_encryption_key`.
+    public fun pack_rotate_encryption_key_proof(
+        chain_id: u8,
+        sender: address,
+        sender_dk: &Scalar,
+        new_dk: &Scalar,
+        new_ek: &CompressedPubkey,
+        balance_amount: u128,
+        token: Object<Metadata>,
+    ): (vector<u8>, vector<u8>, vector<u8>, vector<u8>) {
+        let sender_ek = confidential_asset::encryption_key(sender, token);
+        let compressed = confidential_asset::actual_balance(sender, token);
+        let current = confidential_balance::decompress_balance(&compressed);
+        let (proof, new_balance) = confidential_proof::prove_rotation(
+            chain_id,
+            sender,
+            @aptos_framework,
+            object::object_address(&token),
+            sender_dk,
+            new_dk,
+            &sender_ek,
+            new_ek,
+            balance_amount,
+            &current,
+        );
+        let new_balance_bytes = confidential_balance::balance_to_bytes(&new_balance);
+        let (sigma_proof, zkrp_new_balance) = confidential_proof::serialize_rotation_proof(&proof);
+        (
+            twisted_elgamal::pubkey_to_bytes(new_ek),
+            new_balance_bytes,
+            zkrp_new_balance,
+            sigma_proof,
+        )
+    }
+
+    /// `(new_balance_bytes, zkrp_new_balance, sigma_proof)` for `normalize` after `rollover_pending_balance`
+    /// left the store denormalized (`amount` is the cleartext total to normalize to).
+    public fun pack_normalization_proof(
+        chain_id: u8,
+        sender: address,
+        dk: &Scalar,
+        amount: u128,
+        token: Object<Metadata>,
+    ): (vector<u8>, vector<u8>, vector<u8>) {
+        let ek = confidential_asset::encryption_key(sender, token);
+        let compressed = confidential_asset::actual_balance(sender, token);
+        let current = confidential_balance::decompress_balance(&compressed);
+        let (proof, new_balance) = confidential_proof::prove_normalization(
+            chain_id,
+            sender,
+            @aptos_framework,
+            object::object_address(&token),
+            dk,
+            &ek,
+            amount,
+            &current,
+        );
+        let new_balance_bytes = confidential_balance::balance_to_bytes(&new_balance);
+        let (sigma_proof, zkrp_new_balance) = confidential_proof::serialize_normalization_proof(&proof);
+        (new_balance_bytes, zkrp_new_balance, sigma_proof)
+    }
+}

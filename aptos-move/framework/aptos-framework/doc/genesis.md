@@ -42,6 +42,7 @@
 <b>use</b> <a href="chain_id.md#0x1_chain_id">0x1::chain_id</a>;
 <b>use</b> <a href="chain_status.md#0x1_chain_status">0x1::chain_status</a>;
 <b>use</b> <a href="coin.md#0x1_coin">0x1::coin</a>;
+<b>use</b> <a href="confidential_asset.md#0x1_confidential_asset">0x1::confidential_asset</a>;
 <b>use</b> <a href="consensus_config.md#0x1_consensus_config">0x1::consensus_config</a>;
 <b>use</b> <a href="create_signer.md#0x1_create_signer">0x1::create_signer</a>;
 <b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error">0x1::error</a>;
@@ -364,6 +365,9 @@ Genesis step 1: Initialize aptos framework account and core modules on chain.
     <a href="block.md#0x1_block_initialize">block::initialize</a>(&aptos_framework_account, epoch_interval_microsecs);
     <a href="state_storage.md#0x1_state_storage_initialize">state_storage::initialize</a>(&aptos_framework_account);
     <a href="nonce_validation.md#0x1_nonce_validation_initialize">nonce_validation::initialize</a>(&aptos_framework_account);
+    // Confidential asset ships in the <a href="genesis.md#0x1_genesis">genesis</a> framework bundle, so its `init_module` never runs;
+    // publish its `GlobalConfig` explicitly. Must follow `<a href="chain_id.md#0x1_chain_id_initialize">chain_id::initialize</a>` (read above).
+    <a href="confidential_asset.md#0x1_confidential_asset_initialize">confidential_asset::initialize</a>(&aptos_framework_account);
 }
 </code></pre>
 

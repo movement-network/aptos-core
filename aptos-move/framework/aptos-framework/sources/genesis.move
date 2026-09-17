@@ -13,6 +13,7 @@ module aptos_framework::genesis {
     use aptos_framework::block;
     use aptos_framework::chain_id;
     use aptos_framework::chain_status;
+    use aptos_framework::confidential_asset;
     use aptos_framework::coin;
     use aptos_framework::consensus_config;
     use aptos_framework::execution_config;
@@ -132,6 +133,9 @@ module aptos_framework::genesis {
         block::initialize(&aptos_framework_account, epoch_interval_microsecs);
         state_storage::initialize(&aptos_framework_account);
         nonce_validation::initialize(&aptos_framework_account);
+        // Confidential asset ships in the genesis framework bundle, so its `init_module` never runs;
+        // publish its `GlobalConfig` explicitly. Must follow `chain_id::initialize` (read above).
+        confidential_asset::initialize(&aptos_framework_account);
     }
 
     /// Genesis step 2: Initialize Aptos coin.

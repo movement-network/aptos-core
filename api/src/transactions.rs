@@ -495,6 +495,9 @@ impl TransactionsApi {
         accept_type: AcceptType,
         data: SubmitTransactionsBatchPost,
     ) -> SubmitTransactionsBatchResult<TransactionsBatchSubmissionResult> {
+        // JSON already exposes its array length. Cap it before verify() so an
+        // oversized batch cannot force per-item payload / signature checks.
+        self.reject_json_batch_if_over_configured_limit(&data)?;
         data.verify()
             .context("Submitted transactions invalid")
             .map_err(|err| {
@@ -511,6 +514,8 @@ impl TransactionsApi {
             .check_api_output_enabled("Submit batch transactions", &accept_type)?;
         let ledger_info = self.context.get_latest_ledger_info()?;
         let signed_transactions_batch = self.get_signed_transactions_batch(&ledger_info, data)?;
+        // BCS (and any other encoding) only reveals the count after decode.
+        // JSON is already gated above; this remains the backstop after parse.
         if self.context.max_submit_transaction_batch_size() < signed_transactions_batch.len() {
             return Err(SubmitTransactionError::bad_request_with_code(
                 format!(
@@ -1312,6 +1317,30 @@ impl TransactionsApi {
                         ledger_info,
                     )
                 })?;
+        }
+        Ok(())
+    }
+
+    /// Refuse a JSON submit-batch whose array is already larger than
+    /// `max_submit_transaction_batch_size`. BCS is skipped here because the
+    /// transaction count is unknown until the bytes are decoded.
+    fn reject_json_batch_if_over_configured_limit(
+        &self,
+        data: &SubmitTransactionsBatchPost,
+    ) -> Result<(), SubmitTransactionError> {
+        let SubmitTransactionsBatchPost::Json(json_batch) = data else {
+            return Ok(());
+        };
+        let submitted = json_batch.0.len();
+        let limit = self.context.max_submit_transaction_batch_size();
+        if submitted > limit {
+            return Err(SubmitTransactionError::bad_request_with_code_no_info(
+                format!(
+                    "Submitted too many transactions: {}, while limit is {}",
+                    submitted, limit
+                ),
+                AptosErrorCode::InvalidInput,
+            ));
         }
         Ok(())
     }

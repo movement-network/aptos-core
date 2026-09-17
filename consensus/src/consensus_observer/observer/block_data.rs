@@ -191,15 +191,8 @@ impl ObserverBlockData {
 
     /// Handles commited blocks up to the given ledger info
     fn handle_committed_blocks(&mut self, ledger_info: LedgerInfoWithSignatures) {
-        // Remove the committed blocks from the payload and ordered block stores
-        self.block_payload_store.remove_blocks_for_epoch_round(
-            ledger_info.commit_info().epoch(),
-            ledger_info.commit_info().round(),
-        );
-        self.ordered_block_store
-            .remove_blocks_for_commit(&ledger_info);
-
-        // Verify the ledger info is for the same epoch
+        // Only process commit callbacks for the current epoch. A callback for a
+        // different epoch is ignored without touching the caches or the root.
         let root_commit_info = self.root.commit_info();
         if ledger_info.commit_info().epoch() != root_commit_info.epoch() {
             warn!(
@@ -211,6 +204,14 @@ impl ObserverBlockData {
             );
             return;
         }
+
+        // Remove the committed blocks from the payload and ordered block stores
+        self.block_payload_store.remove_blocks_for_epoch_round(
+            ledger_info.commit_info().epoch(),
+            ledger_info.commit_info().round(),
+        );
+        self.ordered_block_store
+            .remove_blocks_for_commit(&ledger_info);
 
         // Update the root ledger info. Note: we only want to do this if
         // the new ledger info round is greater than the current root
@@ -660,6 +661,58 @@ mod test {
         assert_eq!(observer_block_data.get_all_ordered_blocks().len(), 1);
         assert_eq!(observer_block_data.get_block_payloads().lock().len(), 1);
         assert_eq!(observer_block_data.root(), committed_ledger_info);
+    }
+
+    #[test]
+    fn test_handle_committed_blocks_wrong_epoch_preserves_caches() {
+        // Create a root ledger info
+        let epoch = 10;
+        let round = 5;
+        let root = create_ledger_info(epoch, round);
+
+        // Create the observer block data
+        let mut observer_block_data =
+            ObserverBlockData::new_with_root(ConsensusObserverConfig::default(), root.clone());
+
+        // Seed pending ordered blocks and their payloads at the root epoch
+        let num_ordered_blocks = 3;
+        let ordered_blocks = create_and_add_ordered_blocks(
+            &mut observer_block_data,
+            num_ordered_blocks,
+            epoch,
+            round,
+        );
+        for ordered_block in &ordered_blocks {
+            create_and_add_payloads_for_ordered_block(&mut observer_block_data, ordered_block);
+        }
+
+        // Verify both caches hold all seeded entries
+        assert_eq!(
+            observer_block_data.get_all_ordered_blocks().len(),
+            num_ordered_blocks
+        );
+        assert_eq!(
+            observer_block_data.get_block_payloads().lock().len(),
+            num_ordered_blocks
+        );
+
+        // Deliver a commit notification for a different epoch than the root (epoch + 1).
+        // The root is at `epoch`, so this notification does not belong here and must be
+        // ignored: it should not evict anything from the caches, and it should not move
+        // the root. The higher round (round + 7) ensures we'd notice if the root wrongly
+        // advanced.
+        observer_block_data.handle_committed_blocks(create_ledger_info(epoch + 1, round + 7));
+
+        // Verify nothing was evicted and the root is unchanged
+        assert_eq!(
+            observer_block_data.get_all_ordered_blocks().len(),
+            num_ordered_blocks
+        );
+        assert_eq!(
+            observer_block_data.get_block_payloads().lock().len(),
+            num_ordered_blocks
+        );
+        assert_eq!(observer_block_data.root(), root);
     }
 
     #[test]

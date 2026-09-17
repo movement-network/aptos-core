@@ -535,52 +535,55 @@ impl MoveStructLayout {
         }
     }
 
-    pub fn fields(&self, variant: Option<usize>) -> &[MoveTypeLayout] {
-        match self {
-            Self::Runtime(vals) => vals,
-            Self::RuntimeVariants(variants) => match variant {
-                Some(idx) if idx < variants.len() => &variants[idx],
-                _ => {
-                    // API does not allow to return error, return empty fields instead of crashing
-                    &[]
-                },
+    /// Field layouts for this struct, or for one selected enum variant.
+    ///
+    /// Returns `None` when the query is inconsistent with the layout:
+    /// - `Runtime` requires `variant == None`
+    /// - `RuntimeVariants` requires `Some(idx)` in range
+    /// - decorated layouts are not available through this borrowed accessor
+    ///   (strip names with [`Self::into_fields`] instead)
+    ///
+    /// `None` must be treated as failure. An empty slice is a *valid* unit
+    /// variant (`Some(&[])`). Substituting `&[]` for an unknown tag would let
+    /// callers treat a bad tag as a unit variant and emit BCS that strict
+    /// deserialization rejects.
+    pub fn fields(&self, variant: Option<usize>) -> Option<&[MoveTypeLayout]> {
+        match (self, variant) {
+            (Self::Runtime(vals), None) => Some(vals),
+            (Self::RuntimeVariants(variants), Some(idx)) => {
+                variants.get(idx).map(Vec::as_slice)
             },
-            Self::WithFields(_) | Self::WithTypes { .. } | Self::WithVariants(_) => {
-                // It's not possible to implement this without changing the return type, and some
-                // performance-critical VM serialization code uses the Runtime case of this.
-                // panicking is the best move
-                panic!("Getting fields for decorated representation")
-            },
+            // Decorated structs store named fields; this borrowed accessor is
+            // only defined for the undecorated runtime struct case.
+            (Self::WithFields(_) | Self::WithTypes { .. } | Self::WithVariants(_), _)
+            | (Self::Runtime(_), Some(_))
+            | (Self::RuntimeVariants(_), None) => None,
         }
     }
 
-    pub fn into_fields(self, variant: Option<usize>) -> Vec<MoveTypeLayout> {
-        match self {
-            Self::Runtime(vals) => vals,
-            Self::RuntimeVariants(mut variants) => {
-                match variant {
-                    Some(idx) if idx < variants.len() => variants.remove(idx),
-                    _ => {
-                        // be on the robust side and remove empty vec instead of crash
-                        vec![]
-                    },
-                }
+    /// Owned field layouts for this struct, or for one selected enum variant.
+    ///
+    /// Same fail-closed contract as [`Self::fields`]: `None` for an inconsistent
+    /// query or an out-of-range variant. Decorated layouts are supported here
+    /// because the named-field wrappers can be stripped while moving.
+    pub fn into_fields(self, variant: Option<usize>) -> Option<Vec<MoveTypeLayout>> {
+        match (self, variant) {
+            (Self::Runtime(vals), None) => Some(vals),
+            (Self::RuntimeVariants(mut variants), Some(idx)) if idx < variants.len() => {
+                Some(variants.remove(idx))
             },
-            Self::WithFields(fields) | Self::WithTypes { fields, .. } => {
-                fields.into_iter().map(|f| f.layout).collect()
+            (Self::WithFields(fields), None) | (Self::WithTypes { fields, .. }, None) => {
+                Some(fields.into_iter().map(|f| f.layout).collect())
             },
-            Self::WithVariants(mut variants) => match variant {
-                Some(idx) if idx < variants.len() => variants
+            (Self::WithVariants(mut variants), Some(idx)) if idx < variants.len() => Some(
+                variants
                     .remove(idx)
                     .fields
                     .into_iter()
                     .map(|f| f.layout)
                     .collect(),
-                _ => {
-                    // be on the robust side and return empty vec instead of crash
-                    vec![]
-                },
-            },
+            ),
+            _ => None,
         }
     }
 

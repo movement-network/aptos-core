@@ -7,7 +7,7 @@ use crate::{
     ident_str,
     identifier::Identifier,
     language_storage::{StructTag, TypeTag},
-    value::{MoveStruct, MoveValue},
+    value::{MoveFieldLayout, MoveStruct, MoveStructLayout, MoveTypeLayout, MoveValue, MoveVariantLayout},
 };
 use serde_json::json;
 
@@ -136,4 +136,101 @@ fn nested_typed_struct_deserialization() {
             "type": "0x0::MyModule::MyStruct"
         })
     );
+}
+
+/// RuntimeVariants layout used by the fail-closed field-accessor tests:
+/// variant 0 has one field, variant 1 is a unit variant.
+fn enum_layout() -> MoveStructLayout {
+    MoveStructLayout::RuntimeVariants(vec![
+        vec![MoveTypeLayout::U64],
+        vec![],
+    ])
+}
+
+#[test]
+fn fields_returns_some_for_consistent_runtime_queries() {
+    let runtime = MoveStructLayout::Runtime(vec![MoveTypeLayout::Bool, MoveTypeLayout::U8]);
+    assert_eq!(
+        runtime.fields(None),
+        Some([MoveTypeLayout::Bool, MoveTypeLayout::U8].as_slice())
+    );
+
+    let variants = enum_layout();
+    assert_eq!(
+        variants.fields(Some(0)),
+        Some([MoveTypeLayout::U64].as_slice())
+    );
+    // A genuine unit variant is Some(&[]), not None.
+    assert_eq!(variants.fields(Some(1)), Some([].as_slice()));
+}
+
+#[test]
+fn fields_returns_none_for_unknown_or_inconsistent_tags() {
+    let runtime = MoveStructLayout::Runtime(vec![MoveTypeLayout::U64]);
+    // Structs are not enums: asking for a variant is inconsistent.
+    assert_eq!(runtime.fields(Some(0)), None);
+
+    let variants = enum_layout();
+    assert_eq!(variants.fields(None), None);
+    for bad in [2usize, 3, 100, usize::MAX] {
+        assert_eq!(
+            variants.fields(Some(bad)),
+            None,
+            "out-of-range tag {bad} must not collapse to an empty unit variant"
+        );
+    }
+
+    let decorated = MoveStructLayout::WithFields(vec![MoveFieldLayout::new(
+        ident_str!("x").to_owned(),
+        MoveTypeLayout::U8,
+    )]);
+    assert_eq!(decorated.fields(None), None);
+}
+
+#[test]
+fn into_fields_is_fail_closed_like_fields() {
+    let runtime = MoveStructLayout::Runtime(vec![MoveTypeLayout::U32]);
+    assert_eq!(
+        runtime.clone().into_fields(None),
+        Some(vec![MoveTypeLayout::U32])
+    );
+    assert_eq!(runtime.into_fields(Some(0)), None);
+
+    let variants = enum_layout();
+    assert_eq!(
+        variants.clone().into_fields(Some(0)),
+        Some(vec![MoveTypeLayout::U64])
+    );
+    assert_eq!(variants.clone().into_fields(Some(1)), Some(vec![]));
+    assert_eq!(variants.clone().into_fields(None), None);
+    assert_eq!(variants.into_fields(Some(2)), None);
+
+    let with_fields = MoveStructLayout::WithFields(vec![MoveFieldLayout::new(
+        ident_str!("f").to_owned(),
+        MoveTypeLayout::Bool,
+    )]);
+    assert_eq!(
+        with_fields.into_fields(None),
+        Some(vec![MoveTypeLayout::Bool])
+    );
+
+    let with_variants = MoveStructLayout::WithVariants(vec![
+        MoveVariantLayout {
+            name: ident_str!("A").to_owned(),
+            fields: vec![MoveFieldLayout::new(
+                ident_str!("x").to_owned(),
+                MoveTypeLayout::U8,
+            )],
+        },
+        MoveVariantLayout {
+            name: ident_str!("B").to_owned(),
+            fields: vec![],
+        },
+    ]);
+    assert_eq!(
+        with_variants.clone().into_fields(Some(0)),
+        Some(vec![MoveTypeLayout::U8])
+    );
+    assert_eq!(with_variants.clone().into_fields(Some(1)), Some(vec![]));
+    assert_eq!(with_variants.into_fields(Some(2)), None);
 }

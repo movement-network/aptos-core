@@ -23,6 +23,7 @@ mod enum_variant_tag_serialization;
 mod error_map;
 mod events;
 mod fee_payer;
+mod function_value_bcs_serialization;
 mod function_value_depth;
 mod function_values;
 mod fungible_asset;

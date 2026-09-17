@@ -11,7 +11,7 @@ mod tests {
         values::{values_impl, AbstractFunction, SerializedFunctionData, Struct, Value},
     };
     use better_any::{Tid, TidAble, TidExt};
-    use claims::{assert_err, assert_ok, assert_some};
+    use claims::{assert_err, assert_none, assert_ok, assert_some};
     use move_binary_format::errors::PartialVMResult;
     use move_core_types::{
         ability::AbilitySet,
@@ -547,6 +547,77 @@ mod tests {
                 )
             })
             .expect_err("bad size value deserialization fails");
+    }
+
+    /// Extension mock which can provide serialization data for [MockAbstractFunction].
+    fn serializing_ext_mock() -> MockFunctionValueExtension {
+        let mut ext_mock = MockFunctionValueExtension::new();
+        ext_mock
+            .expect_get_serialization_data()
+            .returning(move |af| {
+                Ok(af
+                    .downcast_ref::<MockAbstractFunction>()
+                    .expect("cast")
+                    .data
+                    .clone())
+            });
+        ext_mock
+    }
+
+    fn make_captured_closure() -> Value {
+        let fun = MockAbstractFunction::new("f", vec![], ClosureMask::new(0b1), vec![
+            MoveTypeLayout::U64,
+        ]);
+        Value::closure(Box::new(fun), vec![Value::u64(22)])
+    }
+
+    #[test]
+    fn function_value_serialization_not_enabled() {
+        let ext_mock = serializing_ext_mock();
+
+        // A function value cannot be serialized, and its size cannot be computed.
+        assert_none!(assert_ok!(ValueSerDeContext::new(None)
+            .with_func_args_deserialization(&ext_mock)
+            .with_function_value_serialization_enabled(false)
+            .serialize(&make_captured_closure(), &make_fun_layout())));
+        assert_err!(ValueSerDeContext::new(None)
+            .with_func_args_deserialization(&ext_mock)
+            .with_function_value_serialization_enabled(false)
+            .serialized_size(&make_captured_closure(), &make_fun_layout()));
+
+        // The same holds if the function value is nested inside another value.
+        let layout = MoveTypeLayout::Vector(Box::new(MoveTypeLayout::Struct(
+            MoveStructLayout::Runtime(vec![MoveTypeLayout::U8, make_fun_layout()]),
+        )));
+        let value = Value::vector_for_testing_only(vec![Value::struct_(Struct::pack(vec![
+            Value::u8(1),
+            make_captured_closure(),
+        ]))]);
+        assert_none!(assert_ok!(ValueSerDeContext::new(None)
+            .with_func_args_deserialization(&ext_mock)
+            .with_function_value_serialization_enabled(false)
+            .serialize(&value, &layout)));
+
+        // Values which do not contain function values are not affected.
+        assert_some!(assert_ok!(ValueSerDeContext::new(None)
+            .with_func_args_deserialization(&ext_mock)
+            .with_function_value_serialization_enabled(false)
+            .serialize(&Value::u64(7), &MoveTypeLayout::U64)));
+    }
+
+    #[test]
+    fn function_value_serialization_enabled_by_default() {
+        let ext_mock = serializing_ext_mock();
+
+        // Serialization of function values is only restricted if a caller asks for it, so that
+        // paths whose bytes are not observable by Move code keep working.
+        assert_some!(assert_ok!(ValueSerDeContext::new(None)
+            .with_func_args_deserialization(&ext_mock)
+            .serialize(&make_captured_closure(), &make_fun_layout())));
+        assert_some!(assert_ok!(ValueSerDeContext::new(None)
+            .with_func_args_deserialization(&ext_mock)
+            .with_function_value_serialization_enabled(true)
+            .serialize(&make_captured_closure(), &make_fun_layout())));
     }
 
     // ======================================================================================

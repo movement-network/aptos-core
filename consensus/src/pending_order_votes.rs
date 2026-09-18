@@ -288,14 +288,14 @@ mod tests {
             li.clone(),
             signers[0].sign(&li).expect("Unable to sign ledger info"),
         );
-        partial_signatures.add_signature(signers[0].author(), vote_0.signature().clone());
+        partial_signatures.add_signature(signers[0].author(), vote_0.signature().unwrap());
 
         let vote_1 = OrderVote::new_with_signature(
             signers[1].author(),
             li.clone(),
             signers[1].sign(&li).expect("Unable to sign ledger info"),
         );
-        partial_signatures.add_signature(signers[1].author(), vote_1.signature().clone());
+        partial_signatures.add_signature(signers[1].author(), vote_1.signature().unwrap());
 
         let vote_2 = OrderVote::new_with_signature(
             signers[2].author(),
@@ -308,7 +308,7 @@ mod tests {
             li.clone(),
             signers[3].sign(&li).expect("Unable to sign ledger info"),
         );
-        partial_signatures.add_signature(signers[3].author(), vote_3.signature().clone());
+        partial_signatures.add_signature(signers[3].author(), vote_3.signature().unwrap());
 
         let vote_4 = OrderVote::new_with_signature(
             signers[4].author(),

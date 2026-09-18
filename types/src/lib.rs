@@ -55,6 +55,7 @@ pub mod validator_verifier;
 pub mod vesting;
 pub mod vm_status;
 pub mod waypoint;
+pub mod wire_bls;
 pub mod write_set;
 
 pub use account_address::AccountAddress as PeerId;

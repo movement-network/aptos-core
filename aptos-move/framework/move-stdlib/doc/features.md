@@ -166,6 +166,8 @@ return true.
 -  [Function `is_calculate_transaction_fee_for_distribution_enabled`](#0x1_features_is_calculate_transaction_fee_for_distribution_enabled)
 -  [Function `get_distribute_transaction_fee_feature`](#0x1_features_get_distribute_transaction_fee_feature)
 -  [Function `is_distribute_transaction_fee_enabled`](#0x1_features_is_distribute_transaction_fee_enabled)
+-  [Function `get_gas_payable_fa_feature`](#0x1_features_get_gas_payable_fa_feature)
+-  [Function `is_gas_payable_fa_enabled`](#0x1_features_is_gas_payable_fa_enabled)
 -  [Function `get_stake_reward_using_treasury_feature`](#0x1_features_get_stake_reward_using_treasury_feature)
 -  [Function `stake_reward_using_treasury_enabled`](#0x1_features_stake_reward_using_treasury_enabled)
 -  [Function `change_feature_flags`](#0x1_features_change_feature_flags)
@@ -693,6 +695,18 @@ Lifetime: transient
 
 
 
+<a id="0x1_features_GAS_PAYABLE_FA"></a>
+
+Whether a transaction may pay for gas in a fungible asset other than APT,
+specified via the <code>gas_fa_coin</code> field of the transaction's extra config.
+Lifetime: transient
+
+
+<pre><code><b>const</b> <a href="features.md#0x1_features_GAS_PAYABLE_FA">GAS_PAYABLE_FA</a>: u64 = 98;
+</code></pre>
+
+
+
 <a id="0x1_features_GOVERNED_GAS_POOL"></a>
 
 Whether the Governed Gas Pool is used to capture gas fees
@@ -848,6 +862,7 @@ Lifetime: transient
 
 Whether the Atomic bridge is available
 Lifetime: transient
+Deprecated in favor of <code><a href="features.md#0x1_features_ALLOW_SERIALIZED_SCRIPT_ARGS">ALLOW_SERIALIZED_SCRIPT_ARGS</a></code> as feature flag 72
 
 
 <pre><code><b>const</b> <a href="features.md#0x1_features_NATIVE_BRIDGE">NATIVE_BRIDGE</a>: u64 = 72;
@@ -4295,6 +4310,52 @@ Whether the Governed Gas Pool is enabled.
 
 <pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_is_distribute_transaction_fee_enabled">is_distribute_transaction_fee_enabled</a>(): bool <b>acquires</b> <a href="features.md#0x1_features_Features">Features</a> {
     <a href="features.md#0x1_features_is_enabled">is_enabled</a>(<a href="features.md#0x1_features_DISTRIBUTE_TRANSACTION_FEE">DISTRIBUTE_TRANSACTION_FEE</a>)
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_features_get_gas_payable_fa_feature"></a>
+
+## Function `get_gas_payable_fa_feature`
+
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_get_gas_payable_fa_feature">get_gas_payable_fa_feature</a>(): u64
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_get_gas_payable_fa_feature">get_gas_payable_fa_feature</a>(): u64 { <a href="features.md#0x1_features_GAS_PAYABLE_FA">GAS_PAYABLE_FA</a> }
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_features_is_gas_payable_fa_enabled"></a>
+
+## Function `is_gas_payable_fa_enabled`
+
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_is_gas_payable_fa_enabled">is_gas_payable_fa_enabled</a>(): bool
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_is_gas_payable_fa_enabled">is_gas_payable_fa_enabled</a>(): bool <b>acquires</b> <a href="features.md#0x1_features_Features">Features</a> {
+    <a href="features.md#0x1_features_is_enabled">is_enabled</a>(<a href="features.md#0x1_features_GAS_PAYABLE_FA">GAS_PAYABLE_FA</a>)
 }
 </code></pre>
 

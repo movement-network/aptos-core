@@ -360,8 +360,10 @@ impl<'a, S: StateView> MoveConverter<'a, S> {
                 extra_config,
             }) => match extra_config {
                 aptos_types::transaction::TransactionExtraConfig::V1 {
-                    multisig_address,
-                    replay_protection_nonce: _,
+                    multisig_address, ..
+                }
+                | aptos_types::transaction::TransactionExtraConfig::V2 {
+                    multisig_address, ..
                 } => {
                     if let Some(multisig_address) = multisig_address {
                         match executable {

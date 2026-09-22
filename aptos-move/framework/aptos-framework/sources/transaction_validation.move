@@ -13,10 +13,14 @@ module aptos_framework::transaction_validation {
     use aptos_framework::chain_id;
     use aptos_framework::coin;
     use aptos_framework::create_signer;
+    use aptos_framework::fungible_asset::Metadata;
     use aptos_framework::governed_gas_pool;
+    use aptos_framework::object;
     use aptos_framework::permissioned_signer;
+    use aptos_framework::primary_fungible_store;
     use aptos_framework::system_addresses;
     use aptos_framework::timestamp;
+    use aptos_framework::transaction_context;
     use aptos_framework::transaction_fee;
     use aptos_framework::nonce_validation;
 
@@ -123,6 +127,17 @@ module aptos_framework::transaction_validation {
             || (features::is_account_abstraction_enabled() && account_abstraction::using_dispatchable_authenticator(transaction_sender))
     }
 
+    /// The fungible asset metadata address this transaction elected to pay gas in, or `None` if it
+    /// pays in the default currency (APT). Returns `None` when the `GAS_PAYABLE_FA` feature is off,
+    /// so the accessor (which is gated on that feature) is only called when it is enabled.
+    inline fun gas_fa_metadata(): Option<address> {
+        if (features::is_gas_payable_fa_enabled()) {
+            transaction_context::gas_payment_fungible_asset()
+        } else {
+            option::none<address>()
+        }
+    }
+
     fun prologue_common(
         sender: &signer,
         gas_payer: &signer,
@@ -198,7 +213,27 @@ module aptos_framework::transaction_validation {
                 ),
                 error::permission_denied(PROLOGUE_PERMISSIONED_GAS_LIMIT_INSUFFICIENT)
             );
-            if (features::operations_default_to_fa_apt_store_enabled()) {
+            let gas_fa_metadata = gas_fa_metadata();
+            if (option::is_some(&gas_fa_metadata)) {
+                // Gas is paid in a selected fungible asset: it must be accepted by the governed gas
+                // pool and the payer must hold enough of it.
+                let metadata = *option::borrow(&gas_fa_metadata);
+                assert!(
+                    governed_gas_pool::is_accepted_gas_fungible_asset(metadata),
+                    error::invalid_argument(PROLOGUE_ECANT_PAY_GAS_DEPOSIT)
+                );
+                // The FA gas fee is charged as gas_used * per-FA gas price; check the payer can
+                // cover the maximum (all of txn_max_gas_units).
+                let max_fa_fee = governed_gas_pool::gas_fee_in_fa(metadata, txn_max_gas_units);
+                assert!(
+                    primary_fungible_store::is_balance_at_least(
+                        gas_payer_address,
+                        object::address_to_object<Metadata>(metadata),
+                        max_fa_fee
+                    ),
+                    error::invalid_argument(PROLOGUE_ECANT_PAY_GAS_DEPOSIT)
+                );
+            } else if (features::operations_default_to_fa_apt_store_enabled()) {
                 assert!(
                     aptos_account::is_fungible_balance_at_least(gas_payer_address, max_transaction_fee),
                     error::invalid_argument(PROLOGUE_ECANT_PAY_GAS_DEPOSIT)
@@ -460,38 +495,56 @@ module aptos_framework::transaction_validation {
         // it's important to maintain the error code consistent with vm
         // to do failed transaction cleanup.
         if (!skip_gas_payment(is_simulation, gas_payer)) {
-            if (features::operations_default_to_fa_apt_store_enabled()) {
+            let gas_fa_metadata = gas_fa_metadata();
+            if (option::is_some(&gas_fa_metadata)) {
+                // Gas paid in a selected fungible asset is charged as gas_used * the FA's gas price
+                // and collected into that FA's governed gas pool. NOTE: the storage-fee refund is
+                // not netted for FA payers; that is a follow-up.
+                let metadata = *option::borrow(&gas_fa_metadata);
+                let fa_fee = governed_gas_pool::gas_fee_in_fa(metadata, gas_used);
                 assert!(
-                    aptos_account::is_fungible_balance_at_least(gas_payer, transaction_fee_amount),
+                    primary_fungible_store::is_balance_at_least(
+                        gas_payer,
+                        object::address_to_object<Metadata>(metadata),
+                        fa_fee
+                    ),
                     error::out_of_range(PROLOGUE_ECANT_PAY_GAS_DEPOSIT),
                 );
+                governed_gas_pool::deposit_gas_fee_fa(gas_payer, metadata, fa_fee);
             } else {
-                assert!(
-                    coin::is_balance_at_least<AptosCoin>(gas_payer, transaction_fee_amount),
-                    error::out_of_range(PROLOGUE_ECANT_PAY_GAS_DEPOSIT),
-                );
-            };
-
-            if (features::storage_deletion_refund_enabled()){
-                if (transaction_fee_amount > storage_fee_refunded) {
-                    let burn_amount = transaction_fee_amount - storage_fee_refunded;
-                    if (features::governed_gas_pool_enabled()){
-                        governed_gas_pool::deposit_gas_fee_v2(gas_payer, burn_amount);
-                    } else {
-                        transaction_fee::burn_fee(gas_payer, burn_amount);
-                    }
-                } else if (transaction_fee_amount < storage_fee_refunded) {
-                    let mint_amount = storage_fee_refunded - transaction_fee_amount;
-                    // TODO: we cannot mint to do storage refund. We need to have a storage refund pool
-                    if (!features::governed_gas_pool_enabled()){
-                        transaction_fee::mint_and_refund(gas_payer, mint_amount);
-                    }
-                };
-            } else {
-                if (features::governed_gas_pool_enabled()){
-                    governed_gas_pool::deposit_gas_fee_v2(gas_payer, transaction_fee_amount);
+                if (features::operations_default_to_fa_apt_store_enabled()) {
+                    assert!(
+                        aptos_account::is_fungible_balance_at_least(gas_payer, transaction_fee_amount),
+                        error::out_of_range(PROLOGUE_ECANT_PAY_GAS_DEPOSIT),
+                    );
                 } else {
-                    transaction_fee::burn_fee(gas_payer, transaction_fee_amount);
+                    assert!(
+                        coin::is_balance_at_least<AptosCoin>(gas_payer, transaction_fee_amount),
+                        error::out_of_range(PROLOGUE_ECANT_PAY_GAS_DEPOSIT),
+                    );
+                };
+
+                if (features::storage_deletion_refund_enabled()){
+                    if (transaction_fee_amount > storage_fee_refunded) {
+                        let burn_amount = transaction_fee_amount - storage_fee_refunded;
+                        if (features::governed_gas_pool_enabled()){
+                            governed_gas_pool::deposit_gas_fee_v2(gas_payer, burn_amount);
+                        } else {
+                            transaction_fee::burn_fee(gas_payer, burn_amount);
+                        }
+                    } else if (transaction_fee_amount < storage_fee_refunded) {
+                        let mint_amount = storage_fee_refunded - transaction_fee_amount;
+                        // TODO: we cannot mint to do storage refund. We need to have a storage refund pool
+                        if (!features::governed_gas_pool_enabled()){
+                            transaction_fee::mint_and_refund(gas_payer, mint_amount);
+                        }
+                    };
+                } else {
+                    if (features::governed_gas_pool_enabled()){
+                        governed_gas_pool::deposit_gas_fee_v2(gas_payer, transaction_fee_amount);
+                    } else {
+                        transaction_fee::burn_fee(gas_payer, transaction_fee_amount);
+                    }
                 }
             }
         };
@@ -695,41 +748,64 @@ module aptos_framework::transaction_validation {
             is_simulation,
             gas_payer_address
         )) {
-            if (features::operations_default_to_fa_apt_store_enabled()) {
+            let gas_fa_metadata = gas_fa_metadata();
+            if (option::is_some(&gas_fa_metadata)) {
+                // Gas paid in a selected fungible asset is charged as gas_used * the FA's gas price
+                // and collected into that FA's governed gas pool. NOTE: the storage-fee refund is
+                // not netted for FA payers; that is a follow-up.
+                let metadata = *option::borrow(&gas_fa_metadata);
+                let fa_fee = governed_gas_pool::gas_fee_in_fa(metadata, gas_used);
                 assert!(
-                    aptos_account::is_fungible_balance_at_least(gas_payer_address, transaction_fee_amount),
+                    primary_fungible_store::is_balance_at_least(
+                        gas_payer_address,
+                        object::address_to_object<Metadata>(metadata),
+                        fa_fee
+                    ),
                     error::out_of_range(PROLOGUE_ECANT_PAY_GAS_DEPOSIT),
                 );
-            } else {
-                assert!(
-                    coin::is_balance_at_least<AptosCoin>(gas_payer_address, transaction_fee_amount),
-                    error::out_of_range(PROLOGUE_ECANT_PAY_GAS_DEPOSIT),
-                );
-            };
-
-            if (transaction_fee_amount > storage_fee_refunded) {
-                let burn_amount = transaction_fee_amount - storage_fee_refunded;
-                if (features::governed_gas_pool_enabled()){
-                    governed_gas_pool::deposit_gas_fee_v2(gas_payer_address, burn_amount);
-                } else {
-                    transaction_fee::burn_fee(gas_payer_address, burn_amount);
-                };
+                governed_gas_pool::deposit_gas_fee_fa(gas_payer_address, metadata, fa_fee);
                 permissioned_signer::check_permission_consume(
                     &gas_payer,
-                    (burn_amount as u256),
+                    (transaction_fee_amount as u256),
                     GasPermission {}
                 );
             } else {
-                let mint_amount = storage_fee_refunded - transaction_fee_amount;
-                // TODO: we cannot mint to do storage refund. We need to have a storage refund pool
-                if (!features::governed_gas_pool_enabled()){
-                    transaction_fee::mint_and_refund(gas_payer_address, mint_amount);
+                if (features::operations_default_to_fa_apt_store_enabled()) {
+                    assert!(
+                        aptos_account::is_fungible_balance_at_least(gas_payer_address, transaction_fee_amount),
+                        error::out_of_range(PROLOGUE_ECANT_PAY_GAS_DEPOSIT),
+                    );
+                } else {
+                    assert!(
+                        coin::is_balance_at_least<AptosCoin>(gas_payer_address, transaction_fee_amount),
+                        error::out_of_range(PROLOGUE_ECANT_PAY_GAS_DEPOSIT),
+                    );
                 };
-                permissioned_signer::increase_limit(
-                    &gas_payer,
-                    (mint_amount as u256),
-                    GasPermission {}
-                );
+
+                if (transaction_fee_amount > storage_fee_refunded) {
+                    let burn_amount = transaction_fee_amount - storage_fee_refunded;
+                    if (features::governed_gas_pool_enabled()){
+                        governed_gas_pool::deposit_gas_fee_v2(gas_payer_address, burn_amount);
+                    } else {
+                        transaction_fee::burn_fee(gas_payer_address, burn_amount);
+                    };
+                    permissioned_signer::check_permission_consume(
+                        &gas_payer,
+                        (burn_amount as u256),
+                        GasPermission {}
+                    );
+                } else {
+                    let mint_amount = storage_fee_refunded - transaction_fee_amount;
+                    // TODO: we cannot mint to do storage refund. We need to have a storage refund pool
+                    if (!features::governed_gas_pool_enabled()){
+                        transaction_fee::mint_and_refund(gas_payer_address, mint_amount);
+                    };
+                    permissioned_signer::increase_limit(
+                        &gas_payer,
+                        (mint_amount as u256),
+                        GasPermission {}
+                    );
+                };
             };
         };
 

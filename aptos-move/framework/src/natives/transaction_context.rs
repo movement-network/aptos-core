@@ -368,6 +368,30 @@ fn native_multisig_payload_internal(
     }
 }
 
+fn native_gas_payment_fa_metadata_internal(
+    context: &mut SafeNativeContext,
+    _ty_args: Vec<Type>,
+    _args: VecDeque<Value>,
+) -> SafeNativeResult<SmallVec<[Value; 1]>> {
+    context.charge(TRANSACTION_CONTEXT_GAS_PAYMENT_FA_METADATA_BASE)?;
+
+    let user_transaction_context_opt = get_user_transaction_context_opt_from_context(context);
+    if let Some(transaction_context) = user_transaction_context_opt {
+        // `Option<address>` is `struct { vec: vector<address> }`: a singleton vector for `Some`,
+        // an empty one for `None`. Build the inner vector with `vector_address` so it carries the
+        // proper element type (the testing-only vector helpers do not, which fails type checks).
+        let inner = match transaction_context.gas_fa_coin() {
+            Some(metadata_address) => Value::vector_address(vec![metadata_address]),
+            None => Value::vector_address(vec![]),
+        };
+        Ok(smallvec![Value::struct_(Struct::pack(vec![inner]))])
+    } else {
+        Err(SafeNativeError::Abort {
+            abort_code: error::invalid_state(abort_codes::ETRANSACTION_CONTEXT_NOT_AVAILABLE),
+        })
+    }
+}
+
 fn get_user_transaction_context_opt_from_context<'a>(
     context: &'a SafeNativeContext,
 ) -> &'a Option<UserTransactionContext> {
@@ -404,6 +428,10 @@ pub fn make_all(
         (
             "multisig_payload_internal",
             native_multisig_payload_internal,
+        ),
+        (
+            "gas_payment_fa_metadata_internal",
+            native_gas_payment_fa_metadata_internal,
         ),
     ];
 

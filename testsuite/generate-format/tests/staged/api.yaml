@@ -739,6 +739,17 @@ TransactionExtraConfig:
                 TYPENAME: AccountAddress
           - replay_protection_nonce:
               OPTION: U64
+    1:
+      V2:
+        STRUCT:
+          - multisig_address:
+              OPTION:
+                TYPENAME: AccountAddress
+          - replay_protection_nonce:
+              OPTION: U64
+          - gas_fa_coin:
+              OPTION:
+                TYPENAME: AccountAddress
 TransactionInfo:
   ENUM:
     0:

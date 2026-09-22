@@ -66,6 +66,59 @@ fn test_existing_account_with_fee_payer() {
     assert!(bob_start > bob_after);
 }
 
+/// A fee-payer (sponsored) transaction with account abstraction disabled routes gas collection
+/// through the legacy `transaction_validation::epilogue_gas_payer_extended` Move function.
+///
+/// Per the VM dispatch in `run_epilogue`, that function is selected exactly when neither
+/// account-abstraction feature is enabled AND the transaction has a fee payer; with account
+/// abstraction on (the default), the unified epilogue is used instead. The gas is charged to the
+/// fee payer, not the sender.
+#[test]
+fn test_fee_payer_runs_epilogue_gas_payer_extended() {
+    let mut h = MoveHarness::new_with_features(
+        vec![
+            FeatureFlag::GAS_PAYER_ENABLED,
+            FeatureFlag::SPONSORED_AUTOMATIC_ACCOUNT_V1_CREATION,
+        ],
+        // Disabling account abstraction forces the non-unified (legacy) epilogue path.
+        vec![
+            FeatureFlag::DEFAULT_ACCOUNT_RESOURCE,
+            FeatureFlag::ACCOUNT_ABSTRACTION,
+            FeatureFlag::DERIVABLE_ACCOUNT_ABSTRACTION,
+        ],
+    );
+
+    let alice = h.new_account_at(AccountAddress::from_hex_literal("0xa11ce").unwrap());
+    let bob = h.new_account_at(AccountAddress::from_hex_literal("0xb0b").unwrap());
+
+    let alice_start = h.read_aptos_balance(alice.address());
+    let bob_start = h.read_aptos_balance(bob.address());
+
+    // A no-op self-transfer; bob sponsors the gas.
+    let payload = aptos_stdlib::aptos_coin_transfer(*alice.address(), 0);
+    let transaction = TransactionBuilder::new(alice.clone())
+        .fee_payer(bob.clone())
+        .payload(payload)
+        .sequence_number(h.sequence_number(alice.address()))
+        .max_gas_amount(1_000_000)
+        .gas_unit_price(1)
+        .sign_fee_payer();
+
+    let output = h.run_raw(transaction);
+    assert_success!(*output.status());
+
+    // The fee payer (bob) paid the gas via epilogue_gas_payer_extended; the sender (alice) did not.
+    let alice_after = h.read_aptos_balance(alice.address());
+    let bob_after = h.read_aptos_balance(bob.address());
+    assert_eq!(alice_start, alice_after);
+    assert!(
+        bob_start > bob_after,
+        "fee payer should have paid the gas: {} -> {}",
+        bob_start,
+        bob_after
+    );
+}
+
 #[test]
 fn test_existing_account_with_fee_payer_aborts() {
     let mut h = MoveHarness::new_with_features(

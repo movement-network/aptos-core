@@ -10,6 +10,9 @@ module aptos_framework::transaction_context {
     /// The transaction context extension feature is not enabled.
     const ETRANSACTION_CONTEXT_EXTENSION_NOT_ENABLED: u64 = 2;
 
+    /// Paying gas in a fungible asset (the `GAS_PAYABLE_FA` feature) is not enabled.
+    const EGAS_PAYABLE_FA_NOT_ENABLED: u64 = 3;
+
     /// A wrapper denoting aptos unique identifer (AUID)
     /// for storing an address
     struct AUID has drop, store {
@@ -123,6 +126,15 @@ module aptos_framework::transaction_context {
         chain_id_internal()
     }
     native fun chain_id_internal(): u8;
+
+    /// Returns the fungible asset metadata address that the current transaction elected to pay gas in,
+    /// or `None` if gas is paid in the default currency (APT).
+    /// This function aborts if called outside of the transaction prologue, execution, or epilogue phases.
+    public fun gas_payment_fungible_asset(): Option<address> {
+        assert!(features::is_gas_payable_fa_enabled(), error::invalid_state(EGAS_PAYABLE_FA_NOT_ENABLED));
+        gas_payment_fa_metadata_internal()
+    }
+    native fun gas_payment_fa_metadata_internal(): Option<address>;
 
     /// Returns the entry function payload if the current transaction has such a payload. Otherwise, return `None`.
     /// This function aborts if called outside of the transaction prologue, execution, or epilogue phases.
@@ -275,5 +287,18 @@ module aptos_framework::transaction_context {
     fun test_call_multisig_payload() {
         // expected to fail with the error code of `invalid_state(E_TRANSACTION_CONTEXT_NOT_AVAILABLE)`
         let _multisig = multisig_payload();
+    }
+
+    #[test(framework = @std)]
+    #[expected_failure(abort_code=196611, location = Self)]
+    fun test_gas_payment_fungible_asset_aborts_when_feature_disabled(framework: signer) {
+        // With `GAS_PAYABLE_FA` disabled, the accessor must abort at the feature gate with
+        // `invalid_state(EGAS_PAYABLE_FA_NOT_ENABLED)` before ever reaching the native.
+        features::change_feature_flags_for_testing(
+            &framework,
+            vector[],
+            vector[features::get_gas_payable_fa_feature()],
+        );
+        let _fa = gas_payment_fungible_asset();
     }
 }

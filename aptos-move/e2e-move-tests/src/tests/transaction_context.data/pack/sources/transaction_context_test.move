@@ -7,6 +7,14 @@ module admin::transaction_context_test {
     use aptos_std::type_info;
     use aptos_framework::transaction_context;
     use aptos_framework::multisig_account;
+    use aptos_framework::fungible_asset::{Self, Metadata};
+    use aptos_framework::primary_fungible_store;
+    use aptos_framework::object::{Self, Object};
+
+    /// Records a fungible asset created by `create_gas_fa` so its metadata can be looked up.
+    struct GasFa has key {
+        metadata: Object<Metadata>,
+    }
 
     /// Since tests in e2e-move-tests/ can only call entry functions which don't have return values, we must store
     /// the results we are interested in inside this (rather-artificial) resource, which we can read back in our
@@ -84,6 +92,48 @@ module admin::transaction_context_test {
     public entry fun store_chain_id_from_native_txn_context(_s: &signer) acquires TransactionContextStore {
         let store = borrow_global_mut<TransactionContextStore>(@admin);
         store.chain_id = transaction_context::chain_id();
+    }
+
+    /// Aborts unless the current transaction elected to pay gas in the fungible asset whose metadata
+    /// object lives at `expected`.
+    public entry fun assert_gas_payment_fungible_asset(_s: &signer, expected: address) {
+        assert!(transaction_context::gas_payment_fungible_asset() == option::some(expected), 1000);
+    }
+
+    /// Aborts unless the current transaction did not elect to pay gas in a fungible asset.
+    public entry fun assert_no_gas_payment_fungible_asset(_s: &signer) {
+        assert!(option::is_none(&transaction_context::gas_payment_fungible_asset()), 1001);
+    }
+
+    /// Creates a primary-store-enabled fungible asset owned by `s`, mints `amount` of it to `s`, and
+    /// records its metadata so a later transaction can elect to pay gas in it.
+    public entry fun create_gas_fa(s: &signer, amount: u64) {
+        let constructor_ref = object::create_named_object(s, b"GASFA");
+        primary_fungible_store::create_primary_store_enabled_fungible_asset(
+            &constructor_ref,
+            option::none(),
+            string::utf8(b"GasFA"),
+            string::utf8(b"GFA"),
+            8,
+            string::utf8(b""),
+            string::utf8(b""),
+        );
+        let mint_ref = fungible_asset::generate_mint_ref(&constructor_ref);
+        let metadata = object::object_from_constructor_ref<Metadata>(&constructor_ref);
+        primary_fungible_store::deposit(signer::address_of(s), fungible_asset::mint(&mint_ref, amount));
+        move_to(s, GasFa { metadata });
+    }
+
+    #[view]
+    /// The metadata object address of the fungible asset created by `create_gas_fa` for `owner`.
+    public fun gas_fa_metadata_address(owner: address): address acquires GasFa {
+        object::object_address(&borrow_global<GasFa>(owner).metadata)
+    }
+
+    #[view]
+    /// `owner`'s primary-store balance of the fungible asset identified by `metadata`.
+    public fun fa_balance(owner: address, metadata: address): u64 {
+        primary_fungible_store::balance(owner, object::address_to_object<Metadata>(metadata))
     }
 
     entry fun store_entry_function_payload_from_native_txn_context<T1, T2, T3>(

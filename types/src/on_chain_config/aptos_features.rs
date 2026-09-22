@@ -143,6 +143,9 @@ pub enum FeatureFlag {
 
     CALCULATE_TRANSACTION_FEE_FOR_DISTRIBUTION = 96,
     DISTRIBUTE_TRANSACTION_FEE = 97,
+    /// Whether a transaction may pay for gas in a fungible asset other than APT,
+    /// specified via the `gas_fa_coin` field of the transaction's extra config.
+    GAS_PAYABLE_FA = 98,
     GOVERNED_GAS_POOL = 223,
     STAKE_REWARD_USING_TREASURY = 224,
     /// Use the fixed `extract_abort_info` lookup that does not spuriously match
@@ -431,6 +434,10 @@ impl Features {
 
     pub fn is_distribute_transaction_fee_enabled(&self) -> bool {
         self.is_enabled(FeatureFlag::DISTRIBUTE_TRANSACTION_FEE)
+    }
+
+    pub fn is_gas_payable_fa_enabled(&self) -> bool {
+        self.is_enabled(FeatureFlag::GAS_PAYABLE_FA)
     }
 
     pub fn get_max_identifier_size(&self) -> u64 {

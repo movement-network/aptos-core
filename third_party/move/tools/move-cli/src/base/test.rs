@@ -11,7 +11,10 @@ use legacy_move_compiler::{
     unit_test::TestPlan,
 };
 use move_command_line_common::files::{FileHash, MOVE_COVERAGE_MAP_EXTENSION};
-use move_compiler_v2::plan_builder as plan_builder_v2;
+use move_compiler_v2::{
+    fuzz::{random_seed, DefaultFuzzSource, FuzzConfig, FuzzValueSource},
+    plan_builder as plan_builder_v2,
+};
 use move_core_types::effects::ChangeSet;
 use move_coverage::coverage_map::{output_map_to_file, CoverageMap};
 use move_package::{
@@ -20,7 +23,7 @@ use move_package::{
 };
 use move_unit_test::{
     test_reporter::{UnitTestFactory, UnitTestFactoryWithCostTable},
-    UnitTestingConfig,
+    FuzzRunnerCtx, UnitTestingConfig,
 };
 use move_vm_runtime::tracing::{LOGGING_FILE_WRITER, TRACING_ENABLED};
 use move_vm_test_utils::gas_schedule::CostTable;
@@ -37,6 +40,7 @@ use std::{
     ops::Deref,
     path::{Path, PathBuf},
     process::ExitStatus,
+    sync::Arc,
 };
 // if not windows nor unix
 #[cfg(not(any(target_family = "windows", target_family = "unix")))]
@@ -221,6 +225,11 @@ pub fn run_move_unit_tests_with_factory<W: Write + Send, F: UnitTestFactory + Se
         .collect();
     let root_package = resolution_graph.root_package.package.name;
     let build_plan = BuildPlan::create(resolution_graph)?;
+    // Resolve the fuzz seed once for the whole run: an explicit `--fuzz-seed`
+    // pins it (reproducible), otherwise a fresh random seed is drawn so each run
+    // searches differently. Resolving here (not inside the compile closure) keeps
+    // every package in the run on the same seed.
+    let resolved_fuzz_seed = unit_test_config.fuzz_seed.unwrap_or_else(random_seed);
     let mut test_plan = None;
     // Compile the package. We need to intercede in the compilation, process being performed by the
     // Move package system, to first grab the compilation env, construct the test plan from it, and
@@ -233,10 +242,41 @@ pub fn run_move_unit_tests_with_factory<W: Write + Send, F: UnitTestFactory + Se
         |options| {
             let (files, units, env) = build_and_report_no_exit_v2_driver(options)?;
             let root_package_in_model = env.symbol_pool().make(root_package.deref());
-            let built_test_plan =
-                plan_builder_v2::construct_test_plan(&env, Some(root_package_in_model));
+            // Install a fuzz value source so `#[test]` functions with unassigned
+            // primitive parameters (and `in` / `!=`-constrained ones) expand into
+            // concrete fuzz cases. Without a source the plan builder reports "no
+            // fuzz value source is registered" for such tests. This mirrors the
+            // wiring in `move_unit_test::UnitTestingConfig::compile_to_test_plan`
+            // so the package-driven runner (used by `aptos move test` and the
+            // framework unit tests) fuzzes identically to the library entrypoint.
+            let fuzz_config = FuzzConfig {
+                runs: unit_test_config.fuzz_runs,
+                seed: resolved_fuzz_seed,
+                dictionary_weight: unit_test_config.fuzz_dictionary_weight,
+                ..FuzzConfig::default()
+            };
+            let fuzz_source: Arc<dyn FuzzValueSource> =
+                Arc::new(DefaultFuzzSource::new(&env, fuzz_config));
+            let built = plan_builder_v2::construct_test_plan_with_fuzz_source(
+                &env,
+                Some(root_package_in_model),
+                fuzz_source.as_ref(),
+            );
+            // Keep the fuzz metadata/source alongside the plan so the runner can
+            // shrink failing fuzz cases; `None` (no tests / not compiled) is fine.
+            let (built_test_plan, fuzz_ctx) = match built {
+                Some(build) => {
+                    let ctx: Arc<dyn std::any::Any + Send + Sync> = Arc::new(FuzzRunnerCtx {
+                        metadata: build.fuzz_metadata,
+                        source: fuzz_source.clone(),
+                        corpus_dir: None,
+                    });
+                    (Some(build.plans), Some(ctx))
+                },
+                None => (None, None),
+            };
 
-            test_plan = Some((built_test_plan, files.clone(), units.clone()));
+            test_plan = Some((built_test_plan, fuzz_ctx, files.clone(), units.clone()));
             Ok((files, units, env))
         },
     )?;
@@ -257,16 +297,17 @@ pub fn run_move_unit_tests_with_factory<W: Write + Send, F: UnitTestFactory + Se
         }
     }
 
-    let (test_plan, mut files, units) = test_plan.unwrap();
+    let (test_plan, fuzz_ctx, mut files, units) = test_plan.unwrap();
     files.extend(dep_file_map);
     let test_plan = test_plan.unwrap();
     let no_tests = test_plan.is_empty();
-    let test_plan = TestPlan::new(
+    let mut test_plan = TestPlan::new(
         test_plan,
         files,
         units,
         compiled_package.bytecode_deps.into_values().collect(),
     );
+    test_plan.runner_metadata = fuzz_ctx;
 
     let trace_path = pkg_path.join(".trace");
     let coverage_map_path = pkg_path

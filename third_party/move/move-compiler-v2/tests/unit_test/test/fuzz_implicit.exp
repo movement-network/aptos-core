@@ -1,0 +1,16 @@
+
+Diagnostics:
+note: fuzz: expanded `bare_with_signer` to 64 cases
+  ┌─ tests/unit_test/test/fuzz_implicit.move:6:16
+  │
+6 │     public fun bare_with_signer(_a: signer) { }
+  │                ^^^^^^^^^^^^^^^^
+
+note: fuzz: expanded `bare_with_two` to 64 cases
+  ┌─ tests/unit_test/test/fuzz_implicit.move:9:16
+  │
+9 │     public fun bare_with_two(_a: signer, _b: address) { }
+  │                ^^^^^^^^^^^^^
+
+
+============ bytecode verification succeeded ========

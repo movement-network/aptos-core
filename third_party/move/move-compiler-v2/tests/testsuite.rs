@@ -6,8 +6,10 @@ use anyhow::bail;
 use codespan_reporting::{diagnostic::Severity, term::termcolor::Buffer};
 use libtest_mimic::{Arguments, Trial};
 use move_compiler_v2::{
-    annotate_units, disassemble_compiled_units, logging, pipeline, plan_builder,
-    run_bytecode_verifier, run_file_format_gen, Experiment, Options,
+    annotate_units, disassemble_compiled_units,
+    fuzz::{DefaultFuzzSource, FuzzConfig},
+    logging, pipeline, plan_builder, run_bytecode_verifier, run_file_format_gen, Experiment,
+    Options,
 };
 use move_model::{metadata::LanguageVersion, model::GlobalEnv, sourcifier::Sourcifier};
 use move_prover_test_utils::{baseline_test, extract_test_directives};
@@ -641,7 +643,8 @@ fn run_flow_similar_to_compiler(config: &TestConfig, options: &Options) -> anyho
         // Build the test plan here to parse and validate any test-related attributes in the AST.
         // In real use, this is run outside of the compilation process, but the needed info is
         // available in `env` once we finish the AST.
-        plan_builder::construct_test_plan(&env, None);
+        let fuzz_source = DefaultFuzzSource::new(&env, FuzzConfig::default());
+        plan_builder::construct_test_plan_with_fuzz_source(&env, None, &fuzz_source);
         ok = check_diags(&mut test_output.borrow_mut(), &env, options);
     }
 

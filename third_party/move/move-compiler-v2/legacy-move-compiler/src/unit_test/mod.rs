@@ -33,6 +33,10 @@ pub struct TestPlan {
     // `NamedCompiledModule` for compiled modules with source,
     // `CompiledModule` for modules with bytecode only
     pub module_info: BTreeMap<ModuleId, NamedOrBytecodeModule>,
+    /// Opaque metadata that downstream runners may consult — e.g. the
+    /// `move-unit-test` runner stores `FuzzPlanMetadata` + fuzz source here
+    /// to enable shrinking/mutation. Legacy code does not introspect it.
+    pub runner_metadata: Option<std::sync::Arc<dyn std::any::Any + Send + Sync>>,
 }
 
 #[derive(Debug, Clone)]
@@ -43,7 +47,14 @@ pub struct ModuleTestPlan {
 
 #[derive(Debug, Clone)]
 pub struct TestCase {
+    /// Display/identity name of this case. For fuzz/matrix expansion this is
+    /// decorated and made unique (e.g. `foo#3[a=42]`), so it is NOT a valid
+    /// Move identifier and must not be used to look up the function.
     pub test_name: TestName,
+    /// The real Move function symbol to invoke (e.g. `foo`). Always a valid
+    /// identifier. Runners must use this — not `test_name` — when loading the
+    /// function from the VM.
+    pub function_name: TestName,
     pub arguments: Vec<MoveValue>,
     pub expected_failure: Option<ExpectedFailure>,
 }
@@ -125,6 +136,7 @@ impl TestPlan {
             files,
             module_tests,
             module_info,
+            runner_metadata: None,
         }
     }
 }

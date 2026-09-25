@@ -1,0 +1,9 @@
+[package]
+name = "attestation_gated"
+version = "0.0.0"
+
+[dependencies]
+AptosFramework = { local = "../../../../../framework/aptos-framework" }
+
+[addresses]
+gated = "0xcafe"

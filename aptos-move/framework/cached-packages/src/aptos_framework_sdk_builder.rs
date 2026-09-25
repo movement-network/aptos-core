@@ -446,6 +446,359 @@ pub enum EntryFunctionCall {
         _bridge_transfer_id: Vec<u8>,
     },
 
+    /// Add admins.
+    AttestationAddAdmins {
+        source: AccountAddress,
+        new_admins: Vec<AccountAddress>,
+    },
+
+    AttestationAddGuardians {
+        source: AccountAddress,
+        new_guardians: Vec<AccountAddress>,
+    },
+
+    AttestationAddIssuers {
+        source: AccountAddress,
+        new_issuers: Vec<AccountAddress>,
+    },
+
+    AttestationAddRemovers {
+        source: AccountAddress,
+        new_removers: Vec<AccountAddress>,
+    },
+
+    AttestationAddSentinels {
+        source: AccountAddress,
+        new_sentinels: Vec<AccountAddress>,
+    },
+
+    /// Invalidate every fact an issuer has written, in one write. This is the remedy for a
+    /// compromised issuer key and it is O(1) in the size of the cohort. Issuer id 0 bumps the
+    /// zkTLS enrollment cohort, which has no registered issuer. The new epoch is one above the
+    /// issuer's effective epoch, so a bump always takes effect even below a raised floor.
+    AttestationBumpIssuerEpoch {
+        source: AccountAddress,
+        issuer_id: u16,
+    },
+
+    /// Create a new attestation source. The deployer only authorizes resource-account creation and
+    /// pays gas; it gains no role unless listed in the role arguments.
+    ///
+    /// @param deployer Signer that authorizes resource-account creation and pays gas.
+    /// @param admins Addresses allowed to configure. At least one, no duplicates, not the source.
+    /// @param issuers Addresses allowed to write facts. May be empty and filled in later.
+    /// @param sentinels Addresses allowed to add denials only. May be empty.
+    /// @param removers Addresses allowed to remove denials only. May be empty.
+    /// @param guardians Addresses allowed to pause writes. May be empty.
+    /// @abort If a list has duplicates, names the source itself, or there is no admin.
+    AttestationCreate {
+        admins: Vec<AccountAddress>,
+        issuers: Vec<AccountAddress>,
+        sentinels: Vec<AccountAddress>,
+        removers: Vec<AccountAddress>,
+        guardians: Vec<AccountAddress>,
+    },
+
+    /// Exclude a subject. Takes effect at `effective_at_secs`, which may be in the future so a
+    /// denial can be announced before it bites.
+    AttestationDeny {
+        source: AccountAddress,
+        subject: AccountAddress,
+        reason: u16,
+        effective_at_secs: u64,
+    },
+
+    /// Exclude many subjects at once, with a shared reason and immediate effect.
+    AttestationDenyBatch {
+        source: AccountAddress,
+        subjects: Vec<AccountAddress>,
+        reason: u16,
+    },
+
+    /// Record or refresh facts for many subjects at once.
+    ///
+    /// @param issuer A registered, active issuer of the source.
+    /// @param source The source address.
+    /// @param subjects Subjects to write.
+    /// @param levels Tier per subject, same length as `subjects`.
+    /// @param expires_at_secs Expiry per subject, same length as `subjects`.
+    /// @param reason Reason code recorded in each subject's history.
+    /// @abort If paused, the caller is not an issuer, the lengths differ, the batch is too large,
+    ///        or any subject is denied.
+    AttestationIssueBatch {
+        source: AccountAddress,
+        subjects: Vec<AccountAddress>,
+        levels: Vec<u8>,
+        expires_at_secs: Vec<u64>,
+        reason: u16,
+    },
+
+    /// Pause writes. Never changes the answer `is_verified` gives.
+    AttestationPause {
+        source: AccountAddress,
+    },
+
+    /// Publish a set commitment for the next epoch. Rotation invalidates outstanding proofs, so
+    /// publish on a fixed low-frequency cadence: it is a privacy measure, because cohort timing
+    /// leaks, and a throughput one, because every gated transaction reads this slot.
+    AttestationPublishRoot {
+        source: AccountAddress,
+        digest: Vec<u8>,
+        leaf_count: u64,
+    },
+
+    /// Record a fact from an attestation the issuer signed off chain. The caller need not be the
+    /// subject or the issuer.
+    ///
+    /// @param source The source address.
+    /// @param subject Subject the attestation is about.
+    /// @param issuer_id Issuer that signed.
+    /// @param issuer_epoch Must equal the issuer's current epoch, so an attestation signed before
+    ///        a compromise bump is refused and one signed for a future epoch is too.
+    /// @param nullifier 32 bytes binding one real-world identity to one subject, or empty to skip.
+    /// @param signature 64-byte ed25519 signature over `attestation_message`.
+    /// @abort If paused, the epoch is stale, the signature fails, a newer attestation is already
+    ///        recorded, the nullifier is bound elsewhere, or the subject is denied.
+    AttestationRedeemAttestation {
+        source: AccountAddress,
+        subject: AccountAddress,
+        issuer_id: u16,
+        issuer_epoch: u64,
+        level: u8,
+        expires_at_secs: u64,
+        issued_at_secs: u64,
+        nullifier: Vec<u8>,
+        signature: Vec<u8>,
+    },
+
+    /// Register an issuer and assign it a stable id. The public key is used only by the
+    /// permissionless relay path, and may be empty for an issuer that only writes directly.
+    ///
+    /// @param admin An admin of the source.
+    /// @param source The source address.
+    /// @param issuer Address to register.
+    /// @param pubkey 32-byte ed25519 public key, or empty.
+    /// @abort If the issuer is already registered or the key length is wrong.
+    AttestationRegisterIssuer {
+        source: AccountAddress,
+        issuer: AccountAddress,
+        pubkey: Vec<u8>,
+    },
+
+    /// Remove admins. A source may never be left with zero admins.
+    AttestationRemoveAdmins {
+        source: AccountAddress,
+        old_admins: Vec<AccountAddress>,
+    },
+
+    AttestationRemoveAttribute {
+        source: AccountAddress,
+        subject: AccountAddress,
+        key: u16,
+    },
+
+    AttestationRemoveGuardians {
+        source: AccountAddress,
+        old_guardians: Vec<AccountAddress>,
+    },
+
+    AttestationRemoveIssuers {
+        source: AccountAddress,
+        old_issuers: Vec<AccountAddress>,
+    },
+
+    AttestationRemoveRemovers {
+        source: AccountAddress,
+        old_removers: Vec<AccountAddress>,
+    },
+
+    AttestationRemoveSentinels {
+        source: AccountAddress,
+        old_sentinels: Vec<AccountAddress>,
+    },
+
+    /// Move many subjects to STATE_REVOKED. A subject that is already revoked is skipped, so one
+    /// stale entry cannot brick a batch.
+    AttestationRevokeBatch {
+        source: AccountAddress,
+        subjects: Vec<AccountAddress>,
+        reason: u16,
+    },
+
+    /// Replace an issuer's signing key. Facts already written stay valid; use
+    /// `bump_issuer_epoch` to invalidate them.
+    AttestationRotateIssuerKey {
+        source: AccountAddress,
+        issuer: AccountAddress,
+        new_pubkey: Vec<u8>,
+    },
+
+    /// Set an attribute on a subject. Every attribute written is public forever, so a source that
+    /// writes jurisdiction data has made a disclosure decision on behalf of its subjects.
+    AttestationSetAttribute {
+        source: AccountAddress,
+        subject: AccountAddress,
+        key: u16,
+        value: Vec<u8>,
+    },
+
+    /// Invalidate every fact written below the given epoch, across all issuers including the zkTLS
+    /// cohort. Strictly increasing, so lowering the floor can never resurrect a fact.
+    AttestationSetFloorEpoch {
+        source: AccountAddress,
+        epoch: u64,
+    },
+
+    /// Temporarily withhold an active subject's fact, reversibly.
+    AttestationSuspend {
+        source: AccountAddress,
+        subject: AccountAddress,
+        reason: u16,
+    },
+
+    /// Remove an exclusion. Deliberately a different role from `deny`.
+    AttestationUndeny {
+        source: AccountAddress,
+        subject: AccountAddress,
+    },
+
+    AttestationUnpause {
+        source: AccountAddress,
+    },
+
+    /// Reverse a suspension. Only a suspended record can be reactivated: a revoked one needs
+    /// re-issuance, and a denied subject cannot be reactivated at all. The record keeps the issuer
+    /// and epoch it was issued under, so a fact killed by an epoch bump stays dead.
+    AttestationUnsuspend {
+        source: AccountAddress,
+        subject: AccountAddress,
+        reason: u16,
+    },
+
+    /// Release the storage held by nonces that can no longer be replayed. Permissionless, because
+    /// it is pure cleanup and nobody has a reason to withhold it other than the fee, which is the
+    /// caller's to pay.
+    AttestationAuthorizationPruneNonces {
+        policy: AccountAddress,
+        nonces: Vec<Vec<u8>>,
+    },
+
+    /// Push the staged body live. Permissionless once its time has arrived, so the business does
+    /// not have to be online at the moment its own rule change takes effect.
+    AttestationPolicyActivatePending {
+        policy: AccountAddress,
+    },
+
+    AttestationPolicyAddAdmins {
+        policy: AccountAddress,
+        new_admins: Vec<AccountAddress>,
+    },
+
+    AttestationPolicyAddGuardians {
+        policy: AccountAddress,
+        new_guardians: Vec<AccountAddress>,
+    },
+
+    /// Discard a staged body that has not activated yet.
+    AttestationPolicyCancelPending {
+        policy: AccountAddress,
+    },
+
+    /// Stop demanding authorization for an action.
+    AttestationPolicyClearStepUp {
+        policy: AccountAddress,
+        action: u8,
+    },
+
+    /// Create a new policy. The deployer only authorizes resource-account creation and pays gas;
+    /// it gains no role unless listed. The body starts empty, which denies everything until rules
+    /// are staged and activated.
+    ///
+    /// @param deployer Signer that authorizes resource-account creation and pays gas.
+    /// @param admins Addresses allowed to stage rules. At least one, no duplicates.
+    /// @param guardians Addresses allowed to pause evaluation. May be empty.
+    /// @abort If a list has duplicates, names the policy itself, or there is no admin.
+    AttestationPolicyCreate {
+        admins: Vec<AccountAddress>,
+        guardians: Vec<AccountAddress>,
+    },
+
+    /// Deny everything until unpaused. Denies loudly with REASON_POLICY_PAUSED rather than
+    /// silently allowing.
+    AttestationPolicyPause {
+        policy: AccountAddress,
+    },
+
+    AttestationPolicyRemoveAdmins {
+        policy: AccountAddress,
+        old_admins: Vec<AccountAddress>,
+    },
+
+    AttestationPolicyRemoveGuardians {
+        policy: AccountAddress,
+        old_guardians: Vec<AccountAddress>,
+    },
+
+    /// Set the key that signs authorizations for this policy, and the longest window it may
+    /// issue. A window of 0 with an empty key disables the step-up path entirely.
+    AttestationPolicySetAuthorizer {
+        policy: AccountAddress,
+        pubkey: Vec<u8>,
+        max_ttl_secs: u64,
+    },
+
+    /// Set the amount above which an action needs a fresh authorization. Absent by default, so a
+    /// liveness dependency is never enabled by accident.
+    AttestationPolicySetStepUp {
+        policy: AccountAddress,
+        action: u8,
+        threshold: u64,
+    },
+
+    /// Stage attribute predicates onto the pending body. Call `stage_body` first.
+    ///
+    /// @param sources Source whose attribute each predicate reads.
+    /// @param keys Attribute key per predicate.
+    /// @param ops One of OP_IN, OP_NOT_IN, OP_EQ, OP_GTE.
+    /// @param values Candidate values per predicate. OP_EQ and OP_GTE take exactly one.
+    AttestationPolicyStageAttrRules {
+        policy: AccountAddress,
+        sources: Vec<AccountAddress>,
+        keys: Vec<u16>,
+        ops: Vec<u8>,
+        values: Vec<Vec<Vec<u8>>>,
+    },
+
+    /// Stage a new body, to take effect at `effective_at_secs`. Staging rather than applying
+    /// immediately is what keeps a rule change from breaking a transaction already in flight.
+    ///
+    /// @param admin An admin of the policy.
+    /// @param policy The policy address.
+    /// @param require_any_sources Sources of which at least one must vouch. May be empty.
+    /// @param require_any_levels Minimum level per entry, same length as require_any_sources.
+    /// @param require_all_sources Sources that must all vouch. May be empty.
+    /// @param require_all_levels Minimum level per entry, same length as require_all_sources.
+    /// @param deny_any Sources whose denial denies. May be empty.
+    /// @param chain_deny Optional chain-wide denial source: empty for none, or exactly one address.
+    ///   A vector rather than an `Option` because entry functions cannot take `Option` arguments.
+    /// @param effective_at_secs When the body becomes active.
+    /// @abort If the lengths differ, a list is over MAX_SOURCES, chain_deny names more than one
+    ///   source, or a named source does not exist.
+    AttestationPolicyStageBody {
+        policy: AccountAddress,
+        require_any_sources: Vec<AccountAddress>,
+        require_any_levels: Vec<u8>,
+        require_all_sources: Vec<AccountAddress>,
+        require_all_levels: Vec<u8>,
+        deny_any: Vec<AccountAddress>,
+        chain_deny: Vec<AccountAddress>,
+        effective_at_secs: u64,
+    },
+
+    AttestationPolicyUnpause {
+        policy: AccountAddress,
+    },
+
     /// Same as `publish_package` but as an entry function which can be called as a transaction. Because
     /// of current restrictions for txn parameters, the metadata needs to be passed in serialized form.
     CodePublishPackageTxn {
@@ -522,6 +875,12 @@ pub enum EntryFunctionCall {
     /// Enable partial governance voting on a stake pool. The voter of this stake pool will be managed by this module.
     /// The existing voter will be replaced. The function is permissionless.
     DelegationPoolEnablePartialGovernanceVoting {
+        pool_address: AccountAddress,
+    },
+
+    /// Enable partial governance voting on a delegation pool if it has not already been initialized.
+    /// This is intended for idempotent migration scripts over existing delegation pools.
+    DelegationPoolEnablePartialGovernanceVotingIfNeeded {
         pool_address: AccountAddress,
     },
 
@@ -1367,6 +1726,68 @@ pub enum EntryFunctionCall {
     VestingVestMany {
         contract_addresses: Vec<AccountAddress>,
     },
+
+    /// Submit a verified claim about yourself. No issuer key is involved on this path: the trust
+    /// root is the attestor set plus the provider's TLS certificate, not an operator holding a key.
+    ///
+    /// @param user The subject. Must be the address the claim names.
+    /// @param source The source to record the fact in.
+    /// @param template_id Registered, active template the claim was produced under.
+    /// @param claim Canonically serialized claim. Must contain the subject and the template id.
+    /// @param signatures One 65-byte recoverable ECDSA signature per attestor.
+    /// @param attestor_epoch Epoch whose attestor set signed.
+    /// @param nullifier 32 bytes binding one identity to one subject, or empty to skip. When set,
+    ///        its lowercase hex must appear in the signed claim, so the attestors vouch for it.
+    /// @abort If the claim does not bind the subject (or the nullifier), a signer is unknown or
+    ///        repeated, the attestor epoch is retired, the template is revoked, the claim was
+    ///        already used, or fewer than the threshold signed.
+    ZktlsEnroll {
+        source: AccountAddress,
+        template_id: Vec<u8>,
+        claim: Vec<u8>,
+        signatures: Vec<Vec<u8>>,
+        attestor_epoch: u64,
+        nullifier: Vec<u8>,
+    },
+
+    /// Create the verifier for a source. Requires an admin of that source, and obtains the
+    /// source's resource-account signer through `attestation`'s friend accessor.
+    ZktlsInitialize {
+        source: AccountAddress,
+    },
+
+    /// Allow a provider template and say what a claim under it grants.
+    ZktlsRegisterTemplate {
+        source: AccountAddress,
+        template_id: Vec<u8>,
+        grants_level: u8,
+        ttl_secs: u64,
+    },
+
+    /// Stop accepting new claims under a template. Facts already recorded are untouched; use
+    /// `attestation::bump_issuer_epoch` with issuer id 0, which invalidates every zkTLS
+    /// enrollment in the source, or a denial per subject for those.
+    ZktlsRevokeTemplate {
+        source: AccountAddress,
+        template_id: Vec<u8>,
+    },
+
+    /// Register a new attestor set under the next epoch. The set it replaces keeps verifying for
+    /// `previous_grace_secs`, so a claim signed moments before the rotation still verifies; every
+    /// older set stops verifying immediately. Rotating away a compromised set with a zero grace
+    /// window cuts it off at once.
+    ///
+    /// @param admin An admin of the source.
+    /// @param source The source address.
+    /// @param attestor_addresses 20-byte Ethereum-style addresses, no duplicates.
+    /// @param required How many distinct attestors must sign. At least 1, at most the count.
+    /// @param previous_grace_secs How long the replaced set keeps verifying. 0 for no grace.
+    ZktlsSetAttestorSet {
+        source: AccountAddress,
+        attestor_addresses: Vec<Vec<u8>>,
+        required: u64,
+        previous_grace_secs: u64,
+    },
 }
 
 impl EntryFunctionCall {
@@ -1607,6 +2028,205 @@ impl EntryFunctionCall {
             AtomicBridgeInitiatorRefundBridgeTransfer {
                 _bridge_transfer_id,
             } => atomic_bridge_initiator_refund_bridge_transfer(_bridge_transfer_id),
+            AttestationAddAdmins { source, new_admins } => {
+                attestation_add_admins(source, new_admins)
+            },
+            AttestationAddGuardians {
+                source,
+                new_guardians,
+            } => attestation_add_guardians(source, new_guardians),
+            AttestationAddIssuers {
+                source,
+                new_issuers,
+            } => attestation_add_issuers(source, new_issuers),
+            AttestationAddRemovers {
+                source,
+                new_removers,
+            } => attestation_add_removers(source, new_removers),
+            AttestationAddSentinels {
+                source,
+                new_sentinels,
+            } => attestation_add_sentinels(source, new_sentinels),
+            AttestationBumpIssuerEpoch { source, issuer_id } => {
+                attestation_bump_issuer_epoch(source, issuer_id)
+            },
+            AttestationCreate {
+                admins,
+                issuers,
+                sentinels,
+                removers,
+                guardians,
+            } => attestation_create(admins, issuers, sentinels, removers, guardians),
+            AttestationDeny {
+                source,
+                subject,
+                reason,
+                effective_at_secs,
+            } => attestation_deny(source, subject, reason, effective_at_secs),
+            AttestationDenyBatch {
+                source,
+                subjects,
+                reason,
+            } => attestation_deny_batch(source, subjects, reason),
+            AttestationIssueBatch {
+                source,
+                subjects,
+                levels,
+                expires_at_secs,
+                reason,
+            } => attestation_issue_batch(source, subjects, levels, expires_at_secs, reason),
+            AttestationPause { source } => attestation_pause(source),
+            AttestationPublishRoot {
+                source,
+                digest,
+                leaf_count,
+            } => attestation_publish_root(source, digest, leaf_count),
+            AttestationRedeemAttestation {
+                source,
+                subject,
+                issuer_id,
+                issuer_epoch,
+                level,
+                expires_at_secs,
+                issued_at_secs,
+                nullifier,
+                signature,
+            } => attestation_redeem_attestation(
+                source,
+                subject,
+                issuer_id,
+                issuer_epoch,
+                level,
+                expires_at_secs,
+                issued_at_secs,
+                nullifier,
+                signature,
+            ),
+            AttestationRegisterIssuer {
+                source,
+                issuer,
+                pubkey,
+            } => attestation_register_issuer(source, issuer, pubkey),
+            AttestationRemoveAdmins { source, old_admins } => {
+                attestation_remove_admins(source, old_admins)
+            },
+            AttestationRemoveAttribute {
+                source,
+                subject,
+                key,
+            } => attestation_remove_attribute(source, subject, key),
+            AttestationRemoveGuardians {
+                source,
+                old_guardians,
+            } => attestation_remove_guardians(source, old_guardians),
+            AttestationRemoveIssuers {
+                source,
+                old_issuers,
+            } => attestation_remove_issuers(source, old_issuers),
+            AttestationRemoveRemovers {
+                source,
+                old_removers,
+            } => attestation_remove_removers(source, old_removers),
+            AttestationRemoveSentinels {
+                source,
+                old_sentinels,
+            } => attestation_remove_sentinels(source, old_sentinels),
+            AttestationRevokeBatch {
+                source,
+                subjects,
+                reason,
+            } => attestation_revoke_batch(source, subjects, reason),
+            AttestationRotateIssuerKey {
+                source,
+                issuer,
+                new_pubkey,
+            } => attestation_rotate_issuer_key(source, issuer, new_pubkey),
+            AttestationSetAttribute {
+                source,
+                subject,
+                key,
+                value,
+            } => attestation_set_attribute(source, subject, key, value),
+            AttestationSetFloorEpoch { source, epoch } => {
+                attestation_set_floor_epoch(source, epoch)
+            },
+            AttestationSuspend {
+                source,
+                subject,
+                reason,
+            } => attestation_suspend(source, subject, reason),
+            AttestationUndeny { source, subject } => attestation_undeny(source, subject),
+            AttestationUnpause { source } => attestation_unpause(source),
+            AttestationUnsuspend {
+                source,
+                subject,
+                reason,
+            } => attestation_unsuspend(source, subject, reason),
+            AttestationAuthorizationPruneNonces { policy, nonces } => {
+                attestation_authorization_prune_nonces(policy, nonces)
+            },
+            AttestationPolicyActivatePending { policy } => {
+                attestation_policy_activate_pending(policy)
+            },
+            AttestationPolicyAddAdmins { policy, new_admins } => {
+                attestation_policy_add_admins(policy, new_admins)
+            },
+            AttestationPolicyAddGuardians {
+                policy,
+                new_guardians,
+            } => attestation_policy_add_guardians(policy, new_guardians),
+            AttestationPolicyCancelPending { policy } => attestation_policy_cancel_pending(policy),
+            AttestationPolicyClearStepUp { policy, action } => {
+                attestation_policy_clear_step_up(policy, action)
+            },
+            AttestationPolicyCreate { admins, guardians } => {
+                attestation_policy_create(admins, guardians)
+            },
+            AttestationPolicyPause { policy } => attestation_policy_pause(policy),
+            AttestationPolicyRemoveAdmins { policy, old_admins } => {
+                attestation_policy_remove_admins(policy, old_admins)
+            },
+            AttestationPolicyRemoveGuardians {
+                policy,
+                old_guardians,
+            } => attestation_policy_remove_guardians(policy, old_guardians),
+            AttestationPolicySetAuthorizer {
+                policy,
+                pubkey,
+                max_ttl_secs,
+            } => attestation_policy_set_authorizer(policy, pubkey, max_ttl_secs),
+            AttestationPolicySetStepUp {
+                policy,
+                action,
+                threshold,
+            } => attestation_policy_set_step_up(policy, action, threshold),
+            AttestationPolicyStageAttrRules {
+                policy,
+                sources,
+                keys,
+                ops,
+                values,
+            } => attestation_policy_stage_attr_rules(policy, sources, keys, ops, values),
+            AttestationPolicyStageBody {
+                policy,
+                require_any_sources,
+                require_any_levels,
+                require_all_sources,
+                require_all_levels,
+                deny_any,
+                chain_deny,
+                effective_at_secs,
+            } => attestation_policy_stage_body(
+                policy,
+                require_any_sources,
+                require_any_levels,
+                require_all_sources,
+                require_all_levels,
+                deny_any,
+                chain_deny,
+                effective_at_secs,
+            ),
+            AttestationPolicyUnpause { policy } => attestation_policy_unpause(policy),
             CodePublishPackageTxn {
                 metadata_serialized,
                 code,
@@ -1656,6 +2276,9 @@ impl EntryFunctionCall {
             },
             DelegationPoolEnablePartialGovernanceVoting { pool_address } => {
                 delegation_pool_enable_partial_governance_voting(pool_address)
+            },
+            DelegationPoolEnablePartialGovernanceVotingIfNeeded { pool_address } => {
+                delegation_pool_enable_partial_governance_voting_if_needed(pool_address)
             },
             DelegationPoolEvictDelegator { delegator_address } => {
                 delegation_pool_evict_delegator(delegator_address)
@@ -2140,6 +2763,38 @@ impl EntryFunctionCall {
             } => vesting_update_voter(contract_address, new_voter),
             VestingVest { contract_address } => vesting_vest(contract_address),
             VestingVestMany { contract_addresses } => vesting_vest_many(contract_addresses),
+            ZktlsEnroll {
+                source,
+                template_id,
+                claim,
+                signatures,
+                attestor_epoch,
+                nullifier,
+            } => zktls_enroll(
+                source,
+                template_id,
+                claim,
+                signatures,
+                attestor_epoch,
+                nullifier,
+            ),
+            ZktlsInitialize { source } => zktls_initialize(source),
+            ZktlsRegisterTemplate {
+                source,
+                template_id,
+                grants_level,
+                ttl_secs,
+            } => zktls_register_template(source, template_id, grants_level, ttl_secs),
+            ZktlsRevokeTemplate {
+                source,
+                template_id,
+            } => zktls_revoke_template(source, template_id),
+            ZktlsSetAttestorSet {
+                source,
+                attestor_addresses,
+                required,
+                previous_grace_secs,
+            } => zktls_set_attestor_set(source, attestor_addresses, required, previous_grace_secs),
         }
     }
 
@@ -3235,6 +3890,1041 @@ pub fn atomic_bridge_initiator_refund_bridge_transfer(
     ))
 }
 
+/// Add admins.
+pub fn attestation_add_admins(
+    source: AccountAddress,
+    new_admins: Vec<AccountAddress>,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation").to_owned(),
+        ),
+        ident_str!("add_admins").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&source).unwrap(),
+            bcs::to_bytes(&new_admins).unwrap(),
+        ],
+    ))
+}
+
+pub fn attestation_add_guardians(
+    source: AccountAddress,
+    new_guardians: Vec<AccountAddress>,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation").to_owned(),
+        ),
+        ident_str!("add_guardians").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&source).unwrap(),
+            bcs::to_bytes(&new_guardians).unwrap(),
+        ],
+    ))
+}
+
+pub fn attestation_add_issuers(
+    source: AccountAddress,
+    new_issuers: Vec<AccountAddress>,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation").to_owned(),
+        ),
+        ident_str!("add_issuers").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&source).unwrap(),
+            bcs::to_bytes(&new_issuers).unwrap(),
+        ],
+    ))
+}
+
+pub fn attestation_add_removers(
+    source: AccountAddress,
+    new_removers: Vec<AccountAddress>,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation").to_owned(),
+        ),
+        ident_str!("add_removers").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&source).unwrap(),
+            bcs::to_bytes(&new_removers).unwrap(),
+        ],
+    ))
+}
+
+pub fn attestation_add_sentinels(
+    source: AccountAddress,
+    new_sentinels: Vec<AccountAddress>,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation").to_owned(),
+        ),
+        ident_str!("add_sentinels").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&source).unwrap(),
+            bcs::to_bytes(&new_sentinels).unwrap(),
+        ],
+    ))
+}
+
+/// Invalidate every fact an issuer has written, in one write. This is the remedy for a
+/// compromised issuer key and it is O(1) in the size of the cohort. Issuer id 0 bumps the
+/// zkTLS enrollment cohort, which has no registered issuer. The new epoch is one above the
+/// issuer's effective epoch, so a bump always takes effect even below a raised floor.
+pub fn attestation_bump_issuer_epoch(source: AccountAddress, issuer_id: u16) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation").to_owned(),
+        ),
+        ident_str!("bump_issuer_epoch").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&source).unwrap(),
+            bcs::to_bytes(&issuer_id).unwrap(),
+        ],
+    ))
+}
+
+/// Create a new attestation source. The deployer only authorizes resource-account creation and
+/// pays gas; it gains no role unless listed in the role arguments.
+///
+/// @param deployer Signer that authorizes resource-account creation and pays gas.
+/// @param admins Addresses allowed to configure. At least one, no duplicates, not the source.
+/// @param issuers Addresses allowed to write facts. May be empty and filled in later.
+/// @param sentinels Addresses allowed to add denials only. May be empty.
+/// @param removers Addresses allowed to remove denials only. May be empty.
+/// @param guardians Addresses allowed to pause writes. May be empty.
+/// @abort If a list has duplicates, names the source itself, or there is no admin.
+pub fn attestation_create(
+    admins: Vec<AccountAddress>,
+    issuers: Vec<AccountAddress>,
+    sentinels: Vec<AccountAddress>,
+    removers: Vec<AccountAddress>,
+    guardians: Vec<AccountAddress>,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation").to_owned(),
+        ),
+        ident_str!("create").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&admins).unwrap(),
+            bcs::to_bytes(&issuers).unwrap(),
+            bcs::to_bytes(&sentinels).unwrap(),
+            bcs::to_bytes(&removers).unwrap(),
+            bcs::to_bytes(&guardians).unwrap(),
+        ],
+    ))
+}
+
+/// Exclude a subject. Takes effect at `effective_at_secs`, which may be in the future so a
+/// denial can be announced before it bites.
+pub fn attestation_deny(
+    source: AccountAddress,
+    subject: AccountAddress,
+    reason: u16,
+    effective_at_secs: u64,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation").to_owned(),
+        ),
+        ident_str!("deny").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&source).unwrap(),
+            bcs::to_bytes(&subject).unwrap(),
+            bcs::to_bytes(&reason).unwrap(),
+            bcs::to_bytes(&effective_at_secs).unwrap(),
+        ],
+    ))
+}
+
+/// Exclude many subjects at once, with a shared reason and immediate effect.
+pub fn attestation_deny_batch(
+    source: AccountAddress,
+    subjects: Vec<AccountAddress>,
+    reason: u16,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation").to_owned(),
+        ),
+        ident_str!("deny_batch").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&source).unwrap(),
+            bcs::to_bytes(&subjects).unwrap(),
+            bcs::to_bytes(&reason).unwrap(),
+        ],
+    ))
+}
+
+/// Record or refresh facts for many subjects at once.
+///
+/// @param issuer A registered, active issuer of the source.
+/// @param source The source address.
+/// @param subjects Subjects to write.
+/// @param levels Tier per subject, same length as `subjects`.
+/// @param expires_at_secs Expiry per subject, same length as `subjects`.
+/// @param reason Reason code recorded in each subject's history.
+/// @abort If paused, the caller is not an issuer, the lengths differ, the batch is too large,
+///        or any subject is denied.
+pub fn attestation_issue_batch(
+    source: AccountAddress,
+    subjects: Vec<AccountAddress>,
+    levels: Vec<u8>,
+    expires_at_secs: Vec<u64>,
+    reason: u16,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation").to_owned(),
+        ),
+        ident_str!("issue_batch").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&source).unwrap(),
+            bcs::to_bytes(&subjects).unwrap(),
+            bcs::to_bytes(&levels).unwrap(),
+            bcs::to_bytes(&expires_at_secs).unwrap(),
+            bcs::to_bytes(&reason).unwrap(),
+        ],
+    ))
+}
+
+/// Pause writes. Never changes the answer `is_verified` gives.
+pub fn attestation_pause(source: AccountAddress) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation").to_owned(),
+        ),
+        ident_str!("pause").to_owned(),
+        vec![],
+        vec![bcs::to_bytes(&source).unwrap()],
+    ))
+}
+
+/// Publish a set commitment for the next epoch. Rotation invalidates outstanding proofs, so
+/// publish on a fixed low-frequency cadence: it is a privacy measure, because cohort timing
+/// leaks, and a throughput one, because every gated transaction reads this slot.
+pub fn attestation_publish_root(
+    source: AccountAddress,
+    digest: Vec<u8>,
+    leaf_count: u64,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation").to_owned(),
+        ),
+        ident_str!("publish_root").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&source).unwrap(),
+            bcs::to_bytes(&digest).unwrap(),
+            bcs::to_bytes(&leaf_count).unwrap(),
+        ],
+    ))
+}
+
+/// Record a fact from an attestation the issuer signed off chain. The caller need not be the
+/// subject or the issuer.
+///
+/// @param source The source address.
+/// @param subject Subject the attestation is about.
+/// @param issuer_id Issuer that signed.
+/// @param issuer_epoch Must equal the issuer's current epoch, so an attestation signed before
+///        a compromise bump is refused and one signed for a future epoch is too.
+/// @param nullifier 32 bytes binding one real-world identity to one subject, or empty to skip.
+/// @param signature 64-byte ed25519 signature over `attestation_message`.
+/// @abort If paused, the epoch is stale, the signature fails, a newer attestation is already
+///        recorded, the nullifier is bound elsewhere, or the subject is denied.
+pub fn attestation_redeem_attestation(
+    source: AccountAddress,
+    subject: AccountAddress,
+    issuer_id: u16,
+    issuer_epoch: u64,
+    level: u8,
+    expires_at_secs: u64,
+    issued_at_secs: u64,
+    nullifier: Vec<u8>,
+    signature: Vec<u8>,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation").to_owned(),
+        ),
+        ident_str!("redeem_attestation").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&source).unwrap(),
+            bcs::to_bytes(&subject).unwrap(),
+            bcs::to_bytes(&issuer_id).unwrap(),
+            bcs::to_bytes(&issuer_epoch).unwrap(),
+            bcs::to_bytes(&level).unwrap(),
+            bcs::to_bytes(&expires_at_secs).unwrap(),
+            bcs::to_bytes(&issued_at_secs).unwrap(),
+            bcs::to_bytes(&nullifier).unwrap(),
+            bcs::to_bytes(&signature).unwrap(),
+        ],
+    ))
+}
+
+/// Register an issuer and assign it a stable id. The public key is used only by the
+/// permissionless relay path, and may be empty for an issuer that only writes directly.
+///
+/// @param admin An admin of the source.
+/// @param source The source address.
+/// @param issuer Address to register.
+/// @param pubkey 32-byte ed25519 public key, or empty.
+/// @abort If the issuer is already registered or the key length is wrong.
+pub fn attestation_register_issuer(
+    source: AccountAddress,
+    issuer: AccountAddress,
+    pubkey: Vec<u8>,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation").to_owned(),
+        ),
+        ident_str!("register_issuer").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&source).unwrap(),
+            bcs::to_bytes(&issuer).unwrap(),
+            bcs::to_bytes(&pubkey).unwrap(),
+        ],
+    ))
+}
+
+/// Remove admins. A source may never be left with zero admins.
+pub fn attestation_remove_admins(
+    source: AccountAddress,
+    old_admins: Vec<AccountAddress>,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation").to_owned(),
+        ),
+        ident_str!("remove_admins").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&source).unwrap(),
+            bcs::to_bytes(&old_admins).unwrap(),
+        ],
+    ))
+}
+
+pub fn attestation_remove_attribute(
+    source: AccountAddress,
+    subject: AccountAddress,
+    key: u16,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation").to_owned(),
+        ),
+        ident_str!("remove_attribute").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&source).unwrap(),
+            bcs::to_bytes(&subject).unwrap(),
+            bcs::to_bytes(&key).unwrap(),
+        ],
+    ))
+}
+
+pub fn attestation_remove_guardians(
+    source: AccountAddress,
+    old_guardians: Vec<AccountAddress>,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation").to_owned(),
+        ),
+        ident_str!("remove_guardians").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&source).unwrap(),
+            bcs::to_bytes(&old_guardians).unwrap(),
+        ],
+    ))
+}
+
+pub fn attestation_remove_issuers(
+    source: AccountAddress,
+    old_issuers: Vec<AccountAddress>,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation").to_owned(),
+        ),
+        ident_str!("remove_issuers").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&source).unwrap(),
+            bcs::to_bytes(&old_issuers).unwrap(),
+        ],
+    ))
+}
+
+pub fn attestation_remove_removers(
+    source: AccountAddress,
+    old_removers: Vec<AccountAddress>,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation").to_owned(),
+        ),
+        ident_str!("remove_removers").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&source).unwrap(),
+            bcs::to_bytes(&old_removers).unwrap(),
+        ],
+    ))
+}
+
+pub fn attestation_remove_sentinels(
+    source: AccountAddress,
+    old_sentinels: Vec<AccountAddress>,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation").to_owned(),
+        ),
+        ident_str!("remove_sentinels").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&source).unwrap(),
+            bcs::to_bytes(&old_sentinels).unwrap(),
+        ],
+    ))
+}
+
+/// Move many subjects to STATE_REVOKED. A subject that is already revoked is skipped, so one
+/// stale entry cannot brick a batch.
+pub fn attestation_revoke_batch(
+    source: AccountAddress,
+    subjects: Vec<AccountAddress>,
+    reason: u16,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation").to_owned(),
+        ),
+        ident_str!("revoke_batch").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&source).unwrap(),
+            bcs::to_bytes(&subjects).unwrap(),
+            bcs::to_bytes(&reason).unwrap(),
+        ],
+    ))
+}
+
+/// Replace an issuer's signing key. Facts already written stay valid; use
+/// `bump_issuer_epoch` to invalidate them.
+pub fn attestation_rotate_issuer_key(
+    source: AccountAddress,
+    issuer: AccountAddress,
+    new_pubkey: Vec<u8>,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation").to_owned(),
+        ),
+        ident_str!("rotate_issuer_key").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&source).unwrap(),
+            bcs::to_bytes(&issuer).unwrap(),
+            bcs::to_bytes(&new_pubkey).unwrap(),
+        ],
+    ))
+}
+
+/// Set an attribute on a subject. Every attribute written is public forever, so a source that
+/// writes jurisdiction data has made a disclosure decision on behalf of its subjects.
+pub fn attestation_set_attribute(
+    source: AccountAddress,
+    subject: AccountAddress,
+    key: u16,
+    value: Vec<u8>,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation").to_owned(),
+        ),
+        ident_str!("set_attribute").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&source).unwrap(),
+            bcs::to_bytes(&subject).unwrap(),
+            bcs::to_bytes(&key).unwrap(),
+            bcs::to_bytes(&value).unwrap(),
+        ],
+    ))
+}
+
+/// Invalidate every fact written below the given epoch, across all issuers including the zkTLS
+/// cohort. Strictly increasing, so lowering the floor can never resurrect a fact.
+pub fn attestation_set_floor_epoch(source: AccountAddress, epoch: u64) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation").to_owned(),
+        ),
+        ident_str!("set_floor_epoch").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&source).unwrap(),
+            bcs::to_bytes(&epoch).unwrap(),
+        ],
+    ))
+}
+
+/// Temporarily withhold an active subject's fact, reversibly.
+pub fn attestation_suspend(
+    source: AccountAddress,
+    subject: AccountAddress,
+    reason: u16,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation").to_owned(),
+        ),
+        ident_str!("suspend").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&source).unwrap(),
+            bcs::to_bytes(&subject).unwrap(),
+            bcs::to_bytes(&reason).unwrap(),
+        ],
+    ))
+}
+
+/// Remove an exclusion. Deliberately a different role from `deny`.
+pub fn attestation_undeny(source: AccountAddress, subject: AccountAddress) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation").to_owned(),
+        ),
+        ident_str!("undeny").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&source).unwrap(),
+            bcs::to_bytes(&subject).unwrap(),
+        ],
+    ))
+}
+
+pub fn attestation_unpause(source: AccountAddress) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation").to_owned(),
+        ),
+        ident_str!("unpause").to_owned(),
+        vec![],
+        vec![bcs::to_bytes(&source).unwrap()],
+    ))
+}
+
+/// Reverse a suspension. Only a suspended record can be reactivated: a revoked one needs
+/// re-issuance, and a denied subject cannot be reactivated at all. The record keeps the issuer
+/// and epoch it was issued under, so a fact killed by an epoch bump stays dead.
+pub fn attestation_unsuspend(
+    source: AccountAddress,
+    subject: AccountAddress,
+    reason: u16,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation").to_owned(),
+        ),
+        ident_str!("unsuspend").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&source).unwrap(),
+            bcs::to_bytes(&subject).unwrap(),
+            bcs::to_bytes(&reason).unwrap(),
+        ],
+    ))
+}
+
+/// Release the storage held by nonces that can no longer be replayed. Permissionless, because
+/// it is pure cleanup and nobody has a reason to withhold it other than the fee, which is the
+/// caller's to pay.
+pub fn attestation_authorization_prune_nonces(
+    policy: AccountAddress,
+    nonces: Vec<Vec<u8>>,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation_authorization").to_owned(),
+        ),
+        ident_str!("prune_nonces").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&policy).unwrap(),
+            bcs::to_bytes(&nonces).unwrap(),
+        ],
+    ))
+}
+
+/// Push the staged body live. Permissionless once its time has arrived, so the business does
+/// not have to be online at the moment its own rule change takes effect.
+pub fn attestation_policy_activate_pending(policy: AccountAddress) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation_policy").to_owned(),
+        ),
+        ident_str!("activate_pending").to_owned(),
+        vec![],
+        vec![bcs::to_bytes(&policy).unwrap()],
+    ))
+}
+
+pub fn attestation_policy_add_admins(
+    policy: AccountAddress,
+    new_admins: Vec<AccountAddress>,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation_policy").to_owned(),
+        ),
+        ident_str!("add_admins").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&policy).unwrap(),
+            bcs::to_bytes(&new_admins).unwrap(),
+        ],
+    ))
+}
+
+pub fn attestation_policy_add_guardians(
+    policy: AccountAddress,
+    new_guardians: Vec<AccountAddress>,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation_policy").to_owned(),
+        ),
+        ident_str!("add_guardians").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&policy).unwrap(),
+            bcs::to_bytes(&new_guardians).unwrap(),
+        ],
+    ))
+}
+
+/// Discard a staged body that has not activated yet.
+pub fn attestation_policy_cancel_pending(policy: AccountAddress) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation_policy").to_owned(),
+        ),
+        ident_str!("cancel_pending").to_owned(),
+        vec![],
+        vec![bcs::to_bytes(&policy).unwrap()],
+    ))
+}
+
+/// Stop demanding authorization for an action.
+pub fn attestation_policy_clear_step_up(policy: AccountAddress, action: u8) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation_policy").to_owned(),
+        ),
+        ident_str!("clear_step_up").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&policy).unwrap(),
+            bcs::to_bytes(&action).unwrap(),
+        ],
+    ))
+}
+
+/// Create a new policy. The deployer only authorizes resource-account creation and pays gas;
+/// it gains no role unless listed. The body starts empty, which denies everything until rules
+/// are staged and activated.
+///
+/// @param deployer Signer that authorizes resource-account creation and pays gas.
+/// @param admins Addresses allowed to stage rules. At least one, no duplicates.
+/// @param guardians Addresses allowed to pause evaluation. May be empty.
+/// @abort If a list has duplicates, names the policy itself, or there is no admin.
+pub fn attestation_policy_create(
+    admins: Vec<AccountAddress>,
+    guardians: Vec<AccountAddress>,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation_policy").to_owned(),
+        ),
+        ident_str!("create").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&admins).unwrap(),
+            bcs::to_bytes(&guardians).unwrap(),
+        ],
+    ))
+}
+
+/// Deny everything until unpaused. Denies loudly with REASON_POLICY_PAUSED rather than
+/// silently allowing.
+pub fn attestation_policy_pause(policy: AccountAddress) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation_policy").to_owned(),
+        ),
+        ident_str!("pause").to_owned(),
+        vec![],
+        vec![bcs::to_bytes(&policy).unwrap()],
+    ))
+}
+
+pub fn attestation_policy_remove_admins(
+    policy: AccountAddress,
+    old_admins: Vec<AccountAddress>,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation_policy").to_owned(),
+        ),
+        ident_str!("remove_admins").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&policy).unwrap(),
+            bcs::to_bytes(&old_admins).unwrap(),
+        ],
+    ))
+}
+
+pub fn attestation_policy_remove_guardians(
+    policy: AccountAddress,
+    old_guardians: Vec<AccountAddress>,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation_policy").to_owned(),
+        ),
+        ident_str!("remove_guardians").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&policy).unwrap(),
+            bcs::to_bytes(&old_guardians).unwrap(),
+        ],
+    ))
+}
+
+/// Set the key that signs authorizations for this policy, and the longest window it may
+/// issue. A window of 0 with an empty key disables the step-up path entirely.
+pub fn attestation_policy_set_authorizer(
+    policy: AccountAddress,
+    pubkey: Vec<u8>,
+    max_ttl_secs: u64,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation_policy").to_owned(),
+        ),
+        ident_str!("set_authorizer").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&policy).unwrap(),
+            bcs::to_bytes(&pubkey).unwrap(),
+            bcs::to_bytes(&max_ttl_secs).unwrap(),
+        ],
+    ))
+}
+
+/// Set the amount above which an action needs a fresh authorization. Absent by default, so a
+/// liveness dependency is never enabled by accident.
+pub fn attestation_policy_set_step_up(
+    policy: AccountAddress,
+    action: u8,
+    threshold: u64,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation_policy").to_owned(),
+        ),
+        ident_str!("set_step_up").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&policy).unwrap(),
+            bcs::to_bytes(&action).unwrap(),
+            bcs::to_bytes(&threshold).unwrap(),
+        ],
+    ))
+}
+
+/// Stage attribute predicates onto the pending body. Call `stage_body` first.
+///
+/// @param sources Source whose attribute each predicate reads.
+/// @param keys Attribute key per predicate.
+/// @param ops One of OP_IN, OP_NOT_IN, OP_EQ, OP_GTE.
+/// @param values Candidate values per predicate. OP_EQ and OP_GTE take exactly one.
+pub fn attestation_policy_stage_attr_rules(
+    policy: AccountAddress,
+    sources: Vec<AccountAddress>,
+    keys: Vec<u16>,
+    ops: Vec<u8>,
+    values: Vec<Vec<Vec<u8>>>,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation_policy").to_owned(),
+        ),
+        ident_str!("stage_attr_rules").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&policy).unwrap(),
+            bcs::to_bytes(&sources).unwrap(),
+            bcs::to_bytes(&keys).unwrap(),
+            bcs::to_bytes(&ops).unwrap(),
+            bcs::to_bytes(&values).unwrap(),
+        ],
+    ))
+}
+
+/// Stage a new body, to take effect at `effective_at_secs`. Staging rather than applying
+/// immediately is what keeps a rule change from breaking a transaction already in flight.
+///
+/// @param admin An admin of the policy.
+/// @param policy The policy address.
+/// @param require_any_sources Sources of which at least one must vouch. May be empty.
+/// @param require_any_levels Minimum level per entry, same length as require_any_sources.
+/// @param require_all_sources Sources that must all vouch. May be empty.
+/// @param require_all_levels Minimum level per entry, same length as require_all_sources.
+/// @param deny_any Sources whose denial denies. May be empty.
+/// @param chain_deny Optional chain-wide denial source: empty for none, or exactly one address.
+///   A vector rather than an `Option` because entry functions cannot take `Option` arguments.
+/// @param effective_at_secs When the body becomes active.
+/// @abort If the lengths differ, a list is over MAX_SOURCES, chain_deny names more than one
+///   source, or a named source does not exist.
+pub fn attestation_policy_stage_body(
+    policy: AccountAddress,
+    require_any_sources: Vec<AccountAddress>,
+    require_any_levels: Vec<u8>,
+    require_all_sources: Vec<AccountAddress>,
+    require_all_levels: Vec<u8>,
+    deny_any: Vec<AccountAddress>,
+    chain_deny: Vec<AccountAddress>,
+    effective_at_secs: u64,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation_policy").to_owned(),
+        ),
+        ident_str!("stage_body").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&policy).unwrap(),
+            bcs::to_bytes(&require_any_sources).unwrap(),
+            bcs::to_bytes(&require_any_levels).unwrap(),
+            bcs::to_bytes(&require_all_sources).unwrap(),
+            bcs::to_bytes(&require_all_levels).unwrap(),
+            bcs::to_bytes(&deny_any).unwrap(),
+            bcs::to_bytes(&chain_deny).unwrap(),
+            bcs::to_bytes(&effective_at_secs).unwrap(),
+        ],
+    ))
+}
+
+pub fn attestation_policy_unpause(policy: AccountAddress) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("attestation_policy").to_owned(),
+        ),
+        ident_str!("unpause").to_owned(),
+        vec![],
+        vec![bcs::to_bytes(&policy).unwrap()],
+    ))
+}
+
 /// Same as `publish_package` but as an entry function which can be called as a transaction. Because
 /// of current restrictions for txn parameters, the metadata needs to be passed in serialized form.
 pub fn code_publish_package_txn(
@@ -3493,6 +5183,25 @@ pub fn delegation_pool_enable_partial_governance_voting(
             ident_str!("delegation_pool").to_owned(),
         ),
         ident_str!("enable_partial_governance_voting").to_owned(),
+        vec![],
+        vec![bcs::to_bytes(&pool_address).unwrap()],
+    ))
+}
+
+/// Enable partial governance voting on a delegation pool if it has not already been initialized.
+/// This is intended for idempotent migration scripts over existing delegation pools.
+pub fn delegation_pool_enable_partial_governance_voting_if_needed(
+    pool_address: AccountAddress,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("delegation_pool").to_owned(),
+        ),
+        ident_str!("enable_partial_governance_voting_if_needed").to_owned(),
         vec![],
         vec![bcs::to_bytes(&pool_address).unwrap()],
     ))
@@ -5965,6 +7674,148 @@ pub fn vesting_vest_many(contract_addresses: Vec<AccountAddress>) -> Transaction
         vec![bcs::to_bytes(&contract_addresses).unwrap()],
     ))
 }
+
+/// Submit a verified claim about yourself. No issuer key is involved on this path: the trust
+/// root is the attestor set plus the provider's TLS certificate, not an operator holding a key.
+///
+/// @param user The subject. Must be the address the claim names.
+/// @param source The source to record the fact in.
+/// @param template_id Registered, active template the claim was produced under.
+/// @param claim Canonically serialized claim. Must contain the subject and the template id.
+/// @param signatures One 65-byte recoverable ECDSA signature per attestor.
+/// @param attestor_epoch Epoch whose attestor set signed.
+/// @param nullifier 32 bytes binding one identity to one subject, or empty to skip. When set,
+///        its lowercase hex must appear in the signed claim, so the attestors vouch for it.
+/// @abort If the claim does not bind the subject (or the nullifier), a signer is unknown or
+///        repeated, the attestor epoch is retired, the template is revoked, the claim was
+///        already used, or fewer than the threshold signed.
+pub fn zktls_enroll(
+    source: AccountAddress,
+    template_id: Vec<u8>,
+    claim: Vec<u8>,
+    signatures: Vec<Vec<u8>>,
+    attestor_epoch: u64,
+    nullifier: Vec<u8>,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("zktls").to_owned(),
+        ),
+        ident_str!("enroll").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&source).unwrap(),
+            bcs::to_bytes(&template_id).unwrap(),
+            bcs::to_bytes(&claim).unwrap(),
+            bcs::to_bytes(&signatures).unwrap(),
+            bcs::to_bytes(&attestor_epoch).unwrap(),
+            bcs::to_bytes(&nullifier).unwrap(),
+        ],
+    ))
+}
+
+/// Create the verifier for a source. Requires an admin of that source, and obtains the
+/// source's resource-account signer through `attestation`'s friend accessor.
+pub fn zktls_initialize(source: AccountAddress) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("zktls").to_owned(),
+        ),
+        ident_str!("initialize").to_owned(),
+        vec![],
+        vec![bcs::to_bytes(&source).unwrap()],
+    ))
+}
+
+/// Allow a provider template and say what a claim under it grants.
+pub fn zktls_register_template(
+    source: AccountAddress,
+    template_id: Vec<u8>,
+    grants_level: u8,
+    ttl_secs: u64,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("zktls").to_owned(),
+        ),
+        ident_str!("register_template").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&source).unwrap(),
+            bcs::to_bytes(&template_id).unwrap(),
+            bcs::to_bytes(&grants_level).unwrap(),
+            bcs::to_bytes(&ttl_secs).unwrap(),
+        ],
+    ))
+}
+
+/// Stop accepting new claims under a template. Facts already recorded are untouched; use
+/// `attestation::bump_issuer_epoch` with issuer id 0, which invalidates every zkTLS
+/// enrollment in the source, or a denial per subject for those.
+pub fn zktls_revoke_template(source: AccountAddress, template_id: Vec<u8>) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("zktls").to_owned(),
+        ),
+        ident_str!("revoke_template").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&source).unwrap(),
+            bcs::to_bytes(&template_id).unwrap(),
+        ],
+    ))
+}
+
+/// Register a new attestor set under the next epoch. The set it replaces keeps verifying for
+/// `previous_grace_secs`, so a claim signed moments before the rotation still verifies; every
+/// older set stops verifying immediately. Rotating away a compromised set with a zero grace
+/// window cuts it off at once.
+///
+/// @param admin An admin of the source.
+/// @param source The source address.
+/// @param attestor_addresses 20-byte Ethereum-style addresses, no duplicates.
+/// @param required How many distinct attestors must sign. At least 1, at most the count.
+/// @param previous_grace_secs How long the replaced set keeps verifying. 0 for no grace.
+pub fn zktls_set_attestor_set(
+    source: AccountAddress,
+    attestor_addresses: Vec<Vec<u8>>,
+    required: u64,
+    previous_grace_secs: u64,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("zktls").to_owned(),
+        ),
+        ident_str!("set_attestor_set").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&source).unwrap(),
+            bcs::to_bytes(&attestor_addresses).unwrap(),
+            bcs::to_bytes(&required).unwrap(),
+            bcs::to_bytes(&previous_grace_secs).unwrap(),
+        ],
+    ))
+}
 mod decoder {
     use super::*;
     pub fn account_offer_rotation_capability(
@@ -6558,6 +8409,539 @@ mod decoder {
         }
     }
 
+    pub fn attestation_add_admins(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationAddAdmins {
+                source: bcs::from_bytes(script.args().get(0)?).ok()?,
+                new_admins: bcs::from_bytes(script.args().get(1)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_add_guardians(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationAddGuardians {
+                source: bcs::from_bytes(script.args().get(0)?).ok()?,
+                new_guardians: bcs::from_bytes(script.args().get(1)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_add_issuers(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationAddIssuers {
+                source: bcs::from_bytes(script.args().get(0)?).ok()?,
+                new_issuers: bcs::from_bytes(script.args().get(1)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_add_removers(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationAddRemovers {
+                source: bcs::from_bytes(script.args().get(0)?).ok()?,
+                new_removers: bcs::from_bytes(script.args().get(1)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_add_sentinels(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationAddSentinels {
+                source: bcs::from_bytes(script.args().get(0)?).ok()?,
+                new_sentinels: bcs::from_bytes(script.args().get(1)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_bump_issuer_epoch(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationBumpIssuerEpoch {
+                source: bcs::from_bytes(script.args().get(0)?).ok()?,
+                issuer_id: bcs::from_bytes(script.args().get(1)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_create(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationCreate {
+                admins: bcs::from_bytes(script.args().get(0)?).ok()?,
+                issuers: bcs::from_bytes(script.args().get(1)?).ok()?,
+                sentinels: bcs::from_bytes(script.args().get(2)?).ok()?,
+                removers: bcs::from_bytes(script.args().get(3)?).ok()?,
+                guardians: bcs::from_bytes(script.args().get(4)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_deny(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationDeny {
+                source: bcs::from_bytes(script.args().get(0)?).ok()?,
+                subject: bcs::from_bytes(script.args().get(1)?).ok()?,
+                reason: bcs::from_bytes(script.args().get(2)?).ok()?,
+                effective_at_secs: bcs::from_bytes(script.args().get(3)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_deny_batch(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationDenyBatch {
+                source: bcs::from_bytes(script.args().get(0)?).ok()?,
+                subjects: bcs::from_bytes(script.args().get(1)?).ok()?,
+                reason: bcs::from_bytes(script.args().get(2)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_issue_batch(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationIssueBatch {
+                source: bcs::from_bytes(script.args().get(0)?).ok()?,
+                subjects: bcs::from_bytes(script.args().get(1)?).ok()?,
+                levels: bcs::from_bytes(script.args().get(2)?).ok()?,
+                expires_at_secs: bcs::from_bytes(script.args().get(3)?).ok()?,
+                reason: bcs::from_bytes(script.args().get(4)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_pause(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationPause {
+                source: bcs::from_bytes(script.args().get(0)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_publish_root(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationPublishRoot {
+                source: bcs::from_bytes(script.args().get(0)?).ok()?,
+                digest: bcs::from_bytes(script.args().get(1)?).ok()?,
+                leaf_count: bcs::from_bytes(script.args().get(2)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_redeem_attestation(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationRedeemAttestation {
+                source: bcs::from_bytes(script.args().get(0)?).ok()?,
+                subject: bcs::from_bytes(script.args().get(1)?).ok()?,
+                issuer_id: bcs::from_bytes(script.args().get(2)?).ok()?,
+                issuer_epoch: bcs::from_bytes(script.args().get(3)?).ok()?,
+                level: bcs::from_bytes(script.args().get(4)?).ok()?,
+                expires_at_secs: bcs::from_bytes(script.args().get(5)?).ok()?,
+                issued_at_secs: bcs::from_bytes(script.args().get(6)?).ok()?,
+                nullifier: bcs::from_bytes(script.args().get(7)?).ok()?,
+                signature: bcs::from_bytes(script.args().get(8)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_register_issuer(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationRegisterIssuer {
+                source: bcs::from_bytes(script.args().get(0)?).ok()?,
+                issuer: bcs::from_bytes(script.args().get(1)?).ok()?,
+                pubkey: bcs::from_bytes(script.args().get(2)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_remove_admins(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationRemoveAdmins {
+                source: bcs::from_bytes(script.args().get(0)?).ok()?,
+                old_admins: bcs::from_bytes(script.args().get(1)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_remove_attribute(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationRemoveAttribute {
+                source: bcs::from_bytes(script.args().get(0)?).ok()?,
+                subject: bcs::from_bytes(script.args().get(1)?).ok()?,
+                key: bcs::from_bytes(script.args().get(2)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_remove_guardians(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationRemoveGuardians {
+                source: bcs::from_bytes(script.args().get(0)?).ok()?,
+                old_guardians: bcs::from_bytes(script.args().get(1)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_remove_issuers(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationRemoveIssuers {
+                source: bcs::from_bytes(script.args().get(0)?).ok()?,
+                old_issuers: bcs::from_bytes(script.args().get(1)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_remove_removers(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationRemoveRemovers {
+                source: bcs::from_bytes(script.args().get(0)?).ok()?,
+                old_removers: bcs::from_bytes(script.args().get(1)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_remove_sentinels(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationRemoveSentinels {
+                source: bcs::from_bytes(script.args().get(0)?).ok()?,
+                old_sentinels: bcs::from_bytes(script.args().get(1)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_revoke_batch(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationRevokeBatch {
+                source: bcs::from_bytes(script.args().get(0)?).ok()?,
+                subjects: bcs::from_bytes(script.args().get(1)?).ok()?,
+                reason: bcs::from_bytes(script.args().get(2)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_rotate_issuer_key(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationRotateIssuerKey {
+                source: bcs::from_bytes(script.args().get(0)?).ok()?,
+                issuer: bcs::from_bytes(script.args().get(1)?).ok()?,
+                new_pubkey: bcs::from_bytes(script.args().get(2)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_set_attribute(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationSetAttribute {
+                source: bcs::from_bytes(script.args().get(0)?).ok()?,
+                subject: bcs::from_bytes(script.args().get(1)?).ok()?,
+                key: bcs::from_bytes(script.args().get(2)?).ok()?,
+                value: bcs::from_bytes(script.args().get(3)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_set_floor_epoch(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationSetFloorEpoch {
+                source: bcs::from_bytes(script.args().get(0)?).ok()?,
+                epoch: bcs::from_bytes(script.args().get(1)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_suspend(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationSuspend {
+                source: bcs::from_bytes(script.args().get(0)?).ok()?,
+                subject: bcs::from_bytes(script.args().get(1)?).ok()?,
+                reason: bcs::from_bytes(script.args().get(2)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_undeny(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationUndeny {
+                source: bcs::from_bytes(script.args().get(0)?).ok()?,
+                subject: bcs::from_bytes(script.args().get(1)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_unpause(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationUnpause {
+                source: bcs::from_bytes(script.args().get(0)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_unsuspend(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationUnsuspend {
+                source: bcs::from_bytes(script.args().get(0)?).ok()?,
+                subject: bcs::from_bytes(script.args().get(1)?).ok()?,
+                reason: bcs::from_bytes(script.args().get(2)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_authorization_prune_nonces(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationAuthorizationPruneNonces {
+                policy: bcs::from_bytes(script.args().get(0)?).ok()?,
+                nonces: bcs::from_bytes(script.args().get(1)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_policy_activate_pending(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationPolicyActivatePending {
+                policy: bcs::from_bytes(script.args().get(0)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_policy_add_admins(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationPolicyAddAdmins {
+                policy: bcs::from_bytes(script.args().get(0)?).ok()?,
+                new_admins: bcs::from_bytes(script.args().get(1)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_policy_add_guardians(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationPolicyAddGuardians {
+                policy: bcs::from_bytes(script.args().get(0)?).ok()?,
+                new_guardians: bcs::from_bytes(script.args().get(1)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_policy_cancel_pending(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationPolicyCancelPending {
+                policy: bcs::from_bytes(script.args().get(0)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_policy_clear_step_up(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationPolicyClearStepUp {
+                policy: bcs::from_bytes(script.args().get(0)?).ok()?,
+                action: bcs::from_bytes(script.args().get(1)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_policy_create(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationPolicyCreate {
+                admins: bcs::from_bytes(script.args().get(0)?).ok()?,
+                guardians: bcs::from_bytes(script.args().get(1)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_policy_pause(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationPolicyPause {
+                policy: bcs::from_bytes(script.args().get(0)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_policy_remove_admins(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationPolicyRemoveAdmins {
+                policy: bcs::from_bytes(script.args().get(0)?).ok()?,
+                old_admins: bcs::from_bytes(script.args().get(1)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_policy_remove_guardians(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationPolicyRemoveGuardians {
+                policy: bcs::from_bytes(script.args().get(0)?).ok()?,
+                old_guardians: bcs::from_bytes(script.args().get(1)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_policy_set_authorizer(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationPolicySetAuthorizer {
+                policy: bcs::from_bytes(script.args().get(0)?).ok()?,
+                pubkey: bcs::from_bytes(script.args().get(1)?).ok()?,
+                max_ttl_secs: bcs::from_bytes(script.args().get(2)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_policy_set_step_up(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationPolicySetStepUp {
+                policy: bcs::from_bytes(script.args().get(0)?).ok()?,
+                action: bcs::from_bytes(script.args().get(1)?).ok()?,
+                threshold: bcs::from_bytes(script.args().get(2)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_policy_stage_attr_rules(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationPolicyStageAttrRules {
+                policy: bcs::from_bytes(script.args().get(0)?).ok()?,
+                sources: bcs::from_bytes(script.args().get(1)?).ok()?,
+                keys: bcs::from_bytes(script.args().get(2)?).ok()?,
+                ops: bcs::from_bytes(script.args().get(3)?).ok()?,
+                values: bcs::from_bytes(script.args().get(4)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_policy_stage_body(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationPolicyStageBody {
+                policy: bcs::from_bytes(script.args().get(0)?).ok()?,
+                require_any_sources: bcs::from_bytes(script.args().get(1)?).ok()?,
+                require_any_levels: bcs::from_bytes(script.args().get(2)?).ok()?,
+                require_all_sources: bcs::from_bytes(script.args().get(3)?).ok()?,
+                require_all_levels: bcs::from_bytes(script.args().get(4)?).ok()?,
+                deny_any: bcs::from_bytes(script.args().get(5)?).ok()?,
+                chain_deny: bcs::from_bytes(script.args().get(6)?).ok()?,
+                effective_at_secs: bcs::from_bytes(script.args().get(7)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn attestation_policy_unpause(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::AttestationPolicyUnpause {
+                policy: bcs::from_bytes(script.args().get(0)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
     pub fn code_publish_package_txn(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
         if let TransactionPayload::EntryFunction(script) = payload {
             Some(EntryFunctionCall::CodePublishPackageTxn {
@@ -6714,6 +9098,20 @@ mod decoder {
         if let TransactionPayload::EntryFunction(script) = payload {
             Some(
                 EntryFunctionCall::DelegationPoolEnablePartialGovernanceVoting {
+                    pool_address: bcs::from_bytes(script.args().get(0)?).ok()?,
+                },
+            )
+        } else {
+            None
+        }
+    }
+
+    pub fn delegation_pool_enable_partial_governance_voting_if_needed(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(
+                EntryFunctionCall::DelegationPoolEnablePartialGovernanceVotingIfNeeded {
                     pool_address: bcs::from_bytes(script.args().get(0)?).ok()?,
                 },
             )
@@ -8140,6 +10538,68 @@ mod decoder {
             None
         }
     }
+
+    pub fn zktls_enroll(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::ZktlsEnroll {
+                source: bcs::from_bytes(script.args().get(0)?).ok()?,
+                template_id: bcs::from_bytes(script.args().get(1)?).ok()?,
+                claim: bcs::from_bytes(script.args().get(2)?).ok()?,
+                signatures: bcs::from_bytes(script.args().get(3)?).ok()?,
+                attestor_epoch: bcs::from_bytes(script.args().get(4)?).ok()?,
+                nullifier: bcs::from_bytes(script.args().get(5)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn zktls_initialize(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::ZktlsInitialize {
+                source: bcs::from_bytes(script.args().get(0)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn zktls_register_template(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::ZktlsRegisterTemplate {
+                source: bcs::from_bytes(script.args().get(0)?).ok()?,
+                template_id: bcs::from_bytes(script.args().get(1)?).ok()?,
+                grants_level: bcs::from_bytes(script.args().get(2)?).ok()?,
+                ttl_secs: bcs::from_bytes(script.args().get(3)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn zktls_revoke_template(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::ZktlsRevokeTemplate {
+                source: bcs::from_bytes(script.args().get(0)?).ok()?,
+                template_id: bcs::from_bytes(script.args().get(1)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn zktls_set_attestor_set(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::ZktlsSetAttestorSet {
+                source: bcs::from_bytes(script.args().get(0)?).ok()?,
+                attestor_addresses: bcs::from_bytes(script.args().get(1)?).ok()?,
+                required: bcs::from_bytes(script.args().get(2)?).ok()?,
+                previous_grace_secs: bcs::from_bytes(script.args().get(3)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
 }
 
 type EntryFunctionDecoderMap = std::collections::HashMap<
@@ -8335,6 +10795,178 @@ static SCRIPT_FUNCTION_DECODER_MAP: once_cell::sync::Lazy<EntryFunctionDecoderMa
             Box::new(decoder::atomic_bridge_initiator_refund_bridge_transfer),
         );
         map.insert(
+            "attestation_add_admins".to_string(),
+            Box::new(decoder::attestation_add_admins),
+        );
+        map.insert(
+            "attestation_add_guardians".to_string(),
+            Box::new(decoder::attestation_add_guardians),
+        );
+        map.insert(
+            "attestation_add_issuers".to_string(),
+            Box::new(decoder::attestation_add_issuers),
+        );
+        map.insert(
+            "attestation_add_removers".to_string(),
+            Box::new(decoder::attestation_add_removers),
+        );
+        map.insert(
+            "attestation_add_sentinels".to_string(),
+            Box::new(decoder::attestation_add_sentinels),
+        );
+        map.insert(
+            "attestation_bump_issuer_epoch".to_string(),
+            Box::new(decoder::attestation_bump_issuer_epoch),
+        );
+        map.insert(
+            "attestation_create".to_string(),
+            Box::new(decoder::attestation_create),
+        );
+        map.insert(
+            "attestation_deny".to_string(),
+            Box::new(decoder::attestation_deny),
+        );
+        map.insert(
+            "attestation_deny_batch".to_string(),
+            Box::new(decoder::attestation_deny_batch),
+        );
+        map.insert(
+            "attestation_issue_batch".to_string(),
+            Box::new(decoder::attestation_issue_batch),
+        );
+        map.insert(
+            "attestation_pause".to_string(),
+            Box::new(decoder::attestation_pause),
+        );
+        map.insert(
+            "attestation_publish_root".to_string(),
+            Box::new(decoder::attestation_publish_root),
+        );
+        map.insert(
+            "attestation_redeem_attestation".to_string(),
+            Box::new(decoder::attestation_redeem_attestation),
+        );
+        map.insert(
+            "attestation_register_issuer".to_string(),
+            Box::new(decoder::attestation_register_issuer),
+        );
+        map.insert(
+            "attestation_remove_admins".to_string(),
+            Box::new(decoder::attestation_remove_admins),
+        );
+        map.insert(
+            "attestation_remove_attribute".to_string(),
+            Box::new(decoder::attestation_remove_attribute),
+        );
+        map.insert(
+            "attestation_remove_guardians".to_string(),
+            Box::new(decoder::attestation_remove_guardians),
+        );
+        map.insert(
+            "attestation_remove_issuers".to_string(),
+            Box::new(decoder::attestation_remove_issuers),
+        );
+        map.insert(
+            "attestation_remove_removers".to_string(),
+            Box::new(decoder::attestation_remove_removers),
+        );
+        map.insert(
+            "attestation_remove_sentinels".to_string(),
+            Box::new(decoder::attestation_remove_sentinels),
+        );
+        map.insert(
+            "attestation_revoke_batch".to_string(),
+            Box::new(decoder::attestation_revoke_batch),
+        );
+        map.insert(
+            "attestation_rotate_issuer_key".to_string(),
+            Box::new(decoder::attestation_rotate_issuer_key),
+        );
+        map.insert(
+            "attestation_set_attribute".to_string(),
+            Box::new(decoder::attestation_set_attribute),
+        );
+        map.insert(
+            "attestation_set_floor_epoch".to_string(),
+            Box::new(decoder::attestation_set_floor_epoch),
+        );
+        map.insert(
+            "attestation_suspend".to_string(),
+            Box::new(decoder::attestation_suspend),
+        );
+        map.insert(
+            "attestation_undeny".to_string(),
+            Box::new(decoder::attestation_undeny),
+        );
+        map.insert(
+            "attestation_unpause".to_string(),
+            Box::new(decoder::attestation_unpause),
+        );
+        map.insert(
+            "attestation_unsuspend".to_string(),
+            Box::new(decoder::attestation_unsuspend),
+        );
+        map.insert(
+            "attestation_authorization_prune_nonces".to_string(),
+            Box::new(decoder::attestation_authorization_prune_nonces),
+        );
+        map.insert(
+            "attestation_policy_activate_pending".to_string(),
+            Box::new(decoder::attestation_policy_activate_pending),
+        );
+        map.insert(
+            "attestation_policy_add_admins".to_string(),
+            Box::new(decoder::attestation_policy_add_admins),
+        );
+        map.insert(
+            "attestation_policy_add_guardians".to_string(),
+            Box::new(decoder::attestation_policy_add_guardians),
+        );
+        map.insert(
+            "attestation_policy_cancel_pending".to_string(),
+            Box::new(decoder::attestation_policy_cancel_pending),
+        );
+        map.insert(
+            "attestation_policy_clear_step_up".to_string(),
+            Box::new(decoder::attestation_policy_clear_step_up),
+        );
+        map.insert(
+            "attestation_policy_create".to_string(),
+            Box::new(decoder::attestation_policy_create),
+        );
+        map.insert(
+            "attestation_policy_pause".to_string(),
+            Box::new(decoder::attestation_policy_pause),
+        );
+        map.insert(
+            "attestation_policy_remove_admins".to_string(),
+            Box::new(decoder::attestation_policy_remove_admins),
+        );
+        map.insert(
+            "attestation_policy_remove_guardians".to_string(),
+            Box::new(decoder::attestation_policy_remove_guardians),
+        );
+        map.insert(
+            "attestation_policy_set_authorizer".to_string(),
+            Box::new(decoder::attestation_policy_set_authorizer),
+        );
+        map.insert(
+            "attestation_policy_set_step_up".to_string(),
+            Box::new(decoder::attestation_policy_set_step_up),
+        );
+        map.insert(
+            "attestation_policy_stage_attr_rules".to_string(),
+            Box::new(decoder::attestation_policy_stage_attr_rules),
+        );
+        map.insert(
+            "attestation_policy_stage_body".to_string(),
+            Box::new(decoder::attestation_policy_stage_body),
+        );
+        map.insert(
+            "attestation_policy_unpause".to_string(),
+            Box::new(decoder::attestation_policy_unpause),
+        );
+        map.insert(
             "code_publish_package_txn".to_string(),
             Box::new(decoder::code_publish_package_txn),
         );
@@ -8389,6 +11021,10 @@ static SCRIPT_FUNCTION_DECODER_MAP: once_cell::sync::Lazy<EntryFunctionDecoderMa
         map.insert(
             "delegation_pool_enable_partial_governance_voting".to_string(),
             Box::new(decoder::delegation_pool_enable_partial_governance_voting),
+        );
+        map.insert(
+            "delegation_pool_enable_partial_governance_voting_if_needed".to_string(),
+            Box::new(decoder::delegation_pool_enable_partial_governance_voting_if_needed),
         );
         map.insert(
             "delegation_pool_evict_delegator".to_string(),
@@ -8841,6 +11477,23 @@ static SCRIPT_FUNCTION_DECODER_MAP: once_cell::sync::Lazy<EntryFunctionDecoderMa
         map.insert(
             "vesting_vest_many".to_string(),
             Box::new(decoder::vesting_vest_many),
+        );
+        map.insert("zktls_enroll".to_string(), Box::new(decoder::zktls_enroll));
+        map.insert(
+            "zktls_initialize".to_string(),
+            Box::new(decoder::zktls_initialize),
+        );
+        map.insert(
+            "zktls_register_template".to_string(),
+            Box::new(decoder::zktls_register_template),
+        );
+        map.insert(
+            "zktls_revoke_template".to_string(),
+            Box::new(decoder::zktls_revoke_template),
+        );
+        map.insert(
+            "zktls_set_attestor_set".to_string(),
+            Box::new(decoder::zktls_set_attestor_set),
         );
         map
     });

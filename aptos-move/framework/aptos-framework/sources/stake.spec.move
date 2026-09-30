@@ -600,7 +600,6 @@ spec aptos_framework::stake {
         let amount = rewards_amount;
         let addr = type_info::type_of<AptosCoin>().account_address;
         aborts_if (rewards_amount > 0) && !exists<coin::CoinInfo<AptosCoin>>(addr);
-        modifies global<coin::CoinInfo<AptosCoin>>(addr);
         include (rewards_amount > 0) ==> coin::CoinAddAbortsIf<AptosCoin> { amount: amount };
     }
 

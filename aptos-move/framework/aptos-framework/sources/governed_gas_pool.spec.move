@@ -35,7 +35,23 @@ spec aptos_framework::governed_gas_pool {
     }
 
     spec initialize(aptos_framework: &signer, delegation_pool_creation_seed: vector<u8>) {
-        requires system_addresses::is_aptos_framework_address(signer::address_of(aptos_framework));
+        // Partial mode: the implementation has multiple abort paths beyond
+        // the framework-address check (resource-account creation, event-handle
+        // creation, transitive `aptos_account::register_fa_and_apt` call,
+        // `move_to` on `GovernedGasPool` / `GovernedGasPoolExtension`).
+        // The framework-address abort is the only one we enumerate; this is
+        // the precondition that callers `init_module` and
+        // `genesis::initialize_aptos_coin` cannot satisfy via `requires`
+        // (they don't know the caller's signer is `@aptos_framework` at
+        // verification time), so converting to `aborts_if` shifts the
+        // verification obligation here.
+        //
+        // Replaces the prior `requires system_addresses::is_aptos_framework_address(...)`
+        // which produced "precondition does not hold at this call" failures
+        // at the two call sites above.
+        pragma aborts_if_is_partial = true;
+        /// [high-level-req-2]
+        aborts_if !system_addresses::is_aptos_framework_address(signer::address_of(aptos_framework));
         /// [high-level-req-1]
         ensures exists<GovernedGasPool>(@aptos_framework);
     }

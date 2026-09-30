@@ -1648,11 +1648,6 @@ as that would prohibit transactions to be executed in parallel.
 The royalty published on the token, or, when the token has none of its own, the royalty of
 the collection it was minted into.
 
-The collection is read from the object reference recorded on the token at mint time. It must
-never be re-derived from <code>creator + collection_name</code>: <code><a href="collection.md#0x4_collection_set_name">collection::set_name</a></code> moves the name
-out from under that derivation, which then resolves to a different collection of the same
-creator - paying out its royalty instead - or to no object at all.
-
 
 <pre><code>#[view]
 <b>public</b> <b>fun</b> <a href="royalty.md#0x4_royalty">royalty</a>&lt;T: key&gt;(<a href="token.md#0x4_token">token</a>: <a href="../../aptos-framework/doc/object.md#0x1_object_Object">object::Object</a>&lt;T&gt;): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_Option">option::Option</a>&lt;<a href="royalty.md#0x4_royalty_Royalty">royalty::Royalty</a>&gt;

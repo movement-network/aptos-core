@@ -602,8 +602,9 @@ pub enum StatusCode {
     TRANSACTION_EXPIRATION_TOO_FAR_IN_FUTURE = 44,
     INVALID_NUMBER_OF_AUTHENTICATION_PROOFS = 45,
 
+    // The transaction is denied by the on-chain transaction permission table
+    TRANSACTION_NOT_PERMITTED = 46,
     // Reserved error code for future use
-    RESERVED_VALIDATION_ERROR_11 = 46,
     RESERVED_VALIDATION_ERROR_12 = 47,
     RESERVED_VALIDATION_ERROR_13 = 48,
     RESERVED_VALIDATION_ERROR_14 = 49,
@@ -763,7 +764,8 @@ pub enum StatusCode {
 
     // Reserved error code for future use
     RESERVED_VERIFICATION_ERROR_1 = 1135,
-    RESERVED_VERIFICATION_ERROR_2 = 1136,
+    // Module publishing is denied by the on-chain transaction permission table
+    MODULE_PUBLISHING_NOT_PERMITTED = 1136,
     RESERVED_VERIFICATION_ERROR_3 = 1137,
     RESERVED_VERIFICATION_ERROR_4 = 1138,
 

@@ -34,6 +34,7 @@ mod randomness_config;
 mod timed_features;
 mod timestamp;
 mod transaction_fee;
+mod transaction_permissions;
 mod validator_set;
 
 pub use self::{
@@ -62,6 +63,9 @@ pub use self::{
     timed_features::{TimedFeatureFlag, TimedFeatureOverride, TimedFeatures, TimedFeaturesBuilder},
     timestamp::CurrentTimeMicroseconds,
     transaction_fee::TransactionFeeBurnCap,
+    transaction_permissions::{
+        TransactionPermissionKind, TransactionPermissionRule, TransactionPermissions,
+    },
     validator_set::{ConsensusScheme, ValidatorSet},
 };
 

@@ -923,6 +923,7 @@ impl AptosVM {
         executable: TransactionExecutableRef<'a>, // TODO[Orderless]: Check what's the right lifetime to use here.
         log_context: &AdapterLogSchema,
         change_set_configs: &ChangeSetConfigs,
+        is_approved_gov_script: bool,
     ) -> Result<(VMStatus, VMOutput), VMStatus> {
         fail_point!("aptos_vm::execute_script_or_entry_function", |_| {
             Err(VMStatus::Error {
@@ -975,6 +976,8 @@ impl AptosVM {
             gas_meter,
             traversal_context,
             change_set_configs,
+            txn_data.sender(),
+            is_approved_gov_script,
         )?;
 
         let epilogue_session = self.charge_change_set_and_respawn_session(
@@ -1076,6 +1079,7 @@ impl AptosVM {
         multisig_address: AccountAddress,
         log_context: &AdapterLogSchema,
         change_set_configs: &ChangeSetConfigs,
+        is_approved_gov_script: bool,
     ) -> Result<(VMStatus, VMOutput), VMStatus> {
         fail_point!("move_adapter::execute_multisig_transaction", |_| {
             Err(VMStatus::error(
@@ -1181,6 +1185,8 @@ impl AptosVM {
                     multisig_address,
                     &entry_function,
                     change_set_configs,
+                    txn_data.sender(),
+                    is_approved_gov_script,
                 ),
         };
 
@@ -1255,6 +1261,8 @@ impl AptosVM {
         multisig_address: AccountAddress,
         payload: &EntryFunction,
         change_set_configs: &ChangeSetConfigs,
+        txn_sender: AccountAddress,
+        is_approved_gov_script: bool,
     ) -> Result<UserSessionChangeSet, VMStatus> {
         // If txn args are not valid, we'd still consider the transaction as executed but
         // failed. This is primarily because it's unrecoverable at this point.
@@ -1278,6 +1286,8 @@ impl AptosVM {
             gas_meter,
             traversal_context,
             change_set_configs,
+            txn_sender,
+            is_approved_gov_script,
         )
     }
 
@@ -1352,6 +1362,8 @@ impl AptosVM {
         gas_meter: &mut impl AptosGasMeter,
         traversal_context: &mut TraversalContext,
         change_set_configs: &ChangeSetConfigs,
+        txn_sender: AccountAddress,
+        is_approved_gov_script: bool,
     ) -> Result<UserSessionChangeSet, VMStatus> {
         let maybe_publish_request = session.execute(|session| session.extract_publish_request());
         if maybe_publish_request.is_none() {
@@ -1374,6 +1386,15 @@ impl AptosVM {
         let modules = self.deserialize_module_bundle(&bundle)?;
         let modules: &Vec<CompiledModule> =
             traversal_context.referenced_module_bundles.alloc(modules);
+
+        crate::transaction_permissions::check_publish_permitted(
+            self.features(),
+            resolver,
+            module_storage,
+            modules,
+            txn_sender,
+            is_approved_gov_script,
+        )?;
 
         // Note: Feature gating is needed here because the traversal of the dependencies could
         //       result in shallow-loading of the modules and therefore subtle changes in
@@ -1740,6 +1761,15 @@ impl AptosVM {
         let executable = transaction
             .executable_ref()
             .map_err(|_| deprecated_module_bundle!())?;
+
+        crate::transaction_permissions::check_transaction_permitted_at_validation(
+            self.features(),
+            session.resolver,
+            transaction_data.sender(),
+            &executable,
+            is_approved_gov_script,
+        )?;
+
         let extra_config = transaction.extra_config();
         self.run_prologue_with_payload(
             session,
@@ -1881,6 +1911,7 @@ impl AptosVM {
                 multisig_address,
                 log_context,
                 change_set_configs,
+                is_approved_gov_script,
             )
         } else {
             self.execute_script_or_entry_function(
@@ -1894,6 +1925,7 @@ impl AptosVM {
                 executable,
                 log_context,
                 change_set_configs,
+                is_approved_gov_script,
             )
         };
         drop(payload_timer);

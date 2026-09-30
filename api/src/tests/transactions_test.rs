@@ -1271,6 +1271,97 @@ async fn test_submit_transaction_rejects_invalid_json() {
     context.check_golden_output(resp);
 }
 
+/// Oversized JSON batches must fail on the count cap, even when every item
+/// would also fail `VerifyInput` (expired timestamp). That shows verify()
+/// never walks the array.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_submit_batch_rejects_oversized_json_before_verify() {
+    let mut node_config = NodeConfig::default();
+    node_config.api.max_submit_transaction_batch_size = 1;
+    let context = new_test_context_with_config(current_function_name!(), node_config);
+
+    let expired = parseable_expired_json_submit_request();
+    let resp = context
+        .expect_status_code(400)
+        .post("/transactions/batch", json!([expired.clone(), expired]))
+        .await;
+
+    assert_eq!(resp["error_code"], "invalid_input");
+    let message = resp["message"].as_str().expect("error message");
+    assert!(
+        message.contains("Submitted too many transactions: 2"),
+        "expected size-cap error, got {message}"
+    );
+    assert!(
+        message.contains("limit is 1"),
+        "expected configured limit in error, got {message}"
+    );
+    assert!(
+        !message.to_ascii_lowercase().contains("expiration"),
+        "size cap must run before verify(); got {message}"
+    );
+}
+
+/// A JSON batch at the configured limit is still verified item-by-item.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_submit_batch_json_at_limit_still_verifies_items() {
+    let mut node_config = NodeConfig::default();
+    node_config.api.max_submit_transaction_batch_size = 2;
+    let context = new_test_context_with_config(current_function_name!(), node_config);
+
+    let expired = parseable_expired_json_submit_request();
+    let resp = context
+        .expect_status_code(400)
+        .post("/transactions/batch", json!([expired.clone(), expired]))
+        .await;
+
+    assert_eq!(resp["error_code"], "invalid_input");
+    let message = resp["message"].as_str().expect("error message");
+    assert!(
+        !message.contains("Submitted too many transactions"),
+        "batch of size == limit must not trip the cap; got {message}"
+    );
+    assert!(
+        message.to_ascii_lowercase().contains("expiration")
+            || message.to_ascii_lowercase().contains("past"),
+        "expected verify() to reject expired items; got {message}"
+    );
+}
+
+/// BCS batches cannot be counted until they are decoded, so the same cap
+/// still applies after `get_signed_transactions_batch`.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_submit_batch_rejects_oversized_bcs_after_decode() {
+    let mut node_config = NodeConfig::default();
+    node_config.api.max_submit_transaction_batch_size = 1;
+    let mut context = new_test_context_with_config(current_function_name!(), node_config);
+
+    let mut root_account = context.root_account().await;
+    let first = context.gen_account();
+    let second = context.gen_account();
+    let txns = vec![
+        context.create_user_account_by(&mut root_account, &first),
+        context.create_user_account_by(&mut root_account, &second),
+    ];
+    let body = bcs::to_bytes(&txns).unwrap();
+
+    let resp = context
+        .expect_status_code(400)
+        .post_bcs_txn("/transactions/batch", body)
+        .await;
+
+    assert_eq!(resp["error_code"], "invalid_input");
+    let message = resp["message"].as_str().expect("error message");
+    assert!(
+        message.contains("Submitted too many transactions: 2"),
+        "expected size-cap error, got {message}"
+    );
+    assert!(
+        message.contains("limit is 1"),
+        "expected configured limit in error, got {message}"
+    );
+}
+
 #[ignore]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_create_signing_message_rejects_payload_too_large_json_body() {
@@ -1729,6 +1820,29 @@ fn gen_string(len: u64) -> String {
         .map(|()| rng.sample(Alphanumeric))
         .take(len as usize)
         .collect()
+}
+
+/// JSON that deserializes as `SubmitTransactionRequest` but fails verify()
+/// because the expiration is already in the past.
+fn parseable_expired_json_submit_request() -> serde_json::Value {
+    json!({
+        "sender": "0x1",
+        "sequence_number": "0",
+        "max_gas_amount": "1",
+        "gas_unit_price": "0",
+        "expiration_timestamp_secs": "1",
+        "payload": {
+            "type": "entry_function_payload",
+            "function": "0x1::aptos_account::create_account",
+            "type_arguments": [],
+            "arguments": ["0x2"],
+        },
+        "signature": {
+            "type": "ed25519_signature",
+            "public_key": "0x0000000000000000000000000000000000000000000000000000000000000001",
+            "signature": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002",
+        },
+    })
 }
 
 // For use when not using the methods on `TestContext` directly.

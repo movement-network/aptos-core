@@ -40,6 +40,7 @@ module aptos_framework::object_code_deployment {
     use aptos_framework::event;
     use aptos_framework::object;
     use aptos_framework::object::{ExtendRef, Object};
+    use aptos_framework::publish_allowlist;
 
     /// Object code deployment feature not supported.
     const EOBJECT_CODE_DEPLOYMENT_NOT_SUPPORTED: u64 = 1;
@@ -93,10 +94,11 @@ module aptos_framework::object_code_deployment {
         );
 
         let publisher_address = signer::address_of(publisher);
+        publish_allowlist::assert_publisher_allowed(publisher_address);
         let object_seed = object_seed(publisher_address);
         let constructor_ref = &object::create_named_object(publisher, object_seed);
         let code_signer = &object::generate_signer(constructor_ref);
-        code::publish_package_txn(code_signer, metadata_serialized, code);
+        code::publish_package_txn_for_code_object(code_signer, metadata_serialized, code);
 
         event::emit(Publish { object_address: signer::address_of(code_signer), });
 
@@ -129,13 +131,14 @@ module aptos_framework::object_code_deployment {
             object::is_owner(code_object, publisher_address),
             error::permission_denied(ENOT_CODE_OBJECT_OWNER),
         );
+        publish_allowlist::assert_publisher_allowed(publisher_address);
 
         let code_object_address = object::object_address(&code_object);
         assert!(exists<ManagingRefs>(code_object_address), error::not_found(ECODE_OBJECT_DOES_NOT_EXIST));
 
         let extend_ref = &borrow_global<ManagingRefs>(code_object_address).extend_ref;
         let code_signer = &object::generate_signer_for_extending(extend_ref);
-        code::publish_package_txn(code_signer, metadata_serialized, code);
+        code::publish_package_txn_for_code_object(code_signer, metadata_serialized, code);
 
         event::emit(Upgrade { object_address: signer::address_of(code_signer), });
     }

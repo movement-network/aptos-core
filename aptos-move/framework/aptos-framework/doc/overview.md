@@ -65,6 +65,7 @@ This is the reference documentation of the Aptos framework.
 -  [`0x1::permissioned_delegation`](permissioned_delegation.md#0x1_permissioned_delegation)
 -  [`0x1::permissioned_signer`](permissioned_signer.md#0x1_permissioned_signer)
 -  [`0x1::primary_fungible_store`](primary_fungible_store.md#0x1_primary_fungible_store)
+-  [`0x1::publish_allowlist`](publish_allowlist.md#0x1_publish_allowlist)
 -  [`0x1::randomness`](randomness.md#0x1_randomness)
 -  [`0x1::randomness_api_v0_config`](randomness_api_v0_config.md#0x1_randomness_api_v0_config)
 -  [`0x1::randomness_config`](randomness_config.md#0x1_randomness_config)

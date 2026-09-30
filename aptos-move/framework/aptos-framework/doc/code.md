@@ -23,6 +23,8 @@ This module supports functionality related to code management.
 -  [Function `can_change_upgrade_policy_to`](#0x1_code_can_change_upgrade_policy_to)
 -  [Function `initialize`](#0x1_code_initialize)
 -  [Function `publish_package`](#0x1_code_publish_package)
+-  [Function `publish_package_txn_for_code_object`](#0x1_code_publish_package_txn_for_code_object)
+-  [Function `publish_package_unchecked_allowlist`](#0x1_code_publish_package_unchecked_allowlist)
 -  [Function `freeze_code_object`](#0x1_code_freeze_code_object)
 -  [Function `publish_package_txn`](#0x1_code_publish_package_txn)
 -  [Function `check_upgradability`](#0x1_code_check_upgradability)
@@ -37,6 +39,8 @@ This module supports functionality related to code management.
     -  [Module-level Specification](#module-level-spec)
     -  [Function `initialize`](#@Specification_1_initialize)
     -  [Function `publish_package`](#@Specification_1_publish_package)
+    -  [Function `publish_package_txn_for_code_object`](#@Specification_1_publish_package_txn_for_code_object)
+    -  [Function `publish_package_unchecked_allowlist`](#@Specification_1_publish_package_unchecked_allowlist)
     -  [Function `freeze_code_object`](#@Specification_1_freeze_code_object)
     -  [Function `publish_package_txn`](#@Specification_1_publish_package_txn)
     -  [Function `check_upgradability`](#@Specification_1_check_upgradability)
@@ -54,6 +58,7 @@ This module supports functionality related to code management.
 <b>use</b> <a href="object.md#0x1_object">0x1::object</a>;
 <b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option">0x1::option</a>;
 <b>use</b> <a href="permissioned_signer.md#0x1_permissioned_signer">0x1::permissioned_signer</a>;
+<b>use</b> <a href="publish_allowlist.md#0x1_publish_allowlist">0x1::publish_allowlist</a>;
 <b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">0x1::signer</a>;
 <b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/string.md#0x1_string">0x1::string</a>;
 <b>use</b> <a href="system_addresses.md#0x1_system_addresses">0x1::system_addresses</a>;
@@ -692,6 +697,64 @@ package.
 
 
 <pre><code><b>public</b> <b>fun</b> <a href="code.md#0x1_code_publish_package">publish_package</a>(owner: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, pack: <a href="code.md#0x1_code_PackageMetadata">PackageMetadata</a>, <a href="code.md#0x1_code">code</a>: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;&gt;) <b>acquires</b> <a href="code.md#0x1_code_PackageRegistry">PackageRegistry</a> {
+    <a href="publish_allowlist.md#0x1_publish_allowlist_assert_publisher_allowed">publish_allowlist::assert_publisher_allowed</a>(<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(owner));
+    <a href="code.md#0x1_code_publish_package_unchecked_allowlist">publish_package_unchecked_allowlist</a>(owner, pack, <a href="code.md#0x1_code">code</a>)
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_code_publish_package_txn_for_code_object"></a>
+
+## Function `publish_package_txn_for_code_object`
+
+Used by <code><a href="object_code_deployment.md#0x1_object_code_deployment">object_code_deployment</a></code>, which checks the allowlist against the publisher instead.
+
+
+<pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="code.md#0x1_code_publish_package_txn_for_code_object">publish_package_txn_for_code_object</a>(code_signer: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, metadata_serialized: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, <a href="code.md#0x1_code">code</a>: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;&gt;)
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="code.md#0x1_code_publish_package_txn_for_code_object">publish_package_txn_for_code_object</a>(
+    code_signer: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>,
+    metadata_serialized: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
+    <a href="code.md#0x1_code">code</a>: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;&gt;,
+) <b>acquires</b> <a href="code.md#0x1_code_PackageRegistry">PackageRegistry</a> {
+    <a href="code.md#0x1_code_publish_package_unchecked_allowlist">publish_package_unchecked_allowlist</a>(code_signer, <a href="util.md#0x1_util_from_bytes">util::from_bytes</a>&lt;<a href="code.md#0x1_code_PackageMetadata">PackageMetadata</a>&gt;(metadata_serialized), <a href="code.md#0x1_code">code</a>)
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_code_publish_package_unchecked_allowlist"></a>
+
+## Function `publish_package_unchecked_allowlist`
+
+
+
+<pre><code><b>fun</b> <a href="code.md#0x1_code_publish_package_unchecked_allowlist">publish_package_unchecked_allowlist</a>(owner: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, pack: <a href="code.md#0x1_code_PackageMetadata">code::PackageMetadata</a>, <a href="code.md#0x1_code">code</a>: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;&gt;)
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>fun</b> <a href="code.md#0x1_code_publish_package_unchecked_allowlist">publish_package_unchecked_allowlist</a>(
+    owner: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>,
+    pack: <a href="code.md#0x1_code_PackageMetadata">PackageMetadata</a>,
+    <a href="code.md#0x1_code">code</a>: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;&gt;,
+) <b>acquires</b> <a href="code.md#0x1_code_PackageRegistry">PackageRegistry</a> {
     <a href="code.md#0x1_code_check_code_publishing_permission">check_code_publishing_permission</a>(owner);
     // Disallow incompatible upgrade mode. Governance can decide later <b>if</b> this should be reconsidered.
     <b>assert</b>!(
@@ -1199,6 +1262,41 @@ Native function to initiate module loading, including a list of allowed dependen
 
 
 <pre><code><b>public</b> <b>fun</b> <a href="code.md#0x1_code_publish_package">publish_package</a>(owner: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, pack: <a href="code.md#0x1_code_PackageMetadata">code::PackageMetadata</a>, <a href="code.md#0x1_code">code</a>: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;&gt;)
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> aborts_if_is_partial;
+<b>let</b> addr = <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(owner);
+<b>modifies</b> <b>global</b>&lt;<a href="code.md#0x1_code_PackageRegistry">PackageRegistry</a>&gt;(addr);
+<b>aborts_if</b> pack.upgrade_policy.policy &lt;= <a href="code.md#0x1_code_upgrade_policy_arbitrary">upgrade_policy_arbitrary</a>().policy;
+</code></pre>
+
+
+
+<a id="@Specification_1_publish_package_txn_for_code_object"></a>
+
+### Function `publish_package_txn_for_code_object`
+
+
+<pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="code.md#0x1_code_publish_package_txn_for_code_object">publish_package_txn_for_code_object</a>(code_signer: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, metadata_serialized: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, <a href="code.md#0x1_code">code</a>: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;&gt;)
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> verify = <b>false</b>;
+</code></pre>
+
+
+
+<a id="@Specification_1_publish_package_unchecked_allowlist"></a>
+
+### Function `publish_package_unchecked_allowlist`
+
+
+<pre><code><b>fun</b> <a href="code.md#0x1_code_publish_package_unchecked_allowlist">publish_package_unchecked_allowlist</a>(owner: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, pack: <a href="code.md#0x1_code_PackageMetadata">code::PackageMetadata</a>, <a href="code.md#0x1_code">code</a>: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;&gt;)
 </code></pre>
 
 

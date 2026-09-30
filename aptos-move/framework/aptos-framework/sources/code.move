@@ -14,6 +14,7 @@ module aptos_framework::code {
     use aptos_framework::event;
     use aptos_framework::object::{Self, Object};
     use aptos_framework::permissioned_signer;
+    use aptos_framework::publish_allowlist;
 
     friend aptos_framework::object_code_deployment;
 
@@ -166,6 +167,24 @@ module aptos_framework::code {
     /// Publishes a package at the given signer's address. The caller must provide package metadata describing the
     /// package.
     public fun publish_package(owner: &signer, pack: PackageMetadata, code: vector<vector<u8>>) acquires PackageRegistry {
+        publish_allowlist::assert_publisher_allowed(signer::address_of(owner));
+        publish_package_unchecked_allowlist(owner, pack, code)
+    }
+
+    /// Used by `object_code_deployment`, which checks the allowlist against the publisher instead.
+    public(friend) fun publish_package_txn_for_code_object(
+        code_signer: &signer,
+        metadata_serialized: vector<u8>,
+        code: vector<vector<u8>>,
+    ) acquires PackageRegistry {
+        publish_package_unchecked_allowlist(code_signer, util::from_bytes<PackageMetadata>(metadata_serialized), code)
+    }
+
+    fun publish_package_unchecked_allowlist(
+        owner: &signer,
+        pack: PackageMetadata,
+        code: vector<vector<u8>>,
+    ) acquires PackageRegistry {
         check_code_publishing_permission(owner);
         // Disallow incompatible upgrade mode. Governance can decide later if this should be reconsidered.
         assert!(

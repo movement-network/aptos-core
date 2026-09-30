@@ -101,6 +101,19 @@ spec aptos_framework::code {
         pragma verify = false;
     }
 
+    spec publish_package_txn_for_code_object {
+        // TODO: Calls `publish_package_unchecked_allowlist`.
+        pragma verify = false;
+    }
+
+    spec publish_package_unchecked_allowlist(owner: &signer, pack: PackageMetadata, code: vector<vector<u8>>) {
+        // TODO: Can't verify 'vector::enumerate' loop.
+        pragma aborts_if_is_partial;
+        let addr = signer::address_of(owner);
+        modifies global<PackageRegistry>(addr);
+        aborts_if pack.upgrade_policy.policy <= upgrade_policy_arbitrary().policy;
+    }
+
     spec check_upgradability(old_pack: &PackageMetadata, new_pack: &PackageMetadata, new_modules: &vector<String>) {
         // TODO: Can't verify 'vector::enumerate' loop.
         pragma aborts_if_is_partial;

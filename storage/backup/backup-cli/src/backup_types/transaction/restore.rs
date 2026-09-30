@@ -59,6 +59,44 @@ use tokio::io::BufReader;
 
 const BATCH_SIZE: usize = if cfg!(test) { 2 } else { 10000 };
 
+/// Transaction plus the outputs KV-only replay applies to the DB.
+type KvReplayItem = (Transaction, TransactionInfo, WriteSet, Vec<ContractEvent>);
+
+fn kv_replay_item_ends_epoch(item: &KvReplayItem) -> bool {
+    item.3.iter().any(ContractEvent::is_new_epoch_event)
+}
+
+/// Seal KV-replay work so an epoch-ending item is always last in its group.
+///
+/// KV-only restore writes `VersionData` (storage usage) for the last version of
+/// each committed group. The first block of a new epoch reads usage at the
+/// prior epoch's last version. If that version sits in the middle of a group,
+/// the row is never persisted and later re-execution fails.
+///
+/// A group closes when it reaches `max_len` or when its newest item ends an
+/// epoch. The full-execution replay path already isolates epochs inside the
+/// chunk executor; this applies the same boundary rule to KV-only replay.
+fn seal_kv_replay_batches<T>(
+    items: impl IntoIterator<Item = T>,
+    max_len: usize,
+    ends_epoch: impl Fn(&T) -> bool,
+) -> Vec<Vec<T>> {
+    debug_assert!(max_len > 0, "KV replay batch length must be positive");
+    let mut sealed = Vec::new();
+    let mut open: Vec<T> = Vec::new();
+    for item in items {
+        let close_after = ends_epoch(&item);
+        open.push(item);
+        if close_after || open.len() >= max_len {
+            sealed.push(std::mem::take(&mut open));
+        }
+    }
+    if !open.is_empty() {
+        sealed.push(open);
+    }
+    sealed
+}
+
 #[derive(Parser)]
 pub struct TransactionRestoreOpt {
     #[clap(long = "transaction-manifest")]
@@ -524,6 +562,14 @@ impl TransactionRestoreBatchController {
             .try_chunks(BATCH_SIZE)
             .err_into::<anyhow::Error>()
             .map_ok(|chunk| {
+                stream::iter(
+                    seal_kv_replay_batches(chunk, BATCH_SIZE, kv_replay_item_ends_epoch)
+                        .into_iter()
+                        .map(Result::<_>::Ok),
+                )
+            })
+            .try_flatten()
+            .map_ok(|chunk| {
                 let (txns, txn_infos, write_sets, events): (Vec<_>, Vec<_>, Vec<_>, Vec<_>) =
                     chunk.into_iter().multiunzip();
                 let handler = arc_restore_handler.clone();
@@ -712,5 +758,99 @@ impl TransactionRestoreBatchController {
             })
             .await?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod kv_replay_batch_tests {
+    use super::seal_kv_replay_batches;
+    use proptest::prelude::*;
+
+    /// Every epoch-ending item must be the last item of its group; groups stay
+    /// within `max_len` and concatenate back to the input.
+    fn assert_epoch_seal_invariant(flags: &[bool], max_len: usize, batches: &[Vec<bool>]) {
+        assert!(max_len > 0);
+        assert_eq!(
+            batches.iter().flatten().copied().collect::<Vec<_>>(),
+            flags,
+            "sealed groups must preserve input order and membership"
+        );
+        for batch in batches {
+            assert!(!batch.is_empty(), "sealed groups must be non-empty");
+            assert!(
+                batch.len() <= max_len,
+                "sealed group length {} exceeds max_len {}",
+                batch.len(),
+                max_len
+            );
+            for flag in batch.iter().take(batch.len() - 1) {
+                assert!(
+                    !*flag,
+                    "epoch-ending item must close its group; found one before the tail"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn empty_input_yields_no_groups() {
+        let batches = seal_kv_replay_batches(Vec::<bool>::new(), 4, |flag| *flag);
+        assert!(batches.is_empty());
+    }
+
+    #[test]
+    fn size_limit_alone_closes_groups() {
+        let flags = vec![false, false, false, false, false];
+        let batches = seal_kv_replay_batches(flags.clone(), 2, |flag| *flag);
+        assert_eq!(
+            batches,
+            vec![vec![false, false], vec![false, false], vec![false]]
+        );
+        assert_epoch_seal_invariant(&flags, 2, &batches);
+    }
+
+    #[test]
+    fn epoch_flag_closes_group_before_size_limit() {
+        // Epoch ending sits at index 2; with max_len 4 the first group must
+        // stop there so VersionData is written for that version.
+        let flags = vec![false, false, true, false, false];
+        let batches = seal_kv_replay_batches(flags.clone(), 4, |flag| *flag);
+        assert_eq!(batches, vec![vec![false, false, true], vec![false, false]]);
+        assert_epoch_seal_invariant(&flags, 4, &batches);
+    }
+
+    #[test]
+    fn consecutive_epoch_flags_each_form_their_own_group() {
+        let flags = vec![true, true, false];
+        let batches = seal_kv_replay_batches(flags.clone(), 8, |flag| *flag);
+        assert_eq!(batches, vec![vec![true], vec![true], vec![false]]);
+        assert_epoch_seal_invariant(&flags, 8, &batches);
+    }
+
+    #[test]
+    fn epoch_flag_at_size_limit_is_a_single_close() {
+        let flags = vec![false, true, false];
+        let batches = seal_kv_replay_batches(flags.clone(), 2, |flag| *flag);
+        assert_eq!(batches, vec![vec![false, true], vec![false]]);
+        assert_epoch_seal_invariant(&flags, 2, &batches);
+    }
+
+    #[test]
+    fn leading_epoch_flag_is_its_own_group() {
+        let flags = vec![true, false, false];
+        let batches = seal_kv_replay_batches(flags.clone(), 10, |flag| *flag);
+        assert_eq!(batches, vec![vec![true], vec![false, false]]);
+        assert_epoch_seal_invariant(&flags, 10, &batches);
+    }
+
+    proptest! {
+        #[test]
+        fn sealing_respects_epoch_and_size_bounds(
+            flags in prop::collection::vec(any::<bool>(), 0..48),
+            max_len in 1usize..12,
+        ) {
+            let batches = seal_kv_replay_batches(flags.clone(), max_len, |flag| *flag);
+            assert_epoch_seal_invariant(&flags, max_len, &batches);
+        }
     }
 }

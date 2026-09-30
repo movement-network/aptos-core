@@ -525,6 +525,12 @@ pub enum EntryFunctionCall {
         pool_address: AccountAddress,
     },
 
+    /// Enable partial governance voting on a delegation pool if it has not already been initialized.
+    /// This is intended for idempotent migration scripts over existing delegation pools.
+    DelegationPoolEnablePartialGovernanceVotingIfNeeded {
+        pool_address: AccountAddress,
+    },
+
     /// Evict a delegator that is not allowlisted by unlocking their entire stake.
     DelegationPoolEvictDelegator {
         delegator_address: AccountAddress,
@@ -1256,6 +1262,32 @@ pub enum EntryFunctionCall {
 
     TransactionFeeConvertToAptosFaBurnRef {},
 
+    /// One-off initialization for chains that upgraded past genesis, invoked
+    /// through governance or a core-resources script.
+    TransactionPermissionsInitializeExtension {},
+
+    /// Insert a rule matching all senders at `index` (0 = evaluated first;
+    /// `index` equal to the current length appends).
+    TransactionPermissionsInsertRuleForAll {
+        index: u64,
+        kind: u8,
+        allow: bool,
+    },
+
+    /// Insert a rule for one sender at `index` (0 = evaluated first; `index`
+    /// equal to the current length appends). Earlier rules take precedence.
+    TransactionPermissionsInsertRuleForSender {
+        index: u64,
+        sender: AccountAddress,
+        kind: u8,
+        allow: bool,
+    },
+
+    /// Remove the rule at `index`; later rules shift down by one.
+    TransactionPermissionsRemoveRule {
+        index: u64,
+    },
+
     /// Used in on-chain governances to update the major version for the next epoch.
     /// Example usage:
     /// - `aptos_framework::version::set_for_next_epoch(&framework_signer, new_version);`
@@ -1656,6 +1688,9 @@ impl EntryFunctionCall {
             },
             DelegationPoolEnablePartialGovernanceVoting { pool_address } => {
                 delegation_pool_enable_partial_governance_voting(pool_address)
+            },
+            DelegationPoolEnablePartialGovernanceVotingIfNeeded { pool_address } => {
+                delegation_pool_enable_partial_governance_voting_if_needed(pool_address)
             },
             DelegationPoolEvictDelegator { delegator_address } => {
                 delegation_pool_evict_delegator(delegator_address)
@@ -2084,6 +2119,21 @@ impl EntryFunctionCall {
             } => staking_proxy_set_voter(operator, new_voter),
             TransactionFeeConvertToAptosFaBurnRef {} => {
                 transaction_fee_convert_to_aptos_fa_burn_ref()
+            },
+            TransactionPermissionsInitializeExtension {} => {
+                transaction_permissions_initialize_extension()
+            },
+            TransactionPermissionsInsertRuleForAll { index, kind, allow } => {
+                transaction_permissions_insert_rule_for_all(index, kind, allow)
+            },
+            TransactionPermissionsInsertRuleForSender {
+                index,
+                sender,
+                kind,
+                allow,
+            } => transaction_permissions_insert_rule_for_sender(index, sender, kind, allow),
+            TransactionPermissionsRemoveRule { index } => {
+                transaction_permissions_remove_rule(index)
             },
             VersionSetForNextEpoch { major } => version_set_for_next_epoch(major),
             VersionSetVersion { major } => version_set_version(major),
@@ -3493,6 +3543,25 @@ pub fn delegation_pool_enable_partial_governance_voting(
             ident_str!("delegation_pool").to_owned(),
         ),
         ident_str!("enable_partial_governance_voting").to_owned(),
+        vec![],
+        vec![bcs::to_bytes(&pool_address).unwrap()],
+    ))
+}
+
+/// Enable partial governance voting on a delegation pool if it has not already been initialized.
+/// This is intended for idempotent migration scripts over existing delegation pools.
+pub fn delegation_pool_enable_partial_governance_voting_if_needed(
+    pool_address: AccountAddress,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("delegation_pool").to_owned(),
+        ),
+        ident_str!("enable_partial_governance_voting_if_needed").to_owned(),
         vec![],
         vec![bcs::to_bytes(&pool_address).unwrap()],
     ))
@@ -5591,6 +5660,91 @@ pub fn transaction_fee_convert_to_aptos_fa_burn_ref() -> TransactionPayload {
     ))
 }
 
+/// One-off initialization for chains that upgraded past genesis, invoked
+/// through governance or a core-resources script.
+pub fn transaction_permissions_initialize_extension() -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("transaction_permissions").to_owned(),
+        ),
+        ident_str!("initialize_extension").to_owned(),
+        vec![],
+        vec![],
+    ))
+}
+
+/// Insert a rule matching all senders at `index` (0 = evaluated first;
+/// `index` equal to the current length appends).
+pub fn transaction_permissions_insert_rule_for_all(
+    index: u64,
+    kind: u8,
+    allow: bool,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("transaction_permissions").to_owned(),
+        ),
+        ident_str!("insert_rule_for_all").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&index).unwrap(),
+            bcs::to_bytes(&kind).unwrap(),
+            bcs::to_bytes(&allow).unwrap(),
+        ],
+    ))
+}
+
+/// Insert a rule for one sender at `index` (0 = evaluated first; `index`
+/// equal to the current length appends). Earlier rules take precedence.
+pub fn transaction_permissions_insert_rule_for_sender(
+    index: u64,
+    sender: AccountAddress,
+    kind: u8,
+    allow: bool,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("transaction_permissions").to_owned(),
+        ),
+        ident_str!("insert_rule_for_sender").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&index).unwrap(),
+            bcs::to_bytes(&sender).unwrap(),
+            bcs::to_bytes(&kind).unwrap(),
+            bcs::to_bytes(&allow).unwrap(),
+        ],
+    ))
+}
+
+/// Remove the rule at `index`; later rules shift down by one.
+pub fn transaction_permissions_remove_rule(index: u64) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("transaction_permissions").to_owned(),
+        ),
+        ident_str!("remove_rule").to_owned(),
+        vec![],
+        vec![bcs::to_bytes(&index).unwrap()],
+    ))
+}
+
 /// Used in on-chain governances to update the major version for the next epoch.
 /// Example usage:
 /// - `aptos_framework::version::set_for_next_epoch(&framework_signer, new_version);`
@@ -6714,6 +6868,20 @@ mod decoder {
         if let TransactionPayload::EntryFunction(script) = payload {
             Some(
                 EntryFunctionCall::DelegationPoolEnablePartialGovernanceVoting {
+                    pool_address: bcs::from_bytes(script.args().get(0)?).ok()?,
+                },
+            )
+        } else {
+            None
+        }
+    }
+
+    pub fn delegation_pool_enable_partial_governance_voting_if_needed(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(
+                EntryFunctionCall::DelegationPoolEnablePartialGovernanceVotingIfNeeded {
                     pool_address: bcs::from_bytes(script.args().get(0)?).ok()?,
                 },
             )
@@ -7920,6 +8088,59 @@ mod decoder {
         }
     }
 
+    pub fn transaction_permissions_initialize_extension(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(_script) = payload {
+            Some(EntryFunctionCall::TransactionPermissionsInitializeExtension {})
+        } else {
+            None
+        }
+    }
+
+    pub fn transaction_permissions_insert_rule_for_all(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::TransactionPermissionsInsertRuleForAll {
+                index: bcs::from_bytes(script.args().get(0)?).ok()?,
+                kind: bcs::from_bytes(script.args().get(1)?).ok()?,
+                allow: bcs::from_bytes(script.args().get(2)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn transaction_permissions_insert_rule_for_sender(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(
+                EntryFunctionCall::TransactionPermissionsInsertRuleForSender {
+                    index: bcs::from_bytes(script.args().get(0)?).ok()?,
+                    sender: bcs::from_bytes(script.args().get(1)?).ok()?,
+                    kind: bcs::from_bytes(script.args().get(2)?).ok()?,
+                    allow: bcs::from_bytes(script.args().get(3)?).ok()?,
+                },
+            )
+        } else {
+            None
+        }
+    }
+
+    pub fn transaction_permissions_remove_rule(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::TransactionPermissionsRemoveRule {
+                index: bcs::from_bytes(script.args().get(0)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
     pub fn version_set_for_next_epoch(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
         if let TransactionPayload::EntryFunction(script) = payload {
             Some(EntryFunctionCall::VersionSetForNextEpoch {
@@ -8391,6 +8612,10 @@ static SCRIPT_FUNCTION_DECODER_MAP: once_cell::sync::Lazy<EntryFunctionDecoderMa
             Box::new(decoder::delegation_pool_enable_partial_governance_voting),
         );
         map.insert(
+            "delegation_pool_enable_partial_governance_voting_if_needed".to_string(),
+            Box::new(decoder::delegation_pool_enable_partial_governance_voting_if_needed),
+        );
+        map.insert(
             "delegation_pool_evict_delegator".to_string(),
             Box::new(decoder::delegation_pool_evict_delegator),
         );
@@ -8764,6 +8989,22 @@ static SCRIPT_FUNCTION_DECODER_MAP: once_cell::sync::Lazy<EntryFunctionDecoderMa
         map.insert(
             "transaction_fee_convert_to_aptos_fa_burn_ref".to_string(),
             Box::new(decoder::transaction_fee_convert_to_aptos_fa_burn_ref),
+        );
+        map.insert(
+            "transaction_permissions_initialize_extension".to_string(),
+            Box::new(decoder::transaction_permissions_initialize_extension),
+        );
+        map.insert(
+            "transaction_permissions_insert_rule_for_all".to_string(),
+            Box::new(decoder::transaction_permissions_insert_rule_for_all),
+        );
+        map.insert(
+            "transaction_permissions_insert_rule_for_sender".to_string(),
+            Box::new(decoder::transaction_permissions_insert_rule_for_sender),
+        );
+        map.insert(
+            "transaction_permissions_remove_rule".to_string(),
+            Box::new(decoder::transaction_permissions_remove_rule),
         );
         map.insert(
             "version_set_for_next_epoch".to_string(),

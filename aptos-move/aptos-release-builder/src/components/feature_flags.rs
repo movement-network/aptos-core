@@ -152,6 +152,7 @@ pub enum FeatureFlag {
     GovernedGasPool,
     SteakRewardUsingTreasury,
     ExtractAbortInfoExactMatch,
+    TransactionPermissions,
 }
 
 fn generate_features_blob(writer: &CodeWriter, data: &[u64]) {
@@ -403,6 +404,7 @@ impl From<FeatureFlag> for AptosFeatureFlag {
             FeatureFlag::ExtractAbortInfoExactMatch => {
                 AptosFeatureFlag::EXTRACT_ABORT_INFO_EXACT_MATCH
             },
+            FeatureFlag::TransactionPermissions => AptosFeatureFlag::TRANSACTION_PERMISSIONS,
         }
     }
 }
@@ -581,6 +583,7 @@ impl From<AptosFeatureFlag> for FeatureFlag {
             AptosFeatureFlag::EXTRACT_ABORT_INFO_EXACT_MATCH => {
                 FeatureFlag::ExtractAbortInfoExactMatch
             },
+            AptosFeatureFlag::TRANSACTION_PERMISSIONS => FeatureFlag::TransactionPermissions,
         }
     }
 }

@@ -138,6 +138,8 @@ return true.
 -  [Function `abort_native_bridge_enabled`](#0x1_features_abort_native_bridge_enabled)
 -  [Function `get_governed_gas_pool_feature`](#0x1_features_get_governed_gas_pool_feature)
 -  [Function `governed_gas_pool_enabled`](#0x1_features_governed_gas_pool_enabled)
+-  [Function `get_transaction_permissions_feature`](#0x1_features_get_transaction_permissions_feature)
+-  [Function `transaction_permissions_enabled`](#0x1_features_transaction_permissions_enabled)
 -  [Function `get_decommission_core_resources_feature`](#0x1_features_get_decommission_core_resources_feature)
 -  [Function `get_decommission_core_resources_enabled`](#0x1_features_get_decommission_core_resources_enabled)
 -  [Function `get_transaction_simulation_enhancement_feature`](#0x1_features_get_transaction_simulation_enhancement_feature)
@@ -848,6 +850,7 @@ Lifetime: transient
 
 Whether the Atomic bridge is available
 Lifetime: transient
+Deprecated in favor of <code><a href="features.md#0x1_features_ALLOW_SERIALIZED_SCRIPT_ARGS">ALLOW_SERIALIZED_SCRIPT_ARGS</a></code> as feature flag 72
 
 
 <pre><code><b>const</b> <a href="features.md#0x1_features_NATIVE_BRIDGE">NATIVE_BRIDGE</a>: u64 = 72;
@@ -1124,6 +1127,19 @@ Lifetime: transient
 
 
 <pre><code><b>const</b> <a href="features.md#0x1_features_TRANSACTION_CONTEXT_EXTENSION">TRANSACTION_CONTEXT_EXTENSION</a>: u64 = 59;
+</code></pre>
+
+
+
+<a id="0x1_features_TRANSACTION_PERMISSIONS"></a>
+
+Whether the on-chain transaction permission table is enforced during
+transaction validation.
+
+Lifetime: transient
+
+
+<pre><code><b>const</b> <a href="features.md#0x1_features_TRANSACTION_PERMISSIONS">TRANSACTION_PERMISSIONS</a>: u64 = 226;
 </code></pre>
 
 
@@ -3648,6 +3664,52 @@ Whether the Governed Gas Pool is enabled.
 
 <pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_governed_gas_pool_enabled">governed_gas_pool_enabled</a>(): bool <b>acquires</b> <a href="features.md#0x1_features_Features">Features</a> {
     <a href="features.md#0x1_features_is_enabled">is_enabled</a>(<a href="features.md#0x1_features_GOVERNED_GAS_POOL">GOVERNED_GAS_POOL</a>)
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_features_get_transaction_permissions_feature"></a>
+
+## Function `get_transaction_permissions_feature`
+
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_get_transaction_permissions_feature">get_transaction_permissions_feature</a>(): u64
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_get_transaction_permissions_feature">get_transaction_permissions_feature</a>(): u64 { <a href="features.md#0x1_features_TRANSACTION_PERMISSIONS">TRANSACTION_PERMISSIONS</a> }
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_features_transaction_permissions_enabled"></a>
+
+## Function `transaction_permissions_enabled`
+
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_transaction_permissions_enabled">transaction_permissions_enabled</a>(): bool
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_transaction_permissions_enabled">transaction_permissions_enabled</a>(): bool <b>acquires</b> <a href="features.md#0x1_features_Features">Features</a> {
+    <a href="features.md#0x1_features_is_enabled">is_enabled</a>(<a href="features.md#0x1_features_TRANSACTION_PERMISSIONS">TRANSACTION_PERMISSIONS</a>)
 }
 </code></pre>
 

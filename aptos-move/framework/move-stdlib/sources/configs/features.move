@@ -645,6 +645,18 @@ module std::features {
         is_enabled(GOVERNED_GAS_POOL)
     }
 
+    /// Whether the on-chain transaction permission table is enforced during
+    /// transaction validation.
+    ///
+    /// Lifetime: transient
+    const TRANSACTION_PERMISSIONS: u64 = 226;
+
+    public fun get_transaction_permissions_feature(): u64 { TRANSACTION_PERMISSIONS }
+
+    public fun transaction_permissions_enabled(): bool acquires Features {
+        is_enabled(TRANSACTION_PERMISSIONS)
+    }
+
     /// Lifetime: transient
     const DECOMMISSION_CORE_RESOURCES: u64 = 222;
 

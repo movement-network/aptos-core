@@ -149,6 +149,9 @@ pub enum FeatureFlag {
     /// compiler-generated abort codes (e.g. `UNSPECIFIED_ABORT_CODE`) against
     /// user-defined error constants whose lower bits happen to coincide.
     EXTRACT_ABORT_INFO_EXACT_MATCH = 225,
+    /// Enforce the on-chain transaction permission table
+    /// (`0x1::transaction_permissions`) during transaction validation.
+    TRANSACTION_PERMISSIONS = 226,
 }
 
 impl FeatureFlag {

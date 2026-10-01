@@ -13,7 +13,6 @@ use aptos_storage_interface::{
 use aptos_types::{
     contract_event::ContractEvent,
     event::EventKey,
-    ledger_info::get_waypoint_version,
     on_chain_config::{
         ConfigurationResource, OnChainConfig, OnChainConfigPayload, OnChainConfigProvider,
     },
@@ -415,11 +414,11 @@ pub struct DbBackedOnChainConfig {
 }
 
 impl DbBackedOnChainConfig {
-    pub fn new(reader: Arc<dyn DbReader>, mut version: Version) -> Self {
-        let waypoint_version = get_waypoint_version().expect("Waypoint version is missing");
-        if version < waypoint_version {
-            version = waypoint_version as Version;
-        }
+    /// `version` must already be clamped by the caller to the DB's first
+    /// available version (see `read_on_chain_configs`), so that reads never
+    /// target state the node does not hold (e.g. pre-waypoint history on a
+    /// fast-synced node). No waypoint-based adjustment happens here.
+    pub fn new(reader: Arc<dyn DbReader>, version: Version) -> Self {
         Self { reader, version }
     }
 }

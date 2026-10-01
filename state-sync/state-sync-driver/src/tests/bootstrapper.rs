@@ -29,9 +29,16 @@ use aptos_data_streaming_service::{
 };
 use aptos_time_service::TimeService;
 use aptos_types::{
+    aggregate_signature::AggregateSignature,
+    block_info::BlockInfo,
+    epoch_state::EpochState,
+    ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
     transaction::{TransactionOutputListWithProof, Version},
+    validator_signer::ValidatorSigner,
+    validator_verifier::{ValidatorConsensusInfo, ValidatorVerifier},
     waypoint::Waypoint,
 };
+use aptos_crypto::hash::HashValue;
 use claims::{assert_matches, assert_none, assert_ok};
 use futures::{channel::{mpsc, oneshot}, FutureExt, SinkExt};
 use mockall::{predicate::eq, Sequence};
@@ -1590,6 +1597,119 @@ async fn test_waypoint_satisfiable() {
         .await
         .unwrap_err();
     assert_matches!(error, Error::UnsatisfiableWaypoint(_));
+}
+
+/// Regression test for audit findings C1/H1 (waypoint verification bypass).
+/// A forged pre-waypoint epoch-ending ledger info (empty aggregate
+/// signature, attacker-chosen `next_epoch_state`) must still be ACCEPTED as
+/// unverified archive data (pre-migration history is not
+/// signature-verifiable), but must NOT install its `next_epoch_state` as
+/// trusted.
+#[test]
+fn test_pre_waypoint_ledger_info_accepted_as_unverified_archive_only() {
+    // Create a bootstrapper for a victim node (trusted epoch state at epoch 0)
+    let driver_configuration = create_full_node_driver_configuration();
+    let (mut bootstrapper, _) =
+        create_bootstrapper(driver_configuration, MockStreamingClient::new(), None, false);
+
+    // Waypoint anchored at version 1000
+    let waypoint_ledger_info = create_random_epoch_ending_ledger_info(1000, 0);
+    let waypoint = Waypoint::new_any(waypoint_ledger_info.ledger_info());
+
+    let verified_epoch_states = bootstrapper.get_verified_epoch_states();
+    assert_eq!(verified_epoch_states.latest_epoch_state().epoch, 0);
+
+    // The forgery: version 500 (< waypoint), epoch 0, `next_epoch_state` for
+    // epoch 1, EMPTY aggregate signature
+    let forged = create_random_epoch_ending_ledger_info(500, 0);
+    verified_epoch_states
+        .update_verified_epoch_states(&forged, &waypoint)
+        .expect("pre-waypoint archive data must still be accepted");
+
+    // It is retained for chunk-commit lookups...
+    assert!(verified_epoch_states
+        .all_epoch_ending_ledger_infos()
+        .contains(&forged));
+
+    // ...but its `next_epoch_state` (epoch 1) was NOT installed as trusted
+    assert_eq!(verified_epoch_states.latest_epoch_state().epoch, 0);
+}
+
+/// Regression test for the H1/F2 attack chain: the attacker forges a
+/// pre-waypoint epoch-ending ledger info whose `next_epoch_state` contains
+/// the ATTACKER'S validator set (accepted via the bypass), then signs a
+/// post-waypoint ledger info with the attacker's OWN keys so it verifies
+/// against the installed fake epoch state — poisoning trust and reaching
+/// the `verify_waypoint` panic. Post-fix, the pre-waypoint ledger info
+/// never installs its `next_epoch_state`, so the post-waypoint forgery
+/// fails the epoch continuity check.
+#[test]
+fn test_forged_pre_waypoint_chain_cannot_escalate_to_post_waypoint_forgery() {
+    let driver_configuration = create_full_node_driver_configuration();
+    let (mut bootstrapper, _) =
+        create_bootstrapper(driver_configuration, MockStreamingClient::new(), None, false);
+
+    let waypoint_ledger_info = create_random_epoch_ending_ledger_info(1000, 0);
+    let waypoint = Waypoint::new_any(waypoint_ledger_info.ledger_info());
+
+    let verified_epoch_states = bootstrapper.get_verified_epoch_states();
+
+    // Step 1: forged pre-waypoint ledger info carrying the attacker's
+    // validator set, with an EMPTY aggregate signature
+    let attacker_signer = ValidatorSigner::random([42; 32]);
+    let make_attacker_verifier = || {
+        ValidatorVerifier::new(vec![ValidatorConsensusInfo::new(
+            attacker_signer.author(),
+            attacker_signer.public_key(),
+            1,
+        )])
+    };
+    let forged_pre = LedgerInfoWithSignatures::new(
+        LedgerInfo::new(
+            BlockInfo::new(
+                0, // epoch matches the victim's trusted epoch
+                0,
+                HashValue::zero(),
+                HashValue::random(),
+                500, // version < waypoint
+                0,
+                Some(EpochState::new(1, make_attacker_verifier())),
+            ),
+            HashValue::random(),
+        ),
+        AggregateSignature::empty(),
+    );
+    verified_epoch_states
+        .update_verified_epoch_states(&forged_pre, &waypoint)
+        .expect("pre-waypoint archive data must still be accepted");
+
+    // Step 2: post-waypoint ledger info signed by the attacker's OWN key.
+    // This only verifies if step 1 installed the attacker's validator set.
+    let post_waypoint_ledger_info = LedgerInfo::new(
+        BlockInfo::new(
+            1, // epoch continues the forged chain
+            0,
+            HashValue::zero(),
+            HashValue::random(),
+            1500, // version > waypoint
+            0,
+            Some(EpochState::new(2, make_attacker_verifier())),
+        ),
+        HashValue::random(),
+    );
+    let attacker_sig = attacker_signer.sign(&post_waypoint_ledger_info).unwrap();
+    let attacker_aggregate = make_attacker_verifier()
+        .aggregate_signatures([(attacker_signer.author(), attacker_sig)].iter().map(|(a, s)| (a, s)))
+        .unwrap();
+    let forged_post =
+        LedgerInfoWithSignatures::new(post_waypoint_ledger_info, attacker_aggregate);
+
+    assert!(
+        verified_epoch_states
+            .update_verified_epoch_states(&forged_post, &waypoint)
+            .is_err(),
+        "post-waypoint forgery must fail: the trusted epoch state never left epoch 0"
+    );
 }
 
 /// Creates a bootstrapper for testing

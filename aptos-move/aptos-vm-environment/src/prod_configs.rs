@@ -13,7 +13,7 @@ use aptos_types::{
     },
     state_store::StateView,
 };
-use move_binary_format::deserializer::DeserializerConfig;
+use move_binary_format::{deserializer::DeserializerConfig, file_format_common::VARIANT_COUNT_MAX};
 use move_bytecode_verifier::VerifierConfig;
 use move_vm_runtime::config::VMConfig;
 use move_vm_types::{
@@ -91,13 +91,14 @@ pub fn aptos_prod_verifier_config(features: &Features) -> VerifierConfig {
         max_value_stack_size: 1024,
         max_type_nodes: Some(256),
         max_push_size: Some(10000),
-        max_struct_definitions: None,
-        max_struct_variants: None,
-        max_fields_in_struct: None,
-        max_function_definitions: None,
+        max_struct_definitions: Some(200),
+        // Allow the full variant range of the binary format; upstream Aptos uses 64.
+        max_struct_variants: Some(VARIANT_COUNT_MAX as usize),
+        max_fields_in_struct: Some(64),
+        max_function_definitions: Some(1000),
         max_back_edges_per_function: None,
         max_back_edges_per_module: None,
-        max_basic_blocks_in_script: None,
+        max_basic_blocks_in_script: Some(1024),
         max_per_fun_meter_units: Some(1000 * 80000),
         max_per_mod_meter_units: Some(1000 * 80000),
         use_signature_checker_v2,

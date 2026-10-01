@@ -27,38 +27,23 @@ const VALIDATOR_NETWORK_OPTIMIZER_NAME: &str = "ValidatorNetworkConfigOptimizer"
 
 const IDENTITY_KEY_FILE: &str = "ephemeral_identity_key";
 
-// Mainnet seed peers. Each seed peer entry is a tuple
-// of (account address, public key, network address).
+// Movement mainnet seed peers, published at
+// https://github.com/movementlabsxyz/movement-networks (mainnet/configs/fullnode.yaml).
+// Each seed peer entry is a tuple of (account address, public key, network address).
 const MAINNET_SEED_PEERS: [(&str, &str, &str); 1] = [(
-    "568fdb6acf26aae2a84419108ff13baa3ebf133844ef18e23a9f47b5af16b698",
-    "0x003cc2ed36e7d486539ac2c411b48d962f1ef17d884c3a7109cad43f16bd5008",
-    "/dns/node1.cloud-b.mainnet.aptoslabs.com/tcp/6182/noise-ik/0x003cc2ed36e7d486539ac2c411b48d962f1ef17d884c3a7109cad43f16bd5008/handshake/0",
+    "9967EBF40AC8C2CCB38709488952DA1826176584EA3067B63B1695362ECB3D1F",
+    "0x9967EBF40AC8C2CCB38709488952DA1826176584EA3067B63B1695362ECB3D1F",
+    "/dns/consensus.mainnet.movementnetwork.xyz/tcp/6182/noise-ik/9967EBF40AC8C2CCB38709488952DA1826176584EA3067B63B1695362ECB3D1F/handshake/0",
 )];
 
-// Testnet seed peers. Each seed peer entry is a tuple
-// of (account address, public key, network address).
-const TESTNET_SEED_PEERS: [(&str, &str, &str); 4] = [
-    (
-        "31e55012a7d439dcd16fee0509cd5855c1fbdc62057ba7fac3f7c88f5453dd8e",
-        "0x87bb19b02580b7e2a91a8e9342ec77ffd8f3ad967f54e77b22aaf558c5c11755",
-        "/dns/seed0.testnet.aptoslabs.com/tcp/6182/noise-ik/0x87bb19b02580b7e2a91a8e9342ec77ffd8f3ad967f54e77b22aaf558c5c11755/handshake/0",
-    ),
-    (
-        "116176e2af223a8b7f8db80dc52f7a423b4d7f8c0553a1747e92ef58849aff4f",
-        "0xc2f24389f31c9c18d2ceb69d153ad9299e0ea7bbd66f457e0a28ef41c77c2b64",
-        "/dns/seed1.testnet.aptoslabs.com/tcp/6182/noise-ik/0xc2f24389f31c9c18d2ceb69d153ad9299e0ea7bbd66f457e0a28ef41c77c2b64/handshake/0",
-    ),
-    (
-        "12000330d7cd8a748f46c25e6ce5d236a27e13d0b510d4516ac84ecc5fddd002",
-        "0x171c661e5b785283978a74eafc52a906e68c73ae78119737b92f93507c753933",
-        "/dns/seed2.testnet.aptoslabs.com/tcp/6182/noise-ik/0x171c661e5b785283978a74eafc52a906e68c73ae78119737b92f93507c753933/handshake/0",
-    ),
-    (
-        "03c04549114877c55f45649aba48ac0a4ff086ab7bdce3b8cc8d3d9947bc0d99",
-        "0xafc38bf177bd825326a1c314748612137d2b35dae6472932806806a32c23174a",
-        "/dns/seed3.testnet.aptoslabs.com/tcp/6182/noise-ik/0xafc38bf177bd825326a1c314748612137d2b35dae6472932806806a32c23174a/handshake/0",
-    ),
-];
+// Movement testnet seed peers, published at
+// https://github.com/movementlabsxyz/movement-networks (testnet/configs/fullnode.yaml).
+// Each seed peer entry is a tuple of (account address, public key, network address).
+const TESTNET_SEED_PEERS: [(&str, &str, &str); 1] = [(
+    "9967EBF40AC8C2CCB38709488952DA1826176584EA3067B63B1695362ECB3D1F",
+    "0x9967EBF40AC8C2CCB38709488952DA1826176584EA3067B63B1695362ECB3D1F",
+    "/dns/consensus.testnet.movementnetwork.xyz/tcp/6182/noise-ik/9967EBF40AC8C2CCB38709488952DA1826176584EA3067B63B1695362ECB3D1F/handshake/0",
+)];
 
 /// A trait for optimizing node configs (and their sub-configs) by tweaking
 /// config values based on node types, chain IDs and compiler features.

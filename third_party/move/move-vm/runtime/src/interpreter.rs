@@ -355,21 +355,23 @@ impl InterpreterImpl<'_> {
                     let (function, frame_cache) = if RTCaches::caches_enabled() {
                         let current_frame_cache = &mut *current_frame.frame_cache.borrow_mut();
 
-                        if let PerInstructionCache::Call(ref function, ref frame_cache) =
-                            current_frame_cache.per_instruction_cache[current_frame.pc as usize]
+                        if let Some(PerInstructionCache::Call(function, frame_cache)) =
+                            current_frame_cache.per_instruction_cache.get(&current_frame.pc)
                         {
                             (Rc::clone(function), Rc::clone(frame_cache))
                         } else {
                             match current_frame_cache.sub_frame_cache.entry(fh_idx) {
                                 btree_map::Entry::Occupied(entry) => {
-                                    let entry = entry.get();
-                                    current_frame_cache.per_instruction_cache
-                                        [current_frame.pc as usize] = PerInstructionCache::Call(
-                                        Rc::clone(&entry.0),
-                                        Rc::clone(&entry.1),
+                                    let (function, frame_cache) = entry.get();
+                                    current_frame_cache.per_instruction_cache.insert(
+                                        current_frame.pc,
+                                        PerInstructionCache::Call(
+                                            Rc::clone(function),
+                                            Rc::clone(frame_cache),
+                                        ),
                                     );
 
-                                    (Rc::clone(&entry.0), Rc::clone(&entry.1))
+                                    (Rc::clone(function), Rc::clone(frame_cache))
                                 },
                                 btree_map::Entry::Vacant(entry) => {
                                     let function = Rc::new(self.load_function(
@@ -381,10 +383,12 @@ impl InterpreterImpl<'_> {
                                         FrameTypeCache::make_rc_for_function(&function);
 
                                     entry.insert((Rc::clone(&function), Rc::clone(&frame_cache)));
-                                    current_frame_cache.per_instruction_cache
-                                        [current_frame.pc as usize] = PerInstructionCache::Call(
-                                        Rc::clone(&function),
-                                        Rc::clone(&frame_cache),
+                                    current_frame_cache.per_instruction_cache.insert(
+                                        current_frame.pc,
+                                        PerInstructionCache::Call(
+                                            Rc::clone(&function),
+                                            Rc::clone(&frame_cache),
+                                        ),
                                     );
 
                                     (function, frame_cache)
@@ -449,22 +453,23 @@ impl InterpreterImpl<'_> {
                     let (function, frame_cache) = if RTCaches::caches_enabled() {
                         let current_frame_cache = &mut *current_frame.frame_cache.borrow_mut();
 
-                        if let PerInstructionCache::CallGeneric(ref function, ref frame_cache) =
-                            current_frame_cache.per_instruction_cache[current_frame.pc as usize]
+                        if let Some(PerInstructionCache::CallGeneric(function, frame_cache)) =
+                            current_frame_cache.per_instruction_cache.get(&current_frame.pc)
                         {
                             (Rc::clone(function), Rc::clone(frame_cache))
                         } else {
                             match current_frame_cache.generic_sub_frame_cache.entry(idx) {
                                 btree_map::Entry::Occupied(entry) => {
-                                    let entry = entry.get();
-                                    current_frame_cache.per_instruction_cache
-                                        [current_frame.pc as usize] =
+                                    let (function, frame_cache) = entry.get();
+                                    current_frame_cache.per_instruction_cache.insert(
+                                        current_frame.pc,
                                         PerInstructionCache::CallGeneric(
-                                            Rc::clone(&entry.0),
-                                            Rc::clone(&entry.1),
-                                        );
+                                            Rc::clone(function),
+                                            Rc::clone(frame_cache),
+                                        ),
+                                    );
 
-                                    (Rc::clone(&entry.0), Rc::clone(&entry.1))
+                                    (Rc::clone(function), Rc::clone(frame_cache))
                                 },
                                 btree_map::Entry::Vacant(entry) => {
                                     let function =
@@ -478,12 +483,13 @@ impl InterpreterImpl<'_> {
                                         FrameTypeCache::make_rc_for_function(&function);
 
                                     entry.insert((Rc::clone(&function), Rc::clone(&frame_cache)));
-                                    current_frame_cache.per_instruction_cache
-                                        [current_frame.pc as usize] =
+                                    current_frame_cache.per_instruction_cache.insert(
+                                        current_frame.pc,
                                         PerInstructionCache::CallGeneric(
                                             Rc::clone(&function),
                                             Rc::clone(&frame_cache),
-                                        );
+                                        ),
+                                    );
                                     (function, frame_cache)
                                 },
                             }
@@ -971,7 +977,7 @@ impl InterpreterImpl<'_> {
                 // in the end to determine which function to jump to. The native function shouldn't switch ordering of arguments.
                 //
                 // Runtime will use such convention to reconstruct the type stack required to perform paranoid mode checks.
-                if function.ty_param_abilities() != target_func.ty_param_abilities()
+                if function.param_tys().is_empty() || function.ty_param_abilities() != target_func.ty_param_abilities()
                     || function.return_tys() != target_func.return_tys()
                     || &function.param_tys()[0..function.param_tys().len() - 1]
                         != target_func.param_tys()
@@ -1660,11 +1666,11 @@ impl Stack {
     }
 
     /// Pop n types off the stack.
-    pub(crate) fn popn_tys(&mut self, n: u16) -> PartialVMResult<Vec<Type>> {
+    pub(crate) fn popn_tys(&mut self, n: usize) -> PartialVMResult<Vec<Type>> {
         let remaining_stack_size = self
             .types
             .len()
-            .checked_sub(n as usize)
+            .checked_sub(n)
             .ok_or_else(|| PartialVMError::new(StatusCode::EMPTY_VALUE_STACK))?;
         let args = self.types.split_off(remaining_stack_size);
         Ok(args)
@@ -1768,7 +1774,7 @@ fn check_depth_of_type_impl(
         Type::Struct { idx, .. } => {
             let formula =
                 DepthFormulaCalculator::new(module_storage).calculate_depth_of_struct(idx)?;
-            check_depth!(formula.solve(&[]))
+            check_depth!(formula.solve(&[])?)
         },
         // NB: substitution must be performed before calling this function
         Type::StructInstantiation { idx, ty_args, .. } => {
@@ -1782,7 +1788,7 @@ fn check_depth_of_type_impl(
                 .collect::<PartialVMResult<Vec<_>>>()?;
             let formula =
                 DepthFormulaCalculator::new(module_storage).calculate_depth_of_struct(idx)?;
-            check_depth!(formula.solve(&ty_arg_depths))
+            check_depth!(formula.solve(&ty_arg_depths)?)
         },
         Type::Function { args, results, .. } => {
             let mut ty_max_depth = depth;
@@ -2128,14 +2134,15 @@ impl Frame {
                             };
 
                         let field_count = if RTCaches::caches_enabled() {
-                            let cached_field_count =
-                                &frame_cache.per_instruction_cache[self.pc as usize];
-                            if let PerInstructionCache::Pack(ref field_count) = cached_field_count {
+                            if let Some(PerInstructionCache::Pack(field_count)) =
+                                frame_cache.per_instruction_cache.get(&self.pc)
+                            {
                                 *field_count
                             } else {
                                 let field_count = get_field_count_charge_gas_and_check_depth()?;
-                                frame_cache.per_instruction_cache[self.pc as usize] =
-                                    PerInstructionCache::Pack(field_count);
+                                frame_cache
+                                    .per_instruction_cache
+                                    .insert(self.pc, PerInstructionCache::Pack(field_count));
                                 field_count
                             }
                         } else {
@@ -2189,18 +2196,16 @@ impl Frame {
                             };
 
                         let field_count = if RTCaches::caches_enabled() {
-                            let cached_field_count =
-                                &frame_cache.per_instruction_cache[self.pc as usize];
-
-                            if let PerInstructionCache::PackGeneric(ref field_count) =
-                                cached_field_count
+                            if let Some(PerInstructionCache::PackGeneric(field_count)) =
+                                frame_cache.per_instruction_cache.get(&self.pc)
                             {
                                 *field_count
                             } else {
                                 let field_count =
                                     get_field_count_charge_gas_and_check_depth(frame_cache)?;
-                                frame_cache.per_instruction_cache[self.pc as usize] =
-                                    PerInstructionCache::PackGeneric(field_count);
+                                frame_cache
+                                    .per_instruction_cache
+                                    .insert(self.pc, PerInstructionCache::PackGeneric(field_count));
                                 field_count
                             }
                         } else {
@@ -2374,6 +2379,14 @@ impl Frame {
                                 ty_args,
                             )
                             .map(Rc::new)?;
+                        if RTTCheck::should_perform_checks() {
+                            verify_pack_closure(
+                                self.ty_builder(),
+                                &mut interpreter.operand_stack,
+                                &function,
+                                *mask,
+                            )?;
+                        }
                         let captured = interpreter.operand_stack.popn(mask.captured_count())?;
                         let lazy_function = LazyLoadedFunction::new_resolved(
                             module_storage.runtime_environment(),
@@ -2383,15 +2396,6 @@ impl Frame {
                         interpreter
                             .operand_stack
                             .push(Value::closure(Box::new(lazy_function), captured))?;
-
-                        if RTTCheck::should_perform_checks() {
-                            verify_pack_closure(
-                                self.ty_builder(),
-                                &mut interpreter.operand_stack,
-                                &function,
-                                *mask,
-                            )?;
-                        }
                     },
                     Bytecode::ReadRef => {
                         let reference = interpreter.operand_stack.pop_as::<Reference>()?;

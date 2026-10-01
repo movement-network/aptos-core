@@ -10,7 +10,7 @@ guide, we go over each section of the Homebrew formula and steps to implement ch
 ## Quick guide
 
 - [Formula in Homebrew GitHub](https://github.com/Homebrew/homebrew-core/blob/master/Formula/movement.rb)
-- [Movement <version-number> New Formula PR for GitHub](<link-to-PR>)
+- [Movement <version-number> New Formula PR for GitHub](link-to-PR)
 
 ## Getting started
 
@@ -178,9 +178,9 @@ brew livecheck --debug movement
   end
 
   # Currently must compile with the same rustc version specified in the
-  # root Cargo.toml file of aptos-core (currently it is pegged to Rust 
+  # root Cargo.toml file of aptos-core (currently it is pegged to Rust
   # v1.64). In the future if it becomes compatible with the latest Rust
-  # toolchain, we can remove the use of rustup-init, replacing it with a 
+  # toolchain, we can remove the use of rustup-init, replacing it with a
   # depends_on "rust" => :build
   # above and build the binary without rustup as a dependency
   #
@@ -221,7 +221,7 @@ key.
 - To view other Homebrew-related FAQs or ask questions yourself, visit
   the [discussions board](https://github.com/orgs/Homebrew/discussions).
 - For similar Rust-related build examples, we recommend:
-    - [`rustfmt.rb`](https://github.com/Homebrew/homebrew-core/blob/master/Formula/rustfmt.rb)
+  - [`rustfmt.rb`](https://github.com/Homebrew/homebrew-core/blob/master/Formula/rustfmt.rb)
 - Finally, note these key Homebew guides:
-    - [Homebrew Formula Cookbook](https://docs.brew.sh/Formula-Cookbook)
-    - [Creating and Running Your Own Homebrew Tap - Rust Runbook](https://publishing-project.rivendellweb.net/creating-and-running-your-own-homebrew-tap/)
+  - [Homebrew Formula Cookbook](https://docs.brew.sh/Formula-Cookbook)
+  - [Creating and Running Your Own Homebrew Tap - Rust Runbook](https://publishing-project.rivendellweb.net/creating-and-running-your-own-homebrew-tap/)

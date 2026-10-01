@@ -12,7 +12,41 @@ use move_binary_format::{
 };
 use move_core_types::gas_algebra::NumTypeNodes;
 use move_vm_types::loaded_data::runtime_types::Type;
-use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::{BTreeMap, HashMap},
+    hash::{BuildHasherDefault, Hasher},
+    rc::Rc,
+};
+
+/// Hasher for the per-instruction cache's `u16` program-counter keys. The keys
+/// are small, dense, and non-adversarial (bytecode offsets), so the value is
+/// used directly as the hash rather than paying for the default SipHash. This
+/// keeps a lookup close to a direct index while still allowing the cache to be
+/// a sparse map that only holds entries for instructions that actually ran.
+#[derive(Default)]
+pub(crate) struct PcHasher(u64);
+
+impl Hasher for PcHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+
+    fn write_u16(&mut self, i: u16) {
+        self.0 = i as u64;
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        // Keys are `u16`, so `write_u16` is what actually gets called. This
+        // fallback only exists to satisfy the trait and is never on the hot
+        // path.
+        for &b in bytes {
+            self.0 = (self.0 << 8) ^ u64::from(b);
+        }
+    }
+}
+
+type BuildPcHasher = BuildHasherDefault<PcHasher>;
 
 #[allow(dead_code)]
 pub(crate) trait RuntimeCacheTraits {
@@ -40,7 +74,6 @@ impl RuntimeCacheTraits for AllRuntimeCaches {
 #[derive(Clone)]
 #[allow(dead_code)]
 pub(crate) enum PerInstructionCache {
-    Nothing,
     Pack(u16),
     PackGeneric(u16),
     Call(Rc<LoadedFunction>, Rc<RefCell<FrameTypeCache>>),
@@ -79,12 +112,12 @@ pub(crate) struct FrameTypeCache {
     /// small. The caches are indexed by the index of the given
     /// bytecode instruction in the function body.
     ///
-    /// Important! - If entry is present for a given instruction, then
+    /// Important! - If an entry is present for a given instruction, then
     /// we do NOT need to re-check for any errors that only depend on
     /// the argument of the bytecode instructions, for which it is
     /// guaranteed that everything will be exactly the same as when we
     /// did the insertion.
-    pub(crate) per_instruction_cache: Vec<PerInstructionCache>,
+    pub(crate) per_instruction_cache: HashMap<u16, PerInstructionCache, BuildPcHasher>,
 }
 
 impl FrameTypeCache {
@@ -239,13 +272,8 @@ impl FrameTypeCache {
         Rc::new(RefCell::<Self>::new(Default::default()))
     }
 
-    pub(crate) fn make_rc_for_function(function: &LoadedFunction) -> Rc<RefCell<Self>> {
-        let frame_cache = Rc::new(RefCell::<Self>::new(Default::default()));
-
-        frame_cache
-            .borrow_mut()
-            .per_instruction_cache
-            .resize(function.code_size(), PerInstructionCache::Nothing);
-        frame_cache
+    /// Creates a frame cache for a callee frame.
+    pub(crate) fn make_rc_for_function(_function: &LoadedFunction) -> Rc<RefCell<Self>> {
+        Self::make_rc()
     }
 }

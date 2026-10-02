@@ -43,9 +43,9 @@ fn benchmark_groups(c: &mut Criterion) {
     scalar_neg(&mut group);
     scalar_sub(&mut group);
 
-    //for n in 1..=128 {
-    //for n in [256, 512, 1024, 2048, 4096] {
-    for n in [2, 8192, 16384, 32768] {
+    // The small widths match the sigma-protocol MSMs that on-chain verification performs,
+    // which run to a few tens of points; the large ones exercise asymptotic scaling.
+    for n in [1, 2, 4, 8, 16, 32, 64, 128, 8192, 16384, 32768] {
         multi_scalar_mul(&mut group, n);
     }
 

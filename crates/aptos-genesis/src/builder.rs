@@ -31,9 +31,11 @@ use aptos_types::{
     keyless::Groth16VerificationKey,
     on_chain_config::{
         Features, GasScheduleV2, OnChainConsensusConfig, OnChainExecutionConfig,
-        OnChainJWKConsensusConfig, OnChainRandomnessConfig,
+        OnChainJWKConsensusConfig, OnChainRandomnessConfig, ValidatorSet,
     },
     transaction::Transaction,
+    validator_config::ValidatorConfig,
+    validator_info::ValidatorInfo,
     waypoint::Waypoint,
 };
 use aptos_vm_genesis::default_gas_schedule;
@@ -155,6 +157,26 @@ impl ValidatorNodeConfig {
         }
     }
 
+    pub fn validator_info(&self) -> anyhow::Result<ValidatorInfo> {
+        let (_, _, private_identity, _) = self.get_key_objects(None)?;
+        let validator_configuration: ValidatorConfiguration = self.try_into()?;
+        let validator: aptos_vm_genesis::Validator = validator_configuration.try_into()?;
+        Ok(ValidatorInfo::new(
+            validator.owner_address,
+            validator.stake_amount,
+            ValidatorConfig::new(
+                private_identity.consensus_private_key.public_key(),
+                validator.network_addresses,
+                validator.full_node_network_addresses,
+                self.index as u64,
+            ),
+        ))
+    }
+
+    pub fn validator_config_path(&self) -> PathBuf {
+        self.dir.join(CONFIG_FILE)
+    }
+
     fn insert_genesis(&mut self, genesis: &Transaction) {
         let config = self.config.override_config_mut();
         config.execution.genesis = Some(genesis.clone());
@@ -187,6 +209,16 @@ impl ValidatorNodeConfig {
             .save_config(self.dir.join(CONFIG_FILE))
             .map_err(Into::into)
     }
+}
+
+pub fn validator_set_from_local_validators(
+    validators: &[ValidatorNodeConfig],
+) -> anyhow::Result<ValidatorSet> {
+    validators
+        .iter()
+        .map(ValidatorNodeConfig::validator_info)
+        .collect::<anyhow::Result<Vec<_>>>()
+        .map(ValidatorSet::new)
 }
 
 impl TryFrom<&ValidatorNodeConfig> for ValidatorConfiguration {

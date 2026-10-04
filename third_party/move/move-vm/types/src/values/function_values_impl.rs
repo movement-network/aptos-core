@@ -130,6 +130,7 @@ impl serde::Serialize for SerializationReadyValue<'_, '_, '_, (), Closure> {
                 ctx: self.ctx,
                 layout: &layout,
                 value,
+                depth: self.depth + 1,
             })?
         }
         seq.end()
@@ -138,6 +139,7 @@ impl serde::Serialize for SerializationReadyValue<'_, '_, '_, (), Closure> {
 
 pub(crate) struct ClosureVisitor<'c>(pub(crate) DeserializationSeed<'c, ()>);
 
+#[allow(clippy::needless_lifetimes)] // TODO(prover-cleanup): revisit serde Visitor lifetime elision.
 impl<'d, 'c> serde::de::Visitor<'d> for ClosureVisitor<'c> {
     type Value = Closure;
 

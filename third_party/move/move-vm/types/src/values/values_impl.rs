@@ -4068,7 +4068,15 @@ impl serde::Serialize for SerializationReadyValue<'_, '_, '_, MoveStructLayout, 
                 },
             }
         } else {
-            let field_layouts = self.layout.fields(None);
+            let field_layouts = match self.layout.fields(None) {
+                Some(field_layouts) => field_layouts,
+                None => {
+                    return Err(invariant_violation::<S>(format!(
+                        "cannot serialize struct value {:?} as {:?} -- field layouts unavailable",
+                        self.value, self.layout
+                    )));
+                },
+            };
             let mut t = serializer.serialize_tuple(values.len())?;
             if field_layouts.len() != values.len() {
                 return Err(invariant_violation::<S>(format!(
@@ -4807,17 +4815,24 @@ pub mod prop {
                     })
                     .boxed(),
             },
-            L::Struct(struct_layout @ MoveStructLayout::RuntimeVariants(variants)) => struct_layout
+            L::Struct(struct_layout @ MoveStructLayout::RuntimeVariants(variants)) => {
                 // TODO(#13806): do we need to have a strategy for different variants?
-                .fields(Some(variants.len().wrapping_sub(1))) // choose last variant
-                .iter()
-                .map(value_strategy_with_layout)
-                .collect::<Vec<_>>()
-                .prop_map(move |vals| Value::struct_(Struct::pack(vals)))
-                .boxed(),
+                // Choose the last variant when one exists. An empty variant list
+                // has no legal tag, so generate no fields.
+                let field_layouts = struct_layout
+                    .fields(Some(variants.len().wrapping_sub(1)))
+                    .unwrap_or(&[]);
+                field_layouts
+                    .iter()
+                    .map(value_strategy_with_layout)
+                    .collect::<Vec<_>>()
+                    .prop_map(move |vals| Value::struct_(Struct::pack(vals)))
+                    .boxed()
+            },
 
             L::Struct(struct_layout) => struct_layout
                 .fields(None)
+                .unwrap_or(&[])
                 .iter()
                 .map(value_strategy_with_layout)
                 .collect::<Vec<_>>()
@@ -4896,12 +4911,16 @@ impl ValueImpl {
                 if let Some((tag, variant_layouts)) =
                     try_get_variant_field_layouts(struct_layout, values)
                 {
-                    // This conversion is infallible and only feeds best-effort
-                    // consumers such as `debug::print`. An out-of-range tag
-                    // cannot occur for a well-formed value; if one somehow does,
-                    // fall back to no field layouts rather than panicking. The
-                    // enforced check lives on the BCS serialization path above.
-                    let variant_layouts = variant_layouts.unwrap_or(&[]);
+                    // Best-effort conversion for consumers such as `debug::print`.
+                    // An unknown tag is not a unit variant: collapsing it to
+                    // empty fields would hide the same serialize/deserialize
+                    // hole that BCS serialization already rejects.
+                    let variant_layouts = variant_layouts.unwrap_or_else(|| {
+                        panic!(
+                            "cannot convert value as {:?}: variant tag {} is out of range",
+                            struct_layout, tag
+                        )
+                    });
                     MoveValue::Struct(MoveStruct::new_variant(
                         tag,
                         values
@@ -4913,10 +4932,16 @@ impl ValueImpl {
                             .collect(),
                     ))
                 } else {
+                    let field_layouts = struct_layout.fields(None).unwrap_or_else(|| {
+                        panic!(
+                            "cannot convert value as {:?}: field layouts unavailable",
+                            struct_layout
+                        )
+                    });
                     MoveValue::Struct(MoveStruct::new(
                         values
                             .iter()
-                            .zip(struct_layout.fields(None))
+                            .zip(field_layouts)
                             .map(|(v, field_layout)| v.as_move_value(field_layout))
                             .collect(),
                     ))
@@ -4980,9 +5005,9 @@ fn try_get_variant_field_layouts<'a>(
     layout: &'a MoveStructLayout,
     values: &[ValueImpl],
 ) -> Option<(u16, Option<&'a [MoveTypeLayout]>)> {
-    if let MoveStructLayout::RuntimeVariants(variants) = layout {
+    if matches!(layout, MoveStructLayout::RuntimeVariants(_)) {
         if let Some(ValueImpl::U16(tag)) = values.first() {
-            return Some((*tag, variants.get(*tag as usize).map(Vec::as_slice)));
+            return Some((*tag, layout.fields(Some(*tag as usize))));
         }
     }
     None

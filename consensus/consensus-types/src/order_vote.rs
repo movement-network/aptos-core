@@ -4,7 +4,7 @@
 
 use crate::common::Author;
 use anyhow::{ensure, Context};
-use aptos_crypto::{bls12381, HashValue};
+use aptos_crypto::{bls12381, CryptoMaterialError, HashValue};
 use aptos_short_hex_str::AsShortHexStr;
 use aptos_types::{
     ledger_info::{LedgerInfo, SignatureWithStatus},
@@ -63,8 +63,8 @@ impl OrderVote {
         &self.ledger_info
     }
 
-    pub fn signature(&self) -> &bls12381::Signature {
-        self.signature.signature()
+    pub fn signature(&self) -> Result<bls12381::Signature, CryptoMaterialError> {
+        self.signature.recover_group_element()
     }
 
     // Question: SignatureWithStatus has interior mutability. Is it okay to expose this?

@@ -2202,6 +2202,24 @@ pub struct MultisigAccountWithSequenceNumber {
     pub(crate) sequence_number: u64,
 }
 
+/// Common options for interactions with a timelock account.
+#[derive(Clone, Debug, Parser, Serialize)]
+pub struct TimelockAccount {
+    /// The address of the timelock account to interact with
+    #[clap(long, value_parser = crate::common::types::load_account_arg)]
+    pub(crate) timelock_address: AccountAddress,
+}
+
+#[derive(Clone, Debug, Parser, Serialize)]
+pub struct TimelockAccountWithProposalHash {
+    #[clap(flatten)]
+    pub(crate) timelock_account: TimelockAccount,
+    /// Proposal hash identifying the timelock transaction to interact with, as 32 hex-encoded
+    /// bytes: keccak256(execution_hash || salt), as output by the create-transaction command
+    #[clap(long)]
+    pub(crate) proposal_hash: String,
+}
+
 #[derive(Debug, Default, Parser)]
 pub struct TypeArgVec {
     /// TypeTag arguments separated by spaces.

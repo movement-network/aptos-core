@@ -240,6 +240,7 @@ fn test_db_indexer_data() {
         ident_str!("features"),
         ident_str!("from_bcs"),
         ident_str!("pool_u64"),
+        ident_str!("timelock"),
         ident_str!("auth_data"),
         ident_str!("multi_key"),
         ident_str!("secp256k1"),

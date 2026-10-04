@@ -9,6 +9,7 @@ use crate::{
             LookupAddress, NewAuthKeyOptions, NewProfileOptions, RotateKey, RotateSummary,
         },
         list::{ListAccount, ListQuery},
+        timelock_account,
         transfer::{TransferCoins, TransferSummary},
     },
     common::{
@@ -20,7 +21,8 @@ use crate::{
             LargePackagesModuleOption, MoveManifestAccountWrapper, MovePackageOptions,
             OptionalPoolAddressArgs, OverrideSizeCheckOption, PoolAddressArgs,
             PrivateKeyInputOptions, PromptOptions, PublicKeyInputOptions, RestOptions, RngArgs,
-            SaveFile, ScriptFunctionArguments, TransactionOptions, TransactionSummary, TypeArgVec,
+            SaveFile, ScriptFunctionArguments, TimelockAccount, TimelockAccountWithProposalHash,
+            TransactionOptions, TransactionSummary, TypeArgVec,
         },
         utils::write_to_file,
     },
@@ -47,6 +49,7 @@ use crate::{
     },
     CliCommand,
 };
+use aptos_api_types::ViewFunction;
 use aptos_config::config::Peer;
 use aptos_crypto::{
     bls12381,
@@ -1249,6 +1252,295 @@ impl CliTestFramework {
         }
         .execute()
         .await
+    }
+
+    // =============================== Timelock helpers ===============================
+
+    fn timelock_compile_args(script_path: PathBuf) -> CompileScriptFunction {
+        CompileScriptFunction {
+            script_path: Some(script_path),
+            framework_package_args: FrameworkPackageArgs {
+                framework_git_rev: None,
+                framework_local_dir: Some(Self::aptos_framework_dir()),
+                skip_fetch_latest_git_deps: false,
+            },
+            ..CompileScriptFunction::default()
+        }
+    }
+
+    /// Deploy a new timelock account (with no cancelers) from the account at `deployer_index`,
+    /// returning its on-chain address.
+    pub async fn create_timelock(
+        &self,
+        deployer_index: usize,
+        creators: Vec<AccountAddress>,
+        executors: Vec<AccountAddress>,
+        num_seconds_execute: u64,
+    ) -> CliTypedResult<AccountAddress> {
+        self.create_timelock_with_cancelers(
+            deployer_index,
+            creators,
+            executors,
+            vec![],
+            num_seconds_execute,
+        )
+        .await
+    }
+
+    /// Deploy a new timelock account with an emergency-response canceler list, returning its
+    /// on-chain address.
+    pub async fn create_timelock_with_cancelers(
+        &self,
+        deployer_index: usize,
+        creators: Vec<AccountAddress>,
+        executors: Vec<AccountAddress>,
+        cancelers: Vec<AccountAddress>,
+        num_seconds_execute: u64,
+    ) -> CliTypedResult<AccountAddress> {
+        let summary = timelock_account::Create {
+            creators,
+            executors,
+            cancelers,
+            num_seconds_execute,
+            txn_options: self.transaction_options(deployer_index, None),
+        }
+        .execute()
+        .await?;
+        summary
+            .timelock_account
+            .map(|account| account.timelock_address)
+            .ok_or_else(|| {
+                CliError::UnexpectedError(
+                    "create did not return a timelock account address".to_string(),
+                )
+            })
+    }
+
+    /// Propose a timelock transaction by compiling `script_path`. Returns the summary, which
+    /// carries the on-chain `proposal_hash`, `execution_hash`, and `salt`.
+    pub async fn create_timelock_transaction(
+        &self,
+        creator_index: usize,
+        timelock_address: AccountAddress,
+        script_path: PathBuf,
+        num_seconds_execute: u64,
+        salt: Option<String>,
+        script_path_uri: Option<String>,
+    ) -> CliTypedResult<timelock_account::CreateTransactionSummary> {
+        timelock_account::CreateTransaction {
+            timelock_account: TimelockAccount { timelock_address },
+            execution_hash: None,
+            compile_proposal_args: Self::timelock_compile_args(script_path),
+            num_seconds_execute,
+            salt,
+            script_path_uri,
+            txn_options: self.transaction_options(creator_index, None),
+        }
+        .execute()
+        .await
+    }
+
+    /// Propose a timelock transaction from a precomputed `execution_hash` (the `--execution-hash`
+    /// path) instead of compiling a script. Returns the proposal summary.
+    pub async fn create_timelock_transaction_with_execution_hash(
+        &self,
+        creator_index: usize,
+        timelock_address: AccountAddress,
+        execution_hash: String,
+        num_seconds_execute: u64,
+        salt: Option<String>,
+        script_path_uri: Option<String>,
+    ) -> CliTypedResult<timelock_account::CreateTransactionSummary> {
+        timelock_account::CreateTransaction {
+            timelock_account: TimelockAccount { timelock_address },
+            execution_hash: Some(execution_hash),
+            compile_proposal_args: CompileScriptFunction::default(),
+            num_seconds_execute,
+            salt,
+            script_path_uri,
+            txn_options: self.transaction_options(creator_index, None),
+        }
+        .execute()
+        .await
+    }
+
+    /// Verify that `script_path` compiles to the execution hash stored in the on-chain proposal.
+    pub async fn verify_timelock_transaction(
+        &self,
+        index: usize,
+        timelock_address: AccountAddress,
+        proposal_hash: String,
+        script_path: PathBuf,
+    ) -> CliTypedResult<Value> {
+        timelock_account::VerifyTransaction {
+            timelock_account_with_proposal_hash: TimelockAccountWithProposalHash {
+                timelock_account: TimelockAccount { timelock_address },
+                proposal_hash,
+            },
+            txn_options: self.transaction_options(index, None),
+            compile_proposal_args: Self::timelock_compile_args(script_path),
+        }
+        .execute()
+        .await
+    }
+
+    /// Execute a proposed timelock transaction by submitting the resolution script at
+    /// `script_path` as the account at `executor_index` (the script's `&signer`).
+    pub async fn execute_timelock(
+        &self,
+        executor_index: usize,
+        timelock_address: AccountAddress,
+        proposal_hash: String,
+        script_path: PathBuf,
+    ) -> CliTypedResult<TransactionSummary> {
+        timelock_account::Execute {
+            timelock_account_with_proposal_hash: TimelockAccountWithProposalHash {
+                timelock_account: TimelockAccount { timelock_address },
+                proposal_hash,
+            },
+            compile_proposal_args: Self::timelock_compile_args(script_path),
+            txn_options: self.transaction_options(executor_index, None),
+        }
+        .execute()
+        .await
+    }
+
+    /// Cancel a proposed timelock transaction as the account at `actor_index`.
+    pub async fn cancel_timelock_transaction(
+        &self,
+        actor_index: usize,
+        timelock_address: AccountAddress,
+        proposal_hash: String,
+    ) -> CliTypedResult<TransactionSummary> {
+        timelock_account::CancelTransaction {
+            timelock_account_with_proposal_hash: TimelockAccountWithProposalHash {
+                timelock_account: TimelockAccount { timelock_address },
+                proposal_hash,
+            },
+            txn_options: self.transaction_options(actor_index, None),
+        }
+        .execute()
+        .await
+    }
+
+    /// Pre-authorize resolution of a proposed timelock transaction as the account at
+    /// `executor_index` (an executor, or a creator when the executor list is empty).
+    pub async fn approve_timelock_resolution(
+        &self,
+        executor_index: usize,
+        timelock_address: AccountAddress,
+        proposal_hash: String,
+    ) -> CliTypedResult<TransactionSummary> {
+        timelock_account::ApproveResolution {
+            timelock_account_with_proposal_hash: TimelockAccountWithProposalHash {
+                timelock_account: TimelockAccount { timelock_address },
+                proposal_hash,
+            },
+            txn_options: self.transaction_options(executor_index, None),
+        }
+        .execute()
+        .await
+    }
+
+    async fn timelock_view(
+        &self,
+        index: usize,
+        function: &'static str,
+        args: Vec<Vec<u8>>,
+    ) -> Vec<Value> {
+        self.transaction_options(index, None)
+            .view(ViewFunction {
+                module: ModuleId::new(AccountAddress::ONE, ident_str!("timelock").to_owned()),
+                function: ident_str!(function).to_owned(),
+                ty_args: vec![],
+                args,
+            })
+            .await
+            .unwrap()
+    }
+
+    /// Call a `timelock::<function>(addr, timelock_address): bool` membership view.
+    async fn timelock_member_view(
+        &self,
+        index: usize,
+        function: &'static str,
+        addr: AccountAddress,
+        timelock_address: AccountAddress,
+    ) -> bool {
+        self.timelock_view(index, function, vec![
+            bcs::to_bytes(&addr).unwrap(),
+            bcs::to_bytes(&timelock_address).unwrap(),
+        ])
+        .await[0]
+            .as_bool()
+            .unwrap()
+    }
+
+    /// `timelock::is_creator(addr, timelock_address)` view.
+    pub async fn timelock_is_creator(
+        &self,
+        index: usize,
+        addr: AccountAddress,
+        timelock_address: AccountAddress,
+    ) -> bool {
+        self.timelock_member_view(index, "is_creator", addr, timelock_address)
+            .await
+    }
+
+    /// `timelock::is_executor(addr, timelock_address)` view.
+    pub async fn timelock_is_executor(
+        &self,
+        index: usize,
+        addr: AccountAddress,
+        timelock_address: AccountAddress,
+    ) -> bool {
+        self.timelock_member_view(index, "is_executor", addr, timelock_address)
+            .await
+    }
+
+    /// `timelock::is_canceler(addr, timelock_address)` view.
+    pub async fn timelock_is_canceler(
+        &self,
+        index: usize,
+        addr: AccountAddress,
+        timelock_address: AccountAddress,
+    ) -> bool {
+        self.timelock_member_view(index, "is_canceler", addr, timelock_address)
+            .await
+    }
+
+    /// `timelock::can_be_executed(timelock_address, proposal_hash)` view.
+    pub async fn timelock_can_be_executed(
+        &self,
+        index: usize,
+        timelock_address: AccountAddress,
+        proposal_hash: Vec<u8>,
+    ) -> bool {
+        self.timelock_view(index, "can_be_executed", vec![
+            bcs::to_bytes(&timelock_address).unwrap(),
+            bcs::to_bytes(&proposal_hash).unwrap(),
+        ])
+        .await[0]
+            .as_bool()
+            .unwrap()
+    }
+
+    /// `timelock::get_proposal_hash(execution_hash, salt)` view, returned as a `0x`-prefixed
+    /// hex string (matching the form emitted by create-transaction).
+    pub async fn timelock_get_proposal_hash(
+        &self,
+        index: usize,
+        execution_hash: Vec<u8>,
+        salt: Vec<u8>,
+    ) -> String {
+        self.timelock_view(index, "get_proposal_hash", vec![
+            bcs::to_bytes(&execution_hash).unwrap(),
+            bcs::to_bytes(&salt).unwrap(),
+        ])
+        .await[0]
+            .as_str()
+            .unwrap()
+            .to_string()
     }
 }
 

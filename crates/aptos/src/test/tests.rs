@@ -108,6 +108,14 @@ async fn ensure_every_command_args_work() {
     assert_cmd_not_panic(&["aptos", "stake", "set-operator", "--help"]).await;
     assert_cmd_not_panic(&["aptos", "stake", "unlock-stake", "--help"]).await;
     assert_cmd_not_panic(&["aptos", "stake", "withdraw-stake", "--help"]).await;
+
+    assert_cmd_not_panic(&["aptos", "timelock"]).await;
+    assert_cmd_not_panic(&["aptos", "timelock", "approve-resolution", "--help"]).await;
+    assert_cmd_not_panic(&["aptos", "timelock", "cancel-transaction", "--help"]).await;
+    assert_cmd_not_panic(&["aptos", "timelock", "create", "--help"]).await;
+    assert_cmd_not_panic(&["aptos", "timelock", "create-transaction", "--help"]).await;
+    assert_cmd_not_panic(&["aptos", "timelock", "execute", "--help"]).await;
+    assert_cmd_not_panic(&["aptos", "timelock", "verify-transaction", "--help"]).await;
 }
 
 /// Ensure we can parse URLs for args

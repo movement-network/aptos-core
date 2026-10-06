@@ -1,5 +1,5 @@
 name: "🔨 Build Version"
-run-name: "Building version for ${{ inputs.ref || github.ref_name }}"
+run-name: "Building version for ${{ inputs.ref || github.ref_name }}${{ inputs.request_id && format(' [{0}]', inputs.request_id) || '' }}"
 on:
   push:
   workflow_dispatch:
@@ -11,6 +11,10 @@ on:
       build_profile:
         description: "The cargo build profile to use."
         default: "release"
+      request_id:
+        description: "Service Manager request id; shown in the run name so the dispatch can be correlated (D37)."
+        required: false
+        default: ""
 
 jobs:
   setup:
@@ -142,8 +146,8 @@ jobs:
             GIT_TAG=${{ needs.setup.outputs.git_tag }}
             GIT_BRANCH=${{ needs.setup.outputs.git_branch }}
             BUILD_DATE=${{ needs.setup.outputs.build_date }}
-          ghcr_username: ${{ vars.INFRA_GH_USER }}
-          ghcr_password: ${{ secrets.INFRA_GH_PAT }}
+          ghcr_username: ${{ github.actor }}
+          ghcr_password: ${{ secrets.GITHUB_TOKEN }}
           git_sha: ${{ needs.setup.outputs.git_sha }}
 
   container-aptos-debugger:
@@ -180,8 +184,8 @@ jobs:
             GIT_TAG=${{ needs.setup.outputs.git_tag }}
             GIT_BRANCH=${{ needs.setup.outputs.git_branch }}
             BUILD_DATE=${{ needs.setup.outputs.build_date }}
-          ghcr_username: ${{ vars.INFRA_GH_USER }}
-          ghcr_password: ${{ secrets.INFRA_GH_PAT }}
+          ghcr_username: ${{ github.actor }}
+          ghcr_password: ${{ secrets.GITHUB_TOKEN }}
           git_sha: ${{ needs.setup.outputs.git_sha }}
 
   binaries-aptos-faucet-service:
@@ -242,8 +246,8 @@ jobs:
             GIT_TAG=${{ needs.setup.outputs.git_tag }}
             GIT_BRANCH=${{ needs.setup.outputs.git_branch }}
             BUILD_DATE=${{ needs.setup.outputs.build_date }}
-          ghcr_username: ${{ vars.INFRA_GH_USER }}
-          ghcr_password: ${{ secrets.INFRA_GH_PAT }}
+          ghcr_username: ${{ github.actor }}
+          ghcr_password: ${{ secrets.GITHUB_TOKEN }}
           git_sha: ${{ needs.setup.outputs.git_sha }}
 
   binaries-aptos-tools:

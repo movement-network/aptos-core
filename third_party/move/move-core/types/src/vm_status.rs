@@ -766,7 +766,8 @@ pub enum StatusCode {
     RESERVED_VERIFICATION_ERROR_1 = 1135,
     // Module publishing is denied by the on-chain transaction permission table
     MODULE_PUBLISHING_NOT_PERMITTED = 1136,
-    RESERVED_VERIFICATION_ERROR_3 = 1137,
+    // Module access is denied by the on-chain transaction permission table
+    MODULE_ACCESS_DENIED = 1137,
     RESERVED_VERIFICATION_ERROR_4 = 1138,
 
     // These are errors that the VM might raise if a violation of internal

@@ -938,13 +938,28 @@ impl AptosVM {
             gas_meter.charge_keyless()?;
         }
 
+        // Enforce module-access rules of the transaction permission table on
+        // every module the payload loads. The publish funnel and the epilogue
+        // below intentionally keep the raw storage.
+        let checked_storage = crate::transaction_permissions::PermissionCheckedCodeStorage::new(
+            code_storage,
+            crate::transaction_permissions::permissions_for(
+                self.features(),
+                resolver,
+                txn_data.sender(),
+                is_approved_gov_script,
+            ),
+            txn_data.sender(),
+            crate::transaction_permissions::access_kind_of(&executable),
+        );
+
         match executable {
             TransactionExecutableRef::Script(script) => {
                 session.execute(|session| {
                     self.validate_and_execute_script(
                         session,
                         serialized_signers,
-                        code_storage,
+                        &checked_storage,
                         gas_meter,
                         traversal_context,
                         script,
@@ -954,7 +969,7 @@ impl AptosVM {
             TransactionExecutableRef::EntryFunction(entry_fn) => {
                 session.execute(|session| {
                     self.validate_and_execute_entry_function(
-                        code_storage,
+                        &checked_storage,
                         session,
                         serialized_signers,
                         gas_meter,
@@ -1264,11 +1279,26 @@ impl AptosVM {
         txn_sender: AccountAddress,
         is_approved_gov_script: bool,
     ) -> Result<UserSessionChangeSet, VMStatus> {
+        // Enforce module-access rules of the transaction permission table on
+        // every module the inner payload loads; the publish funnel below
+        // intentionally keeps the raw storage.
+        let checked_storage = crate::transaction_permissions::PermissionCheckedCodeStorage::new(
+            module_storage,
+            crate::transaction_permissions::permissions_for(
+                self.features(),
+                resolver,
+                txn_sender,
+                is_approved_gov_script,
+            ),
+            txn_sender,
+            aptos_types::on_chain_config::TransactionPermissionKind::Other,
+        );
+
         // If txn args are not valid, we'd still consider the transaction as executed but
         // failed. This is primarily because it's unrecoverable at this point.
         session.execute(|session| {
             self.validate_and_execute_entry_function(
-                module_storage,
+                &checked_storage,
                 session,
                 &SerializedSigners::new(vec![serialized_signer(&multisig_address)], None),
                 gas_meter,

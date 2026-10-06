@@ -10,12 +10,20 @@ Each rule has three fields:
 - **kind** — `0` deploy, `1` upgrade, `2` script, `3` other (entry functions, multisig);
 - **allow** — the verdict.
 
-Rules are evaluated top to bottom and the first rule whose sender and kind both match decides. When no rule matches, the transaction is **allowed**, so an empty table with the feature on changes nothing. Rules match the primary transaction sender (also for fee-payer, multi-agent, and multisig transactions). A deploy is a publish whose target modules do not exist yet; publishing over any existing module is an upgrade. A script that publishes code must pass both the script rules and the deploy/upgrade rules.
+A rule may also carry a **module pattern** (an address, optionally narrowed to one module name). Rules without one apply to the transaction as a whole. Rules with one apply per module:
+
+- for **deploy**/**upgrade** kinds, the pattern matches the modules being published, so publishing can be restricted per address or per module ("only `0xabc::m` may be deployed", "nobody may upgrade anything at `0xdef`");
+- for **script**/**other** kinds, the pattern matches every module the transaction loads during execution — entry points, transitive calls, and resource types alike — so access to a module can be denied outright.
+
+Module patterns cannot target special addresses (0x0–0xf): every transaction loads framework code, so those modules are always accessible by design.
+
+Rules are evaluated top to bottom and the first rule whose sender, kind, and (where applicable) module all match decides. When no rule matches, the transaction is **allowed**, so an empty table with the feature on changes nothing. Rules match the primary transaction sender (also for fee-payer, multi-agent, and multisig transactions). A module is a deploy target when it does not exist yet at its address and an upgrade target otherwise; each module of a bundle is judged separately. A script that publishes code must pass both the script rules and the deploy/upgrade rules.
 
 Enforcement effects:
 
 - Denied **script** and **other** transactions are discarded at validation (mempool, execution, and simulation) with status `TRANSACTION_NOT_PERMITTED`; no gas is charged.
 - Denied **deploy** and **upgrade** transactions fail during execution with status `MODULE_PUBLISHING_NOT_PERMITTED`; gas **is** charged, so denied publishes are not free compute.
+- Module-access denials are discarded at validation when the denied module is the entry function's own module (`TRANSACTION_NOT_PERMITTED`, no gas); a denial of a transitively loaded module or a module loaded by a script lands during execution with status `MODULE_ACCESS_DENIED`, and gas is charged.
 
 Administration cannot be locked out: the VM never denies approved governance scripts, framework-reserved senders (0x1–0xa), the core-resources account, or `0x1::aptos_governance` entry functions, regardless of table contents.
 
@@ -89,6 +97,24 @@ movement move run-script \
   --url <NODE_URL> \
   --assume-yes
 ```
+
+Insert a module rule (example: nobody may touch `0xabc::dex` from entry-function transactions; use an empty string as the module name to cover the whole address, and `u8:2` to cover scripts instead):
+
+```bash
+movement move run-script \
+  --script-path movement-migration/tx-permissions/insert_module_rule_for_all.move \
+  --sender-account <CORE_RESOURCE_ADDRESS> \
+  --private-key-file <CORE_RESOURCE_KEY_FILE> \
+  --args u64:0 \
+  --args u8:3 \
+  --args address:0xabc \
+  --args 'string:dex' \
+  --args bool:false \
+  --url <NODE_URL> \
+  --assume-yes
+```
+
+`insert_module_rule_for_sender.move` is the per-sender variant (sender address as the third argument). The view `0x1::transaction_permissions::check_module_access` returns the verdict the VM would apply for a given sender, kind, and module.
 
 Remove a rule (list the table first to confirm the index; later rules shift down by one):
 

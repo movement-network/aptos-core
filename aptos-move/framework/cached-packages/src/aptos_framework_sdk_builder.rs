@@ -1266,16 +1266,38 @@ pub enum EntryFunctionCall {
     /// through governance or a core-resources script.
     TransactionPermissionsInitializeExtension {},
 
-    /// Insert a rule matching all senders at `index` (0 = evaluated first;
-    /// `index` equal to the current length appends).
+    /// Insert a module rule matching all senders. An empty `module_name`
+    /// matches every module at `module_addr`.
+    TransactionPermissionsInsertModuleRuleForAll {
+        index: u64,
+        kind: u8,
+        module_addr: AccountAddress,
+        module_name: Vec<u8>,
+        allow: bool,
+    },
+
+    /// Insert a module rule for one sender. An empty `module_name` matches
+    /// every module at `module_addr`.
+    TransactionPermissionsInsertModuleRuleForSender {
+        index: u64,
+        sender: AccountAddress,
+        kind: u8,
+        module_addr: AccountAddress,
+        module_name: Vec<u8>,
+        allow: bool,
+    },
+
+    /// Insert a transaction-level rule matching all senders at `index` (0 =
+    /// evaluated first; `index` equal to the current length appends).
     TransactionPermissionsInsertRuleForAll {
         index: u64,
         kind: u8,
         allow: bool,
     },
 
-    /// Insert a rule for one sender at `index` (0 = evaluated first; `index`
-    /// equal to the current length appends). Earlier rules take precedence.
+    /// Insert a transaction-level rule for one sender at `index` (0 =
+    /// evaluated first; `index` equal to the current length appends). Earlier
+    /// rules take precedence.
     TransactionPermissionsInsertRuleForSender {
         index: u64,
         sender: AccountAddress,
@@ -2123,6 +2145,34 @@ impl EntryFunctionCall {
             TransactionPermissionsInitializeExtension {} => {
                 transaction_permissions_initialize_extension()
             },
+            TransactionPermissionsInsertModuleRuleForAll {
+                index,
+                kind,
+                module_addr,
+                module_name,
+                allow,
+            } => transaction_permissions_insert_module_rule_for_all(
+                index,
+                kind,
+                module_addr,
+                module_name,
+                allow,
+            ),
+            TransactionPermissionsInsertModuleRuleForSender {
+                index,
+                sender,
+                kind,
+                module_addr,
+                module_name,
+                allow,
+            } => transaction_permissions_insert_module_rule_for_sender(
+                index,
+                sender,
+                kind,
+                module_addr,
+                module_name,
+                allow,
+            ),
             TransactionPermissionsInsertRuleForAll { index, kind, allow } => {
                 transaction_permissions_insert_rule_for_all(index, kind, allow)
             },
@@ -5677,8 +5727,68 @@ pub fn transaction_permissions_initialize_extension() -> TransactionPayload {
     ))
 }
 
-/// Insert a rule matching all senders at `index` (0 = evaluated first;
-/// `index` equal to the current length appends).
+/// Insert a module rule matching all senders. An empty `module_name`
+/// matches every module at `module_addr`.
+pub fn transaction_permissions_insert_module_rule_for_all(
+    index: u64,
+    kind: u8,
+    module_addr: AccountAddress,
+    module_name: Vec<u8>,
+    allow: bool,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("transaction_permissions").to_owned(),
+        ),
+        ident_str!("insert_module_rule_for_all").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&index).unwrap(),
+            bcs::to_bytes(&kind).unwrap(),
+            bcs::to_bytes(&module_addr).unwrap(),
+            bcs::to_bytes(&module_name).unwrap(),
+            bcs::to_bytes(&allow).unwrap(),
+        ],
+    ))
+}
+
+/// Insert a module rule for one sender. An empty `module_name` matches
+/// every module at `module_addr`.
+pub fn transaction_permissions_insert_module_rule_for_sender(
+    index: u64,
+    sender: AccountAddress,
+    kind: u8,
+    module_addr: AccountAddress,
+    module_name: Vec<u8>,
+    allow: bool,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("transaction_permissions").to_owned(),
+        ),
+        ident_str!("insert_module_rule_for_sender").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&index).unwrap(),
+            bcs::to_bytes(&sender).unwrap(),
+            bcs::to_bytes(&kind).unwrap(),
+            bcs::to_bytes(&module_addr).unwrap(),
+            bcs::to_bytes(&module_name).unwrap(),
+            bcs::to_bytes(&allow).unwrap(),
+        ],
+    ))
+}
+
+/// Insert a transaction-level rule matching all senders at `index` (0 =
+/// evaluated first; `index` equal to the current length appends).
 pub fn transaction_permissions_insert_rule_for_all(
     index: u64,
     kind: u8,
@@ -5702,8 +5812,9 @@ pub fn transaction_permissions_insert_rule_for_all(
     ))
 }
 
-/// Insert a rule for one sender at `index` (0 = evaluated first; `index`
-/// equal to the current length appends). Earlier rules take precedence.
+/// Insert a transaction-level rule for one sender at `index` (0 =
+/// evaluated first; `index` equal to the current length appends). Earlier
+/// rules take precedence.
 pub fn transaction_permissions_insert_rule_for_sender(
     index: u64,
     sender: AccountAddress,
@@ -8098,6 +8209,43 @@ mod decoder {
         }
     }
 
+    pub fn transaction_permissions_insert_module_rule_for_all(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(
+                EntryFunctionCall::TransactionPermissionsInsertModuleRuleForAll {
+                    index: bcs::from_bytes(script.args().get(0)?).ok()?,
+                    kind: bcs::from_bytes(script.args().get(1)?).ok()?,
+                    module_addr: bcs::from_bytes(script.args().get(2)?).ok()?,
+                    module_name: bcs::from_bytes(script.args().get(3)?).ok()?,
+                    allow: bcs::from_bytes(script.args().get(4)?).ok()?,
+                },
+            )
+        } else {
+            None
+        }
+    }
+
+    pub fn transaction_permissions_insert_module_rule_for_sender(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(
+                EntryFunctionCall::TransactionPermissionsInsertModuleRuleForSender {
+                    index: bcs::from_bytes(script.args().get(0)?).ok()?,
+                    sender: bcs::from_bytes(script.args().get(1)?).ok()?,
+                    kind: bcs::from_bytes(script.args().get(2)?).ok()?,
+                    module_addr: bcs::from_bytes(script.args().get(3)?).ok()?,
+                    module_name: bcs::from_bytes(script.args().get(4)?).ok()?,
+                    allow: bcs::from_bytes(script.args().get(5)?).ok()?,
+                },
+            )
+        } else {
+            None
+        }
+    }
+
     pub fn transaction_permissions_insert_rule_for_all(
         payload: &TransactionPayload,
     ) -> Option<EntryFunctionCall> {
@@ -8993,6 +9141,14 @@ static SCRIPT_FUNCTION_DECODER_MAP: once_cell::sync::Lazy<EntryFunctionDecoderMa
         map.insert(
             "transaction_permissions_initialize_extension".to_string(),
             Box::new(decoder::transaction_permissions_initialize_extension),
+        );
+        map.insert(
+            "transaction_permissions_insert_module_rule_for_all".to_string(),
+            Box::new(decoder::transaction_permissions_insert_module_rule_for_all),
+        );
+        map.insert(
+            "transaction_permissions_insert_module_rule_for_sender".to_string(),
+            Box::new(decoder::transaction_permissions_insert_module_rule_for_sender),
         );
         map.insert(
             "transaction_permissions_insert_rule_for_all".to_string(),

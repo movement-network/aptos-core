@@ -17,6 +17,10 @@ inputs:
   ghcr_password:
     description: "Password for GHCR login: the job's GITHUB_TOKEN with packages: write; the package must grant this repository Actions write access"
     required: true
+  image_source:
+    description: "Repository URL for the org.opencontainers.image.source label, which links the package to that repository (defaults to the building repository). Builds of a private mirror pass the public repository so shared packages stay linked to it."
+    required: false
+    default: ""
   git_sha:
     description: "Git SHA to use for image tagging (defaults to github.sha)"
     required: false
@@ -75,7 +79,7 @@ runs:
       # repository and nobody has to link packages by hand.
       docker build \
         "${BUILD_ARGS_ARRAY[@]}" \
-        --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
+        --label "org.opencontainers.image.source=${{ inputs.image_source || format('{0}/{1}', github.server_url, github.repository) }}" \
         --label "org.opencontainers.image.revision=${{ inputs.git_sha || github.sha }}" \
         -f "$DOCKERFILE_PATH" \
         -t ${{ inputs.image_name }}:${{ env.GIT_SHA_SHORT }} \

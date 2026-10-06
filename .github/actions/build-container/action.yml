@@ -12,10 +12,10 @@ inputs:
     required: false
     default: ""
   ghcr_username:
-    description: "Username for GHCR login"
+    description: "Username for GHCR login (github.actor when using the job's GITHUB_TOKEN)"
     required: true
   ghcr_password:
-    description: "Password for GHCR login"
+    description: "Password for GHCR login: the job's GITHUB_TOKEN with packages: write; the package must grant this repository Actions write access"
     required: true
   git_sha:
     description: "Git SHA to use for image tagging (defaults to github.sha)"
@@ -35,6 +35,9 @@ outputs:
   artifact_name:
     description: "The name of the uploaded artifact"
     value: ${{ inputs.image_name }}:${{ env.GIT_SHA_SHORT }}
+  image_digest:
+    description: "The registry manifest digest of the pushed image (sha256:...); deploy by this, not by tag"
+    value: ${{ env.IMAGE_DIGEST }}
 
 runs:
   using: "composite"
@@ -68,13 +71,19 @@ runs:
         [[ -n "$line" ]] && BUILD_ARGS_ARRAY+=("--build-arg" "$line")
       done <<< "${{ inputs.build_args }}"
 
+      # The source label links the package to this repository on first push, so GHCR access follows the
+      # repository and nobody has to link packages by hand.
       docker build \
         "${BUILD_ARGS_ARRAY[@]}" \
+        --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
+        --label "org.opencontainers.image.revision=${{ inputs.git_sha || github.sha }}" \
         -f "$DOCKERFILE_PATH" \
         -t ${{ inputs.image_name }}:${{ env.GIT_SHA_SHORT }} \
         -t ${{ inputs.image_name }}:latest .
       docker push ${{ inputs.image_name }}:${{ env.GIT_SHA_SHORT }}
       docker push ${{ inputs.image_name }}:latest
+      IMAGE_DIGEST=$(docker inspect --format '{{index .RepoDigests 0}}' ${{ inputs.image_name }}:${{ env.GIT_SHA_SHORT }} | cut -d@ -f2)
+      echo "IMAGE_DIGEST=$IMAGE_DIGEST" >> $GITHUB_ENV
     shell: bash
 
   - name: Output image information
@@ -93,5 +102,6 @@ runs:
       echo "- **Image:** \`${{ inputs.image_name }}:${{ env.GIT_SHA_SHORT }}\`" >> $GITHUB_STEP_SUMMARY
       echo "- **Tag:** \`${{ env.GIT_SHA_SHORT }}\`" >> $GITHUB_STEP_SUMMARY
       echo "- **Tag:** \`latest\`" >> $GITHUB_STEP_SUMMARY
+      echo "- **Digest:** \`${{ env.IMAGE_DIGEST }}\`" >> $GITHUB_STEP_SUMMARY
       echo "- **Registry:** \`${{ inputs.image_name }}\`" >> $GITHUB_STEP_SUMMARY
     shell: bash

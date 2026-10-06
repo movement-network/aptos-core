@@ -80,8 +80,8 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ vars.INFRA_GH_USER || github.actor }}
-          password: ${{ secrets.INFRA_GH_PAT || secrets.GITHUB_TOKEN }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and publish images
         shell: bash

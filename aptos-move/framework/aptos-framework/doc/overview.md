@@ -25,6 +25,9 @@ This is the reference documentation of the Aptos framework.
 -  [`0x1::atomic_bridge_counterparty`](atomic_bridge.md#0x1_atomic_bridge_counterparty)
 -  [`0x1::atomic_bridge_initiator`](atomic_bridge.md#0x1_atomic_bridge_initiator)
 -  [`0x1::atomic_bridge_store`](atomic_bridge.md#0x1_atomic_bridge_store)
+-  [`0x1::attestation`](attestation.md#0x1_attestation)
+-  [`0x1::attestation_authorization`](attestation_authorization.md#0x1_attestation_authorization)
+-  [`0x1::attestation_policy`](attestation_policy.md#0x1_attestation_policy)
 -  [`0x1::auth_data`](auth_data.md#0x1_auth_data)
 -  [`0x1::base16`](base16.md#0x1_base16)
 -  [`0x1::big_ordered_map`](big_ordered_map.md#0x1_big_ordered_map)
@@ -55,6 +58,7 @@ This is the reference documentation of the Aptos framework.
 -  [`0x1::jwks`](jwks.md#0x1_jwks)
 -  [`0x1::keyless_account`](keyless_account.md#0x1_keyless_account)
 -  [`0x1::managed_coin`](managed_coin.md#0x1_managed_coin)
+-  [`0x1::merkle_proof`](merkle_proof.md#0x1_merkle_proof)
 -  [`0x1::multisig_account`](multisig_account.md#0x1_multisig_account)
 -  [`0x1::native_bridge`](native_bridge.md#0x1_native_bridge)
 -  [`0x1::nonce_validation`](nonce_validation.md#0x1_nonce_validation)
@@ -91,6 +95,7 @@ This is the reference documentation of the Aptos framework.
 -  [`0x1::version`](version.md#0x1_version)
 -  [`0x1::vesting`](vesting.md#0x1_vesting)
 -  [`0x1::voting`](voting.md#0x1_voting)
+-  [`0x1::zktls`](zktls.md#0x1_zktls)
 
 
 [move-book]: https://aptos.dev/move/book/SUMMARY

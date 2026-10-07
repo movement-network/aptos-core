@@ -9062,8 +9062,13 @@ dependencies = [
 name = "fuzzer"
 version = "0.1.0"
 dependencies = [
+ "aptos-cached-packages",
  "aptos-framework",
+ "aptos-language-e2e-tests",
+ "aptos-transaction-simulation",
  "aptos-types",
+ "aptos-vm",
+ "aptos-vm-environment",
  "arbitrary",
  "base64 0.21.7",
  "bcs 0.1.4",
@@ -9072,8 +9077,12 @@ dependencies = [
  "dearbitrary",
  "hex",
  "move-binary-format",
+ "move-bytecode-verifier",
  "move-core-types",
+ "move-vm-types",
+ "once_cell",
  "rayon",
+ "serde_json",
  "sha2 0.9.9",
  "walkdir",
 ]
@@ -16856,11 +16865,8 @@ dependencies = [
 [[package]]
 name = "slug"
 version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3bd94acec9c8da640005f8e135a39fc0372e74535e6b368b7a04b875f784c8c4"
 dependencies = [
  "deunicode",
- "wasm-bindgen",
 ]
 
 [[package]]

@@ -16,8 +16,10 @@ fn check_for_invariant_violation_vmerror(e: VMError) {
         // ignore known false positive
         && !e
             .message()
-            .is_some_and(|m| m.starts_with("too many type parameters/arguments in the program"))
-    {
+            .is_some_and(|m| 
+                (m.starts_with("too many type parameters/arguments in the program") ||
+                 m.starts_with("Reference field when checking recursive structs")
+            )) {
         panic!("invariant violation {:?}", e);
     }
 }

@@ -88,7 +88,7 @@ pub(crate) fn sort_by_deps(
     visited: &mut HashSet<ModuleId>,
 ) -> Result<(), Corpus> {
     if visited.contains(&id) {
-        return Err(Corpus::Keep);
+        return Err(Corpus::Reject);
     }
     visited.insert(id.clone());
     if order.contains(&id) {

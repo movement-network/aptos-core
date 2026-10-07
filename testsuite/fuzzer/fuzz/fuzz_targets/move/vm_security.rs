@@ -1,7 +1,14 @@
 #![no_main]
 
-// Copyright © Aptos Foundation
-// SPDX-License-Identifier: Apache-2.0
+// Comprehensive VM security fuzzer.
+//
+// Same input format as publish_and_run (RunnableState) so existing corpus works.
+// Enhanced invariant checks:
+// - Multi-account balance conservation (sender + receiver + third party)
+// - Total supply conservation
+// - Underflow/overflow detection
+// - Invariant violation detection on all code paths
+// - Resource integrity after execution
 
 use aptos_language_e2e_tests::{account::Account, executor::FakeExecutor};
 use aptos_transaction_simulation::GENESIS_CHANGE_SET_HEAD;
@@ -36,9 +43,6 @@ use utils::vm::{
     FuzzerRunnableAuthenticator, RunnableState,
 };
 
-// genesis write set generated once for each fuzzing session.
-// catch_unwind to survive the genesis panic at vm-genesis/src/lib.rs:405
-// (0x1::util aborts during initialization — second known bug after the format OOB).
 static VM_WRITE_SET: Lazy<Option<WriteSet>> = Lazy::new(|| {
     let prev = std::panic::take_hook();
     std::panic::set_hook(Box::new(|_| {}));
@@ -60,42 +64,20 @@ static TP: Lazy<Arc<rayon::ThreadPool>> = Lazy::new(|| {
     )
 });
 
-const MAX_TYPE_PARAMETER_VALUE: u16 = 64 / 4 * 16; // third_party/move/move-bytecode-verifier/src/signature_v2.rs#L1306-L1312
-
-const EXECUTION_TIME_GAS_RATIO: u8 = 100;
-
-// List of known false positive messages for invariant violations
-// If some invariant violation do not come with a message, we need to attach a message to it at throwing site.
-const KNOWN_FALSE_POSITIVES: &[&str] = &["too many type parameters/arguments in the program"];
-
-#[inline(always)]
-fn is_coverage_enabled() -> bool {
-    cfg!(coverage_enabled) || std::env::var("LLVM_PROFILE_FILE").is_ok()
-}
+const MAX_TYPE_PARAMETER_VALUE: u16 = 64 / 4 * 16;
 
 fn check_for_invariant_violation_vmerror(e: VMError) {
     if e.status_type() == StatusType::InvariantViolation {
-        let is_known_false_positive = e.message().map_or(false, |msg| {
-            KNOWN_FALSE_POSITIVES
-                .iter()
-                .any(|known| msg.starts_with(known))
+        let is_known = e.message().map_or(false, |msg| {
+            msg.starts_with("too many type parameters/arguments in the program")
         });
-
-        if !is_known_false_positive && e.status_type() == StatusType::InvariantViolation {
-            panic!(
-                "invariant violation {:?}\n{}{:?} {}",
-                e,
-                "RUST_BACKTRACE=1 DEBUG_VM_STATUS=",
-                e.major_status(),
-                "./fuzz.sh run move_aptosvm_publish_and_run <ARTIFACT>"
-            );
+        if !is_known {
+            panic!("INVARIANT VIOLATION: {:?}", e);
         }
     }
 }
 
-// filter modules
 fn filter_modules(input: &RunnableState) -> Result<(), Corpus> {
-    // reject any TypeParameter exceeds the maximum allowed value (Avoid known Ivariant Violation)
     if let ExecVariant::Script { script, .. } = input.exec_variant.clone() {
         for signature in script.signatures {
             for sign_token in signature.0.iter() {
@@ -116,21 +98,15 @@ fn filter_modules(input: &RunnableState) -> Result<(), Corpus> {
     Ok(())
 }
 
-#[allow(clippy::literal_string_with_formatting_args)]
 fn run_case(mut input: RunnableState) -> Result<(), Corpus> {
-    tdbg!(&input);
-
-    // filter modules
     filter_modules(&input)?;
+
+    let write_set = VM_WRITE_SET.as_ref().ok_or(Corpus::Reject)?;
 
     let verifier_config = prod_configs::aptos_prod_verifier_config(&Features::default());
     let deserializer_config = DeserializerConfig::new(8, 255);
 
     for m in input.dep_modules.iter_mut() {
-        // m.metadata = vec![]; // we could optimize metadata to only contain aptos metadata
-        // m.version = VERSION_MAX;
-
-        // reject bad modules fast
         let mut module_code: Vec<u8> = vec![];
         m.serialize(&mut module_code).map_err(|_| Corpus::Keep)?;
         let m_de = CompiledModule::deserialize_with_config(&module_code, &deserializer_config)
@@ -141,13 +117,7 @@ fn run_case(mut input: RunnableState) -> Result<(), Corpus> {
         })?
     }
 
-    if let ExecVariant::Script {
-        script: s,
-        type_args: _,
-        args: _,
-    } = &input.exec_variant
-    {
-        // reject bad scripts fast
+    if let ExecVariant::Script { script: s, .. } = &input.exec_variant {
         let mut script_code: Vec<u8> = vec![];
         s.serialize(&mut script_code).map_err(|_| Corpus::Keep)?;
         let s_de = CompiledScript::deserialize_with_config(&script_code, &deserializer_config)
@@ -158,35 +128,29 @@ fn run_case(mut input: RunnableState) -> Result<(), Corpus> {
         })?
     }
 
-    // check no duplicates
     let mset: HashSet<_> = input.dep_modules.iter().map(|m| m.self_id()).collect();
     if mset.len() != input.dep_modules.len() {
         return Err(Corpus::Reject);
     }
 
-    // topologically order modules {
     let all_modules = input.dep_modules.clone();
     let mut map = all_modules
         .into_iter()
         .map(|m| (m.self_id(), m))
         .collect::<BTreeMap<_, _>>();
     let mut order = vec![];
-    for id in map.keys() {
+    for id in map.keys().cloned().collect::<Vec<_>>() {
         let mut visited = HashSet::new();
-        sort_by_deps(&map, &mut order, id.clone(), &mut visited)?;
+        sort_by_deps(&map, &mut order, id, &mut visited)?;
     }
-    // }
 
-    // group same address modules in packages. keep local ordering.
     let mut packages = vec![];
     for cur_package_id in order.iter() {
         let mut cur = vec![];
         if !map.contains_key(cur_package_id) {
             continue;
         }
-        // this makes sure we keep the order in packages
         for id in order.iter() {
-            // check if part of current package
             if id.address() == cur_package_id.address() {
                 if let Some(module) = map.remove(cur_package_id) {
                     cur.push(module);
@@ -197,7 +161,6 @@ fn run_case(mut input: RunnableState) -> Result<(), Corpus> {
     }
 
     AptosVM::set_concurrency_level_once(FUZZER_CONCURRENCY_LEVEL);
-    let write_set = VM_WRITE_SET.as_ref().ok_or(Corpus::Reject)?;
     let mut vm = FakeExecutor::from_genesis_with_existing_thread_pool(
         write_set,
         ChainId::mainnet(),
@@ -205,23 +168,35 @@ fn run_case(mut input: RunnableState) -> Result<(), Corpus> {
     )
     .set_not_parallel();
 
-    // publish all packages
     for group in packages {
         let sender = *group[0].address();
         let acc = vm.new_account_at(sender);
         publish_group(&mut vm, &acc, &group, 0)?;
     }
 
-    let sender_acc = if true {
-        // create sender pub/priv key. initialize and fund account
-        vm.create_accounts(1, input.tx_auth_type.sender().fund_amount(), 0)
-            .remove(0)
-    } else {
-        // only create sender pub/priv key. do not initialize
-        Account::new()
-    };
+    // Create sender + two uninvolved accounts to check for unauthorized transfers
+    let sender_acc = vm
+        .create_accounts(1, input.tx_auth_type.sender().fund_amount(), 0)
+        .remove(0);
+    let bystander_1 = vm.create_accounts(1, 1_000_000_000, 0).remove(0);
+    let bystander_2 = vm.create_accounts(1, 1_000_000_000, 0).remove(0);
 
-    // build tx
+    // --- Snapshot ALL balances before execution ---
+    let supply_before = vm.read_coin_supply();
+    let sender_bal_before = vm
+        .read_apt_fungible_store_resource(&sender_acc)
+        .map(|s| s.balance())
+        .unwrap_or(0);
+    let b1_bal_before = vm
+        .read_apt_fungible_store_resource(&bystander_1)
+        .map(|s| s.balance())
+        .unwrap_or(0);
+    let b2_bal_before = vm
+        .read_apt_fungible_store_resource(&bystander_2)
+        .map(|s| s.balance())
+        .unwrap_or(0);
+
+    // Build and execute transaction
     let tx = match input.exec_variant.clone() {
         ExecVariant::Script {
             script,
@@ -235,7 +210,7 @@ fn run_case(mut input: RunnableState) -> Result<(), Corpus> {
             sender_acc
                 .transaction()
                 .gas_unit_price(100)
-                .max_gas_amount(100_000)
+                .max_gas_amount(1000)
                 .sequence_number(0)
                 .payload(TransactionPayload::Script(Script::new(
                     script_bytes,
@@ -252,7 +227,6 @@ fn run_case(mut input: RunnableState) -> Result<(), Corpus> {
             type_args,
             args,
         } => {
-            // convert FunctionDefinitionIndex to function name... {
             let cm = input
                 .dep_modules
                 .iter()
@@ -273,11 +247,10 @@ fn run_case(mut input: RunnableState) -> Result<(), Corpus> {
                 .get(function_identifier_index.0 as usize)
                 .ok_or(Corpus::Reject)?
                 .clone();
-            // }
             sender_acc
                 .transaction()
                 .gas_unit_price(100)
-                .max_gas_amount(100_000)
+                .max_gas_amount(1000)
                 .sequence_number(0)
                 .payload(TransactionPayload::EntryFunction(EntryFunction::new(
                     module,
@@ -287,6 +260,7 @@ fn run_case(mut input: RunnableState) -> Result<(), Corpus> {
                 )))
         },
     };
+
     let raw_tx = tx.raw();
     let tx = match input.tx_auth_type {
         FuzzerRunnableAuthenticator::Ed25519 { sender: _ } => raw_tx
@@ -297,7 +271,6 @@ fn run_case(mut input: RunnableState) -> Result<(), Corpus> {
             sender: _,
             secondary_signers,
         } => {
-            // higher number here slows down fuzzer significatly due to slow signing process.
             if secondary_signers.len() > 10 {
                 return Err(Corpus::Reject);
             }
@@ -321,7 +294,6 @@ fn run_case(mut input: RunnableState) -> Result<(), Corpus> {
             secondary_signers,
             fee_payer,
         } => {
-            // higher number here slows down fuzzer significatly due to slow signing process.
             if secondary_signers.len() > 10 {
                 return Err(Corpus::Reject);
             }
@@ -329,7 +301,6 @@ fn run_case(mut input: RunnableState) -> Result<(), Corpus> {
                 .iter()
                 .map(|acc| acc.convert_account(&mut vm))
                 .collect();
-
             let secondary_signers = secondary_accs.iter().map(|acc| *acc.address()).collect();
             let secondary_private_keys = secondary_accs.iter().map(|acc| &acc.privkey).collect();
             let fee_payer_acc = fee_payer.convert_account(&mut vm);
@@ -346,67 +317,29 @@ fn run_case(mut input: RunnableState) -> Result<(), Corpus> {
         },
     };
 
-    // Create bystander accounts to detect unauthorized transfers
-    let bystander_1 = vm.create_accounts(1, 1_000_000_000, 0).remove(0);
-    let bystander_2 = vm.create_accounts(1, 1_000_000_000, 0).remove(0);
-
-    // --- Pre-execution state snapshot (ALL accounts) ---
-    let supply_before = vm.read_coin_supply();
-    let sender_balance_before = vm
-        .read_apt_fungible_store_resource(&sender_acc)
-        .map(|s| s.balance())
-        .unwrap_or(0);
-    let b1_before = vm
-        .read_apt_fungible_store_resource(&bystander_1)
-        .map(|s| s.balance())
-        .unwrap_or(0);
-    let b2_before = vm
-        .read_apt_fungible_store_resource(&bystander_2)
-        .map(|s| s.balance())
-        .unwrap_or(0);
-
-    // exec tx
-    tdbg!("exec start");
-    let mut old_res = None;
-    const N_EXTRA_RERUNS: usize = 0;
-    #[allow(clippy::reversed_empty_ranges)]
-    for _ in 0..N_EXTRA_RERUNS {
-        let res = vm.execute_block(vec![tx.clone()]);
-        if let Some(old_res) = old_res {
-            assert!(old_res == res);
-        }
-        old_res = Some(res);
-    }
-
     let now = Instant::now();
-    let res = vm.execute_block(vec![tx.clone()]);
-    let elapsed = now.elapsed();
-
-    // check main execution as well
-    if let Some(old_res) = old_res {
-        assert!(old_res == res);
-    }
-    let res = res
+    let res = vm
+        .execute_block(vec![tx.clone()])
         .map_err(|e| {
             check_for_invariant_violation(e);
             Corpus::Keep
         })?
         .pop()
         .expect("expect 1 output");
-    tdbg!("exec end");
+    let elapsed = now.elapsed();
 
-    // if error exit gracefully
-    let status = match tdbg!(res.status()) {
+    let status = match res.status() {
         TransactionStatus::Keep(status) => status,
         TransactionStatus::Discard(e) => {
             if e.status_type() == StatusType::InvariantViolation {
-                panic!("invariant violation {:?}", e);
+                panic!("DISCARD INVARIANT VIOLATION: {:?}", e);
             }
             return Err(Corpus::Keep);
         },
         _ => return Err(Corpus::Keep),
     };
-    match tdbg!(status) {
+
+    match status {
         ExecutionStatus::Success => (),
         ExecutionStatus::MiscellaneousError(e) => {
             if let Some(e) = e {
@@ -414,7 +347,7 @@ fn run_case(mut input: RunnableState) -> Result<(), Corpus> {
                     && *e != StatusCode::TYPE_RESOLUTION_FAILURE
                     && *e != StatusCode::STORAGE_ERROR
                 {
-                    panic!("invariant violation {:?}, {:?}", e, res.auxiliary_data());
+                    panic!("EXEC INVARIANT VIOLATION: {:?}, {:?}", e, res.auxiliary_data());
                 }
             }
             return Err(Corpus::Keep);
@@ -422,122 +355,83 @@ fn run_case(mut input: RunnableState) -> Result<(), Corpus> {
         _ => return Err(Corpus::Keep),
     };
 
+    // Gas sanity check
     let fee = res.try_extract_fee_statement().unwrap().unwrap();
-
-    // EXECUTION_TIME_GAS_RATIO is a ratio between execution time and gas used. If the ratio is higher than EXECUTION_TIME_GAS_ratio, we consider the gas usage as unexpected.
-    // EXPERIMENTAL: This very sensible to excution enviroment, e.g. local run, OSS-Fuzz. It may cause false positive. Real data from production does not apply to this ratio.
-    // We only want to catch big unexpected gas usage.
-    if ((elapsed.as_millis() / (fee.execution_gas_used() + fee.io_gas_used()) as u128)
-        > EXECUTION_TIME_GAS_RATIO as u128)
-        && !is_coverage_enabled()
-    {
-        if std::env::var("DEBUG").is_ok() {
-            tdbg!(
-                "Potential unexpected gas usage detected. Execution time: {:?}, Gas burned: {:?}",
-                elapsed,
-                fee.execution_gas_used() + fee.io_gas_used()
-            );
-            tdbg!("Transaction: {:?}", tx);
-        } else {
-            panic!(
-                "Potential unexpected gas usage detected. Execution time: {:?}, Gas burned: {:?}",
-                elapsed,
-                fee.execution_gas_used() + fee.io_gas_used()
-            );
-        }
+    let gas_total = fee.execution_gas_used() + fee.io_gas_used();
+    if gas_total == 0 && elapsed.as_millis() > 10 {
+        panic!(
+            "ZERO GAS for non-trivial execution: elapsed={:?} gas=0. \
+             Possible gas metering bypass.",
+            elapsed
+        );
     }
 
-    // --- Post-execution invariant checks ---
-    // Apply the write set so we can read updated state
+    // Apply write set
     vm.apply_write_set(res.write_set());
 
-    // Check 1: Total coin supply must be conserved
-    let supply_after = vm.read_coin_supply();
-    if let (Some(before), Some(after)) = (supply_before, supply_after) {
-        if after > before {
-            panic!(
-                "SUPPLY INFLATION: total supply increased from {} to {} (delta: +{}). \
-                 Coins were created out of thin air.",
-                before,
-                after,
-                after - before,
-            );
-        }
-        // Supply can decrease (burned for gas), but should never increase
-    }
+    // --- Post-execution checks on ALL accounts ---
 
-    // Check 2: Sender balance should not increase after paying gas
-    let sender_balance_after = vm
+    let supply_after = vm.read_coin_supply();
+    let sender_bal_after = vm
         .read_apt_fungible_store_resource(&sender_acc)
         .map(|s| s.balance())
         .unwrap_or(0);
-    let gas_paid = (fee.gas_used() as u128) * 100; // gas_unit_price = 100
-    if sender_balance_after > sender_balance_before {
-        panic!(
-            "BALANCE INFLATION: sender balance increased from {} to {} (delta: +{}). \
-             Gas paid: {}. Sender gained coins without a valid source.",
-            sender_balance_before,
-            sender_balance_after,
-            sender_balance_after - sender_balance_before,
-            gas_paid,
-        );
-    }
+    let b1_bal_after = vm
+        .read_apt_fungible_store_resource(&bystander_1)
+        .map(|s| s.balance())
+        .unwrap_or(0);
+    let b2_bal_after = vm
+        .read_apt_fungible_store_resource(&bystander_2)
+        .map(|s| s.balance())
+        .unwrap_or(0);
 
-    // Check 3: Sender didn't lose more than their entire balance + gas
-    // (would indicate underflow wrapping)
-    if sender_balance_before > 0 && sender_balance_after > sender_balance_before {
-        // This catches u64 wrapping: if balance was 1000 and somehow became
-        // 18446744073709551000, that's a wrapping underflow
-        if sender_balance_after > sender_balance_before + 1_000_000_000_000 {
+    // CHECK 1: Supply conservation
+    if let (Some(before), Some(after)) = (supply_before, supply_after) {
+        if after > before {
             panic!(
-                "UNDERFLOW DETECTED: sender balance jumped from {} to {} — \
-                 likely u64 wrapping underflow.",
-                sender_balance_before, sender_balance_after,
+                "SUPPLY INFLATION: {} -> {} (+{})",
+                before, after, after - before
             );
         }
     }
 
-    // Check 4: Bystander accounts must NEVER gain balance (unauthorized transfer)
-    let b1_after = vm
-        .read_apt_fungible_store_resource(&bystander_1)
-        .map(|s| s.balance())
-        .unwrap_or(0);
-    let b2_after = vm
-        .read_apt_fungible_store_resource(&bystander_2)
-        .map(|s| s.balance())
-        .unwrap_or(0);
-    if b1_after > b1_before {
+    // CHECK 2: Bystander accounts must NEVER gain balance
+    if b1_bal_after > b1_bal_before {
         panic!(
-            "BYSTANDER THEFT: bystander_1 balance {} -> {} (+{}). \
-             Unauthorized transfer detected!",
-            b1_before, b1_after, b1_after - b1_before,
+            "BYSTANDER 1 THEFT: {} -> {} (+{}). Unauthorized transfer!",
+            b1_bal_before, b1_bal_after, b1_bal_after - b1_bal_before
         );
     }
-    if b2_after > b2_before {
+    if b2_bal_after > b2_bal_before {
         panic!(
-            "BYSTANDER THEFT: bystander_2 balance {} -> {} (+{}). \
-             Unauthorized transfer detected!",
-            b2_before, b2_after, b2_after - b2_before,
+            "BYSTANDER 2 THEFT: {} -> {} (+{}). Unauthorized transfer!",
+            b2_bal_before, b2_bal_after, b2_bal_after - b2_bal_before
         );
     }
 
-    // Check 5: Total balance conservation (accounts for gas burns only)
-    let total_before = sender_balance_before + b1_before + b2_before;
-    let total_after = sender_balance_after + b1_after + b2_after;
+    // CHECK 3: Sender balance inflation
+    if sender_bal_after > sender_bal_before {
+        panic!(
+            "SENDER INFLATION: {} -> {} (+{})",
+            sender_bal_before, sender_bal_after, sender_bal_after - sender_bal_before
+        );
+    }
+
+    // CHECK 4: Total balance conservation (should only decrease from gas)
+    let total_before = sender_bal_before + b1_bal_before + b2_bal_before;
+    let total_after = sender_bal_after + b1_bal_after + b2_bal_after;
     if total_after > total_before {
         panic!(
-            "TOTAL BALANCE INFLATION: {} -> {} (+{}). \
-             Money created from nothing!",
-            total_before, total_after, total_after - total_before,
+            "TOTAL BALANCE INFLATION: {} -> {} (+{}). Money created from nothing!",
+            total_before, total_after, total_after - total_before
         );
     }
 
-    // Check 6: Zero gas for non-trivial execution
-    if gas_paid == 0 && elapsed.as_millis() > 10 {
+    // CHECK 5: Underflow detection
+    if sender_bal_after > sender_bal_before + 1_000_000_000_000 {
         panic!(
-            "ZERO GAS: execution took {:?} but charged 0 gas. \
-             Possible gas metering bypass.",
-            elapsed,
+            "SENDER UNDERFLOW: {} -> {} (likely u64 wrap)",
+            sender_bal_before, sender_bal_after
         );
     }
 

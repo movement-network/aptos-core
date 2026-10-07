@@ -10,6 +10,7 @@
 //! See [`Table.move`](../sources/Table.move) for language use.
 //! See [`README.md`](../README.md) for integration into an adapter.
 
+use aptos_gas_algebra::AbstractValueSize;
 use aptos_gas_schedule::gas_params::natives::table::*;
 use aptos_native_interface::{
     safely_pop_arg, RawSafeNative, SafeNativeBuilder, SafeNativeContext, SafeNativeError,
@@ -296,10 +297,36 @@ pub fn table_natives(
     })
 }
 
+/// Abstract size of a table value that was just deserialized (cache miss).
+/// Cache hits return `None` so a repeated borrow cannot be billed twice.
+fn graph_size_if_freshly_materialized(
+    context: &SafeNativeContext,
+    gv: &GlobalValue,
+    loaded: Option<Option<NumBytes>>,
+) -> PartialVMResult<Option<AbstractValueSize>> {
+    if loaded.is_none()
+        || !context.timed_feature_enabled(TimedFeatureFlag::MeterValueNodesOnDeserialize)
+    {
+        return Ok(None);
+    }
+    gv.view()
+        .map(|val| {
+            context
+                .abs_val_gas_params()
+                .abstract_value_size(&val, context.gas_feature_version())
+        })
+        .transpose()
+}
+
 fn charge_load_cost(
     context: &mut SafeNativeContext,
     loaded: Option<Option<NumBytes>>,
+    freshly_materialized_graph: Option<AbstractValueSize>,
 ) -> SafeNativeResult<()> {
+    if let Some(graph_size) = freshly_materialized_graph {
+        context.bill_value_graph_walk(graph_size)?;
+    }
+
     context.charge(COMMON_LOAD_BASE_LEGACY)?;
 
     match loaded {
@@ -396,6 +423,7 @@ fn native_add_box(
     } else {
         None
     };
+    let materialized_graph = graph_size_if_freshly_materialized(context, gv, loaded)?;
 
     let res = match gv.move_to(val) {
         Ok(_) => Ok(smallvec![]),
@@ -411,7 +439,7 @@ fn native_add_box(
     if let Some(amount) = mem_usage {
         context.use_heap_memory(amount)?;
     }
-    charge_load_cost(context, loaded)?;
+    charge_load_cost(context, loaded, materialized_graph)?;
 
     res
 }
@@ -425,7 +453,8 @@ fn native_borrow_box(
     assert_eq!(args.len(), 2);
 
     context.charge(BORROW_BOX_BASE)?;
-    let fix_memory_double_counting = context.timed_feature_enabled(TimedFeatureFlag::FixTableNativesMemoryDoubleCounting);
+    let fix_memory_double_counting =
+        context.timed_feature_enabled(TimedFeatureFlag::FixTableNativesMemoryDoubleCounting);
 
     let function_value_extension = context.function_value_extension();
     let table_context = context.extensions().get::<NativeTableContext>();
@@ -453,6 +482,7 @@ fn native_borrow_box(
     } else {
         None
     };
+    let materialized_graph = graph_size_if_freshly_materialized(context, gv, loaded)?;
 
     let res = match gv.borrow_global() {
         Ok(ref_val) => Ok(smallvec![ref_val]),
@@ -468,7 +498,7 @@ fn native_borrow_box(
     if let Some(amount) = mem_usage {
         context.use_heap_memory(amount)?;
     }
-    charge_load_cost(context, loaded)?;
+    charge_load_cost(context, loaded, materialized_graph)?;
 
     res
 }
@@ -511,6 +541,7 @@ fn native_contains_box(
     } else {
         None
     };
+    let materialized_graph = graph_size_if_freshly_materialized(context, gv, loaded)?;
     let exists = Value::bool(gv.exists()?);
 
     drop(table_data);
@@ -520,7 +551,7 @@ fn native_contains_box(
     if let Some(amount) = mem_usage {
         context.use_heap_memory(amount)?;
     }
-    charge_load_cost(context, loaded)?;
+    charge_load_cost(context, loaded, materialized_graph)?;
 
     Ok(smallvec![exists])
 }
@@ -563,6 +594,7 @@ fn native_remove_box(
     } else {
         None
     };
+    let materialized_graph = graph_size_if_freshly_materialized(context, gv, loaded)?;
 
     let res = match gv.move_from() {
         Ok(val) => Ok(smallvec![val]),
@@ -578,7 +610,7 @@ fn native_remove_box(
     if let Some(amount) = mem_usage {
         context.use_heap_memory(amount)?;
     }
-    charge_load_cost(context, loaded)?;
+    charge_load_cost(context, loaded, materialized_graph)?;
 
     res
 }

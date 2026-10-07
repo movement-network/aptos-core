@@ -575,6 +575,10 @@ where
         ) -> PartialVMResult<()>;
     }
 
+    fn enable_value_graph_load_billing(&mut self, enabled: bool) {
+        self.base.enable_value_graph_load_billing(enabled);
+    }
+
     fn charge_io_gas_for_transaction(&mut self, txn_size: NumBytes) -> VMResult<()> {
         let (cost, res) = self.delegate_charge(|base| base.charge_io_gas_for_transaction(txn_size));
 

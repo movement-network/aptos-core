@@ -6,7 +6,9 @@ use aptos_native_interface::{
     safely_assert_eq, safely_pop_arg, RawSafeNative, SafeNativeBuilder, SafeNativeContext,
     SafeNativeResult,
 };
-use aptos_types::transaction::authenticator::AuthenticationKey;
+use aptos_types::{
+    on_chain_config::TimedFeatureFlag, transaction::authenticator::AuthenticationKey,
+};
 use better_any::{Tid, TidAble};
 use move_core_types::{
     account_address::AccountAddress,
@@ -71,6 +73,17 @@ fn native_exists_at(
         context.charge(
             OBJECT_EXISTS_AT_PER_ITEM_LOADED + OBJECT_EXISTS_AT_PER_BYTE_LOADED * num_bytes,
         )?;
+        // exists_at deserializes into the session cache on a miss. Byte
+        // charges above miss the node graph; bill it here when the flag is
+        // on. Cache hits (`num_bytes == None`) were already billed.
+        if context.timed_feature_enabled(TimedFeatureFlag::MeterValueNodesOnDeserialize) {
+            if let Some((heap, graph_size)) =
+                context.session_cached_resource_graph_sizes(address, &type_)?
+            {
+                context.use_heap_memory(heap)?;
+                context.bill_value_graph_walk(graph_size)?;
+            }
+        }
     }
 
     Ok(smallvec![Value::bool(exists)])

@@ -263,4 +263,13 @@ pub trait AptosGasMeter: MoveGasMeter {
             .inject_balance(extra_balance)
             .map_err(|e| e.finish(Location::Undefined))
     }
+
+    /// When enabled, resource loads also bill for walking the deserialized
+    /// value graph (CPU work that blob-length IO gas does not capture).
+    ///
+    /// Default is a no-op so wrappers that do not track the flag stay
+    /// backward compatible. Production meters override this.
+    fn enable_value_graph_load_billing(&mut self, enabled: bool) {
+        let _ = enabled;
+    }
 }

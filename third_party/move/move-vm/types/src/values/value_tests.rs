@@ -5,7 +5,7 @@
 use crate::{loaded_data::runtime_types::TypeBuilder, values::*, views::*};
 use claims::{assert_err, assert_ok};
 use move_binary_format::errors::*;
-use move_core_types::{account_address::AccountAddress, u256::U256};
+use move_core_types::{account_address::AccountAddress, u256::U256, vm_status::StatusCode};
 
 #[test]
 fn locals() -> PartialVMResult<()> {
@@ -306,6 +306,68 @@ fn test_mem_swap() -> PartialVMResult<()> {
             }
         }
     }
+
+    Ok(())
+}
+
+fn assert_invariant_violation(err: PartialVMError) {
+    assert_eq!(
+        err.major_status(),
+        StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR
+    );
+}
+
+/// Two `Reference`s into the same container must not panic the VM thread.
+/// `swap_contents` fails closed with an invariant-violation status.
+#[test]
+fn container_self_swap_returns_status_instead_of_panicking() -> PartialVMResult<()> {
+    let mut locals = Locals::new(3);
+    locals.store_loc(0, Value::vector_u64(vec![1, 2, 3]), false)?;
+    locals.store_loc(1, Value::struct_(Struct::pack(vec![Value::u16(9)])), false)?;
+    locals.store_loc(
+        2,
+        Value::vector_for_testing_only(vec![Value::u64(7), Value::u64(8)]),
+        false,
+    )?;
+
+    let borrow =
+        |ls: &Locals, idx: usize| ls.borrow_loc(idx).unwrap().value_as::<Reference>().unwrap();
+
+    for idx in 0..3 {
+        let before = borrow(&locals, idx).read_ref()?;
+        let err = borrow(&locals, idx)
+            .swap_values(borrow(&locals, idx))
+            .unwrap_err();
+        assert_invariant_violation(err);
+        assert!(borrow(&locals, idx).read_ref()?.equals(&before)?);
+    }
+
+    Ok(())
+}
+
+/// `move_range` on two refs to the same vector must not panic. Distinct
+/// vectors still transfer the range.
+#[test]
+fn move_range_on_aliased_vector_refs_returns_status_instead_of_panicking() -> PartialVMResult<()> {
+    let mut locals = Locals::new(2);
+    locals.store_loc(0, Value::vector_u64(vec![10, 20, 30]), false)?;
+    locals.store_loc(1, Value::vector_u64(vec![40, 50]), false)?;
+
+    let ty = TypeBuilder::with_limits(10, 10).create_u64_ty();
+    let as_vector_ref =
+        |ls: &Locals, idx: usize| ls.borrow_loc(idx).unwrap().value_as::<VectorRef>().unwrap();
+
+    let src = as_vector_ref(&locals, 0);
+    let dst = as_vector_ref(&locals, 1);
+    assert_ok!(VectorRef::move_range(&src, 0, 1, &dst, 0, &ty));
+    assert_eq!(src.length_as_usize(&ty)?, 2);
+    assert_eq!(dst.length_as_usize(&ty)?, 3);
+
+    let same_a = as_vector_ref(&locals, 0);
+    let same_b = as_vector_ref(&locals, 0);
+    let err = VectorRef::move_range(&same_a, 0, 1, &same_b, 0, &ty).unwrap_err();
+    assert_invariant_violation(err);
+    assert_eq!(same_a.length_as_usize(&ty)?, 2);
 
     Ok(())
 }

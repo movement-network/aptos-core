@@ -366,6 +366,9 @@ fn native_add_box(
     assert_eq!(args.len(), 3);
 
     context.charge(ADD_BOX_BASE)?;
+    let function_value_serialization_enabled = context
+        .get_feature_flags()
+        .is_function_value_bcs_serialization_enabled();
     let fix_memory_double_counting =
         context.timed_feature_enabled(TimedFeatureFlag::FixTableNativesMemoryDoubleCounting);
 
@@ -379,7 +382,12 @@ fn native_add_box(
 
     let table = table_data.get_or_create_table(context, handle, &ty_args[0], &ty_args[2])?;
 
-    let key_bytes = serialize_key(&function_value_extension, &table.key_layout, &key)?;
+    let key_bytes = serialize_key(
+        &function_value_extension,
+        &table.key_layout,
+        &key,
+        function_value_serialization_enabled,
+    )?;
     let key_cost = ADD_BOX_PER_BYTE_SERIALIZED * NumBytes::new(key_bytes.len() as u64);
 
     let (gv, loaded) =
@@ -425,7 +433,11 @@ fn native_borrow_box(
     assert_eq!(args.len(), 2);
 
     context.charge(BORROW_BOX_BASE)?;
-    let fix_memory_double_counting = context.timed_feature_enabled(TimedFeatureFlag::FixTableNativesMemoryDoubleCounting);
+    let function_value_serialization_enabled = context
+        .get_feature_flags()
+        .is_function_value_bcs_serialization_enabled();
+    let fix_memory_double_counting =
+        context.timed_feature_enabled(TimedFeatureFlag::FixTableNativesMemoryDoubleCounting);
 
     let function_value_extension = context.function_value_extension();
     let table_context = context.extensions().get::<NativeTableContext>();
@@ -436,7 +448,12 @@ fn native_borrow_box(
 
     let table = table_data.get_or_create_table(context, handle, &ty_args[0], &ty_args[2])?;
 
-    let key_bytes = serialize_key(&function_value_extension, &table.key_layout, &key)?;
+    let key_bytes = serialize_key(
+        &function_value_extension,
+        &table.key_layout,
+        &key,
+        function_value_serialization_enabled,
+    )?;
     let key_cost = BORROW_BOX_PER_BYTE_SERIALIZED * NumBytes::new(key_bytes.len() as u64);
 
     let (gv, loaded) =
@@ -482,6 +499,9 @@ fn native_contains_box(
     assert_eq!(args.len(), 2);
 
     context.charge(CONTAINS_BOX_BASE)?;
+    let function_value_serialization_enabled = context
+        .get_feature_flags()
+        .is_function_value_bcs_serialization_enabled();
     let fix_memory_double_counting =
         context.timed_feature_enabled(TimedFeatureFlag::FixTableNativesMemoryDoubleCounting);
 
@@ -494,7 +514,12 @@ fn native_contains_box(
 
     let table = table_data.get_or_create_table(context, handle, &ty_args[0], &ty_args[2])?;
 
-    let key_bytes = serialize_key(&function_value_extension, &table.key_layout, &key)?;
+    let key_bytes = serialize_key(
+        &function_value_extension,
+        &table.key_layout,
+        &key,
+        function_value_serialization_enabled,
+    )?;
     let key_cost = CONTAINS_BOX_PER_BYTE_SERIALIZED * NumBytes::new(key_bytes.len() as u64);
 
     let (gv, loaded) =
@@ -534,6 +559,9 @@ fn native_remove_box(
     assert_eq!(args.len(), 2);
 
     context.charge(REMOVE_BOX_BASE)?;
+    let function_value_serialization_enabled = context
+        .get_feature_flags()
+        .is_function_value_bcs_serialization_enabled();
     let fix_memory_double_counting =
         context.timed_feature_enabled(TimedFeatureFlag::FixTableNativesMemoryDoubleCounting);
 
@@ -546,7 +574,12 @@ fn native_remove_box(
 
     let table = table_data.get_or_create_table(context, handle, &ty_args[0], &ty_args[2])?;
 
-    let key_bytes = serialize_key(&function_value_extension, &table.key_layout, &key)?;
+    let key_bytes = serialize_key(
+        &function_value_extension,
+        &table.key_layout,
+        &key,
+        function_value_serialization_enabled,
+    )?;
     let key_cost = REMOVE_BOX_PER_BYTE_SERIALIZED * NumBytes::new(key_bytes.len() as u64);
 
     let (gv, loaded) =
@@ -630,13 +663,18 @@ fn get_table_handle(table: &StructRef) -> PartialVMResult<TableHandle> {
     Ok(TableHandle(handle))
 }
 
+/// Serializes a table key. Note that the serialized bytes address the table item in global
+/// storage, and so are observable by Move code: if function value serialization is not enabled,
+/// keys containing function values cannot be used.
 fn serialize_key(
     function_value_extension: &dyn FunctionValueExtension,
     layout: &MoveTypeLayout,
     key: &Value,
+    function_value_serialization_enabled: bool,
 ) -> PartialVMResult<Vec<u8>> {
     ValueSerDeContext::new(function_value_extension.max_value_nest_depth())
         .with_func_args_deserialization(function_value_extension)
+        .with_function_value_serialization_enabled(function_value_serialization_enabled)
         .serialize(key, layout)?
         .ok_or_else(|| partial_extension_error("cannot serialize table key"))
 }

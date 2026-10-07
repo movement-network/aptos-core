@@ -3,11 +3,15 @@
 
 use crate::{assert_abort, assert_success, tests::common, MoveHarness};
 use aptos_framework::BuildOptions;
+use aptos_types::on_chain_config::FeatureFlag;
 use move_core_types::account_address::AccountAddress;
 
 #[test]
 fn test_any_with_function_values() {
     let mut h = MoveHarness::new();
+    // `any::pack` serializes the value with `bcs::to_bytes`, which is only allowed for values
+    // containing function values while the feature below is enabled.
+    h.enable_features(vec![FeatureFlag::ENABLE_FUNCTION_VALUE_BCS_SERIALIZATION], vec![]);
 
     let acc = h.new_account_at(AccountAddress::from_hex_literal("0x123").unwrap());
     assert_success!(h.publish_package_with_options(

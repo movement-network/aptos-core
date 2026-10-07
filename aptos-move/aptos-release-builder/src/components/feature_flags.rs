@@ -152,6 +152,7 @@ pub enum FeatureFlag {
     GovernedGasPool,
     SteakRewardUsingTreasury,
     ExtractAbortInfoExactMatch,
+    EnableFunctionValueBcsSerialization,
 }
 
 fn generate_features_blob(writer: &CodeWriter, data: &[u64]) {
@@ -403,6 +404,9 @@ impl From<FeatureFlag> for AptosFeatureFlag {
             FeatureFlag::ExtractAbortInfoExactMatch => {
                 AptosFeatureFlag::EXTRACT_ABORT_INFO_EXACT_MATCH
             },
+            FeatureFlag::EnableFunctionValueBcsSerialization => {
+                AptosFeatureFlag::ENABLE_FUNCTION_VALUE_BCS_SERIALIZATION
+            },
         }
     }
 }
@@ -580,6 +584,9 @@ impl From<AptosFeatureFlag> for FeatureFlag {
             AptosFeatureFlag::STAKE_REWARD_USING_TREASURY => FeatureFlag::SteakRewardUsingTreasury,
             AptosFeatureFlag::EXTRACT_ABORT_INFO_EXACT_MATCH => {
                 FeatureFlag::ExtractAbortInfoExactMatch
+            },
+            AptosFeatureFlag::ENABLE_FUNCTION_VALUE_BCS_SERIALIZATION => {
+                FeatureFlag::EnableFunctionValueBcsSerialization
             },
         }
     }

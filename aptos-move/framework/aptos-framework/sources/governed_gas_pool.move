@@ -23,7 +23,10 @@ module aptos_framework::governed_gas_pool {
 
     friend aptos_framework::stake;
     friend aptos_framework::transaction_fee;
+    friend aptos_framework::reconfiguration;
 
+    /// Insufficient balance in the pool.
+    const EINSUFFICIENT_BALANCE: u64 = 1;
     /// No longer supported.
     const ENO_LONGER_SUPPORTED: u64 = 4;
 
@@ -70,7 +73,7 @@ module aptos_framework::governed_gas_pool {
     public fun initialize(
         aptos_framework: &signer,
         delegation_pool_creation_seed: vector<u8>,
-    ) {
+    ) acquires GovernedGasPool {
         system_addresses::assert_aptos_framework(aptos_framework);
 
         // return if the governed gas pool has already been initialized
@@ -80,9 +83,10 @@ module aptos_framework::governed_gas_pool {
                     deposited_treasury_counter: 0,
                     withdraw_staking_reward_events: account::new_event_handle<WithdrawStakingRewardEvent>(aptos_framework),
                 });
-            }
-        } else {
+            };
 
+            upgrade_pool_store_to_concurrent(&governed_gas_signer());
+        } else {
             // generate a seed to be used to create the resource account hosting the delegation pool
             let seed = create_resource_account_seed(delegation_pool_creation_seed);
 
@@ -98,6 +102,15 @@ module aptos_framework::governed_gas_pool {
                 deposited_treasury_counter: 0,
                 withdraw_staking_reward_events: account::new_event_handle<WithdrawStakingRewardEvent>(aptos_framework),
             });
+
+            upgrade_pool_store_to_concurrent(&governed_gas_pool_signer);
+        }
+    }
+
+    /// If the CONCURRENT_FUNGIBLE_BALANCE feature is enabled, upgrade the governed gas pool to a concurrent store
+    public(friend) fun on_reconfig() acquires GovernedGasPool {
+        if (exists<GovernedGasPool>(@aptos_framework)) {
+            upgrade_pool_store_to_concurrent(&governed_gas_signer());
         }
     }
 
@@ -105,23 +118,31 @@ module aptos_framework::governed_gas_pool {
     /// @param aptos_framework The signer of the aptos_framework module.
     public entry fun initialize_governed_gas_pool_extension(
         aptos_framework: &signer,
-    ) {
+    )  {
         system_addresses::assert_aptos_framework(aptos_framework);
 
         // return if the governed gas extension has already been initialized
-        if (exists<GovernedGasPoolExtension>(signer::address_of(aptos_framework))) {
-        } else {
+        if (!exists<GovernedGasPoolExtension>(signer::address_of(aptos_framework))) {
+            move_to(aptos_framework, GovernedGasPoolExtension{
+                deposited_treasury_counter: 0,
+                withdraw_staking_reward_events: account::new_event_handle<WithdrawStakingRewardEvent>(aptos_framework),
+            });
+        };
+    }
 
-        move_to(aptos_framework, GovernedGasPoolExtension{
-            deposited_treasury_counter: 0,
-            withdraw_staking_reward_events: account::new_event_handle<WithdrawStakingRewardEvent>(aptos_framework),
-        });
-        }
+    /// Ensure the pool is using aggregator_v2 for concurrentcy.
+    /// @param pool_signer The signer of the gas pool.
+    fun upgrade_pool_store_to_concurrent(pool_signer: &signer) {
+        if (features::concurrent_fungible_balance_enabled()) {
+            let store_addr = primary_fungible_store_address(signer::address_of(pool_signer));
+            let store = object::address_to_object<fungible_asset::FungibleStore>(store_addr);
+            fungible_asset::upgrade_store_to_concurrent(pool_signer, store);
+        };
     }
 
     /// Initialize the governed gas pool as a module
     /// @param aptos_framework The signer of the aptos_framework module.
-    fun init_module(aptos_framework: &signer) {
+    fun init_module(aptos_framework: &signer) acquires GovernedGasPool {
         // Initialize the governed gas pool
         let seed : vector<u8> = b"aptos_framework::governed_gas_pool";
         initialize(aptos_framework, seed);
@@ -207,6 +228,8 @@ module aptos_framework::governed_gas_pool {
     /// @param gas_payer The address of the account that paid the gas fees.
     /// @param gas_fee The amount of gas fees to be deposited.
     public(friend) fun deposit_gas_fee_v2(gas_payer: address, gas_fee: u64) acquires GovernedGasPool {
+        if (gas_fee == 0) return;
+
         if (features::operations_default_to_fa_apt_store_enabled()) {
             deposit_from_fungible_store(gas_payer, gas_fee);
         } else {
@@ -245,18 +268,19 @@ module aptos_framework::governed_gas_pool {
         amount: u64
     ): Coin<CoinType> acquires GovernedGasPool, GovernedGasPoolExtension {
         let balance = get_balance<CoinType>();
-        assert!(balance >= amount, 0); // insufficient balance
-        let ggpv2 = borrow_global_mut<GovernedGasPoolExtension>(@aptos_framework);
+        assert!(balance >= amount, EINSUFFICIENT_BALANCE);
 
+        let reward = coin::withdraw<CoinType>(&governed_gas_signer(), amount);
+
+        // Use aggregators only if feature is enabled AND counters are initialized.
+        // This avoids aborts between feature rollout and extension initialization.
+        let ggpv2 = borrow_global_mut<GovernedGasPoolExtension>(@aptos_framework);
         event::emit_event(
             &mut ggpv2.withdraw_staking_reward_events,
-            WithdrawStakingRewardEvent {
-                amount,
-            },
+            WithdrawStakingRewardEvent { amount },
         );
-        
-        // Withdraw reward coin.
-        coin::withdraw<CoinType>(&governed_gas_signer(), amount)
+
+        reward
     }
 
     /// Register Aptos coin with Governed gas signer.
@@ -315,7 +339,7 @@ module aptos_framework::governed_gas_pool {
     /// @param aptos_framework The signer of the aptos_framework module.
     public fun initialize_for_test(
         aptos_framework: &signer,
-    ) {
+    ) acquires GovernedGasPool {
 
         // Create framework account to be able to send event.
         aptos_framework::account::create_account_for_test(@aptos_framework);
@@ -453,7 +477,7 @@ module aptos_framework::governed_gas_pool {
     }
 
     #[test(aptos_framework = @aptos_framework)]
-    fun test_initialize_is_idempotent(aptos_framework: &signer) {
+    fun test_initialize_is_idempotent(aptos_framework: &signer) acquires GovernedGasPool {
         // initialize the governed gas pool
         initialize_for_test(aptos_framework);
         // initialize the governed gas pool again, no abort
@@ -466,10 +490,10 @@ module aptos_framework::governed_gas_pool {
     ///
     /// @param aptos_framework is the signer of the aptos_framework module.
     fun test_deposite_treasury_and_counter(aptos_framework: &signer, treasury: &signer) acquires GovernedGasPool, GovernedGasPoolExtension, AptosCoinMintCapability {
-       
+
         // initialize the modules
         initialize_for_test(aptos_framework);
-    
+
         // create the depositor account and fund it
         aptos_account::create_account(signer::address_of(treasury));
         mint_for_test(signer::address_of(treasury), 1000);

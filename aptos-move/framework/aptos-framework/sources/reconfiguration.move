@@ -13,6 +13,7 @@ module aptos_framework::reconfiguration {
     use aptos_framework::chain_status;
     use aptos_framework::reconfiguration_state;
     use aptos_framework::storage_gas;
+    use aptos_framework::governed_gas_pool;
 
     friend aptos_framework::aptos_governance;
     friend aptos_framework::block;
@@ -133,6 +134,7 @@ module aptos_framework::reconfiguration {
         // Call stake to compute the new validator set and distribute rewards and transaction fees.
         stake::on_new_epoch();
         storage_gas::on_reconfig();
+        governed_gas_pool::on_reconfig();
 
         assert!(current_time > config_ref.last_reconfiguration_time, error::invalid_state(EINVALID_BLOCK_TIME));
         config_ref.last_reconfiguration_time = current_time;

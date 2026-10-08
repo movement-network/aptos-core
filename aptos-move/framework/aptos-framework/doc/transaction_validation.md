@@ -1431,10 +1431,11 @@ If there is no fee_payer, fee_payer = sender
             );
         } <b>else</b> {
             <b>let</b> mint_amount = storage_fee_refunded - transaction_fee_amount;
-            // TODO: we cannot mint <b>to</b> do storage refund. We need <b>to</b> have a storage refund pool
-            <b>if</b> (!<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_governed_gas_pool_enabled">features::governed_gas_pool_enabled</a>()){
+            // TODO: Should storage refunds go <b>to</b> the governed gas pool or a separate storage refund pool?
+            <b>if</b> (mint_amount &gt; 0) {
                 <a href="transaction_fee.md#0x1_transaction_fee_mint_and_refund">transaction_fee::mint_and_refund</a>(gas_payer_address, mint_amount);
             };
+
             <a href="permissioned_signer.md#0x1_permissioned_signer_increase_limit">permissioned_signer::increase_limit</a>(
                 &gas_payer,
                 (mint_amount <b>as</b> u256),

@@ -4761,6 +4761,17 @@ framework-published voting power in agreement with DKG's post-sweep view.
 
 
 
+<a id="0x1_stake_spec_get_lockup_secs"></a>
+
+
+<pre><code><b>fun</b> <a href="stake.md#0x1_stake_spec_get_lockup_secs">spec_get_lockup_secs</a>(pool_address: <b>address</b>): u64 {
+   <b>global</b>&lt;<a href="stake.md#0x1_stake_StakePool">StakePool</a>&gt;(pool_address).locked_until_secs
+}
+</code></pre>
+
+
+
+
 <a id="0x1_stake_spec_rewards_amount"></a>
 
 
@@ -5996,17 +6007,6 @@ framework-published voting power in agreement with DKG's post-sweep view.
 
 
 
-
-<a id="0x1_stake_spec_get_lockup_secs"></a>
-
-
-<pre><code><b>fun</b> <a href="stake.md#0x1_stake_spec_get_lockup_secs">spec_get_lockup_secs</a>(pool_address: <b>address</b>): u64 {
-   <b>global</b>&lt;<a href="stake.md#0x1_stake_StakePool">StakePool</a>&gt;(pool_address).locked_until_secs
-}
-</code></pre>
-
-
-
 <a id="@Specification_1_calculate_rewards_amount"></a>
 
 ### Function `calculate_rewards_amount`
@@ -6099,7 +6099,6 @@ framework-published voting power in agreement with DKG's post-sweep view.
     <b>let</b> amount = rewards_amount;
     <b>let</b> addr = <a href="../../aptos-stdlib/doc/type_info.md#0x1_type_info_type_of">type_info::type_of</a>&lt;AptosCoin&gt;().account_address;
     <b>aborts_if</b> (rewards_amount &gt; 0) && !<b>exists</b>&lt;<a href="coin.md#0x1_coin_CoinInfo">coin::CoinInfo</a>&lt;AptosCoin&gt;&gt;(addr);
-    <b>modifies</b> <b>global</b>&lt;<a href="coin.md#0x1_coin_CoinInfo">coin::CoinInfo</a>&lt;AptosCoin&gt;&gt;(addr);
     <b>include</b> (rewards_amount &gt; 0) ==&gt; <a href="coin.md#0x1_coin_CoinAddAbortsIf">coin::CoinAddAbortsIf</a>&lt;AptosCoin&gt; { amount: amount };
 }
 </code></pre>

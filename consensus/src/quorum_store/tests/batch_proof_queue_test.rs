@@ -826,3 +826,182 @@ async fn test_proof_queue_pull_full_utilization() {
     proof_queue.handle_updated_block_timestamp(10);
     assert!(proof_queue.is_empty());
 }
+
+/// Build a BatchInfo with a deterministic (non-random) digest so two calls with the same
+/// `num_txns` produce the same BatchInfo, and calls with different `num_txns` produce
+/// different ones — giving us a proper collision: same (author, batch_id), different metadata.
+///
+/// Expiration is set to `u64::MAX` so that `gc_expired_batch_summaries_without_proofs` never
+/// evicts the entry during the test.
+fn batch_info_with_num_txns(
+    author: PeerId,
+    batch_id: BatchId,
+    gas_bucket_start: u64,
+    num_txns: u64,
+) -> BatchInfo {
+    let digest = HashValue::sha3_256_of(&num_txns.to_le_bytes());
+    BatchInfo::new(
+        author,
+        batch_id,
+        0,
+        u64::MAX, // far-future expiration — never GC'd by wall-clock
+        digest,
+        num_txns,
+        num_txns,
+        gas_bucket_start,
+    )
+}
+
+/// Regression test: a batch summary is inserted first, then a proof arrives for the same
+/// (author, batch_id) key but with different metadata.  The proof must be rejected.
+#[tokio::test]
+async fn test_proof_queue_rejects_batch_key_collision() {
+    let my_peer_id = PeerId::random();
+    let batch_store = batch_store_for_test(5 * 1024 * 1024);
+    let mut proof_queue = BatchProofQueue::new(my_peer_id, batch_store, 1);
+
+    let author = PeerId::random();
+    let batch_id = BatchId::new_for_test(0);
+
+    // Insert a batch summary with num_txns = 5.
+    let summary_info = batch_info_with_num_txns(author, batch_id, 100, 5);
+    proof_queue.insert_batches(vec![(summary_info, vec![])]);
+
+    // A proof for the same (author, batch_id) but num_txns = 100 must be rejected.
+    let colliding_proof = ProofOfStore::new(
+        batch_info_with_num_txns(author, batch_id, 100, 100),
+        AggregateSignature::empty(),
+    );
+    proof_queue.insert_proof(colliding_proof);
+
+    // The collision was rejected: no proof is tracked.
+    let (remaining_txns, remaining_proofs) = proof_queue.remaining_txns_and_proofs();
+    assert_eq!(remaining_proofs, 0, "colliding proof must not be counted");
+    assert_eq!(remaining_txns, 0);
+
+    // The batch summary is still present.
+    assert_eq!(proof_queue.batch_summaries_len(), 1);
+}
+
+/// Regression test: a proof arrives first, then a second proof for the same (author, batch_id)
+/// key arrives with different metadata.  The second proof must be rejected.
+#[tokio::test]
+async fn test_proof_queue_rejects_batch_key_collision_proof_first() {
+    let my_peer_id = PeerId::random();
+    let batch_store = batch_store_for_test(5 * 1024 * 1024);
+    let mut proof_queue = BatchProofQueue::new(my_peer_id, batch_store, 1);
+
+    let author = PeerId::random();
+    let batch_id = BatchId::new_for_test(1);
+
+    // Insert the legitimate proof (num_txns = 5).
+    let proof_v1 = ProofOfStore::new(
+        batch_info_with_num_txns(author, batch_id, 100, 5),
+        AggregateSignature::empty(),
+    );
+    proof_queue.insert_proof(proof_v1);
+
+    let (txns_after_first, proofs_after_first) = proof_queue.remaining_txns_and_proofs();
+    assert_eq!(proofs_after_first, 1);
+    assert_eq!(txns_after_first, 5);
+
+    // A second proof with the same (author, batch_id) but num_txns = 100 must be rejected.
+    let proof_v2 = ProofOfStore::new(
+        batch_info_with_num_txns(author, batch_id, 100, 100),
+        AggregateSignature::empty(),
+    );
+    proof_queue.insert_proof(proof_v2);
+
+    // Accounting must be unchanged — the colliding proof was dropped.
+    let (remaining_txns, remaining_proofs) = proof_queue.remaining_txns_and_proofs();
+    assert_eq!(remaining_proofs, 1, "only the original proof must be counted");
+    assert_eq!(remaining_txns, 5, "txn count must reflect original proof only");
+}
+
+/// Regression test: a proof is inserted first, then a batch summary for the same
+/// (author, batch_id) key arrives with different metadata.  The summary must be rejected.
+#[tokio::test]
+async fn test_proof_queue_rejects_batch_summary_collision() {
+    let my_peer_id = PeerId::random();
+    let batch_store = batch_store_for_test(5 * 1024 * 1024);
+    let mut proof_queue = BatchProofQueue::new(my_peer_id, batch_store, 1);
+
+    let author = PeerId::random();
+    let batch_id = BatchId::new_for_test(2);
+
+    // Insert the legitimate proof (num_txns = 5).
+    let proof = ProofOfStore::new(
+        batch_info_with_num_txns(author, batch_id, 100, 5),
+        AggregateSignature::empty(),
+    );
+    proof_queue.insert_proof(proof);
+
+    // A batch summary with the same key but num_txns = 100 must be rejected.
+    let colliding_summary = batch_info_with_num_txns(author, batch_id, 100, 100);
+    proof_queue.insert_batches(vec![(colliding_summary, vec![])]);
+
+    // Proof accounting must be unchanged.
+    let (remaining_txns, remaining_proofs) = proof_queue.remaining_txns_and_proofs();
+    assert_eq!(remaining_proofs, 1);
+    assert_eq!(remaining_txns, 5, "txn count must not be corrupted by colliding summary");
+
+    // No batch summary must have been recorded.
+    assert_eq!(proof_queue.batch_summaries_len(), 0);
+}
+
+/// Regression test: mark_committed must use the stored item's num_txns for accounting,
+/// not the num_txns from the caller-supplied BatchInfo.  A colliding BatchInfo with a
+/// larger num_txns previously caused an integer underflow / panic.
+#[tokio::test]
+async fn test_mark_committed_with_colliding_info_uses_stored_num_txns() {
+    let my_peer_id = PeerId::random();
+    let batch_store = batch_store_for_test(5 * 1024 * 1024);
+    let mut proof_queue = BatchProofQueue::new(my_peer_id, batch_store, 1);
+
+    let author = PeerId::random();
+    let batch_id = BatchId::new_for_test(3);
+
+    // Insert a proof with num_txns = 5; remaining counter becomes 5.
+    let proof = ProofOfStore::new(
+        batch_info_with_num_txns(author, batch_id, 100, 5),
+        AggregateSignature::empty(),
+    );
+    proof_queue.insert_proof(proof);
+
+    let (txns_before, proofs_before) = proof_queue.remaining_txns_and_proofs();
+    assert_eq!(proofs_before, 1);
+    assert_eq!(txns_before, 5);
+
+    // Call mark_committed with a BatchInfo for the same key but num_txns = 1_000_000.
+    // Before the fix this would underflow (5 - 1_000_000) and panic in debug mode.
+    let colliding_commit_info =
+        batch_info_with_num_txns(author, batch_id, 100, 1_000_000);
+    proof_queue.mark_committed(vec![colliding_commit_info]);
+
+    // The counter must have been decremented by the stored 5, not the caller's 1_000_000.
+    let (remaining_txns, remaining_proofs) = proof_queue.remaining_txns_and_proofs();
+    assert_eq!(remaining_proofs, 0);
+    assert_eq!(remaining_txns, 0, "accounting must use stored num_txns, not caller's");
+}
+
+/// Exact retransmits (same key, same metadata) must still be accepted as a no-op.
+#[tokio::test]
+async fn test_proof_queue_accepts_identical_resend() {
+    let my_peer_id = PeerId::random();
+    let batch_store = batch_store_for_test(5 * 1024 * 1024);
+    let mut proof_queue = BatchProofQueue::new(my_peer_id, batch_store, 1);
+
+    let author = PeerId::random();
+    let batch_id = BatchId::new_for_test(4);
+    let info = batch_info_with_num_txns(author, batch_id, 100, 7);
+
+    let proof1 = ProofOfStore::new(info.clone(), AggregateSignature::empty());
+    let proof2 = ProofOfStore::new(info, AggregateSignature::empty());
+
+    proof_queue.insert_proof(proof1);
+    proof_queue.insert_proof(proof2); // identical resend — must not panic or double-count
+
+    let (remaining_txns, remaining_proofs) = proof_queue.remaining_txns_and_proofs();
+    assert_eq!(remaining_proofs, 1, "duplicate proof must not be double-counted");
+    assert_eq!(remaining_txns, 7);
+}

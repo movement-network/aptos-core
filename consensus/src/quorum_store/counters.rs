@@ -22,6 +22,8 @@ pub const CALLBACK_SUCCESS_LABEL: &str = "callback_success";
 
 pub const POS_EXPIRED_LABEL: &str = "expired";
 pub const POS_DUPLICATE_LABEL: &str = "duplicate";
+pub const POS_COLLISION_LABEL: &str = "collision";
+pub const BATCH_COLLISION_LABEL: &str = "batch_collision";
 
 static TRANSACTION_COUNT_BUCKETS: Lazy<Vec<f64>> = Lazy::new(|| {
     exponential_buckets(
@@ -626,6 +628,19 @@ static REJECTED_POS_COUNT: Lazy<IntCounterVec> = Lazy::new(|| {
 
 pub fn inc_rejected_pos_count(reason: &str) {
     REJECTED_POS_COUNT.with_label_values(&[reason]).inc();
+}
+
+static REJECTED_BATCH_COUNT: Lazy<IntCounterVec> = Lazy::new(|| {
+    register_int_counter_vec!(
+        "quorum_store_rejected_batch_count",
+        "Count of the rejected batch summaries since last restart, grouped by reason.",
+        &["reason"]
+    )
+    .unwrap()
+});
+
+pub fn inc_rejected_batch_count(reason: &str) {
+    REJECTED_BATCH_COUNT.with_label_values(&[reason]).inc();
 }
 
 /// Count of the received batches since last restart.

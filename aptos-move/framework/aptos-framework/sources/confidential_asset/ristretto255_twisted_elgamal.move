@@ -9,7 +9,7 @@
 /// flexibility and functionality in cryptographic protocols. This design still maintains the homomorphic property:
 /// `Enc_Y(v, r) + Enc_Y(v', r') = Enc_Y(v + v', r + r')`, where `v, v'` are plaintexts, `Y` is the public key,
 /// and `r, r'` are random scalars.
-module aptos_experimental::ristretto255_twisted_elgamal {
+module aptos_framework::ristretto255_twisted_elgamal {
     use std::option::Option;
     use aptos_std::ristretto255::{Self, CompressedRistretto, RistrettoPoint, Scalar};
 
@@ -39,17 +39,43 @@ module aptos_experimental::ristretto255_twisted_elgamal {
     //
 
     /// Creates a new public key from a serialized Ristretto255 point.
-    /// Returns `Some(CompressedPubkey)` if the deserialization is successful, otherwise `None`.
+    /// Returns `Some(CompressedPubkey)` if the deserialization is successful and the
+    /// resulting point is non-identity, otherwise `None`.
+    ///
+    /// Identity-point public keys are rejected because they break both privacy and
+    /// soundness: ciphertexts encrypted under `ek = identity` have the form
+    /// `(v*G + r*H, r*identity) = (v*G + r*H, identity)`, so the randomness blinding
+    /// is null and any observer can brute-force the encrypted value. Sigma protocols
+    /// that bind the public key (registration, transfer, rotation) also become
+    /// trivially forgeable: the prover does not need to know any secret key, since
+    /// `e * identity = identity` for any challenge `e`.
     public fun new_pubkey_from_bytes(bytes: vector<u8>): Option<CompressedPubkey> {
         let point = ristretto255::new_compressed_point_from_bytes(bytes);
         if (point.is_some()) {
+            let compressed = point.extract();
+            if (is_identity_compressed(&compressed)) {
+                return std::option::none()
+            };
             let pk = CompressedPubkey {
-                point: point.extract()
+                point: compressed
             };
             std::option::some(pk)
         } else {
             std::option::none()
         }
+    }
+
+    /// Returns `true` if the given public key is the Ristretto255 identity point.
+    /// Such keys are rejected by `new_pubkey_from_bytes`; this helper is exposed for
+    /// callers that obtain a `CompressedPubkey` through other means and want to
+    /// re-validate it before use.
+    public fun is_identity_pubkey(pubkey: &CompressedPubkey): bool {
+        is_identity_compressed(&pubkey.point)
+    }
+
+    fun is_identity_compressed(point: &CompressedRistretto): bool {
+        ristretto255::compressed_point_to_bytes(*point)
+            == ristretto255::compressed_point_to_bytes(ristretto255::point_identity_compressed())
     }
 
     /// Serializes a Twisted ElGamal public key into its byte representation.

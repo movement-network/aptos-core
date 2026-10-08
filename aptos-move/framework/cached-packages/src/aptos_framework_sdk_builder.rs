@@ -484,6 +484,31 @@ pub enum EntryFunctionCall {
         coin_type: TypeTag,
     },
 
+    /// The same as `deposit`, but converts coins to missing FA first.
+    ConfidentialAssetDepositCoins {
+        coin_type: TypeTag,
+        amount: u64,
+    },
+
+    /// The same as `deposit_to`, but converts coins to missing FA first.
+    ConfidentialAssetDepositCoinsTo {
+        coin_type: TypeTag,
+        to: AccountAddress,
+        amount: u64,
+    },
+
+    /// Sets, rotates, or clears the chain-level auditor key. Pass an empty
+    /// `new_chain_auditor_ek` to clear (which disables all confidential transfers until a
+    /// successor is set). Bumps `chain_auditor_epoch` and emits [`ChainAuditorChanged`].
+    ///
+    /// Callable only by [`GlobalConfig.chain_auditor_admin`]. Aborts with
+    /// [`ECHAIN_AUDITOR_ADMIN_NOT_SET`] before an admin is assigned, or
+    /// [`ENOT_CHAIN_AUDITOR_ADMIN`] for any other signer. Rotation invalidates pending
+    /// transfer proofs — see [`set_asset_auditor`].
+    ConfidentialAssetSetChainAuditor {
+        new_chain_auditor_ek: Vec<u8>,
+    },
+
     /// Add `amount` of coins to the delegation pool `pool_address`.
     DelegationPoolAddStake {
         pool_address: AccountAddress,
@@ -1624,6 +1649,17 @@ impl EntryFunctionCall {
                 amount,
             } => coin_transfer(coin_type, to, amount),
             CoinUpgradeSupply { coin_type } => coin_upgrade_supply(coin_type),
+            ConfidentialAssetDepositCoins { coin_type, amount } => {
+                confidential_asset_deposit_coins(coin_type, amount)
+            },
+            ConfidentialAssetDepositCoinsTo {
+                coin_type,
+                to,
+                amount,
+            } => confidential_asset_deposit_coins_to(coin_type, to, amount),
+            ConfidentialAssetSetChainAuditor {
+                new_chain_auditor_ek,
+            } => confidential_asset_set_chain_auditor(new_chain_auditor_ek),
             DelegationPoolAddStake {
                 pool_address,
                 amount,
@@ -3354,6 +3390,65 @@ pub fn coin_upgrade_supply(coin_type: TypeTag) -> TransactionPayload {
         ident_str!("upgrade_supply").to_owned(),
         vec![coin_type],
         vec![],
+    ))
+}
+
+/// The same as `deposit`, but converts coins to missing FA first.
+pub fn confidential_asset_deposit_coins(coin_type: TypeTag, amount: u64) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("confidential_asset").to_owned(),
+        ),
+        ident_str!("deposit_coins").to_owned(),
+        vec![coin_type],
+        vec![bcs::to_bytes(&amount).unwrap()],
+    ))
+}
+
+/// The same as `deposit_to`, but converts coins to missing FA first.
+pub fn confidential_asset_deposit_coins_to(
+    coin_type: TypeTag,
+    to: AccountAddress,
+    amount: u64,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("confidential_asset").to_owned(),
+        ),
+        ident_str!("deposit_coins_to").to_owned(),
+        vec![coin_type],
+        vec![bcs::to_bytes(&to).unwrap(), bcs::to_bytes(&amount).unwrap()],
+    ))
+}
+
+/// Sets, rotates, or clears the chain-level auditor key. Pass an empty
+/// `new_chain_auditor_ek` to clear (which disables all confidential transfers until a
+/// successor is set). Bumps `chain_auditor_epoch` and emits [`ChainAuditorChanged`].
+///
+/// Callable only by [`GlobalConfig.chain_auditor_admin`]. Aborts with
+/// [`ECHAIN_AUDITOR_ADMIN_NOT_SET`] before an admin is assigned, or
+/// [`ENOT_CHAIN_AUDITOR_ADMIN`] for any other signer. Rotation invalidates pending
+/// transfer proofs — see [`set_asset_auditor`].
+pub fn confidential_asset_set_chain_auditor(new_chain_auditor_ek: Vec<u8>) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("confidential_asset").to_owned(),
+        ),
+        ident_str!("set_chain_auditor").to_owned(),
+        vec![],
+        vec![bcs::to_bytes(&new_chain_auditor_ek).unwrap()],
     ))
 }
 
@@ -6636,6 +6731,45 @@ mod decoder {
         }
     }
 
+    pub fn confidential_asset_deposit_coins(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::ConfidentialAssetDepositCoins {
+                coin_type: script.ty_args().get(0)?.clone(),
+                amount: bcs::from_bytes(script.args().get(0)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn confidential_asset_deposit_coins_to(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::ConfidentialAssetDepositCoinsTo {
+                coin_type: script.ty_args().get(0)?.clone(),
+                to: bcs::from_bytes(script.args().get(0)?).ok()?,
+                amount: bcs::from_bytes(script.args().get(1)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn confidential_asset_set_chain_auditor(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::ConfidentialAssetSetChainAuditor {
+                new_chain_auditor_ek: bcs::from_bytes(script.args().get(0)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
     pub fn delegation_pool_add_stake(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
         if let TransactionPayload::EntryFunction(script) = payload {
             Some(EntryFunctionCall::DelegationPoolAddStake {
@@ -8361,6 +8495,18 @@ static SCRIPT_FUNCTION_DECODER_MAP: once_cell::sync::Lazy<EntryFunctionDecoderMa
         map.insert(
             "coin_upgrade_supply".to_string(),
             Box::new(decoder::coin_upgrade_supply),
+        );
+        map.insert(
+            "confidential_asset_deposit_coins".to_string(),
+            Box::new(decoder::confidential_asset_deposit_coins),
+        );
+        map.insert(
+            "confidential_asset_deposit_coins_to".to_string(),
+            Box::new(decoder::confidential_asset_deposit_coins_to),
+        );
+        map.insert(
+            "confidential_asset_set_chain_auditor".to_string(),
+            Box::new(decoder::confidential_asset_set_chain_auditor),
         );
         map.insert(
             "delegation_pool_add_stake".to_string(),

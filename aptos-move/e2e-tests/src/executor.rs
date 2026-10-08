@@ -87,6 +87,7 @@ use move_vm_runtime::{
     module_traversal::{TraversalContext, TraversalStorage},
     ModuleStorage,
 };
+use move_vm_runtime::move_vm::SerializedReturnValues;
 use move_vm_types::gas::UnmeteredGasMeter;
 use serde::Serialize;
 use std::{
@@ -1330,6 +1331,51 @@ impl FakeExecutor {
         };
         self.state_store.apply_write_set(&write_set).unwrap();
         self.event_store.extend(events);
+    }
+
+    /// Like [`Self::try_exec`], but targets an arbitrary published address (e.g. `0x7` experimental)
+    /// and returns serialized Move return values (for test-only / internal callees).
+    pub fn try_exec_function_bypass_at(
+        &mut self,
+        module_addr: AccountAddress,
+        module_name: &str,
+        function_name: &str,
+        type_params: Vec<TypeTag>,
+        args: Vec<Vec<u8>>,
+    ) -> Result<SerializedReturnValues, VMStatus> {
+        let env = AptosEnvironment::new(&self.state_store);
+        let resolver = self.state_store.as_move_resolver();
+        let vm = MoveVmExt::new(&env);
+
+        let module_storage = self.state_store.as_aptos_code_storage(&env);
+
+        let mut session = vm.new_session(&resolver, SessionId::void(), None);
+        let traversal_storage = TraversalStorage::new();
+        let module_id = ModuleId::new(
+            module_addr,
+            Identifier::new(module_name).expect("valid module name"),
+        );
+        let ret = session
+            .execute_function_bypass_visibility(
+                &module_id,
+                Identifier::new(function_name)
+                    .expect("valid function name")
+                    .as_ref(),
+                type_params,
+                args,
+                &mut UnmeteredGasMeter,
+                &mut TraversalContext::new(&traversal_storage),
+                &module_storage,
+            )
+            .map_err(|e| e.into_vm_status())?;
+        let (write_set, events) = finish_session_assert_no_modules(
+            session,
+            &module_storage,
+            &ChangeSetConfigs::unlimited_at_gas_feature_version(env.gas_feature_version()),
+        );
+        self.state_store.apply_write_set(&write_set).unwrap();
+        self.event_store.extend(events);
+        Ok(ret)
     }
 
     pub fn try_exec(

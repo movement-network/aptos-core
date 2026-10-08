@@ -3,15 +3,6 @@ run-name: "Publish builder images for ${{ inputs.ref || github.ref_name }}"
 
 on:
   push:
-    branches:
-      - m1
-    paths:
-      - ".github/workflows/publish-builder-images.yaml"
-      - ".cargo/**"
-      - "Cargo.lock"
-      - "Cargo.toml"
-      - "docker/builder/**"
-      - "rust-toolchain.toml"
   workflow_dispatch:
     inputs:
       ref:
@@ -160,4 +151,18 @@ jobs:
             --build-context "tools-builder=docker-image://$IMAGE_NAMESPACE/tools-builder:$SHORT_SHA" \
             "${common_metadata_args[@]}" \
             "${tools_tags[@]}" \
+            .
+
+          validator_tags=()
+          add_tags validator_tags "$IMAGE_NAMESPACE/validator"
+
+          docker buildx build \
+            --push \
+            --file docker/builder/validator.Dockerfile \
+            --target validator \
+            --build-context "debian-base=$DEBIAN_CONTEXT" \
+            --build-context "node-builder=docker-image://$IMAGE_NAMESPACE/aptos-node-builder:$SHORT_SHA" \
+            --build-context "tools-builder=docker-image://$IMAGE_NAMESPACE/tools-builder:$SHORT_SHA" \
+            "${common_metadata_args[@]}" \
+            "${validator_tags[@]}" \
             .

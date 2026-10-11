@@ -24,7 +24,6 @@ use aptos_storage_interface::DbReaderWriter;
 use aptos_storage_service_client::StorageServiceClient;
 use aptos_temppath::TempPath;
 use aptos_time_service::TimeService;
-use aptos_types::ledger_info::set_waypoint_version;
 use aptos_vm::aptos_vm::AptosVMBlockExecutor;
 use futures::{FutureExt, StreamExt};
 use std::{collections::HashMap, sync::Arc};
@@ -54,9 +53,6 @@ fn test_new_initialized_configs() {
     // Get the actual waypoint from the bootstrapped database
     let genesis_ledger_info = db_rw.reader.get_latest_ledger_info().unwrap();
     let waypoint = aptos_types::waypoint::Waypoint::new_any(genesis_ledger_info.ledger_info());
-
-    // Set the global waypoint version for event notifications
-    set_waypoint_version(waypoint.version());
 
     // Create mempool and consensus notifiers
     let (mempool_notifier, _) = new_mempool_notifier_listener_pair(100);

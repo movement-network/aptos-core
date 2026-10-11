@@ -11,7 +11,7 @@ use aptos_indexer_grpc_table_info::internal_indexer_db_service::InternalIndexerD
 use aptos_logger::{debug, info};
 use aptos_storage_interface::{DbReader, DbReaderWriter};
 use aptos_types::{
-    ledger_info::{set_waypoint_version, LedgerInfoWithSignatures},
+    ledger_info::LedgerInfoWithSignatures,
     transaction::Version,
     waypoint::Waypoint,
 };
@@ -198,7 +198,6 @@ pub fn initialize_database_and_checkpoints(
     );
 
     let waypoint = node_config.base.waypoint.waypoint();
-    set_waypoint_version(waypoint.version());
     Ok((
         db_rw,
         backup_service,

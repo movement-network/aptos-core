@@ -11,10 +11,12 @@ use crate::{
     on_chain_config::ValidatorSet,
     transaction::Version,
     validator_verifier::{ValidatorVerifier, VerifyError},
+    wire_bls::WireBlsSignature,
 };
 use aptos_crypto::{
     bls12381,
     hash::{CryptoHash, HashValue},
+    CryptoMaterialError,
 };
 use aptos_crypto_derive::{BCSCryptoHash, CryptoHasher};
 use derivative::Derivative;
@@ -405,7 +407,9 @@ impl LedgerInfoWithVerifiedSignatures {
 #[derive(Clone, Debug, Derivative)]
 #[derivative(PartialEq, Eq)]
 pub struct SignatureWithStatus {
-    signature: bls12381::Signature,
+    /// Compressed encoding. Equality is on these bytes, matching the old
+    /// `bls12381::Signature` `PartialEq` (which compared `to_bytes()`).
+    signature: WireBlsSignature,
     #[derivative(PartialEq = "ignore")]
     // false if the signature not verified.
     // true if the signature is verified.
@@ -417,13 +421,25 @@ impl SignatureWithStatus {
         self.verification_status.store(true, Ordering::SeqCst);
     }
 
-    pub fn signature(&self) -> &bls12381::Signature {
+    /// Compressed payload. Safe to call while matching commit votes to a
+    /// later full `LedgerInfo`; does not decompress.
+    pub fn wire_signature(&self) -> &WireBlsSignature {
         &self.signature
+    }
+
+    /// Recover the group element. Call this only on verify / aggregate paths.
+    pub fn recover_group_element(&self) -> Result<bls12381::Signature, CryptoMaterialError> {
+        self.signature.recover_group_element()
+    }
+
+    /// Historical name for the recovered group element.
+    pub fn signature(&self) -> Result<bls12381::Signature, CryptoMaterialError> {
+        self.recover_group_element()
     }
 
     pub fn from(signature: bls12381::Signature) -> Self {
         Self {
-            signature,
+            signature: WireBlsSignature::from(signature),
             verification_status: Arc::new(AtomicBool::new(false)),
         }
     }
@@ -447,8 +463,11 @@ impl<'de> Deserialize<'de> for SignatureWithStatus {
     where
         D: serde::Deserializer<'de>,
     {
-        let signature = bls12381::Signature::deserialize(deserializer)?;
-        Ok(SignatureWithStatus::from(signature))
+        let signature = WireBlsSignature::deserialize(deserializer)?;
+        Ok(SignatureWithStatus {
+            signature,
+            verification_status: Arc::new(AtomicBool::new(false)),
+        })
     }
 }
 
@@ -521,16 +540,43 @@ impl<T: Clone + Send + Sync + Serialize + CryptoHash> SignatureAggregator<T> {
     ) -> Result<AggregateSignature, VerifyError> {
         self.check_voting_power(verifier, true)?;
 
-        let all_signatures = self
+        // Skip payloads that are not G2 points. `check_voting_power` still
+        // counted every stored voter; verification of the resulting bitmask
+        // (or a later filter pass) drops the unrecoverable authors.
+        let recovered: Vec<(AccountAddress, bls12381::Signature)> = self
             .signatures
             .iter()
-            .map(|(voter, sig)| (voter, sig.signature()));
-        verifier.aggregate_signatures(all_signatures)
+            .filter_map(|(voter, sig)| {
+                sig.recover_group_element()
+                    .ok()
+                    .map(|point| (*voter, point))
+            })
+            .collect();
+        verifier.aggregate_signatures(recovered.iter().map(|(voter, sig)| (voter, sig)))
     }
 
-    fn filter_invalid_signatures(&mut self, verifier: &ValidatorVerifier) {
+    /// Keep only signatures that verify against `self.data`.
+    ///
+    /// `SignatureWithStatus::is_verified` records that a signature verified,
+    /// never *which* message it verified. A commit vote can therefore arrive
+    /// already marked verified after `CommitVote::verify` checked the voter's
+    /// own `LedgerInfo`. Recovery must re-check every signature here.
+    fn drop_signatures_not_bound_to_data(&mut self, verifier: &ValidatorVerifier) {
         let signatures = mem::take(&mut self.signatures);
-        self.signatures = verifier.filter_invalid_signatures(&self.data, signatures);
+        let mut retained = BTreeMap::new();
+        for (author, signature) in signatures {
+            let bound = signature
+                .recover_group_element()
+                .ok()
+                .is_some_and(|point| verifier.verify(author, &self.data, &point).is_ok());
+            if bound {
+                signature.set_verified();
+                retained.insert(author, signature);
+            } else {
+                verifier.add_pessimistic_verify_set(author);
+            }
+        }
+        self.signatures = retained;
     }
 
     /// Try to aggregate all signatures if the voting power is enough. If the aggregated signature is
@@ -539,21 +585,20 @@ impl<T: Clone + Send + Sync + Serialize + CryptoHash> SignatureAggregator<T> {
         &mut self,
         verifier: &ValidatorVerifier,
     ) -> Result<(T, AggregateSignature), VerifyError> {
-        let aggregated_sig = self.try_aggregate(verifier)?;
-
-        match verifier.verify_multi_signatures(&self.data, &aggregated_sig) {
-            Ok(_) => {
-                // We are not marking all the signatures as "verified" here, as two malicious
-                // voters can collude and create a valid aggregated signature.
-                Ok((self.data.clone(), aggregated_sig))
-            },
-            Err(_) => {
-                self.filter_invalid_signatures(verifier);
-
-                let aggregated_sig = self.try_aggregate(verifier)?;
-                Ok((self.data.clone(), aggregated_sig))
-            },
+        let first = self.try_aggregate(verifier)?;
+        if verifier.verify_multi_signatures(&self.data, &first).is_ok() {
+            // Do not mark every stored signature verified: two malicious
+            // voters can collude to form a valid aggregate that includes
+            // an unbound individual signature.
+            return Ok((self.data.clone(), first));
         }
+
+        self.drop_signatures_not_bound_to_data(verifier);
+        let recovered = self.try_aggregate(verifier)?;
+        // Fail closed: never return a certificate that does not verify
+        // against this aggregator's own data.
+        verifier.verify_multi_signatures(&self.data, &recovered)?;
+        Ok((self.data.clone(), recovered))
     }
 
     pub fn data(&self) -> &T {
@@ -611,11 +656,11 @@ mod tests {
     fn test_signature_with_status_bcs() {
         let signature = bls12381::Signature::dummy_signature();
         let signature_with_status_1 = SignatureWithStatus {
-            signature: signature.clone(),
+            signature: WireBlsSignature::from(&signature),
             verification_status: Arc::new(AtomicBool::new(true)),
         };
         let signature_with_status_2 = SignatureWithStatus {
-            signature: signature.clone(),
+            signature: WireBlsSignature::from(&signature),
             verification_status: Arc::new(AtomicBool::new(false)),
         };
         let serialized_signature_with_status_1 =
@@ -623,11 +668,18 @@ mod tests {
         let serialized_signature_with_status_2 =
             bcs::to_bytes(&signature_with_status_2).expect("Failed to serialize signature");
         assert!(serialized_signature_with_status_1 == serialized_signature_with_status_2);
+        assert_eq!(
+            serialized_signature_with_status_1,
+            bcs::to_bytes(&signature).expect("Failed to serialize raw signature")
+        );
 
         let deserialized_signature_with_status: SignatureWithStatus =
             bcs::from_bytes(&serialized_signature_with_status_1)
                 .expect("Failed to deserialize signature");
-        assert_eq!(*deserialized_signature_with_status.signature(), signature);
+        assert_eq!(
+            deserialized_signature_with_status.signature().unwrap(),
+            signature
+        );
         assert!(!deserialized_signature_with_status.is_verified());
     }
 
@@ -635,11 +687,11 @@ mod tests {
     fn test_signature_with_status_serde() {
         let signature = bls12381::Signature::dummy_signature();
         let signature_with_status_1 = SignatureWithStatus {
-            signature: signature.clone(),
+            signature: WireBlsSignature::from(&signature),
             verification_status: Arc::new(AtomicBool::new(true)),
         };
         let signature_with_status_2 = SignatureWithStatus {
-            signature: signature.clone(),
+            signature: WireBlsSignature::from(&signature),
             verification_status: Arc::new(AtomicBool::new(false)),
         };
         let serialized_signature_with_status_1 =
@@ -647,11 +699,18 @@ mod tests {
         let serialized_signature_with_status_2 =
             serde_json::to_string(&signature_with_status_2).expect("Failed to serialize signature");
         assert!(serialized_signature_with_status_1 == serialized_signature_with_status_2);
+        assert_eq!(
+            serialized_signature_with_status_1,
+            serde_json::to_string(&signature).expect("Failed to serialize raw signature")
+        );
 
         let deserialized_signature_with_status: SignatureWithStatus =
             serde_json::from_str(&serialized_signature_with_status_1)
                 .expect("Failed to deserialize signature");
-        assert_eq!(*deserialized_signature_with_status.signature(), signature);
+        assert_eq!(
+            deserialized_signature_with_status.signature().unwrap(),
+            signature
+        );
         assert!(!deserialized_signature_with_status.is_verified());
     }
 
@@ -864,5 +923,107 @@ mod tests {
         assert_eq!(signature_aggregator.verified_voters().count(), 5);
         assert_eq!(signature_aggregator.all_voters().count(), 5);
         assert_eq!(validator_verifier.pessimistic_verify_set().len(), 2);
+    }
+
+    #[test]
+    fn junk_signature_with_status_decodes_without_group_element() {
+        let junk = WireBlsSignature::from_compact_array([0x7Fu8; WireBlsSignature::COMPACT_LEN]);
+        let encoded = bcs::to_bytes(&junk).unwrap();
+        let decoded: SignatureWithStatus =
+            bcs::from_bytes(&encoded).expect("length-valid payload must decode");
+        assert!(!decoded.is_verified());
+        assert!(decoded.recover_group_element().is_err());
+        assert_eq!(decoded.wire_signature(), &junk);
+    }
+
+    #[test]
+    fn junk_aggregate_payload_does_not_block_ledger_info_match() {
+        let ledger_info = LedgerInfo::new(BlockInfo::empty(), HashValue::random());
+        let dummy = bls12381::Signature::dummy_signature();
+        let valid = AggregateSignature::new(BitVec::from(vec![true]), Some(dummy.clone()));
+        let mut encoded = bcs::to_bytes(&valid).unwrap();
+
+        let dummy_bytes = bcs::to_bytes(&dummy).unwrap();
+        let junk = WireBlsSignature::from_compact_array([0xEEu8; WireBlsSignature::COMPACT_LEN]);
+        let junk_bytes = bcs::to_bytes(&junk).unwrap();
+        assert_eq!(dummy_bytes.len(), junk_bytes.len());
+        let start = encoded.len() - dummy_bytes.len();
+        encoded[start..].copy_from_slice(&junk_bytes);
+
+        let decoded: AggregateSignature =
+            bcs::from_bytes(&encoded).expect("compressed payload must decode");
+        assert!(decoded.try_group_element().is_err());
+        assert_eq!(decoded.wire_sig(), Some(&junk));
+
+        let li_with_sigs = LedgerInfoWithSignatures::new(ledger_info.clone(), decoded);
+        // Commit-vote matching compares ledger fields only; decompression
+        // must not run (and must not fail) before this equality check.
+        assert_eq!(li_with_sigs.ledger_info(), &ledger_info);
+        assert_eq!(li_with_sigs.commit_info(), ledger_info.commit_info());
+
+        let vote_placeholder = LedgerInfo::new(
+            ledger_info.commit_info().clone(),
+            ledger_info.consensus_data_hash(),
+        );
+        assert_eq!(&vote_placeholder, li_with_sigs.ledger_info());
+        assert!(li_with_sigs
+            .verify_signatures(&ValidatorVerifier::new(vec![]))
+            .is_err());
+    }
+
+    /// A signature that is valid for a different LedgerInfo, even if already
+    /// marked verified, must be dropped on the recovery path. Remaining
+    /// honest votes over the aggregator's data must still certify.
+    #[test]
+    fn verified_signature_for_other_ledger_info_is_dropped_on_recovery() {
+        let commit_info = BlockInfo::empty();
+        let target = LedgerInfo::new(commit_info.clone(), HashValue::from_u64(1));
+        let other = LedgerInfo::new(commit_info, HashValue::from_u64(2));
+        assert_ne!(target, other);
+
+        const NUM_SIGNERS: u8 = 7;
+        let signers: Vec<ValidatorSigner> = (0..NUM_SIGNERS)
+            .map(|i| ValidatorSigner::random([i; 32]))
+            .collect();
+        let infos: Vec<ValidatorConsensusInfo> = signers
+            .iter()
+            .map(|s| ValidatorConsensusInfo::new(s.author(), s.public_key(), 1))
+            .collect();
+        let verifier = ValidatorVerifier::new_with_quorum_voting_power(infos, 5)
+            .expect("Incorrect quorum size.");
+
+        let mut aggregator = SignatureAggregator::new(target.clone());
+        let mut expected_partial = PartialSignatures::empty();
+
+        // Poison: valid over `other`, already marked verified.
+        let poison = SignatureWithStatus::from(signers[0].sign(&other).unwrap());
+        poison.set_verified();
+        aggregator.add_signature(signers[0].author(), &poison);
+
+        for signer in signers.iter().skip(1).take(5) {
+            let sig = SignatureWithStatus::from(signer.sign(&target).unwrap());
+            aggregator.add_signature(signer.author(), &sig);
+            expected_partial.add_signature(signer.author(), signer.sign(&target).unwrap());
+        }
+
+        assert_eq!(aggregator.all_voters().count(), 6);
+        let (certified_data, aggregate) = aggregator
+            .aggregate_and_verify(&verifier)
+            .expect("honest quorum must still certify after dropping the unbound signature");
+        assert_eq!(certified_data, target);
+        verifier
+            .verify_multi_signatures(&target, &aggregate)
+            .expect("returned certificate must verify against the aggregator data");
+        assert_eq!(
+            aggregate,
+            verifier
+                .aggregate_signatures(expected_partial.signatures_iter())
+                .unwrap()
+        );
+        assert_eq!(aggregator.all_voters().count(), 5);
+        assert!(verifier
+            .pessimistic_verify_set()
+            .contains(&signers[0].author()));
+        assert!(!aggregator.all_voters().any(|a| *a == signers[0].author()));
     }
 }

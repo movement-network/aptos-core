@@ -108,9 +108,10 @@ impl Vote {
         &self.ledger_info
     }
 
-    /// Return the signature of the vote
-    pub fn signature(&self) -> &bls12381::Signature {
-        self.signature.signature()
+    /// Recover the group element of the vote signature.
+    /// Callers that only match `LedgerInfo` should use [`Self::signature_with_status`].
+    pub fn signature(&self) -> Result<bls12381::Signature, CryptoMaterialError> {
+        self.signature.recover_group_element()
     }
 
     pub fn signature_with_status(&self) -> &SignatureWithStatus {

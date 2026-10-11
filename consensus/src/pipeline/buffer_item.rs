@@ -5,7 +5,7 @@
 use crate::{
     counters, pipeline::hashable::Hashable, state_replication::StateComputerCommitCallBackType,
 };
-use anyhow::anyhow;
+use anyhow::{anyhow, ensure};
 use aptos_consensus_types::{
     common::{Author, Round},
     pipeline::commit_vote::CommitVote,
@@ -393,47 +393,60 @@ impl BufferItem {
     }
 
     pub fn add_signature_if_matched(&mut self, vote: CommitVote) -> anyhow::Result<()> {
-        let target_commit_info = vote.commit_info();
-        let author = vote.author();
-        let signature = vote.signature_with_status();
         match self {
             Self::Ordered(ordered) => {
+                // Execution has not produced the final LedgerInfo yet, so only
+                // the ordered BlockInfo can be compared. Votes stay in
+                // `unverified_votes` (one per author) and
+                // `create_signature_aggregator` later admits a vote only when
+                // its entire LedgerInfo equals the executed commit message.
                 if ordered
                     .ordered_proof
                     .commit_info()
-                    .match_ordered_only(target_commit_info)
+                    .match_ordered_only(vote.commit_info())
                 {
-                    // we optimistically assume the vote will be valid in the future.
-                    // when advancing to executed item, we will check if the sigs are valid.
-                    // each author at most stores a single sig for each item,
-                    // so an adversary will not be able to flood our memory.
-                    ordered.unverified_votes.insert(author, vote);
+                    ordered.unverified_votes.insert(vote.author(), vote);
                     return Ok(());
                 }
             },
             Self::Executed(executed) => {
-                if executed.commit_info == *target_commit_info {
-                    executed
-                        .partial_commit_proof
-                        .add_signature(author, signature);
-                    return Ok(());
-                }
+                return Self::admit_into_partial_commit_proof(
+                    &mut executed.partial_commit_proof,
+                    &vote,
+                );
             },
             Self::Signed(signed) => {
-                if signed.partial_commit_proof.data().commit_info() == target_commit_info {
-                    signed.partial_commit_proof.add_signature(author, signature);
-                    return Ok(());
-                }
+                return Self::admit_into_partial_commit_proof(
+                    &mut signed.partial_commit_proof,
+                    &vote,
+                );
             },
             Self::Aggregated(aggregated) => {
-                // we do not need to do anything for aggregated
-                // but return true is helpful to stop the outer loop early
-                if aggregated.commit_proof.commit_info() == target_commit_info {
+                // Already certified. Accept only a vote bound to that same
+                // LedgerInfo so a foreign consensus_data_hash cannot ACK.
+                if vote.signs_same_ledger_info(aggregated.commit_proof.ledger_info()) {
                     return Ok(());
                 }
             },
         }
-        Err(anyhow!("Inconsistent commit info."))
+        Err(anyhow!(
+            "commit vote is not bound to this buffer item's LedgerInfo"
+        ))
+    }
+
+    /// Admit `vote` into a partial proof only when it signed the exact
+    /// LedgerInfo the aggregator is collecting. `commit_info` equality is
+    /// not enough: BLS is bound to `commit_info` plus `consensus_data_hash`.
+    fn admit_into_partial_commit_proof(
+        partial: &mut SignatureAggregator<LedgerInfo>,
+        vote: &CommitVote,
+    ) -> anyhow::Result<()> {
+        ensure!(
+            vote.signs_same_ledger_info(partial.data()),
+            "commit vote LedgerInfo does not match the partial commit proof"
+        );
+        partial.add_signature(vote.author(), vote.signature_with_status());
+        Ok(())
     }
 
     pub fn is_ordered(&self) -> bool {
@@ -548,23 +561,23 @@ mod test {
         let mut partial_signatures = BTreeMap::new();
         partial_signatures.insert(
             validator_signers[0].author(),
-            commit_votes[0].signature().clone(),
+            commit_votes[0].signature().unwrap(),
         );
         partial_signatures.insert(
             validator_signers[1].author(),
-            commit_votes[1].signature().clone(),
+            commit_votes[1].signature().unwrap(),
         );
         partial_signatures.insert(
             validator_signers[2].author(),
-            commit_votes[2].signature().clone(),
+            commit_votes[2].signature().unwrap(),
         );
         partial_signatures.insert(
             validator_signers[3].author(),
-            commit_votes[3].signature().clone(),
+            commit_votes[3].signature().unwrap(),
         );
         partial_signatures.insert(
             validator_signers[4].author(),
-            commit_votes[4].signature().clone(),
+            commit_votes[4].signature().unwrap(),
         );
         let li_with_sig = validator_verifier
             .aggregate_signatures(partial_signatures.iter())
@@ -597,9 +610,10 @@ mod test {
 
         match executed_item {
             BufferItem::Executed(ref executed_item_inner) => {
-                assert_eq!(executed_item_inner.executed_blocks, vec![
-                    pipelined_block.clone()
-                ]);
+                assert_eq!(
+                    executed_item_inner.executed_blocks,
+                    vec![pipelined_block.clone()]
+                );
                 assert_eq!(executed_item_inner.commit_info, block_info);
                 assert_eq!(
                     executed_item_inner
@@ -653,23 +667,23 @@ mod test {
         let mut partial_signatures = BTreeMap::new();
         partial_signatures.insert(
             validator_signers[0].author(),
-            commit_votes[0].signature().clone(),
+            commit_votes[0].signature().unwrap(),
         );
         partial_signatures.insert(
             validator_signers[1].author(),
-            commit_votes[1].signature().clone(),
+            commit_votes[1].signature().unwrap(),
         );
         partial_signatures.insert(
             validator_signers[2].author(),
-            commit_votes[2].signature().clone(),
+            commit_votes[2].signature().unwrap(),
         );
         partial_signatures.insert(
             validator_signers[4].author(),
-            commit_votes[4].signature().clone(),
+            commit_votes[4].signature().unwrap(),
         );
         partial_signatures.insert(
             validator_signers[6].author(),
-            commit_votes[6].signature().clone(),
+            commit_votes[6].signature().unwrap(),
         );
         let li_with_sig = validator_verifier
             .aggregate_signatures(partial_signatures.iter())
@@ -703,9 +717,10 @@ mod test {
 
         match executed_item {
             BufferItem::Executed(ref executed_item_inner) => {
-                assert_eq!(executed_item_inner.executed_blocks, vec![
-                    pipelined_block.clone()
-                ]);
+                assert_eq!(
+                    executed_item_inner.executed_blocks,
+                    vec![pipelined_block.clone()]
+                );
                 assert_eq!(executed_item_inner.commit_info, block_info);
                 assert_eq!(
                     executed_item_inner
@@ -726,9 +741,10 @@ mod test {
         let mut executed_item = executed_item.try_advance_to_aggregated(&validator_verifier);
         match executed_item {
             BufferItem::Executed(ref executed_item_inner) => {
-                assert_eq!(executed_item_inner.executed_blocks, vec![
-                    pipelined_block.clone()
-                ]);
+                assert_eq!(
+                    executed_item_inner.executed_blocks,
+                    vec![pipelined_block.clone()]
+                );
                 assert_eq!(executed_item_inner.commit_info, block_info);
                 assert_eq!(
                     executed_item_inner
@@ -750,9 +766,10 @@ mod test {
         let mut executed_item = executed_item.try_advance_to_aggregated(&validator_verifier);
         match executed_item {
             BufferItem::Executed(ref executed_item_inner) => {
-                assert_eq!(executed_item_inner.executed_blocks, vec![
-                    pipelined_block.clone()
-                ]);
+                assert_eq!(
+                    executed_item_inner.executed_blocks,
+                    vec![pipelined_block.clone()]
+                );
                 assert_eq!(executed_item_inner.commit_info, block_info);
                 assert_eq!(
                     executed_item_inner
@@ -777,6 +794,91 @@ mod test {
                 assert_eq!(aggregated_item_inner.commit_proof, commit_proof);
             },
             _ => panic!("Expected aggregated item."),
+        }
+    }
+
+    /// A BLS commit vote is bound to the entire LedgerInfo. Same `commit_info`
+    /// with a different `consensus_data_hash` must not enter a partial proof,
+    /// even when `CommitVote::verify` succeeds against the voter's own message.
+    /// Honest votes over the expected LedgerInfo must still form a certificate.
+    #[test]
+    fn reject_vote_with_unrelated_consensus_data_hash_and_still_quorum() {
+        let (validator_signers, validator_verifier) = create_validators();
+        let pipelined_block = create_pipelined_block();
+        let block_info = pipelined_block.block_info();
+        let expected_ledger = LedgerInfo::new(block_info.clone(), HashValue::zero());
+        let foreign_ledger = LedgerInfo::new(block_info.clone(), HashValue::from_u64(0xA11CE));
+        let ordered_proof =
+            LedgerInfoWithSignatures::new(expected_ledger.clone(), AggregateSignature::empty());
+
+        let mut executed_item = BufferItem::new_ordered(
+            vec![pipelined_block.clone()],
+            ordered_proof,
+            Box::new(move |_, _| {}),
+            HashMap::new(),
+        )
+        .advance_to_executed_or_aggregated(
+            vec![pipelined_block.clone()],
+            &validator_verifier,
+            None,
+            true,
+        );
+        assert!(executed_item.is_executed());
+
+        let foreign_vote = CommitVote::new(
+            validator_signers[0].author(),
+            foreign_ledger.clone(),
+            &validator_signers[0],
+        )
+        .unwrap();
+        assert_eq!(foreign_vote.commit_info(), expected_ledger.commit_info());
+        assert_ne!(foreign_vote.ledger_info(), &expected_ledger);
+        assert!(!foreign_vote.signs_same_ledger_info(&expected_ledger));
+        foreign_vote
+            .verify(validator_signers[0].author(), &validator_verifier)
+            .expect("signature is valid over the foreign LedgerInfo");
+        assert!(
+            executed_item
+                .add_signature_if_matched(foreign_vote.clone())
+                .is_err(),
+            "Executed partial proof must reject a vote bound to another consensus_data_hash"
+        );
+        match &executed_item {
+            BufferItem::Executed(inner) => {
+                assert_eq!(inner.partial_commit_proof.all_voters().count(), 0);
+            },
+            _ => panic!("Expected executed item after rejected vote"),
+        }
+
+        let signed_item = executed_item.advance_to_signed(
+            validator_signers[1].author(),
+            validator_signers[1].sign(&expected_ledger).unwrap(),
+        );
+        let mut signed_item = signed_item;
+        assert!(
+            signed_item.add_signature_if_matched(foreign_vote).is_err(),
+            "Signed partial proof must reject a vote bound to another consensus_data_hash"
+        );
+
+        let honest_votes =
+            create_valid_commit_votes(validator_signers.clone(), expected_ledger.clone());
+        for vote in honest_votes.iter().take(5) {
+            signed_item
+                .add_signature_if_matched(vote.clone())
+                .expect("honest vote over the expected LedgerInfo must be admitted");
+        }
+
+        let aggregated_item = signed_item.try_advance_to_aggregated(&validator_verifier);
+        match aggregated_item {
+            BufferItem::Aggregated(inner) => {
+                inner
+                    .commit_proof
+                    .verify_signatures(&validator_verifier)
+                    .expect("honest quorum must produce a verifiable commit certificate");
+                assert_eq!(inner.commit_proof.ledger_info(), &expected_ledger);
+                assert!(inner.commit_proof.get_num_voters() >= 5);
+            },
+            _ => panic!("Expected aggregated item from honest quorum"),
         }
     }
 }

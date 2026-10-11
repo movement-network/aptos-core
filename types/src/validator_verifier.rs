@@ -279,7 +279,10 @@ impl ValidatorVerifier {
         if (!self.optimistic_sig_verification || self.pessimistic_verify_set.contains(&author))
             && !signature_with_status.is_verified()
         {
-            self.verify(author, message, signature_with_status.signature())?;
+            let point = signature_with_status
+                .recover_group_element()
+                .map_err(|_| VerifyError::InvalidMultiSignature)?;
+            self.verify(author, message, &point)?;
             signature_with_status.set_verified();
         }
         Ok(())
@@ -296,10 +299,11 @@ impl ValidatorVerifier {
             .into_par_iter()
             .with_min_len(4) // At least 4 signatures are verified in each task
             .filter_map(|(account_address, signature)| {
+                let recovered = signature.recover_group_element().ok();
                 if signature.is_verified()
-                    || self
-                        .verify(account_address, message, signature.signature())
-                        .is_ok()
+                    || recovered
+                        .as_ref()
+                        .is_some_and(|point| self.verify(account_address, message, point).is_ok())
                 {
                     signature.set_verified();
                     Some((account_address, signature))
@@ -371,10 +375,11 @@ impl ValidatorVerifier {
                 return Ok(());
             }
         }
-        // Verify empty multi signature
+        // Verify empty multi signature. Decompression happens here, after the
+        // bitmask and voting-power checks above.
         let multi_sig = multi_signature
-            .sig()
-            .as_ref()
+            .try_group_element()
+            .map_err(|_| VerifyError::InvalidMultiSignature)?
             .ok_or(VerifyError::EmptySignature)?;
         // Verify the optimistically aggregated signature.
         let aggregated_key =
@@ -405,10 +410,11 @@ impl ValidatorVerifier {
         }
         // Verify the quorum voting power of the authors
         self.check_voting_power(authors.iter(), true)?;
-        // Verify empty aggregated signature
+        // Verify empty aggregated signature. Decompression happens here, after
+        // the bitmask and voting-power checks above.
         let aggregated_sig = aggregated_signature
-            .sig()
-            .as_ref()
+            .try_group_element()
+            .map_err(|_| VerifyError::InvalidMultiSignature)?
             .ok_or(VerifyError::EmptySignature)?;
 
         aggregated_sig

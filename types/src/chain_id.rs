@@ -8,17 +8,11 @@ use std::{convert::TryFrom, fmt, str::FromStr};
 /// A registry of named chain IDs
 /// Its main purpose is to improve human readability of reserved chain IDs in config files and CLI
 /// When signing transactions for such chains, the numerical chain ID should still be used
-/// (e.g. MAINNET has numeric chain ID 1, TESTNET has chain ID 2, etc)
+/// (e.g. MOVEMAINNET has numeric chain ID 126, MOVETESTNET has chain ID 250)
+/// Note: ChainId 0 is reserved to guard against accidental zero-initialization.
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum NamedChain {
-    /// Users might accidentally initialize the ChainId field to 0, hence reserving ChainId 0 for accidental
-    /// initialization.
-    /// MAINNET is the Aptos mainnet production chain and is reserved for 1
-    MAINNET = 1,
-    // Even though these CHAIN IDs do not correspond to MAINNET, changing them should be avoided since they
-    // can break test environments for various organisations.
-    TESTNET = 2,
     DEVNET = 3,
     TESTING = 4,
     PREMAINNET = 5,
@@ -26,8 +20,6 @@ pub enum NamedChain {
     MOVETESTNET = 250,
 }
 
-const MAINNET: &str = "mainnet";
-const TESTNET: &str = "testnet";
 const DEVNET: &str = "devnet";
 const TESTING: &str = "testing";
 const PREMAINNET: &str = "premainnet";
@@ -47,8 +39,6 @@ impl NamedChain {
     pub fn from_chain_id(chain_id: &ChainId) -> Result<NamedChain, String> {
         let chain_id = chain_id.id();
         match chain_id {
-            1 => Ok(NamedChain::MAINNET),
-            2 => Ok(NamedChain::TESTNET),
             3 => Ok(NamedChain::DEVNET), // TODO: this is not correct and should removed. The devnet chain ID changes.
             4 => Ok(NamedChain::TESTING),
             5 => Ok(NamedChain::PREMAINNET),
@@ -64,8 +54,8 @@ impl FromStr for NamedChain {
 
     fn from_str(string: &str) -> Result<Self> {
         let named_chain = match string.to_lowercase().as_str() {
-            MAINNET => NamedChain::MAINNET,
-            TESTNET => NamedChain::TESTNET,
+            MOVEMENT_MAINNET => NamedChain::MOVEMAINNET,
+            MOVEMENT_TESTNET => NamedChain::MOVETESTNET,
             DEVNET => NamedChain::DEVNET,
             TESTING => NamedChain::TESTING,
             PREMAINNET => NamedChain::PREMAINNET,
@@ -83,22 +73,14 @@ impl FromStr for NamedChain {
 pub struct ChainId(u8);
 
 impl ChainId {
-    /// Returns true iff the chain ID matches testnet
+    /// Returns true iff the chain ID matches Movement testnet.
     pub fn is_testnet(&self) -> bool {
-        self.matches_named_chain(NamedChain::TESTNET)
-    }
-
-    /// Returns true iff the chain ID matches mainnet
-    pub fn is_mainnet(&self) -> bool {
-        self.matches_named_chain(NamedChain::MAINNET)
-    }
-
-    pub fn is_movement_mainnet(&self) -> bool {
-        self.matches_named_chain(NamedChain::MOVEMAINNET)
-    }
-
-    pub fn is_movement_testnet(&self) -> bool {
         self.matches_named_chain(NamedChain::MOVETESTNET)
+    }
+
+    /// Returns true iff the chain ID matches Movement mainnet.
+    pub fn is_mainnet(&self) -> bool {
+        self.matches_named_chain(NamedChain::MOVEMAINNET)
     }
 
     /// Returns true iff the chain ID matches the given named chain
@@ -167,8 +149,6 @@ impl fmt::Display for NamedChain {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", match self {
             NamedChain::DEVNET => DEVNET,
-            NamedChain::TESTNET => TESTNET,
-            NamedChain::MAINNET => MAINNET,
             NamedChain::TESTING => TESTING,
             NamedChain::PREMAINNET => PREMAINNET,
             NamedChain::MOVEMAINNET => MOVEMENT_MAINNET,
@@ -211,11 +191,11 @@ impl ChainId {
     }
 
     pub fn testnet() -> Self {
-        ChainId::new(NamedChain::TESTNET.id())
+        ChainId::new(NamedChain::MOVETESTNET.id())
     }
 
     pub fn mainnet() -> Self {
-        ChainId::new(NamedChain::MAINNET.id())
+        ChainId::new(NamedChain::MOVEMAINNET.id())
     }
 }
 
@@ -231,5 +211,18 @@ mod test {
         assert!(ChainId::from_str("255255").is_err());
         assert_eq!(ChainId::from_str("TESTING").unwrap(), ChainId::test());
         assert_eq!(ChainId::from_str("255").unwrap(), ChainId::new(255));
+
+        // The Movement chains parse from their canonical names, matching Display output.
+        assert_eq!(
+            ChainId::from_str("movement_mainnet").unwrap(),
+            ChainId::mainnet()
+        );
+        assert_eq!(
+            ChainId::from_str("movement_testnet").unwrap(),
+            ChainId::testnet()
+        );
+        // The Aptos "mainnet"/"testnet" names are no longer reserved.
+        assert!(ChainId::from_str("mainnet").is_err());
+        assert!(ChainId::from_str("testnet").is_err());
     }
 }

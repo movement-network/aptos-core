@@ -24,10 +24,12 @@ pub const DEFAULT_EXECUTION_CONCURRENCY_LEVEL: u16 = 32;
 // Genesis constants
 const GENESIS_BLOB_FILENAME: &str = "genesis.blob";
 const GENESIS_VERSION: u64 = 0;
+// Movement genesis waypoints, published at
+// https://github.com/movementlabsxyz/movement-networks (<network>/genesis_waypoint.txt).
 const MAINNET_GENESIS_WAYPOINT: &str =
-    "0:6072b68a942aace147e0655c5704beaa255c84a7829baa4e72a500f1516584c4";
+    "0:fb098815125443b6337c61b81aade770e7dcf69d93e8a636365a664939f100a3";
 const TESTNET_GENESIS_WAYPOINT: &str =
-    "0:4b56f15c1dcef7f9f3eb4b4798c0cba0f1caacc0d35f1c80ad9b7a21f1f8b454";
+    "0:1b6eeb5566c6267b610340e17d47849742ff488a21eeb3fc1971fb8c2b128133";
 
 #[derive(Clone, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(default, deny_unknown_fields)]

@@ -1371,8 +1371,8 @@ pub struct CheckNetworkConnectivity {
 
     /// `ChainId` of remote server.
     /// Examples include:
-    /// - Chain numbers, e.g., `2`, `3` and `25`.
-    /// - Chain names, e.g., `devnet`, `testnet`, `mainnet` and `testing` (for local test networks).
+    /// - Chain numbers, e.g., `126`, `250` and `25`.
+    /// - Chain names, e.g., `movement_mainnet`, `movement_testnet`, `devnet` and `testing` (for local test networks).
     #[clap(long)]
     pub chain_id: ChainId,
 
@@ -1508,7 +1508,7 @@ mod tests {
             "--address",
             "invalid-address",
             "--chain-id",
-            "mainnet",
+            "movement_mainnet",
         ];
         let error_message = run_tool_with_args(args).await.unwrap_err();
         assert_contains(error_message, "Invalid address");
@@ -1519,7 +1519,7 @@ mod tests {
         assert_contains(error_message, "invalid value");
 
         // Verify that a failure to connect will return a timeout
-        let args = &["aptos", "node", "check-network-connectivity", "--address", "/ip4/31.71.116.169/tcp/0001/noise-ik/0x249f3301db104705652e0a0c471b46d13172b2baf14e31f007413f3baee46b0c/handshake/0", "--chain-id", "testnet"];
+        let args = &["aptos", "node", "check-network-connectivity", "--address", "/ip4/31.71.116.169/tcp/0001/noise-ik/0x249f3301db104705652e0a0c471b46d13172b2baf14e31f007413f3baee46b0c/handshake/0", "--chain-id", "movement_testnet"];
         let error_message = run_tool_with_args(args).await.unwrap_err();
         assert_contains(error_message, "Timed out while checking endpoint");
     }

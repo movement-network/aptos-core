@@ -383,4 +383,43 @@ module aptos_experimental::confidential_balance {
 
         ok
     }
+
+    //
+    // Fuzz tests
+    //
+
+    // `split_into_chunks_u64`/`_u128` decompose an integer into 16-bit limbs and
+    // lift each limb to a Ristretto `Scalar`. The shift/mask logic
+    // (`amount >> (i * CHUNK_SIZE_BITS) & 0xffff`) is exactly where an off-by-one
+    // in the chunk count, the bit width, or the limb ordering slips past
+    // hand-picked examples. We fuzz the full integer range and check each emitted
+    // scalar against an independently computed little-endian limb decomposition;
+    // the assertion only holds if every chunk is the correct 16 bits in the
+    // correct position, and it covers the high limbs that fixed examples rarely
+    // reach.
+    #[test]
+    fun fuzz_split_into_chunks_u64(amount: u64) {
+        let chunks = split_into_chunks_u64(amount);
+        assert!(vector::length(&chunks) == PENDING_BALANCE_CHUNKS, 0);
+        let i = 0;
+        while (i < PENDING_BALANCE_CHUNKS) {
+            let expected = (amount >> ((i * CHUNK_SIZE_BITS) as u8)) & 0xffff;
+            let expected_scalar = ristretto255::new_scalar_from_u64(expected);
+            assert!(ristretto255::scalar_equals(vector::borrow(&chunks, i), &expected_scalar), 1);
+            i = i + 1;
+        };
+    }
+
+    #[test]
+    fun fuzz_split_into_chunks_u128(amount: u128) {
+        let chunks = split_into_chunks_u128(amount);
+        assert!(vector::length(&chunks) == ACTUAL_BALANCE_CHUNKS, 0);
+        let i = 0;
+        while (i < ACTUAL_BALANCE_CHUNKS) {
+            let expected = (amount >> ((i * CHUNK_SIZE_BITS) as u8)) & 0xffff;
+            let expected_scalar = ristretto255::new_scalar_from_u128(expected);
+            assert!(ristretto255::scalar_equals(vector::borrow(&chunks, i), &expected_scalar), 1);
+            i = i + 1;
+        };
+    }
 }

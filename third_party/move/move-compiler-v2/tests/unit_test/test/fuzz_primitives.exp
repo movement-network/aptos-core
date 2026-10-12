@@ -1,0 +1,52 @@
+
+Diagnostics:
+note: fuzz: expanded `fuzz_u64` to 64 cases
+  ┌─ tests/unit_test/test/fuzz_primitives.move:7:16
+  │
+7 │     public fun fuzz_u64(_a: u64) { }
+  │                ^^^^^^^^
+
+note: fuzz: expanded `fuzz_u8` to 64 cases
+   ┌─ tests/unit_test/test/fuzz_primitives.move:10:16
+   │
+10 │     public fun fuzz_u8(_a: u8) { }
+   │                ^^^^^^^
+
+note: fuzz: expanded `fuzz_bool` to 64 cases
+   ┌─ tests/unit_test/test/fuzz_primitives.move:13:16
+   │
+13 │     public fun fuzz_bool(_a: bool) { }
+   │                ^^^^^^^^^
+
+note: fuzz: expanded `fuzz_address` to 64 cases
+   ┌─ tests/unit_test/test/fuzz_primitives.move:16:16
+   │
+16 │     public fun fuzz_address(_a: address) { }
+   │                ^^^^^^^^^^^^
+
+note: fuzz: expanded `fuzz_pair` to 64 cases
+   ┌─ tests/unit_test/test/fuzz_primitives.move:19:16
+   │
+19 │     public fun fuzz_pair(_a: u64, _b: address) { }
+   │                ^^^^^^^^^
+
+note: fuzz: expanded `fuzz_range_u64` to 64 cases
+   ┌─ tests/unit_test/test/fuzz_primitives.move:22:16
+   │
+22 │     public fun fuzz_range_u64(_a: u64) { }
+   │                ^^^^^^^^^^^^^^
+
+note: fuzz: expanded `fuzz_exclude_u64` to 64 cases
+   ┌─ tests/unit_test/test/fuzz_primitives.move:25:16
+   │
+25 │     public fun fuzz_exclude_u64(_a: u64) { }
+   │                ^^^^^^^^^^^^^^^^
+
+note: fuzz: expanded `fuzz_addr_list` to 64 cases
+   ┌─ tests/unit_test/test/fuzz_primitives.move:28:16
+   │
+28 │     public fun fuzz_addr_list(_a: signer) { }
+   │                ^^^^^^^^^^^^^^
+
+
+============ bytecode verification succeeded ========

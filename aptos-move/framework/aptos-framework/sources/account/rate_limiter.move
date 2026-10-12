@@ -169,4 +169,67 @@ module aptos_framework::rate_limiter {
         refill(&mut bucket);
         assert!(bucket.current_amount == 10, 603); // Should be full again
     }
+
+    //
+    // Fuzz tests
+    //
+
+    // A token bucket must never hold more than its capacity, no matter how
+    // requests and time-based refills interleave. `refill`'s arithmetic is where
+    // a fuzzer earns its keep: a zero `refill_interval` divides by zero, and an
+    // unbounded `capacity`/elapsed pair overflows `time_passed * capacity` or the
+    // running `current_amount + new_tokens`. We bound the drawn values into
+    // realistic ranges so the test exercises the logic rather than tripping the
+    // u64 guardrails, and assert the capacity invariant plus exact accounting on
+    // the no-elapsed-time path.
+    #[test(aptos_framework = @0x1)]
+    fun fuzz_request_respects_capacity(
+        aptos_framework: &signer,
+        cap_raw: u64,
+        interval_raw: u64,
+        req_raw: u64,
+    ) {
+        timestamp::set_time_has_started_for_testing(aptos_framework);
+        let capacity = 1 + cap_raw % 1000000; // [1, 1_000_000]
+        let interval = 1 + interval_raw % 86400; // [1, 86400]; never 0
+        let bucket = initialize(capacity, interval);
+
+        // No time has elapsed since initialize(), so the refill inside request()
+        // adds nothing: a full bucket grants exactly `req` when req <= capacity.
+        let req = req_raw % (capacity + 1); // [0, capacity]
+        let granted = request(&mut bucket, req);
+        assert!(granted, 0);
+        assert!(bucket.current_amount == capacity - req, 1);
+        assert!(bucket.current_amount <= bucket.capacity, 2);
+    }
+
+    #[test(aptos_framework = @0x1)]
+    fun fuzz_refill_never_exceeds_capacity(
+        aptos_framework: &signer,
+        cap_raw: u64,
+        interval_raw: u64,
+        elapsed_raw: u64,
+    ) {
+        timestamp::set_time_has_started_for_testing(aptos_framework);
+        let capacity = 1 + cap_raw % 1000000; // [1, 1_000_000]
+        let interval = 1 + interval_raw % 86400; // [1, 86400]
+        let bucket = initialize(capacity, interval);
+
+        // Drain fully, advance the clock by a bounded, strictly positive amount
+        // (update_global_time_for_test requires time to move forward), then
+        // refill. With capacity <= 1e6 and elapsed <= 1e5, `time_passed *
+        // capacity` <= 1e11 — well inside u64 — so we test the refill logic, not
+        // overflow.
+        assert!(request(&mut bucket, capacity), 0);
+        assert!(bucket.current_amount == 0, 1);
+
+        let elapsed = 1 + elapsed_raw % 100000; // [1, 100_000] seconds
+        timestamp::update_global_time_for_test_secs(timestamp::now_seconds() + elapsed);
+        refill(&mut bucket);
+
+        // A refill tops up to, but never beyond, capacity...
+        assert!(bucket.current_amount <= bucket.capacity, 2);
+        // ...and any carried-over fractional accumulation is a proper remainder.
+        assert!(bucket.fractional_accumulated < interval, 3);
+    }
 }

@@ -1,0 +1,13 @@
+
+Diagnostics:
+error: Cannot mix `=` with `!=` / `in` for the same parameter
+  ┌─ tests/unit_test/test/fuzz_mix_assign_constraint.move:3:23
+  │
+3 │     #[test(_a = @0x1, _a != @0x2)]
+  │                       ^^^^^^^^^^
+
+error: Cannot mix `=` with `!=` / `in` for the same parameter
+  ┌─ tests/unit_test/test/fuzz_mix_assign_constraint.move:6:12
+  │
+6 │     #[test(_a != @0x2, _a = @0x1)]
+  │            ^^^^^^^^^^

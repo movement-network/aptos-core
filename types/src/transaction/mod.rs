@@ -741,6 +741,13 @@ pub enum TransactionExtraConfig {
         // Some(nonce) for orderless transactions
         replay_protection_nonce: Option<u64>,
     },
+    V2 {
+        multisig_address: Option<AccountAddress>,
+        // None for regular transactions
+        // Some(nonce) for orderless transactions
+        replay_protection_nonce: Option<u64>,
+        gas_fa_coin: Option<AccountAddress>,
+    },
 }
 
 impl TransactionPayload {
@@ -808,13 +815,15 @@ impl TransactionPayload {
         match self {
             TransactionPayload::Script(_)
             | TransactionPayload::EntryFunction(_)
-            | TransactionPayload::ModuleBundle(_) => TransactionExtraConfig::V1 {
+            | TransactionPayload::ModuleBundle(_) => TransactionExtraConfig::V2 {
                 multisig_address: None,
                 replay_protection_nonce: None,
+                gas_fa_coin: None,
             },
-            TransactionPayload::Multisig(multisig) => TransactionExtraConfig::V1 {
+            TransactionPayload::Multisig(multisig) => TransactionExtraConfig::V2 {
                 multisig_address: Some(multisig.multisig_address),
                 replay_protection_nonce: None,
+                gas_fa_coin: None,
             },
             TransactionPayload::Payload(TransactionPayloadInner::V1 { extra_config, .. }) => {
                 extra_config.clone()
@@ -863,6 +872,18 @@ impl TransactionPayload {
                             Some(rng.gen())
                         }),
                     },
+                    TransactionExtraConfig::V2 {
+                        multisig_address,
+                        replay_protection_nonce,
+                        gas_fa_coin,
+                    } => TransactionExtraConfig::V2 {
+                        multisig_address,
+                        replay_protection_nonce: replay_protection_nonce.or_else(|| {
+                            let mut rng = rand::thread_rng();
+                            Some(rng.gen())
+                        }),
+                        gas_fa_coin,
+                    },
                 }
             }
             TransactionPayload::Payload(TransactionPayloadInner::V1 {
@@ -885,6 +906,10 @@ impl TransactionExtraConfig {
             Self::V1 {
                 replay_protection_nonce,
                 ..
+            }
+            | Self::V2 {
+                replay_protection_nonce,
+                ..
             } => *replay_protection_nonce,
         }
     }
@@ -898,8 +923,23 @@ impl TransactionExtraConfig {
             Self::V1 {
                 multisig_address,
                 replay_protection_nonce: _,
+            }
+            | Self::V2 {
+                multisig_address, ..
             } => *multisig_address,
         }
+    }
+
+    pub fn gas_fa_coin(&self) -> Option<AccountAddress> {
+        match self {
+            Self::V1 { .. } => None,
+            Self::V2 {  gas_fa_coin, .. } => *gas_fa_coin
+        }
+    }
+
+    pub fn has_gas_fa_coin(&self) -> bool {
+        self.gas_fa_coin().is_some()
+
     }
 }
 

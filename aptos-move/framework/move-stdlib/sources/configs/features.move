@@ -793,6 +793,17 @@ module std::features {
         is_enabled(DISTRIBUTE_TRANSACTION_FEE)
     }
 
+    /// Whether a transaction may pay for gas in a fungible asset other than APT,
+    /// specified via the `gas_fa_coin` field of the transaction's extra config.
+    /// Lifetime: transient
+    const GAS_PAYABLE_FA: u64 = 98;
+
+    public fun get_gas_payable_fa_feature(): u64 { GAS_PAYABLE_FA }
+
+    public fun is_gas_payable_fa_enabled(): bool acquires Features {
+        is_enabled(GAS_PAYABLE_FA)
+    }
+
     /// Whether the staking rewards are mint (diseable) or withdraw from the gouverned gas pool treasury (enable).
     ///
     /// Lifetime: permanent

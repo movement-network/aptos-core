@@ -1734,6 +1734,15 @@ impl AptosVM {
             }
         }
 
+        if !self.features().is_gas_payable_fa_enabled()
+            && transaction.extra_config().has_gas_fa_coin()
+        {
+            return Err(VMStatus::error(
+                StatusCode::FEATURE_UNDER_GATING,
+                Some("Paying gas in a fungible asset is not yet supported".to_string()),
+            ));
+        }
+
         // The prologue MUST be run AFTER any validation. Otherwise you may run prologue and hit
         // SEQUENCE_NUMBER_TOO_NEW if there is more than one transaction from the same sender and
         // end up skipping validation.

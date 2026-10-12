@@ -28,6 +28,8 @@
 -  [Function `gas_unit_price_internal`](#0x1_transaction_context_gas_unit_price_internal)
 -  [Function `chain_id`](#0x1_transaction_context_chain_id)
 -  [Function `chain_id_internal`](#0x1_transaction_context_chain_id_internal)
+-  [Function `gas_payment_fungible_asset`](#0x1_transaction_context_gas_payment_fungible_asset)
+-  [Function `gas_payment_fa_metadata_internal`](#0x1_transaction_context_gas_payment_fa_metadata_internal)
 -  [Function `entry_function_payload`](#0x1_transaction_context_entry_function_payload)
 -  [Function `entry_function_payload_internal`](#0x1_transaction_context_entry_function_payload_internal)
 -  [Function `account_address`](#0x1_transaction_context_account_address)
@@ -184,6 +186,16 @@ Represents the multisig payload.
 <a id="@Constants_0"></a>
 
 ## Constants
+
+
+<a id="0x1_transaction_context_EGAS_PAYABLE_FA_NOT_ENABLED"></a>
+
+Paying gas in a fungible asset (the <code>GAS_PAYABLE_FA</code> feature) is not enabled.
+
+
+<pre><code><b>const</b> <a href="transaction_context.md#0x1_transaction_context_EGAS_PAYABLE_FA_NOT_ENABLED">EGAS_PAYABLE_FA_NOT_ENABLED</a>: u64 = 3;
+</code></pre>
+
 
 
 <a id="0x1_transaction_context_ETRANSACTION_CONTEXT_EXTENSION_NOT_ENABLED"></a>
@@ -679,6 +691,56 @@ This function aborts if called outside of the transaction prologue, execution, o
 
 
 <pre><code><b>native</b> <b>fun</b> <a href="transaction_context.md#0x1_transaction_context_chain_id_internal">chain_id_internal</a>(): u8;
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_transaction_context_gas_payment_fungible_asset"></a>
+
+## Function `gas_payment_fungible_asset`
+
+Returns the fungible asset metadata address that the current transaction elected to pay gas in,
+or <code>None</code> if gas is paid in the default currency (APT).
+This function aborts if called outside of the transaction prologue, execution, or epilogue phases.
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="transaction_context.md#0x1_transaction_context_gas_payment_fungible_asset">gas_payment_fungible_asset</a>(): <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_Option">option::Option</a>&lt;<b>address</b>&gt;
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="transaction_context.md#0x1_transaction_context_gas_payment_fungible_asset">gas_payment_fungible_asset</a>(): Option&lt;<b>address</b>&gt; {
+    <b>assert</b>!(<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_is_gas_payable_fa_enabled">features::is_gas_payable_fa_enabled</a>(), <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_state">error::invalid_state</a>(<a href="transaction_context.md#0x1_transaction_context_EGAS_PAYABLE_FA_NOT_ENABLED">EGAS_PAYABLE_FA_NOT_ENABLED</a>));
+    <a href="transaction_context.md#0x1_transaction_context_gas_payment_fa_metadata_internal">gas_payment_fa_metadata_internal</a>()
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_transaction_context_gas_payment_fa_metadata_internal"></a>
+
+## Function `gas_payment_fa_metadata_internal`
+
+
+
+<pre><code><b>fun</b> <a href="transaction_context.md#0x1_transaction_context_gas_payment_fa_metadata_internal">gas_payment_fa_metadata_internal</a>(): <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_Option">option::Option</a>&lt;<b>address</b>&gt;
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>native</b> <b>fun</b> <a href="transaction_context.md#0x1_transaction_context_gas_payment_fa_metadata_internal">gas_payment_fa_metadata_internal</a>(): Option&lt;<b>address</b>&gt;;
 </code></pre>
 
 

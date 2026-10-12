@@ -51,6 +51,8 @@ pub enum Tool {
     #[clap(subcommand)]
     Stake(stake::StakeTool),
     #[clap(subcommand)]
+    Timelock(account::TimelockAccountTool),
+    #[clap(subcommand)]
     Update(update::UpdateTool),
     #[clap(subcommand, hide(true))]
     Workspace(WorkspaceCommand),
@@ -72,6 +74,7 @@ impl Tool {
             Multisig(tool) => tool.execute().await,
             Node(tool) => tool.execute().await,
             Stake(tool) => tool.execute().await,
+            Timelock(tool) => tool.execute().await,
             Update(tool) => tool.execute().await,
             Workspace(workspace) => workspace.execute_serialized_without_logger().await,
         }

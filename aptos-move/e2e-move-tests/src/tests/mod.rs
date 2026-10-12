@@ -61,6 +61,7 @@ mod string_args;
 mod test_self;
 mod token_event_store;
 mod token_objects;
+mod timelock;
 mod transaction_context;
 mod type_too_large;
 mod upgrade_compatibility;

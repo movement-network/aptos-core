@@ -12,6 +12,7 @@ pub mod fund;
 pub mod key_rotation;
 pub mod list;
 pub mod multisig_account;
+pub mod timelock_account;
 pub mod transfer;
 
 /// Tool for interacting with accounts
@@ -71,6 +72,30 @@ impl MultisigAccountTool {
             MultisigAccountTool::ExecuteWithPayload(tool) => tool.execute_serialized().await,
             MultisigAccountTool::Reject(tool) => tool.execute_serialized().await,
             MultisigAccountTool::VerifyProposal(tool) => tool.execute_serialized().await,
+        }
+    }
+}
+
+/// Tool for interacting with timelock accounts
+#[derive(Debug, Subcommand)]
+pub enum TimelockAccountTool {
+    ApproveResolution(timelock_account::ApproveResolution),
+    CancelTransaction(timelock_account::CancelTransaction),
+    Create(timelock_account::Create),
+    CreateTransaction(timelock_account::CreateTransaction),
+    Execute(timelock_account::Execute),
+    VerifyTransaction(timelock_account::VerifyTransaction),
+}
+
+impl TimelockAccountTool {
+    pub async fn execute(self) -> CliResult {
+        match self {
+            TimelockAccountTool::ApproveResolution(tool) => tool.execute_serialized().await,
+            TimelockAccountTool::CancelTransaction(tool) => tool.execute_serialized().await,
+            TimelockAccountTool::Create(tool) => tool.execute_serialized().await,
+            TimelockAccountTool::CreateTransaction(tool) => tool.execute_serialized().await,
+            TimelockAccountTool::Execute(tool) => tool.execute_serialized().await,
+            TimelockAccountTool::VerifyTransaction(tool) => tool.execute_serialized().await,
         }
     }
 }

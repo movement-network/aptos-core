@@ -4,6 +4,7 @@
 
 pub mod dag;
 pub mod db;
+pub mod eph_devnet;
 pub mod indexer;
 pub mod land_blocking;
 pub mod multi_region;

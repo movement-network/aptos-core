@@ -33,7 +33,7 @@ Aptos blockchain node deployment
 | fullnode.storage.class | string | `nil` | Kubernetes storage class to use for fullnode persistent storage |
 | fullnode.storage.size | string | `"2048Gi"` | Size of fullnode persistent storage |
 | fullnode.tolerations | list | `[]` |  |
-| genesis_blob_upload_url | string | `"https://us-west1-aptos-forge-gcp-0.cloudfunctions.net/signed-url?cluster_name=unknown&era=1"` |  |
+| genesis_blob_upload_url | string | `""` |  |
 | haproxy.affinity | object | `{}` |  |
 | haproxy.config.send_proxy_protocol | bool | `false` | Whether to send Proxy Protocol v2 |
 | haproxy.config.user | string | `"nobody"` | System user to run HA |

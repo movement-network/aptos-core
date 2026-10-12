@@ -103,8 +103,14 @@ impl K8sSwarm {
         let prom_client = match prometheus::get_prometheus_client().await {
             Ok(p) => Some(p),
             Err(e) => {
-                // Fail fast if prometheus is not configured. A test is meaningless if we do not have observability
-                bail!("Could not build prometheus client: {}", e);
+                // Prometheus is optional: an ephemeral devnet only needs the
+                // network up, not observability. Perf tests that require metrics
+                // will surface its absence via their success criteria.
+                warn!(
+                    "Could not build prometheus client, continuing without metrics: {}",
+                    e
+                );
+                None
             },
         };
 
@@ -128,12 +134,19 @@ impl K8sSwarm {
             has_indexer,
         };
 
-        // test hitting the configured prometheus endpoint
-        let query = "container_memory_usage_bytes{pod=\"aptos-node-0-validator-0\"}";
-        let r = swarm.query_metrics(query, None, None).await?;
-        let ivs = r.as_instant().unwrap();
-        for iv in ivs {
-            info!("container_memory_usage_bytes: {}", iv.sample().value());
+        // If prometheus is configured, verify we can reach it; otherwise skip.
+        if swarm.prom_client.is_some() {
+            let query = "container_memory_usage_bytes{pod=\"aptos-node-0-validator-0\"}";
+            match swarm.query_metrics(query, None, None).await {
+                Ok(r) => {
+                    if let Some(ivs) = r.as_instant() {
+                        for iv in ivs {
+                            info!("container_memory_usage_bytes: {}", iv.sample().value());
+                        }
+                    }
+                },
+                Err(e) => warn!("Prometheus query failed, continuing without metrics: {}", e),
+            }
         }
 
         Ok(swarm)

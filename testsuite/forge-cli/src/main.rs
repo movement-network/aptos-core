@@ -15,6 +15,7 @@ use std::{self, env, num::NonZeroUsize, process, time::Duration};
 use sugars::{boxed, hmap};
 use suites::{
     dag::get_dag_test,
+    eph_devnet::get_eph_devnet_test,
     indexer::get_indexer_test,
     land_blocking::get_land_blocking_test,
     multi_region::get_multi_region_test,
@@ -519,6 +520,7 @@ fn get_test_suite(
     let named_test_suites = [
         boxed!(|| get_land_blocking_test(test_name, duration, test_cmd))
             as Box<dyn Fn() -> Option<ForgeConfig>>,
+        boxed!(|| get_eph_devnet_test(test_name)),
         boxed!(|| get_multi_region_test(test_name)),
         boxed!(|| get_netbench_test(test_name)),
         boxed!(|| get_pfn_test(test_name, duration)),

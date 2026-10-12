@@ -145,6 +145,8 @@ spec:
           value: {{ .Values.genesis.multicluster.domain_suffixes | quote }}
         - name: GENESIS_BLOB_UPLOAD_URL
           value: {{ .Values.genesis.genesis_blob_upload_url | quote }}
+        - name: GENESIS_BLOB_S3_BUCKET
+          value: {{ .Values.genesis.genesis_blob_s3_bucket | quote }}
         - name: CLUSTER_NAME
           value: {{ .Values.genesis.cluster_name | quote }}
         volumeMounts:

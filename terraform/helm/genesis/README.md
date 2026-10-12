@@ -37,7 +37,7 @@ Aptos blockchain automated genesis ceremony for testnets
 | genesis.domain | string | `nil` | If set, the base domain name of the fullnode and validator endpoints |
 | genesis.fullnode.enable_onchain_discovery | bool | `true` | Use External DNS as created by aptos-node helm chart for fullnode host in genesis |
 | genesis.fullnode.internal_host_suffix | string | `"fullnode-lb"` | If `enable_onchain_discovery` is false, use this host suffix for internal kubernetes service name |
-| genesis.genesis_blob_upload_url | string | `"https://us-west1-aptos-forge-gcp-0.cloudfunctions.net/signed-url"` |  |
+| genesis.genesis_blob_upload_url | string | `""` |  |
 | genesis.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy to use for tools image |
 | genesis.image.repo | string | `"aptoslabs/tools"` | Image repo to use for tools image for running genesis |
 | genesis.image.tag | string | `nil` | Image tag to use for tools image. If set, overrides `imageTag` |

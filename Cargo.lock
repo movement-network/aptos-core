@@ -12113,6 +12113,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "move-lean-difftest"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "aptos-cached-packages",
+ "aptos-framework",
+ "aptos-gas-schedule",
+ "aptos-types",
+ "aptos-vm",
+ "bcs 0.1.4",
+ "codespan-reporting",
+ "curve25519-dalek-ng",
+ "hex",
+ "legacy-move-compiler",
+ "move-binary-format",
+ "move-compiler-v2",
+ "move-core-types",
+ "move-model",
+ "move-stdlib",
+ "move-vm-runtime",
+ "move-vm-test-utils",
+ "move-vm-types",
+ "serde",
+ "serde_json",
+ "sha2 0.9.9",
+ "sha3 0.9.1",
+ "tempfile",
+]
+
+[[package]]
 name = "move-linter"
 version = "0.1.0"
 dependencies = [

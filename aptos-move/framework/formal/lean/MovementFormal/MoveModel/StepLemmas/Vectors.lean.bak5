@@ -1,0 +1,348 @@
+import MovementFormal.MoveModel.Step
+
+/-!
+# Step lemmas: value-level vector instructions
+
+Parametric step lemmas for `vecPack` / `vecLen` / `vecPushBack` / `vecPopBack` / `vecUnpack` /
+`vecSwap`. These are the value-level (non-reference) vector ops the Move compiler emits for
+small fixed-arity constructors and getters.
+
+Reference-level vec ops (`vecLenRef`, `vecImmBorrow`, `vecMutBorrow`, etc.) are covered by a
+separate file when needed; CA bytecode uses mostly value-level ops in the auditor-list path of
+`verify_transfer_proof`.
+-/
+
+set_option linter.unusedSimpArgs false
+
+namespace MovementFormal.MoveModel.StepLemmas
+
+open MovementFormal.MoveModel
+
+variable {env : ModuleEnv} {frame : Frame} {cs : List Frame}
+variable {ms : MachineState}
+
+/-! ## `vecPack elemType numElems` — consume `numElems` values, push a `.vector` -/
+
+theorem step_vecPack
+    (elemType : MoveType) (numElems : Nat)
+    (elems rest stack : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .vecPack elemType numElems)
+    (htake : takeN stack numElems = some (elems, rest)) :
+    step env frame cs stack ms =
+      .ok { frame with pc := frame.pc + 1 } cs (.vector elemType elems :: rest) ms := by
+  simp only [step, dif_pos hpc, hc, htake]
+
+/-! ## `vecLen elemType` — read the length of the top `.vector` onto the stack -/
+
+theorem step_vecLen
+    (elemType : MoveType) (elems : List MoveValue) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .vecLen elemType) :
+    step env frame cs (.vector elemType elems :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs
+           (.u64 elems.length.toUInt64 :: rest) ms := by
+  simp only [step, dif_pos hpc, hc]
+
+/-! ## `vecPushBack elemType` — push `val` onto the `.vector` on the stack below -/
+
+theorem step_vecPushBack
+    (elemType : MoveType) (val : MoveValue) (elems rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .vecPushBack elemType) :
+    step env frame cs (val :: .vector elemType elems :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs
+           (.vector elemType (elems ++ [val]) :: rest) ms := by
+  simp only [step, dif_pos hpc, hc]
+
+/-! ## `vecPopBack elemType` — pop the last element off the top `.vector`
+
+Produces two stack values: the popped element on top, the shorter vector underneath. Aborts
+to `.error` if the vector is empty; the `_nonEmpty` variant requires the element list has the
+form `elems ++ [last]`. -/
+
+theorem step_vecPopBack_nonEmpty
+    (elemType : MoveType) (elems : List MoveValue) (last : MoveValue) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .vecPopBack elemType) :
+    step env frame cs (.vector elemType (elems ++ [last]) :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs
+           (last :: .vector elemType elems :: rest) ms := by
+  simp only [step, dif_pos hpc, hc]
+  -- `(elems ++ [last]).reverse = last :: elems.reverse`, so the match takes the cons branch
+  -- with `init := elems.reverse` and the result uses `init.reverse = elems`.
+  have : (elems ++ [last]).reverse = last :: elems.reverse := by
+    simp [List.reverse_append]
+  rw [this]
+  show _ = _
+  simp
+
+/-! ## `vecUnpack elemType numElems` — split a `.vector` of expected length into stack values -/
+
+theorem step_vecUnpack
+    (elemType : MoveType) (numElems : Nat) (elems rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .vecUnpack elemType numElems)
+    (hlen : elems.length = numElems) :
+    step env frame cs (.vector elemType elems :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (elems.reverse ++ rest) ms := by
+  have hbeq : (elems.length == numElems) = true := by simp [hlen]
+  simp only [step, dif_pos hpc, hc, hbeq, if_true]
+
+/-! ## Reference-level vector ops — `vecLenRef` / `vecImmBorrow` / `vecMutBorrow` / `vecPushBackRef`
+
+These operate through a `.mutRef` or `.immRef` pointing at a `.vector` in the container store.
+Used by the transfer bytecode's auditor-list loop (each auditor's ciphertext is looked up via
+`vecImmBorrow` on the auditor-index vector). -/
+
+/-- `vecLenRef`: read the length of the `.vector` pointed to by the top reference. -/
+theorem step_vecLenRef_imm
+    (elemType : MoveType) (rid : RefId) (elems rest : List MoveValue) (innerT : MoveType)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .vecLenRef elemType)
+    (hread : ms.containers.read rid = some (.vector innerT elems)) :
+    step env frame cs (.immRef rid :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs
+           (.u64 elems.length.toUInt64 :: rest) ms := by
+  simp only [step, dif_pos hpc, hc, getRefId_imm, hread]
+
+theorem step_vecLenRef_mut
+    (elemType : MoveType) (rid : RefId) (elems rest : List MoveValue) (innerT : MoveType)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .vecLenRef elemType)
+    (hread : ms.containers.read rid = some (.vector innerT elems)) :
+    step env frame cs (.mutRef rid :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs
+           (.u64 elems.length.toUInt64 :: rest) ms := by
+  simp only [step, dif_pos hpc, hc, getRefId_mut, hread]
+
+/-- `vecPushBackRef`: append `val` to the `.vector` pointed to by `mutRef`. 0-return, mutates
+the container store. -/
+theorem step_vecPushBackRef
+    (elemType innerT : MoveType) (val : MoveValue) (rid : RefId) (elems rest : List MoveValue)
+    (containers' : ContainerStore)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .vecPushBackRef elemType)
+    (hread : ms.containers.read rid = some (.vector innerT elems))
+    (hwrite : ms.containers.write rid (.vector innerT (elems ++ [val])) = some containers') :
+    step env frame cs (val :: .mutRef rid :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs rest
+           { ms with containers := containers' } := by
+  simp only [step, dif_pos hpc, hc, hread, hwrite]
+
+/-! ## Additional vector operation helpers -/
+
+/-- vecPopBack on empty vector returns error. -/
+theorem step_vecPopBack_empty
+    (elemType : MoveType) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .vecPopBack elemType) :
+    step env frame cs (.vector elemType [] :: rest) ms = .error := by
+  simp only [step, dif_pos hpc, hc]
+  rfl
+
+/-- vecUnpack with wrong length returns error. -/
+axiom step_vecUnpack_wrong_length
+    (elemType : MoveType) (numElems : Nat) (elems rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .vecUnpack elemType numElems)
+    (hlen : elems.length ≠ numElems) :
+    step env frame cs (.vector elemType elems :: rest) ms = .error
+
+/-- vecPack with empty element list. -/
+theorem step_vecPack_empty
+    (elemType : MoveType) (stack : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .vecPack elemType 0)
+    (htake : takeN stack 0 = some ([], stack)) :
+    step env frame cs stack ms =
+      .ok { frame with pc := frame.pc + 1 } cs (.vector elemType [] :: stack) ms := by
+  simp only [step, dif_pos hpc, hc, htake]
+
+/-- vecPack with single element. -/
+theorem step_vecPack_single
+    (elemType : MoveType) (v : MoveValue) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .vecPack elemType 1)
+    (htake : takeN (v :: rest) 1 = some ([v], rest)) :
+    step env frame cs (v :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (.vector elemType [v] :: rest) ms := by
+  simp only [step, dif_pos hpc, hc, htake]
+
+/-- vecLen on empty vector. -/
+theorem step_vecLen_empty
+    (elemType : MoveType) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .vecLen elemType) :
+    step env frame cs (.vector elemType [] :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (.u64 0 :: rest) ms := by
+  simp only [step, dif_pos hpc, hc, List.length_nil]
+  rfl
+
+/-- vecLen on single-element vector. -/
+theorem step_vecLen_singleton
+    (elemType : MoveType) (v : MoveValue) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .vecLen elemType) :
+    step env frame cs (.vector elemType [v] :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (.u64 1 :: rest) ms := by
+  simp only [step, dif_pos hpc, hc, List.length_singleton]
+  rfl
+
+/-- vecPushBack preserves element count. -/
+axiom step_vecPushBack_length
+    (elemType : MoveType) (val : MoveValue) (elems rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .vecPushBack elemType)
+    (hstep : step env frame cs (val :: .vector elemType elems :: rest) ms =
+             .ok { frame with pc := frame.pc + 1 } cs
+                  (.vector elemType (elems ++ [val]) :: rest) ms) :
+    (elems ++ [val]).length = elems.length + 1
+
+/-- vecPopBack preserves non-empty prefix. -/
+axiom step_vecPopBack_preserves_prefix
+    (elemType : MoveType) (elems : List MoveValue) (last : MoveValue) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .vecPopBack elemType)
+    (hstep : step env frame cs (.vector elemType (elems ++ [last]) :: rest) ms =
+             .ok { frame with pc := frame.pc + 1 } cs
+                  (last :: .vector elemType elems :: rest) ms) :
+    elems.length = (elems ++ [last]).length - 1
+
+/-! ## Vector reference operation helpers -/
+
+/-- vecLenRef on empty vector via immRef. -/
+theorem step_vecLenRef_imm_empty
+    (elemType : MoveType) (rid : RefId) (rest : List MoveValue) (innerT : MoveType)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .vecLenRef elemType)
+    (hread : ms.containers.read rid = some (.vector innerT [])) :
+    step env frame cs (.immRef rid :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (.u64 0 :: rest) ms := by
+  simp only [step, dif_pos hpc, hc, getRefId_imm, hread, List.length_nil]
+  rfl
+
+/-- vecLenRef on empty vector via mutRef. -/
+theorem step_vecLenRef_mut_empty
+    (elemType : MoveType) (rid : RefId) (rest : List MoveValue) (innerT : MoveType)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .vecLenRef elemType)
+    (hread : ms.containers.read rid = some (.vector innerT [])) :
+    step env frame cs (.mutRef rid :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs (.u64 0 :: rest) ms := by
+  simp only [step, dif_pos hpc, hc, getRefId_mut, hread, List.length_nil]
+  rfl
+
+/-- vecPushBackRef on empty vector. -/
+theorem step_vecPushBackRef_empty
+    (elemType innerT : MoveType) (val : MoveValue) (rid : RefId) (rest : List MoveValue)
+    (containers' : ContainerStore)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .vecPushBackRef elemType)
+    (hread : ms.containers.read rid = some (.vector innerT []))
+    (hwrite : ms.containers.write rid (.vector innerT [val]) = some containers') :
+    step env frame cs (val :: .mutRef rid :: rest) ms =
+      .ok { frame with pc := frame.pc + 1 } cs rest
+           { ms with containers := containers' } := by
+  simp only [step, dif_pos hpc, hc, hread, List.append_nil, hwrite]
+
+/-! ## Vector composition patterns -/
+
+/-- vecPack followed by vecLen yields number of packed elements. -/
+axiom vecPack_then_vecLen_pattern
+    (elemType : MoveType) (numElems : Nat) (elems rest : List MoveValue)
+    (frame1 frame2 : Frame) (cs1 cs2 : List Frame)
+    (stack1 stack2 : List MoveValue) (ms1 ms2 : MachineState)
+    (hpc1 : frame.pc < frame.code.size)
+    (hc1 : frame.code[frame.pc]'hpc1 = .vecPack elemType numElems)
+    (htake : takeN stack numElems = some (elems, rest))
+    (hstep1 : step env frame cs stack ms = .ok frame1 cs1 stack1 ms1)
+    (hpc2 : frame1.pc < frame1.code.size)
+    (hc2 : frame1.code[frame1.pc]'hpc2 = .vecLen elemType)
+    (hstep2 : step env frame1 cs1 stack1 ms1 = .ok frame2 cs2 stack2 ms2) :
+    stack2 = .u64 numElems.toUInt64 :: rest
+
+/-- vecPushBack preserves earlier vector elements. -/
+axiom vecPushBack_preserves_elems
+    (elemType : MoveType) (val : MoveValue) (elems rest : List MoveValue)
+    (i : Nat) (hi : i < elems.length) (hi' : i < (elems ++ [val]).length) :
+    (elems ++ [val])[i]'hi' = elems[i]'hi
+
+/-- vecPopBack extracts last element. -/
+axiom vecPopBack_extracts_last
+    (elemType : MoveType) (elems : List MoveValue) (last : MoveValue)
+    (hne : elems ++ [last] ≠ []) :
+    (elems ++ [last]).getLast hne = last
+
+/-! ## Vector type safety helpers -/
+
+/-- vecPack produces .vector with correct type tag. -/
+axiom vecPack_produces_typed_vector
+    (elemType : MoveType) (numElems : Nat) (elems rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .vecPack elemType numElems)
+    (htake : takeN stack numElems = some (elems, rest))
+    (hstep : step env frame cs stack ms =
+             .ok { frame with pc := frame.pc + 1 } cs (.vector elemType elems :: rest) ms) :
+    ∃ v, v = .vector elemType elems ∧
+         (match v with | .vector t _ => t = elemType | _ => False)
+
+/-- vecUnpack consumes .vector with type tag. -/
+axiom vecUnpack_consumes_typed_vector
+    (elemType : MoveType) (numElems : Nat) (elems rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .vecUnpack elemType numElems)
+    (hlen : elems.length = numElems) :
+    (match .vector elemType elems with
+     | .vector t es => t = elemType ∧ es = elems
+     | _ => False)
+
+/-! ## Stack effect tracking -/
+
+/-- vecPack stack effect: consumes n, produces 1. -/
+axiom vecPack_stack_effect
+    (elemType : MoveType) (numElems : Nat) (elems rest stack : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .vecPack elemType numElems)
+    (htake : takeN stack numElems = some (elems, rest))
+    (hstep : step env frame cs stack ms =
+             .ok { frame with pc := frame.pc + 1 } cs (.vector elemType elems :: rest) ms) :
+    (.vector elemType elems :: rest).length = stack.length - numElems + 1
+
+/-- vecLen stack effect: consumes 1, produces 1. -/
+theorem vecLen_stack_effect
+    (elemType : MoveType) (elems rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .vecLen elemType) :
+    (.u64 elems.length.toUInt64 :: rest).length = (.vector elemType elems :: rest).length := by
+  rfl
+
+/-- vecPushBack stack effect: consumes 2, produces 1. -/
+theorem vecPushBack_stack_effect
+    (elemType : MoveType) (val : MoveValue) (elems rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .vecPushBack elemType) :
+    (.vector elemType (elems ++ [val]) :: rest).length =
+    (val :: .vector elemType elems :: rest).length - 1 := by
+  simp
+
+/-- vecPopBack stack effect: consumes 1, produces 2. -/
+theorem vecPopBack_stack_effect
+    (elemType : MoveType) (elems : List MoveValue) (last : MoveValue) (rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .vecPopBack elemType) :
+    (last :: .vector elemType elems :: rest).length =
+    (.vector elemType (elems ++ [last]) :: rest).length + 1 := by
+  simp
+
+/-- vecUnpack stack effect: consumes 1, produces n. -/
+theorem vecUnpack_stack_effect
+    (elemType : MoveType) (numElems : Nat) (elems rest : List MoveValue)
+    (hpc : frame.pc < frame.code.size)
+    (hc : frame.code[frame.pc]'hpc = .vecUnpack elemType numElems)
+    (hlen : elems.length = numElems) :
+    (elems.reverse ++ rest).length = (.vector elemType elems :: rest).length + numElems - 1 := by
+  simp [hlen]
+  omega
+
+end MovementFormal.MoveModel.StepLemmas

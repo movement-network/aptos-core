@@ -1,0 +1,5 @@
+# Oracle / merge outputs (also listed in `../.gitignore` from repo `formal/` root).
+difftest_oracle*.json
+difftest_merged.json
+difftest_ca_e2e_fragment.json
+difftest_ci_merged.json

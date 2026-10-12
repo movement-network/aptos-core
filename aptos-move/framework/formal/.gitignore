@@ -1,0 +1,10 @@
+# --- Lean (`lean/`) ---
+# Lake cache lives under `lean/`; see `lean/.gitignore` for scratch/logs too.
+lean/.lake/
+
+# --- Rust difftest (`difftest/`) ---
+# VM oracle JSON emitted by `cargo run -p move-lean-difftest` / `difftest-stdlib.sh`
+difftest/difftest_oracle*.json
+difftest/difftest_merged.json
+difftest/difftest_ca_e2e_fragment.json
+difftest/difftest_ci_merged.json

@@ -209,13 +209,6 @@ jobs:
   # Run the cached packages build. This is a PR required job.
   rust-build-cached-packages:
     needs: file_change_determinator
-    if: | # Only run on each PR once an appropriate event occurs
-      (
-        github.event_name == 'workflow_dispatch' ||
-        github.event_name == 'push' ||
-        contains(github.event.pull_request.labels.*.name, 'CICD:run-e2e-tests') ||
-        github.event.pull_request.auto_merge != null
-      )
     runs-on: blacksmith-16vcpu-ubuntu-2204
     steps:
       - uses: actions/checkout@v4

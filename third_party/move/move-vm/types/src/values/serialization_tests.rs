@@ -178,6 +178,17 @@ mod tests {
         }
     }
 
+    #[test]
+    #[should_panic(expected = "variant tag 3 is out of range")]
+    fn as_move_value_rejects_out_of_range_unit_tag() {
+        // as_move_value used to zip an unknown tag against an empty field
+        // list, producing a unit-variant MoveValue. That is the same hole
+        // serialize already rejects.
+        let layout = enum_layout();
+        let bad = Value::struct_(Struct::pack_variant(3, iter::empty()));
+        let _ = bad.as_move_value(&layout);
+    }
+
     // ---------------------------------------------------------------------------
     // Rust cross-serialization tests
 

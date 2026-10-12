@@ -15,7 +15,7 @@ use std::str::FromStr;
 fn is_string_layout(layout: &MoveTypeLayout) -> bool {
     use MoveTypeLayout as L;
     if let L::Struct(move_struct) = layout {
-        if let [L::Vector(elem)] = move_struct.fields(None).iter().as_slice() {
+        if let Some([L::Vector(elem)]) = move_struct.fields(None) {
             if let L::U8 = elem.as_ref() {
                 return true;
             }
@@ -27,7 +27,7 @@ fn is_string_layout(layout: &MoveTypeLayout) -> bool {
 pub fn is_derived_string_struct_layout(layout: &MoveTypeLayout) -> bool {
     use MoveTypeLayout as L;
     if let L::Struct(move_struct) = layout {
-        if let [value_field, L::Vector(padding_elem)] = move_struct.fields(None).iter().as_slice() {
+        if let Some([value_field, L::Vector(padding_elem)]) = move_struct.fields(None) {
             if is_string_layout(value_field) {
                 if let L::U8 = padding_elem.as_ref() {
                     return true;
@@ -141,6 +141,44 @@ mod tests {
     #[test]
     fn test_int_to_string_fails_on_small_width() {
         assert_err!(u64_to_fixed_size_utf8_bytes(1000, 1));
+    }
+
+    #[test]
+    fn enum_layouts_are_not_string_or_derived_string() {
+        use move_core_types::value::MoveStructLayout;
+
+        // fields(None) on RuntimeVariants is None. That must not be treated as
+        // a String (vector<u8> wrapper) or DerivedStringSnapshot — including
+        // when a variant happens to look like those structs.
+        let enum_layout = MoveTypeLayout::Struct(MoveStructLayout::RuntimeVariants(vec![
+            vec![],
+            vec![MoveTypeLayout::Vector(Box::new(MoveTypeLayout::U8))],
+            vec![
+                MoveTypeLayout::Struct(MoveStructLayout::Runtime(vec![MoveTypeLayout::Vector(
+                    Box::new(MoveTypeLayout::U8),
+                )])),
+                MoveTypeLayout::Vector(Box::new(MoveTypeLayout::U8)),
+            ],
+        ]));
+        assert!(!is_string_layout(&enum_layout));
+        assert!(!is_derived_string_struct_layout(&enum_layout));
+    }
+
+    #[test]
+    fn runtime_string_layouts_still_match() {
+        use move_core_types::value::MoveStructLayout;
+
+        let string = MoveTypeLayout::Struct(MoveStructLayout::Runtime(vec![
+            MoveTypeLayout::Vector(Box::new(MoveTypeLayout::U8)),
+        ]));
+        assert!(is_string_layout(&string));
+
+        let derived = MoveTypeLayout::Struct(MoveStructLayout::Runtime(vec![
+            string.clone(),
+            MoveTypeLayout::Vector(Box::new(MoveTypeLayout::U8)),
+        ]));
+        assert!(is_derived_string_struct_layout(&derived));
+        assert!(!is_string_layout(&derived));
     }
 
     #[test]

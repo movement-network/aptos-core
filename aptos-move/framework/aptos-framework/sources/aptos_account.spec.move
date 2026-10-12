@@ -274,6 +274,40 @@ spec aptos_framework::aptos_account {
         pragma verify = false;
     }
 
+    spec register_fa_and_apt(account_signer: &signer) {
+        // Partial mode: implementation has two branches based on the
+        // `features::new_accounts_default_to_fa_apt_store_enabled()` flag:
+        //   FA branch: `ensure_primary_fungible_store_exists` (inline fun,
+        //     no spec — abort enumeration pending).
+        //   Legacy branch: `coin::register<AptosCoin>(account_signer)` then
+        //     `ensure_primary_fungible_store_exists`. `coin::register`
+        //     transitively reaches `coin::assert_signer_has_permission`,
+        //     whose conditional permissioned-signer abort path is the same
+        //     gap documented on `aptos_coin::initialize`.
+        //
+        // TODO(fv): tighten to strict mode once:
+        //   - `assert_signer_has_permission`'s conditional abort path can
+        //     be modeled (see aptos_coin::initialize TODO for two viable
+        //     paths: caller-side `requires`, or modeling
+        //     `withdraw_permission_check_by_address` precisely).
+        //   - `ensure_primary_fungible_store_exists` is specced with a real
+        //     abort enumeration (currently an inline fun, no spec).
+        //   - `features::new_accounts_default_to_fa_apt_store_enabled`'s
+        //     abort conditions are threaded through.
+        // Once those are in place, the right shape here is:
+        //   aborts_if !exists<features::Features>(@std);
+        //   include features::spec_new_accounts_default_to_fa_apt_store_enabled()
+        //       ==> EnsurePrimaryFungibleStoreExistsAbortsIf;
+        //   include !features::spec_new_accounts_default_to_fa_apt_store_enabled()
+        //       ==> coin::RegisterAbortsIf<AptosCoin> { account: account_signer }
+        //       and EnsurePrimaryFungibleStoreExistsAbortsIf;
+        // Until then, partial mode keeps the spec honest without weakening
+        // the entire function to `pragma verify = false`. Improvement over
+        // the sibling `register_apt` stub at line 272, which is left as-is
+        // to keep this PR scoped.
+        pragma aborts_if_is_partial = true;
+    }
+
     spec fungible_transfer_only(source: &signer, to: address, amount: u64) {
         // TODO: temporary mockup.
         pragma verify = false;

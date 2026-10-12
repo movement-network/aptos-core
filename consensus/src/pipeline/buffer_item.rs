@@ -548,23 +548,23 @@ mod test {
         let mut partial_signatures = BTreeMap::new();
         partial_signatures.insert(
             validator_signers[0].author(),
-            commit_votes[0].signature().clone(),
+            commit_votes[0].signature().unwrap(),
         );
         partial_signatures.insert(
             validator_signers[1].author(),
-            commit_votes[1].signature().clone(),
+            commit_votes[1].signature().unwrap(),
         );
         partial_signatures.insert(
             validator_signers[2].author(),
-            commit_votes[2].signature().clone(),
+            commit_votes[2].signature().unwrap(),
         );
         partial_signatures.insert(
             validator_signers[3].author(),
-            commit_votes[3].signature().clone(),
+            commit_votes[3].signature().unwrap(),
         );
         partial_signatures.insert(
             validator_signers[4].author(),
-            commit_votes[4].signature().clone(),
+            commit_votes[4].signature().unwrap(),
         );
         let li_with_sig = validator_verifier
             .aggregate_signatures(partial_signatures.iter())
@@ -653,23 +653,23 @@ mod test {
         let mut partial_signatures = BTreeMap::new();
         partial_signatures.insert(
             validator_signers[0].author(),
-            commit_votes[0].signature().clone(),
+            commit_votes[0].signature().unwrap(),
         );
         partial_signatures.insert(
             validator_signers[1].author(),
-            commit_votes[1].signature().clone(),
+            commit_votes[1].signature().unwrap(),
         );
         partial_signatures.insert(
             validator_signers[2].author(),
-            commit_votes[2].signature().clone(),
+            commit_votes[2].signature().unwrap(),
         );
         partial_signatures.insert(
             validator_signers[4].author(),
-            commit_votes[4].signature().clone(),
+            commit_votes[4].signature().unwrap(),
         );
         partial_signatures.insert(
             validator_signers[6].author(),
-            commit_votes[6].signature().clone(),
+            commit_votes[6].signature().unwrap(),
         );
         let li_with_sig = validator_verifier
             .aggregate_signatures(partial_signatures.iter())

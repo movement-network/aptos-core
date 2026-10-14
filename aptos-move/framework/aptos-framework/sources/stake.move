@@ -951,12 +951,15 @@ module aptos_framework::stake {
     public entry fun join_validator_set(
         operator: &signer,
         pool_address: address
-    ) acquires StakePool, ValidatorConfig, ValidatorSet {
+    ) acquires AllowedValidators, StakePool, ValidatorConfig, ValidatorSet {
         check_stake_permission(operator);
         assert!(
             staking_config::get_allow_validator_set_change(&staking_config::get()),
             error::invalid_argument(ENO_POST_GENESIS_VALIDATOR_SET_CHANGE_ALLOWED),
         );
+        // Recheck admission at the point where voting power is requested. A validator can be
+        // initialized long before it joins (or rejoins), and the allowlist may change meanwhile.
+        assert!(is_allowed(pool_address), error::not_found(EINELIGIBLE_VALIDATOR));
 
         join_validator_set_internal(operator, pool_address);
     }
@@ -1820,6 +1823,23 @@ module aptos_framework::stake {
         }
     }
 
+    #[view]
+    /// Returns the configured validator admission inventory. `none` means admission is open;
+    /// `some(accounts)` means only the returned pool addresses may initialize or join.
+    public fun get_allowed_validators(): Option<vector<address>> acquires AllowedValidators {
+        if (!exists<AllowedValidators>(@aptos_framework)) {
+            option::none()
+        } else {
+            option::some(borrow_global<AllowedValidators>(@aptos_framework).accounts)
+        }
+    }
+
+    #[view]
+    /// Returns whether `account` currently passes validator admission control.
+    public fun is_allowed_validator(account: address): bool acquires AllowedValidators {
+        is_allowed(account)
+    }
+
     fun is_allowed(account: address): bool acquires AllowedValidators {
         if (!exists<AllowedValidators>(@aptos_framework)) {
             true
@@ -1958,7 +1978,7 @@ module aptos_framework::stake {
         operator: &signer,
         pool_address: address,
         should_end_epoch: bool,
-    ) acquires StakePool, AptosCoinCapabilities, ValidatorConfig, ValidatorPerformance, ValidatorSet {
+    ) acquires AllowedValidators, StakePool, AptosCoinCapabilities, ValidatorConfig, ValidatorPerformance, ValidatorSet {
         let pk_bytes = bls12381::public_key_to_bytes(pk);
         let pop_bytes = bls12381::proof_of_possession_to_bytes(pop);
         rotate_consensus_key(operator, pool_address, pk_bytes, pop_bytes);
@@ -3536,13 +3556,37 @@ module aptos_framework::stake {
     ) acquires AllowedValidators, OwnerCapability, StakePool, ValidatorSet {
         let addr = signer::address_of(validator);
         let (burn, mint) = aptos_coin::initialize_for_test(aptos_framework);
+        assert!(option::is_none(&get_allowed_validators()), 0);
+        assert!(is_allowed_validator(addr), 1);
         configure_allowed_validators(aptos_framework, vector[addr]);
+        let inventory = get_allowed_validators();
+        assert!(option::extract(&mut inventory) == vector[addr], 2);
+        assert!(is_allowed_validator(addr), 3);
+        assert!(!is_allowed_validator(@0x234), 4);
 
         account::create_account_for_test(addr);
         coin::register<AptosCoin>(validator);
         initialize_stake_owner(validator, 0, addr, addr);
         coin::destroy_burn_cap(burn);
         coin::destroy_mint_cap(mint);
+    }
+
+    #[test(aptos_framework = @0x1, validator = @0x123)]
+    #[expected_failure(abort_code = 0x60011, location = Self)]
+    public entry fun test_removed_validator_cannot_join(
+        aptos_framework: &signer,
+        validator: &signer,
+    ) acquires AllowedValidators, AptosCoinCapabilities, OwnerCapability, StakePool, ValidatorConfig, ValidatorPerformance, ValidatorSet {
+        initialize_for_test(aptos_framework);
+        let validator_address = signer::address_of(validator);
+        configure_allowed_validators(aptos_framework, vector[validator_address]);
+
+        let (_sk, pk, pop) = generate_identity();
+        initialize_test_validator(&pk, &pop, validator, 100, false, false);
+
+        // Revoking admission after initialization must prevent a later join.
+        configure_allowed_validators(aptos_framework, vector[]);
+        join_validator_set(validator, validator_address);
     }
 
     #[test(aptos_framework = @0x1, validator = @0x123)]

@@ -4,12 +4,11 @@ version = "1.0.0"
 authors = []
 
 [addresses]
+admin = "0xa550c18"
 
 [dev-addresses]
 
 [dependencies.AptosFramework]
-git = "https://github.com/movement-network/aptos-core.git"
-rev = "l1-migration"
-subdir = "aptos-move/framework/aptos-framework"
+local = "../../aptos-move/framework/aptos-framework"
 
 [dev-dependencies]

@@ -31,7 +31,7 @@ pub struct ReleaseOptions {
 
     /// For each package, whether it should be built with using latest language features.
     /// Generally packages being deployed to testnet/mainnet need to use default features,
-    /// while those that don't (like aptos-experimental) can use latest language features.
+    /// while custom packages can opt in to latest language features.
     #[clap(long)]
     pub package_use_latest_language: Vec<bool>,
 

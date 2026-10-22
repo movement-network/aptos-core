@@ -254,7 +254,8 @@ impl Package {
                 code,
                 PublishType::AccountDeploy,
                 None,
-                AccountAddress::from_str_strict(default_large_packages_module_address(chain_id))
+                AccountAddress::from_str_strict(default_large_packages_module_address(chain_id)
+                    .expect("Chunked benchmark publishing requires a deployed helper; this network has no default helper"))
                     .unwrap(),
                 CHUNK_SIZE_IN_BYTES,
             )

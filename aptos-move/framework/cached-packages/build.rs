@@ -16,20 +16,6 @@ fn main() -> Result<()> {
         println!(
             "cargo:rerun-if-changed={}",
             prev_dir
-                .join("aptos-experimental")
-                .join("sources")
-                .display()
-        );
-        println!(
-            "cargo:rerun-if-changed={}",
-            prev_dir
-                .join("aptos-experimental")
-                .join("Move.toml")
-                .display()
-        );
-        println!(
-            "cargo:rerun-if-changed={}",
-            prev_dir
                 .join("aptos-token-objects")
                 .join("Move.toml")
                 .display()

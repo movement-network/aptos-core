@@ -12,10 +12,6 @@ use move_core_types::{account_address::AccountAddress, ident_str, language_stora
 pub const LARGE_PACKAGES_PROD_MODULE_ADDRESS: &str =
     "0x0e1ca3011bdd07246d4d16d909dbb2d6953a86c4735d5acf5865d962c630cce7";
 
-/// Address where large packages module is deployed on dev network started from genesis
-/// (including devnet and localnet)
-pub const LARGE_PACKAGES_DEV_MODULE_ADDRESS: &str = "0x7";
-
 /// The default chunk size for splitting code and metadata to fit within the transaction size limits.
 pub const CHUNK_SIZE_IN_BYTES: usize = 55_000;
 
@@ -25,11 +21,11 @@ pub enum PublishType {
     ObjectUpgrade,
 }
 
-pub fn default_large_packages_module_address(chain_id: &ChainId) -> &'static str {
+pub fn default_large_packages_module_address(chain_id: &ChainId) -> Option<&'static str> {
     if chain_id.is_mainnet() || chain_id.is_testnet() {
-        LARGE_PACKAGES_PROD_MODULE_ADDRESS
+        Some(LARGE_PACKAGES_PROD_MODULE_ADDRESS)
     } else {
-        LARGE_PACKAGES_DEV_MODULE_ADDRESS
+        None
     }
 }
 

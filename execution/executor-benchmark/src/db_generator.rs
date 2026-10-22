@@ -78,8 +78,8 @@ pub(crate) fn bootstrap_with_genesis(
     enable_storage_sharding: bool,
     init_features: Features,
 ) {
-    let (config, _genesis_key) =
-        aptos_genesis::test_utils::test_config_with_custom_onchain(Some(Arc::new(move |config| {
+    let init_genesis_config: Option<aptos_genesis::builder::InitGenesisConfigFn> =
+        Some(Arc::new(move |config| {
             config.initial_features_override = Some(init_features.clone());
             config.initial_jwks = vec![IssuerJWK {
                 issuer: get_sample_iss(),
@@ -88,7 +88,9 @@ pub(crate) fn bootstrap_with_genesis(
             config.keyless_groth16_vk = Some(Groth16VerificationKey::from(
                 &TEST_GROTH16_SETUP.prepared_vk,
             ));
-        })));
+        }));
+    let (config, _genesis_key) =
+        aptos_genesis::test_utils::test_config_with_custom_onchain(init_genesis_config);
 
     let mut rocksdb_configs = RocksdbConfigs::default();
     rocksdb_configs.state_merkle_db_config.max_open_files = -1;

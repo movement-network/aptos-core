@@ -13,4 +13,4 @@ both chains under the compatible upgrade policy while the feature stays disabled
   module).
 - Private functions, `public(friend)` functions, `friend` declarations, `init_module`, constants, spec blocks and
   `#[test_only]` code are removed. The modules publish no resource, emit no event and write no state.
-- The aptos-experimental copy (address 0x7) is a separate, unrelated package and is untouched.
+- The separate, undeployed experimental copy at address 0x7 has been removed.

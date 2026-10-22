@@ -34,6 +34,12 @@ aptos move document --help
 
 The documentation process is also integrated into the framework building process and will be automatically triggered like other derived artifacts, via `cached-packages` or explicit release building.
 
+Standard release bundles contain MoveStdlib, AptosStdlib, AptosFramework,
+AptosToken, and AptosTokenObjects. The undeployed AptosExperimental (`0x7`)
+package and its dependent examples and workloads have been removed. The `0x7`
+account remains reserved by the framework. Chunked publishing on custom networks
+requires an explicitly supplied address for an independently deployed helper.
+
 ## Running Move tests
 
 To test our Move code while developing the Aptos Framework, run `cargo test` inside this directory:

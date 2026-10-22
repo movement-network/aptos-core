@@ -321,51 +321,18 @@ fn compile_framework_sources(
     PrecompiledFilesModules::new(all_source_files, modules)
 }
 
-// aptos-experimental can be using latest language features, while others cannot.
-// So we need to compile it twice, once without aptos-experimental, and once with.
+fn framework_sources() -> Vec<String> {
+    aptos_cached_packages::head_release_bundle()
+        .files()
+        .unwrap()
+        .to_vec()
+}
 
-static PRECOMPILED_APTOS_FRAMEWORK_V2: Lazy<PrecompiledFilesModules> = Lazy::new(|| {
-    compile_framework_sources(
-        aptos_cached_packages::head_release_bundle()
-            .files()
-            .unwrap()
-            .iter()
-            .filter(|f| !f.contains("aptos-move/framework/aptos-experimental/sources"))
-            .cloned()
-            .collect::<Vec<_>>(),
-        None,
-    )
-});
+static PRECOMPILED_APTOS_FRAMEWORK_V2: Lazy<PrecompiledFilesModules> =
+    Lazy::new(|| compile_framework_sources(framework_sources(), None));
 
-static PRECOMPILED_APTOS_FRAMEWORK_V2_WITH_EXPERIMENTAL: Lazy<PrecompiledFilesModules> =
-    Lazy::new(|| {
-        let named_address_mapping_strings: Vec<String> = aptos_framework::named_addresses()
-            .iter()
-            .map(|(string, num_addr)| format!("{}={}", string, num_addr))
-            .collect();
-
-        // aptos-experimental can be using latest language features, while others cannot.
-        // So we need to compile it twice, once without aptos-experimental, and once with.
-        // (in the second pass, we need to provide both, in case aptos-experimental depends on other modules)
-
-        let all_sources = aptos_cached_packages::head_release_bundle()
-            .files()
-            .unwrap();
-
-        let options = move_compiler_v2::Options {
-            sources: all_sources.clone(),
-            dependencies: vec![],
-            named_address_mapping: named_address_mapping_strings.clone(),
-            known_attributes: aptos_framework::extended_checks::get_all_attribute_names().clone(),
-            language_version: Some(LanguageVersion::latest()),
-            ..move_compiler_v2::Options::default()
-        };
-
-        let (_global_env, modules) = move_compiler_v2::run_move_compiler_to_stderr(options.clone())
-            .expect("framework compilation succeeds");
-
-        PrecompiledFilesModules::new(all_sources, modules)
-    });
+static PRECOMPILED_APTOS_FRAMEWORK_V2_LATEST: Lazy<PrecompiledFilesModules> =
+    Lazy::new(|| compile_framework_sources(framework_sources(), Some(LanguageVersion::latest())));
 
 /**
  * Test Adapter Implementation
@@ -778,7 +745,9 @@ impl<'a> MoveTestAdapter<'a> for AptosTestAdapter<'a> {
         let module_id = ModuleId::new(address, module.self_id().name().to_owned());
 
         let mut module_blob = vec![];
-        module.serialize(&mut module_blob).unwrap();
+        module
+            .serialize_for_version(Some(module.version), &mut module_blob)
+            .unwrap();
 
         // TODO: Do we still need this?
         let _private_key = match (extra_args.private_key, named_addr_opt) {
@@ -1093,8 +1062,8 @@ fn precompiled_v2_framework() -> &'static PrecompiledFilesModules {
     &PRECOMPILED_APTOS_FRAMEWORK_V2
 }
 
-fn precompiled_v2_framework_with_experimental() -> &'static PrecompiledFilesModules {
-    &PRECOMPILED_APTOS_FRAMEWORK_V2_WITH_EXPERIMENTAL
+fn precompiled_v2_framework_latest() -> &'static PrecompiledFilesModules {
+    &PRECOMPILED_APTOS_FRAMEWORK_V2_LATEST
 }
 
 pub fn run_aptos_test(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
@@ -1113,12 +1082,11 @@ pub fn run_aptos_test_with_config(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let suffix = Some(EXP_EXT.to_owned());
     let v2_lib = match &config {
-        // only latest language version can use experimental framework
         TestRunConfig::CompilerV2 {
             language_version, ..
         } => {
             if language_version == &LanguageVersion::latest() {
-                precompiled_v2_framework_with_experimental()
+                precompiled_v2_framework_latest()
             } else {
                 precompiled_v2_framework()
             }

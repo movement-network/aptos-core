@@ -22,3 +22,26 @@ static HEAD_RELEASE_BUNDLE: Lazy<ReleaseBundle> = Lazy::new(|| {
 pub fn head_release_bundle() -> &'static ReleaseBundle {
     &HEAD_RELEASE_BUNDLE
 }
+
+#[cfg(test)]
+mod tests {
+    use super::head_release_bundle;
+    use move_core_types::account_address::AccountAddress;
+
+    #[test]
+    fn shipped_bundle_excludes_experimental_modules() {
+        let bundle = head_release_bundle();
+        assert!(bundle
+            .packages
+            .iter()
+            .all(|package| package.name() != "AptosExperimental"));
+        assert!(bundle
+            .compiled_modules()
+            .iter()
+            .all(|module| module.self_id().address() != &AccountAddress::SEVEN));
+        assert!(bundle
+            .source_dirs
+            .iter()
+            .all(|path| !path.contains("aptos-experimental")));
+    }
+}

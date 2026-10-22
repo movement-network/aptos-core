@@ -4582,6 +4582,7 @@ framework-published voting power in agreement with DKG's post-sweep view.
 Reject an ACL that excludes a queued joiner: epoch activation does not recheck the ACL.
 Existing active validators are not evicted by this operation.
 
+
 <pre><code><b>public</b> <b>fun</b> <a href="stake.md#0x1_stake_configure_allowed_validators">configure_allowed_validators</a>(aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, accounts: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;)
 </code></pre>
 
@@ -6222,7 +6223,7 @@ Existing active validators are not evicted by this operation.
 <b>aborts_if</b> !<a href="system_addresses.md#0x1_system_addresses_is_aptos_framework_address">system_addresses::is_aptos_framework_address</a>(aptos_framework_address);
 <b>let</b> pending = <b>global</b>&lt;<a href="stake.md#0x1_stake_ValidatorSet">ValidatorSet</a>&gt;(@aptos_framework).pending_active;
 <b>aborts_if</b> <b>exists</b>&lt;<a href="stake.md#0x1_stake_ValidatorSet">ValidatorSet</a>&gt;(@aptos_framework) &&
-    (<b>exists</b> i <b>in</b> 0..len(pending): !contains(accounts, pending[i].addr));
+    (<b>exists</b> i in 0..len(pending): !contains(accounts, pending[i].addr));
 <b>let</b> <b>post</b> allowed = <b>global</b>&lt;<a href="stake.md#0x1_stake_AllowedValidators">AllowedValidators</a>&gt;(aptos_framework_address);
 <b>ensures</b> allowed.accounts == accounts;
 </code></pre>

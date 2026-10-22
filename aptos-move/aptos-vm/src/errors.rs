@@ -41,6 +41,8 @@ pub const EINSUFFICIENT_BALANCE_FOR_REQUIRED_DEPOSIT: u64 = 1011;
 pub const ENONCE_ALREADY_USED: u64 = 1012;
 // Transaction expiration time is too far in the future.
 pub const ETRANSACTION_EXPIRATION_TOO_FAR_IN_FUTURE: u64 = 1013;
+// Standalone script sender is not in the execution allowlist.
+pub const ESCRIPT_EXECUTION_NOT_ALLOWED: u64 = 1014;
 
 // Specified account is not a multisig account.
 const EACCOUNT_NOT_MULTISIG: u64 = 2002;
@@ -140,6 +142,9 @@ pub fn convert_prologue_error(
                 },
                 (INVALID_ARGUMENT, ETRANSACTION_EXPIRATION_TOO_FAR_IN_FUTURE) => {
                     StatusCode::TRANSACTION_EXPIRATION_TOO_FAR_IN_FUTURE
+                },
+                (INVALID_ARGUMENT, ESCRIPT_EXECUTION_NOT_ALLOWED) => {
+                    StatusCode::SCRIPT_EXECUTION_NOT_ALLOWED
                 },
                 (INVALID_ARGUMENT, ENONCE_ALREADY_USED) => StatusCode::NONCE_ALREADY_USED,
                 (category, reason) => {

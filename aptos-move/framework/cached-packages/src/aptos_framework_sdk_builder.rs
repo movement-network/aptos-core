@@ -525,6 +525,12 @@ pub enum EntryFunctionCall {
         pool_address: AccountAddress,
     },
 
+    /// Enable partial governance voting on a delegation pool if it has not already been initialized.
+    /// This is intended for idempotent migration scripts over existing delegation pools.
+    DelegationPoolEnablePartialGovernanceVotingIfNeeded {
+        pool_address: AccountAddress,
+    },
+
     /// Evict a delegator that is not allowlisted by unlocking their entire stake.
     DelegationPoolEvictDelegator {
         delegator_address: AccountAddress,
@@ -1053,6 +1059,22 @@ pub enum EntryFunctionCall {
         seed: Vec<u8>,
         metadata_serialized: Vec<u8>,
         code: Vec<Vec<u8>>,
+    },
+
+    ScriptExecutionAllowlistAdd {
+        sender: AccountAddress,
+    },
+
+    ScriptExecutionAllowlistDisable {},
+
+    ScriptExecutionAllowlistEnable {},
+
+    /// Create an empty list without changing existing membership or enabling enforcement.
+    /// Core-resources administration and governance proposals supply the framework signer.
+    ScriptExecutionAllowlistInitialize {},
+
+    ScriptExecutionAllowlistRemove {
+        sender: AccountAddress,
     },
 
     /// Add `amount` of coins from the `account` owning the StakePool.
@@ -1657,6 +1679,9 @@ impl EntryFunctionCall {
             DelegationPoolEnablePartialGovernanceVoting { pool_address } => {
                 delegation_pool_enable_partial_governance_voting(pool_address)
             },
+            DelegationPoolEnablePartialGovernanceVotingIfNeeded { pool_address } => {
+                delegation_pool_enable_partial_governance_voting_if_needed(pool_address)
+            },
             DelegationPoolEvictDelegator { delegator_address } => {
                 delegation_pool_evict_delegator(delegator_address)
             },
@@ -1960,6 +1985,11 @@ impl EntryFunctionCall {
                 metadata_serialized,
                 code,
             ),
+            ScriptExecutionAllowlistAdd { sender } => script_execution_allowlist_add(sender),
+            ScriptExecutionAllowlistDisable {} => script_execution_allowlist_disable(),
+            ScriptExecutionAllowlistEnable {} => script_execution_allowlist_enable(),
+            ScriptExecutionAllowlistInitialize {} => script_execution_allowlist_initialize(),
+            ScriptExecutionAllowlistRemove { sender } => script_execution_allowlist_remove(sender),
             StakeAddStake { amount } => stake_add_stake(amount),
             StakeIncreaseLockup {} => stake_increase_lockup(),
             StakeInitializeStakeOwner {
@@ -3498,6 +3528,25 @@ pub fn delegation_pool_enable_partial_governance_voting(
     ))
 }
 
+/// Enable partial governance voting on a delegation pool if it has not already been initialized.
+/// This is intended for idempotent migration scripts over existing delegation pools.
+pub fn delegation_pool_enable_partial_governance_voting_if_needed(
+    pool_address: AccountAddress,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("delegation_pool").to_owned(),
+        ),
+        ident_str!("enable_partial_governance_voting_if_needed").to_owned(),
+        vec![],
+        vec![bcs::to_bytes(&pool_address).unwrap()],
+    ))
+}
+
 /// Evict a delegator that is not allowlisted by unlocking their entire stake.
 pub fn delegation_pool_evict_delegator(delegator_address: AccountAddress) -> TransactionPayload {
     TransactionPayload::EntryFunction(EntryFunction::new(
@@ -4909,6 +4958,83 @@ pub fn resource_account_create_resource_account_and_publish_package(
             bcs::to_bytes(&metadata_serialized).unwrap(),
             bcs::to_bytes(&code).unwrap(),
         ],
+    ))
+}
+
+pub fn script_execution_allowlist_add(sender: AccountAddress) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("script_execution_allowlist").to_owned(),
+        ),
+        ident_str!("add").to_owned(),
+        vec![],
+        vec![bcs::to_bytes(&sender).unwrap()],
+    ))
+}
+
+pub fn script_execution_allowlist_disable() -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("script_execution_allowlist").to_owned(),
+        ),
+        ident_str!("disable").to_owned(),
+        vec![],
+        vec![],
+    ))
+}
+
+pub fn script_execution_allowlist_enable() -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("script_execution_allowlist").to_owned(),
+        ),
+        ident_str!("enable").to_owned(),
+        vec![],
+        vec![],
+    ))
+}
+
+/// Create an empty list without changing existing membership or enabling enforcement.
+/// Core-resources administration and governance proposals supply the framework signer.
+pub fn script_execution_allowlist_initialize() -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("script_execution_allowlist").to_owned(),
+        ),
+        ident_str!("initialize").to_owned(),
+        vec![],
+        vec![],
+    ))
+}
+
+pub fn script_execution_allowlist_remove(sender: AccountAddress) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("script_execution_allowlist").to_owned(),
+        ),
+        ident_str!("remove").to_owned(),
+        vec![],
+        vec![bcs::to_bytes(&sender).unwrap()],
     ))
 }
 
@@ -6722,6 +6848,20 @@ mod decoder {
         }
     }
 
+    pub fn delegation_pool_enable_partial_governance_voting_if_needed(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(
+                EntryFunctionCall::DelegationPoolEnablePartialGovernanceVotingIfNeeded {
+                    pool_address: bcs::from_bytes(script.args().get(0)?).ok()?,
+                },
+            )
+        } else {
+            None
+        }
+    }
+
     pub fn delegation_pool_evict_delegator(
         payload: &TransactionPayload,
     ) -> Option<EntryFunctionCall> {
@@ -7511,6 +7651,60 @@ mod decoder {
                     code: bcs::from_bytes(script.args().get(2)?).ok()?,
                 },
             )
+        } else {
+            None
+        }
+    }
+
+    pub fn script_execution_allowlist_add(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::ScriptExecutionAllowlistAdd {
+                sender: bcs::from_bytes(script.args().get(0)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn script_execution_allowlist_disable(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(_script) = payload {
+            Some(EntryFunctionCall::ScriptExecutionAllowlistDisable {})
+        } else {
+            None
+        }
+    }
+
+    pub fn script_execution_allowlist_enable(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(_script) = payload {
+            Some(EntryFunctionCall::ScriptExecutionAllowlistEnable {})
+        } else {
+            None
+        }
+    }
+
+    pub fn script_execution_allowlist_initialize(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(_script) = payload {
+            Some(EntryFunctionCall::ScriptExecutionAllowlistInitialize {})
+        } else {
+            None
+        }
+    }
+
+    pub fn script_execution_allowlist_remove(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::ScriptExecutionAllowlistRemove {
+                sender: bcs::from_bytes(script.args().get(0)?).ok()?,
+            })
         } else {
             None
         }
@@ -8391,6 +8585,10 @@ static SCRIPT_FUNCTION_DECODER_MAP: once_cell::sync::Lazy<EntryFunctionDecoderMa
             Box::new(decoder::delegation_pool_enable_partial_governance_voting),
         );
         map.insert(
+            "delegation_pool_enable_partial_governance_voting_if_needed".to_string(),
+            Box::new(decoder::delegation_pool_enable_partial_governance_voting_if_needed),
+        );
+        map.insert(
             "delegation_pool_evict_delegator".to_string(),
             Box::new(decoder::delegation_pool_evict_delegator),
         );
@@ -8631,6 +8829,26 @@ static SCRIPT_FUNCTION_DECODER_MAP: once_cell::sync::Lazy<EntryFunctionDecoderMa
         map.insert(
             "resource_account_create_resource_account_and_publish_package".to_string(),
             Box::new(decoder::resource_account_create_resource_account_and_publish_package),
+        );
+        map.insert(
+            "script_execution_allowlist_add".to_string(),
+            Box::new(decoder::script_execution_allowlist_add),
+        );
+        map.insert(
+            "script_execution_allowlist_disable".to_string(),
+            Box::new(decoder::script_execution_allowlist_disable),
+        );
+        map.insert(
+            "script_execution_allowlist_enable".to_string(),
+            Box::new(decoder::script_execution_allowlist_enable),
+        );
+        map.insert(
+            "script_execution_allowlist_initialize".to_string(),
+            Box::new(decoder::script_execution_allowlist_initialize),
+        );
+        map.insert(
+            "script_execution_allowlist_remove".to_string(),
+            Box::new(decoder::script_execution_allowlist_remove),
         );
         map.insert(
             "stake_add_stake".to_string(),

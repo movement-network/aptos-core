@@ -15,8 +15,10 @@ module aptos_framework::transaction_validation {
     use aptos_framework::create_signer;
     use aptos_framework::governed_gas_pool;
     use aptos_framework::permissioned_signer;
+    use aptos_framework::script_execution_allowlist;
     use aptos_framework::system_addresses;
     use aptos_framework::timestamp;
+    use aptos_framework::transaction_context;
     use aptos_framework::transaction_fee;
     use aptos_framework::nonce_validation;
 
@@ -72,6 +74,7 @@ module aptos_framework::transaction_validation {
     const PROLOGUE_PERMISSIONED_GAS_LIMIT_INSUFFICIENT: u64 = 1011;
     const PROLOGUE_ENONCE_ALREADY_USED: u64 = 1012;
     const PROLOGUE_ETRANSACTION_EXPIRATION_TOO_FAR_IN_FUTURE: u64 = 1013;
+    const PROLOGUE_ESCRIPT_EXECUTION_NOT_ALLOWED: u64 = 1014;
 
     /// Permission management
     ///
@@ -141,6 +144,18 @@ module aptos_framework::transaction_validation {
             error::invalid_argument(PROLOGUE_ETRANSACTION_EXPIRED),
         );
         assert!(chain_id::get() == chain_id, error::invalid_argument(PROLOGUE_EBAD_CHAIN_ID));
+
+        // Standalone scripts are identified by a non-empty script hash. Entry-function payloads
+        // have an empty hash and remain unaffected by this feature.
+        if (
+            script_execution_allowlist::is_enabled()
+                && !transaction_context::get_script_hash().is_empty()
+        ) {
+            assert!(
+                script_execution_allowlist::is_allowed(sender_address),
+                error::invalid_argument(PROLOGUE_ESCRIPT_EXECUTION_NOT_ALLOWED),
+            );
+        };
 
         // TODO[Orderless]: Here, we are maintaining the same order of validation steps as before orderless txns were introduced.
         // Ideally, do the replay protection check in the end after the authentication key check and gas payment checks.

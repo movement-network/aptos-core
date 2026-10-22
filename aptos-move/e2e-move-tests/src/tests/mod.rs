@@ -51,6 +51,8 @@ mod randomness_test_and_abort;
 mod remote_state;
 mod resource_groups;
 mod rotate_auth_key;
+mod script_allowlist_migration_scripts;
+mod script_execution_allowlist;
 mod scripts;
 mod simple_defi;
 mod smart_data_structures;

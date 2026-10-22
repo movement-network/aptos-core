@@ -602,6 +602,10 @@ pub enum StatusCode {
     TRANSACTION_EXPIRATION_TOO_FAR_IN_FUTURE = 44,
     INVALID_NUMBER_OF_AUTHENTICATION_PROOFS = 45,
 
+    // Standalone Move script sender is not authorized by the on-chain allowlist.
+    // This fork reserves this validation-status range for chain-specific policy failures.
+    SCRIPT_EXECUTION_NOT_ALLOWED = 923,
+
     // Reserved error code for future use
     RESERVED_VALIDATION_ERROR_11 = 46,
     RESERVED_VALIDATION_ERROR_12 = 47,

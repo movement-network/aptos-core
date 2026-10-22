@@ -1,0 +1,11 @@
+# Copyright © Move Foundation
+# SPDX-License-Identifier: Apache-2.0
+
+[package]
+name = "script-execution-allowlist"
+version = "0.0.0"
+
+[addresses]
+
+[dependencies.AptosFramework]
+local = "../../aptos-move/framework/aptos-framework"

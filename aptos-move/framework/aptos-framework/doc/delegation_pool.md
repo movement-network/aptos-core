@@ -152,6 +152,7 @@ transferred to A
 -  [Function `owner_cap_exists`](#0x1_delegation_pool_owner_cap_exists)
 -  [Function `get_owned_pool_address`](#0x1_delegation_pool_get_owned_pool_address)
 -  [Function `delegation_pool_exists`](#0x1_delegation_pool_delegation_pool_exists)
+-  [Function `governance_records_initialized`](#0x1_delegation_pool_governance_records_initialized)
 -  [Function `partial_governance_voting_enabled`](#0x1_delegation_pool_partial_governance_voting_enabled)
 -  [Function `observed_lockup_cycle`](#0x1_delegation_pool_observed_lockup_cycle)
 -  [Function `is_next_commission_percentage_effective`](#0x1_delegation_pool_is_next_commission_percentage_effective)
@@ -179,6 +180,7 @@ transferred to A
 -  [Function `initialize_delegation_pool`](#0x1_delegation_pool_initialize_delegation_pool)
 -  [Function `beneficiary_for_operator`](#0x1_delegation_pool_beneficiary_for_operator)
 -  [Function `enable_partial_governance_voting`](#0x1_delegation_pool_enable_partial_governance_voting)
+-  [Function `enable_partial_governance_voting_if_needed`](#0x1_delegation_pool_enable_partial_governance_voting_if_needed)
 -  [Function `vote`](#0x1_delegation_pool_vote)
 -  [Function `create_proposal`](#0x1_delegation_pool_create_proposal)
 -  [Function `assert_owner_cap_exists`](#0x1_delegation_pool_assert_owner_cap_exists)
@@ -676,7 +678,7 @@ evicted later by the pool owner.
 
 <dl>
 <dt>
-<code>allowlist: <a href="../../aptos-stdlib/doc/smart_table.md#0x1_smart_table_SmartTable">smart_table::SmartTable</a>&lt;<b>address</b>, bool&gt;</code>
+<code><a href="allowlist.md#0x1_allowlist">allowlist</a>: <a href="../../aptos-stdlib/doc/smart_table.md#0x1_smart_table_SmartTable">smart_table::SmartTable</a>&lt;<b>address</b>, bool&gt;</code>
 </dt>
 <dd>
 
@@ -2122,6 +2124,32 @@ Return whether a delegation pool exists at supplied address <code>addr</code>.
 
 </details>
 
+<a id="0x1_delegation_pool_governance_records_initialized"></a>
+
+## Function `governance_records_initialized`
+
+Return whether a delegation pool has governance records initialized.
+
+
+<pre><code>#[view]
+<b>public</b> <b>fun</b> <a href="delegation_pool.md#0x1_delegation_pool_governance_records_initialized">governance_records_initialized</a>(pool_address: <b>address</b>): bool
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="delegation_pool.md#0x1_delegation_pool_governance_records_initialized">governance_records_initialized</a>(pool_address: <b>address</b>): bool {
+    <b>exists</b>&lt;<a href="delegation_pool.md#0x1_delegation_pool_GovernanceRecords">GovernanceRecords</a>&gt;(pool_address)
+}
+</code></pre>
+
+
+
+</details>
+
 <a id="0x1_delegation_pool_partial_governance_voting_enabled"></a>
 
 ## Function `partial_governance_voting_enabled`
@@ -2140,7 +2168,7 @@ Return whether a delegation pool has already enabled partial governance voting.
 
 
 <pre><code><b>public</b> <b>fun</b> <a href="delegation_pool.md#0x1_delegation_pool_partial_governance_voting_enabled">partial_governance_voting_enabled</a>(pool_address: <b>address</b>): bool {
-    <b>exists</b>&lt;<a href="delegation_pool.md#0x1_delegation_pool_GovernanceRecords">GovernanceRecords</a>&gt;(pool_address) && <a href="stake.md#0x1_stake_get_delegated_voter">stake::get_delegated_voter</a>(pool_address) == pool_address
+    <a href="delegation_pool.md#0x1_delegation_pool_governance_records_initialized">governance_records_initialized</a>(pool_address) && <a href="stake.md#0x1_stake_get_delegated_voter">stake::get_delegated_voter</a>(pool_address) == pool_address
 }
 </code></pre>
 
@@ -2821,11 +2849,11 @@ Return allowlist or revert if allowlisting is not enabled for the provided deleg
 ): <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt; <b>acquires</b> <a href="delegation_pool.md#0x1_delegation_pool_DelegationPoolAllowlisting">DelegationPoolAllowlisting</a> {
     <a href="delegation_pool.md#0x1_delegation_pool_assert_allowlisting_enabled">assert_allowlisting_enabled</a>(pool_address);
 
-    <b>let</b> allowlist = <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>[];
+    <b>let</b> <a href="allowlist.md#0x1_allowlist">allowlist</a> = <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>[];
     <a href="../../aptos-stdlib/doc/smart_table.md#0x1_smart_table_for_each_ref">smart_table::for_each_ref</a>(<b>freeze</b>(<a href="delegation_pool.md#0x1_delegation_pool_borrow_mut_delegators_allowlist">borrow_mut_delegators_allowlist</a>(pool_address)), |delegator, _v| {
-        <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector_push_back">vector::push_back</a>(&<b>mut</b> allowlist, *delegator);
+        <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector_push_back">vector::push_back</a>(&<b>mut</b> <a href="allowlist.md#0x1_allowlist">allowlist</a>, *delegator);
     });
-    allowlist
+    <a href="allowlist.md#0x1_allowlist">allowlist</a>
 }
 </code></pre>
 
@@ -3078,6 +3106,37 @@ The existing voter will be replaced. The function is permissionless.
         create_proposal_events: <a href="account.md#0x1_account_new_event_handle">account::new_event_handle</a>&lt;<a href="delegation_pool.md#0x1_delegation_pool_CreateProposalEvent">CreateProposalEvent</a>&gt;(&stake_pool_signer),
         delegate_voting_power_events: <a href="account.md#0x1_account_new_event_handle">account::new_event_handle</a>&lt;<a href="delegation_pool.md#0x1_delegation_pool_DelegateVotingPowerEvent">DelegateVotingPowerEvent</a>&gt;(&stake_pool_signer),
     });
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_delegation_pool_enable_partial_governance_voting_if_needed"></a>
+
+## Function `enable_partial_governance_voting_if_needed`
+
+Enable partial governance voting on a delegation pool if it has not already been initialized.
+This is intended for idempotent migration scripts over existing delegation pools.
+
+
+<pre><code><b>public</b> entry <b>fun</b> <a href="delegation_pool.md#0x1_delegation_pool_enable_partial_governance_voting_if_needed">enable_partial_governance_voting_if_needed</a>(pool_address: <b>address</b>)
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> entry <b>fun</b> <a href="delegation_pool.md#0x1_delegation_pool_enable_partial_governance_voting_if_needed">enable_partial_governance_voting_if_needed</a>(
+    pool_address: <b>address</b>,
+) <b>acquires</b> <a href="delegation_pool.md#0x1_delegation_pool_DelegationPool">DelegationPool</a>, <a href="delegation_pool.md#0x1_delegation_pool_GovernanceRecords">GovernanceRecords</a>, <a href="delegation_pool.md#0x1_delegation_pool_BeneficiaryForOperator">BeneficiaryForOperator</a>, <a href="delegation_pool.md#0x1_delegation_pool_NextCommissionPercentage">NextCommissionPercentage</a> {
+    <a href="delegation_pool.md#0x1_delegation_pool_assert_delegation_pool_exists">assert_delegation_pool_exists</a>(pool_address);
+    <b>if</b> (!<a href="delegation_pool.md#0x1_delegation_pool_governance_records_initialized">governance_records_initialized</a>(pool_address)) {
+        <a href="delegation_pool.md#0x1_delegation_pool_enable_partial_governance_voting">enable_partial_governance_voting</a>(pool_address);
+    }
 }
 </code></pre>
 
@@ -3938,7 +3997,7 @@ Update DelegatedVotes of a voter to up-to-date then return the total voting powe
 <pre><code>inline <b>fun</b> <a href="delegation_pool.md#0x1_delegation_pool_borrow_mut_delegators_allowlist">borrow_mut_delegators_allowlist</a>(
     pool_address: <b>address</b>
 ): &<b>mut</b> SmartTable&lt;<b>address</b>, bool&gt; <b>acquires</b> <a href="delegation_pool.md#0x1_delegation_pool_DelegationPoolAllowlisting">DelegationPoolAllowlisting</a> {
-    &<b>mut</b> <b>borrow_global_mut</b>&lt;<a href="delegation_pool.md#0x1_delegation_pool_DelegationPoolAllowlisting">DelegationPoolAllowlisting</a>&gt;(pool_address).allowlist
+    &<b>mut</b> <b>borrow_global_mut</b>&lt;<a href="delegation_pool.md#0x1_delegation_pool_DelegationPoolAllowlisting">DelegationPoolAllowlisting</a>&gt;(pool_address).<a href="allowlist.md#0x1_allowlist">allowlist</a>
 }
 </code></pre>
 
@@ -4227,7 +4286,7 @@ Enable delegators allowlisting as the pool owner.
     <b>if</b> (<a href="delegation_pool.md#0x1_delegation_pool_allowlisting_enabled">allowlisting_enabled</a>(pool_address)) { <b>return</b> };
 
     <b>let</b> pool_signer = <a href="delegation_pool.md#0x1_delegation_pool_retrieve_stake_pool_owner">retrieve_stake_pool_owner</a>(<b>borrow_global</b>&lt;<a href="delegation_pool.md#0x1_delegation_pool_DelegationPool">DelegationPool</a>&gt;(pool_address));
-    <b>move_to</b>(&pool_signer, <a href="delegation_pool.md#0x1_delegation_pool_DelegationPoolAllowlisting">DelegationPoolAllowlisting</a> { allowlist: <a href="../../aptos-stdlib/doc/smart_table.md#0x1_smart_table_new">smart_table::new</a>&lt;<b>address</b>, bool&gt;() });
+    <b>move_to</b>(&pool_signer, <a href="delegation_pool.md#0x1_delegation_pool_DelegationPoolAllowlisting">DelegationPoolAllowlisting</a> { <a href="allowlist.md#0x1_allowlist">allowlist</a>: <a href="../../aptos-stdlib/doc/smart_table.md#0x1_smart_table_new">smart_table::new</a>&lt;<b>address</b>, bool&gt;() });
 
     <a href="event.md#0x1_event_emit">event::emit</a>(<a href="delegation_pool.md#0x1_delegation_pool_EnableDelegatorsAllowlisting">EnableDelegatorsAllowlisting</a> { pool_address });
 }
@@ -4260,9 +4319,9 @@ Disable delegators allowlisting as the pool owner. The existing allowlist will b
     <b>let</b> pool_address = <a href="delegation_pool.md#0x1_delegation_pool_get_owned_pool_address">get_owned_pool_address</a>(<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(owner));
     <a href="delegation_pool.md#0x1_delegation_pool_assert_allowlisting_enabled">assert_allowlisting_enabled</a>(pool_address);
 
-    <b>let</b> <a href="delegation_pool.md#0x1_delegation_pool_DelegationPoolAllowlisting">DelegationPoolAllowlisting</a> { allowlist } = <b>move_from</b>&lt;<a href="delegation_pool.md#0x1_delegation_pool_DelegationPoolAllowlisting">DelegationPoolAllowlisting</a>&gt;(pool_address);
-    // <b>if</b> the allowlist becomes too large, the owner can always remove some delegators
-    <a href="../../aptos-stdlib/doc/smart_table.md#0x1_smart_table_destroy">smart_table::destroy</a>(allowlist);
+    <b>let</b> <a href="delegation_pool.md#0x1_delegation_pool_DelegationPoolAllowlisting">DelegationPoolAllowlisting</a> { <a href="allowlist.md#0x1_allowlist">allowlist</a> } = <b>move_from</b>&lt;<a href="delegation_pool.md#0x1_delegation_pool_DelegationPoolAllowlisting">DelegationPoolAllowlisting</a>&gt;(pool_address);
+    // <b>if</b> the <a href="allowlist.md#0x1_allowlist">allowlist</a> becomes too large, the owner can always remove some delegators
+    <a href="../../aptos-stdlib/doc/smart_table.md#0x1_smart_table_destroy">smart_table::destroy</a>(<a href="allowlist.md#0x1_allowlist">allowlist</a>);
 
     <a href="event.md#0x1_event_emit">event::emit</a>(<a href="delegation_pool.md#0x1_delegation_pool_DisableDelegatorsAllowlisting">DisableDelegatorsAllowlisting</a> { pool_address });
 }

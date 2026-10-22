@@ -39,7 +39,11 @@ impl RawData for LocalnetDataService {
         // Some node metadata
         let context = self.service_context.context.clone();
         let r = req.into_inner();
-        let starting_version = r.starting_version.expect("Starting version must be set");
+        // A missing starting version means "latest", as in the indexer-grpc data service; it must
+        // not panic the node (aptos-indexer-processor-sdk v2.4.1 get_chain_id sends None).
+        let starting_version = resolve_starting_version(r.starting_version, || {
+            Ok(context.get_latest_ledger_info_wrapped()?.ledger_version.0)
+        })?;
         let ending_version = if let Some(count) = r.transactions_count {
             starting_version.saturating_add(count)
         } else {
@@ -130,5 +134,43 @@ impl RawData for LocalnetDataService {
         Ok(Response::new(
             Box::pin(output_stream) as Self::GetTransactionsStream
         ))
+    }
+}
+
+/// Resolves the requested starting version. `None` means the latest committed version, so a client
+/// that asks for "the latest transaction" gets one immediately instead of waiting for a new commit.
+fn resolve_starting_version(
+    requested: Option<u64>,
+    latest: impl FnOnce() -> anyhow::Result<u64>,
+) -> Result<u64, Status> {
+    match requested {
+        Some(version) => Ok(version),
+        None => latest().map_err(|e| {
+            Status::unavailable(format!("Unable to read the latest ledger version: {e}"))
+        }),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_starting_version;
+    use tonic::Code;
+
+    #[test]
+    fn explicit_starting_version_is_used() {
+        let version = resolve_starting_version(Some(7), || panic!("latest must not be read"));
+        assert_eq!(version.unwrap(), 7);
+    }
+
+    #[test]
+    fn missing_starting_version_resolves_to_latest() {
+        assert_eq!(resolve_starting_version(None, || Ok(42)).unwrap(), 42);
+    }
+
+    #[test]
+    fn missing_starting_version_with_unreadable_ledger_is_an_error_not_a_panic() {
+        let status =
+            resolve_starting_version(None, || Err(anyhow::anyhow!("db down"))).unwrap_err();
+        assert_eq!(status.code(), Code::Unavailable);
     }
 }

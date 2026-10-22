@@ -11,6 +11,7 @@ use aptos_crypto::{
 };
 use aptos_types::{
     function_info::FunctionInfo,
+    on_chain_config::Features,
     transaction::{EntryFunction, TransactionStatus},
 };
 use move_core_types::{identifier::Identifier, language_storage::ModuleId, vm_status::StatusCode};
@@ -20,6 +21,10 @@ use std::{path::PathBuf, sync::Arc};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_account_abstraction_single_signer() {
+    if !Features::default().is_account_abstraction_enabled() {
+        eprintln!("Skipping account abstraction: disabled in the default feature configuration");
+        return;
+    }
     let key_pair = Arc::new(KeyPair::<PrivateKey, PublicKey>::generate(&mut OsRng));
 
     let mut context = new_test_context(current_function_name!());
@@ -111,6 +116,10 @@ async fn test_account_abstraction_single_signer() {
 /// a, c are AA; b, d are normal ed25519 accounts.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_account_abstraction_multi_agent_with_abstracted_sender() {
+    if !Features::default().is_account_abstraction_enabled() {
+        eprintln!("Skipping account abstraction: disabled in the default feature configuration");
+        return;
+    }
     let key_pair = Arc::new(KeyPair::<PrivateKey, PublicKey>::generate(&mut OsRng));
     let mut context = new_test_context(current_function_name!());
     let mut a = context.create_account().await;

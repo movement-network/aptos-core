@@ -307,12 +307,15 @@ fn test_db_indexer_data() {
         ident_str!("randomness_config"),
         ident_str!("table_with_length"),
         ident_str!("aggregator_factory"),
+        ident_str!("confidential_asset"),
+        ident_str!("confidential_proof"),
         ident_str!("account_abstraction"),
         ident_str!("atomic_bridge_store"),
         ident_str!("governance_proposal"),
         ident_str!("optional_aggregator"),
         ident_str!("permissioned_signer"),
         ident_str!("transaction_context"),
+        ident_str!("confidential_balance"),
         ident_str!("jwk_consensus_config"),
         ident_str!("ristretto255_elgamal"),
         ident_str!("reconfiguration_state"),
@@ -334,6 +337,7 @@ fn test_db_indexer_data() {
         ident_str!("script_execution_allowlist"),
         ident_str!("atomic_bridge_configuration"),
         ident_str!("dispatchable_fungible_asset"),
+        ident_str!("ristretto255_twisted_elgamal"),
         ident_str!("common_account_abstractions_utils"),
     ]
     .into_iter()

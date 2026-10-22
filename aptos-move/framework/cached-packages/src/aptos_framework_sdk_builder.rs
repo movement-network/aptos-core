@@ -446,11 +446,25 @@ pub enum EntryFunctionCall {
         _bridge_transfer_id: Vec<u8>,
     },
 
+    CodeAddPublishAllowlistSender {
+        sender: AccountAddress,
+    },
+
+    CodeDisablePublishAllowlist {},
+
+    CodeEnablePublishAllowlist {},
+
+    CodeInitializePublishAllowlist {},
+
     /// Same as `publish_package` but as an entry function which can be called as a transaction. Because
     /// of current restrictions for txn parameters, the metadata needs to be passed in serialized form.
     CodePublishPackageTxn {
         metadata_serialized: Vec<u8>,
         code: Vec<Vec<u8>>,
+    },
+
+    CodeRemovePublishAllowlistSender {
+        sender: AccountAddress,
     },
 
     CoinCreateCoinConversionMap {},
@@ -1629,10 +1643,17 @@ impl EntryFunctionCall {
             AtomicBridgeInitiatorRefundBridgeTransfer {
                 _bridge_transfer_id,
             } => atomic_bridge_initiator_refund_bridge_transfer(_bridge_transfer_id),
+            CodeAddPublishAllowlistSender { sender } => code_add_publish_allowlist_sender(sender),
+            CodeDisablePublishAllowlist {} => code_disable_publish_allowlist(),
+            CodeEnablePublishAllowlist {} => code_enable_publish_allowlist(),
+            CodeInitializePublishAllowlist {} => code_initialize_publish_allowlist(),
             CodePublishPackageTxn {
                 metadata_serialized,
                 code,
             } => code_publish_package_txn(metadata_serialized, code),
+            CodeRemovePublishAllowlistSender { sender } => {
+                code_remove_publish_allowlist_sender(sender)
+            },
             CoinCreateCoinConversionMap {} => coin_create_coin_conversion_map(),
             CoinCreatePairing { coin_type } => coin_create_pairing(coin_type),
             CoinMigrateCoinStoreToFungibleStore {
@@ -3265,6 +3286,66 @@ pub fn atomic_bridge_initiator_refund_bridge_transfer(
     ))
 }
 
+pub fn code_add_publish_allowlist_sender(sender: AccountAddress) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("code").to_owned(),
+        ),
+        ident_str!("add_publish_allowlist_sender").to_owned(),
+        vec![],
+        vec![bcs::to_bytes(&sender).unwrap()],
+    ))
+}
+
+pub fn code_disable_publish_allowlist() -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("code").to_owned(),
+        ),
+        ident_str!("disable_publish_allowlist").to_owned(),
+        vec![],
+        vec![],
+    ))
+}
+
+pub fn code_enable_publish_allowlist() -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("code").to_owned(),
+        ),
+        ident_str!("enable_publish_allowlist").to_owned(),
+        vec![],
+        vec![],
+    ))
+}
+
+pub fn code_initialize_publish_allowlist() -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("code").to_owned(),
+        ),
+        ident_str!("initialize_publish_allowlist").to_owned(),
+        vec![],
+        vec![],
+    ))
+}
+
 /// Same as `publish_package` but as an entry function which can be called as a transaction. Because
 /// of current restrictions for txn parameters, the metadata needs to be passed in serialized form.
 pub fn code_publish_package_txn(
@@ -3285,6 +3366,21 @@ pub fn code_publish_package_txn(
             bcs::to_bytes(&metadata_serialized).unwrap(),
             bcs::to_bytes(&code).unwrap(),
         ],
+    ))
+}
+
+pub fn code_remove_publish_allowlist_sender(sender: AccountAddress) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("code").to_owned(),
+        ),
+        ident_str!("remove_publish_allowlist_sender").to_owned(),
+        vec![],
+        vec![bcs::to_bytes(&sender).unwrap()],
     ))
 }
 
@@ -6684,11 +6780,65 @@ mod decoder {
         }
     }
 
+    pub fn code_add_publish_allowlist_sender(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::CodeAddPublishAllowlistSender {
+                sender: bcs::from_bytes(script.args().get(0)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn code_disable_publish_allowlist(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(_script) = payload {
+            Some(EntryFunctionCall::CodeDisablePublishAllowlist {})
+        } else {
+            None
+        }
+    }
+
+    pub fn code_enable_publish_allowlist(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(_script) = payload {
+            Some(EntryFunctionCall::CodeEnablePublishAllowlist {})
+        } else {
+            None
+        }
+    }
+
+    pub fn code_initialize_publish_allowlist(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(_script) = payload {
+            Some(EntryFunctionCall::CodeInitializePublishAllowlist {})
+        } else {
+            None
+        }
+    }
+
     pub fn code_publish_package_txn(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
         if let TransactionPayload::EntryFunction(script) = payload {
             Some(EntryFunctionCall::CodePublishPackageTxn {
                 metadata_serialized: bcs::from_bytes(script.args().get(0)?).ok()?,
                 code: bcs::from_bytes(script.args().get(1)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn code_remove_publish_allowlist_sender(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::CodeRemovePublishAllowlistSender {
+                sender: bcs::from_bytes(script.args().get(0)?).ok()?,
             })
         } else {
             None
@@ -8529,8 +8679,28 @@ static SCRIPT_FUNCTION_DECODER_MAP: once_cell::sync::Lazy<EntryFunctionDecoderMa
             Box::new(decoder::atomic_bridge_initiator_refund_bridge_transfer),
         );
         map.insert(
+            "code_add_publish_allowlist_sender".to_string(),
+            Box::new(decoder::code_add_publish_allowlist_sender),
+        );
+        map.insert(
+            "code_disable_publish_allowlist".to_string(),
+            Box::new(decoder::code_disable_publish_allowlist),
+        );
+        map.insert(
+            "code_enable_publish_allowlist".to_string(),
+            Box::new(decoder::code_enable_publish_allowlist),
+        );
+        map.insert(
+            "code_initialize_publish_allowlist".to_string(),
+            Box::new(decoder::code_initialize_publish_allowlist),
+        );
+        map.insert(
             "code_publish_package_txn".to_string(),
             Box::new(decoder::code_publish_package_txn),
+        );
+        map.insert(
+            "code_remove_publish_allowlist_sender".to_string(),
+            Box::new(decoder::code_remove_publish_allowlist_sender),
         );
         map.insert(
             "coin_create_coin_conversion_map".to_string(),

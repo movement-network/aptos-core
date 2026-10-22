@@ -6,8 +6,8 @@ transaction sender. Entry-function calls are unchanged. Fee payers, secondary
 signers, special addresses, and governance-approved script hashes do not confer
 membership. Before initialization, enforcement is disabled. An enabled empty list
 denies scripts. The resource at `0x1::script_execution_allowlist::AllowedSenders`
-contains the reusable `allowlist::Allowlist` value. The shared module operates on
-supplied values; this module owns the resource and controls access to it.
+contains the shared `allowlist::Allowlist` value. Its state is independent of
+`0x1::code::PublishAllowlist`.
 
 ## Rollout
 
@@ -64,9 +64,14 @@ governance proposal. Its only argument is `u64:<PROPOSAL_ID>`; the transaction
 sender must be allowlisted while script enforcement is enabled. This does not
 require a designated recovery sender or provide an admission exemption.
 
-Local script checks cover admission, administration, all primary/secondary/fee-payer
-membership combinations, and migration helper compilation:
+The combined local rehearsal exercises independent policy state, immediate activation,
+a governance-approved upgrade at `0x1` after revoking the normal operator, and disabling
+publishing and script restrictions through a separately controlled recovery sender:
 
 ```bash
-cargo test -p e2e-move-tests --lib script_ -- --test-threads=1
+cargo test -p e2e-move-tests --lib allowlist_recovery -- --test-threads=1
 ```
+
+Publishing activation does not require script-list setup. When script enforcement is enabled,
+the transaction sender submitting a publishing helper needs script admission like any other
+script sender. Configure each policy independently for the operations its members will perform.

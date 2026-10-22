@@ -419,9 +419,10 @@ This function aborts if called outside of the transaction prologue, execution, o
 
 ## Function `sender_internal`
 
+Framework publishing checks need the primary sender independently of the public context feature.
 
 
-<pre><code><b>fun</b> <a href="transaction_context.md#0x1_transaction_context_sender_internal">sender_internal</a>(): <b>address</b>
+<pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="transaction_context.md#0x1_transaction_context_sender_internal">sender_internal</a>(): <b>address</b>
 </code></pre>
 
 
@@ -430,7 +431,7 @@ This function aborts if called outside of the transaction prologue, execution, o
 <summary>Implementation</summary>
 
 
-<pre><code><b>native</b> <b>fun</b> <a href="transaction_context.md#0x1_transaction_context_sender_internal">sender_internal</a>(): <b>address</b>;
+<pre><code><b>public</b>(<b>friend</b>) <b>native</b> <b>fun</b> <a href="transaction_context.md#0x1_transaction_context_sender_internal">sender_internal</a>(): <b>address</b>;
 </code></pre>
 
 
@@ -1165,7 +1166,7 @@ Returns the inner entry function payload of the multisig payload.
 ### Function `sender_internal`
 
 
-<pre><code><b>fun</b> <a href="transaction_context.md#0x1_transaction_context_sender_internal">sender_internal</a>(): <b>address</b>
+<pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="transaction_context.md#0x1_transaction_context_sender_internal">sender_internal</a>(): <b>address</b>
 </code></pre>
 
 

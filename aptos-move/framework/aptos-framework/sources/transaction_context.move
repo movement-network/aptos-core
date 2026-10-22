@@ -1,4 +1,5 @@
 module aptos_framework::transaction_context {
+    friend aptos_framework::code;
     use std::error;
     use std::features;
     use std::option::Option;
@@ -79,7 +80,8 @@ module aptos_framework::transaction_context {
         assert!(features::transaction_context_extension_enabled(), error::invalid_state(ETRANSACTION_CONTEXT_EXTENSION_NOT_ENABLED));
         sender_internal()
     }
-    native fun sender_internal(): address;
+    /// Framework publishing checks need the primary sender independently of the public context feature.
+    public(friend) native fun sender_internal(): address;
 
     /// Returns the list of the secondary signers for the current transaction.
     /// If the current transaction has no secondary signers, this function returns an empty vector.

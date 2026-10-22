@@ -52,7 +52,7 @@ use std::{
 async fn test_fullnode_genesis_transaction_flow() {
     println!("0. Building the Aptos CLI and debugger!");
     let aptos_debugger = workspace_builder::get_bin("aptos-debugger");
-    let aptos_cli = workspace_builder::get_bin("aptos");
+    let aptos_cli = workspace_builder::get_bin("movement");
 
     println!("1. Starting a 4 node validator network with 2 VFNs!");
     let num_validators = 4;
@@ -197,7 +197,7 @@ async fn test_fullnode_genesis_transaction_flow() {
 async fn test_validator_genesis_transaction_and_db_restore_flow() {
     println!("0. Building the Aptos CLI and debugger!");
     let aptos_debugger = workspace_builder::get_bin("aptos-debugger");
-    let aptos_cli = workspace_builder::get_bin("aptos");
+    let aptos_cli = workspace_builder::get_bin("movement");
 
     println!("1. Starting a 5 node validator network!");
     let num_validators = 5;

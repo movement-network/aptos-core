@@ -235,9 +235,9 @@ impl FeatureFlag {
             FeatureFlag::COLLECTION_OWNER,
             FeatureFlag::PERMISSIONED_SIGNER,
             FeatureFlag::ENABLE_CALL_TREE_AND_INSTRUCTION_VM_CACHE,
-            FeatureFlag::ACCOUNT_ABSTRACTION,
+            // Account abstraction requires explicit activation and registry initialization.
+            // ACCOUNT_ABSTRACTION and DERIVABLE_ACCOUNT_ABSTRACTION remain opt-in.
             FeatureFlag::BULLETPROOFS_BATCH_NATIVES,
-            FeatureFlag::DERIVABLE_ACCOUNT_ABSTRACTION,
             FeatureFlag::VM_BINARY_FORMAT_V8,
             FeatureFlag::ENABLE_FUNCTION_VALUES,
             FeatureFlag::NEW_ACCOUNTS_DEFAULT_TO_FA_STORE,

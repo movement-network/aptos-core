@@ -70,10 +70,12 @@ fn set_enabled(h: &mut MoveHarness, enabled: bool) {
     ));
 }
 
+// Existing nodes map the policy-specific Move abort to this generic error.
+// It must still discard the transaction without executing the payload.
 fn assert_denied(status: TransactionStatus) {
     assert_eq!(
         status,
-        TransactionStatus::Discard(StatusCode::SCRIPT_EXECUTION_NOT_ALLOWED)
+        TransactionStatus::Discard(StatusCode::UNEXPECTED_ERROR_FROM_KNOWN_MOVE_FUNCTION)
     );
 }
 
@@ -201,20 +203,22 @@ fn approved_script_hash_and_privileged_senders_do_not_bypass_membership() {
 
 #[test]
 fn validation_and_simulation_reject_unlisted_script_sender() {
-    assert_eq!(StatusCode::SCRIPT_EXECUTION_NOT_ALLOWED as u64, 923);
     let mut h = MoveHarness::new();
     let alice = h.new_account_at(AccountAddress::from_hex_literal("0xa11ce").unwrap());
     let code = script("script { fun main() {} }");
     initialize(&mut h);
     set_enabled(&mut h, true);
     let sequence_before = h.sequence_number(alice.address());
+    let tx = transaction(&h, &alice, code.clone()).sign();
+    assert_denied(h.run(tx));
+    assert_eq!(h.sequence_number(alice.address()), sequence_before);
     // A future sequence number must not turn a denial into mempool admission.
     let tx = transaction(&h, &alice, code.clone())
         .sequence_number(100)
         .sign();
     assert_eq!(
         h.executor.validate_transaction(tx).status(),
-        Some(StatusCode::SCRIPT_EXECUTION_NOT_ALLOWED)
+        Some(StatusCode::UNEXPECTED_ERROR_FROM_KNOWN_MOVE_FUNCTION)
     );
     let raw = transaction(&h, &alice, code).raw();
     let simulation = SignedTransaction::new(
@@ -228,7 +232,9 @@ fn validation_and_simulation_reject_unlisted_script_sender() {
     );
     assert_eq!(
         output.status(),
-        &TransactionStatus::Discard(StatusCode::SCRIPT_EXECUTION_NOT_ALLOWED)
+        &TransactionStatus::Discard(StatusCode::UNEXPECTED_ERROR_FROM_KNOWN_MOVE_FUNCTION)
     );
+    assert_eq!(output.gas_used(), 0);
+    assert!(output.write_set().is_empty());
     assert_eq!(h.sequence_number(alice.address()), sequence_before);
 }

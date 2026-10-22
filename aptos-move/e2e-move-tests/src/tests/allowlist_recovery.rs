@@ -112,7 +112,7 @@ fn preflight_denied(status: TransactionStatus, expected: u64) {
 fn script_denied(status: TransactionStatus) {
     assert_eq!(
         status,
-        TransactionStatus::Discard(StatusCode::SCRIPT_EXECUTION_NOT_ALLOWED)
+        TransactionStatus::Discard(StatusCode::UNEXPECTED_ERROR_FROM_KNOWN_MOVE_FUNCTION)
     );
 }
 

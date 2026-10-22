@@ -11,17 +11,16 @@ contains the shared `allowlist::Allowlist` value. Its state is independent of
 
 ## Rollout
 
-1. Deploy node binaries containing the new prologue error mapping to all validators
-   and serving nodes.
-2. Upgrade the framework with the new module and prologue while the module remains disabled.
-3. Run `scripts/initialize.move` once (idempotent).
-4. Run `scripts/add.move` for each approved primary sender, including the
+1. Upgrade the framework with the new module and prologue while the module remains disabled.
+   This policy uses existing node functionality; no node binary update is required.
+2. Run `scripts/initialize.move` once (idempotent).
+3. Run `scripts/add.move` for each approved primary sender, including the
    core-resources account used to submit these administration scripts. Its argument
    is `address:<sender>`; use `scripts/remove.move` to revoke membership.
-5. Inspect `0x1::script_execution_allowlist::get_allowed_senders` through the view API.
-6. Run `scripts/enable.move` without arguments. It verifies that the actual
+4. Inspect `0x1::script_execution_allowlist::get_allowed_senders` through the view API.
+5. Run `scripts/enable.move` without arguments. It verifies that the actual
    core-resources transaction sender is listed and enables enforcement immediately.
-7. Verify `0x1::script_execution_allowlist::is_enabled` and test listed/unlisted senders.
+6. Verify `0x1::script_execution_allowlist::is_enabled` and test listed/unlisted senders.
 
 From the repository root, a core-resources initialization command is:
 
@@ -38,6 +37,16 @@ Use the same options with the other script paths. Add
 automatically added or exempted. The framework signer obtained inside a script
 authorizes management; it is not the transaction sender and does not need membership
 when core resources submits the transaction.
+
+## Rejection status
+
+The policy-specific Move prologue abort is handled by the existing node fallback,
+`UNEXPECTED_ERROR_FROM_KNOWN_MOVE_FUNCTION`. Unauthorized scripts are discarded
+without consuming gas or a sequence number. Mempool validation and simulation
+also reject them. The fallback classifies the rejection as an invariant error
+and produces generic VM error logs; it does not expose a dedicated script-policy
+status. This is the compatibility tradeoff for enabling the policy through a
+framework-only upgrade.
 
 ## Administration
 

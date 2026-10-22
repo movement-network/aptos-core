@@ -32,7 +32,7 @@ use std::{fs, path::PathBuf, process::Command, sync::Arc};
 /// i.e: The network will be alive after applying the new aptos framework release.
 async fn test_upgrade_flow() {
     // prebuild tools.
-    let aptos_cli = workspace_builder::get_bin("aptos");
+    let aptos_cli = workspace_builder::get_bin("movement");
 
     let num_nodes = 5;
     let (mut env, _cli, _) = SwarmBuilder::new_local(num_nodes)

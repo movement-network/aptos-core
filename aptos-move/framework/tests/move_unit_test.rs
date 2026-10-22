@@ -5,7 +5,7 @@
 use aptos_framework::{extended_checks, path_in_crate, BuildOptions};
 use aptos_gas_schedule::{MiscGasParameters, NativeGasParameters, LATEST_GAS_FEATURE_VERSION};
 use aptos_types::on_chain_config::{
-    aptos_test_feature_flags_genesis, Features, TimedFeaturesBuilder,
+    aptos_test_feature_flags_genesis_with, FeatureFlag, Features, TimedFeaturesBuilder,
 };
 use aptos_vm::natives;
 use move_cli::base::test::{run_move_unit_tests, UnitTestResult};
@@ -44,7 +44,7 @@ fn run_tests_for_pkg(path_to_pkg: impl Into<String>, use_latest_language: bool) 
         // TODO(Gas): double check if this is correct
         utc,
         aptos_test_natives(),
-        aptos_test_feature_flags_genesis(),
+        aptos_test_feature_flags_genesis_with(&unit_test_features()),
         /* gas limit */ Some(100_000),
         /* cost_table */ None,
         /* compute_coverage */ false,
@@ -71,8 +71,18 @@ pub fn aptos_test_natives() -> NativeFunctionTable {
         NativeGasParameters::zeros(),
         MiscGasParameters::zeros(),
         TimedFeaturesBuilder::enable_all().build(),
-        Features::default(),
+        unit_test_features(),
     )
+}
+
+/// Account abstraction is opt-in in the default feature set, but the framework unit tests
+/// exercise it. Natives read their flags from this set, not from the `Features` resource,
+/// so both must be initialized from it.
+fn unit_test_features() -> Features {
+    let mut features = Features::default();
+    features.enable(FeatureFlag::ACCOUNT_ABSTRACTION);
+    features.enable(FeatureFlag::DERIVABLE_ACCOUNT_ABSTRACTION);
+    features
 }
 
 #[test]

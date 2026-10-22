@@ -455,7 +455,12 @@ impl Features {
 }
 
 pub fn aptos_test_feature_flags_genesis() -> ChangeSet {
-    let features_value = bcs::to_bytes(&Features::default()).unwrap();
+    aptos_test_feature_flags_genesis_with(&Features::default())
+}
+
+/// Same as `aptos_test_feature_flags_genesis`, but initializes the given feature set.
+pub fn aptos_test_feature_flags_genesis_with(features: &Features) -> ChangeSet {
+    let features_value = bcs::to_bytes(features).unwrap();
 
     let mut change_set = ChangeSet::new();
     // we need to initialize features to their defaults.

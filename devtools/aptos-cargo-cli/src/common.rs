@@ -133,8 +133,7 @@ impl SelectedPackageArgs {
             "Attempting to recompute metadata locally for merge-base commit: {:?}",
             merge_base
         );
-        if let Some(metadata) =
-            recompute_merge_base_metadata(merge_base, &dir_path, &local_metadata_file_path)
+        if let Some(metadata) = recompute_merge_base_metadata(merge_base, &local_metadata_file_path)
         {
             return Ok(metadata);
         }
@@ -171,11 +170,13 @@ impl SelectedPackageArgs {
         Ok((base_package_graph, head_package_graph, changed_files))
     }
 
-    /// Identifies the merge base to compare against. This is done by identifying
-    /// the commit at which the current branch forked off the GitHub base ref.
-    ///
-    /// Note: if the merge-base is too old, an error will be returned.
+    /// Identifies the revision to compare against. Push and manually dispatched
+    /// workflows provide an explicit baseline; pull requests use their base ref.
     fn identify_merge_base(&self) -> anyhow::Result<String> {
+        if let Ok(base_sha) = env::var("APTOS_CARGO_CHANGED_FILES_BASE") {
+            return resolve_explicit_baseline(&base_sha);
+        }
+
         let base_ref = env::var("GITHUB_BASE_REF").unwrap_or_else(|_| "main".to_string());
         let origin_base_ref = format!("origin/{base_ref}");
 
@@ -185,8 +186,18 @@ impl SelectedPackageArgs {
             .arg("HEAD")
             .arg(&origin_base_ref)
             .output()
-            .expect("failed to execute git merge-base");
+            .map_err(|err| anyhow!("failed to execute git merge-base: {err}"))?;
+        if !merge_base_output.status.success() {
+            return Err(anyhow!(
+                "failed to find a merge base between HEAD and {origin_base_ref}"
+            ));
+        }
         let merge_base = parse_string_from_output(merge_base_output);
+        if merge_base.is_empty() {
+            return Err(anyhow!(
+                "git merge-base returned no revision for HEAD and {origin_base_ref}"
+            ));
+        }
 
         // Log and return the merge base
         info!("Identified the merge base: {:?}", merge_base);
@@ -252,6 +263,27 @@ impl SelectedPackageArgs {
 
         Ok(package_set)
     }
+}
+
+fn resolve_explicit_baseline(base_sha: &str) -> anyhow::Result<String> {
+    let commit = format!("{}^{{commit}}", base_sha);
+    let output = Command::new("git")
+        .args(["rev-parse", "--verify", &commit])
+        .output()
+        .map_err(|err| anyhow!("failed to resolve push baseline {base_sha}: {err}"))?;
+    if !output.status.success() {
+        return Err(anyhow!("push baseline is not a local commit: {base_sha}"));
+    }
+
+    let merge_base = parse_string_from_output(output);
+    if merge_base.is_empty() {
+        return Err(anyhow!("push baseline resolved to no revision: {base_sha}"));
+    }
+    info!(
+        "Using the explicit changed-files baseline: {:?}",
+        merge_base
+    );
+    Ok(merge_base)
 }
 
 /// Parses the cargo metadata from the given contents
@@ -362,64 +394,78 @@ fn read_metadata_from_gcs(
 /// Recomputes and returns the metadata for the merge base commit locally
 fn recompute_merge_base_metadata(
     merge_base: &str,
-    local_dir_path: &String,
     local_metadata_file_path: &String,
 ) -> Option<CargoMetadata> {
-    // Clone the aptos-core repository to the local directory
+    let workspace_directory = workspace_dir();
+    let (cargo_metadata, output) =
+        recompute_metadata_at_revision(&workspace_directory, merge_base)?;
+    write_metadata_locally(local_metadata_file_path, output);
+    Some(cargo_metadata)
+}
+
+fn recompute_metadata_at_revision(
+    workspace_directory: &str,
+    revision: &str,
+) -> Option<(CargoMetadata, String)> {
+    // Materialize the verified revision from the current checkout. This avoids
+    // remote credentials, shallow-history assumptions, and checkout filters.
+    let temporary_directory = tempfile::Builder::new()
+        .prefix("aptos-x-metadata-")
+        .tempdir()
+        .ok()?;
+    let archive_path = temporary_directory.path().join("workspace.tar");
     debug!(
-        "Cloning aptos-core repository to local directory: {:?}",
-        local_dir_path
+        "Materializing metadata baseline in temporary directory: {:?}",
+        temporary_directory.path()
     );
-    let clone_directory = format!("{}/aptos-core", local_dir_path);
-    Command::new("git")
-        .arg("clone")
-        .arg("--depth")
-        .arg("500") // Clone the last 500 commits to ensure the merge base is included
-        .arg("https://github.com/movement-network/aptos-core.git")
-        .arg(clone_directory.clone())
+
+    let archive_output = Command::new("git")
+        .current_dir(workspace_directory)
+        .args(["archive", "--format=tar", "--output"])
+        .arg(&archive_path)
+        .arg(revision)
         .output()
-        .expect("failed to execute git clone");
-
-    // Check out the merge base commit for the aptos-core clone
-    debug!(
-        "Checking out merge base commit for aptos-core clone: {:?}",
-        merge_base
-    );
-    Command::new("git")
-        .current_dir(clone_directory.clone())
-        .arg("checkout")
-        .arg(merge_base)
-        .output()
-        .expect("failed to execute git checkout");
-
-    // Recompute the metadata for the merge base commit
-    let output = Command::new("cargo")
-        .current_dir(clone_directory.clone())
-        .arg("metadata")
-        .arg("--all-features")
-        .output()
-        .expect("failed to execute cargo metadata");
-    let output = parse_string_from_output(output);
-
-    // Parse the metadata from the output
-    let cargo_metadata = parse_cargo_metadata(&output);
-
-    // If the metadata was successfully parsed, write it to the local directory
-    if cargo_metadata.is_some() {
-        write_metadata_locally(local_metadata_file_path, output);
-    }
-
-    // Delete the aptos-core clone
-    debug!("Deleting aptos-core clone directory: {:?}", clone_directory);
-    if let Err(error) = fs::remove_dir_all(clone_directory.clone()) {
+        .ok()?;
+    if !archive_output.status.success() {
         warn!(
-            "Error deleting aptos-core clone directory: {:?}. Error: {:?}",
-            clone_directory, error
+            "Unable to archive metadata baseline {:?}: exit status {:?}",
+            revision,
+            archive_output.status.code()
         );
+        return None;
     }
 
-    // Return the metadata
-    cargo_metadata
+    let unpack_output = Command::new("tar")
+        .args(["-xf"])
+        .arg(&archive_path)
+        .args(["-C"])
+        .arg(temporary_directory.path())
+        .output()
+        .ok()?;
+    if !unpack_output.status.success() {
+        warn!(
+            "Unable to unpack metadata baseline {:?}: exit status {:?}",
+            revision,
+            unpack_output.status.code()
+        );
+        return None;
+    }
+
+    let metadata_output = Command::new("cargo")
+        .current_dir(temporary_directory.path())
+        .args(["metadata", "--all-features"])
+        .output()
+        .ok()?;
+    if !metadata_output.status.success() {
+        warn!(
+            "Unable to recompute cargo metadata for baseline commit: {:?}",
+            revision
+        );
+        return None;
+    }
+
+    let output = parse_string_from_output(metadata_output);
+    parse_cargo_metadata(&output).map(|cargo_metadata| (cargo_metadata, output))
 }
 
 /// Writes the metadata to the local filesystem (at the specified path)
@@ -440,5 +486,91 @@ fn write_metadata_locally(local_file_path: &String, metadata: String) {
             "Error writing file: {:?}. Error: {:?}",
             local_file_path, error
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn git(directory: &std::path::Path, args: &[&str]) -> String {
+        let output = Command::new("git")
+            .current_dir(directory)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "git command failed: {args:?}");
+        parse_string_from_output(output)
+    }
+
+    fn write_package(workspace: &std::path::Path, name: &str) {
+        let package_directory = workspace.join(name);
+        fs::create_dir_all(package_directory.join("src")).unwrap();
+        fs::write(
+            package_directory.join("Cargo.toml"),
+            format!("[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nedition = \"2021\"\n"),
+        )
+        .unwrap();
+        fs::write(package_directory.join("src/lib.rs"), "pub fn value() {}\n").unwrap();
+    }
+
+    #[test]
+    fn explicit_baseline_resolves_a_local_commit() {
+        let head = parse_string_from_output(
+            Command::new("git")
+                .args(["rev-parse", "HEAD"])
+                .output()
+                .unwrap(),
+        );
+
+        assert_eq!(resolve_explicit_baseline(&head).unwrap(), head);
+    }
+
+    #[test]
+    fn explicit_baseline_requires_a_local_commit() {
+        assert!(resolve_explicit_baseline("not-a-commit").is_err());
+    }
+
+    #[test]
+    fn local_metadata_fallback_reads_the_requested_baseline_graph() {
+        let workspace = tempfile::tempdir().unwrap();
+        fs::write(
+            workspace.path().join("Cargo.toml"),
+            "[workspace]\nresolver = \"2\"\nmembers = [\"base\"]\n",
+        )
+        .unwrap();
+        write_package(workspace.path(), "base");
+        git(workspace.path(), &["init"]);
+        git(
+            workspace.path(),
+            &["config", "user.email", "test@example.com"],
+        );
+        git(workspace.path(), &["config", "user.name", "Test User"]);
+        git(workspace.path(), &["add", "."]);
+        git(workspace.path(), &["commit", "-m", "baseline"]);
+        let baseline = git(workspace.path(), &["rev-parse", "HEAD"]);
+
+        fs::write(
+            workspace.path().join("Cargo.toml"),
+            "[workspace]\nresolver = \"2\"\nmembers = [\"base\", \"head\"]\n",
+        )
+        .unwrap();
+        write_package(workspace.path(), "head");
+        git(workspace.path(), &["add", "."]);
+        git(workspace.path(), &["commit", "-m", "head"]);
+
+        let (baseline_metadata, _) =
+            recompute_metadata_at_revision(workspace.path().to_str().unwrap(), &baseline).unwrap();
+        let (head_metadata, _) = recompute_metadata_at_revision(
+            workspace.path().to_str().unwrap(),
+            &git(workspace.path(), &["rev-parse", "HEAD"]),
+        )
+        .unwrap();
+
+        assert_eq!(
+            baseline_metadata.build_graph().unwrap().packages().count(),
+            1
+        );
+        assert_eq!(head_metadata.build_graph().unwrap().packages().count(), 2);
     }
 }

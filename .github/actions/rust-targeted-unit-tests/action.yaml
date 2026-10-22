@@ -20,6 +20,39 @@ runs:
         docker run --detach -p 5432:5432 cimg/postgres:14.2
       shell: bash
 
+    # Pull requests compare against their base branch. A push has no base branch,
+    # so use the revision GitHub reports immediately before this push instead.
+    # A manual run compares against the current revision's first parent.
+    - name: Select the changed-files baseline
+      shell: bash
+      run: |
+        set -euo pipefail
+        case "$GITHUB_EVENT_NAME" in
+          pull_request)
+            git fetch --no-tags origin "$GITHUB_BASE_REF"
+            ;;
+          push)
+            base_sha="$(jq -r '.before // empty' "$GITHUB_EVENT_PATH")"
+            if [[ ! "$base_sha" =~ ^[0-9a-f]{40}$ ]] || [[ "$base_sha" =~ ^0{40}$ ]]; then
+              echo "GitHub did not provide a usable pre-push revision." >&2
+              exit 1
+            fi
+            git cat-file -e "${base_sha}^{commit}"
+            echo "APTOS_CARGO_CHANGED_FILES_BASE=$base_sha" >> "$GITHUB_ENV"
+            ;;
+          workflow_dispatch)
+            base_sha="$(git rev-parse --verify HEAD^ 2>/dev/null)" || {
+              echo "A manual targeted-test run requires a parent revision." >&2
+              exit 1
+            }
+            echo "APTOS_CARGO_CHANGED_FILES_BASE=$base_sha" >> "$GITHUB_ENV"
+            ;;
+          *)
+            echo "Unsupported event for targeted changed-file selection: $GITHUB_EVENT_NAME" >&2
+            exit 1
+            ;;
+        esac
+
     # Output the changed files
     - name: Output the changed files
       run: cargo x changed-files -vvv

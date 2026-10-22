@@ -110,7 +110,7 @@ impl ReleaseOptions {
             rust::output(&mut file, abis, true)
                 .with_context(|| format!("Failed to output rust bindings to {}", path.display()))?;
         }
-        std::process::Command::new("rustfmt")
+        let output = std::process::Command::new("rustfmt")
             .arg("--config")
             .arg("imports_granularity=crate")
             .arg(path)
@@ -121,6 +121,13 @@ impl ReleaseOptions {
                     path.display()
                 )
             })?;
+        anyhow::ensure!(
+            output.status.success(),
+            "rustfmt failed on {} ({}): {}",
+            path.display(),
+            output.status,
+            String::from_utf8_lossy(&output.stderr)
+        );
         Ok(())
     }
 }

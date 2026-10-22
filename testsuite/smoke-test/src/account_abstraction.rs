@@ -149,7 +149,9 @@ async fn test_solana_derivable_account() {
     info.client()
         .submit_and_wait(&create_txn)
         .await
-        .unwrap_or_else(|_| panic!("aa: {:?}", create_txn));
+        .unwrap_or_else(|err| {
+            panic!("aa transaction failed: {err:?}\ntransaction: {create_txn:?}")
+        });
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
@@ -229,5 +231,7 @@ async fn test_ethereum_derivable_account() {
     info.client()
         .submit_and_wait(&create_txn)
         .await
-        .unwrap_or_else(|_| panic!("aa: {:?}", create_txn));
+        .unwrap_or_else(|err| {
+            panic!("aa transaction failed: {err:?}\ntransaction: {create_txn:?}")
+        });
 }

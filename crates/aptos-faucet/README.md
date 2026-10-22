@@ -26,6 +26,7 @@ Noteworthy features of the faucet include:
 - Different funding backends. Examples include:
   - MintFunder: This works like the legacy faucet. By default, on startup we use the root account to delegate minting capability to a new account and use that to create and mint coins for each fund request.
   - TransferFunder: Each faucet has its own account and uses that to create accounts and transfer funds into them. No minting.
+    - By default the TransferFunder only funds accounts that do not exist yet and rejects existing accounts with `AccountAlreadyExists`. Set `allow_existing_accounts: true` in its `funder_config` to also transfer to existing accounts (still capped at `amount_to_fund`).
 - All of these features are configurable using a config file.
 
 ## Running
@@ -46,6 +47,14 @@ For running the faucet in production, you will instead want to build a configura
 ```
 cargo run -p aptos-faucet-service -- run -c <path_to_config_file>
 ```
+
+### Client IP behind a proxy
+Checkers and bypassers that use the client IP (IP blocklist / allowlist, ratelimits) and the request logs take it from the request. By default the faucet uses poem's `RealIp`, which trusts a client-supplied `X-Real-IP`, then `Forwarded`, then the leftmost `X-Forwarded-For` entry. Any client can spoof those unless a proxy in front of the faucet overwrites them. If the faucet runs behind proxies that append to `X-Forwarded-For` (for example an AWS ALB), set `trusted_proxy_hops` in `server_config` to the number of such proxies:
+```yaml
+server_config:
+  trusted_proxy_hops: 1  # one AWS ALB
+```
+The client IP is then the Nth `X-Forwarded-For` entry from the right. `X-Real-IP` and `Forwarded` are ignored. If `X-Forwarded-For` has fewer than N entries, the socket address is used.
 
 You can find many examples of different config files in [configs/](configs/).
 

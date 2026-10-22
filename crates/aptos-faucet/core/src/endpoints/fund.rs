@@ -8,6 +8,7 @@ use super::{
 use crate::{
     bypasser::{Bypasser, BypasserTrait},
     checkers::{Checker, CheckerData, CheckerTrait, CompleteData},
+    common::SourceIp,
     endpoints::AptosTapErrorCode,
     firebase_jwt::jwt_sub,
     funder::{Funder, FunderTrait},
@@ -21,7 +22,7 @@ use aptos_sdk::{
         transaction::{authenticator::AuthenticationKey, SignedTransaction},
     },
 };
-use poem::{http::HeaderMap, web::RealIp};
+use poem::http::HeaderMap;
 use poem_openapi::{
     payload::{Json, PlainText},
     ApiResponse, Object, OpenApi,
@@ -108,9 +109,9 @@ impl FundApi {
     async fn fund(
         &self,
         fund_request: Json<FundRequest>,
-        // This automagically uses FromRequest to get this data from the request.
-        // It takes into things like X-Forwarded-IP and X-Real-IP.
-        source_ip: RealIp,
+        // This uses FromRequest to determine the client IP, taking into account
+        // `server_config.trusted_proxy_hops`. See `SourceIp`.
+        source_ip: SourceIp,
         // Same thing, this uses FromRequest.
         header_map: &HeaderMap,
     ) -> poem::Result<Json<FundResponse>, AptosTapErrorResponse> {
@@ -138,9 +139,9 @@ impl FundApi {
     async fn is_eligible(
         &self,
         fund_request: Json<FundRequest>,
-        // This automagically uses FromRequest to get this data from the request.
-        // It takes into things like X-Forwarded-IP and X-Real-IP.
-        source_ip: RealIp,
+        // This uses FromRequest to determine the client IP, taking into account
+        // `server_config.trusted_proxy_hops`. See `SourceIp`.
+        source_ip: SourceIp,
         // Same thing, this uses FromRequest.
         header_map: &HeaderMap,
     ) -> poem::Result<(), AptosTapErrorResponse> {
@@ -195,7 +196,7 @@ impl FundApiComponents {
     async fn preprocess_request(
         &self,
         fund_request: &FundRequest,
-        source_ip: RealIp,
+        source_ip: SourceIp,
         header_map: &HeaderMap,
         dry_run: bool,
     ) -> poem::Result<(CheckerData, bool, Option<SemaphorePermit>), AptosTapError> {
@@ -281,9 +282,9 @@ impl FundApiComponents {
     async fn fund_inner(
         &self,
         fund_request: FundRequest,
-        // This automagically uses FromRequest to get this data from the request.
-        // It takes into things like X-Forwarded-IP and X-Real-IP.
-        source_ip: RealIp,
+        // This uses FromRequest to determine the client IP, taking into account
+        // `server_config.trusted_proxy_hops`. See `SourceIp`.
+        source_ip: SourceIp,
         // Same thing, this uses FromRequest.
         header_map: &HeaderMap,
         dry_run: bool,
@@ -375,9 +376,9 @@ pub async fn mint(
         pub_key,
         return_txns,
     }): poem::web::Query<MintRequest>,
-    // This automagically uses FromRequest to get this data from the request.
-    // It takes into things like X-Forwarded-IP and X-Real-IP.
-    source_ip: RealIp,
+    // This uses FromRequest to determine the client IP, taking into account
+    // `server_config.trusted_proxy_hops`. See `SourceIp`.
+    source_ip: SourceIp,
     // Same thing, this uses FromRequest.
     header_map: &HeaderMap,
 ) -> poem::Result<MintResponse> {

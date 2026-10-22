@@ -5,6 +5,7 @@ use super::server_args::ServerConfig;
 use crate::{
     bypasser::{Bypasser, BypasserConfig},
     checkers::{CaptchaManager, Checker, CheckerConfig, CheckerTrait},
+    common::TrustedProxyHops,
     endpoints::{
         build_openapi_service, convert_error, mint, BasicApi, CaptchaApi, FundApi,
         FundApiComponents,
@@ -209,7 +210,10 @@ impl RunConfig {
                 .at("/spec.yaml", spec_yaml)
                 .at("/mint", poem::post(mint.data(fund_api_components)))
                 .with(cors)
-                .around(middleware_log),
+                .around(middleware_log)
+                // Outermost so that both the endpoints and the log middleware
+                // resolve the source IP the same way.
+                .data(TrustedProxyHops(self.server_config.trusted_proxy_hops)),
         );
 
         main_futures.push(Box::pin(async move {
@@ -260,6 +264,7 @@ impl RunConfig {
                 listen_address,
                 listen_port,
                 api_path_base: "".to_string(),
+                trusted_proxy_hops: None,
             },
             metrics_server_config: MetricsServerConfig {
                 disable: true,

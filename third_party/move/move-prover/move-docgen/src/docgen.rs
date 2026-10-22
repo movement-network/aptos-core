@@ -2095,7 +2095,7 @@ impl<'env> Docgen<'env> {
             (None, 0) => None,
             (None, 1) => {
                 // A simple name. Resolve either to module or to item in current module.
-                if let Some(module) = self.env.find_module_by_name(parts_sym[0]) {
+                if let Some(module) = self.find_module_for_reference(parts_sym[0]) {
                     Some(self.ref_for_module(&module))
                 } else if let Some(module) = &self.current_module {
                     try_func_struct_or_const(module, parts_sym[0], false)
@@ -2109,7 +2109,7 @@ impl<'env> Docgen<'env> {
                 let module_opt = if parts[0] == "Self" {
                     self.current_module.as_ref().cloned()
                 } else {
-                    self.env.find_module_by_name(parts_sym[0])
+                    self.find_module_for_reference(parts_sym[0])
                 };
                 if let Some(module) = module_opt {
                     try_func_struct_or_const(&module, parts_sym[1], true)
@@ -2119,6 +2119,28 @@ impl<'env> Docgen<'env> {
             },
             (_, _) => None,
         }
+    }
+
+    /// Finds a module referenced from generated documentation. Prefer a uniquely named module
+    /// used by the module currently being documented, since simple module names are not globally
+    /// unique across addresses.
+    fn find_module_for_reference(&self, name: Symbol) -> Option<ModuleEnv<'_>> {
+        if let Some(current_module) = &self.current_module {
+            let mut used_modules = current_module
+                .get_used_modules(true)
+                .into_iter()
+                .map(|id| self.env.get_module(id))
+                .filter(|module| module.get_name().name() == name);
+            if let Some(module) = used_modules.next() {
+                return used_modules.next().is_none().then_some(module);
+            }
+        }
+
+        let mut modules = self
+            .env
+            .get_modules()
+            .filter(|module| module.get_name().name() == name);
+        modules.next().filter(|_| modules.next().is_none())
     }
 
     /// Create label for a module.

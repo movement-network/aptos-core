@@ -1,0 +1,3 @@
+module 0x7::same {
+    public struct Type has copy, drop {}
+}

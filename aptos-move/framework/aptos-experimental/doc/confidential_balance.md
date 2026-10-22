@@ -73,7 +73,7 @@ Represents a compressed confidential balance, where each chunk is a compressed T
 
 <dl>
 <dt>
-<code>chunks: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="../../aptos-framework/doc/ristretto255_twisted_elgamal.md#0x1_ristretto255_twisted_elgamal_CompressedCiphertext">ristretto255_twisted_elgamal::CompressedCiphertext</a>&gt;</code>
+<code>chunks: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_CompressedCiphertext">ristretto255_twisted_elgamal::CompressedCiphertext</a>&gt;</code>
 </dt>
 <dd>
 
@@ -101,7 +101,7 @@ Represents a confidential balance, where each chunk is a Twisted ElGamal ciphert
 
 <dl>
 <dt>
-<code>chunks: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="../../aptos-framework/doc/ristretto255_twisted_elgamal.md#0x1_ristretto255_twisted_elgamal_Ciphertext">ristretto255_twisted_elgamal::Ciphertext</a>&gt;</code>
+<code>chunks: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="ristretto255_twisted_elgamal.md#0x7_ristretto255_twisted_elgamal_Ciphertext">ristretto255_twisted_elgamal::Ciphertext</a>&gt;</code>
 </dt>
 <dd>
 
@@ -163,7 +163,7 @@ The number of chunks in a pending balance.
 Creates a new zero pending balance, where each chunk is set to zero Twisted ElGamal ciphertext.
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_new_pending_balance_no_randomness">new_pending_balance_no_randomness</a>(): <a href="../../aptos-framework/doc/confidential_balance.md#0x1_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_new_pending_balance_no_randomness">new_pending_balance_no_randomness</a>(): confidential_balance::ConfidentialBalance
 </code></pre>
 
 
@@ -192,7 +192,7 @@ Creates a new zero pending balance, where each chunk is set to zero Twisted ElGa
 Creates a new zero actual balance, where each chunk is set to zero Twisted ElGamal ciphertext.
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_new_actual_balance_no_randomness">new_actual_balance_no_randomness</a>(): <a href="../../aptos-framework/doc/confidential_balance.md#0x1_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_new_actual_balance_no_randomness">new_actual_balance_no_randomness</a>(): confidential_balance::ConfidentialBalance
 </code></pre>
 
 
@@ -221,7 +221,7 @@ Creates a new zero actual balance, where each chunk is set to zero Twisted ElGam
 Creates a new compressed zero pending balance, where each chunk is set to compressed zero Twisted ElGamal ciphertext.
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_new_compressed_pending_balance_no_randomness">new_compressed_pending_balance_no_randomness</a>(): <a href="../../aptos-framework/doc/confidential_balance.md#0x1_confidential_balance_CompressedConfidentialBalance">confidential_balance::CompressedConfidentialBalance</a>
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_new_compressed_pending_balance_no_randomness">new_compressed_pending_balance_no_randomness</a>(): confidential_balance::CompressedConfidentialBalance
 </code></pre>
 
 
@@ -251,7 +251,7 @@ Creates a new compressed zero pending balance, where each chunk is set to compre
 Creates a new compressed zero actual balance, where each chunk is set to compressed zero Twisted ElGamal ciphertext.
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_new_compressed_actual_balance_no_randomness">new_compressed_actual_balance_no_randomness</a>(): <a href="../../aptos-framework/doc/confidential_balance.md#0x1_confidential_balance_CompressedConfidentialBalance">confidential_balance::CompressedConfidentialBalance</a>
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_new_compressed_actual_balance_no_randomness">new_compressed_actual_balance_no_randomness</a>(): confidential_balance::CompressedConfidentialBalance
 </code></pre>
 
 
@@ -281,7 +281,7 @@ Creates a new compressed zero actual balance, where each chunk is set to compres
 Creates a new pending balance from a 64-bit amount with no randomness, splitting the amount into four 16-bit chunks.
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_new_pending_balance_u64_no_randonmess">new_pending_balance_u64_no_randonmess</a>(amount: u64): <a href="../../aptos-framework/doc/confidential_balance.md#0x1_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_new_pending_balance_u64_no_randonmess">new_pending_balance_u64_no_randonmess</a>(amount: u64): confidential_balance::ConfidentialBalance
 </code></pre>
 
 
@@ -311,7 +311,7 @@ Creates a new pending balance from a serialized byte array representation.
 Returns <code>Some(<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">ConfidentialBalance</a>)</code> if deserialization succeeds, otherwise <code>None</code>.
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_new_pending_balance_from_bytes">new_pending_balance_from_bytes</a>(bytes: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_Option">option::Option</a>&lt;<a href="../../aptos-framework/doc/confidential_balance.md#0x1_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>&gt;
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_new_pending_balance_from_bytes">new_pending_balance_from_bytes</a>(bytes: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_Option">option::Option</a>&lt;confidential_balance::ConfidentialBalance&gt;
 </code></pre>
 
 
@@ -351,7 +351,7 @@ Creates a new actual balance from a serialized byte array representation.
 Returns <code>Some(<a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">ConfidentialBalance</a>)</code> if deserialization succeeds, otherwise <code>None</code>.
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_new_actual_balance_from_bytes">new_actual_balance_from_bytes</a>(bytes: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_Option">option::Option</a>&lt;<a href="../../aptos-framework/doc/confidential_balance.md#0x1_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>&gt;
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_new_actual_balance_from_bytes">new_actual_balance_from_bytes</a>(bytes: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_Option">option::Option</a>&lt;confidential_balance::ConfidentialBalance&gt;
 </code></pre>
 
 
@@ -390,7 +390,7 @@ Returns <code>Some(<a href="confidential_balance.md#0x7_confidential_balance_Con
 Compresses a confidential balance into its <code><a href="confidential_balance.md#0x7_confidential_balance_CompressedConfidentialBalance">CompressedConfidentialBalance</a></code> representation.
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_compress_balance">compress_balance</a>(balance: &<a href="../../aptos-framework/doc/confidential_balance.md#0x1_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>): <a href="../../aptos-framework/doc/confidential_balance.md#0x1_confidential_balance_CompressedConfidentialBalance">confidential_balance::CompressedConfidentialBalance</a>
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_compress_balance">compress_balance</a>(balance: &confidential_balance::ConfidentialBalance): confidential_balance::CompressedConfidentialBalance
 </code></pre>
 
 
@@ -417,7 +417,7 @@ Compresses a confidential balance into its <code><a href="confidential_balance.m
 Decompresses a compressed confidential balance into its <code><a href="confidential_balance.md#0x7_confidential_balance_ConfidentialBalance">ConfidentialBalance</a></code> representation.
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_decompress_balance">decompress_balance</a>(balance: &<a href="../../aptos-framework/doc/confidential_balance.md#0x1_confidential_balance_CompressedConfidentialBalance">confidential_balance::CompressedConfidentialBalance</a>): <a href="../../aptos-framework/doc/confidential_balance.md#0x1_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_decompress_balance">decompress_balance</a>(balance: &confidential_balance::CompressedConfidentialBalance): confidential_balance::ConfidentialBalance
 </code></pre>
 
 
@@ -444,7 +444,7 @@ Decompresses a compressed confidential balance into its <code><a href="confident
 Serializes a confidential balance into a byte array representation.
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_balance_to_bytes">balance_to_bytes</a>(balance: &<a href="../../aptos-framework/doc/confidential_balance.md#0x1_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_balance_to_bytes">balance_to_bytes</a>(balance: &confidential_balance::ConfidentialBalance): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
 </code></pre>
 
 
@@ -475,7 +475,7 @@ Serializes a confidential balance into a byte array representation.
 Extracts the <code>C</code> value component (<code>a * H + r * G</code>) of each chunk in a confidential balance as a vector of <code>RistrettoPoint</code>s.
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_balance_to_points_c">balance_to_points_c</a>(balance: &<a href="../../aptos-framework/doc/confidential_balance.md#0x1_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_RistrettoPoint">ristretto255::RistrettoPoint</a>&gt;
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_balance_to_points_c">balance_to_points_c</a>(balance: &confidential_balance::ConfidentialBalance): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_RistrettoPoint">ristretto255::RistrettoPoint</a>&gt;
 </code></pre>
 
 
@@ -503,7 +503,7 @@ Extracts the <code>C</code> value component (<code>a * H + r * G</code>) of each
 Extracts the <code>D</code> randomness component (<code>r * Y</code>) of each chunk in a confidential balance as a vector of <code>RistrettoPoint</code>s.
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_balance_to_points_d">balance_to_points_d</a>(balance: &<a href="../../aptos-framework/doc/confidential_balance.md#0x1_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_RistrettoPoint">ristretto255::RistrettoPoint</a>&gt;
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_balance_to_points_d">balance_to_points_d</a>(balance: &confidential_balance::ConfidentialBalance): <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="../../aptos-framework/../aptos-stdlib/doc/ristretto255.md#0x1_ristretto255_RistrettoPoint">ristretto255::RistrettoPoint</a>&gt;
 </code></pre>
 
 
@@ -532,7 +532,7 @@ Adds two confidential balances homomorphically, mutating the first balance in pl
 The second balance must have fewer or equal chunks compared to the first.
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_add_balances_mut">add_balances_mut</a>(lhs: &<b>mut</b> <a href="../../aptos-framework/doc/confidential_balance.md#0x1_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>, rhs: &<a href="../../aptos-framework/doc/confidential_balance.md#0x1_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>)
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_add_balances_mut">add_balances_mut</a>(lhs: &<b>mut</b> confidential_balance::ConfidentialBalance, rhs: &confidential_balance::ConfidentialBalance)
 </code></pre>
 
 
@@ -564,7 +564,7 @@ Subtracts one confidential balance from another homomorphically, mutating the fi
 The second balance must have fewer or equal chunks compared to the first.
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_sub_balances_mut">sub_balances_mut</a>(lhs: &<b>mut</b> <a href="../../aptos-framework/doc/confidential_balance.md#0x1_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>, rhs: &<a href="../../aptos-framework/doc/confidential_balance.md#0x1_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>)
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_sub_balances_mut">sub_balances_mut</a>(lhs: &<b>mut</b> confidential_balance::ConfidentialBalance, rhs: &confidential_balance::ConfidentialBalance)
 </code></pre>
 
 
@@ -595,7 +595,7 @@ The second balance must have fewer or equal chunks compared to the first.
 Checks if two confidential balances are equivalent, including both value and randomness components.
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_balance_equals">balance_equals</a>(lhs: &<a href="../../aptos-framework/doc/confidential_balance.md#0x1_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>, rhs: &<a href="../../aptos-framework/doc/confidential_balance.md#0x1_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>): bool
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_balance_equals">balance_equals</a>(lhs: &confidential_balance::ConfidentialBalance, rhs: &confidential_balance::ConfidentialBalance): bool
 </code></pre>
 
 
@@ -628,7 +628,7 @@ Checks if two confidential balances are equivalent, including both value and ran
 Checks if the corresponding value components (<code>C</code>) of two confidential balances are equivalent.
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_balance_c_equals">balance_c_equals</a>(lhs: &<a href="../../aptos-framework/doc/confidential_balance.md#0x1_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>, rhs: &<a href="../../aptos-framework/doc/confidential_balance.md#0x1_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>): bool
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_balance_c_equals">balance_c_equals</a>(lhs: &confidential_balance::ConfidentialBalance, rhs: &confidential_balance::ConfidentialBalance): bool
 </code></pre>
 
 
@@ -664,7 +664,7 @@ Checks if the corresponding value components (<code>C</code>) of two confidentia
 Checks if a confidential balance is equivalent to zero, where all chunks are the identity element.
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_is_zero_balance">is_zero_balance</a>(balance: &<a href="../../aptos-framework/doc/confidential_balance.md#0x1_confidential_balance_ConfidentialBalance">confidential_balance::ConfidentialBalance</a>): bool
+<pre><code><b>public</b> <b>fun</b> <a href="confidential_balance.md#0x7_confidential_balance_is_zero_balance">is_zero_balance</a>(balance: &confidential_balance::ConfidentialBalance): bool
 </code></pre>
 
 

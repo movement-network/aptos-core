@@ -1,0 +1,7 @@
+module 0x7::uses {
+    use 0x7::same;
+
+    public struct Wrapper has copy, drop {
+        value: same::Type,
+    }
+}

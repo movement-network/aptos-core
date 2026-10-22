@@ -47,6 +47,8 @@ runs:
 
         if command -v rustup >/dev/null 2>&1; then
           rustup show
+          # Framework SDK generation invokes rustfmt from the active toolchain.
+          rustup component add rustfmt
         else
           cargo --version
         fi

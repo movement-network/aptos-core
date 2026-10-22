@@ -407,44 +407,52 @@ fn recompute_metadata_at_revision(
     workspace_directory: &str,
     revision: &str,
 ) -> Option<(CargoMetadata, String)> {
-    // A shared local clone exposes exactly the commits already verified in the
-    // checkout, avoiding network credentials and shallow-history assumptions.
+    // Materialize the verified revision from the current checkout. This avoids
+    // remote credentials, shallow-history assumptions, and checkout filters.
     let temporary_directory = tempfile::Builder::new()
         .prefix("aptos-x-metadata-")
         .tempdir()
         .ok()?;
-    let clone_directory = temporary_directory.path().join("aptos-core");
+    let archive_path = temporary_directory.path().join("workspace.tar");
     debug!(
-        "Creating local clone for metadata recomputation: {:?}",
-        clone_directory
+        "Materializing metadata baseline in temporary directory: {:?}",
+        temporary_directory.path()
     );
 
-    let clone_output = Command::new("git")
-        .args(["clone", "--shared", "--no-checkout"])
-        .arg(workspace_directory)
-        .arg(&clone_directory)
+    let archive_output = Command::new("git")
+        .current_dir(workspace_directory)
+        .args(["archive", "--format=tar", "--output"])
+        .arg(&archive_path)
+        .arg(revision)
         .output()
         .ok()?;
-    if !clone_output.status.success() {
-        warn!("Unable to create a local clone for cargo metadata recomputation");
+    if !archive_output.status.success() {
+        warn!(
+            "Unable to archive metadata baseline {:?}: exit status {:?}",
+            revision,
+            archive_output.status.code()
+        );
         return None;
     }
 
-    let checkout_output = Command::new("git")
-        .current_dir(&clone_directory)
-        .args(["checkout", revision])
+    let unpack_output = Command::new("tar")
+        .args(["-xf"])
+        .arg(&archive_path)
+        .args(["-C"])
+        .arg(temporary_directory.path())
         .output()
         .ok()?;
-    if !checkout_output.status.success() {
+    if !unpack_output.status.success() {
         warn!(
-            "Unable to check out metadata baseline commit: {:?}",
-            revision
+            "Unable to unpack metadata baseline {:?}: exit status {:?}",
+            revision,
+            unpack_output.status.code()
         );
         return None;
     }
 
     let metadata_output = Command::new("cargo")
-        .current_dir(&clone_directory)
+        .current_dir(temporary_directory.path())
         .args(["metadata", "--all-features"])
         .output()
         .ok()?;

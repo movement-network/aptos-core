@@ -140,6 +140,7 @@ impl<V: VMBlockExecutor> ChunkExecutorTrait for ChunkExecutor<V> {
 
         let chunk = ChunkToExecute {
             transactions,
+            transaction_infos: txn_infos_with_proof.transaction_infos.clone(),
             first_version: v.ok_or_else(|| anyhow!("first version is None"))?,
         };
         let chunk_verifier = Arc::new(StateSyncChunkVerifier {
@@ -304,8 +305,8 @@ impl<V: VMBlockExecutor> ChunkExecutorInner<V> {
 
         let num_txns = chunk.len();
 
-        let state_view = self.state_view(parent_state.latest())?;
-        let execution_output = chunk.into_output::<V>(&parent_state, state_view)?;
+        let execution_output =
+            chunk.into_output::<V>(&parent_state, |state| self.state_view(state.latest()))?;
         let output = PartialStateComputeResult::new(execution_output);
 
         // Enqueue for next stage.
@@ -604,7 +605,13 @@ impl<V: VMBlockExecutor> ChunkExecutorInner<V> {
             BlockExecutorConfigFromOnchain::new_no_block_limit(),
             TransactionSliceMetadata::chunk(begin_version, end_version),
         )?;
-        // not `zip_eq`, deliberately
+        ensure!(
+            execution_output.to_commit.transaction_outputs.len()
+                == (end_version - begin_version) as usize,
+            "Replay execution did not produce an output for every transaction in {}..{}",
+            begin_version,
+            end_version,
+        );
         for (version, txn_out, txn_info, write_set, events) in multizip((
             begin_version..end_version,
             &execution_output.to_commit.transaction_outputs,
@@ -618,6 +625,41 @@ impl<V: VMBlockExecutor> ChunkExecutorInner<V> {
                 Some(write_set),
                 Some(events),
             ) {
+                // Combining historical blocks can change intermediate storage metadata:
+                // metadata from materialized delayed-field writes may become visible to
+                // later transactions only after a block boundary. Retry the first block
+                // from the unchanged parent state before treating this as a genuine mismatch.
+                // Never split inside a block just to make verification succeed.
+                let first_block_end = transactions
+                    .iter()
+                    .take((end_version - begin_version) as usize)
+                    .enumerate()
+                    .find_map(|(offset, txn)| {
+                        if offset > 0 && txn.is_block_start() {
+                            Some(begin_version + offset as Version)
+                        } else if txn.is_non_reconfig_block_ending() {
+                            Some(begin_version + offset as Version + 1)
+                        } else {
+                            None
+                        }
+                    });
+                if let Some(block_end) = first_block_end.filter(|end| *end < end_version) {
+                    info!(
+                        begin_version = begin_version,
+                        end_version = end_version,
+                        block_end = block_end,
+                        "Combined replay verification failed; retrying at original block boundary"
+                    );
+                    return self.verify_execution(
+                        transactions,
+                        transaction_infos,
+                        write_sets,
+                        event_vecs,
+                        begin_version,
+                        block_end,
+                        verify_execution_mode,
+                    );
+                }
                 return if verify_execution_mode.is_lazy_quit() {
                     error!("(Not quitting right away.) {}", err);
                     verify_execution_mode.mark_seen_error();

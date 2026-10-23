@@ -118,7 +118,7 @@ async fn test_db_restore() {
     // make a backup from node 1
     let node1_config = swarm.validator(validator_peer_ids[1]).unwrap().config();
     let port = node1_config.storage.backup_service_address.port();
-    let (backup_path, _) = db_backup(port, 5, 400, 200, 5, &[]);
+    let (backup_path, snapshot_version) = db_backup(port, 5, 400, 200, 5, &[]);
     // take down node 0
     let node_to_restart = validator_peer_ids[0];
     swarm.validator_mut(node_to_restart).unwrap().stop();
@@ -139,7 +139,8 @@ async fn test_db_restore() {
         db_dir.as_path(),
         &[],
         node0_config.storage.rocksdb_configs.enable_storage_sharding,
-        None,
+        // The coordinator snapshots an epoch-ending version with a backed-up ledger info.
+        snapshot_version,
     );
 
     expected_balance_0 -= 3;
@@ -421,7 +422,7 @@ pub(crate) fn db_restore(
     db_path: &Path,
     trusted_waypoints: &[Waypoint],
     enable_storage_sharding: bool,
-    target_verion: Option<Version>, /* target version should be same as epoch ending version to start a node */
+    epoch_ending_version: Version,
 ) {
     let now = Instant::now();
     let bin_path = workspace_builder::get_bin("aptos-debugger");
@@ -440,10 +441,9 @@ pub(crate) fn db_restore(
         cmd.arg("--enable_storage_sharding");
         cmd.arg("--enable-state-indices");
     }
-    if let Some(version) = target_verion {
-        cmd.arg("--target-version");
-        cmd.arg(&version.to_string());
-    }
+    // A validator must restart with a ledger info covering its restored transaction tail.
+    cmd.arg("--target-version");
+    cmd.arg(epoch_ending_version.to_string());
 
     let status = cmd
         .args([

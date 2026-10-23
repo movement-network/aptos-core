@@ -70,8 +70,10 @@ impl PrunerManager for LedgerPrunerManager {
         // Only wake up the ledger pruner if there are `ledger_pruner_pruning_batch_size` pending
         // versions.
         if self.is_pruner_enabled()
-            && latest_version
-                >= min_readable_version + self.pruning_batch_size as u64 + self.prune_window
+            && min_readable_version
+                .checked_add(self.pruning_batch_size as u64)
+                .and_then(|version| version.checked_add(self.prune_window))
+                .is_some_and(|threshold| latest_version >= threshold)
         {
             self.set_pruner_target_db_version(latest_version);
         }
@@ -173,5 +175,54 @@ impl LedgerPrunerManager {
             .as_ref()
             .unwrap()
             .set_target_db_version(min_readable_version);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::AptosDB;
+    use aptos_temppath::TempPath;
+
+    fn pruner_config(prune_window: Version, batch_size: usize) -> LedgerPrunerConfig {
+        LedgerPrunerConfig {
+            enable: true,
+            prune_window,
+            batch_size,
+            user_pruning_window_offset: 0,
+        }
+    }
+
+    #[test]
+    fn test_target_threshold_does_not_wrap_after_restored_progress() {
+        let path = TempPath::new();
+        let db = AptosDB::new_for_test(&path);
+        let restored_progress = Version::MAX - 5;
+        db.ledger_db
+            .write_pruner_progress(restored_progress)
+            .unwrap();
+
+        let pruner = LedgerPrunerManager::new(Arc::clone(&db.ledger_db), pruner_config(4, 4), None);
+        pruner.maybe_set_pruner_target_db_version(Version::MAX);
+
+        assert_eq!(pruner.get_min_readable_version(), restored_progress);
+    }
+
+    #[test]
+    fn test_target_threshold_requires_full_batch_and_window() {
+        let path = TempPath::new();
+        let db = AptosDB::new_for_test(&path);
+        let restored_progress = 7;
+        db.ledger_db
+            .write_pruner_progress(restored_progress)
+            .unwrap();
+
+        let pruner =
+            LedgerPrunerManager::new(Arc::clone(&db.ledger_db), pruner_config(10, 5), None);
+        pruner.maybe_set_pruner_target_db_version(21);
+        assert_eq!(pruner.get_min_readable_version(), restored_progress);
+
+        pruner.maybe_set_pruner_target_db_version(22);
+        assert_eq!(pruner.get_min_readable_version(), 12);
     }
 }

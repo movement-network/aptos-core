@@ -133,13 +133,8 @@ impl RestoreCoordinator {
         );
 
         COORDINATOR_TARGET_VERSION.set(target_version as i64);
-        let lhs = self.ledger_history_start_version();
-
-        // Make the readable ledger history boundary explicit in the restored DB.
-        // Otherwise, when these metadata keys are missing, node startup infers
-        // the ledger pruner progress from the first VersionData row, which is
-        // typically the state snapshot version rather than the requested lhs.
-        self.global_opt.run_mode.save_ledger_pruner_progress(lhs)?;
+        let snapshot_selection_version =
+            self.ledger_history_start_version.unwrap_or(target_version);
 
         let latest_tree_version = self
             .global_opt
@@ -161,8 +156,16 @@ impl RestoreCoordinator {
             .run_mode
             .get_next_expected_transaction_version()?;
 
-        let kv_snapshot = match self.global_opt.run_mode.get_in_progress_state_kv_snapshot() {
-            Ok(Some(ver)) => {
+        // Keep the original snapshot version even after its KV data has been restored:
+        // later replay checkpoints must not advance the readable history boundary.
+        let in_progress_kv_snapshot_version = self
+            .global_opt
+            .run_mode
+            .get_in_progress_state_kv_snapshot()
+            .ok()
+            .flatten();
+        let kv_snapshot = match in_progress_kv_snapshot_version {
+            Some(ver) => {
                 if db_next_version >= ver {
                     // already restored the kv snapshot, no need to restore again
                     None
@@ -176,13 +179,13 @@ impl RestoreCoordinator {
                     snapshot
                 }
             },
-            Ok(None) | Err(_) => {
+            None => {
                 assert_eq!(
                     db_next_version, 0,
                     "DB should be empty if no in-progress state snapshot found"
                 );
                 metadata_view
-                    .select_state_snapshot(std::cmp::min(lhs, max_txn_ver))
+                    .select_state_snapshot(std::cmp::min(snapshot_selection_version, max_txn_ver))
                     .expect("Cannot find any snapshot before ledger history start version")
             },
         };
@@ -201,6 +204,14 @@ impl RestoreCoordinator {
                 .select_state_snapshot(target_version)?
                 .expect("Cannot find tree snapshot before target version")
         };
+
+        // Make the readable ledger history boundary explicit in the restored DB.
+        // For the default mode it starts at the selected state snapshot. Otherwise, when these
+        // metadata keys are missing, node startup infers pruner progress from VersionData.
+        self.save_ledger_pruner_progress(
+            in_progress_kv_snapshot_version.or_else(|| kv_snapshot.as_ref().map(|s| s.version)),
+            tree_snapshot.version,
+        )?;
 
         let mut do_phase_1 = if let Some(kv_snapshot) = kv_snapshot.as_ref() {
             // if we have a kv snapshot, we need to restore the state between lhs and rs
@@ -383,13 +394,21 @@ impl RestoreCoordinator {
 }
 
 impl RestoreCoordinator {
-    fn target_version(&self) -> Version {
-        self.global_opt.target_version
+    fn save_ledger_pruner_progress(
+        &self,
+        history_snapshot_version: Option<Version>,
+        tree_snapshot_version: Version,
+    ) -> Result<()> {
+        self.global_opt.run_mode.save_ledger_pruner_progress(
+            self.ledger_history_start_version
+                .or(history_snapshot_version)
+                .unwrap_or(tree_snapshot_version),
+        )?;
+        Ok(())
     }
 
-    fn ledger_history_start_version(&self) -> Version {
-        self.ledger_history_start_version
-            .unwrap_or_else(|| self.target_version())
+    fn target_version(&self) -> Version {
+        self.global_opt.target_version
     }
 
     #[allow(dead_code)]
@@ -410,5 +429,89 @@ impl RestoreCoordinator {
         } else {
             bail!("No transaction backup found.")
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{RestoreCoordinator, RestoreCoordinatorOpt};
+    use crate::{
+        metadata::cache::MetadataCacheOpt,
+        storage::{local_fs::LocalFs, BackupStorage},
+        utils::{
+            ConcurrentDownloadsOpt, GlobalRestoreOpt, GlobalRestoreOptions,
+            ReplayConcurrencyLevelOpt, RocksdbOpt, TrustedWaypointOpt,
+        },
+    };
+    use aptos_db::AptosDB;
+    use aptos_storage_interface::DbReader;
+    use aptos_temppath::TempPath;
+    use aptos_types::transaction::Version;
+    use std::{convert::TryInto, sync::Arc};
+
+    fn persist_ledger_history_boundary(
+        db_dir: &TempPath,
+        configured_version: Option<Version>,
+        history_snapshot_version: Option<Version>,
+        tree_snapshot_version: Version,
+    ) {
+        let global_opt: GlobalRestoreOptions = GlobalRestoreOpt {
+            dry_run: false,
+            db_dir: Some(db_dir.path().to_path_buf()),
+            target_version: None,
+            trusted_waypoints: TrustedWaypointOpt::default(),
+            rocksdb_opt: RocksdbOpt::default(),
+            concurrent_downloads: ConcurrentDownloadsOpt::default(),
+            replay_concurrency_level: ReplayConcurrencyLevelOpt::default(),
+            enable_state_indices: false,
+        }
+        .try_into()
+        .unwrap();
+        let coordinator = RestoreCoordinator::new(
+            RestoreCoordinatorOpt {
+                metadata_cache_opt: MetadataCacheOpt::new(None::<&std::path::Path>),
+                replay_all: false,
+                ledger_history_start_version: configured_version,
+                skip_epoch_endings: false,
+            },
+            global_opt,
+            Arc::new(LocalFs::new(db_dir.path().join("backup"))) as Arc<dyn BackupStorage>,
+        );
+
+        coordinator
+            .save_ledger_pruner_progress(history_snapshot_version, tree_snapshot_version)
+            .unwrap();
+    }
+
+    #[test]
+    fn test_ledger_history_boundary_persists_to_reopened_db() {
+        let db_dir = TempPath::new();
+        db_dir.create_as_dir().unwrap();
+
+        persist_ledger_history_boundary(&db_dir, None, Some(29), 29);
+        assert_eq!(
+            AptosDB::new_for_test(&db_dir)
+                .get_first_txn_version()
+                .unwrap(),
+            Some(29),
+        );
+
+        // A resumed restore may have a newer tree checkpoint, but its history begins at the
+        // original state snapshot.
+        persist_ledger_history_boundary(&db_dir, None, Some(29), 49);
+        assert_eq!(
+            AptosDB::new_for_test(&db_dir)
+                .get_first_txn_version()
+                .unwrap(),
+            Some(29),
+        );
+
+        persist_ledger_history_boundary(&db_dir, Some(0), Some(29), 49);
+        assert_eq!(
+            AptosDB::new_for_test(&db_dir)
+                .get_first_txn_version()
+                .unwrap(),
+            Some(0),
+        );
     }
 }

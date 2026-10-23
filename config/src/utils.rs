@@ -16,7 +16,7 @@ use std::{
     env, fs,
     fs::{File, OpenOptions},
     io::Seek,
-    net::{TcpListener, TcpStream},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpListener, TcpStream},
     ops::Range,
     thread,
     time::Duration,
@@ -65,19 +65,23 @@ impl Drop for PortCounterFiles {
 }
 
 pub fn get_available_port() -> u16 {
+    get_available_port_for_ip(IpAddr::V4(Ipv4Addr::LOCALHOST))
+}
+
+fn get_available_port_for_ip(ip: IpAddr) -> u16 {
     if NEXTEST_RUN_ID.is_some() {
-        get_unique_port()
+        get_unique_port(ip)
     } else {
-        get_random_port()
+        get_random_port(ip)
     }
 }
 
 /// Return an ephemeral, available port. On unix systems, the port returned will be in the
 /// TIME_WAIT state ensuring that the OS won't hand out this port for some grace period.
 /// Callers should be able to bind to this port given they use SO_REUSEADDR.
-fn get_random_port() -> u16 {
+fn get_random_port(ip: IpAddr) -> u16 {
     for _ in 0..MAX_PORT_RETRIES {
-        if let Ok(port) = try_bind(None) {
+        if let Ok(port) = try_bind(ip, None) {
             return port;
         }
     }
@@ -85,16 +89,24 @@ fn get_random_port() -> u16 {
     panic!("Error: could not find an available port");
 }
 
-fn try_bind(port: Option<u16>) -> ::std::io::Result<u16> {
+fn try_bind(ip: IpAddr, port: Option<u16>) -> ::std::io::Result<u16> {
     // Use the provided port or 0 to request a random available port from the OS
     let port = port.unwrap_or_default(); // Defaults to 0
-    let listener = TcpListener::bind(("localhost", port))?;
+    let listener = TcpListener::bind(SocketAddr::new(ip, port))?;
     let addr = listener.local_addr()?;
 
     // Create and accept a connection (which we'll promptly drop) in order to force the port
     // into the TIME_WAIT state, ensuring that the port will be reserved from some limited
     // amount of time (roughly 60s on some Linux systems)
-    let _sender = TcpStream::connect(addr)?;
+    let connect_addr = SocketAddr::new(
+        match ip {
+            IpAddr::V4(ip) if ip.is_unspecified() => IpAddr::V4(Ipv4Addr::LOCALHOST),
+            IpAddr::V6(ip) if ip.is_unspecified() => IpAddr::V6(Ipv6Addr::LOCALHOST),
+            ip => ip,
+        },
+        addr.port(),
+    );
+    let _sender = TcpStream::connect(connect_addr)?;
     let _incoming = listener.accept()?;
 
     Ok(addr.port())
@@ -118,7 +130,7 @@ fn counter_path() -> String {
 /// cargo nextest runs tests concurrently in different processes. We have observed that using
 /// a simple bind(0) results in flaky tests when nodes are restarted within tests; likely the OS
 /// is prioritizing recently released ports.
-fn get_unique_port() -> u16 {
+fn get_unique_port(ip: IpAddr) -> u16 {
     let mut port_counter_files = open_counter_file();
     let global_counter = match port_counter_files.counter_file.read_u16::<BigEndian>() {
         Ok(counter) => {
@@ -136,7 +148,7 @@ fn get_unique_port() -> u16 {
             0
         },
     };
-    let (port, updated_counter) = bind_port_from_counter(global_counter);
+    let (port, updated_counter) = bind_port_from_counter(global_counter, ip);
 
     port_counter_files.counter_file.set_len(0).unwrap();
     port_counter_files.counter_file.rewind().unwrap();
@@ -177,7 +189,7 @@ fn open_counter_file() -> PortCounterFiles {
     panic!("Could not acquire lock to: {}", lock_path());
 }
 
-fn bind_port_from_counter(mut counter: u16) -> (u16, u16) {
+fn bind_port_from_counter(mut counter: u16, ip: IpAddr) -> (u16, u16) {
     for attempt in 0..MAX_PORT_RETRIES {
         let port = PORT_VECTOR[counter as usize];
         counter += 1;
@@ -185,7 +197,7 @@ fn bind_port_from_counter(mut counter: u16) -> (u16, u16) {
             counter = 0;
         }
 
-        match try_bind(Some(port)) {
+        match try_bind(ip, Some(port)) {
             Ok(port) => {
                 return (port, counter);
             },
@@ -216,14 +228,44 @@ pub fn get_local_ip() -> Option<NetworkAddress> {
 }
 
 pub fn get_available_port_in_multiaddr(is_ipv4: bool) -> NetworkAddress {
-    let ip_proto = if is_ipv4 {
-        Protocol::Ip4("0.0.0.0".parse().unwrap())
+    let (ip_proto, ip) = if is_ipv4 {
+        (
+            Protocol::Ip4(Ipv4Addr::UNSPECIFIED),
+            IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+        )
     } else {
-        Protocol::Ip6("::1".parse().unwrap())
+        (
+            Protocol::Ip6(Ipv6Addr::LOCALHOST),
+            IpAddr::V6(Ipv6Addr::LOCALHOST),
+        )
     };
-    NetworkAddress::from_protocols(vec![ip_proto, Protocol::Tcp(get_available_port())]).unwrap()
+    NetworkAddress::from_protocols(vec![ip_proto, Protocol::Tcp(get_available_port_for_ip(ip))])
+        .unwrap()
 }
 
 pub fn get_genesis_txn(config: &NodeConfig) -> Option<&Transaction> {
     config.execution.genesis.as_ref()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn try_bind_rejects_occupied_ipv4_port() {
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        assert!(try_bind(IpAddr::V4(Ipv4Addr::LOCALHOST), Some(port)).is_err());
+    }
+
+    #[test]
+    fn try_bind_rejects_occupied_ipv6_port_when_available() {
+        let Ok(listener) = TcpListener::bind((Ipv6Addr::LOCALHOST, 0)) else {
+            return;
+        };
+        let port = listener.local_addr().unwrap().port();
+
+        assert!(try_bind(IpAddr::V6(Ipv6Addr::LOCALHOST), Some(port)).is_err());
+    }
 }

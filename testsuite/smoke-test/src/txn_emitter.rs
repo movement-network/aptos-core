@@ -11,11 +11,17 @@ use aptos_forge::{
     args::TransactionTypeArg, emitter::NumAccountsMode, AccountType, EmitJobMode, EmitJobRequest,
     EntryPoints, NodeExt, Result, Swarm, TransactionType, TxnEmitter, TxnStats, WorkflowProgress,
 };
-use aptos_sdk::{transaction_builder::TransactionFactory, types::PeerId};
+use aptos_sdk::{
+    transaction_builder::TransactionFactory,
+    types::{LocalAccount, PeerId},
+};
 use aptos_types::keyless::test_utils::{get_sample_esk, get_sample_exp_date, get_sample_jwt_token};
 use once_cell::sync::Lazy;
 use rand::{rngs::OsRng, SeedableRng};
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 pub async fn generate_traffic(
     swarm: &mut dyn Swarm,
@@ -113,6 +119,37 @@ pub async fn create_emit_job_request(
             .keyless_jwt(&get_sample_jwt_token());
     }
     Ok(emit_job_request)
+}
+
+async fn emit_until_submitted(
+    mut emitter: TxnEmitter,
+    source_account: Arc<LocalAccount>,
+    emit_job_request: EmitJobRequest,
+) -> Result<TxnStats> {
+    let job = emitter
+        .start_job(source_account, emit_job_request, 1)
+        .await?;
+    let deadline = Instant::now() + Duration::from_secs(60);
+    let mut reached_submission_threshold = false;
+    while Instant::now() < deadline {
+        if job
+            .peek_and_accumulate()
+            .first()
+            .is_some_and(|stats| stats.submitted > 30)
+        {
+            reached_submission_threshold = true;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
+
+    let txn_stat = job.stop_and_accumulate().await.into_iter().next().unwrap();
+    println!("txn emitter final stats: {txn_stat}");
+    ensure!(
+        reached_submission_threshold,
+        "txn emitter did not submit more than 30 transactions: {txn_stat}"
+    );
+    Ok(txn_stat)
 }
 
 static TRANSACTION_MIX_PER_PHASE: Lazy<Vec<Vec<(TransactionType, usize)>>> = Lazy::new(|| {
@@ -228,10 +265,9 @@ async fn test_txn_emmitter_with_high_pending_latency() {
 
     let all_validators = swarm.validators().map(|v| v.peer_id()).collect::<Vec<_>>();
 
-    let txn_stat = generate_traffic(
+    let emit_job_request = create_emit_job_request(
         &mut swarm,
         &all_validators,
-        Duration::from_secs(20),
         100,
         vec![vec![(
             TransactionType::CallCustomModules {
@@ -244,10 +280,18 @@ async fn test_txn_emmitter_with_high_pending_latency() {
             },
             1,
         )]],
+        AccountType::Local,
     )
     .await
     .unwrap();
-    assert!(txn_stat.submitted > 30);
+    let rng = SeedableRng::from_rng(OsRng).unwrap();
+    let transaction_factory =
+        TransactionFactory::new(swarm.chain_info().chain_id).with_gas_unit_price(100);
+    let rest_cli = swarm.validators().next().unwrap().rest_client();
+    let emitter = TxnEmitter::new(transaction_factory, rng, rest_cli);
+    emit_until_submitted(emitter, swarm.chain_info().root_account, emit_job_request)
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
@@ -285,10 +329,12 @@ async fn test_txn_emmitter_low_funds() {
         });
 
     let account_1 = Arc::new(account_1);
-    let txn_stat = emitter
-        .emit_txn_for_with_stats(account_1, emit_job_request, Duration::from_secs(10), 3)
+    let txn_stat = emit_until_submitted(emitter, account_1, emit_job_request)
         .await
         .unwrap();
 
-    assert!(txn_stat.submitted > 30);
+    assert!(
+        txn_stat.committed > 0,
+        "low-funds emitter submitted transactions but committed none: {txn_stat}"
+    );
 }

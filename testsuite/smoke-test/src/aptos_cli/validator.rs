@@ -17,9 +17,10 @@ use aptos_types::{
     account_config::CORE_CODE_ADDRESS,
     network_address::DnsName,
     on_chain_config::{
-        ConsensusAlgorithmConfig, ConsensusConfigV1, ExecutionConfigV1, LeaderReputationType,
-        OnChainConsensusConfig, OnChainExecutionConfig, OnChainRandomnessConfig,
-        ProposerAndVoterConfig, ProposerElectionType, TransactionShufflerType, ValidatorSet,
+        ConfigurationResource, ConsensusAlgorithmConfig, ConsensusConfigV1, ExecutionConfigV1,
+        LeaderReputationType, OnChainConsensusConfig, OnChainExecutionConfig,
+        OnChainRandomnessConfig, ProposerAndVoterConfig, ProposerElectionType,
+        TransactionShufflerType, ValidatorSet,
     },
     PeerId,
 };
@@ -1713,12 +1714,12 @@ async fn test_multivalidator_staking_reward_impl() {
     const SECONDS_PER_YEAR: u64 = 365 * 24 * 60 * 60; // 31,536,000
     const EPOCH_DURATION_SECS: u64 = 4; // Must match genesis_config.epoch_duration_secs
     const APY_PERCENTAGE: u64 = 10;
-    const REWARDS_RATE_DENOMINATOR: f64 = 1_000_000_000.0;
+    const REWARDS_RATE_DENOMINATOR: u64 = 1_000_000_000;
 
-    let epochs_per_year = SECONDS_PER_YEAR as f64 / EPOCH_DURATION_SECS as f64;
+    let epochs_per_year = SECONDS_PER_YEAR / EPOCH_DURATION_SECS;
     let rewards_rate_numerator =
-        (APY_PERCENTAGE as f64 * REWARDS_RATE_DENOMINATOR / 100.0) / epochs_per_year;
-    let per_epoch_rate = rewards_rate_numerator / REWARDS_RATE_DENOMINATOR;
+        (APY_PERCENTAGE * REWARDS_RATE_DENOMINATOR / 100) / epochs_per_year;
+    let per_epoch_rate = rewards_rate_numerator as f64 / REWARDS_RATE_DENOMINATOR as f64;
 
     println!("Per-epoch reward rate: {:.10}", per_epoch_rate);
 
@@ -1745,7 +1746,7 @@ async fn test_multivalidator_staking_reward_impl() {
         tokio::time::sleep(Duration::from_secs(5)).await;
 
         // Trigger epoch change
-        let epoch_result = reconfig(
+        reconfig(
             &rest_client,
             &transaction_factory,
             swarm.chain_info().root_account(),
@@ -1804,25 +1805,99 @@ async fn test_multivalidator_staking_reward_impl() {
 
         // Store final epoch info
         if epoch_num == 2 {
-            final_epoch_info = Some((epoch_result, epoch_state, epoch_validator_set));
+            final_epoch_info = Some((epoch_state, epoch_validator_set));
         }
     }
 
     // Extract final epoch data
-    let (final_epoch_result, final_state, final_validator_set) = final_epoch_info.unwrap();
+    let (final_state, final_validator_set) = final_epoch_info.unwrap();
 
-    // Calculate actual epoch count and expected rate
-    let actual_epochs = final_epoch_result.epoch - initial_state.epoch;
-    let expected_rate = per_epoch_rate * (actual_epochs as f64);
+    // The snapshot can observe the new epoch before its first NewBlockEvent is committed.
+    // Wait for that marker so FetchMetadata does not classify the final epoch as partial.
+    tokio::time::timeout(Duration::from_secs(30), async {
+        loop {
+            if let Ok(response) = rest_client.get_new_block_events_bcs(None, Some(1)).await {
+                let (events, _) = response.into_parts();
+                if events
+                    .first()
+                    .map(|event| event.event.epoch() >= final_state.epoch)
+                    .unwrap_or(false)
+                {
+                    break;
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    .expect("Timed out waiting for a committed NewBlockEvent at the final snapshot epoch");
 
-    println!(
-        "Actual epochs passed: {}, Expected reward rate: {:.10}",
-        actual_epochs, expected_rate
+    // Calculate expected rewards from the actual proposal performance in each completed epoch.
+    // This mirrors stake::calculate_rewards_amount, including the integer genesis rounding.
+    let completed_epochs = FetchMetadata::fetch_new_block_events(
+        &rest_client,
+        Some(initial_state.epoch as i64),
+        Some(final_state.epoch as i64),
+    )
+    .await
+    .unwrap();
+    assert!(
+        !completed_epochs.is_empty(),
+        "No completed epochs found between snapshots {} and {}",
+        initial_state.epoch,
+        final_state.epoch
     );
 
-    // Verify proportional reward distribution across actual epochs
-    // Calculate total rewards and rates in a single pass
-    let mut reward_rates: Vec<(PeerId, f64)> = Vec::new();
+    let actual_epochs = final_state.epoch - initial_state.epoch;
+    assert!(
+        actual_epochs >= 2,
+        "Should have progressed through at least 2 completed epochs, actual: {}",
+        actual_epochs
+    );
+    assert_eq!(
+        completed_epochs.len() as u64,
+        actual_epochs,
+        "Completed epoch metadata must cover the exact snapshot interval"
+    );
+
+    let mut expected_rewards = HashMap::new();
+    let mut total_successful_proposals = 0;
+    let mut total_proposals_observed = 0;
+    for epoch_info in &completed_epochs {
+        assert!(
+            !epoch_info.partial,
+            "Epoch {} metadata is partial",
+            epoch_info.epoch
+        );
+        let epoch_stats = AnalyzeValidators::analyze(&epoch_info.blocks, &epoch_info.validators);
+        for validator in &epoch_info.validators {
+            let stats = epoch_stats.validator_stats.get(&validator.address).unwrap();
+            let total_proposals = stats.proposal_successes + stats.proposal_failures;
+            total_successful_proposals += stats.proposal_successes;
+            total_proposals_observed += total_proposals;
+            let reward = if total_proposals == 0 {
+                0
+            } else {
+                ((validator.voting_power as u128)
+                    * (rewards_rate_numerator as u128)
+                    * (stats.proposal_successes as u128)
+                    / ((REWARDS_RATE_DENOMINATOR as u128) * (total_proposals as u128)))
+                    as u64
+            };
+            *expected_rewards.entry(validator.address).or_insert(0) += reward;
+        }
+    }
+    assert!(
+        total_proposals_observed > 0 && total_successful_proposals > 0,
+        "Completed epoch metadata contained no successful proposals"
+    );
+
+    println!(
+        "Actual epochs passed: {}, Integer per-epoch reward rate: {:.10}",
+        actual_epochs, per_epoch_rate
+    );
+
+    // Verify each validator's reward against its measured proposal performance.
     let mut total_rewards_distributed = 0u64;
 
     for address in &validator_addresses {
@@ -1831,47 +1906,20 @@ async fn test_multivalidator_staking_reward_impl() {
         let total_rewards = final_power - initial_power;
         total_rewards_distributed += total_rewards; // Accumulate total as we go
 
-        let reward_rate = total_rewards as f64 / *initial_power as f64;
-        reward_rates.push((*address, reward_rate));
+        let expected_reward = *expected_rewards.get(address).unwrap_or(&0);
+        assert_eq!(
+            total_rewards, expected_reward,
+            "Validator {} reward {} does not match performance-adjusted expectation {}",
+            address, total_rewards, expected_reward
+        );
 
         println!(
-            "Validator {} - Initial stake: {}, Final stake: {}, Total rewards: {}, Reward rate: {:.10}",
-            address, initial_power, final_power, total_rewards, reward_rate
-        );
-
-        // Assert that the actual reward rate is close to the expected rate (within 50% tolerance)
-        // We use a generous tolerance because:
-        // 1. Validators may have different success rates in proposals
-        // 2. There may be rounding in the on-chain calculations
-        // 3. The test runs with short epochs which can introduce timing variations
-        let rate_deviation = ((reward_rate - expected_rate) / expected_rate).abs();
-        assert!(
-            rate_deviation < 0.5,
-            "Validator {} reward rate {:.10} is too far from expected {:.10} for {} epochs (deviation: {:.2}%)",
-            address,
-            reward_rate,
-            expected_rate,
-            actual_epochs,
-            rate_deviation * 100.0
-        );
-    }
-
-    let avg_rate: f64 =
-        reward_rates.iter().map(|(_, r)| r).sum::<f64>() / reward_rates.len() as f64;
-    for (address, rate) in &reward_rates {
-        let deviation = ((rate - avg_rate) / avg_rate).abs();
-        assert!(
-            deviation < 0.5,
-            "Validator {} reward rate {:.10} deviates too much from average {:.10} (deviation: {:.2}%)",
-            address,
-            rate,
-            avg_rate,
-            deviation * 100.0
+            "Validator {} - Initial stake: {}, Final stake: {}, Total rewards: {}, Expected rewards: {}",
+            address, initial_power, final_power, total_rewards, expected_reward
         );
     }
 
     println!("All validators received proportional rewards correctly!");
-    println!("Average reward rate: {:.6}", avg_rate);
     println!(
         "Total rewards distributed across all validators: {}",
         total_rewards_distributed
@@ -1880,30 +1928,39 @@ async fn test_multivalidator_staking_reward_impl() {
     // Use the CLI to analyze validator performance
     cli.analyze_validator_performance(
         Some(initial_state.epoch as i64),
-        Some(final_epoch_result.epoch as i64),
+        Some(final_state.epoch as i64),
     )
     .await
     .unwrap();
 
-    // Verify we ran through at least 2 epochs (may be more due to initialization)
-    assert!(
-        final_epoch_result.epoch - initial_state.epoch >= 2,
-        "Should have progressed through at least 2 epochs, actual: {}",
-        final_epoch_result.epoch - initial_state.epoch
-    );
-
     // Fetch and verify WithdrawStakingRewardEvent amounts match the stake rewards
     println!("Fetching WithdrawStakingRewardEvent events...");
-    let events = rest_client
-        .get_account_events_bcs(
-            CORE_CODE_ADDRESS,
-            "0x1::governed_gas_pool::GovernedGasPoolExtension",
-            "withdraw_staking_reward_events",
-            None,
-            None,
-        )
-        .await
-        .expect("Failed to fetch withdraw staking reward events");
+    let mut events = Vec::new();
+    let mut event_start = 0;
+    loop {
+        let page = rest_client
+            .get_account_events_bcs(
+                CORE_CODE_ADDRESS,
+                "0x1::governed_gas_pool::GovernedGasPoolExtension",
+                "withdraw_staking_reward_events",
+                Some(event_start),
+                Some(1000),
+            )
+            .await
+            .expect("Failed to fetch withdraw staking reward events")
+            .into_inner();
+        let page_len = page.len();
+        let passed_final_version = page
+            .iter()
+            .any(|event| event.transaction_version > final_state.version);
+        if let Some(last) = page.last() {
+            event_start = last.event.v1().unwrap().sequence_number() + 1;
+        }
+        events.extend(page);
+        if page_len < 1000 || passed_final_version {
+            break;
+        }
+    }
 
     // Deserialize events and sum up the amounts
     #[derive(Debug, serde::Deserialize)]
@@ -1913,11 +1970,11 @@ async fn test_multivalidator_staking_reward_impl() {
 
     let mut total_event_amount = 0u64;
     let mut events_in_range = 0;
-    for event_with_version in events.inner() {
+    for event_with_version in &events {
         let version = event_with_version.transaction_version;
 
         // Only count events that occurred between initial and final versions
-        if version >= initial_state.version && version <= final_state.version {
+        if version > initial_state.version && version <= final_state.version {
             let event = event_with_version
                 .event
                 .v1()
@@ -1960,13 +2017,36 @@ async fn test_multivalidator_staking_reward_impl() {
         .unwrap();
 }
 
-// Helper function to get validator set and state
-async fn get_validator_set_and_state(rest_client: &Client) -> (State, HashMap<PeerId, u64>) {
+#[derive(Clone, Copy, Debug)]
+struct ValidatorSnapshot {
+    epoch: u64,
+    version: u64,
+}
+
+// The validator-set resource can reflect the next epoch while the REST header still reports
+// the closing epoch. Read Configuration at the same ledger version to keep epoch and voting
+// power snapshots aligned for reward accounting.
+async fn get_validator_set_and_state(
+    rest_client: &Client,
+) -> (ValidatorSnapshot, HashMap<PeerId, u64>) {
     let (validator_set, state): (ValidatorSet, State) = rest_client
         .get_account_resource_bcs(CORE_CODE_ADDRESS, "0x1::stake::ValidatorSet")
         .await
         .unwrap()
         .into_parts();
+    let configuration = rest_client
+        .get_account_resource_at_version_bcs::<ConfigurationResource>(
+            CORE_CODE_ADDRESS,
+            "0x1::reconfiguration::Configuration",
+            state.version,
+        )
+        .await
+        .unwrap()
+        .into_inner();
+    let snapshot = ValidatorSnapshot {
+        epoch: configuration.epoch(),
+        version: state.version,
+    };
 
     let validator_to_voting_power = validator_set
         .active_validators
@@ -1974,7 +2054,7 @@ async fn get_validator_set_and_state(rest_client: &Client) -> (State, HashMap<Pe
         .map(|v| (v.account_address, v.consensus_voting_power()))
         .collect::<HashMap<_, _>>();
 
-    (state, validator_to_voting_power)
+    (snapshot, validator_to_voting_power)
 }
 
 /// Creates a Features object with specific features disabled for testing

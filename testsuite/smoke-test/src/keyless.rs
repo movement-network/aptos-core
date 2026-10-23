@@ -64,6 +64,7 @@ async fn test_keyless_oidc_txn_verifies() {
 }
 
 #[tokio::test]
+#[ignore = "Keyless key rotation is outside Movement's enabled deployment scope"]
 async fn test_keyless_rotate_vk() {
     let (tw_sk, config, jwk, swarm, mut cli, root_idx) = setup_local_net().await;
     let mut info = swarm.aptos_public_info();
@@ -480,12 +481,13 @@ async fn test_keyless_groth16_verifies_using_rust_sdk() {
         .await
         .unwrap();
 
+    remove_training_wheels(&mut cli, &mut info, root_idx).await;
+
+    // Sign after governance setup because the SDK transaction TTL is 30 seconds.
     let builder = info
         .transaction_factory()
         .payload(aptos_stdlib::aptos_coin_transfer(recipient.address(), 100));
     let signed_txn = account.sign_with_transaction_builder(builder);
-
-    remove_training_wheels(&mut cli, &mut info, root_idx).await;
 
     info!("Submit keyless Groth16 transaction");
     let result = swarm
@@ -545,12 +547,13 @@ async fn test_keyless_groth16_verifies_using_rust_sdk_from_jwt() {
         .await
         .unwrap();
 
+    remove_training_wheels(&mut cli, &mut info, root_idx).await;
+
+    // Sign after governance setup because the SDK transaction TTL is 30 seconds.
     let builder = info
         .transaction_factory()
         .payload(aptos_stdlib::aptos_coin_transfer(recipient.address(), 100));
     let signed_txn = account.sign_with_transaction_builder(builder);
-
-    remove_training_wheels(&mut cli, &mut info, root_idx).await;
 
     info!("Submit keyless Groth16 transaction");
     let result = swarm

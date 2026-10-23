@@ -1421,72 +1421,94 @@ fn spawn_request_task<T: AptosDataClientInterface + Send + Clone + 'static>(
         );
 
         // Fetch the client response
-        let client_response = match data_client_request {
-            DataClientRequest::EpochEndingLedgerInfos(request) => {
-                get_epoch_ending_ledger_infos(aptos_data_client, request, request_timeout_ms).await
-            },
-            DataClientRequest::NewTransactionsWithProof(request) => {
-                get_new_transactions_with_proof(aptos_data_client, request, request_timeout_ms)
+        let client_response = async {
+            if !data_client_request.is_new_data_request() {
+                fail::fail_point!("state_sync::stream_data_request_timeout", |_| {
+                    Err(aptos_data_client::error::Error::TimeoutWaitingForResponse(
+                        "Injected stream data request timeout".to_owned(),
+                    ))
+                });
+            }
+
+            match data_client_request {
+                DataClientRequest::EpochEndingLedgerInfos(request) => {
+                    get_epoch_ending_ledger_infos(aptos_data_client, request, request_timeout_ms)
+                        .await
+                },
+                DataClientRequest::NewTransactionsWithProof(request) => {
+                    get_new_transactions_with_proof(aptos_data_client, request, request_timeout_ms)
+                        .await
+                },
+                DataClientRequest::NewTransactionOutputsWithProof(request) => {
+                    get_new_transaction_outputs_with_proof(
+                        aptos_data_client,
+                        request,
+                        request_timeout_ms,
+                    )
                     .await
-            },
-            DataClientRequest::NewTransactionOutputsWithProof(request) => {
-                get_new_transaction_outputs_with_proof(
-                    aptos_data_client,
-                    request,
-                    request_timeout_ms,
-                )
-                .await
-            },
-            DataClientRequest::NewTransactionsOrOutputsWithProof(request) => {
-                get_new_transactions_or_outputs_with_proof(
-                    aptos_data_client,
-                    request,
-                    request_timeout_ms,
-                )
-                .await
-            },
-            DataClientRequest::NumberOfStates(request) => {
-                get_number_of_states(aptos_data_client, request, request_timeout_ms).await
-            },
-            DataClientRequest::StateValuesWithProof(request) => {
-                get_states_values_with_proof(aptos_data_client, request, request_timeout_ms).await
-            },
-            DataClientRequest::SubscribeTransactionsWithProof(request) => {
-                subscribe_to_transactions_with_proof(aptos_data_client, request, request_timeout_ms)
+                },
+                DataClientRequest::NewTransactionsOrOutputsWithProof(request) => {
+                    get_new_transactions_or_outputs_with_proof(
+                        aptos_data_client,
+                        request,
+                        request_timeout_ms,
+                    )
                     .await
-            },
-            DataClientRequest::SubscribeTransactionOutputsWithProof(request) => {
-                subscribe_to_transaction_outputs_with_proof(
-                    aptos_data_client,
-                    request,
-                    request_timeout_ms,
-                )
-                .await
-            },
-            DataClientRequest::SubscribeTransactionsOrOutputsWithProof(request) => {
-                subscribe_to_transactions_or_outputs_with_proof(
-                    aptos_data_client,
-                    request,
-                    request_timeout_ms,
-                )
-                .await
-            },
-            DataClientRequest::TransactionOutputsWithProof(request) => {
-                get_transaction_outputs_with_proof(aptos_data_client, request, request_timeout_ms)
+                },
+                DataClientRequest::NumberOfStates(request) => {
+                    get_number_of_states(aptos_data_client, request, request_timeout_ms).await
+                },
+                DataClientRequest::StateValuesWithProof(request) => {
+                    get_states_values_with_proof(aptos_data_client, request, request_timeout_ms)
+                        .await
+                },
+                DataClientRequest::SubscribeTransactionsWithProof(request) => {
+                    subscribe_to_transactions_with_proof(
+                        aptos_data_client,
+                        request,
+                        request_timeout_ms,
+                    )
                     .await
-            },
-            DataClientRequest::TransactionsWithProof(request) => {
-                get_transactions_with_proof(aptos_data_client, request, request_timeout_ms).await
-            },
-            DataClientRequest::TransactionsOrOutputsWithProof(request) => {
-                get_transactions_or_outputs_with_proof(
-                    aptos_data_client,
-                    request,
-                    request_timeout_ms,
-                )
-                .await
-            },
-        };
+                },
+                DataClientRequest::SubscribeTransactionOutputsWithProof(request) => {
+                    subscribe_to_transaction_outputs_with_proof(
+                        aptos_data_client,
+                        request,
+                        request_timeout_ms,
+                    )
+                    .await
+                },
+                DataClientRequest::SubscribeTransactionsOrOutputsWithProof(request) => {
+                    subscribe_to_transactions_or_outputs_with_proof(
+                        aptos_data_client,
+                        request,
+                        request_timeout_ms,
+                    )
+                    .await
+                },
+                DataClientRequest::TransactionOutputsWithProof(request) => {
+                    get_transaction_outputs_with_proof(
+                        aptos_data_client,
+                        request,
+                        request_timeout_ms,
+                    )
+                    .await
+                },
+                DataClientRequest::TransactionsWithProof(request) => {
+                    get_transactions_with_proof(aptos_data_client, request, request_timeout_ms)
+                        .await
+                },
+                DataClientRequest::TransactionsOrOutputsWithProof(request) => {
+                    get_transactions_or_outputs_with_proof(
+                        aptos_data_client,
+                        request,
+                        request_timeout_ms,
+                    )
+                    .await
+                },
+            }
+        }
+        .await;
 
         // Increment the appropriate counter depending on the response
         match &client_response {

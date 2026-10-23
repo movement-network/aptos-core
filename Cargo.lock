@@ -1086,6 +1086,7 @@ dependencies = [
  "async-trait",
  "claims",
  "enum_dispatch",
+ "fail",
  "futures",
  "once_cell",
  "rand 0.7.3",

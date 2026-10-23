@@ -17,9 +17,65 @@ use aptos_sdk::types::PeerId;
 use aptos_storage_interface::DbReader;
 use move_core_types::account_address::AccountAddress;
 use std::{
+    collections::HashMap,
     sync::Arc,
     time::{Duration, Instant},
 };
+
+const STREAM_DATA_REQUEST_TIMEOUT_FAILPOINT: &str = "state_sync::stream_data_request_timeout";
+const STREAM_DATA_REQUEST_TIMEOUT_FAILPOINT_ACTION: &str = "1*return";
+
+/// Injects a single data stream request timeout so that state sync retries with
+/// its normal response timeout and exponential backoff policy.
+pub fn configure_stream_data_request_timeout_failpoint(config: &mut NodeConfig) {
+    config.failpoints.get_or_insert_with(HashMap::new).insert(
+        STREAM_DATA_REQUEST_TIMEOUT_FAILPOINT.to_string(),
+        STREAM_DATA_REQUEST_TIMEOUT_FAILPOINT_ACTION.to_string(),
+    );
+}
+
+/// Verifies the retry path exercised by the configured data stream timeout.
+pub async fn verify_stream_data_request_timeout_metrics(node: &LocalNode) {
+    let failpoint_is_configured = node
+        .config()
+        .failpoints
+        .as_ref()
+        .and_then(|failpoints| failpoints.get(STREAM_DATA_REQUEST_TIMEOUT_FAILPOINT))
+        .is_some_and(|action| action == STREAM_DATA_REQUEST_TIMEOUT_FAILPOINT_ACTION);
+    if !failpoint_is_configured {
+        return;
+    }
+
+    let timeout_errors = node
+        .get_metric_i64(
+            "aptos_data_streaming_service_received_response_error{error_type=timeout_waiting_for_response}",
+        )
+        .await
+        .unwrap()
+        .unwrap_or_default();
+    assert!(
+        timeout_errors >= 1,
+        "expected the injected data stream request timeout to be recorded"
+    );
+
+    let data_client_config = &node.config().state_sync.aptos_data_client;
+    let retry_timeout_ms = std::cmp::min(
+        data_client_config.max_response_timeout_ms,
+        data_client_config.response_timeout_ms * 2,
+    );
+    let retry_count = node
+        .get_metric_with_fields_i64(
+            "aptos_data_streaming_service_retried_data_requests",
+            HashMap::from([("request_timeout".to_string(), retry_timeout_ms.to_string())]),
+        )
+        .await
+        .unwrap()
+        .unwrap_or_default();
+    assert!(
+        retry_count >= 1,
+        "expected a data stream request retry with timeout {retry_timeout_ms}ms"
+    );
+}
 
 /// Creates a new full node using the given config and swarm
 pub async fn create_fullnode(full_node_config: NodeConfig, swarm: &mut LocalSwarm) -> PeerId {
@@ -162,6 +218,7 @@ pub async fn test_fullnode_sync(
         .await
         .unwrap();
     wait_for_all_nodes(swarm).await;
+    verify_stream_data_request_timeout_metrics(swarm.fullnode(vfn_peer_id).unwrap()).await;
 
     // Execute more transactions on the validator and verify the fullnode catches up
     execute_transactions_and_wait(

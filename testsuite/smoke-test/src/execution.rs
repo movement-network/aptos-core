@@ -6,7 +6,8 @@ use crate::{
     aptos_cli::validator::generate_blob, smoke_test_environment::SwarmBuilder,
     utils::get_current_version,
 };
-use aptos_forge::{NodeExt, Swarm, SwarmExt};
+use anyhow::Context;
+use aptos_forge::{NodeExt, Result, Swarm, SwarmExt};
 use aptos_rest_client::Client;
 use aptos_types::on_chain_config::{
     BlockGasLimitType, ExecutionConfigV4, OnChainExecutionConfig, TransactionDeduperType,
@@ -17,8 +18,16 @@ use std::{sync::Arc, time::Duration};
 
 const MAX_WAIT_SECS: u64 = 30;
 
+async fn consensus_metric(swarm: &dyn Swarm, query: &str) -> Result<Option<u64>> {
+    let validator = swarm.validators().next().unwrap();
+    Ok(validator
+        .get_metric_i64(query)
+        .await?
+        .map(|value| value.max(0) as u64))
+}
+
 #[tokio::test]
-async fn fallback_test() {
+async fn fallback_test() -> Result<()> {
     let swarm = SwarmBuilder::new_local(1)
         .with_init_config(Arc::new(|_, config, _| {
             config.api.failpoints_enabled = true;
@@ -35,6 +44,14 @@ async fn fallback_test() {
 
     let client = swarm.validators().next().unwrap().rest_client();
 
+    let failed_txns_before = tokio::time::timeout(
+        Duration::from_secs(MAX_WAIT_SECS),
+        consensus_metric(&swarm, "aptos_consensus_committed_txns_count{state=failed}"),
+    )
+    .await
+    .context("timed out reading the failed transaction counter baseline")??
+    .unwrap_or(0);
+
     client
         .set_failpoint(
             "aptos_vm::vm_wrapper::execute_transaction".to_string(),
@@ -43,7 +60,29 @@ async fn fallback_test() {
         .await
         .unwrap();
 
-    let version_milestone_0 = get_current_version(&client).await;
+    // The counter delta fences pre-injection executions through ordered post-commit handling.
+    let (_failed_txns_version, version_milestone_0) =
+        tokio::time::timeout(Duration::from_secs(MAX_WAIT_SECS), async {
+            let failed_txns_version = loop {
+                let failed_txns =
+                    consensus_metric(&swarm, "aptos_consensus_committed_txns_count{state=failed}")
+                        .await?
+                        .unwrap_or(0);
+                if failed_txns > failed_txns_before {
+                    break consensus_metric(&swarm, "aptos_consensus_last_committed_version{}")
+                        .await?
+                        .ok_or_else(|| anyhow::anyhow!("committed version metric is missing"))?;
+                }
+                tokio::time::sleep(Duration::from_millis(250)).await;
+            };
+
+            while get_current_version(&client).await < failed_txns_version {
+                tokio::time::sleep(Duration::from_millis(250)).await;
+            }
+            Ok::<_, anyhow::Error>((failed_txns_version, get_current_version(&client).await))
+        })
+        .await
+        .context("timed out waiting for failed commit and REST visibility")??;
     let version_milestone_1 = version_milestone_0 + 1;
     // We won't reach next version.
     assert!(swarm
@@ -68,6 +107,7 @@ async fn fallback_test() {
         .wait_for_all_nodes_to_catchup_to_version(version_milestone_2, Duration::from_secs(30))
         .await
         .expect("milestone 2 taking too long");
+    Ok(())
 }
 
 async fn update_execution_config(

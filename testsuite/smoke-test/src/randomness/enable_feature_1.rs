@@ -3,11 +3,12 @@
 
 use crate::{
     randomness::{
-        decrypt_key_map, script_to_enable_main_logic, script_to_update_consensus_config,
-        verify_dkg_transcript,
+        decrypt_key_map, first_new_block_version_for_epoch, get_on_chain_resource_at_version,
+        governance_activation_epoch_and_version, governance_gas_options,
+        script_to_enable_main_logic, script_to_update_consensus_config, verify_dkg_transcript,
     },
     smoke_test_environment::SwarmBuilder,
-    utils::{get_current_consensus_config, get_on_chain_resource},
+    utils::get_current_consensus_config,
 };
 use aptos_forge::{Node, Swarm, SwarmExt};
 use aptos_logger::{debug, info};
@@ -56,50 +57,69 @@ async fn enable_feature_1() {
 
     debug!("enable_vtxn_script={}", enable_vtxn_script);
     let txn_summary = cli
-        .run_script(root_idx, enable_vtxn_script.as_str())
+        .run_script_with_gas_options(
+            root_idx,
+            enable_vtxn_script.as_str(),
+            Some(governance_gas_options()),
+        )
         .await
         .expect("Txn execution error.");
     debug!("enabling_vtxn_summary={:?}", txn_summary);
 
-    swarm
-        .wait_for_all_nodes_to_catchup_to_epoch(4, Duration::from_secs(epoch_duration_secs * 2))
-        .await
-        .expect("Waited too long for epoch 4.");
+    let (vtxn_epoch, _) = governance_activation_epoch_and_version(
+        &client,
+        &txn_summary,
+        Duration::from_secs(epoch_duration_secs * 2),
+    )
+    .await;
 
-    info!("Now in epoch 4. Enabling randomness main logic.");
+    info!(
+        "Validator transactions enabled in epoch {}. Enabling randomness main logic.",
+        vtxn_epoch
+    );
     let enable_main_logic_script = script_to_enable_main_logic();
     let txn_summary = cli
-        .run_script(root_idx, enable_main_logic_script.as_str())
+        .run_script_with_gas_options(
+            root_idx,
+            enable_main_logic_script.as_str(),
+            Some(governance_gas_options()),
+        )
         .await
         .expect("Txn execution error.");
     debug!("txn_summary={:?}", txn_summary);
 
-    swarm
-        .wait_for_all_nodes_to_catchup_to_epoch(5, Duration::from_secs(epoch_duration_secs * 2))
-        .await
-        .expect("Waited too long for epoch 5.");
+    let (activation_epoch, activation_version) = governance_activation_epoch_and_version(
+        &client,
+        &txn_summary,
+        Duration::from_secs(epoch_duration_secs * 2),
+    )
+    .await;
 
-    info!("Now in epoch 5. Both DKG and vtxn are enabled. There should be no randomness since DKG did not happen at the end of last epoch.");
-    let maybe_last_complete = get_on_chain_resource::<DKGState>(&client)
-        .await
-        .last_completed;
+    info!(
+        "DKG and validator transactions enabled in epoch {} at version {}. No DKG result should be present for that epoch.",
+        activation_epoch, activation_version
+    );
+    let maybe_last_complete =
+        get_on_chain_resource_at_version::<DKGState>(&client, activation_version)
+            .await
+            .last_completed;
     assert!(
-        maybe_last_complete.is_none() || maybe_last_complete.as_ref().unwrap().target_epoch() != 5
+        maybe_last_complete.is_none()
+            || maybe_last_complete.as_ref().unwrap().target_epoch() != activation_epoch
     );
 
-    info!("Waiting for epoch 6.");
-    swarm
-        .wait_for_all_nodes_to_catchup_to_epoch(
-            6,
-            Duration::from_secs(epoch_duration_secs + estimated_dkg_latency_secs),
-        )
-        .await
-        .expect("Waited too long for epoch 6.");
+    let next_epoch = activation_epoch + 1;
+    let next_epoch_version = first_new_block_version_for_epoch(
+        &client,
+        next_epoch,
+        Duration::from_secs(epoch_duration_secs + estimated_dkg_latency_secs),
+    )
+    .await;
 
-    let dkg_session = get_on_chain_resource::<DKGState>(&client)
+    let dkg_session = get_on_chain_resource_at_version::<DKGState>(&client, next_epoch_version)
         .await
         .last_completed
-        .expect("dkg result for epoch 6 should be present");
-    assert_eq!(6, dkg_session.target_epoch());
+        .expect("dkg result for the epoch after activation should be present");
+    assert_eq!(next_epoch, dkg_session.target_epoch());
     assert!(verify_dkg_transcript(&dkg_session, &decrypt_key_map).is_ok());
 }

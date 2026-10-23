@@ -26,6 +26,7 @@ aptos-types = { workspace = true }
 arc-swap = { workspace = true }
 async-trait = { workspace = true }
 enum_dispatch = { workspace = true }
+fail = { workspace = true }
 futures = { workspace = true }
 once_cell = { workspace = true }
 serde = { workspace = true }
@@ -40,3 +41,6 @@ aptos-types = { workspace = true, features = ["fuzzing"] }
 claims = { workspace = true }
 rand = { workspace = true }
 tokio = { workspace = true }
+
+[features]
+failpoints = ["fail/failpoints"]

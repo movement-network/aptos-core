@@ -185,6 +185,7 @@ spec aptos_framework::stake {
         aborts_if !exists<StakingConfig>(@aptos_framework);
         aborts_if !exists<ValidatorSet>(@aptos_framework);
         aborts_if reconfiguration_state::spec_is_in_progress();
+        aborts_if !spec_is_allowed(pool_address);
 
         let stake_pool = global<StakePool>(pool_address);
         let validator_set = global<ValidatorSet>(@aptos_framework);
@@ -785,6 +786,9 @@ spec aptos_framework::stake {
     spec configure_allowed_validators(aptos_framework: &signer, accounts: vector<address>) {
         let aptos_framework_address = signer::address_of(aptos_framework);
         aborts_if !system_addresses::is_aptos_framework_address(aptos_framework_address);
+        let pending = global<ValidatorSet>(@aptos_framework).pending_active;
+        aborts_if exists<ValidatorSet>(@aptos_framework) &&
+            (exists i in 0..len(pending): !contains(accounts, pending[i].addr));
         let post allowed = global<AllowedValidators>(aptos_framework_address);
         // Make sure that the accounts of AllowedValidators are always the passed parameter.
         ensures allowed.accounts == accounts;

@@ -2499,10 +2499,8 @@ pub struct OverrideSizeCheckOption {
 pub struct LargePackagesModuleOption {
     /// Address of the `large_packages` move module for chunked publishing
     ///
-    /// By default, on the module is published at `0x0e1ca3011bdd07246d4d16d909dbb2d6953a86c4735d5acf5865d962c630cce7`
-    /// on Testnet and Mainnet, and `0x7` on localnest/devnet.
-    /// On any custom network where neither is used, you will need to first publish it from the framework
-    /// under move-examples/large_packages.
+    /// Aptos Mainnet and Testnet use `0x0e1ca3011bdd07246d4d16d909dbb2d6953a86c4735d5acf5865d962c630cce7`.
+    /// Other networks require an explicit address for an independently deployed helper.
     #[clap(long, value_parser = crate::common::types::load_account_arg)]
     pub(crate) large_packages_module_address: Option<AccountAddress>,
 }
@@ -2516,9 +2514,13 @@ impl LargePackagesModuleOption {
             Ok(address)
         } else {
             let chain_id = ChainId::new(client.get_ledger_information().await?.inner().chain_id);
+            let default_address = default_large_packages_module_address(&chain_id).ok_or_else(|| {
+                CliError::CommandArgumentError(
+                    "Chunked publishing requires --large-packages-module-address on this network".to_owned(),
+                )
+            })?;
             Ok(
-                AccountAddress::from_str_strict(default_large_packages_module_address(&chain_id))
-                    .map_err(|err| {
+                AccountAddress::from_str_strict(default_address).map_err(|err| {
                     CliError::UnableToParse("Default Large Package Module Address", err.to_string())
                 })?,
             )

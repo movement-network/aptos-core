@@ -60,7 +60,9 @@ impl FullnodeData for FullnodeDataService {
     ) -> Result<Response<Self::GetTransactionsFromNodeStream>, Status> {
         // Gets configs for the stream, partly from the request and partly from the node config
         let r = req.into_inner();
-        let starting_version = r.starting_version.expect("Starting version must be set");
+        // The starting version is required by the fullnode data protocol (the data service always
+        // sets it); reject a request without one instead of panicking the node.
+        let starting_version = require_starting_version(r.starting_version)?;
         let processor_task_count = self.service_context.processor_task_count;
         let processor_batch_size = self.service_context.processor_batch_size;
         let output_batch_size = self.service_context.output_batch_size;
@@ -230,5 +232,22 @@ pub fn get_status(
             },
         )),
         chain_id: ledger_chain_id as u32,
+    }
+}
+
+fn require_starting_version(requested: Option<u64>) -> Result<u64, Status> {
+    requested.ok_or_else(|| Status::invalid_argument("Starting version must be set"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::require_starting_version;
+    use tonic::Code;
+
+    #[test]
+    fn starting_version_is_required() {
+        assert_eq!(require_starting_version(Some(0)).unwrap(), 0);
+        let status = require_starting_version(None).unwrap_err();
+        assert_eq!(status.code(), Code::InvalidArgument);
     }
 }

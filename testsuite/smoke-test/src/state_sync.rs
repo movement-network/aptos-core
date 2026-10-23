@@ -83,7 +83,7 @@ async fn test_fullnode_output_sync_exponential_backoff() {
         .state_sync
         .state_sync_driver
         .continuous_syncing_mode = ContinuousSyncingMode::ApplyTransactionOutputs;
-    vfn_config.state_sync.aptos_data_client.response_timeout_ms = 1;
+    state_sync_utils::configure_stream_data_request_timeout_failpoint(&mut vfn_config);
 
     // Create the fullnode and test its ability to sync
     let vfn_peer_id = state_sync_utils::create_fullnode(vfn_config, &mut swarm).await;
@@ -113,7 +113,7 @@ async fn test_fullnode_intelligent_sync_epoch_changes() {
         .state_sync
         .aptos_data_client
         .max_num_output_reductions = 1;
-    vfn_config.state_sync.aptos_data_client.response_timeout_ms = 1;
+    state_sync_utils::configure_stream_data_request_timeout_failpoint(&mut vfn_config);
 
     // Create the fullnode and test its ability to sync
     let vfn_peer_id = state_sync_utils::create_fullnode(vfn_config, &mut swarm).await;
@@ -143,7 +143,7 @@ async fn test_fullnode_fast_and_intelligent_sync_epoch_changes() {
         .state_sync
         .aptos_data_client
         .max_num_output_reductions = 2;
-    vfn_config.state_sync.aptos_data_client.response_timeout_ms = 1;
+    state_sync_utils::configure_stream_data_request_timeout_failpoint(&mut vfn_config);
 
     // Create the fullnode and test its ability to sync
     let vfn_peer_id = state_sync_utils::create_fullnode(vfn_config, &mut swarm).await;
@@ -430,7 +430,7 @@ async fn test_validator_intelligent_sync_epoch_changes() {
                 .state_sync
                 .aptos_data_client
                 .max_num_output_reductions = 1;
-            config.state_sync.aptos_data_client.response_timeout_ms = 1;
+            state_sync_utils::configure_stream_data_request_timeout_failpoint(config);
         }))
         .build()
         .await;
@@ -490,7 +490,7 @@ async fn test_validator_output_sync_exponential_backoff() {
                 BootstrappingMode::ApplyTransactionOutputsFromGenesis;
             config.state_sync.state_sync_driver.continuous_syncing_mode =
                 ContinuousSyncingMode::ApplyTransactionOutputs;
-            config.state_sync.aptos_data_client.response_timeout_ms = 1;
+            state_sync_utils::configure_stream_data_request_timeout_failpoint(config);
         }))
         .build()
         .await;
@@ -561,7 +561,7 @@ async fn test_all_validators_fast_and_execution_sync() {
 /// If `epoch_changes` are enabled then epoch changes can occur during
 /// test execution and validator syncing.
 async fn test_validator_sync_exponential_backoff(epoch_changes: bool) {
-    // Create a swarm of 4 validators using fast sync and a small response timeout
+    // Create a swarm of 4 validators using fast sync with injected request timeouts
     let mut swarm = SwarmBuilder::new_local(4)
         .with_aptos()
         .with_init_config(Arc::new(|_, config, _| {
@@ -570,7 +570,7 @@ async fn test_validator_sync_exponential_backoff(epoch_changes: bool) {
             config.state_sync.state_sync_driver.continuous_syncing_mode =
                 ContinuousSyncingMode::ApplyTransactionOutputs;
             config.state_sync.aptos_data_client.use_compression = false;
-            config.state_sync.aptos_data_client.response_timeout_ms = 1;
+            state_sync_utils::configure_stream_data_request_timeout_failpoint(config);
         }))
         .with_init_genesis_config(Arc::new(|genesis_config| {
             genesis_config.epoch_duration_secs = 10_000; // Prevent epoch changes from occurring unnecessarily
@@ -622,6 +622,10 @@ async fn test_validator_sync(
     // Restart the validator and wait for all nodes to catchup
     swarm.validator_mut(validator).unwrap().start().unwrap();
     wait_for_all_nodes(swarm).await;
+    state_sync_utils::verify_stream_data_request_timeout_metrics(
+        swarm.validator(validator).unwrap(),
+    )
+    .await;
 
     // Execute multiple transactions and verify the validator
     // can sync and that consensus is still running.

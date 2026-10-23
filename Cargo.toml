@@ -430,7 +430,7 @@ aptos-runtimes = { path = "crates/aptos-runtimes" }
 aptos-safety-rules = { path = "consensus/safety-rules" }
 aptos-schemadb = { path = "storage/schemadb" }
 aptos-scratchpad = { path = "storage/scratchpad" }
-aptos-script-composer = { path = "aptos-move/script-composer" }
+aptos-script-composer = { package = "dynamic-transaction-composer", path = "aptos-move/script-composer" }
 aptos-sdk = { path = "sdk" }
 aptos-sdk-builder = { path = "aptos-move/aptos-sdk-builder" }
 aptos-secure-net = { path = "secure/net" }

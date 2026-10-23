@@ -31,7 +31,7 @@ pub struct ReleaseOptions {
 
     /// For each package, whether it should be built with using latest language features.
     /// Generally packages being deployed to testnet/mainnet need to use default features,
-    /// while those that don't (like aptos-experimental) can use latest language features.
+    /// while custom packages can opt in to latest language features.
     #[clap(long)]
     pub package_use_latest_language: Vec<bool>,
 
@@ -110,7 +110,7 @@ impl ReleaseOptions {
             rust::output(&mut file, abis, true)
                 .with_context(|| format!("Failed to output rust bindings to {}", path.display()))?;
         }
-        std::process::Command::new("rustfmt")
+        let output = std::process::Command::new("rustfmt")
             .arg("--config")
             .arg("imports_granularity=crate")
             .arg(path)
@@ -121,6 +121,13 @@ impl ReleaseOptions {
                     path.display()
                 )
             })?;
+        anyhow::ensure!(
+            output.status.success(),
+            "rustfmt failed on {} ({}): {}",
+            path.display(),
+            output.status,
+            String::from_utf8_lossy(&output.stderr)
+        );
         Ok(())
     }
 }

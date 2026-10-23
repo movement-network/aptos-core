@@ -32,9 +32,7 @@ pub fn generate_upgrade_proposals(
 
     const MVT_APTOS_GIT_PATH: &str = "https://github.com/movement-network/aptos-core.git";
 
-    // NOTE: This is skipping 0x7 (aptos-experimental package) which is only meant to be released
-    // to devnet (or local testnet) via the genesis process and never released/upgraded in testnet
-    // or mainnet.
+    // Upgrade only the five deployed framework packages.
     let mut package_path_list = [
         ("0x1", "aptos-move/framework/move-stdlib"),
         ("0x1", "aptos-move/framework/aptos-stdlib"),

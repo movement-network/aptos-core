@@ -28,6 +28,8 @@ repos:
           - devtools/assets/license_header_utf8.txt
           - --license-filepath
           - devtools/assets/shared_license_header_utf8.txt
+          - --license-filepath
+          - devtools/assets/move_foundation_license_header.txt
           - --comment-style
           - //
       - id: insert-license

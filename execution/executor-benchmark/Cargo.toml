@@ -17,6 +17,7 @@ anyhow = { workspace = true }
 aptos-aggregator = { workspace = true }
 aptos-block-executor = { workspace = true }
 aptos-block-partitioner = { workspace = true }
+aptos-cached-packages = { workspace = true }
 aptos-config = { workspace = true }
 aptos-crypto = { workspace = true }
 aptos-db = { workspace = true }
@@ -34,6 +35,7 @@ aptos-mvhashmap = { workspace = true }
 aptos-node-resource-metrics = { workspace = true }
 aptos-push-metrics =  { workspace = true }
 aptos-sdk = { workspace = true }
+aptos-script-composer = { workspace = true }
 aptos-storage-interface = { workspace = true }
 aptos-transaction-generator-lib = { workspace = true }
 aptos-transaction-workloads-lib = { workspace = true }
@@ -70,6 +72,7 @@ jemallocator = { version = "0.5.0", features = [
 ] }
 
 [dev-dependencies]
+aptos-language-e2e-tests = { workspace = true }
 aptos-temppath = { workspace = true }
 
 [features]

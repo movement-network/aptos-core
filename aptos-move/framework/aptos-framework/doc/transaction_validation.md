@@ -66,9 +66,11 @@
 <b>use</b> <a href="nonce_validation.md#0x1_nonce_validation">0x1::nonce_validation</a>;
 <b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option">0x1::option</a>;
 <b>use</b> <a href="permissioned_signer.md#0x1_permissioned_signer">0x1::permissioned_signer</a>;
+<b>use</b> <a href="script_execution_allowlist.md#0x1_script_execution_allowlist">0x1::script_execution_allowlist</a>;
 <b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">0x1::signer</a>;
 <b>use</b> <a href="system_addresses.md#0x1_system_addresses">0x1::system_addresses</a>;
 <b>use</b> <a href="timestamp.md#0x1_timestamp">0x1::timestamp</a>;
+<b>use</b> <a href="transaction_context.md#0x1_transaction_context">0x1::transaction_context</a>;
 <b>use</b> <a href="transaction_fee.md#0x1_transaction_fee">0x1::transaction_fee</a>;
 <b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">0x1::vector</a>;
 </code></pre>
@@ -313,6 +315,15 @@ important to the semantics of the system.
 
 
 
+<a id="0x1_transaction_validation_PROLOGUE_ESCRIPT_EXECUTION_NOT_ALLOWED"></a>
+
+
+
+<pre><code><b>const</b> <a href="transaction_validation.md#0x1_transaction_validation_PROLOGUE_ESCRIPT_EXECUTION_NOT_ALLOWED">PROLOGUE_ESCRIPT_EXECUTION_NOT_ALLOWED</a>: u64 = 1014;
+</code></pre>
+
+
+
 <a id="0x1_transaction_validation_PROLOGUE_ESECONDARY_KEYS_ADDRESSES_COUNT_MISMATCH"></a>
 
 
@@ -538,6 +549,18 @@ Only called during genesis to initialize system resources for this module.
         <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="transaction_validation.md#0x1_transaction_validation_PROLOGUE_ETRANSACTION_EXPIRED">PROLOGUE_ETRANSACTION_EXPIRED</a>),
     );
     <b>assert</b>!(<a href="chain_id.md#0x1_chain_id_get">chain_id::get</a>() == <a href="chain_id.md#0x1_chain_id">chain_id</a>, <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="transaction_validation.md#0x1_transaction_validation_PROLOGUE_EBAD_CHAIN_ID">PROLOGUE_EBAD_CHAIN_ID</a>));
+
+    // Standalone scripts are identified by a non-empty <b>script</b> <a href="../../aptos-stdlib/../move-stdlib/doc/hash.md#0x1_hash">hash</a>. Entry-function payloads
+    // have an empty <a href="../../aptos-stdlib/../move-stdlib/doc/hash.md#0x1_hash">hash</a> and remain unaffected by this feature.
+    <b>if</b> (
+        <a href="script_execution_allowlist.md#0x1_script_execution_allowlist_is_enabled">script_execution_allowlist::is_enabled</a>()
+            && !<a href="transaction_context.md#0x1_transaction_context_get_script_hash">transaction_context::get_script_hash</a>().is_empty()
+    ) {
+        <b>assert</b>!(
+            <a href="script_execution_allowlist.md#0x1_script_execution_allowlist_is_allowed">script_execution_allowlist::is_allowed</a>(sender_address),
+            <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="transaction_validation.md#0x1_transaction_validation_PROLOGUE_ESCRIPT_EXECUTION_NOT_ALLOWED">PROLOGUE_ESCRIPT_EXECUTION_NOT_ALLOWED</a>),
+        );
+    };
 
     // TODO[Orderless]: Here, we are maintaining the same order of validation steps <b>as</b> before orderless txns were introduced.
     // Ideally, do the replay protection check in the end after the authentication key check and gas payment checks.

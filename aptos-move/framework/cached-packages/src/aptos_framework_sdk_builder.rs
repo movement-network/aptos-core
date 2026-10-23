@@ -446,11 +446,25 @@ pub enum EntryFunctionCall {
         _bridge_transfer_id: Vec<u8>,
     },
 
+    CodeAddPublishAllowlistSender {
+        sender: AccountAddress,
+    },
+
+    CodeDisablePublishAllowlist {},
+
+    CodeEnablePublishAllowlist {},
+
+    CodeInitializePublishAllowlist {},
+
     /// Same as `publish_package` but as an entry function which can be called as a transaction. Because
     /// of current restrictions for txn parameters, the metadata needs to be passed in serialized form.
     CodePublishPackageTxn {
         metadata_serialized: Vec<u8>,
         code: Vec<Vec<u8>>,
+    },
+
+    CodeRemovePublishAllowlistSender {
+        sender: AccountAddress,
     },
 
     CoinCreateCoinConversionMap {},
@@ -482,6 +496,24 @@ pub enum EntryFunctionCall {
     /// available.
     CoinUpgradeSupply {
         coin_type: TypeTag,
+    },
+
+    /// Paused: always aborts with `E_CONFIDENTIAL_ASSETS_PAUSED`.
+    ConfidentialAssetDepositCoins {
+        coin_type: TypeTag,
+        _amount: u64,
+    },
+
+    /// Paused: always aborts with `E_CONFIDENTIAL_ASSETS_PAUSED`.
+    ConfidentialAssetDepositCoinsTo {
+        coin_type: TypeTag,
+        _to: AccountAddress,
+        _amount: u64,
+    },
+
+    /// Paused: always aborts with `E_CONFIDENTIAL_ASSETS_PAUSED`.
+    ConfidentialAssetSetChainAuditor {
+        _new_chain_auditor_ek: Vec<u8>,
     },
 
     /// Add `amount` of coins to the delegation pool `pool_address`.
@@ -522,6 +554,12 @@ pub enum EntryFunctionCall {
     /// Enable partial governance voting on a stake pool. The voter of this stake pool will be managed by this module.
     /// The existing voter will be replaced. The function is permissionless.
     DelegationPoolEnablePartialGovernanceVoting {
+        pool_address: AccountAddress,
+    },
+
+    /// Enable partial governance voting on a delegation pool if it has not already been initialized.
+    /// This is intended for idempotent migration scripts over existing delegation pools.
+    DelegationPoolEnablePartialGovernanceVotingIfNeeded {
         pool_address: AccountAddress,
     },
 
@@ -1053,6 +1091,22 @@ pub enum EntryFunctionCall {
         seed: Vec<u8>,
         metadata_serialized: Vec<u8>,
         code: Vec<Vec<u8>>,
+    },
+
+    ScriptExecutionAllowlistAdd {
+        sender: AccountAddress,
+    },
+
+    ScriptExecutionAllowlistDisable {},
+
+    ScriptExecutionAllowlistEnable {},
+
+    /// Create an empty list without changing existing membership or enabling enforcement.
+    /// Core-resources administration and governance proposals supply the framework signer.
+    ScriptExecutionAllowlistInitialize {},
+
+    ScriptExecutionAllowlistRemove {
+        sender: AccountAddress,
     },
 
     /// Add `amount` of coins from the `account` owning the StakePool.
@@ -1607,10 +1661,17 @@ impl EntryFunctionCall {
             AtomicBridgeInitiatorRefundBridgeTransfer {
                 _bridge_transfer_id,
             } => atomic_bridge_initiator_refund_bridge_transfer(_bridge_transfer_id),
+            CodeAddPublishAllowlistSender { sender } => code_add_publish_allowlist_sender(sender),
+            CodeDisablePublishAllowlist {} => code_disable_publish_allowlist(),
+            CodeEnablePublishAllowlist {} => code_enable_publish_allowlist(),
+            CodeInitializePublishAllowlist {} => code_initialize_publish_allowlist(),
             CodePublishPackageTxn {
                 metadata_serialized,
                 code,
             } => code_publish_package_txn(metadata_serialized, code),
+            CodeRemovePublishAllowlistSender { sender } => {
+                code_remove_publish_allowlist_sender(sender)
+            },
             CoinCreateCoinConversionMap {} => coin_create_coin_conversion_map(),
             CoinCreatePairing { coin_type } => coin_create_pairing(coin_type),
             CoinMigrateCoinStoreToFungibleStore {
@@ -1624,6 +1685,17 @@ impl EntryFunctionCall {
                 amount,
             } => coin_transfer(coin_type, to, amount),
             CoinUpgradeSupply { coin_type } => coin_upgrade_supply(coin_type),
+            ConfidentialAssetDepositCoins { coin_type, _amount } => {
+                confidential_asset_deposit_coins(coin_type, _amount)
+            },
+            ConfidentialAssetDepositCoinsTo {
+                coin_type,
+                _to,
+                _amount,
+            } => confidential_asset_deposit_coins_to(coin_type, _to, _amount),
+            ConfidentialAssetSetChainAuditor {
+                _new_chain_auditor_ek,
+            } => confidential_asset_set_chain_auditor(_new_chain_auditor_ek),
             DelegationPoolAddStake {
                 pool_address,
                 amount,
@@ -1656,6 +1728,9 @@ impl EntryFunctionCall {
             },
             DelegationPoolEnablePartialGovernanceVoting { pool_address } => {
                 delegation_pool_enable_partial_governance_voting(pool_address)
+            },
+            DelegationPoolEnablePartialGovernanceVotingIfNeeded { pool_address } => {
+                delegation_pool_enable_partial_governance_voting_if_needed(pool_address)
             },
             DelegationPoolEvictDelegator { delegator_address } => {
                 delegation_pool_evict_delegator(delegator_address)
@@ -1960,6 +2035,11 @@ impl EntryFunctionCall {
                 metadata_serialized,
                 code,
             ),
+            ScriptExecutionAllowlistAdd { sender } => script_execution_allowlist_add(sender),
+            ScriptExecutionAllowlistDisable {} => script_execution_allowlist_disable(),
+            ScriptExecutionAllowlistEnable {} => script_execution_allowlist_enable(),
+            ScriptExecutionAllowlistInitialize {} => script_execution_allowlist_initialize(),
+            ScriptExecutionAllowlistRemove { sender } => script_execution_allowlist_remove(sender),
             StakeAddStake { amount } => stake_add_stake(amount),
             StakeIncreaseLockup {} => stake_increase_lockup(),
             StakeInitializeStakeOwner {
@@ -3235,6 +3315,66 @@ pub fn atomic_bridge_initiator_refund_bridge_transfer(
     ))
 }
 
+pub fn code_add_publish_allowlist_sender(sender: AccountAddress) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("code").to_owned(),
+        ),
+        ident_str!("add_publish_allowlist_sender").to_owned(),
+        vec![],
+        vec![bcs::to_bytes(&sender).unwrap()],
+    ))
+}
+
+pub fn code_disable_publish_allowlist() -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("code").to_owned(),
+        ),
+        ident_str!("disable_publish_allowlist").to_owned(),
+        vec![],
+        vec![],
+    ))
+}
+
+pub fn code_enable_publish_allowlist() -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("code").to_owned(),
+        ),
+        ident_str!("enable_publish_allowlist").to_owned(),
+        vec![],
+        vec![],
+    ))
+}
+
+pub fn code_initialize_publish_allowlist() -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("code").to_owned(),
+        ),
+        ident_str!("initialize_publish_allowlist").to_owned(),
+        vec![],
+        vec![],
+    ))
+}
+
 /// Same as `publish_package` but as an entry function which can be called as a transaction. Because
 /// of current restrictions for txn parameters, the metadata needs to be passed in serialized form.
 pub fn code_publish_package_txn(
@@ -3255,6 +3395,21 @@ pub fn code_publish_package_txn(
             bcs::to_bytes(&metadata_serialized).unwrap(),
             bcs::to_bytes(&code).unwrap(),
         ],
+    ))
+}
+
+pub fn code_remove_publish_allowlist_sender(sender: AccountAddress) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("code").to_owned(),
+        ),
+        ident_str!("remove_publish_allowlist_sender").to_owned(),
+        vec![],
+        vec![bcs::to_bytes(&sender).unwrap()],
     ))
 }
 
@@ -3354,6 +3509,61 @@ pub fn coin_upgrade_supply(coin_type: TypeTag) -> TransactionPayload {
         ident_str!("upgrade_supply").to_owned(),
         vec![coin_type],
         vec![],
+    ))
+}
+
+/// Paused: always aborts with `E_CONFIDENTIAL_ASSETS_PAUSED`.
+pub fn confidential_asset_deposit_coins(coin_type: TypeTag, _amount: u64) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("confidential_asset").to_owned(),
+        ),
+        ident_str!("deposit_coins").to_owned(),
+        vec![coin_type],
+        vec![bcs::to_bytes(&_amount).unwrap()],
+    ))
+}
+
+/// Paused: always aborts with `E_CONFIDENTIAL_ASSETS_PAUSED`.
+pub fn confidential_asset_deposit_coins_to(
+    coin_type: TypeTag,
+    _to: AccountAddress,
+    _amount: u64,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("confidential_asset").to_owned(),
+        ),
+        ident_str!("deposit_coins_to").to_owned(),
+        vec![coin_type],
+        vec![
+            bcs::to_bytes(&_to).unwrap(),
+            bcs::to_bytes(&_amount).unwrap(),
+        ],
+    ))
+}
+
+/// Paused: always aborts with `E_CONFIDENTIAL_ASSETS_PAUSED`.
+pub fn confidential_asset_set_chain_auditor(_new_chain_auditor_ek: Vec<u8>) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("confidential_asset").to_owned(),
+        ),
+        ident_str!("set_chain_auditor").to_owned(),
+        vec![],
+        vec![bcs::to_bytes(&_new_chain_auditor_ek).unwrap()],
     ))
 }
 
@@ -3493,6 +3703,25 @@ pub fn delegation_pool_enable_partial_governance_voting(
             ident_str!("delegation_pool").to_owned(),
         ),
         ident_str!("enable_partial_governance_voting").to_owned(),
+        vec![],
+        vec![bcs::to_bytes(&pool_address).unwrap()],
+    ))
+}
+
+/// Enable partial governance voting on a delegation pool if it has not already been initialized.
+/// This is intended for idempotent migration scripts over existing delegation pools.
+pub fn delegation_pool_enable_partial_governance_voting_if_needed(
+    pool_address: AccountAddress,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("delegation_pool").to_owned(),
+        ),
+        ident_str!("enable_partial_governance_voting_if_needed").to_owned(),
         vec![],
         vec![bcs::to_bytes(&pool_address).unwrap()],
     ))
@@ -4909,6 +5138,83 @@ pub fn resource_account_create_resource_account_and_publish_package(
             bcs::to_bytes(&metadata_serialized).unwrap(),
             bcs::to_bytes(&code).unwrap(),
         ],
+    ))
+}
+
+pub fn script_execution_allowlist_add(sender: AccountAddress) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("script_execution_allowlist").to_owned(),
+        ),
+        ident_str!("add").to_owned(),
+        vec![],
+        vec![bcs::to_bytes(&sender).unwrap()],
+    ))
+}
+
+pub fn script_execution_allowlist_disable() -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("script_execution_allowlist").to_owned(),
+        ),
+        ident_str!("disable").to_owned(),
+        vec![],
+        vec![],
+    ))
+}
+
+pub fn script_execution_allowlist_enable() -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("script_execution_allowlist").to_owned(),
+        ),
+        ident_str!("enable").to_owned(),
+        vec![],
+        vec![],
+    ))
+}
+
+/// Create an empty list without changing existing membership or enabling enforcement.
+/// Core-resources administration and governance proposals supply the framework signer.
+pub fn script_execution_allowlist_initialize() -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("script_execution_allowlist").to_owned(),
+        ),
+        ident_str!("initialize").to_owned(),
+        vec![],
+        vec![],
+    ))
+}
+
+pub fn script_execution_allowlist_remove(sender: AccountAddress) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("script_execution_allowlist").to_owned(),
+        ),
+        ident_str!("remove").to_owned(),
+        vec![],
+        vec![bcs::to_bytes(&sender).unwrap()],
     ))
 }
 
@@ -6558,11 +6864,65 @@ mod decoder {
         }
     }
 
+    pub fn code_add_publish_allowlist_sender(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::CodeAddPublishAllowlistSender {
+                sender: bcs::from_bytes(script.args().get(0)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn code_disable_publish_allowlist(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(_script) = payload {
+            Some(EntryFunctionCall::CodeDisablePublishAllowlist {})
+        } else {
+            None
+        }
+    }
+
+    pub fn code_enable_publish_allowlist(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(_script) = payload {
+            Some(EntryFunctionCall::CodeEnablePublishAllowlist {})
+        } else {
+            None
+        }
+    }
+
+    pub fn code_initialize_publish_allowlist(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(_script) = payload {
+            Some(EntryFunctionCall::CodeInitializePublishAllowlist {})
+        } else {
+            None
+        }
+    }
+
     pub fn code_publish_package_txn(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
         if let TransactionPayload::EntryFunction(script) = payload {
             Some(EntryFunctionCall::CodePublishPackageTxn {
                 metadata_serialized: bcs::from_bytes(script.args().get(0)?).ok()?,
                 code: bcs::from_bytes(script.args().get(1)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn code_remove_publish_allowlist_sender(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::CodeRemovePublishAllowlistSender {
+                sender: bcs::from_bytes(script.args().get(0)?).ok()?,
             })
         } else {
             None
@@ -6630,6 +6990,45 @@ mod decoder {
         if let TransactionPayload::EntryFunction(script) = payload {
             Some(EntryFunctionCall::CoinUpgradeSupply {
                 coin_type: script.ty_args().get(0)?.clone(),
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn confidential_asset_deposit_coins(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::ConfidentialAssetDepositCoins {
+                coin_type: script.ty_args().get(0)?.clone(),
+                _amount: bcs::from_bytes(script.args().get(0)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn confidential_asset_deposit_coins_to(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::ConfidentialAssetDepositCoinsTo {
+                coin_type: script.ty_args().get(0)?.clone(),
+                _to: bcs::from_bytes(script.args().get(0)?).ok()?,
+                _amount: bcs::from_bytes(script.args().get(1)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn confidential_asset_set_chain_auditor(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::ConfidentialAssetSetChainAuditor {
+                _new_chain_auditor_ek: bcs::from_bytes(script.args().get(0)?).ok()?,
             })
         } else {
             None
@@ -6714,6 +7113,20 @@ mod decoder {
         if let TransactionPayload::EntryFunction(script) = payload {
             Some(
                 EntryFunctionCall::DelegationPoolEnablePartialGovernanceVoting {
+                    pool_address: bcs::from_bytes(script.args().get(0)?).ok()?,
+                },
+            )
+        } else {
+            None
+        }
+    }
+
+    pub fn delegation_pool_enable_partial_governance_voting_if_needed(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(
+                EntryFunctionCall::DelegationPoolEnablePartialGovernanceVotingIfNeeded {
                     pool_address: bcs::from_bytes(script.args().get(0)?).ok()?,
                 },
             )
@@ -7511,6 +7924,60 @@ mod decoder {
                     code: bcs::from_bytes(script.args().get(2)?).ok()?,
                 },
             )
+        } else {
+            None
+        }
+    }
+
+    pub fn script_execution_allowlist_add(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::ScriptExecutionAllowlistAdd {
+                sender: bcs::from_bytes(script.args().get(0)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn script_execution_allowlist_disable(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(_script) = payload {
+            Some(EntryFunctionCall::ScriptExecutionAllowlistDisable {})
+        } else {
+            None
+        }
+    }
+
+    pub fn script_execution_allowlist_enable(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(_script) = payload {
+            Some(EntryFunctionCall::ScriptExecutionAllowlistEnable {})
+        } else {
+            None
+        }
+    }
+
+    pub fn script_execution_allowlist_initialize(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(_script) = payload {
+            Some(EntryFunctionCall::ScriptExecutionAllowlistInitialize {})
+        } else {
+            None
+        }
+    }
+
+    pub fn script_execution_allowlist_remove(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::ScriptExecutionAllowlistRemove {
+                sender: bcs::from_bytes(script.args().get(0)?).ok()?,
+            })
         } else {
             None
         }
@@ -8335,8 +8802,28 @@ static SCRIPT_FUNCTION_DECODER_MAP: once_cell::sync::Lazy<EntryFunctionDecoderMa
             Box::new(decoder::atomic_bridge_initiator_refund_bridge_transfer),
         );
         map.insert(
+            "code_add_publish_allowlist_sender".to_string(),
+            Box::new(decoder::code_add_publish_allowlist_sender),
+        );
+        map.insert(
+            "code_disable_publish_allowlist".to_string(),
+            Box::new(decoder::code_disable_publish_allowlist),
+        );
+        map.insert(
+            "code_enable_publish_allowlist".to_string(),
+            Box::new(decoder::code_enable_publish_allowlist),
+        );
+        map.insert(
+            "code_initialize_publish_allowlist".to_string(),
+            Box::new(decoder::code_initialize_publish_allowlist),
+        );
+        map.insert(
             "code_publish_package_txn".to_string(),
             Box::new(decoder::code_publish_package_txn),
+        );
+        map.insert(
+            "code_remove_publish_allowlist_sender".to_string(),
+            Box::new(decoder::code_remove_publish_allowlist_sender),
         );
         map.insert(
             "coin_create_coin_conversion_map".to_string(),
@@ -8361,6 +8848,18 @@ static SCRIPT_FUNCTION_DECODER_MAP: once_cell::sync::Lazy<EntryFunctionDecoderMa
         map.insert(
             "coin_upgrade_supply".to_string(),
             Box::new(decoder::coin_upgrade_supply),
+        );
+        map.insert(
+            "confidential_asset_deposit_coins".to_string(),
+            Box::new(decoder::confidential_asset_deposit_coins),
+        );
+        map.insert(
+            "confidential_asset_deposit_coins_to".to_string(),
+            Box::new(decoder::confidential_asset_deposit_coins_to),
+        );
+        map.insert(
+            "confidential_asset_set_chain_auditor".to_string(),
+            Box::new(decoder::confidential_asset_set_chain_auditor),
         );
         map.insert(
             "delegation_pool_add_stake".to_string(),
@@ -8389,6 +8888,10 @@ static SCRIPT_FUNCTION_DECODER_MAP: once_cell::sync::Lazy<EntryFunctionDecoderMa
         map.insert(
             "delegation_pool_enable_partial_governance_voting".to_string(),
             Box::new(decoder::delegation_pool_enable_partial_governance_voting),
+        );
+        map.insert(
+            "delegation_pool_enable_partial_governance_voting_if_needed".to_string(),
+            Box::new(decoder::delegation_pool_enable_partial_governance_voting_if_needed),
         );
         map.insert(
             "delegation_pool_evict_delegator".to_string(),
@@ -8631,6 +9134,26 @@ static SCRIPT_FUNCTION_DECODER_MAP: once_cell::sync::Lazy<EntryFunctionDecoderMa
         map.insert(
             "resource_account_create_resource_account_and_publish_package".to_string(),
             Box::new(decoder::resource_account_create_resource_account_and_publish_package),
+        );
+        map.insert(
+            "script_execution_allowlist_add".to_string(),
+            Box::new(decoder::script_execution_allowlist_add),
+        );
+        map.insert(
+            "script_execution_allowlist_disable".to_string(),
+            Box::new(decoder::script_execution_allowlist_disable),
+        );
+        map.insert(
+            "script_execution_allowlist_enable".to_string(),
+            Box::new(decoder::script_execution_allowlist_enable),
+        );
+        map.insert(
+            "script_execution_allowlist_initialize".to_string(),
+            Box::new(decoder::script_execution_allowlist_initialize),
+        );
+        map.insert(
+            "script_execution_allowlist_remove".to_string(),
+            Box::new(decoder::script_execution_allowlist_remove),
         );
         map.insert(
             "stake_add_stake".to_string(),

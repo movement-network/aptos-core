@@ -148,6 +148,7 @@ jobs:
             BUILD_DATE=${{ needs.setup.outputs.build_date }}
           ghcr_username: ${{ github.actor }}
           ghcr_password: ${{ secrets.GITHUB_TOKEN }}
+          image_source: https://github.com/movement-network/aptos-core
           git_sha: ${{ needs.setup.outputs.git_sha }}
 
   container-aptos-debugger:
@@ -186,6 +187,7 @@ jobs:
             BUILD_DATE=${{ needs.setup.outputs.build_date }}
           ghcr_username: ${{ github.actor }}
           ghcr_password: ${{ secrets.GITHUB_TOKEN }}
+          image_source: https://github.com/movement-network/aptos-core
           git_sha: ${{ needs.setup.outputs.git_sha }}
 
   binaries-aptos-faucet-service:
@@ -248,6 +250,7 @@ jobs:
             BUILD_DATE=${{ needs.setup.outputs.build_date }}
           ghcr_username: ${{ github.actor }}
           ghcr_password: ${{ secrets.GITHUB_TOKEN }}
+          image_source: https://github.com/movement-network/aptos-core
           git_sha: ${{ needs.setup.outputs.git_sha }}
 
   binaries-aptos-tools:

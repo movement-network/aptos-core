@@ -26,7 +26,8 @@ terminate-after = 1
 # like profile.ci
 status-level = "skip"
 failure-output = "immediate-final"
-fail-fast = true
+# Complete the suite so one failure does not hide unrelated regressions.
+fail-fast = false
 # different than ci
 test-threads = 6
 retries = 3

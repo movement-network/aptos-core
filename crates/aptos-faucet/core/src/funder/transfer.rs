@@ -46,6 +46,13 @@ pub struct TransferFunderConfig {
 
     /// The amount of coins to fund the receiver account.
     pub amount_to_fund: AmountToFund,
+
+    /// If true, the funder also funds receiver accounts that already exist,
+    /// transferring up to `amount_to_fund` to them with
+    /// `0x1::aptos_account::transfer`. If false (the default), a request for an
+    /// existing account is rejected with `AccountAlreadyExists`.
+    #[serde(default)]
+    pub allow_existing_accounts: bool,
 }
 
 impl TransferFunderConfig {
@@ -76,6 +83,7 @@ impl TransferFunderConfig {
             self.transaction_submission_config
                 .wait_for_outstanding_txns_secs,
             self.transaction_submission_config.wait_for_transactions,
+            self.allow_existing_accounts,
         );
 
         Ok(funder)
@@ -114,6 +122,10 @@ pub struct TransferFunder {
 
     /// If set, we won't return responses until the transaction is processed.
     wait_for_transactions: bool,
+
+    /// If set, we also fund receiver accounts that already exist, rather than
+    /// rejecting them with `AccountAlreadyExists`.
+    allow_existing_accounts: bool,
 }
 
 impl TransferFunder {
@@ -131,6 +143,7 @@ impl TransferFunder {
         transaction_expiration_secs: u64,
         wait_for_outstanding_txns_secs: u64,
         wait_for_transactions: bool,
+        allow_existing_accounts: bool,
     ) -> Self {
         let gas_unit_price_manager =
             GasUnitPriceManager::new(node_url.clone(), gas_unit_price_ttl_secs);
@@ -150,6 +163,7 @@ impl TransferFunder {
             outstanding_requests: RwLock::new(vec![]),
             wait_for_outstanding_txns_secs,
             wait_for_transactions,
+            allow_existing_accounts,
         }
     }
 
@@ -220,6 +234,26 @@ impl TransferFunder {
         .await
     }
 
+    /// Reject a receiver that already exists on chain (it has a sequence number)
+    /// unless the funder is configured to fund existing accounts.
+    fn check_receiver_eligibility(
+        &self,
+        receiver_address: AccountAddress,
+        receiver_seq_num: Option<u64>,
+    ) -> Result<(), AptosTapError> {
+        if receiver_seq_num.is_some() && !self.allow_existing_accounts {
+            return Err(AptosTapError::new(
+                "Account ineligible".to_string(),
+                AptosTapErrorCode::Rejected,
+            )
+            .rejection_reasons(vec![RejectionReason::new(
+                format!("Account {} already exists", receiver_address),
+                RejectionReasonCode::AccountAlreadyExists,
+            )]));
+        }
+        Ok(())
+    }
+
     async fn is_healthy_as_result(&self) -> Result<(), AptosTapError> {
         let funder_health = self.is_healthy().await;
         if !funder_health.can_process_requests {
@@ -240,13 +274,14 @@ impl TransferFunder {
 #[async_trait]
 impl FunderTrait for TransferFunder {
     /// Before actually initiating the fund transaction, we do a set of checks,
-    /// such as ensuring that the funder has sufficient funds and that the
-    /// receiver account does not yet exist. These are not meant to completely
-    /// verify these preconditions, as there could be races between the checks
-    /// and the transaction submission between requests, but it reduces the
-    /// prevalence of transaction failure. The transaction we submit ensures
-    /// that the account doesn't exist already, so that's our real guarantee,
-    /// the prior checks are just to avoid paying gas if we don't need to.
+    /// such as ensuring that the funder has sufficient funds and, unless
+    /// `allow_existing_accounts` is set, that the receiver account does not yet
+    /// exist. These are not meant to completely verify these preconditions, as
+    /// there could be races between the checks and the transaction submission
+    /// between requests, but it reduces the prevalence of transaction failure.
+    /// The existence check is a policy check only: the transfer we submit
+    /// works for both new and existing accounts, so a receiver created between
+    /// the check and the submission is still funded.
     /// If check_only is set, we only do the initial checks without actually
     /// submitting any transactions.
     async fn fund(
@@ -278,22 +313,12 @@ impl FunderTrait for TransferFunder {
         )
         .await?;
 
-        // When updating the sequence numbers, we expect that the receiver sequence
-        // number should be None, because the account should not exist yet.
-        if receiver_seq_num.is_some() {
-            return Err(AptosTapError::new(
-                "Account ineligible".to_string(),
-                AptosTapErrorCode::Rejected,
-            )
-            .rejection_reasons(vec![RejectionReason::new(
-                format!("Account {} already exists", receiver_address),
-                RejectionReasonCode::AccountAlreadyExists,
-            )]));
-        }
+        // The receiver sequence number is Some if the account already exists.
+        // By default we only fund accounts that do not exist yet.
+        self.check_receiver_eligibility(receiver_address, receiver_seq_num)?;
 
-        // This Move function checks if the account exists, and if it does,
-        // returns an error. If not, it creates the account and transfers the
-        // requested amount of coins to it.
+        // This Move function creates the receiver account if it does not exist
+        // yet, then transfers the requested amount of coins to it.
         let transactions = if check_only {
             vec![]
         } else {
@@ -411,5 +436,278 @@ impl FromStr for AmountToFund {
             .parse::<u64>()
             .with_context(|| format!("Parsing u64 string {} failed", s))?;
         Ok(Self(data))
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::endpoints::USE_HELPFUL_ERRORS;
+    use aptos_sdk::{
+        bcs, crypto::Uniform, move_types::account_address::AccountAddress as MoveAddress,
+    };
+    use poem::{
+        get, handler,
+        http::StatusCode,
+        listener::TcpListener,
+        post,
+        web::{Data, Path},
+        Body, EndpointExt, Response, Route, Server,
+    };
+    use std::{
+        collections::HashSet,
+        sync::{Arc, Mutex},
+    };
+
+    const AMOUNT_TO_FUND: u64 = 100;
+
+    /// A minimal stand-in for the node API endpoints the TransferFunder uses:
+    /// account lookup, the balance view function and BCS transaction submission.
+    /// Submitted transactions are treated as committed immediately, so the
+    /// funder's on-chain sequence number is the number of submissions.
+    struct MockNode {
+        funder_address: AccountAddress,
+        existing_accounts: HashMap<AccountAddress, u64>,
+        submitted: Mutex<Vec<SignedTransaction>>,
+    }
+
+    fn with_state_headers(status: StatusCode, body: Body) -> Response {
+        Response::builder()
+            .status(status)
+            .header("X-Aptos-Chain-Id", "4")
+            .header("X-Aptos-Epoch", "1")
+            .header("X-Aptos-Ledger-Version", "1")
+            .header("X-Aptos-Ledger-Oldest-Version", "0")
+            .header("X-Aptos-Block-Height", "1")
+            .header("X-Aptos-Oldest-Block-Height", "0")
+            .header("X-Aptos-Ledger-TimestampUsec", "1")
+            .body(body)
+    }
+
+    #[handler]
+    fn get_account(Path(address): Path<String>, node: Data<&Arc<MockNode>>) -> Response {
+        let address = AccountAddress::from_hex(address.trim_start_matches("0x"))
+            .expect("mock node got an invalid address");
+        let sequence_number = if address == node.funder_address {
+            Some(node.submitted.lock().unwrap().len() as u64)
+        } else {
+            node.existing_accounts.get(&address).copied()
+        };
+        match sequence_number {
+            Some(sequence_number) => with_state_headers(
+                StatusCode::OK,
+                Body::from_json(serde_json::json!({
+                    "sequence_number": sequence_number.to_string(),
+                    "authentication_key": format!("0x{}", "00".repeat(32)),
+                }))
+                .unwrap(),
+            ),
+            None => with_state_headers(
+                StatusCode::NOT_FOUND,
+                Body::from_json(serde_json::json!({
+                    "message": format!("Account not found by Address({})", address),
+                    "error_code": "account_not_found",
+                    "vm_error_code": null,
+                }))
+                .unwrap(),
+            ),
+        }
+    }
+
+    #[handler]
+    fn view() -> Response {
+        with_state_headers(
+            StatusCode::OK,
+            Body::from(bcs::to_bytes(&vec![u64::MAX]).unwrap()),
+        )
+    }
+
+    #[handler]
+    fn submit(body: Vec<u8>, node: Data<&Arc<MockNode>>) -> Response {
+        let txn: SignedTransaction =
+            bcs::from_bytes(&body).expect("mock node got an invalid transaction");
+        node.submitted.lock().unwrap().push(txn);
+        with_state_headers(StatusCode::ACCEPTED, Body::empty())
+    }
+
+    async fn start_mock_node(
+        existing_accounts: &[(AccountAddress, u64)],
+    ) -> (Url, Arc<MockNode>, LocalAccount) {
+        let key = Ed25519PrivateKey::generate_for_testing();
+        let funder_address = account_address_from_private_key(&key);
+        let faucet_account = LocalAccount::new(funder_address, key, 0);
+        let node = Arc::new(MockNode {
+            funder_address,
+            existing_accounts: existing_accounts.iter().copied().collect(),
+            submitted: Mutex::new(vec![]),
+        });
+        let app = Route::new()
+            .at("/v1/accounts/:address", get(get_account))
+            .at("/v1/view", post(view))
+            .at("/v1/transactions", post(submit))
+            .data(node.clone());
+        let port = aptos_config::utils::get_available_port();
+        tokio::spawn(Server::new(TcpListener::bind(format!("127.0.0.1:{}", port))).run(app));
+        let url = Url::parse(&format!("http://127.0.0.1:{}/", port)).unwrap();
+        for _ in 0..100 {
+            if tokio::net::TcpStream::connect(("127.0.0.1", port))
+                .await
+                .is_ok()
+            {
+                return (url, node, faucet_account);
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        panic!("mock node did not start");
+    }
+
+    fn build_funder(
+        faucet_account: LocalAccount,
+        node_url: Url,
+        allow_existing_accounts: bool,
+    ) -> TransferFunder {
+        let _ = USE_HELPFUL_ERRORS.set(true);
+        TransferFunder::new(
+            faucet_account,
+            ChainId::test(),
+            node_url,
+            None,
+            None,
+            MinimumFunds(0),
+            AmountToFund(AMOUNT_TO_FUND),
+            Duration::from_secs(30),
+            Some(100),
+            10_000,
+            30,
+            // wait_for_outstanding_txns_secs
+            5,
+            // wait_for_transactions
+            false,
+            allow_existing_accounts,
+        )
+    }
+
+    /// Assert that the transaction transfers `amount` to `receiver` through
+    /// 0x1::aptos_account::transfer.
+    fn assert_is_transfer(txn: &SignedTransaction, receiver: AccountAddress, amount: u64) {
+        let entry_function = match txn.payload() {
+            TransactionPayload::EntryFunction(entry_function) => entry_function,
+            other => panic!("unexpected payload {:?}", other),
+        };
+        assert_eq!(entry_function.module().address(), &MoveAddress::ONE);
+        assert_eq!(entry_function.module().name().as_str(), "aptos_account");
+        assert_eq!(entry_function.function().as_str(), "transfer");
+        assert_eq!(entry_function.args(), &[
+            bcs::to_bytes(&receiver).unwrap(),
+            bcs::to_bytes(&amount).unwrap()
+        ]);
+    }
+
+    #[test]
+    fn test_config_allow_existing_accounts_defaults_to_false() {
+        let base = "node_url: \"http://127.0.0.1:8080\"\nchain_id: 4\nminimum_funds: 10\namount_to_fund: 5\n";
+        let config: TransferFunderConfig = serde_yaml::from_str(base).unwrap();
+        assert!(!config.allow_existing_accounts);
+
+        let config: TransferFunderConfig =
+            serde_yaml::from_str(&format!("{}allow_existing_accounts: true\n", base)).unwrap();
+        assert!(config.allow_existing_accounts);
+    }
+
+    #[tokio::test]
+    async fn test_existing_account_rejected_by_default() {
+        let receiver = AccountAddress::random();
+        let (url, node, faucet_account) = start_mock_node(&[(receiver, 3)]).await;
+        let funder = build_funder(faucet_account, url, false);
+
+        for check_only in [true, false] {
+            let error = funder
+                .fund(None, receiver, check_only, false)
+                .await
+                .expect_err("existing account should be rejected by default");
+            assert_eq!(error.error_code, AptosTapErrorCode::Rejected);
+            assert_eq!(
+                error
+                    .rejection_reasons
+                    .iter()
+                    .map(|reason| reason.get_code())
+                    .collect::<Vec<_>>(),
+                vec![RejectionReasonCode::AccountAlreadyExists]
+            );
+        }
+        assert!(node.submitted.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_existing_account_funded_when_allowed() {
+        let receiver = AccountAddress::random();
+        let (url, node, faucet_account) = start_mock_node(&[(receiver, 3)]).await;
+        let funder = build_funder(faucet_account, url, true);
+
+        // check_only passes the checks without submitting anything.
+        let txns = funder.fund(None, receiver, true, false).await.unwrap();
+        assert!(txns.is_empty());
+        assert!(node.submitted.lock().unwrap().is_empty());
+
+        // A real request transfers to the existing account, capped at
+        // amount_to_fund, and does not wait on the receiver's sequence number.
+        let txns = tokio::time::timeout(
+            Duration::from_secs(5),
+            funder.fund(Some(AMOUNT_TO_FUND * 10), receiver, false, false),
+        )
+        .await
+        .expect("funding an existing account should not stall")
+        .unwrap();
+        assert_eq!(txns.len(), 1);
+        assert_is_transfer(&txns[0], receiver, AMOUNT_TO_FUND);
+        let submitted = node.submitted.lock().unwrap();
+        assert_eq!(submitted.len(), 1);
+        assert_is_transfer(&submitted[0], receiver, AMOUNT_TO_FUND);
+    }
+
+    #[tokio::test]
+    async fn test_new_account_funded_in_both_modes() {
+        for allow_existing_accounts in [false, true] {
+            let (url, node, faucet_account) = start_mock_node(&[]).await;
+            let funder = build_funder(faucet_account, url, allow_existing_accounts);
+            let receiver = AccountAddress::random();
+            let txns = funder.fund(Some(7), receiver, false, false).await.unwrap();
+            assert_eq!(txns.len(), 1);
+            assert_is_transfer(&txns[0], receiver, 7);
+            assert_eq!(node.submitted.lock().unwrap().len(), 1);
+        }
+    }
+
+    /// Many concurrent requests for the same existing receiver share the same
+    /// (receiver, amount) key in the outstanding request queue. They must all
+    /// complete, each with its own funder sequence number.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn test_concurrent_requests_for_same_existing_account() {
+        let receiver = AccountAddress::random();
+        let (url, node, faucet_account) = start_mock_node(&[(receiver, 0)]).await;
+        let funder = Arc::new(build_funder(faucet_account, url, true));
+
+        let num_requests = 40;
+        let handles: Vec<_> = (0..num_requests)
+            .map(|_| {
+                let funder = funder.clone();
+                tokio::spawn(async move { funder.fund(None, receiver, false, false).await })
+            })
+            .collect();
+        let mut sequence_numbers = HashSet::new();
+        for handle in handles {
+            let txns = tokio::time::timeout(Duration::from_secs(20), handle)
+                .await
+                .expect("concurrent requests should not stall")
+                .unwrap()
+                .unwrap();
+            assert_is_transfer(&txns[0], receiver, AMOUNT_TO_FUND);
+            assert!(sequence_numbers.insert(txns[0].sequence_number()));
+        }
+        assert_eq!(
+            sequence_numbers,
+            (0..num_requests as u64).collect::<HashSet<_>>()
+        );
+        assert_eq!(node.submitted.lock().unwrap().len(), num_requests);
     }
 }

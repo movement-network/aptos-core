@@ -10,12 +10,13 @@ use aptos_logger::info;
 use aptos_rest_client::Client;
 use aptos_types::{
     dkg::{DKGSessionState, DKGState, DKGTrait, DefaultDKG},
-    on_chain_config::{OnChainConfig, OnChainConsensusConfig},
+    on_chain_config::{ConfigurationResource, OnChainConfig, OnChainConsensusConfig},
     randomness::{PerBlockRandomness, RandMetadata, WVUF},
     validator_verifier::ValidatorConsensusInfo,
 };
 use digest::Digest;
 use move_core_types::{account_address::AccountAddress, language_storage::CORE_CODE_ADDRESS};
+use movement::common::types::{GasOptions, TransactionSummary};
 use rand::{prelude::StdRng, SeedableRng};
 use std::{collections::HashMap, time::Duration};
 use tokio::time::Instant;
@@ -57,6 +58,96 @@ async fn get_on_chain_resource_at_version<T: OnChainConfig>(
         .await;
     let response = maybe_response.unwrap();
     response.into_inner()
+}
+
+/// Return the ledger version of the first committed block in `target_epoch`.
+///
+/// The configuration change transaction records the epoch it applies to only in
+/// its pre-state.  Read the resources asserted by these tests at that epoch's
+/// first block, rather than at whatever later epoch the compiler/runtime has
+/// reached.
+async fn first_new_block_version_for_epoch(
+    rest_client: &Client,
+    target_epoch: u64,
+    time_limit: Duration,
+) -> u64 {
+    const PAGE_SIZE: u16 = 100;
+
+    let deadline = Instant::now() + time_limit;
+    let (_, state) = rest_client
+        .get_new_block_events_bcs(None, Some(1))
+        .await
+        .expect("failed to determine the new-block event cursor")
+        .into_parts();
+    let mut cursor = state.oldest_block_height;
+
+    loop {
+        let events = rest_client
+            .get_new_block_events_bcs(Some(cursor), Some(PAGE_SIZE))
+            .await
+            .expect("failed to fetch new-block events")
+            .into_inner();
+
+        for event in events {
+            match event.event.epoch().cmp(&target_epoch) {
+                std::cmp::Ordering::Less => cursor = event.sequence_number + 1,
+                std::cmp::Ordering::Equal => return event.version,
+                std::cmp::Ordering::Greater => panic!(
+                    "first retained new-block event for epoch {} is already after target epoch {}",
+                    event.event.epoch(),
+                    target_epoch,
+                ),
+            }
+        }
+
+        assert!(
+            Instant::now() < deadline,
+            "timed out waiting for a committed new-block event in epoch {target_epoch}"
+        );
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+}
+
+/// Avoid a reconfiguration transaction being capped by a simulation from a
+/// different execution state. Keep the normal estimated gas price and expiry.
+fn governance_gas_options() -> GasOptions {
+    GasOptions {
+        max_gas: Some(2_000_000),
+        ..Default::default()
+    }
+}
+
+/// Identify the epoch in which a governance reconfiguration transaction takes
+/// effect and a stable ledger version for assertions about that epoch.
+async fn governance_activation_epoch_and_version(
+    rest_client: &Client,
+    txn_summary: &TransactionSummary,
+    time_limit: Duration,
+) -> (u64, u64) {
+    let transaction_version = txn_summary
+        .version
+        .expect("governance reconfiguration transaction did not report a version");
+    tokio::time::timeout(
+        time_limit,
+        rest_client.wait_for_version(transaction_version),
+    )
+    .await
+    .expect("timed out waiting for the historical reader to reach the governance transaction")
+    .expect("historical reader failed while waiting for the governance transaction");
+
+    let pre_state_version = transaction_version
+        .checked_sub(1)
+        .expect("governance reconfiguration transaction has no pre-state version");
+    let activation_epoch =
+        get_on_chain_resource_at_version::<ConfigurationResource>(rest_client, pre_state_version)
+            .await
+            .epoch()
+            .checked_add(1)
+            .expect("configuration epoch overflow");
+    let activation_version =
+        first_new_block_version_for_epoch(rest_client, activation_epoch, time_limit).await;
+
+    (activation_epoch, activation_version)
 }
 
 /// Poll the on-chain state until we see a DKG session finishes.

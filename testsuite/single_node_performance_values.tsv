@@ -44,10 +44,6 @@ no-op-fee-payer	100	VM	57	0.903	1.031	24743.2
 simple-script	1	VM	57	0.836	1.050	32094.5
 vector-trim-append-len3000-size1	1	VM	57	0.824	1.032	740.9
 vector-remove-insert-len3000-size1	1	VM	57	0.897	1.026	807.0
-order-book-no-matches	1	VM	56	0.8	1.2	1450.0
-order-book-balanced-matches25-pct	1	VM	56	0.8	1.2	920.0
-order-book-balanced-matches80-pct	1	VM	56	0.8	1.2	487.0
-order-book-balanced-size-skewed80-pct	1	VM	56	0.8	1.2	1091.0
 no_commit_apt-fa-transfer	1	VM	57	0.952	1.037	23751.6
 no_commit_apt-fa-transfer	1	NativeVM	57	0.878	1.023	49486.4
 no_commit_apt-fa-transfer	1	AptosVMSpeculative	57	0.914	1.012	1014.9

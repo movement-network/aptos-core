@@ -6,7 +6,7 @@ use aptos_cached_packages::aptos_stdlib;
 use aptos_crypto::SigningKey;
 use aptos_forge::Swarm;
 use aptos_sdk::types::{AccountKey, LocalAccount};
-use aptos_types::function_info::FunctionInfo;
+use aptos_types::{function_info::FunctionInfo, on_chain_config::Features};
 use ethers::{
     core::rand::rngs::OsRng,
     signers::{LocalWallet, Signer},
@@ -92,7 +92,19 @@ fn bytes_to_base58(bytes: &[u8]) -> String {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn test_solana_derivable_account() {
-    let swarm = SwarmBuilder::new_local(1).with_aptos().build().await;
+    let features = Features::default();
+    if !features.is_derivable_account_abstraction_enabled() {
+        eprintln!(
+            "Skipping derivable account abstraction: disabled in the default feature configuration"
+        );
+        return;
+    }
+    // An explicit override initializes the authentication registry if the feature is enabled.
+    let swarm = SwarmBuilder::new_local(1)
+        .with_aptos()
+        .with_initial_features_override(features)
+        .build()
+        .await;
     let mut info = swarm.aptos_public_info();
 
     let function_info = FunctionInfo::new(
@@ -149,12 +161,26 @@ async fn test_solana_derivable_account() {
     info.client()
         .submit_and_wait(&create_txn)
         .await
-        .unwrap_or_else(|_| panic!("aa: {:?}", create_txn));
+        .unwrap_or_else(|err| {
+            panic!("aa transaction failed: {err:?}\ntransaction: {create_txn:?}")
+        });
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn test_ethereum_derivable_account() {
-    let swarm = SwarmBuilder::new_local(1).with_aptos().build().await;
+    let features = Features::default();
+    if !features.is_derivable_account_abstraction_enabled() {
+        eprintln!(
+            "Skipping derivable account abstraction: disabled in the default feature configuration"
+        );
+        return;
+    }
+    // An explicit override initializes the authentication registry if the feature is enabled.
+    let swarm = SwarmBuilder::new_local(1)
+        .with_aptos()
+        .with_initial_features_override(features)
+        .build()
+        .await;
     let mut info = swarm.aptos_public_info();
 
     let function_info = FunctionInfo::new(
@@ -229,5 +255,7 @@ async fn test_ethereum_derivable_account() {
     info.client()
         .submit_and_wait(&create_txn)
         .await
-        .unwrap_or_else(|_| panic!("aa: {:?}", create_txn));
+        .unwrap_or_else(|err| {
+            panic!("aa transaction failed: {err:?}\ntransaction: {create_txn:?}")
+        });
 }

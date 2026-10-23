@@ -29,7 +29,7 @@ async fn test_aptos_node_after_get_bin() {
     let validator_peer_ids = swarm.validators().map(|v| v.peer_id()).collect::<Vec<_>>();
 
     // Before #5308 this re-compiled aptos-node and caused a panic on the vfn.
-    let _aptos_cli = crate::workspace_builder::get_bin("aptos");
+    let _aptos_cli = crate::workspace_builder::get_bin("movement");
 
     let validator = validator_peer_ids[0];
     let _vfn = swarm

@@ -20,7 +20,8 @@ use aptos_config::{
 };
 use aptos_forge::{
     get_highest_synced_version, get_highest_synced_version_and_epoch,
-    wait_for_all_nodes_to_catchup, LocalNode, LocalSwarm, Node, NodeExt, SwarmExt, Validator,
+    wait_for_all_nodes_to_catchup, wait_for_all_nodes_to_catchup_to_version, LocalNode, LocalSwarm,
+    Node, NodeExt, SwarmExt, Validator,
 };
 use aptos_temppath::TempPath;
 use aptos_types::{transaction::Transaction, waypoint::Waypoint};
@@ -32,6 +33,7 @@ use std::{
     path::PathBuf,
     process::Command,
     str::FromStr,
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -52,7 +54,7 @@ use std::{
 async fn test_fullnode_genesis_transaction_flow() {
     println!("0. Building the Aptos CLI and debugger!");
     let aptos_debugger = workspace_builder::get_bin("aptos-debugger");
-    let aptos_cli = workspace_builder::get_bin("aptos");
+    let aptos_cli = workspace_builder::get_bin("movement");
 
     println!("1. Starting a 4 node validator network with 2 VFNs!");
     let num_validators = 4;
@@ -197,14 +199,26 @@ async fn test_fullnode_genesis_transaction_flow() {
 async fn test_validator_genesis_transaction_and_db_restore_flow() {
     println!("0. Building the Aptos CLI and debugger!");
     let aptos_debugger = workspace_builder::get_bin("aptos-debugger");
-    let aptos_cli = workspace_builder::get_bin("aptos");
+    let aptos_cli = workspace_builder::get_bin("movement");
 
     println!("1. Starting a 5 node validator network!");
     let num_validators = 5;
     let (mut swarm, cli_test_framework, _) = SwarmBuilder::new_local(num_validators)
         .with_aptos()
+        .with_init_genesis_config(Arc::new(|genesis_config| {
+            // Avoid halting during a background epoch change. The recovery script
+            // below explicitly ends the epoch after removing the validator.
+            genesis_config.epoch_duration_secs = 10_000;
+        }))
         .build_with_cli(0)
         .await;
+
+    // The first block starts an epoch transition because genesis has timestamp 0.
+    // Let it finish before sync_only mode halts consensus and DKG completion.
+    swarm
+        .wait_for_all_nodes_to_catchup_to_epoch(2, Duration::from_secs(MAX_CATCH_UP_WAIT_SECS))
+        .await
+        .unwrap();
 
     println!("2. Enabling `sync_only` mode for the last validator and verifying that it can sync!");
     let last_validator = swarm.validators_mut().last().unwrap();
@@ -246,6 +260,12 @@ async fn test_validator_genesis_transaction_and_db_restore_flow() {
         .output()
         .unwrap();
 
+    assert!(
+        output.status.success(),
+        "Recovery bootstrap failed: stdout={}, stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
     println!("8. Parsing the output to get the waypoint: {:?}", output);
     let output_string = std::str::from_utf8(&output.stdout).unwrap();
     let waypoint = parse_waypoint(output_string);
@@ -357,12 +377,26 @@ async fn delete_db_and_execute_restore(
         &[waypoint],
     );
 
+    // Capture the known committed boundary before taking the validator offline. This is a
+    // fixed catch-up target for the restored validator. Keep the successfully read backup
+    // target as a floor because the best-effort swarm query can miss unavailable nodes.
+    let target_version = get_highest_synced_version(&env.get_all_nodes_clients_with_names())
+        .await
+        .unwrap()
+        .max(current_version);
+
     // Stop the specified validator
     let validator = env.validators_mut().nth(validator_index).unwrap();
     validator.stop();
 
-    // Disable sync_only mode on the specified validator
+    // Trust the same recovery waypoint used to restore the database, and prevent
+    // initial safety-rule setup from replacing it with the original genesis waypoint.
     let mut validator_config = validator.config().clone();
+    insert_waypoint(&mut validator_config, waypoint);
+    validator_config
+        .consensus
+        .safety_rules
+        .initial_safety_rules_config = InitialSafetyRulesConfig::None;
     validator_config.consensus.sync_only = false;
     validator_config
         .save_to_path(validator.config_path())
@@ -383,27 +417,25 @@ async fn delete_db_and_execute_restore(
         db_dir.as_path(),
         &[waypoint],
         enable_storage_sharding,
-        None,
+        // The recovery waypoint is an epoch-ending ledger info. Restore exactly through it so
+        // the DB's latest ledger info remains the trusted boundary when consensus starts.
+        waypoint.version(),
     );
 
     // Restart the validator and wait for it to become healthy
     validator.start().unwrap();
     wait_for_health_and_connectivity(validator, NetworkId::Validator, num_nodes - 2).await;
 
-    // Wait until the validator catches up to the current version
-    let client = validator.rest_client();
-    let version = get_highest_synced_version(&env.get_all_nodes_clients_with_names())
-        .await
-        .unwrap();
-    loop {
-        if let Ok(resp) = client.get_ledger_information().await {
-            if resp.into_inner().version > version {
-                println!("Node 3 catches up on {}", version);
-                break;
-            }
-        }
-        tokio::time::sleep(Duration::from_secs(1)).await;
-    }
+    // Verify the restored validator reaches the fixed pre-restart committed boundary. The helper
+    // has a bounded timeout and reports the named node, unlike the previous unbounded poll.
+    let restored_validator = vec![(validator.name().to_string(), validator.rest_client())];
+    wait_for_all_nodes_to_catchup_to_version(
+        &restored_validator,
+        target_version,
+        Duration::from_secs(MAX_CATCH_UP_WAIT_SECS),
+    )
+    .await
+    .unwrap();
 }
 
 /// Deletes the DB of the specified validator and waits for it to catch up
@@ -482,7 +514,7 @@ fn generate_genesis_transaction(
     genesis_blob_path.create_as_file().unwrap();
 
     // Generate the genesis write-set transaction
-    Command::new(aptos_cli.as_path())
+    let output = Command::new(aptos_cli.as_path())
         .current_dir(workspace_root())
         .args(&vec![
             "genesis",
@@ -499,6 +531,13 @@ fn generate_genesis_transaction(
         ])
         .output()
         .unwrap();
+
+    assert!(
+        output.status.success(),
+        "Recovery transaction generation failed: stdout={}, stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
 
     // Read the genesis transaction from the temporary file
     let genesis_transaction = {

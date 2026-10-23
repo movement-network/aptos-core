@@ -14,6 +14,8 @@ module aptos_framework::code {
     use aptos_framework::event;
     use aptos_framework::object::{Self, Object};
     use aptos_framework::permissioned_signer;
+    use aptos_framework::allowlist::{Self, Allowlist};
+    use aptos_framework::transaction_context;
 
     friend aptos_framework::object_code_deployment;
 
@@ -111,7 +113,128 @@ module aptos_framework::code {
     /// Current permissioned signer cannot publish codes.
     const ENO_CODE_PERMISSION: u64 = 0xB;
 
+    /// The primary transaction sender is not approved for publishing.
+    const EPUBLISHING_NOT_ALLOWED: u64 = 0xC;
+    /// Publishing allowlist administration requires initialization.
+    const EPUBLISH_ALLOWLIST_NOT_INITIALIZED: u64 = 0xD;
+
     struct CodePublishingPermission has copy, drop, store {}
+
+    struct PublishAllowlist has key {
+        allowlist: Allowlist,
+    }
+
+    #[event]
+    struct PublishAllowlistEnabledChanged has drop, store {
+        enabled: bool,
+    }
+
+    #[event]
+    struct PublishAllowedSenderChanged has drop, store {
+        sender: address,
+        allowed: bool,
+    }
+
+    public entry fun initialize_publish_allowlist(framework: &signer) {
+        system_addresses::assert_aptos_framework(framework);
+        if (!exists<PublishAllowlist>(@aptos_framework)) {
+            move_to(framework, PublishAllowlist { allowlist: allowlist::new() });
+        };
+    }
+
+    public entry fun enable_publish_allowlist(framework: &signer) acquires PublishAllowlist {
+        system_addresses::assert_aptos_framework(framework);
+        assert!(exists<PublishAllowlist>(@aptos_framework), error::not_found(EPUBLISH_ALLOWLIST_NOT_INITIALIZED));
+        let list = &mut borrow_global_mut<PublishAllowlist>(@aptos_framework).allowlist;
+        if (allowlist::enable(list)) {
+            event::emit(PublishAllowlistEnabledChanged { enabled: true });
+        };
+    }
+
+    public entry fun disable_publish_allowlist(framework: &signer) acquires PublishAllowlist {
+        system_addresses::assert_aptos_framework(framework);
+        assert!(exists<PublishAllowlist>(@aptos_framework), error::not_found(EPUBLISH_ALLOWLIST_NOT_INITIALIZED));
+        let list = &mut borrow_global_mut<PublishAllowlist>(@aptos_framework).allowlist;
+        if (allowlist::disable(list)) {
+            event::emit(PublishAllowlistEnabledChanged { enabled: false });
+        };
+    }
+
+    public entry fun add_publish_allowlist_sender(
+        framework: &signer, sender: address
+    ) acquires PublishAllowlist {
+        system_addresses::assert_aptos_framework(framework);
+        assert!(exists<PublishAllowlist>(@aptos_framework), error::not_found(EPUBLISH_ALLOWLIST_NOT_INITIALIZED));
+        let list = &mut borrow_global_mut<PublishAllowlist>(@aptos_framework).allowlist;
+        if (allowlist::add(list, sender)) {
+            event::emit(PublishAllowedSenderChanged { sender, allowed: true });
+        };
+    }
+
+    public entry fun remove_publish_allowlist_sender(
+        framework: &signer, sender: address
+    ) acquires PublishAllowlist {
+        system_addresses::assert_aptos_framework(framework);
+        assert!(exists<PublishAllowlist>(@aptos_framework), error::not_found(EPUBLISH_ALLOWLIST_NOT_INITIALIZED));
+        let list = &mut borrow_global_mut<PublishAllowlist>(@aptos_framework).allowlist;
+        if (allowlist::remove(list, sender)) {
+            event::emit(PublishAllowedSenderChanged { sender, allowed: false });
+        };
+    }
+
+    #[view]
+    public fun is_publish_allowlist_enabled(): bool acquires PublishAllowlist {
+        exists<PublishAllowlist>(@aptos_framework)
+            && allowlist::is_enabled(&PublishAllowlist[@aptos_framework].allowlist)
+    }
+
+    /// Returns configured membership, regardless of whether publishing enforcement is enabled.
+    #[view]
+    public fun is_publish_allowlisted(sender: address): bool acquires PublishAllowlist {
+        exists<PublishAllowlist>(@aptos_framework)
+            && allowlist::is_allowed(&PublishAllowlist[@aptos_framework].allowlist, sender)
+    }
+
+    #[view]
+    public fun get_publish_allowed_senders(): vector<address> acquires PublishAllowlist {
+        if (exists<PublishAllowlist>(@aptos_framework)) {
+            allowlist::get_allowed_senders(&PublishAllowlist[@aptos_framework].allowlist)
+        } else {
+            vector[]
+        }
+    }
+
+    #[test]
+    fun test_publish_allowlist_defaults_disabled() acquires PublishAllowlist {
+        assert!(!is_publish_allowlist_enabled(), 0);
+        assert!(!is_publish_allowlisted(@0xcafe), 1);
+        assert!(get_publish_allowed_senders().is_empty(), 2);
+    }
+
+    #[test(framework = @aptos_framework)]
+    fun test_publish_allowlist_initialize_preserves_state(framework: signer) acquires PublishAllowlist {
+        initialize_publish_allowlist(&framework);
+        add_publish_allowlist_sender(&framework, @0xcafe);
+        enable_publish_allowlist(&framework);
+        initialize_publish_allowlist(&framework);
+        assert!(is_publish_allowlist_enabled(), 0);
+        assert!(is_publish_allowlisted(@0xcafe), 1);
+        assert!(get_publish_allowed_senders().length() == 1, 2);
+    }
+
+    #[test(framework = @aptos_framework)]
+    fun test_enabled_empty_publish_allowlist(framework: signer) acquires PublishAllowlist {
+        initialize_publish_allowlist(&framework);
+        enable_publish_allowlist(&framework);
+        assert!(is_publish_allowlist_enabled(), 0);
+        assert!(!is_publish_allowlisted(@0xcafe), 1);
+    }
+
+    #[test(attacker = @0xcafe)]
+    #[expected_failure(abort_code = 0x50003, location = aptos_framework::system_addresses)]
+    fun test_publish_allowlist_admin_requires_framework(attacker: signer) {
+        initialize_publish_allowlist(&attacker);
+    }
 
     /// Permissions
     public(friend) fun check_code_publishing_permission(s: &signer) {
@@ -165,7 +288,13 @@ module aptos_framework::code {
 
     /// Publishes a package at the given signer's address. The caller must provide package metadata describing the
     /// package.
-    public fun publish_package(owner: &signer, pack: PackageMetadata, code: vector<vector<u8>>) acquires PackageRegistry {
+    public fun publish_package(owner: &signer, pack: PackageMetadata, code: vector<vector<u8>>) acquires PackageRegistry, PublishAllowlist {
+        if (is_publish_allowlist_enabled()) {
+            assert!(
+                is_publish_allowlisted(transaction_context::sender_internal()),
+                error::permission_denied(EPUBLISHING_NOT_ALLOWED),
+            );
+        };
         check_code_publishing_permission(owner);
         // Disallow incompatible upgrade mode. Governance can decide later if this should be reconsidered.
         assert!(
@@ -254,7 +383,7 @@ module aptos_framework::code {
     /// Same as `publish_package` but as an entry function which can be called as a transaction. Because
     /// of current restrictions for txn parameters, the metadata needs to be passed in serialized form.
     public entry fun publish_package_txn(owner: &signer, metadata_serialized: vector<u8>, code: vector<vector<u8>>)
-    acquires PackageRegistry {
+    acquires PackageRegistry, PublishAllowlist {
         publish_package(owner, util::from_bytes<PackageMetadata>(metadata_serialized), code)
     }
 

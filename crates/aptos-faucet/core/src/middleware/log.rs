@@ -2,14 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::metrics::{HISTOGRAM, RESPONSE_STATUS};
+use crate::common::SourceIp;
 use aptos_logger::{
     error, info,
     prelude::{sample, SampleRate},
     warn, Schema,
 };
-use poem::{
-    http::header, web::RealIp, Endpoint, FromRequest, Request, RequestBody, Response, Result,
-};
+use poem::{http::header, Endpoint, FromRequest, Request, RequestBody, Response, Result};
 use poem_openapi::OperationId;
 use std::{net::IpAddr, time::Duration};
 
@@ -22,7 +21,7 @@ use std::{net::IpAddr, time::Duration};
 pub async fn middleware_log<E: Endpoint>(next: E, request: Request) -> Result<Response> {
     let start = std::time::Instant::now();
 
-    let source_ip = RealIp::from_request(&request, &mut RequestBody::default())
+    let source_ip = SourceIp::from_request(&request, &mut RequestBody::default())
         .await
         .map(|ip| ip.0)
         .unwrap_or(None);

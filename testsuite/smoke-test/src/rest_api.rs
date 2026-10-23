@@ -4,29 +4,34 @@
 
 use crate::{
     smoke_test_environment::{new_local_swarm_with_aptos, SwarmBuilder},
-    txn_emitter::generate_traffic,
+    txn_emitter::create_emit_job_request,
 };
 use aptos_cached_packages::aptos_stdlib;
 use aptos_config::config::GasEstimationConfig;
 use aptos_crypto::ed25519::Ed25519Signature;
-use aptos_forge::{LocalSwarm, NodeExt, Swarm, TransactionType};
+use aptos_forge::{EmitJobMode, LocalSwarm, NodeExt, Swarm, TransactionType, TxnEmitter};
 use aptos_global_constants::{DEFAULT_BUCKETS, GAS_UNIT_PRICE};
 use aptos_rest_client::{
     aptos_api_types::{MoveModuleId, TransactionData, ViewFunction, ViewRequest},
     Client,
 };
-use aptos_sdk::move_types::language_storage::StructTag;
+use aptos_sdk::{move_types::language_storage::StructTag, transaction_builder::TransactionFactory};
 use aptos_types::{
     account_address::AccountAddress,
     account_config::{AccountResource, CORE_CODE_ADDRESS},
     on_chain_config::{ExecutionConfigV2, OnChainExecutionConfig, TransactionShufflerType},
-    transaction::{authenticator::AuthenticationKey, SignedTransaction, Transaction},
+    transaction::{
+        authenticator::AuthenticationKey,
+        use_case::{UseCaseAwareTransaction, UseCaseKey},
+        SignedTransaction, Transaction,
+    },
 };
 use move_core_types::{
     ident_str,
     language_storage::{ModuleId, TypeTag},
 };
-use std::{convert::TryFrom, str::FromStr, sync::Arc, time::Duration};
+use rand::{rngs::OsRng, SeedableRng};
+use std::{collections::HashMap, convert::TryFrom, str::FromStr, sync::Arc, time::Duration};
 
 #[tokio::test]
 async fn test_get_index() {
@@ -97,7 +102,7 @@ async fn block_height(client: &Client) -> u64 {
         .block_height
 }
 
-async fn test_gas_estimation_inner(swarm: &mut LocalSwarm) {
+async fn test_gas_estimation_inner(swarm: &mut LocalSwarm, full_threshold: Option<usize>) {
     let client = swarm.validators().next().unwrap().rest_client();
     let estimation = match client.estimate_gas_price().await {
         Ok(res) => res.into_inner(),
@@ -114,10 +119,9 @@ async fn test_gas_estimation_inner(swarm: &mut LocalSwarm) {
 
     let txn_gas_price = 100;
     let all_validators: Vec<_> = swarm.validators().map(|v| v.peer_id()).collect();
-    let txn_stat = generate_traffic(
+    let mut emit_job_request = create_emit_job_request(
         swarm,
         &all_validators,
-        Duration::from_secs(20),
         txn_gas_price,
         vec![vec![(
             TransactionType::CoinTransfer {
@@ -128,15 +132,165 @@ async fn test_gas_estimation_inner(swarm: &mut LocalSwarm) {
             },
             100,
         )]],
+        aptos_forge::AccountType::Local,
     )
     .await
     .unwrap();
-    println!("{:?}", txn_stat.rate());
+    emit_job_request = emit_job_request.mode(EmitJobMode::MaxLoad {
+        mempool_backlog: 100,
+    });
+    let rng = SeedableRng::from_rng(OsRng).unwrap();
+    let transaction_factory =
+        TransactionFactory::new(swarm.chain_info().chain_id).with_gas_unit_price(txn_gas_price);
+    let mut emitter = TxnEmitter::new(transaction_factory, rng, client.clone());
+    let emit_job = emitter
+        .start_job(swarm.chain_info().root_account, emit_job_request, 1)
+        .await
+        .unwrap();
 
-    let estimation = match client.estimate_gas_price().await {
-        Ok(res) => res.into_inner(),
-        Err(e) => panic!("Client error: {:?}", e),
-    };
+    let required_blocks = GasEstimationConfig::default().aggressive_block_history as u64;
+    let load_result = tokio::time::timeout(Duration::from_secs(180), async {
+        let Some(full_threshold) = full_threshold else {
+            let start_height = client
+                .get_ledger_information()
+                .await
+                .map_err(|error| error.to_string())?
+                .into_inner()
+                .block_height;
+            return loop {
+                let current_height = client
+                    .get_ledger_information()
+                    .await
+                    .map_err(|error| error.to_string())?
+                    .into_inner()
+                    .block_height;
+                if current_height > start_height + required_blocks {
+                    break client
+                        .estimate_gas_price()
+                        .await
+                        .map(|response| response.into_inner())
+                        .map_err(|error| error.to_string());
+                }
+                tokio::time::sleep(Duration::from_millis(200)).await;
+            };
+        };
+        let required_blocks = required_blocks as usize;
+        let gas_config = GasEstimationConfig::default();
+        let mut block_cache = HashMap::new();
+        loop {
+            // Each sample must outlive our previous estimate's cache entry. Judge readiness
+            // from its immutable input window, never from the returned price.
+            tokio::time::sleep(Duration::from_millis(gas_config.cache_expiration_ms)).await;
+            let estimate = client
+                .estimate_gas_price()
+                .await
+                .map_err(|error| error.to_string())?;
+            let sample_version = estimate.state().version;
+            let sample_epoch = estimate.state().epoch;
+            let current_height = client
+                .get_block_by_version_bcs(sample_version, false)
+                .await
+                .map_err(|error| error.to_string())?
+                .into_inner()
+                .block_height;
+            // Exclude the newest block because it may still be the estimator's partial input.
+            let latest_completed = current_height.saturating_sub(1);
+            let Some(first_height) = latest_completed.checked_sub(required_blocks as u64 - 1)
+            else {
+                tokio::time::sleep(Duration::from_millis(200)).await;
+                continue;
+            };
+            block_cache.retain(|height, _| *height >= first_height);
+            for height in first_height..=latest_completed {
+                if block_cache.contains_key(&height) {
+                    continue;
+                }
+                let block = client
+                    .get_block_by_height_bcs(height, true)
+                    .await
+                    .map_err(|error| error.to_string())?
+                    .into_inner();
+                let transactions = block
+                    .transactions
+                    .as_ref()
+                    .ok_or_else(|| format!("block {height} omitted transactions"))?;
+                if block.last_version - block.first_version + 1 != transactions.len() as u64 {
+                    return Err(format!("block {height} has incomplete transactions"));
+                }
+                block_cache.insert(height, block);
+            }
+            let blocks: Vec<_> = (first_height..=latest_completed)
+                .filter_map(|height| block_cache.get(&height))
+                .collect();
+            if blocks.len() != required_blocks {
+                tokio::time::sleep(Duration::from_millis(200)).await;
+                continue;
+            }
+            let epochs: Vec<_> = blocks
+                .iter()
+                .filter_map(|block| {
+                    block
+                        .transactions
+                        .as_ref()?
+                        .iter()
+                        .find_map(|txn| match &txn.transaction {
+                            Transaction::BlockMetadata(metadata) => Some(metadata.epoch()),
+                            Transaction::BlockMetadataExt(metadata) => Some(metadata.epoch()),
+                            _ => None,
+                        })
+                })
+                .collect();
+            let Some(epoch) = epochs.first().copied() else {
+                tokio::time::sleep(Duration::from_millis(200)).await;
+                continue;
+            };
+            let all_same_epoch = epochs.len() == required_blocks
+                && epochs.iter().all(|value| *value == sample_epoch);
+            let all_inputs_match = blocks.iter().all(|block| {
+                block
+                    .transactions
+                    .as_ref()
+                    .unwrap()
+                    .iter()
+                    .filter_map(|txn| txn.transaction.try_as_signed_user_txn())
+                    .all(|txn| {
+                        txn.gas_unit_price() == txn_gas_price
+                            && matches!(txn.parse_use_case(), UseCaseKey::Platform)
+                    })
+            });
+            let latest_market = &blocks[required_blocks - gas_config.market_block_history..];
+            let full_market_blocks = latest_market
+                .iter()
+                .filter(|block| {
+                    block
+                        .transactions
+                        .as_ref()
+                        .unwrap()
+                        .iter()
+                        .filter(|txn| txn.transaction.try_as_signed_user_txn().is_some())
+                        .count()
+                        >= full_threshold
+                })
+                .count();
+            println!(
+                "gas estimation input gate: latest_version={} epoch={} full_market_blocks={}/{}",
+                sample_version,
+                epoch,
+                full_market_blocks,
+                latest_market.len()
+            );
+            if all_same_epoch && all_inputs_match && full_market_blocks > latest_market.len() / 2 {
+                break Ok(estimate.into_inner());
+            }
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+    })
+    .await;
+    let txn_stats = emit_job.stop_and_accumulate().await;
+    println!("{:?}", txn_stats.last().map(|stats| stats.rate()));
+    let estimation = load_result
+        .expect("Timed out waiting for enough loaded blocks for gas estimation")
+        .expect("Client error while waiting for loaded blocks or estimating gas price");
     println!("{:?}", estimation);
     // Note: it's quite hard to get deprioritized_gas_estimate higher in smoke tests
     assert_eq!(next_bucket(txn_gas_price), estimation.gas_estimate);
@@ -148,17 +302,21 @@ async fn test_gas_estimation_inner(swarm: &mut LocalSwarm) {
     // Wait for enough empty blocks to reset the prices
     let num_blocks_to_reset = GasEstimationConfig::default().aggressive_block_history as u64;
     let base_height = block_height(&client).await;
-    loop {
-        let num_blocks_passed = block_height(&client).await - base_height;
-        if num_blocks_passed > num_blocks_to_reset {
-            println!("{} blocks passed, done sleeping", num_blocks_passed);
-            break;
+    tokio::time::timeout(Duration::from_secs(180), async {
+        loop {
+            let num_blocks_passed = block_height(&client).await - base_height;
+            if num_blocks_passed > num_blocks_to_reset {
+                println!("{} blocks passed, done sleeping", num_blocks_passed);
+                break;
+            }
+            println!("{} blocks passed, sleeping 10 secs...", num_blocks_passed);
+            // Exercise cache
+            client.estimate_gas_price().await.unwrap();
+            tokio::time::sleep(Duration::from_secs(10)).await;
         }
-        println!("{} blocks passed, sleeping 10 secs...", num_blocks_passed);
-        // Exercise cache
-        client.estimate_gas_price().await.unwrap();
-        std::thread::sleep(Duration::from_secs(10));
-    }
+    })
+    .await
+    .expect("Timed out waiting for enough empty blocks to reset gas prices");
 
     // Multiple times, to exercise cache
     for _i in 0..2 {
@@ -185,10 +343,10 @@ async fn test_gas_estimation_txns_limit() {
             conf.api.gas_estimation.enabled = true;
             // Use a small full block threshold to make gas estimates update sooner.
             conf.api.gas_estimation.full_block_txns = max_block_txns as usize;
-            // Wait for full blocks with small block size to advance consensus at a fast rate.
             conf.consensus.quorum_store_poll_time_ms = 200;
             conf.consensus.wait_for_full_blocks_above_pending_blocks = 0;
             conf.consensus.max_sending_block_txns = max_block_txns;
+            conf.consensus.max_sending_block_txns_after_filtering = max_block_txns;
             conf.consensus.quorum_store.sender_max_batch_txns = conf
                 .consensus
                 .quorum_store
@@ -203,7 +361,7 @@ async fn test_gas_estimation_txns_limit() {
         .build()
         .await;
 
-    test_gas_estimation_inner(&mut swarm).await;
+    test_gas_estimation_inner(&mut swarm, Some(3)).await;
 }
 
 #[tokio::test]
@@ -227,6 +385,7 @@ async fn test_gas_estimation_gas_used_limit() {
             conf.consensus.quorum_store_poll_time_ms = 200;
             conf.consensus.wait_for_full_blocks_above_pending_blocks = 0;
             conf.consensus.max_sending_block_txns = max_block_txns;
+            conf.consensus.max_sending_block_txns_after_filtering = max_block_txns;
             conf.consensus.quorum_store.sender_max_batch_txns = conf
                 .consensus
                 .quorum_store
@@ -241,7 +400,7 @@ async fn test_gas_estimation_gas_used_limit() {
         .build()
         .await;
 
-    test_gas_estimation_inner(&mut swarm).await;
+    test_gas_estimation_inner(&mut swarm, None).await;
 }
 
 #[tokio::test]

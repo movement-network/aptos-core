@@ -8,6 +8,7 @@ use crate::{
 };
 use aptos_crypto::ed25519::Ed25519PrivateKey;
 use aptos_logger::info;
+use aptos_script_composer::{CallArgument, TransactionComposer};
 use aptos_sdk::{
     transaction_builder::{aptos_stdlib, TransactionFactory},
     types::LocalAccount,
@@ -20,12 +21,13 @@ use aptos_types::{
     account_config::{aptos_test_root_address, AccountResource},
     chain_id::ChainId,
     state_store::MoveResourceExt,
-    transaction::{EntryFunction, Transaction, TransactionPayload},
+    transaction::{Script, Transaction, TransactionPayload},
 };
 use chrono::Local;
 use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
-use move_core_types::{ident_str, language_storage::ModuleId};
+use move_core_types::{transaction_argument::TransactionArgument, value::MoveValue};
+use once_cell::sync::Lazy;
 #[cfg(test)]
 use rand::SeedableRng;
 use rand::{rngs::StdRng, seq::SliceRandom, thread_rng, Rng};
@@ -51,6 +53,59 @@ use thread_local::ThreadLocal;
 
 const META_FILENAME: &str = "metadata.toml";
 pub const MAX_ACCOUNTS_INVOLVED_IN_P2P: usize = 1_000_000;
+
+static CREATE_AND_FUND_ACCOUNT_SCRIPT: Lazy<Script> = Lazy::new(|| {
+    let mut composer = TransactionComposer::single_signer();
+    for module in aptos_cached_packages::head_release_bundle()
+        .compiled_modules()
+        .into_iter()
+        .filter(|module| {
+            let id = module.self_id();
+            id.address() == &AccountAddress::ONE
+                && matches!(id.name().as_str(), "account" | "aptos_account")
+        })
+    {
+        composer.insert_module(module);
+    }
+
+    let recipient = MoveValue::Address(AccountAddress::ZERO)
+        .simple_serialize()
+        .unwrap();
+    composer
+        .add_batched_call(
+            "0x1::account".to_string(),
+            "create_account_if_does_not_exist".to_string(),
+            vec![],
+            vec![CallArgument::new_bytes(recipient.clone())],
+        )
+        .unwrap();
+    composer
+        .add_batched_call(
+            "0x1::aptos_account".to_string(),
+            "transfer".to_string(),
+            vec![],
+            vec![
+                CallArgument::new_signer(0),
+                CallArgument::new_bytes(recipient),
+                CallArgument::new_bytes(MoveValue::U64(0).simple_serialize().unwrap()),
+            ],
+        )
+        .unwrap();
+
+    bcs::from_bytes(&composer.generate_batched_calls(true).unwrap()).unwrap()
+});
+
+fn create_and_fund_account_payload(recipient: AccountAddress, amount: u64) -> TransactionPayload {
+    TransactionPayload::Script(Script::new(
+        CREATE_AND_FUND_ACCOUNT_SCRIPT.code().to_vec(),
+        vec![],
+        vec![
+            TransactionArgument::Address(recipient),
+            TransactionArgument::Address(recipient),
+            TransactionArgument::U64(amount),
+        ],
+    ))
+}
 
 pub(crate) fn get_progress_bar(num_accounts: usize) -> ProgressBar {
     let bar = ProgressBar::new(num_accounts as u64);
@@ -448,20 +503,11 @@ impl TransactionGenerator {
                 Arc::new(AtomicUsize::new(0)),
                 |(sender_idx, new_account), account_cache| {
                     let sender = &account_cache.accounts[sender_idx];
-                    // Use special function to both transfer, and create account resource.
-                    let payload = TransactionPayload::EntryFunction(EntryFunction::new(
-                        ModuleId::new(
-                            AccountAddress::SEVEN,
-                            ident_str!("benchmark_utils").to_owned(),
-                        ),
-                        ident_str!("transfer_and_create_account").to_owned(),
-                        vec![],
-                        vec![
-                            bcs::to_bytes(&new_account.authentication_key().account_address())
-                                .unwrap(),
-                            bcs::to_bytes(&init_account_balance).unwrap(),
-                        ],
-                    ));
+                    // Materialize AccountResource before funding the new account.
+                    let payload = create_and_fund_account_payload(
+                        new_account.authentication_key().account_address(),
+                        init_account_balance,
+                    );
                     let txn = sender
                         .sign_with_transaction_builder(self.transaction_factory.payload(payload));
                     Some(Transaction::UserTransaction(txn))
@@ -892,4 +938,40 @@ fn test_get_conflicting_grps_transfer_indices() {
             assert_eq!(get_num_connected_components(&adj_list), connected_txn_grps);
         }
     }
+}
+
+#[test]
+fn test_create_and_fund_account_payload_creates_before_transferring() {
+    let recipient = AccountAddress::from_hex_literal("0xcafe").unwrap();
+    let amount = 42;
+    assert!(aptos_types::on_chain_config::Features::default()
+        .is_enabled(aptos_types::on_chain_config::FeatureFlag::DEFAULT_ACCOUNT_RESOURCE,));
+
+    let mut executor = aptos_language_e2e_tests::executor::FakeExecutor::from_head_genesis();
+    let sender = executor.new_account_at(AccountAddress::from_hex_literal("0xa11ce").unwrap());
+    let recipient_account =
+        aptos_language_e2e_tests::account::Account::new_genesis_account(recipient);
+    let account_key = aptos_types::state_store::state_key::StateKey::resource_typed::<AccountResource>(
+        &recipient,
+    )
+    .unwrap();
+    assert!(executor.read_state_value(&account_key).is_none());
+    let output = executor.execute_transaction(
+        sender
+            .transaction()
+            .sequence_number(0)
+            .gas_unit_price(100)
+            .payload(create_and_fund_account_payload(recipient, amount))
+            .sign(),
+    );
+    assert!(output.status().status().unwrap().is_success());
+    executor.apply_write_set(output.write_set());
+    assert!(executor.read_account_resource(&recipient_account).is_some());
+    assert_eq!(
+        executor
+            .read_apt_fungible_store_resource(&recipient_account)
+            .unwrap()
+            .balance(),
+        amount
+    );
 }

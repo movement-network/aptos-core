@@ -13,8 +13,19 @@ This module supports functionality related to code management.
 -  [Struct `UpgradePolicy`](#0x1_code_UpgradePolicy)
 -  [Struct `PublishPackage`](#0x1_code_PublishPackage)
 -  [Struct `CodePublishingPermission`](#0x1_code_CodePublishingPermission)
+-  [Resource `PublishAllowlist`](#0x1_code_PublishAllowlist)
+-  [Struct `PublishAllowlistEnabledChanged`](#0x1_code_PublishAllowlistEnabledChanged)
+-  [Struct `PublishAllowedSenderChanged`](#0x1_code_PublishAllowedSenderChanged)
 -  [Struct `AllowedDep`](#0x1_code_AllowedDep)
 -  [Constants](#@Constants_0)
+-  [Function `initialize_publish_allowlist`](#0x1_code_initialize_publish_allowlist)
+-  [Function `enable_publish_allowlist`](#0x1_code_enable_publish_allowlist)
+-  [Function `disable_publish_allowlist`](#0x1_code_disable_publish_allowlist)
+-  [Function `add_publish_allowlist_sender`](#0x1_code_add_publish_allowlist_sender)
+-  [Function `remove_publish_allowlist_sender`](#0x1_code_remove_publish_allowlist_sender)
+-  [Function `is_publish_allowlist_enabled`](#0x1_code_is_publish_allowlist_enabled)
+-  [Function `is_publish_allowlisted`](#0x1_code_is_publish_allowlisted)
+-  [Function `get_publish_allowed_senders`](#0x1_code_get_publish_allowed_senders)
 -  [Function `check_code_publishing_permission`](#0x1_code_check_code_publishing_permission)
 -  [Function `grant_permission`](#0x1_code_grant_permission)
 -  [Function `upgrade_policy_arbitrary`](#0x1_code_upgrade_policy_arbitrary)
@@ -47,7 +58,8 @@ This module supports functionality related to code management.
     -  [Function `request_publish_with_allowed_deps`](#@Specification_1_request_publish_with_allowed_deps)
 
 
-<pre><code><b>use</b> <a href="../../aptos-stdlib/doc/copyable_any.md#0x1_copyable_any">0x1::copyable_any</a>;
+<pre><code><b>use</b> <a href="allowlist.md#0x1_allowlist">0x1::allowlist</a>;
+<b>use</b> <a href="../../aptos-stdlib/doc/copyable_any.md#0x1_copyable_any">0x1::copyable_any</a>;
 <b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error">0x1::error</a>;
 <b>use</b> <a href="event.md#0x1_event">0x1::event</a>;
 <b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features">0x1::features</a>;
@@ -57,6 +69,7 @@ This module supports functionality related to code management.
 <b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">0x1::signer</a>;
 <b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/string.md#0x1_string">0x1::string</a>;
 <b>use</b> <a href="system_addresses.md#0x1_system_addresses">0x1::system_addresses</a>;
+<b>use</b> <a href="transaction_context.md#0x1_transaction_context">0x1::transaction_context</a>;
 <b>use</b> <a href="util.md#0x1_util">0x1::util</a>;
 <b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">0x1::vector</a>;
 </code></pre>
@@ -333,6 +346,95 @@ Event emitted when code is published to an address.
 
 </details>
 
+<a id="0x1_code_PublishAllowlist"></a>
+
+## Resource `PublishAllowlist`
+
+
+
+<pre><code><b>struct</b> <a href="code.md#0x1_code_PublishAllowlist">PublishAllowlist</a> <b>has</b> key
+</code></pre>
+
+
+
+<details>
+<summary>Fields</summary>
+
+
+<dl>
+<dt>
+<code><a href="allowlist.md#0x1_allowlist">allowlist</a>: <a href="allowlist.md#0x1_allowlist_Allowlist">allowlist::Allowlist</a></code>
+</dt>
+<dd>
+
+</dd>
+</dl>
+
+
+</details>
+
+<a id="0x1_code_PublishAllowlistEnabledChanged"></a>
+
+## Struct `PublishAllowlistEnabledChanged`
+
+
+
+<pre><code>#[<a href="event.md#0x1_event">event</a>]
+<b>struct</b> <a href="code.md#0x1_code_PublishAllowlistEnabledChanged">PublishAllowlistEnabledChanged</a> <b>has</b> drop, store
+</code></pre>
+
+
+
+<details>
+<summary>Fields</summary>
+
+
+<dl>
+<dt>
+<code>enabled: bool</code>
+</dt>
+<dd>
+
+</dd>
+</dl>
+
+
+</details>
+
+<a id="0x1_code_PublishAllowedSenderChanged"></a>
+
+## Struct `PublishAllowedSenderChanged`
+
+
+
+<pre><code>#[<a href="event.md#0x1_event">event</a>]
+<b>struct</b> <a href="code.md#0x1_code_PublishAllowedSenderChanged">PublishAllowedSenderChanged</a> <b>has</b> drop, store
+</code></pre>
+
+
+
+<details>
+<summary>Fields</summary>
+
+
+<dl>
+<dt>
+<code>sender: <b>address</b></code>
+</dt>
+<dd>
+
+</dd>
+<dt>
+<code>allowed: bool</code>
+</dt>
+<dd>
+
+</dd>
+</dl>
+
+
+</details>
+
 <a id="0x1_code_AllowedDep"></a>
 
 ## Struct `AllowedDep`
@@ -464,6 +566,26 @@ Dependency could not be resolved to any published package.
 
 
 
+<a id="0x1_code_EPUBLISHING_NOT_ALLOWED"></a>
+
+The primary transaction sender is not approved for publishing.
+
+
+<pre><code><b>const</b> <a href="code.md#0x1_code_EPUBLISHING_NOT_ALLOWED">EPUBLISHING_NOT_ALLOWED</a>: u64 = 12;
+</code></pre>
+
+
+
+<a id="0x1_code_EPUBLISH_ALLOWLIST_NOT_INITIALIZED"></a>
+
+Publishing allowlist administration requires initialization.
+
+
+<pre><code><b>const</b> <a href="code.md#0x1_code_EPUBLISH_ALLOWLIST_NOT_INITIALIZED">EPUBLISH_ALLOWLIST_NOT_INITIALIZED</a>: u64 = 13;
+</code></pre>
+
+
+
 <a id="0x1_code_EUPGRADE_IMMUTABLE"></a>
 
 Cannot upgrade an immutable package
@@ -483,6 +605,234 @@ Cannot downgrade a package's upgradability policy
 </code></pre>
 
 
+
+<a id="0x1_code_initialize_publish_allowlist"></a>
+
+## Function `initialize_publish_allowlist`
+
+
+
+<pre><code><b>public</b> entry <b>fun</b> <a href="code.md#0x1_code_initialize_publish_allowlist">initialize_publish_allowlist</a>(framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>)
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> entry <b>fun</b> <a href="code.md#0x1_code_initialize_publish_allowlist">initialize_publish_allowlist</a>(framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>) {
+    <a href="system_addresses.md#0x1_system_addresses_assert_aptos_framework">system_addresses::assert_aptos_framework</a>(framework);
+    <b>if</b> (!<b>exists</b>&lt;<a href="code.md#0x1_code_PublishAllowlist">PublishAllowlist</a>&gt;(@aptos_framework)) {
+        <b>move_to</b>(framework, <a href="code.md#0x1_code_PublishAllowlist">PublishAllowlist</a> { <a href="allowlist.md#0x1_allowlist">allowlist</a>: <a href="allowlist.md#0x1_allowlist_new">allowlist::new</a>() });
+    };
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_code_enable_publish_allowlist"></a>
+
+## Function `enable_publish_allowlist`
+
+
+
+<pre><code><b>public</b> entry <b>fun</b> <a href="code.md#0x1_code_enable_publish_allowlist">enable_publish_allowlist</a>(framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>)
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> entry <b>fun</b> <a href="code.md#0x1_code_enable_publish_allowlist">enable_publish_allowlist</a>(framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>) <b>acquires</b> <a href="code.md#0x1_code_PublishAllowlist">PublishAllowlist</a> {
+    <a href="system_addresses.md#0x1_system_addresses_assert_aptos_framework">system_addresses::assert_aptos_framework</a>(framework);
+    <b>assert</b>!(<b>exists</b>&lt;<a href="code.md#0x1_code_PublishAllowlist">PublishAllowlist</a>&gt;(@aptos_framework), <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_not_found">error::not_found</a>(<a href="code.md#0x1_code_EPUBLISH_ALLOWLIST_NOT_INITIALIZED">EPUBLISH_ALLOWLIST_NOT_INITIALIZED</a>));
+    <b>let</b> list = &<b>mut</b> <b>borrow_global_mut</b>&lt;<a href="code.md#0x1_code_PublishAllowlist">PublishAllowlist</a>&gt;(@aptos_framework).<a href="allowlist.md#0x1_allowlist">allowlist</a>;
+    <b>if</b> (<a href="allowlist.md#0x1_allowlist_enable">allowlist::enable</a>(list)) {
+        <a href="event.md#0x1_event_emit">event::emit</a>(<a href="code.md#0x1_code_PublishAllowlistEnabledChanged">PublishAllowlistEnabledChanged</a> { enabled: <b>true</b> });
+    };
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_code_disable_publish_allowlist"></a>
+
+## Function `disable_publish_allowlist`
+
+
+
+<pre><code><b>public</b> entry <b>fun</b> <a href="code.md#0x1_code_disable_publish_allowlist">disable_publish_allowlist</a>(framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>)
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> entry <b>fun</b> <a href="code.md#0x1_code_disable_publish_allowlist">disable_publish_allowlist</a>(framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>) <b>acquires</b> <a href="code.md#0x1_code_PublishAllowlist">PublishAllowlist</a> {
+    <a href="system_addresses.md#0x1_system_addresses_assert_aptos_framework">system_addresses::assert_aptos_framework</a>(framework);
+    <b>assert</b>!(<b>exists</b>&lt;<a href="code.md#0x1_code_PublishAllowlist">PublishAllowlist</a>&gt;(@aptos_framework), <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_not_found">error::not_found</a>(<a href="code.md#0x1_code_EPUBLISH_ALLOWLIST_NOT_INITIALIZED">EPUBLISH_ALLOWLIST_NOT_INITIALIZED</a>));
+    <b>let</b> list = &<b>mut</b> <b>borrow_global_mut</b>&lt;<a href="code.md#0x1_code_PublishAllowlist">PublishAllowlist</a>&gt;(@aptos_framework).<a href="allowlist.md#0x1_allowlist">allowlist</a>;
+    <b>if</b> (<a href="allowlist.md#0x1_allowlist_disable">allowlist::disable</a>(list)) {
+        <a href="event.md#0x1_event_emit">event::emit</a>(<a href="code.md#0x1_code_PublishAllowlistEnabledChanged">PublishAllowlistEnabledChanged</a> { enabled: <b>false</b> });
+    };
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_code_add_publish_allowlist_sender"></a>
+
+## Function `add_publish_allowlist_sender`
+
+
+
+<pre><code><b>public</b> entry <b>fun</b> <a href="code.md#0x1_code_add_publish_allowlist_sender">add_publish_allowlist_sender</a>(framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, sender: <b>address</b>)
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> entry <b>fun</b> <a href="code.md#0x1_code_add_publish_allowlist_sender">add_publish_allowlist_sender</a>(
+    framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, sender: <b>address</b>
+) <b>acquires</b> <a href="code.md#0x1_code_PublishAllowlist">PublishAllowlist</a> {
+    <a href="system_addresses.md#0x1_system_addresses_assert_aptos_framework">system_addresses::assert_aptos_framework</a>(framework);
+    <b>assert</b>!(<b>exists</b>&lt;<a href="code.md#0x1_code_PublishAllowlist">PublishAllowlist</a>&gt;(@aptos_framework), <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_not_found">error::not_found</a>(<a href="code.md#0x1_code_EPUBLISH_ALLOWLIST_NOT_INITIALIZED">EPUBLISH_ALLOWLIST_NOT_INITIALIZED</a>));
+    <b>let</b> list = &<b>mut</b> <b>borrow_global_mut</b>&lt;<a href="code.md#0x1_code_PublishAllowlist">PublishAllowlist</a>&gt;(@aptos_framework).<a href="allowlist.md#0x1_allowlist">allowlist</a>;
+    <b>if</b> (<a href="allowlist.md#0x1_allowlist_add">allowlist::add</a>(list, sender)) {
+        <a href="event.md#0x1_event_emit">event::emit</a>(<a href="code.md#0x1_code_PublishAllowedSenderChanged">PublishAllowedSenderChanged</a> { sender, allowed: <b>true</b> });
+    };
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_code_remove_publish_allowlist_sender"></a>
+
+## Function `remove_publish_allowlist_sender`
+
+
+
+<pre><code><b>public</b> entry <b>fun</b> <a href="code.md#0x1_code_remove_publish_allowlist_sender">remove_publish_allowlist_sender</a>(framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, sender: <b>address</b>)
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> entry <b>fun</b> <a href="code.md#0x1_code_remove_publish_allowlist_sender">remove_publish_allowlist_sender</a>(
+    framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, sender: <b>address</b>
+) <b>acquires</b> <a href="code.md#0x1_code_PublishAllowlist">PublishAllowlist</a> {
+    <a href="system_addresses.md#0x1_system_addresses_assert_aptos_framework">system_addresses::assert_aptos_framework</a>(framework);
+    <b>assert</b>!(<b>exists</b>&lt;<a href="code.md#0x1_code_PublishAllowlist">PublishAllowlist</a>&gt;(@aptos_framework), <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_not_found">error::not_found</a>(<a href="code.md#0x1_code_EPUBLISH_ALLOWLIST_NOT_INITIALIZED">EPUBLISH_ALLOWLIST_NOT_INITIALIZED</a>));
+    <b>let</b> list = &<b>mut</b> <b>borrow_global_mut</b>&lt;<a href="code.md#0x1_code_PublishAllowlist">PublishAllowlist</a>&gt;(@aptos_framework).<a href="allowlist.md#0x1_allowlist">allowlist</a>;
+    <b>if</b> (<a href="allowlist.md#0x1_allowlist_remove">allowlist::remove</a>(list, sender)) {
+        <a href="event.md#0x1_event_emit">event::emit</a>(<a href="code.md#0x1_code_PublishAllowedSenderChanged">PublishAllowedSenderChanged</a> { sender, allowed: <b>false</b> });
+    };
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_code_is_publish_allowlist_enabled"></a>
+
+## Function `is_publish_allowlist_enabled`
+
+
+
+<pre><code>#[view]
+<b>public</b> <b>fun</b> <a href="code.md#0x1_code_is_publish_allowlist_enabled">is_publish_allowlist_enabled</a>(): bool
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="code.md#0x1_code_is_publish_allowlist_enabled">is_publish_allowlist_enabled</a>(): bool <b>acquires</b> <a href="code.md#0x1_code_PublishAllowlist">PublishAllowlist</a> {
+    <b>exists</b>&lt;<a href="code.md#0x1_code_PublishAllowlist">PublishAllowlist</a>&gt;(@aptos_framework)
+        && <a href="allowlist.md#0x1_allowlist_is_enabled">allowlist::is_enabled</a>(&<a href="code.md#0x1_code_PublishAllowlist">PublishAllowlist</a>[@aptos_framework].<a href="allowlist.md#0x1_allowlist">allowlist</a>)
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_code_is_publish_allowlisted"></a>
+
+## Function `is_publish_allowlisted`
+
+
+
+<pre><code>#[view]
+<b>public</b> <b>fun</b> <a href="code.md#0x1_code_is_publish_allowlisted">is_publish_allowlisted</a>(sender: <b>address</b>): bool
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="code.md#0x1_code_is_publish_allowlisted">is_publish_allowlisted</a>(sender: <b>address</b>): bool <b>acquires</b> <a href="code.md#0x1_code_PublishAllowlist">PublishAllowlist</a> {
+    <b>exists</b>&lt;<a href="code.md#0x1_code_PublishAllowlist">PublishAllowlist</a>&gt;(@aptos_framework)
+        && <a href="allowlist.md#0x1_allowlist_is_allowed">allowlist::is_allowed</a>(&<a href="code.md#0x1_code_PublishAllowlist">PublishAllowlist</a>[@aptos_framework].<a href="allowlist.md#0x1_allowlist">allowlist</a>, sender)
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_code_get_publish_allowed_senders"></a>
+
+## Function `get_publish_allowed_senders`
+
+
+
+<pre><code>#[view]
+<b>public</b> <b>fun</b> <a href="code.md#0x1_code_get_publish_allowed_senders">get_publish_allowed_senders</a>(): <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt;
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="code.md#0x1_code_get_publish_allowed_senders">get_publish_allowed_senders</a>(): <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<b>address</b>&gt; <b>acquires</b> <a href="code.md#0x1_code_PublishAllowlist">PublishAllowlist</a> {
+    <b>if</b> (<b>exists</b>&lt;<a href="code.md#0x1_code_PublishAllowlist">PublishAllowlist</a>&gt;(@aptos_framework)) {
+        <a href="allowlist.md#0x1_allowlist_get_allowed_senders">allowlist::get_allowed_senders</a>(&<a href="code.md#0x1_code_PublishAllowlist">PublishAllowlist</a>[@aptos_framework].<a href="allowlist.md#0x1_allowlist">allowlist</a>)
+    } <b>else</b> {
+        <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>[]
+    }
+}
+</code></pre>
+
+
+
+</details>
 
 <a id="0x1_code_check_code_publishing_permission"></a>
 
@@ -691,7 +1041,13 @@ package.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="code.md#0x1_code_publish_package">publish_package</a>(owner: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, pack: <a href="code.md#0x1_code_PackageMetadata">PackageMetadata</a>, <a href="code.md#0x1_code">code</a>: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;&gt;) <b>acquires</b> <a href="code.md#0x1_code_PackageRegistry">PackageRegistry</a> {
+<pre><code><b>public</b> <b>fun</b> <a href="code.md#0x1_code_publish_package">publish_package</a>(owner: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, pack: <a href="code.md#0x1_code_PackageMetadata">PackageMetadata</a>, <a href="code.md#0x1_code">code</a>: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;&gt;) <b>acquires</b> <a href="code.md#0x1_code_PackageRegistry">PackageRegistry</a>, <a href="code.md#0x1_code_PublishAllowlist">PublishAllowlist</a> {
+    <b>if</b> (<a href="code.md#0x1_code_is_publish_allowlist_enabled">is_publish_allowlist_enabled</a>()) {
+        <b>assert</b>!(
+            <a href="code.md#0x1_code_is_publish_allowlisted">is_publish_allowlisted</a>(<a href="transaction_context.md#0x1_transaction_context_sender_internal">transaction_context::sender_internal</a>()),
+            <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_permission_denied">error::permission_denied</a>(<a href="code.md#0x1_code_EPUBLISHING_NOT_ALLOWED">EPUBLISHING_NOT_ALLOWED</a>),
+        );
+    };
     <a href="code.md#0x1_code_check_code_publishing_permission">check_code_publishing_permission</a>(owner);
     // Disallow incompatible upgrade mode. Governance can decide later <b>if</b> this should be reconsidered.
     <b>assert</b>!(
@@ -820,7 +1176,7 @@ of current restrictions for txn parameters, the metadata needs to be passed in s
 
 
 <pre><code><b>public</b> entry <b>fun</b> <a href="code.md#0x1_code_publish_package_txn">publish_package_txn</a>(owner: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, metadata_serialized: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, <a href="code.md#0x1_code">code</a>: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;&gt;)
-<b>acquires</b> <a href="code.md#0x1_code_PackageRegistry">PackageRegistry</a> {
+<b>acquires</b> <a href="code.md#0x1_code_PackageRegistry">PackageRegistry</a>, <a href="code.md#0x1_code_PublishAllowlist">PublishAllowlist</a> {
     <a href="code.md#0x1_code_publish_package">publish_package</a>(owner, <a href="util.md#0x1_util_from_bytes">util::from_bytes</a>&lt;<a href="code.md#0x1_code_PackageMetadata">PackageMetadata</a>&gt;(metadata_serialized), <a href="code.md#0x1_code">code</a>)
 }
 </code></pre>

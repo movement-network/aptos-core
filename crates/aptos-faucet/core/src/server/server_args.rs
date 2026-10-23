@@ -16,6 +16,18 @@ pub struct ServerConfig {
     /// API path base. e.g. "/v1"
     #[serde(default = "ServerConfig::default_api_path_base")]
     pub api_path_base: String,
+
+    /// How the client IP used by checkers, bypassers and logs is determined.
+    /// If unset (the default), the faucet uses poem's `RealIp`, which trusts a
+    /// client-supplied X-Real-IP, then Forwarded, then the leftmost
+    /// X-Forwarded-For entry. That is spoofable unless a proxy overwrites those
+    /// headers. If set to N, the faucet trusts only the N rightmost
+    /// X-Forwarded-For entries, i.e. those appended by its own N reverse
+    /// proxies, and uses the Nth entry from the right as the client IP,
+    /// ignoring X-Real-IP and Forwarded. Behind a single AWS ALB, use 1. If
+    /// X-Forwarded-For has fewer than N entries, the socket address is used.
+    #[serde(default)]
+    pub trusted_proxy_hops: Option<u32>,
 }
 
 impl ServerConfig {

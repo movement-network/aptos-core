@@ -28,6 +28,14 @@ async fn test_mint_transfer() {
     info.mint(account1.address(), 100_000_000_000)
         .await
         .unwrap();
+    assert_eq!(
+        info.client()
+            .view_apt_account_balance(account1.address())
+            .await
+            .unwrap()
+            .into_inner(),
+        100_000_000_000
+    );
 
     let transfer_txn = account1.sign_with_transaction_builder(
         info.transaction_factory()
@@ -42,32 +50,6 @@ async fn test_mint_transfer() {
             .into_inner(),
         40000
     );
-
-    // test delegation
-    let txn_factory = info.transaction_factory();
-    let delegate_txn1 = info
-        .root_account()
-        .sign_with_transaction_builder(txn_factory.payload(
-            aptos_stdlib::aptos_coin_delegate_mint_capability(account1.address()),
-        ));
-    info.client().submit_and_wait(&delegate_txn1).await.unwrap();
-
-    // Test delegating more than one at a time: faucet startup stampeding herd
-    let delegate_txn2 = info
-        .root_account()
-        .sign_with_transaction_builder(txn_factory.payload(
-            aptos_stdlib::aptos_coin_delegate_mint_capability(account2.address()),
-        ));
-    info.client().submit_and_wait(&delegate_txn2).await.unwrap();
-
-    let claim_txn = account1.sign_with_transaction_builder(
-        txn_factory.payload(aptos_stdlib::aptos_coin_claim_mint_capability()),
-    );
-    info.client().submit_and_wait(&claim_txn).await.unwrap();
-    let mint_txn = account1.sign_with_transaction_builder(
-        txn_factory.payload(aptos_stdlib::aptos_coin_mint(account1.address(), 10000)),
-    );
-    info.client().submit_and_wait(&mint_txn).await.unwrap();
 
     // Testing the AptosDebugger by reexecuting the transaction that has been published.
     println!("Testing....");

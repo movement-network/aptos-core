@@ -5,15 +5,23 @@ use crate::smoke_test_environment::SwarmBuilder;
 use aptos_cached_packages::aptos_stdlib;
 use aptos_crypto::SigningKey;
 use aptos_forge::Swarm;
-use aptos_types::function_info::FunctionInfo;
+use aptos_types::{
+    function_info::FunctionInfo,
+    on_chain_config::{FeatureFlag, Features},
+};
 use move_core_types::account_address::AccountAddress;
 use movement::move_tool::MemberId;
 use std::{str::FromStr, sync::Arc};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn test_permissioned_delegation() {
+    // Account abstraction is opt-in; the override also makes genesis initialize its registry.
+    let mut features = Features::default();
+    features.enable(FeatureFlag::ACCOUNT_ABSTRACTION);
+    features.enable(FeatureFlag::DERIVABLE_ACCOUNT_ABSTRACTION);
     let (swarm, mut cli, _faucet) = SwarmBuilder::new_local(1)
         .with_aptos()
+        .with_initial_features_override(features)
         .build_with_cli(0)
         .await;
     let mut info = swarm.aptos_public_info();

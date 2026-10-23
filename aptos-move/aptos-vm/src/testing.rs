@@ -78,6 +78,7 @@ impl AptosVM {
         gas_meter_balance: u64,
     ) -> (VMStatus, VMOutput) {
         use crate::gas::make_prod_gas_meter;
+        use aptos_gas_meter::AptosGasMeter;
         use move_vm_runtime::module_traversal::{TraversalContext, TraversalStorage};
 
         let txn_data = TransactionMetadata::new(txn, self.timed_features());
@@ -101,6 +102,9 @@ impl AptosVM {
             gas_meter_balance.into(),
             &NoopBlockSynchronizationKillSwitch {},
         );
+        gas_meter.enable_value_graph_load_billing(self.timed_features().is_enabled(
+            aptos_types::on_chain_config::TimedFeatureFlag::MeterValueNodesOnDeserialize,
+        ));
 
         let change_set_configs = &self
             .storage_gas_params(&log_context)

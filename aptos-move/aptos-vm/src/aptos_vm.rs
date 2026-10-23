@@ -1958,6 +1958,10 @@ impl AptosVM {
             initial_balance,
             code_storage,
         );
+        gas_meter.enable_value_graph_load_billing(
+            self.timed_features()
+                .is_enabled(TimedFeatureFlag::MeterValueNodesOnDeserialize),
+        );
 
         let (status, output) = self.execute_user_transaction_impl(
             resolver,
@@ -2351,6 +2355,10 @@ impl AptosVM {
             /* is_approved_gov_script */ false,
             max_gas_amount.into(),
             &NoopBlockSynchronizationKillSwitch {},
+        );
+        gas_meter.enable_value_graph_load_billing(
+            vm.timed_features()
+                .is_enabled(TimedFeatureFlag::MeterValueNodesOnDeserialize),
         );
 
         let resolver = state_view.as_move_resolver();
@@ -2857,6 +2865,10 @@ impl VMValidator for AptosVM {
             is_approved_gov_script,
             initial_balance,
             &NoopBlockSynchronizationKillSwitch {},
+        );
+        gas_meter.enable_value_graph_load_billing(
+            self.timed_features()
+                .is_enabled(TimedFeatureFlag::MeterValueNodesOnDeserialize),
         );
         let storage = TraversalStorage::new();
 

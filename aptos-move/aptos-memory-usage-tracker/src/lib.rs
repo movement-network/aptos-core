@@ -562,4 +562,8 @@ where
 
         fn charge_keyless(&mut self) -> VMResult<()>;
     }
+
+    fn enable_value_graph_load_billing(&mut self, enabled: bool) {
+        self.base.enable_value_graph_load_billing(enabled);
+    }
 }

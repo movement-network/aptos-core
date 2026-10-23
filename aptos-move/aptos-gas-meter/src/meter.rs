@@ -6,6 +6,7 @@ use aptos_gas_algebra::{Fee, FeePerGasUnit, NumTypeNodes};
 use aptos_gas_schedule::{
     gas_feature_versions::*,
     gas_params::{instr::*, txn::*},
+    value_graph_walk_cost,
 };
 use aptos_types::{
     contract_event::ContractEvent, state_store::state_key::StateKey, write_set::WriteOpSize,
@@ -31,6 +32,10 @@ use move_vm_types::{
 /// consisting all the gas parameters, which it can lookup when performing gas calculations.
 pub struct StandardGasMeter<A> {
     algebra: A,
+    /// When set, a cache-miss resource load bills for the deserialized graph.
+    /// Off by default so existing `new()` call sites keep historical costs
+    /// until the VM opts in via [`AptosGasMeter::enable_value_graph_load_billing`].
+    bill_value_graph_on_load: bool,
 }
 
 impl<A> StandardGasMeter<A>
@@ -38,7 +43,10 @@ where
     A: GasAlgebra,
 {
     pub fn new(algebra: A) -> Self {
-        Self { algebra }
+        Self {
+            algebra,
+            bill_value_graph_on_load: false,
+        }
     }
 
     pub fn feature_version(&self) -> u64 {
@@ -215,6 +223,21 @@ where
         // TODO(Gas): check if this is correct.
         if self.feature_version() <= 8 && val.is_none() && bytes_loaded != 0.into() {
             return Err(PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR).with_message("in legacy versions, number of bytes loaded must be zero when the resource does not exist ".to_string()));
+        }
+        // Interpreter `charge_load_resource` runs on a cache miss: the value
+        // was just deserialized. IO gas below tracks stored bytes only; bill
+        // the graph walk so a compact blob cannot materialize a huge value
+        // for free. Cache hits never enter this callback.
+        if self.bill_value_graph_on_load {
+            if let Some(loaded) = &val {
+                let graph_size = self
+                    .vm_gas_params()
+                    .misc
+                    .abs_val
+                    .abstract_value_size(loaded, self.feature_version())?;
+                self.algebra
+                    .charge_execution(value_graph_walk_cost(graph_size))?;
+            }
         }
         let cost = self
             .io_pricing()
@@ -598,5 +621,102 @@ where
         self.algebra
             .charge_execution(KEYLESS_BASE_COST)
             .map_err(|e| e.finish(Location::Undefined))
+    }
+
+    fn enable_value_graph_load_billing(&mut self, enabled: bool) {
+        self.bill_value_graph_on_load = enabled;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{traits::GasAlgebra, AptosGasMeter, StandardGasAlgebra};
+    use aptos_gas_schedule::{
+        value_graph_walk_cost, InitialGasSchedule, VMGasParameters, LATEST_GAS_FEATURE_VERSION,
+    };
+    use aptos_vm_types::{
+        resolver::NoopBlockSynchronizationKillSwitch, storage::StorageGasParameters,
+    };
+    use move_core_types::{
+        account_address::AccountAddress,
+        gas_algebra::{InternalGas, NumBytes},
+        language_storage::TypeTag,
+    };
+    use move_vm_types::{gas::GasMeter, values::Value, views::TypeView};
+
+    struct DummyType;
+
+    impl TypeView for DummyType {
+        fn to_type_tag(&self) -> TypeTag {
+            TypeTag::Bool
+        }
+    }
+
+    fn execution_after_load(bill: bool, val: &Value) -> InternalGas {
+        let kill = NoopBlockSynchronizationKillSwitch {};
+        let mut meter = StandardGasMeter::new(StandardGasAlgebra::new(
+            LATEST_GAS_FEATURE_VERSION,
+            VMGasParameters::initial(),
+            StorageGasParameters::latest(),
+            false,
+            10_000_000u64,
+            &kill,
+        ));
+        meter.enable_value_graph_load_billing(bill);
+        meter
+            .charge_load_resource(AccountAddress::ZERO, DummyType, Some(val), NumBytes::new(8))
+            .expect("load charge must succeed");
+        meter.algebra().execution_gas_used()
+    }
+
+    #[test]
+    fn resource_load_is_free_to_walk_the_graph_until_billing_is_enabled() {
+        let blob = Value::vector_u8((0u8..200).collect::<Vec<_>>());
+        let off = execution_after_load(false, &blob);
+        assert_eq!(
+            u64::from(off),
+            0,
+            "IO gas is not execution gas; the walk must stay unbilled when the flag is off"
+        );
+    }
+
+    #[test]
+    fn resource_load_bills_execution_gas_for_the_deserialized_graph() {
+        let blob = Value::vector_u8((0u8..200).collect::<Vec<_>>());
+        let on = execution_after_load(true, &blob);
+        let expected = {
+            let size = VMGasParameters::initial()
+                .misc
+                .abs_val
+                .abstract_value_size(&blob, LATEST_GAS_FEATURE_VERSION)
+                .expect("size");
+            value_graph_walk_cost(size)
+        };
+        assert_eq!(on, expected);
+        assert!(u64::from(on) > 1_101);
+    }
+
+    #[test]
+    fn missing_resource_does_not_pay_a_walk_charge() {
+        let kill = NoopBlockSynchronizationKillSwitch {};
+        let mut meter = StandardGasMeter::new(StandardGasAlgebra::new(
+            LATEST_GAS_FEATURE_VERSION,
+            VMGasParameters::initial(),
+            StorageGasParameters::latest(),
+            false,
+            10_000_000u64,
+            &kill,
+        ));
+        meter.enable_value_graph_load_billing(true);
+        meter
+            .charge_load_resource(
+                AccountAddress::ZERO,
+                DummyType,
+                Option::<Value>::None,
+                NumBytes::new(0),
+            )
+            .expect("absent resource is billable for IO only");
+        assert_eq!(u64::from(meter.algebra().execution_gas_used()), 0);
     }
 }

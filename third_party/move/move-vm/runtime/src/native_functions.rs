@@ -24,8 +24,11 @@ use move_core_types::{
     vm_status::StatusCode,
 };
 use move_vm_types::{
-    gas::NativeGasMeter, loaded_data::runtime_types::Type, natives::function::NativeResult,
-    resolver::ResourceResolver, values::Value,
+    gas::NativeGasMeter,
+    loaded_data::runtime_types::Type,
+    natives::function::NativeResult,
+    resolver::ResourceResolver,
+    values::{GlobalValue, Value},
 };
 use std::{
     collections::{HashMap, VecDeque},
@@ -161,6 +164,21 @@ impl<'b, 'c> NativeContext<'_, 'b, 'c> {
             let exists = self.data_store.get_resource_mut(&address, ty)?.exists()?;
             (exists, None)
         })
+    }
+
+    /// Resource already resident in this session's data cache.
+    ///
+    /// Used after [`Self::exists_at`] (which materializes the value on a
+    /// cache miss) so natives can bill for the graph they just built
+    /// without changing the exists/borrow APIs.
+    pub fn session_cached_resource(
+        &mut self,
+        address: AccountAddress,
+        ty: &Type,
+    ) -> PartialVMResult<&GlobalValue> {
+        self.data_store
+            .get_resource_mut(&address, ty)
+            .map(|gv| &*gv)
     }
 
     pub fn type_to_type_tag(&self, ty: &Type) -> PartialVMResult<TypeTag> {

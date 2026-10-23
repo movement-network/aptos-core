@@ -29,6 +29,14 @@ pub enum TimedFeatureFlag {
 
     /// Uses full transaction size when computing transaction metadata.
     UseFullTransactionSizeForTransactionMetadata,
+
+    /// Bill execution gas for walking a materialized Move value graph.
+    ///
+    /// Covers deserialize paths (`from_bytes`, resource / table / object
+    /// loads) and serialize-side BCS walks (`to_bytes`, `serialized_size`).
+    /// Without this, a small BCS blob can expand into a huge node graph
+    /// while only paying for the blob length.
+    MeterValueNodesOnDeserialize,
 }
 
 /// Representation of features that are gated by the block timestamps.
@@ -81,8 +89,20 @@ impl TimedFeatureFlag {
         use TimedFeatureFlag::*;
 
         match (self, chain_id) {
-            (UseFullTransactionSizeForTransactionMetadata, MOVEMAINNET | MOVETESTNET) => Los_Angeles
-                .with_ymd_and_hms(2026, 5, 4, 9, 45, 0)
+            (UseFullTransactionSizeForTransactionMetadata, MOVEMAINNET | MOVETESTNET) => {
+                Los_Angeles
+                    .with_ymd_and_hms(2026, 5, 4, 9, 45, 0)
+                    .unwrap()
+                    .with_timezone(&Utc)
+            },
+            // Must precede the Movement catch-all so this flag does not
+            // activate on 2025-08-11 (already in the past).
+            (MeterValueNodesOnDeserialize, MOVETESTNET) => Los_Angeles
+                .with_ymd_and_hms(2026, 10, 15, 9, 0, 0)
+                .unwrap()
+                .with_timezone(&Utc),
+            (MeterValueNodesOnDeserialize, MOVEMAINNET) => Los_Angeles
+                .with_ymd_and_hms(2026, 10, 22, 9, 0, 0)
                 .unwrap()
                 .with_timezone(&Utc),
             (_, MOVEMAINNET | MOVETESTNET) => Los_Angeles
@@ -152,6 +172,22 @@ impl TimedFeatureFlag {
 
             // Irrelevant for us except for testing
             (UseFullTransactionSizeForTransactionMetadata, _) => BEGINNING_OF_TIME,
+
+            // Three hours after the Unix epoch so a single `new_epoch()`
+            // (two hours) leaves the flag off. Tests that need the charge
+            // advance two epochs. Existing tests that only roll one epoch
+            // keep the historical unmetered behavior.
+            (MeterValueNodesOnDeserialize, TESTING) => {
+                Utc.with_ymd_and_hms(1970, 1, 1, 3, 0, 0).unwrap()
+            },
+            (MeterValueNodesOnDeserialize, TESTNET) => Los_Angeles
+                .with_ymd_and_hms(2026, 10, 15, 14, 0, 0)
+                .unwrap()
+                .with_timezone(&Utc),
+            (MeterValueNodesOnDeserialize, MAINNET) => Los_Angeles
+                .with_ymd_and_hms(2026, 10, 22, 14, 0, 0)
+                .unwrap()
+                .with_timezone(&Utc),
 
             // For chains other than testnet and mainnet, a timed feature is considered enabled from
             // the very beginning, if left unspecified.
@@ -239,6 +275,7 @@ impl TimedFeatures {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::chain_id::NamedChain;
     use claims::assert_ok;
 
     #[test]
@@ -376,6 +413,46 @@ mod test {
         assert!(
             mainnet_nov_15_2024.is_enabled(EntryCompatibility),
             "EntryCompatibility should be enabled on Nov 15, 2024 on mainnet"
+        );
+    }
+
+    #[test]
+    fn value_graph_flag_stays_off_until_its_own_activation() {
+        use TimedFeatureFlag::*;
+
+        let genesis = 0;
+        let two_hours_micros = 2 * 3_600 * 1_000_000;
+        let four_hours_micros = 4 * 3_600 * 1_000_000;
+
+        let testing_genesis = TimedFeaturesBuilder::new(ChainId::test(), genesis);
+        assert!(
+            !testing_genesis.is_enabled(MeterValueNodesOnDeserialize),
+            "flag must be off at testing genesis so historical gas stays unchanged"
+        );
+
+        let after_one_epoch = TimedFeaturesBuilder::new(ChainId::test(), two_hours_micros);
+        assert!(
+            !after_one_epoch.is_enabled(MeterValueNodesOnDeserialize),
+            "a single two-hour epoch must not enable the charge"
+        );
+
+        let after_two_epochs = TimedFeaturesBuilder::new(ChainId::test(), four_hours_micros);
+        assert!(
+            after_two_epochs.is_enabled(MeterValueNodesOnDeserialize),
+            "two epochs (four hours) must cross the three-hour testing gate"
+        );
+
+        // Movement's unnamed-flag catch-all is 2025-08-11; this flag must not
+        // inherit that date or it would be live immediately.
+        let movement_now = Utc
+            .with_ymd_and_hms(2026, 9, 6, 0, 0, 0)
+            .unwrap()
+            .timestamp_micros() as u64;
+        let movement =
+            TimedFeaturesBuilder::new(ChainId::new(NamedChain::MOVETESTNET.id()), movement_now);
+        assert!(
+            !movement.is_enabled(MeterValueNodesOnDeserialize),
+            "Movement testnet must wait for the explicit October 2026 activation"
         );
     }
 }

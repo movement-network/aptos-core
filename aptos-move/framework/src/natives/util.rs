@@ -6,6 +6,7 @@ use aptos_native_interface::{
     safely_pop_arg, RawSafeNative, SafeNativeBuilder, SafeNativeContext, SafeNativeError,
     SafeNativeResult,
 };
+use aptos_types::on_chain_config::TimedFeatureFlag;
 use move_core_types::gas_algebra::NumBytes;
 use move_vm_runtime::native_functions::NativeFunction;
 use move_vm_types::{
@@ -57,6 +58,13 @@ fn native_from_bytes(
             })
         },
     };
+
+    // Blob-length gas above does not cover building the value graph. A
+    // compact payload can still explode into many nodes.
+    if context.timed_feature_enabled(TimedFeatureFlag::MeterValueNodesOnDeserialize) {
+        let graph_size = context.abs_val_size(&val)?;
+        context.bill_value_graph_walk(graph_size)?;
+    }
 
     Ok(smallvec![val])
 }

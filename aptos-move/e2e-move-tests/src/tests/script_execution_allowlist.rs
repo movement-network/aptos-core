@@ -1,7 +1,7 @@
 // Copyright © Move Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{assert_success, MoveHarness};
+use crate::{assert_success, get_validator_config, setup_staking, MoveHarness};
 use aptos_cached_packages::aptos_stdlib;
 use aptos_crypto::{ed25519::Ed25519Signature, HashValue};
 use aptos_framework::{BuildOptions, BuiltPackage};
@@ -10,11 +10,13 @@ use aptos_package_builder::PackageBuilder;
 use aptos_types::{
     account_address::AccountAddress,
     account_config::aptos_test_root_address,
+    network_address::NetworkAddress,
     on_chain_config::ApprovedExecutionHashes,
     transaction::{Script, SignedTransaction, TransactionStatus},
 };
 use aptos_vm::AptosSimulationVM;
 use move_core_types::{ident_str, language_storage::StructTag, vm_status::StatusCode};
+use std::str::FromStr;
 
 fn script(source: &str) -> Script {
     let mut builder = PackageBuilder::new("StandaloneScript");
@@ -237,4 +239,62 @@ fn validation_and_simulation_reject_unlisted_script_sender() {
     assert_eq!(output.gas_used(), 0);
     assert!(output.write_set().is_empty());
     assert_eq!(h.sequence_number(alice.address()), sequence_before);
+}
+
+#[test]
+fn core_resource_stake_address_update_is_exempt_from_enabled_allowlists() {
+    let mut h = MoveHarness::new();
+    let owner = h.new_account_at(AccountAddress::from_hex_literal("0xa11ce").unwrap());
+    let owner_address = *owner.address();
+    assert_success!(setup_staking(&mut h, &owner, 50_000_000));
+    let before = get_validator_config(&h, &owner_address);
+
+    // Leave the script sender list empty, then independently enable the code
+    // publish allowlist. The core-resources entry function must remain usable.
+    initialize(&mut h);
+    set_enabled(&mut h, true);
+    let framework = h.aptos_framework_account();
+    assert_success!(h.run_entry_function(
+        &framework,
+        "0x1::code::initialize_publish_allowlist".parse().unwrap(),
+        vec![],
+        vec![],
+    ));
+    assert_success!(h.run_entry_function(
+        &framework,
+        "0x1::code::enable_publish_allowlist".parse().unwrap(),
+        vec![],
+        vec![],
+    ));
+
+    let core_resources = h.new_account_at(aptos_test_root_address());
+    let key = "080e287879c918794170e258bfaddd75acac5b3e350419044655e4983a487120";
+    let validator_addresses = bcs::to_bytes(&vec![NetworkAddress::from_str(&format!(
+        "/ip4/192.0.2.10/tcp/6180/noise-ik/{key}/handshake/0"
+    ))
+    .unwrap()])
+    .unwrap();
+    let fullnode_addresses = bcs::to_bytes(&vec![NetworkAddress::from_str(&format!(
+        "/dns4/fullnode.example.com/tcp/6181/noise-ik/{key}/handshake/0"
+    ))
+    .unwrap()])
+    .unwrap();
+    assert_success!(h.run_entry_function(
+        &core_resources,
+        "0x1::stake::update_network_and_fullnode_addresses_by_core_resources"
+            .parse()
+            .unwrap(),
+        vec![],
+        vec![
+            bcs::to_bytes(&owner_address).unwrap(),
+            bcs::to_bytes(&validator_addresses).unwrap(),
+            bcs::to_bytes(&fullnode_addresses).unwrap(),
+        ],
+    ));
+
+    let after = get_validator_config(&h, &owner_address);
+    assert_eq!(after.validator_network_addresses, validator_addresses);
+    assert_eq!(after.fullnode_network_addresses, fullnode_addresses);
+    assert_eq!(after.consensus_public_key, before.consensus_public_key);
+    assert_eq!(after.validator_index, before.validator_index);
 }

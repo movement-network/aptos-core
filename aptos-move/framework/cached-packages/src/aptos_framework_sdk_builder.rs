@@ -1184,6 +1184,14 @@ pub enum EntryFunctionCall {
         new_fullnode_addresses: Vec<u8>,
     },
 
+    /// Update validator addresses using core resources. This only takes effect in the next epoch.
+    /// Address bytes use the same encoding as the operator entry function.
+    StakeUpdateNetworkAndFullnodeAddressesByCoreResources {
+        pool_address: AccountAddress,
+        new_network_addresses: Vec<u8>,
+        new_fullnode_addresses: Vec<u8>,
+    },
+
     /// Withdraw from `account`'s inactive stake.
     StakeWithdraw {
         withdraw_amount: u64,
@@ -2076,6 +2084,15 @@ impl EntryFunctionCall {
                 new_network_addresses,
                 new_fullnode_addresses,
             } => stake_update_network_and_fullnode_addresses(
+                pool_address,
+                new_network_addresses,
+                new_fullnode_addresses,
+            ),
+            StakeUpdateNetworkAndFullnodeAddressesByCoreResources {
+                pool_address,
+                new_network_addresses,
+                new_fullnode_addresses,
+            } => stake_update_network_and_fullnode_addresses_by_core_resources(
                 pool_address,
                 new_network_addresses,
                 new_fullnode_addresses,
@@ -5452,6 +5469,31 @@ pub fn stake_update_network_and_fullnode_addresses(
     ))
 }
 
+/// Update validator addresses using core resources. This only takes effect in the next epoch.
+/// Address bytes use the same encoding as the operator entry function.
+pub fn stake_update_network_and_fullnode_addresses_by_core_resources(
+    pool_address: AccountAddress,
+    new_network_addresses: Vec<u8>,
+    new_fullnode_addresses: Vec<u8>,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("stake").to_owned(),
+        ),
+        ident_str!("update_network_and_fullnode_addresses_by_core_resources").to_owned(),
+        vec![],
+        vec![
+            bcs::to_bytes(&pool_address).unwrap(),
+            bcs::to_bytes(&new_network_addresses).unwrap(),
+            bcs::to_bytes(&new_fullnode_addresses).unwrap(),
+        ],
+    ))
+}
+
 /// Withdraw from `account`'s inactive stake.
 pub fn stake_withdraw(withdraw_amount: u64) -> TransactionPayload {
     TransactionPayload::EntryFunction(EntryFunction::new(
@@ -8112,6 +8154,22 @@ mod decoder {
         }
     }
 
+    pub fn stake_update_network_and_fullnode_addresses_by_core_resources(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(
+                EntryFunctionCall::StakeUpdateNetworkAndFullnodeAddressesByCoreResources {
+                    pool_address: bcs::from_bytes(script.args().get(0)?).ok()?,
+                    new_network_addresses: bcs::from_bytes(script.args().get(1)?).ok()?,
+                    new_fullnode_addresses: bcs::from_bytes(script.args().get(2)?).ok()?,
+                },
+            )
+        } else {
+            None
+        }
+    }
+
     pub fn stake_withdraw(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
         if let TransactionPayload::EntryFunction(script) = payload {
             Some(EntryFunctionCall::StakeWithdraw {
@@ -9199,6 +9257,10 @@ static SCRIPT_FUNCTION_DECODER_MAP: once_cell::sync::Lazy<EntryFunctionDecoderMa
         map.insert(
             "stake_update_network_and_fullnode_addresses".to_string(),
             Box::new(decoder::stake_update_network_and_fullnode_addresses),
+        );
+        map.insert(
+            "stake_update_network_and_fullnode_addresses_by_core_resources".to_string(),
+            Box::new(decoder::stake_update_network_and_fullnode_addresses_by_core_resources),
         );
         map.insert(
             "stake_withdraw".to_string(),

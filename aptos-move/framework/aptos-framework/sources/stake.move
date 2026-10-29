@@ -951,8 +951,31 @@ module aptos_framework::stake {
         check_stake_permission(operator);
         assert_reconfig_not_in_progress();
         assert_stake_pool_exists(pool_address);
-        let stake_pool = borrow_global_mut<StakePool>(pool_address);
+        let stake_pool = borrow_global<StakePool>(pool_address);
         assert!(signer::address_of(operator) == stake_pool.operator_address, error::unauthenticated(ENOT_OPERATOR));
+        update_network_and_fullnode_addresses_internal(pool_address, new_network_addresses, new_fullnode_addresses);
+    }
+
+    /// Update validator addresses using core resources. This only takes effect in the next epoch.
+    /// Address bytes use the same encoding as the operator entry function.
+    public entry fun update_network_and_fullnode_addresses_by_core_resources(
+        core_resources: &signer,
+        pool_address: address,
+        new_network_addresses: vector<u8>,
+        new_fullnode_addresses: vector<u8>,
+    ) acquires StakePool, ValidatorConfig {
+        system_addresses::assert_core_resource(core_resources);
+        assert_reconfig_not_in_progress();
+        assert_stake_pool_exists(pool_address);
+        update_network_and_fullnode_addresses_internal(pool_address, new_network_addresses, new_fullnode_addresses);
+    }
+
+    fun update_network_and_fullnode_addresses_internal(
+        pool_address: address,
+        new_network_addresses: vector<u8>,
+        new_fullnode_addresses: vector<u8>,
+    ) acquires StakePool, ValidatorConfig {
+        let stake_pool = borrow_global_mut<StakePool>(pool_address);
         assert!(exists<ValidatorConfig>(pool_address), error::not_found(EVALIDATOR_CONFIG));
         let validator_info = borrow_global_mut<ValidatorConfig>(pool_address);
         let old_network_addresses = validator_info.network_addresses;
@@ -2190,6 +2213,134 @@ module aptos_framework::stake {
 
         // Add 9901 more. Total stake is 50 (active) + 50 (pending_inactive) + 9901 > 10000 so still exceeding max.
         mint_and_add_stake(validator_1, 9901);
+    }
+
+    #[test(aptos_framework = @aptos_framework, core_resources = @core_resources, validator = @0x123)]
+    fun test_core_resources_addresses_module_events(
+        aptos_framework: &signer, core_resources: &signer, validator: &signer,
+    ) acquires AllowedValidators, AptosCoinCapabilities, OwnerCapability, PendingTransactionFee, StakePool, TransactionFeeConfig, ValidatorConfig, ValidatorPerformance, ValidatorSet {
+        test_core_resources_addresses(aptos_framework, core_resources, validator, true);
+    }
+
+    #[test(aptos_framework = @aptos_framework, core_resources = @core_resources, validator = @0x123)]
+    fun test_core_resources_addresses_legacy_events(
+        aptos_framework: &signer, core_resources: &signer, validator: &signer,
+    ) acquires AllowedValidators, AptosCoinCapabilities, OwnerCapability, PendingTransactionFee, StakePool, TransactionFeeConfig, ValidatorConfig, ValidatorPerformance, ValidatorSet {
+        test_core_resources_addresses(aptos_framework, core_resources, validator, false);
+    }
+
+    #[test_only]
+    fun test_core_resources_addresses(
+        aptos_framework: &signer, core_resources: &signer, validator: &signer, module_events: bool,
+    ) acquires AllowedValidators, AptosCoinCapabilities, OwnerCapability, PendingTransactionFee, StakePool, TransactionFeeConfig, ValidatorConfig, ValidatorPerformance, ValidatorSet {
+        initialize_for_test(aptos_framework);
+        let migration = features::get_module_event_migration_feature();
+        if (module_events) {
+            features::change_feature_flags_for_testing(aptos_framework, vector[migration], vector[]);
+        } else {
+            features::change_feature_flags_for_testing(aptos_framework, vector[], vector[migration]);
+        };
+        let (_sk, pk, pop) = generate_identity();
+        initialize_test_validator(&pk, &pop, validator, 100, true, true);
+        let pool_address = signer::address_of(validator);
+        // The operator path remains usable and establishes nonempty old address bytes.
+        update_network_and_fullnode_addresses(validator, pool_address, b"old validator", b"old fullnode");
+        end_epoch();
+        let old_config = *borrow_global<ValidatorConfig>(pool_address);
+        let old_set = *borrow_global<ValidatorSet>(@aptos_framework);
+        let old_pool = borrow_global<StakePool>(pool_address);
+        let old_locked_until_secs = old_pool.locked_until_secs;
+        let old_operator = old_pool.operator_address;
+        let old_voter = old_pool.delegated_voter;
+        let old_active = coin::value(&old_pool.active);
+        let old_inactive = coin::value(&old_pool.inactive);
+        let old_pending_active = coin::value(&old_pool.pending_active);
+        let old_pending_inactive = coin::value(&old_pool.pending_inactive);
+        let old_owner_pool = borrow_global<OwnerCapability>(pool_address).pool_address;
+        let old_event_count = event::counter(&old_pool.update_network_and_fullnode_addresses_events);
+
+        update_network_and_fullnode_addresses_by_core_resources(
+            core_resources, pool_address, b"new validator", b"new fullnode",
+        );
+        let expected_config = old_config;
+        expected_config.network_addresses = b"new validator";
+        expected_config.fullnode_addresses = b"new fullnode";
+        assert!(*borrow_global<ValidatorConfig>(pool_address) == expected_config, 1);
+        let pool = borrow_global<StakePool>(pool_address);
+        assert!(pool.locked_until_secs == old_locked_until_secs, 2);
+        assert!(pool.operator_address == old_operator && pool.delegated_voter == old_voter, 3);
+        assert!(coin::value(&pool.active) == old_active && coin::value(&pool.inactive) == old_inactive, 4);
+        assert!(coin::value(&pool.pending_active) == old_pending_active, 5);
+        assert!(coin::value(&pool.pending_inactive) == old_pending_inactive, 6);
+        assert!(borrow_global<OwnerCapability>(pool_address).pool_address == old_owner_pool, 7);
+        // Current-epoch discovery must retain the old config until the next epoch.
+        assert!(*borrow_global<ValidatorSet>(@aptos_framework) == old_set, 8);
+        if (module_events) {
+            assert!(event::counter(&pool.update_network_and_fullnode_addresses_events) == old_event_count, 9);
+            assert!(event::was_event_emitted(&UpdateNetworkAndFullnodeAddresses {
+                pool_address,
+                old_network_addresses: old_config.network_addresses,
+                new_network_addresses: b"new validator",
+                old_fullnode_addresses: old_config.fullnode_addresses,
+                new_fullnode_addresses: b"new fullnode",
+            }), 10);
+            assert!(event::emitted_events<UpdateNetworkAndFullnodeAddresses>().length() == 2, 11);
+        } else {
+            assert!(event::counter(&pool.update_network_and_fullnode_addresses_events) == old_event_count + 1, 9);
+            assert!(event::was_event_emitted_by_handle(&pool.update_network_and_fullnode_addresses_events,
+                &UpdateNetworkAndFullnodeAddressesEvent {
+                    pool_address,
+                    old_network_addresses: old_config.network_addresses,
+                    new_network_addresses: b"new validator",
+                    old_fullnode_addresses: old_config.fullnode_addresses,
+                    new_fullnode_addresses: b"new fullnode",
+                }), 10);
+        };
+        end_epoch();
+        let set = borrow_global<ValidatorSet>(@aptos_framework);
+        assert!(set.active_validators[0].config == expected_config, 12);
+        // Empty fullnode bytes remain supported, as on the operator path.
+        update_network_and_fullnode_addresses_by_core_resources(core_resources, pool_address, b"new validator", b"");
+        assert!(borrow_global<ValidatorConfig>(pool_address).fullnode_addresses.is_empty(), 13);
+    }
+
+    #[test(aptos_framework = @aptos_framework, validator = @0x123)]
+    #[expected_failure(abort_code = 0x50001, location = aptos_framework::system_addresses)]
+    fun test_core_resources_addresses_rejects_operator(
+        aptos_framework: &signer, validator: &signer,
+    ) acquires AllowedValidators, AptosCoinCapabilities, OwnerCapability, PendingTransactionFee, StakePool, TransactionFeeConfig, ValidatorConfig, ValidatorPerformance, ValidatorSet {
+        initialize_for_test(aptos_framework);
+        let (_sk, pk, pop) = generate_identity();
+        initialize_test_validator(&pk, &pop, validator, 100, true, true);
+        update_network_and_fullnode_addresses_by_core_resources(validator, signer::address_of(validator), b"x", b"y");
+    }
+
+    #[test(aptos_framework = @aptos_framework)]
+    #[expected_failure(abort_code = 0x50001, location = aptos_framework::system_addresses)]
+    fun test_core_resources_addresses_rejects_framework(aptos_framework: &signer) acquires StakePool, ValidatorConfig {
+        update_network_and_fullnode_addresses_by_core_resources(aptos_framework, @0x123, b"x", b"y");
+    }
+
+    #[test(other = @0xbeef)]
+    #[expected_failure(abort_code = 0x50001, location = aptos_framework::system_addresses)]
+    fun test_core_resources_addresses_rejects_other(other: &signer) acquires StakePool, ValidatorConfig {
+        update_network_and_fullnode_addresses_by_core_resources(other, @0x123, b"x", b"y");
+    }
+
+    #[test(aptos_framework = @aptos_framework, core_resources = @core_resources)]
+    #[expected_failure(abort_code = 0x30014, location = Self)]
+    fun test_core_resources_addresses_rejects_reconfiguration(
+        aptos_framework: &signer, core_resources: &signer,
+    ) acquires StakePool, ValidatorConfig {
+        initialize_for_test(aptos_framework);
+        reconfiguration_state::on_reconfig_start();
+        update_network_and_fullnode_addresses_by_core_resources(core_resources, @0x123, b"x", b"y");
+    }
+
+    #[test(core_resources = @core_resources)]
+    #[expected_failure(abort_code = 0x1000e, location = Self)]
+    fun test_core_resources_addresses_rejects_missing_pool(core_resources: &signer) acquires StakePool, ValidatorConfig {
+        update_network_and_fullnode_addresses_by_core_resources(core_resources, @0x123, b"x", b"y");
     }
 
     #[test(aptos_framework = @aptos_framework, validator = @0x123)]

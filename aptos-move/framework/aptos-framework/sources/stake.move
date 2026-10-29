@@ -951,9 +951,9 @@ module aptos_framework::stake {
         check_stake_permission(operator);
         assert_reconfig_not_in_progress();
         assert_stake_pool_exists(pool_address);
-        let stake_pool = borrow_global<StakePool>(pool_address);
+        let stake_pool = borrow_global_mut<StakePool>(pool_address);
         assert!(signer::address_of(operator) == stake_pool.operator_address, error::unauthenticated(ENOT_OPERATOR));
-        update_network_and_fullnode_addresses_internal(pool_address, new_network_addresses, new_fullnode_addresses);
+        update_network_and_fullnode_addresses_internal(stake_pool, pool_address, new_network_addresses, new_fullnode_addresses);
     }
 
     /// Update validator addresses using core resources. This only takes effect in the next epoch.
@@ -967,15 +967,16 @@ module aptos_framework::stake {
         system_addresses::assert_core_resource(core_resources);
         assert_reconfig_not_in_progress();
         assert_stake_pool_exists(pool_address);
-        update_network_and_fullnode_addresses_internal(pool_address, new_network_addresses, new_fullnode_addresses);
+        let stake_pool = borrow_global_mut<StakePool>(pool_address);
+        update_network_and_fullnode_addresses_internal(stake_pool, pool_address, new_network_addresses, new_fullnode_addresses);
     }
 
     fun update_network_and_fullnode_addresses_internal(
+        stake_pool: &mut StakePool,
         pool_address: address,
         new_network_addresses: vector<u8>,
         new_fullnode_addresses: vector<u8>,
-    ) acquires StakePool, ValidatorConfig {
-        let stake_pool = borrow_global_mut<StakePool>(pool_address);
+    ) acquires ValidatorConfig {
         assert!(exists<ValidatorConfig>(pool_address), error::not_found(EVALIDATOR_CONFIG));
         let validator_info = borrow_global_mut<ValidatorConfig>(pool_address);
         let old_network_addresses = validator_info.network_addresses;

@@ -87,6 +87,7 @@ jobs:
           - package: "movement"
           - package: "l1-migration"
           - package: "aptos-debugger"
+          - package: "aptos-waypoint-extractor"
     env:
       TARGET_FOLDER: target/${{ needs.setup.outputs.build_profile }}
     steps:
@@ -179,6 +180,45 @@ jobs:
         with:
           image_name: ghcr.io/movement-network/aptos-debugger
           dockerfile_subdir: aptos-debugger
+          build_args: |
+            BINARY_PATH=${{ env.TARGET_FOLDER }}
+            GIT_SHA=${{ env.SHORT_SHA }}
+            GIT_TAG=${{ needs.setup.outputs.git_tag }}
+            GIT_BRANCH=${{ needs.setup.outputs.git_branch }}
+            BUILD_DATE=${{ needs.setup.outputs.build_date }}
+          ghcr_username: ${{ github.actor }}
+          ghcr_password: ${{ secrets.GITHUB_TOKEN }}
+          image_source: https://github.com/movement-network/aptos-core
+          git_sha: ${{ needs.setup.outputs.git_sha }}
+
+  container-aptos-waypoint-extractor:
+    needs:
+      - setup
+      - binaries-aptos-node
+    runs-on: blacksmith-16vcpu-ubuntu-2204
+    name: "build container: aptos-waypoint-extractor"
+    permissions:
+      contents: read
+      packages: write
+    env:
+      TARGET_FOLDER: target/${{ needs.setup.outputs.build_profile }}
+      SHORT_SHA: ${{ needs.setup.outputs.short_sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha}}
+      - name: Download aptos-waypoint-extractor binary
+        uses: actions/download-artifact@v4
+        with:
+          name: aptos-waypoint-extractor-${{ env.SHORT_SHA }}
+          path: ${{ env.TARGET_FOLDER }}
+      - name: List binaries
+        run: ls -la ${{ env.TARGET_FOLDER }}
+      - name: Build Container
+        uses: movement-network/aptos-core/.github/actions/build-container@m1
+        with:
+          image_name: ghcr.io/movement-network/aptos-waypoint-extractor
+          dockerfile_subdir: aptos-waypoint-extractor
           build_args: |
             BINARY_PATH=${{ env.TARGET_FOLDER }}
             GIT_SHA=${{ env.SHORT_SHA }}

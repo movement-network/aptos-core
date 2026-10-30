@@ -4806,6 +4806,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "aptos-waypoint-extractor"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "aptos-bitvec",
+ "aptos-crypto",
+ "aptos-types",
+ "bcs 0.1.4",
+ "bytes",
+ "clap 4.5.21",
+ "futures",
+ "rayon",
+ "reqwest 0.11.23",
+ "serde",
+ "tokio",
+]
+
+[[package]]
 name = "aptos-workspace-server"
 version = "0.1.0"
 dependencies = [

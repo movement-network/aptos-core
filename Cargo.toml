@@ -180,6 +180,7 @@ members = [
     "storage/aptosdb",
     "storage/backup/backup-cli",
     "storage/backup/backup-service",
+    "storage/backup/waypoint-extractor",
     "storage/db-tool",
     "storage/indexer",
     "storage/indexer_schemas",
@@ -469,6 +470,7 @@ aptos-vm-types = { path = "aptos-move/aptos-vm-types" }
 aptos-vm-validator = { path = "vm-validator" }
 aptos-workspace-server = { path = "aptos-move/aptos-workspace-server" }
 aptos-warp-webserver = { path = "crates/aptos-warp-webserver" }
+aptos-waypoint-extractor = { path = "storage/backup/waypoint-extractor" }
 aptos-cargo-cli = { path = "devtools/aptos-cargo-cli" }
 
 # External crate dependencies.
